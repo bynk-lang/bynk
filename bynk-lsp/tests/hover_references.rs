@@ -142,7 +142,7 @@ fn hover_at(
             ),
         }),
         doc: Some((text, offset)),
-        path: &uri.to_file_path().unwrap_or_default(),
+        path: uri.to_file_path().ok().as_deref(),
         // No src_root: the cross-file / first-party rungs are not what these
         // fixtures exercise, and `examples/todo` is single-file.
         files: None,

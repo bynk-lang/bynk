@@ -3008,7 +3008,7 @@ impl LanguageServer for Backend {
         let content = crate::hover::hover_content(&crate::hover::HoverInput {
             analysis,
             doc,
-            path: &uri.to_file_path().unwrap_or_default(),
+            path: uri.to_file_path().ok().as_deref(),
             files: files.as_deref(),
         });
         // #2470: a refined type's hover gains its predicates in words and,

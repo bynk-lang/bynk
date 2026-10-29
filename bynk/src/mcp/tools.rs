@@ -369,12 +369,16 @@ fn describe_at(
         // The files are read from disk and not edited, so the analysed text is
         // the live text.
         doc: Some((text, offset)),
-        path: &abs,
+        path: Some(&abs),
         files: Some(&project.content),
     });
     let Some(hover) = hover else {
         return (vec![], vec![]);
     };
+    // The definition site is the resolved symbol's. Failing that, the by-name
+    // rungs answered, and the site is the declaration they described: a hover
+    // from any other rung (a local, a handler header, a keyword) is not about
+    // a same-named declaration elsewhere, and names none.
     let defs = if let Some((_, def)) = bynk_ide::index_queries::definition_at(&a.index, rel, offset)
     {
         vec![at.at(&def.path, def.span)]
@@ -383,7 +387,7 @@ fn describe_at(
         files.sort_by(|x, y| x.source_path.cmp(&y.source_path));
         files
             .into_iter()
-            .find(|f| bynk_ide::symbols::describe_symbol(&f.text, word).is_some())
+            .find(|f| bynk_ide::symbols::describe_symbol(&f.text, word).as_ref() == Some(&hover))
             .and_then(|f| {
                 bynk_ide::symbols::find_declaration_span(&f.text, word)
                     .map(|span| at.at(&f.source_path, span))

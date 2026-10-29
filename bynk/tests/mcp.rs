@@ -31,6 +31,10 @@ service api from http {
 "#;
 
 /// A second unit with a deliberate error, so diagnostics have something to say.
+/// A unit whose parameter `total` shadows `fn total` in `src/shop.bynk`'s sibling.
+const SHADOW: &str = "commons shadow\n\nfn total() -> Int { 1 }\n";
+const SHADOWED: &str = "commons shadowed\n\nfn sum(total: Int) -> Int { total }\n";
+
 const BROKEN: &str = "commons broken\n\ntype Bad = {\n  x: Missing,\n}\n";
 
 /// A throwaway project, removed on drop.
@@ -106,6 +110,8 @@ fn text(reply: &Value) -> (&str, bool) {
 #[test]
 fn describe_symbol_shares_the_editors_hover_ladder() {
     let p = Project::new("hover");
+    std::fs::write(p.0.join("src/shadow.bynk"), SHADOW).unwrap();
+    std::fs::write(p.0.join("src/shadowed.bynk"), SHADOWED).unwrap();
     let replies = session(
         &p.0,
         &[
@@ -118,12 +124,24 @@ fn describe_symbol_shares_the_editors_hover_ladder() {
                 "bynk_describe_symbol",
                 json!({"file":"src/shop.bynk","line":12,"column":6}),
             ),
+            // A parameter that shadows a declaration elsewhere hovers as the
+            // parameter and names no definition site: not the other `total`.
+            call(
+                3,
+                "bynk_describe_symbol",
+                json!({"file":"src/shadowed.bynk","line":3,"column":29}),
+            ),
         ],
     );
     let (hover, err) = text(&replies[1]);
     assert!(!err, "{hover}");
     assert!(hover.contains("**Wire contract**"), "{hover}");
     assert!(hover.contains("POST /items"), "{hover}");
+
+    let (shadowed, err) = text(&replies[2]);
+    assert!(!err, "{shadowed}");
+    assert!(shadowed.contains("total"), "{shadowed}");
+    assert!(!shadowed.contains("shadow.bynk"), "{shadowed}");
 }
 
 #[test]

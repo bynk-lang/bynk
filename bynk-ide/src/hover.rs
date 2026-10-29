@@ -89,7 +89,8 @@ pub struct HoverInput<'a> {
     pub doc: Option<(&'a str, usize)>,
     /// The cursor's file as the caller knows it: it is excluded from the
     /// cross-file declaration scan, which looks for the name *elsewhere*.
-    pub path: &'a Path,
+    /// `None` (a document with no file path) skips that scan.
+    pub path: Option<&'a Path>,
     /// Content-ownership track (#1086): a pre-read `(path, content)` map for
     /// the project's `.bynk` files (the caller's overlay-then-disk sweep) —
     /// was a bare path list the resolution rungs below read from disk
@@ -341,8 +342,9 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         .or_else(|| {
             input
                 .files
-                .and_then(|content| {
-                    crate::symbols::describe_symbol_cross_file(content, input.path, &name)
+                .zip(input.path)
+                .and_then(|(content, path)| {
+                    crate::symbols::describe_symbol_cross_file(content, path, &name)
                 })
                 .map(|(_other_path, desc)| desc)
         })

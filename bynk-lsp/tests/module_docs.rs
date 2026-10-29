@@ -149,7 +149,7 @@ fn hover_at(
             ),
         }),
         doc: Some((text, offset)),
-        path: &uri.to_file_path().unwrap_or_default(),
+        path: uri.to_file_path().ok().as_deref(),
         files: with_files.then_some(&others),
     })
 }
