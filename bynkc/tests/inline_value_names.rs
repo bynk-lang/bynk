@@ -147,7 +147,7 @@ fn suite_project(tag: &str) -> PathBuf {
     .unwrap();
     std::fs::write(
         root.join("tests/maths.bynk"),
-        "suite shop.maths {\n  case \"c\" {\n    let total = total(3)\n    let other = total + 1\n    expect other == 7\n  }\n}\n",
+        "suite shop.maths {\n  case \"c\" {\n    let total = total(3)\n    let other = total + 1\n    expect other == 7\n  }\n  property \"p\" {\n    for all n: Int {\n      let twice = n + n\n      expect twice == n * 2\n    }\n  }\n}\n",
     )
     .unwrap();
     root
@@ -218,6 +218,21 @@ fn a_suite_let_named_like_a_scaffold_binding_is_left_out() {
         "`total` would show the destructured function, not the let: {seen:?}"
     );
     assert_eq!(seen, vec!["other"], "the case's other let is offered");
+
+    // A `property` body's `let` is recorded too; its `for all` binder `n`
+    // enters through the initial scope, so it gets no inline value.
+    let stop = suite_text.rfind("expect").unwrap();
+    let sites = inline_value_sites(
+        &suite_locals,
+        Span::new(0, suite_text.len()),
+        Span::new(stop, stop),
+        Some(&names),
+    );
+    let seen: Vec<&str> = sites
+        .iter()
+        .map(|s| &suite_text[s.range.start..s.range.end])
+        .collect();
+    assert_eq!(seen, vec!["twice"], "the property's let, not its binder");
     assert!(
         ts.contains("const other = "),
         "`other` is declared under its own name:\n{ts}"
