@@ -2334,6 +2334,43 @@ mod tests {
     }
 
     #[test]
+    fn resolve_doc_link_in_reports_ambiguous_and_still_tries_unit_qualified() {
+        let index = index_with(vec![
+            (
+                key("ratelimit", SymbolKind::Type, "Order"),
+                site("ratelimit.bynk", 10, 15),
+                vec![],
+            ),
+            (
+                key("ratelimit", SymbolKind::Fn, "Order"),
+                site("ratelimit.bynk", 40, 45),
+                vec![],
+            ),
+            (
+                key("other", SymbolKind::Type, "Order"),
+                site("other.bynk", 1, 6),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit"])]);
+        assert_eq!(
+            resolve_doc_link_in(&index, &scope, "ratelimit", "Order", None),
+            DocLinkResolution::Ambiguous {
+                unit: "ratelimit".into(),
+                kinds: vec![SymbolKind::Type, SymbolKind::Fn],
+            }
+        );
+        assert_eq!(
+            resolve_doc_link_in(&index, &scope, "ratelimit", "Nope", None),
+            DocLinkResolution::Unresolved
+        );
+        let hit = resolve_doc_link_in(&index, &scope, "ratelimit", "other.Order", None)
+            .resolved()
+            .unwrap();
+        assert_eq!(hit.def.path, PathBuf::from("other.bynk"));
+    }
+
+    #[test]
     fn named_type_target_unwraps_single_param_containers() {
         use bynk_check::checker::{NamedKind, Types};
         use bynk_syntax::ast::BaseType;
