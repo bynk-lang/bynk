@@ -16,7 +16,8 @@ const CAPABILITIES_PAGE: &str = "https://bynk-lang.org/book/reference/bynk-capab
 /// `(first-party unit, capability, anchor on `CAPABILITIES_PAGE`, operations)`.
 /// A capability documented only as a table row links to its unit's surface
 /// section. The operations are listed so a misspelt `[Clock.nwo]` stays plain
-/// text, as a project-scope miss does.
+/// text, as a project-scope miss does, and they are the did-you-mean candidates
+/// for the unresolved-link hint, so do not trim them.
 type Entry = (
     &'static str,
     &'static str,

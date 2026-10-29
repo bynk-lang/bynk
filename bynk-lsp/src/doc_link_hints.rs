@@ -9,11 +9,13 @@
 //! LSP-only: the checker and `bynk check` never see it. The severity is the
 //! `bynk.docLinks.reportUnresolved` setting (`off` / `hint` / `warning`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::LazyLock;
 
 use bynk_check::index::ProjectIndex;
 use bynk_check::locals::LocalBinding;
+use bynk_syntax::ast::SourceUnit;
 use bynk_syntax::span::Span;
 use serde_json::json;
 use tower_lsp::lsp_types::{
@@ -67,6 +69,50 @@ impl Level {
             Level::Warning => Some(DiagnosticSeverity::WARNING),
         }
     }
+}
+
+/// Top-level item names declared by the first-party (synthetic) units that the
+/// curated doc table (`first_party_docs::FIRST_PARTY_DOCS`) does not cover: the
+/// first-party types (`FetchError`, `Uuid`, …) and `bynk.crypto`'s `Crypto`.
+/// Their symbols are never in the project index and have no Book entry to link
+/// to, so a link to one reads as unresolved even though the name is real; those
+/// owners stay exempt. Curated capabilities are not exempt, so a mistyped
+/// `[Clock.nwo]` is still flagged.
+static UNLINKED_FIRST_PARTY_NAMES: LazyLock<HashSet<String>> = LazyLock::new(|| {
+    let mut names = HashSet::new();
+    for (_, src) in bynk_check::firstparty::FIRSTPARTY_SOURCES {
+        let Ok(tokens) = bynk_syntax::lexer::tokenize(src) else {
+            continue;
+        };
+        let (Some(unit), _) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, src) else {
+            continue;
+        };
+        let items = match &unit {
+            SourceUnit::Commons(c) => &c.items,
+            SourceUnit::Adapter(a) => &a.items,
+            SourceUnit::Context(c) => &c.items,
+            SourceUnit::Suite(_) => continue,
+        };
+        names.extend(
+            items
+                .iter()
+                .filter_map(|i| i.name())
+                .map(|n| n.name.clone())
+                .filter(|n| {
+                    !crate::first_party_docs::FIRST_PARTY_DOCS
+                        .iter()
+                        .any(|(_, cap, ..)| cap == n)
+                }),
+        );
+    }
+    names
+});
+
+/// Does `name` (`Owner` or `Owner.member`) name a first-party item with no
+/// curated doc entry?
+fn is_unlinked_first_party(name: &str) -> bool {
+    let owner = name.split_once('.').map_or(name, |(o, _)| o);
+    UNLINKED_FIRST_PARTY_NAMES.contains(owner)
 }
 
 /// Is the candidate at `span` an intentional bracket — escaped (`\[TODO]`) or
@@ -183,6 +229,7 @@ pub fn unresolved_link_diagnostics(
         if resolve_doc_link_in(index, doc_scope, owner_unit, &name, ctx.as_ref()).is_some()
             || crate::first_party_docs::resolve_first_party_doc_link(doc_scope, owner_unit, &name)
                 .is_some()
+            || is_unlinked_first_party(&name)
             || is_escaped(text, span)
         {
             continue;
@@ -616,6 +663,13 @@ mod tests {
     #[test]
     fn resolving_first_party_links_are_not_hinted() {
         assert!(run_first_party("See [Clock.now] and [Clock].").is_empty());
+    }
+
+    #[test]
+    fn first_party_types_and_crypto_without_a_doc_entry_are_not_hinted() {
+        assert!(
+            run_first_party("Returns a [FetchError] or a [Uuid]; signs with [Crypto].").is_empty()
+        );
     }
 
     #[test]
