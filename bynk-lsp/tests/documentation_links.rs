@@ -251,3 +251,19 @@ fn a_handler_parameter_link_resolves() {
             .collect::<Vec<_>>()
     );
 }
+
+/// #2569: a method's doc attaches at its name in the editor and the panel alike, so a
+/// parameter link and an own-part link both resolve on the panel.
+#[test]
+fn a_method_doc_links_a_parameter() {
+    let wire = page_of(
+        "context u\n\ntype Box = {\n  value: Int,\n}\n\n---\nAdds [n] to the box.\n---\nfn Box.plus(self, n: Int) -> Int {\n  self.value + n\n}\n",
+    );
+    let (_, plus) = entry(&wire, "Box.plus");
+    let sources = plus
+        .links
+        .iter()
+        .filter(|l| matches!(l, WireDocLink::Source { .. }))
+        .count();
+    assert_eq!(sources, 1, "{} / {:?}", plus.markdown, plus.links);
+}
