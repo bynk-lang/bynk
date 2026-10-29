@@ -43,6 +43,7 @@ fn page() -> WireDocModel {
         Some(DocLinkContext {
             index: &r.index,
             doc_scope: &r.doc_scope,
+            locals: &r.locals,
         }),
     )
     .expect("a page")
@@ -73,7 +74,11 @@ fn a_link_to_another_unit_targets_its_source() {
         .links
         .iter()
         .find_map(|l| match l {
-            WireDocLink::Source { uri, range } => Some((uri, range)),
+            // #2523: `[remaining]`, an own field, now links too — in this
+            // file; `[decide]` is the one that lives in another unit.
+            WireDocLink::Source { uri, range } if uri.path().ends_with("/window.bynk") => {
+                Some((uri, range))
+            }
             _ => None,
         })
         .expect("`[decide]` links to its source");
@@ -102,7 +107,13 @@ fn without_a_resolver_the_markdown_is_untouched() {
 /// Analyse a one-file project written to a scratch directory (discovery reads
 /// the disk; an overlay alone does not create a file) and return its page.
 fn page_of(text: &str) -> WireDocModel {
-    let root = std::env::temp_dir().join(format!("bynk-doc-links-{}", std::process::id()));
+    // Tests run in parallel: a directory per call, not per process.
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let root = std::env::temp_dir().join(format!(
+        "bynk-doc-links-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(&root).expect("a scratch directory");
     let rel = PathBuf::from("unit.bynk");
     std::fs::write(root.join(&rel), text).expect("the unit written");
@@ -122,6 +133,7 @@ fn page_of(text: &str) -> WireDocModel {
         Some(DocLinkContext {
             index: &r.index,
             doc_scope: &r.doc_scope,
+            locals: &r.locals,
         }),
     );
     let _ = std::fs::remove_dir_all(&root);
@@ -170,5 +182,52 @@ fn a_project_declaration_wins_over_a_first_party_name() {
             .any(|l| matches!(l, WireDocLink::Entry { .. } | WireDocLink::Source { .. })),
         "{:?}",
         thing.links
+    );
+}
+
+/// #2523: a link to the declaration's own field resolves on the panel, as it
+/// does in the editor and on hover.
+#[test]
+fn an_own_field_link_resolves() {
+    let wire = page_of(
+        "context u\n\n---\nHow many are [left] in the window.\n---\ntype View = {\n  left: Int,\n}\n",
+    );
+    let (_, view) = entry(&wire, "View");
+    assert!(
+        view.links
+            .iter()
+            .any(|l| matches!(l, WireDocLink::Source { .. } | WireDocLink::Entry { .. })),
+        "{} / {:?}",
+        view.markdown,
+        view.links
+    );
+}
+
+/// #2523: a link to a fn's parameter resolves on the panel.
+#[test]
+fn a_parameter_link_resolves() {
+    let wire =
+        page_of("context u\n\n---\nAdds one to [n].\n---\nfn bump(n: Int) -> Int {\n  n + 1\n}\n");
+    let (_, bump) = entry(&wire, "bump");
+    assert!(
+        bump.links
+            .iter()
+            .any(|l| matches!(l, WireDocLink::Source { .. })),
+        "{} / {:?}",
+        bump.markdown,
+        bump.links
+    );
+}
+
+/// #2523: a unit-qualified name resolves on the panel (the rate-limiter's
+/// handler doc names `[window.decide]`).
+#[test]
+fn a_unit_qualified_link_resolves() {
+    let wire = page();
+    assert!(
+        wire.entries
+            .iter()
+            .any(|e| e.markdown.contains("[window.decide](#bynk-doc-link-")),
+        "no entry links window.decide"
     );
 }

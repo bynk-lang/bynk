@@ -2495,6 +2495,7 @@ impl Backend {
             Some(documentation_request::DocLinkContext {
                 index: &analysis.index,
                 doc_scope: &analysis.doc_scope,
+                locals: &analysis.locals,
             }),
         ))
     }
