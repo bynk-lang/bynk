@@ -344,3 +344,26 @@ fn unit_qualified_name_resolves() {
     let def = def.expect("`window.decide` resolves cross-unit");
     assert_eq!(text_of(&r, &def), "decide");
 }
+
+#[test]
+fn own_parameter_resolves_from_a_methods_doc() {
+    // #2569: a method's doc attaches at its name, so `[n]` finds the parameter.
+    let root = std::env::temp_dir().join(format!("bynk-method-doc-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("a scratch directory");
+    std::fs::write(
+        root.join("unit.bynk"),
+        "context u\n\ntype Box = {\n  value: Int,\n}\n\n---\nAdds [n] to the box.\n---\nfn Box.plus(self, n: Int) -> Int {\n  self.value + n\n}\n",
+    )
+    .expect("the unit written");
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let r = bynk_ide::diagnose_project(&root, &sources);
+    let (_, def) = doc_links_in(&r, "unit.bynk")
+        .into_iter()
+        .find(|(n, _)| n == "n")
+        .expect("`[n]` is a candidate");
+    let def = def.expect("`n` resolves to plus's parameter");
+    assert_eq!(text_of(&r, &def), "n");
+    assert!(file_text(&r, "unit.bynk")[..def.span.start].ends_with("self, "));
+    let _ = std::fs::remove_dir_all(&root);
+}
