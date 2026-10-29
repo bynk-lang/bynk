@@ -135,6 +135,7 @@ time = { version = "0.3", default-features = false, features = ["std", "parsing"
 # #2274: registry version ranges and selection (packaging slice 4a).
 semver = "1"
 tower-lsp = "0.20"
+url = "2"
 # #1667: dev-only, for driving `LspService` and reading its `ClientSocket` in
 # bynk-lsp's tests. Both are already in the tree through `tower-lsp`.
 tower = { version = "0.5", default-features = false, features = ["util"] }

@@ -42,9 +42,9 @@ pub mod documentation_request;
 pub mod explain_request;
 pub mod extract;
 pub mod fill_arms;
-pub mod first_party_docs;
+pub use bynk_ide::first_party_docs;
 pub mod fix_all;
-pub mod hover;
+pub use bynk_ide::hover;
 pub mod index_queries;
 mod inlay_hints;
 pub mod inline;
@@ -57,6 +57,7 @@ pub mod provider_stub;
 mod publish;
 pub mod refined_request;
 mod schema_lock;
+mod semantic_tokens;
 pub mod sequence_request;
 mod signature_help;
 mod structure;
@@ -3007,7 +3008,7 @@ impl LanguageServer for Backend {
         let content = crate::hover::hover_content(&crate::hover::HoverInput {
             analysis,
             doc,
-            uri: &uri,
+            path: uri.to_file_path().ok().as_deref(),
             files: files.as_deref(),
         });
         // #2470: a refined type's hover gains its predicates in words and,
