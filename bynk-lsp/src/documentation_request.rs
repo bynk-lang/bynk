@@ -78,6 +78,9 @@ pub enum WireDocLink {
 pub struct DocLinkContext<'a> {
     pub index: &'a bynk_check::index::ProjectIndex,
     pub doc_scope: &'a HashMap<String, Vec<String>>,
+    /// #2523: the round's per-file local bindings, from which a link in a
+    /// fn / handler / op's doc reads its parameters.
+    pub locals: &'a bynk_check::locals::FileLocals,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -156,13 +159,17 @@ pub fn documentation_model_for(
             project_root,
             placed: &placed,
         };
-        for e in &mut entries {
-            let (markdown, links) = linker.linkify(&e.markdown);
+        for (e, (file, span)) in entries.iter_mut().zip(&placed) {
+            let (markdown, links) = linker.linkify(
+                &e.markdown,
+                file,
+                Some(attached_offset(snapshots, file, span.start)),
+            );
             e.markdown = markdown;
             e.links = links;
         }
         if let Some(doc) = &unit_doc {
-            let (markdown, links) = linker.linkify(doc);
+            let (markdown, links) = linker.linkify(doc, rel, None);
             unit_doc = Some(markdown);
             unit_links = links;
         }
@@ -175,6 +182,22 @@ pub fn documentation_model_for(
         unit_range: crate::position::span_to_range(text, model.unit_span),
         entries,
     })
+}
+
+/// #2523: the offset the editor attaches a doc comment at — the first
+/// identifier at or after the entry's span start (a handler's span starts at
+/// `on`, not at a name).
+fn attached_offset(snapshots: &HashMap<PathBuf, String>, file: &Path, start: usize) -> usize {
+    snapshots
+        .get(file)
+        .and_then(|text| bynk_syntax::lexer::tokenize(text).ok())
+        .and_then(|tokens| {
+            tokens
+                .iter()
+                .find(|t| t.span.start >= start && t.kind == bynk_syntax::lexer::TokenKind::Ident)
+                .map(|t| t.span.start)
+        })
+        .unwrap_or(start)
 }
 
 /// #2462: rewrites a block of Markdown's resolvable intra-doc links.
@@ -193,12 +216,32 @@ impl Linker<'_> {
     /// unresolved candidate is left as authored (the render-only decision of
     /// #848). The resolution is `resolve_doc_link`'s — the same as hover and
     /// `documentLink`.
-    fn linkify(&self, markdown: &str) -> (String, Vec<WireDocLink>) {
+    ///
+    /// #2523: `file` / `attached` are the declaration the doc is attached to
+    /// (its file and the byte offset of its name; `None` for a unit's lede, which
+    /// has no own parts and may come from a sibling file), so its own fields and
+    /// parameters link as they do in the editor.
+    fn linkify(
+        &self,
+        markdown: &str,
+        file: &Path,
+        attached: Option<usize>,
+    ) -> (String, Vec<WireDocLink>) {
+        let dc = self
+            .snapshots
+            .get(file)
+            .zip(attached)
+            .map(|(text, attached)| crate::index_queries::DocLinkContext {
+                path: file,
+                text: text.as_str(),
+                attached,
+                locals: self.ctx.locals.get(file).map_or(&[], |l| l.as_slice()),
+            });
         let mut out = String::with_capacity(markdown.len());
         let mut links = Vec::new();
         let mut last = 0;
         for cand in bynk_ide::symbols::scan_doc_link_candidates(markdown) {
-            let Some(target) = self.resolve(&cand.name) else {
+            let Some(target) = self.resolve(&cand.name, dc.as_ref()) else {
                 continue;
             };
             out.push_str(&markdown[last..cand.span.start]);
@@ -217,22 +260,28 @@ impl Linker<'_> {
     /// The project's own declaration first; only when the project has none of
     /// that spelling, the first-party Book entry (`doc_link_url`, which keeps
     /// a project declaration shadowing a first-party name).
-    fn resolve(&self, name: &str) -> Option<WireDocLink> {
-        if let Some(def) = crate::index_queries::resolve_doc_link(
+    fn resolve(
+        &self,
+        name: &str,
+        dc: Option<&crate::index_queries::DocLinkContext<'_>>,
+    ) -> Option<WireDocLink> {
+        if let Some(hit) = crate::index_queries::resolve_doc_link_in(
             self.ctx.index,
             self.ctx.doc_scope,
             self.owner_unit,
             name,
+            dc,
         ) {
-            return self.target(def);
+            return self.target(&hit.def);
         }
-        let url = crate::symbols::doc_link_url(
+        let url = crate::symbols::doc_link_url_in(
             self.ctx.index,
             self.ctx.doc_scope,
             self.project_root,
             self.snapshots,
             self.owner_unit,
             name,
+            dc,
         )?;
         matches!(url.scheme(), "http" | "https").then(|| WireDocLink::External {
             href: url.to_string(),
