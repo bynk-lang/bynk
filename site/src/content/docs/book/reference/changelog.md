@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.436.2** | The documentation panel resolves doc links in context, so a declaration's own fields, parameters and unit-qualified names link as they do in the editor |
 | **v0.436.1** | The unresolved doc-link hint now flags a mistyped first-party link such as `[Clock.nwo]` and suggests `[Clock.now]` |
 | **v0.436.0** | A service contract's canonical form names a sum variant's payload fields (`A(x: Int)`), so renaming one changes the contract hash |
 | **v0.435.3** | "`bynk deploy --context --accept-compatible-skew` deploys a callee ahead of live callers whose contract it stays compatible with, recorded in `bynk.contracts.lock`" |
