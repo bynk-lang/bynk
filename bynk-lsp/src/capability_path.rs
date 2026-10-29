@@ -48,13 +48,18 @@ pub struct StepLocation {
 /// The full set of chains for the entry at `offset`, flattened to the sites the
 /// peek lists (path by path, shortest first, a shared site once), with the
 /// capability, the entry's position, the number of chains, and whether the
-/// checker's cap cut the list short.
+/// checker's cap cut the list short. [`AllPaths::by_path`] keeps each chain's
+/// own sites, a shared site repeated, so a client can mark where one path ends
+/// and the next begins (#2534).
 pub struct AllPaths {
     pub capability: String,
     pub entry: tower_lsp::lsp_types::Position,
     pub paths: usize,
     pub truncated: bool,
     pub locations: Vec<StepLocation>,
+    /// Each chain's sites in order, shortest chain first (one per chain
+    /// counted by `paths`; a step whose file is unknown is left out).
+    pub by_path: Vec<Vec<StepLocation>>,
 }
 
 pub fn all_paths(view: &PathView<'_>, offset: usize) -> Option<AllPaths> {
@@ -66,22 +71,34 @@ pub fn all_paths(view: &PathView<'_>, offset: usize) -> Option<AllPaths> {
     }
     let text = view.snapshots.get(view.rel)?;
     let mut locations: Vec<StepLocation> = Vec::new();
+    let mut by_path: Vec<Vec<StepLocation>> = Vec::with_capacity(paths.len());
     for path in &paths {
+        let mut own = Vec::with_capacity(path.steps.len());
         for step in &path.steps {
             let Some(loc) = location(view, step.site()) else {
                 continue;
             };
             if !locations.contains(&loc) {
-                locations.push(loc);
+                locations.push(loc.clone());
             }
+            own.push(loc);
         }
+        // A chain none of whose sites resolve is dropped, so `by_path` and
+        // `paths` count the same chains.
+        if !own.is_empty() {
+            by_path.push(own);
+        }
+    }
+    if by_path.is_empty() {
+        return None;
     }
     Some(AllPaths {
         capability,
         entry: offset_to_position(text, entry.start),
-        paths: paths.len(),
+        paths: by_path.len(),
         truncated,
         locations,
+        by_path,
     })
 }
 
@@ -97,7 +114,9 @@ fn location(view: &PathView<'_>, span: Span) -> Option<StepLocation> {
 
 /// The "Show capability path" action for the `given` entry at `offset`, or none
 /// off an entry. Its command carries `[uri, position, locations]` for the
-/// client to hand to the editor's references peek.
+/// client to hand to the editor's references peek, then (#2534) `by_path`, each
+/// chain's sites with shared ones repeated, for a client that groups the peek
+/// by path; a client that reads three arguments is unaffected.
 pub fn show_action(view: &PathView<'_>, uri: &Url, offset: usize) -> Option<CodeActionOrCommand> {
     let all = all_paths(view, offset)?;
     let title = if all.paths == 1 {
@@ -120,6 +139,7 @@ pub fn show_action(view: &PathView<'_>, uri: &Url, offset: usize) -> Option<Code
                 serde_json::json!(uri),
                 serde_json::json!(all.entry),
                 serde_json::json!(all.locations),
+                serde_json::json!(all.by_path),
             ]),
         }),
         is_preferred: Some(false),
