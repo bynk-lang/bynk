@@ -7,7 +7,7 @@
 //! ([`SHOW_COMMAND`]) that opens the editor's references peek over the steps'
 //! sites. Both read the checker's recorded graph; nothing here re-derives a
 //! path from the source text, and the full set is computed on demand by
-//! [`CapabilityGraph::all_paths`] rather than stored per entry.
+//! [`bynk_check::capability_paths::CapabilityGraph::all_paths`] rather than stored per entry.
 //!
 //! Because the command is executed by the *client*, the action is offered only
 //! to a client that says it implements it —
