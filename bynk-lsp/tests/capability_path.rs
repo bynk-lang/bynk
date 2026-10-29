@@ -170,6 +170,12 @@ fn the_action_lists_every_path_as_peek_locations() {
     // Two calls into `withdraw`/`go`, the `withdraw` call inside `go`, and the
     // one shared use.
     assert_eq!(all.locations.len(), 4, "{:?}", all.locations);
+    // Per path, the shared use repeats: `go` → `withdraw` → use, and
+    // `withdraw` → use.
+    let lens: Vec<usize> = all.by_path.iter().map(Vec::len).collect();
+    assert_eq!(lens.iter().sum::<usize>(), 5, "{lens:?}");
+    let last = |i: usize| all.by_path[i].last().cloned();
+    assert_eq!(last(0), last(1), "both chains end at the one shared use");
     let uri = Url::from_file_path(p.root.join("shop/takedown.bynk")).unwrap();
     let Some(CodeActionOrCommand::CodeAction(action)) =
         show_action(&view(&p, &snaps, &rel), &uri, offset)
@@ -185,7 +191,7 @@ fn the_action_lists_every_path_as_peek_locations() {
     );
     let cmd = action.command.expect("a client command");
     assert_eq!(cmd.command, "bynk.showCapabilityPath");
-    assert_eq!(cmd.arguments.unwrap().len(), 3);
+    assert_eq!(cmd.arguments.unwrap().len(), 4);
 }
 
 #[test]
