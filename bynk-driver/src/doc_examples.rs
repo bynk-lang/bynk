@@ -380,6 +380,7 @@ fn context_copy(
     close: Option<usize>,
     header_end: usize,
     uses: &[(usize, String)],
+    moved: &[usize],
     ex: &Example<'_>,
 ) -> Copy {
     let mut bytes = source.as_bytes().to_vec();
@@ -408,13 +409,7 @@ fn context_copy(
         .body
         .iter()
         .enumerate()
-        .map(|(k, l)| {
-            if uses.iter().any(|(u, _)| *u == k) {
-                ""
-            } else {
-                l.text
-            }
-        })
+        .map(|(k, l)| if moved.contains(&k) { "" } else { l.text })
         .collect();
     text.push_str(&body.join("\n"));
     if close.is_some() {
@@ -624,7 +619,9 @@ impl DocExamples {
         };
         // A `uses` the context already has is left out of the header.
         let have: Vec<String> = ctx.uses.iter().map(|u| u.target.joined()).collect();
-        let uses: Vec<(usize, String)> = fence_uses(ex)
+        let all_uses = fence_uses(ex);
+        let moved: Vec<usize> = all_uses.iter().map(|(k, _)| *k).collect();
+        let uses: Vec<(usize, String)> = all_uses
             .into_iter()
             .filter(|(_, line)| !have.iter().any(|h| line.trim_end() == format!("uses {h}")))
             .collect();
@@ -639,7 +636,7 @@ impl DocExamples {
             text,
             from,
             hoisted,
-        } = context_copy(source, &blank, close, ctx.name.span.end, &uses, ex);
+        } = context_copy(source, &blank, close, ctx.name.span.end, &uses, &moved, ex);
         let real_starts = line_starts(source);
         let table = Table {
             synth_key: key.to_path_buf(),
