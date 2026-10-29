@@ -57,8 +57,8 @@ pub struct AllPaths {
     pub paths: usize,
     pub truncated: bool,
     pub locations: Vec<StepLocation>,
-    /// Each chain's sites in order, shortest chain first (parallel to the
-    /// chains counted by `paths`).
+    /// Each chain's sites in order, shortest chain first (one per chain
+    /// counted by `paths`; a step whose file is unknown is left out).
     pub by_path: Vec<Vec<StepLocation>>,
 }
 
@@ -83,12 +83,19 @@ pub fn all_paths(view: &PathView<'_>, offset: usize) -> Option<AllPaths> {
             }
             own.push(loc);
         }
-        by_path.push(own);
+        // A chain none of whose sites resolve is dropped, so `by_path` and
+        // `paths` count the same chains.
+        if !own.is_empty() {
+            by_path.push(own);
+        }
+    }
+    if by_path.is_empty() {
+        return None;
     }
     Some(AllPaths {
         capability,
         entry: offset_to_position(text, entry.start),
-        paths: paths.len(),
+        paths: by_path.len(),
         truncated,
         locations,
         by_path,

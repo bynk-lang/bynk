@@ -173,7 +173,7 @@ fn the_action_lists_every_path_as_peek_locations() {
     // Per path, the shared use repeats: `go` → `withdraw` → use, and
     // `withdraw` → use.
     let lens: Vec<usize> = all.by_path.iter().map(Vec::len).collect();
-    assert_eq!(lens.iter().sum::<usize>(), 5, "{lens:?}");
+    assert_eq!(lens, vec![2, 3], "shortest chain first");
     let last = |i: usize| all.by_path[i].last().cloned();
     assert_eq!(last(0), last(1), "both chains end at the one shared use");
     let uri = Url::from_file_path(p.root.join("shop/takedown.bynk")).unwrap();
@@ -191,7 +191,9 @@ fn the_action_lists_every_path_as_peek_locations() {
     );
     let cmd = action.command.expect("a client command");
     assert_eq!(cmd.command, "bynk.showCapabilityPath");
-    assert_eq!(cmd.arguments.unwrap().len(), 4);
+    let args = cmd.arguments.unwrap();
+    assert_eq!(args.len(), 4);
+    assert_eq!(args[3], serde_json::json!(all.by_path));
 }
 
 #[test]
