@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.436.6** | Doc-link completion after a unit prefix (`[window.`, `[a.b.`) offers that unit's top-level names |
 | **v0.436.5** | Inline values while debugging now show for the locals of `suite` `case` and `property` blocks, not only functions and handlers |
 | **v0.436.4** | '`bynk test` checks declaration examples in a context''s doc comments' |
 | **v0.436.3** | `bynk mcp`'s `bynk_describe_symbol` answers from the language server's full hover ladder |
