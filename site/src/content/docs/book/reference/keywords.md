@@ -90,7 +90,7 @@ Reserved only in the one position named below; elsewhere (a field, parameter, or
 
 ## Contextual words
 
-Not lexer keywords: these are ordinary identifiers everywhere except the one position named below, where they carry meaning. You can still use them as a field, parameter, or other name elsewhere.
+Not lexer keywords: the lexer treats these as ordinary identifiers, and they carry meaning only in the position each entry describes (inside an agent body or a `migrate` step, for instance). You can still use them as a field, parameter, or other name elsewhere.
 
 | Word | Meaning |
 |---|---|
