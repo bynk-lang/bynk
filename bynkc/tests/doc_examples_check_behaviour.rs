@@ -166,6 +166,45 @@ fn a_context_fence_is_checked_against_the_rest_of_the_context() {
     assert!(!text.contains("shop.bynk:3:"), "{text}");
 }
 
+#[test]
+fn a_context_fence_may_start_with_a_uses() {
+    let shop = "---\n```bynk\nuses demo.calc\n\nfn twice(o: Order) -> Int { double(o.cents) }\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n";
+    let root = context_project("context-uses", shop);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(ok, "{text}");
+
+    // An unresolved `uses` in the fence is reported at its fence line.
+    let broken = shop.replace("uses demo.calc", "uses demo.nope");
+    let root = context_project("context-uses-broken", &broken);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(!ok, "{text}");
+    assert!(text.contains("shop.bynk:3:"), "{text}");
+}
+
+#[test]
+fn a_brace_form_context_fence_is_checked() {
+    let shop = "---\n```bynk\nfn total(o: Order) -> Int { o.cents }\n```\n---\ncontext demo.shop {\n  type Order = { cents: Int }\n}\n";
+    let root = context_project("context-brace", shop);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(ok, "{text}");
+
+    let broken = shop.replace("o.cents }", "o.cents + \"x\" }");
+    let root = context_project("context-brace-broken", &broken);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(!ok, "{text}");
+    assert!(text.contains("shop.bynk:3:"), "{text}");
+}
+
+#[test]
+fn a_replacement_that_breaks_other_items_is_not_the_examples_error() {
+    // The fence reshapes `Order`, which `describe` relies on: the error there
+    // is not reported, as only diagnostics inside the fence count.
+    let shop = "---\n```bynk\ntype Order = { cents: Int, tag: String }\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n\nfn describe(o: Order) -> Int { o.cents }\n\nfn make() -> Order { Order { cents: 1 } }\n";
+    let root = context_project("context-replace", shop);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(ok, "{text}");
+}
+
 /// A `bynk test` fence is run, so these need the runner `behaviour_fixtures.rs`
 /// does: skipped on Windows, and where no `tsc` and `node` are on the path.
 fn can_run() -> bool {

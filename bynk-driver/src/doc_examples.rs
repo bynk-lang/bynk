@@ -246,6 +246,9 @@ struct Table {
 struct CopyMap {
     /// The synthetic byte offset at which the appended text starts.
     from: usize,
+    /// The fence's `uses` hoisted into the header: where each sits in the
+    /// copy, and its line in the body.
+    hoisted: Vec<(Range<usize>, usize)>,
     /// The first appended body line, in the copy.
     synth_line: usize,
     /// The body's first line, in the real file.
@@ -340,16 +343,45 @@ fn fence_item_names(target: &str, body: &str) -> Vec<String> {
     }
 }
 
+/// The leading `uses` lines of a declaration fence: a `uses` after a
+/// declaration is a parse error, so the copy declares them in the context's
+/// header instead. Each is the line's index in the body and its `uses` text.
+fn fence_uses(ex: &Example<'_>) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    for (k, l) in ex.body.iter().enumerate() {
+        let t = l.text.trim();
+        if t.starts_with("uses ") {
+            out.push((k, t.to_string()));
+        } else if !(t.is_empty() || t.starts_with("--")) {
+            break;
+        }
+    }
+    out
+}
+
+/// A copy of a context made to check a declaration fence.
+struct Copy {
+    text: String,
+    /// The byte offset at which the appended fence body starts.
+    from: usize,
+    /// The `uses` the fence brought to the header: where each sits in the copy,
+    /// and its line in the fence body.
+    hoisted: Vec<(Range<usize>, usize)>,
+}
+
 /// A copy of the context `source` with the declarations in `blank` and the
-/// `close` brace (of a brace-form context) blanked out, and the fence `ex`
-/// appended. Blanking keeps every line, so the real file's lines are the
-/// copy's; the body is the copy's last lines.
+/// `close` brace (of a brace-form context) blanked out, the fence's `uses`
+/// added to the header after `header_end`, and the rest of the fence `ex`
+/// appended. Blanking keeps every line, so the real file's lines are the copy's;
+/// the body is the copy's last lines.
 fn context_copy(
     source: &str,
     blank: &[Range<usize>],
     close: Option<usize>,
+    header_end: usize,
+    uses: &[(usize, String)],
     ex: &Example<'_>,
-) -> String {
+) -> Copy {
     let mut bytes = source.as_bytes().to_vec();
     for range in blank {
         for b in &mut bytes[range.clone()] {
@@ -362,12 +394,37 @@ fn context_copy(
         bytes[at] = b' ';
     }
     let mut text = String::from_utf8(bytes).expect("blanking keeps whole characters");
+    let mut hoisted = Vec::new();
+    let mut at = header_end;
+    for (k, line) in uses {
+        let piece = format!(" {line}");
+        text.insert_str(at, &piece);
+        hoisted.push((at + 1..at + piece.len(), *k));
+        at += piece.len();
+    }
     text.push('\n');
-    text.push_str(&ex.text());
+    let from = text.len();
+    let body: Vec<&str> = ex
+        .body
+        .iter()
+        .enumerate()
+        .map(|(k, l)| {
+            if uses.iter().any(|(u, _)| *u == k) {
+                ""
+            } else {
+                l.text
+            }
+        })
+        .collect();
+    text.push_str(&body.join("\n"));
     if close.is_some() {
         text.push_str("\n}");
     }
-    text
+    Copy {
+        text,
+        from,
+        hoisted,
+    }
 }
 
 /// The real file name a synthetic file's name stands for.
@@ -530,8 +587,14 @@ impl DocExamples {
                 let table = self.layer_tables[layer]
                     .iter()
                     .find(|t| t.synth_key.ends_with(&path))?;
-                let from = table.copy.as_ref()?.from;
-                (ae.error.span.start >= from).then(|| Self::remap_one(ae, table, path))
+                let copy = table.copy.as_ref()?;
+                let at = ae.error.span.start;
+                if let Some((_, k)) = copy.hoisted.iter().find(|(r, _)| r.contains(&at)) {
+                    // An error in a `uses` moved to the header is the fence
+                    // line's.
+                    return Some(Self::at_fence_line(ae, table, copy.real_line + k, path));
+                }
+                (at >= copy.from).then(|| Self::remap_one(ae, table, path))
             })
             .collect()
     }
@@ -550,11 +613,21 @@ impl DocExamples {
     ) -> bool {
         let close = match ctx.form {
             CommonsForm::Fragment => None,
-            CommonsForm::Brace => match source[..ctx.span.end].rfind('}') {
-                Some(at) => Some(at),
-                None => return false,
-            },
+            CommonsForm::Brace => {
+                let at = source[..ctx.span.end].rfind('}');
+                debug_assert!(at.is_some(), "a brace-form context ends in a brace");
+                match at {
+                    Some(at) => Some(at),
+                    None => return false,
+                }
+            }
         };
+        // A `uses` the context already has is left out of the header.
+        let have: Vec<String> = ctx.uses.iter().map(|u| u.target.joined()).collect();
+        let uses: Vec<(usize, String)> = fence_uses(ex)
+            .into_iter()
+            .filter(|(_, line)| !have.iter().any(|h| line.trim_end() == format!("uses {h}")))
+            .collect();
         let names = fence_item_names(target, &ex.text());
         let blank: Vec<Range<usize>> = ctx
             .items
@@ -562,13 +635,18 @@ impl DocExamples {
             .filter(|i| i.name().is_some_and(|n| names.contains(&n.name)))
             .map(|i| i.span().start..i.span().end)
             .collect();
-        let text = context_copy(source, &blank, close, ex);
+        let Copy {
+            text,
+            from,
+            hoisted,
+        } = context_copy(source, &blank, close, ctx.name.span.end, &uses, ex);
         let real_starts = line_starts(source);
         let table = Table {
             synth_key: key.to_path_buf(),
             synth_starts: line_starts(&text),
             copy: Some(CopyMap {
-                from: source.len() + 1,
+                from,
+                hoisted,
                 synth_line: real_starts.len(),
                 real_line: ex.open + 1,
                 len: ex.body.len(),
@@ -653,6 +731,29 @@ impl DocExamples {
         let real = path.with_file_name(real_name_of(&name)?);
         let table = self.tables.iter().find(|t| t.synth_key.ends_with(path))?;
         Some((table, real))
+    }
+
+    /// `ae` moved onto the whole of line `real_line` of the real file.
+    fn at_fence_line(
+        mut ae: AttributedError,
+        table: &Table,
+        real_line: usize,
+        real: PathBuf,
+    ) -> AttributedError {
+        let start = table.real_starts[real_line];
+        let end = table
+            .real_starts
+            .get(real_line + 1)
+            .map_or(table.real_len, |next| next - 1);
+        ae.error.span = bynk_syntax::span::Span {
+            start,
+            end,
+            ..ae.error.span
+        };
+        ae.error.labels.clear();
+        ae.error.suggestions.clear();
+        ae.source_path = Some(real);
+        ae
     }
 
     fn remap_one(mut ae: AttributedError, table: &Table, real: PathBuf) -> AttributedError {
@@ -850,6 +951,23 @@ mod tests {
         let at = text.rfind("fn f").unwrap();
         let (start, _) = table.map_range(at, at + 2);
         assert_eq!(&src[start..start + 2], "fn");
+    }
+
+    #[test]
+    fn a_fence_uses_moves_to_the_context_header() {
+        let src = "---\n```bynk\nuses a.b\nuses m.c\n\nfn f() -> Int { 1 }\n```\n---\ncontext m uses m.c\n\ntype T = { c: Int }\n";
+        let found = DocExamples::collect(&sources(src));
+        let (_, text) = &found.layers[0][0];
+        // `m.c` is already used; `a.b` moves to the header and the body keeps
+        // its lines, with the `uses` lines blank.
+        let code = &text[text.find("context m").unwrap()..];
+        assert!(code.starts_with("context m uses a.b uses m.c\n"), "{code}");
+        assert!(text.ends_with("\n\n\n\nfn f() -> Int { 1 }"), "{text}");
+        assert_eq!(text.matches("uses a.b").count(), 2, "{text}");
+        let copy = found.layer_tables[0][0].copy.as_ref().unwrap();
+        assert_eq!(copy.hoisted.len(), 1);
+        assert_eq!(&text[copy.hoisted[0].0.clone()], "uses a.b");
+        assert_eq!(copy.hoisted[0].1, 0);
     }
 
     #[test]
