@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A service contract's canonical form names a sum variant's payload fields (`A(x: Int)`), so renaming one changes the contract hash
----
+# 0649 — A service contract names sum payload fields
 
-## ADR: contract-sum-payload-field-names
-title: A service contract names sum payload fields
-summary: Contract mode renders a variant payload as sorted `name: type`, as the storage modes already do
+- **Status:** Accepted (v0.436)
 
 **Context.** The wire format keys a sum's payload by field name
 (`{"kind":"Circle","radius":0.5}`), but `Mode::Contract` rendered a payload as

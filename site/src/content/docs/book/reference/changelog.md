@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.435**.
+written against **v0.436**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.436.0** | A service contract's canonical form names a sum variant's payload fields (`A(x: Int)`), so renaming one changes the contract hash |
 | **v0.435.3** | "`bynk deploy --context --accept-compatible-skew` deploys a callee ahead of live callers whose contract it stays compatible with, recorded in `bynk.contracts.lock`" |
 | **v0.435.2** | "`bynk deploy` and the editor's contract diff classify a service-contract change as compatible or breaking, with reasons" |
 | **v0.435.1** | "`bynk openapi` writes an OpenAPI 3.1 document for a project's `from http` services, derived from the routes, handler params, boundary types and refinements" |
