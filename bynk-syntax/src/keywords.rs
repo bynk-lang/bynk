@@ -334,7 +334,7 @@ const fn k(word: &'static str, meaning: &'static str) -> KeywordInfo {
     KeywordInfo { word, meaning }
 }
 
-/// Render the keyword reference page — three tiers, each with prose that is
+/// Render the keyword reference page — four tiers, each with prose that is
 /// true of *that* tier (the page used to make one blanket claim that was false
 /// of two of them).
 pub fn render_markdown() -> String {
@@ -346,9 +346,10 @@ pub fn render_markdown() -> String {
          Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference:: -->\n\n",
     );
     out.push_str(
-        "Bynk reserves names in three tiers. The first two are lexer keywords; the \
-         third are compiler-known type names. Only the **hard keywords** can never \
-         be used as an identifier.\n\n",
+        "Bynk reserves names in four tiers. The first two are lexer keywords; the \
+         third are words the lexer treats as plain identifiers; the fourth are \
+         compiler-known type names. Only the **hard keywords** can never be used \
+         as an identifier.\n\n",
     );
 
     // Tier 1 — hard keywords: every reserved token except the contextual ones.
@@ -383,7 +384,20 @@ pub fn render_markdown() -> String {
         out.push_str(&format!("| `{}` | {} |\n", info.word, info.meaning));
     }
 
-    // Tier 3 — built-in type names: not lexer keywords at all, but reserved in
+    // Tier 3 — contextual words: not lexer keywords at all; ordinary identifiers
+    // that carry meaning in one position.
+    out.push_str("\n## Contextual words\n\n");
+    out.push_str(
+        "Not lexer keywords: these are ordinary identifiers everywhere except the \
+         one position named below, where they carry meaning. You can still use them \
+         as a field, parameter, or other name elsewhere.\n\n",
+    );
+    out.push_str("| Word | Meaning |\n|---|---|\n");
+    for info in CONTEXTUAL_KEYWORDS {
+        out.push_str(&format!("| `{}` | {} |\n", info.word, info.meaning));
+    }
+
+    // Tier 4 — built-in type names: not lexer keywords at all, but reserved in
     // type position (a `type` declaration may not reuse one).
     out.push_str("\n## Built-in type names\n\n");
     out.push_str(
