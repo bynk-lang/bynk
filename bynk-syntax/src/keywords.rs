@@ -388,9 +388,10 @@ pub fn render_markdown() -> String {
     // that carry meaning in one position.
     out.push_str("\n## Contextual words\n\n");
     out.push_str(
-        "Not lexer keywords: these are ordinary identifiers everywhere except the \
-         one position named below, where they carry meaning. You can still use them \
-         as a field, parameter, or other name elsewhere.\n\n",
+        "Not lexer keywords: the lexer treats these as ordinary identifiers, and \
+         they carry meaning only in the position each entry describes (inside an \
+         agent body or a `migrate` step, for instance). You can still use them as a \
+         field, parameter, or other name elsewhere.\n\n",
     );
     out.push_str("| Word | Meaning |\n|---|---|\n");
     for info in CONTEXTUAL_KEYWORDS {
