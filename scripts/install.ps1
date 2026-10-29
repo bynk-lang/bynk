@@ -6,6 +6,7 @@
 # Options (environment variables):
 #   BYNK_VERSION      release tag to install (e.g. v0.16.0); default: the latest
 #   BYNK_INSTALL_DIR  where to put the binaries; default: %LOCALAPPDATA%\Programs\bynk\bin
+#   BYNK_NO_MODIFY_PATH  set to any value to leave the user's PATH alone
 #
 # The archive is verified against the release's SHA256SUMS before anything is
 # installed. The install directory is added to the user's PATH.
@@ -66,7 +67,9 @@ try {
 # REG_EXPAND_SZ (what [Environment]::SetEnvironmentVariable would flatten).
 $key = (Get-Item 'HKCU:\Environment')
 $userPath = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-if (($userPath -split ';') -notcontains $dest) {
+if ($env:BYNK_NO_MODIFY_PATH) {
+    Write-Host "Skipped the PATH update (BYNK_NO_MODIFY_PATH is set); add $dest to your PATH yourself."
+} elseif (($userPath -split ';') -notcontains $dest) {
     $newPath = if ($userPath) { "$userPath;$dest" } else { $dest }
     Set-ItemProperty -Path 'HKCU:\Environment' -Name Path -Value $newPath -Type ExpandString
     $env:Path = "$env:Path;$dest"
