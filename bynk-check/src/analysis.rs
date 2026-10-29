@@ -793,6 +793,7 @@ pub fn analyse_project_with_policy(
         &unit_uses,
         &mut test_errors,
         &mut refs,
+        &mut locals,
         tys,
     );
     errors.extend_attributed_by_span(&parsed, test_errors);

@@ -181,10 +181,8 @@ fn a_suite_let_named_like_a_scaffold_binding_is_left_out() {
         "the let is renamed:\n{ts}"
     );
 
-    // Suite case bodies are checked with a throwaway locals sink, so today the
-    // server has no locals there and offers no inline values in a test. Should
-    // they ever be recorded, the guard must keep `total` out: either outcome
-    // is correct, a lookup of `total` is not.
+    // A case's locals are recorded (#2517), so a test gets inline values; the
+    // guard must keep `total` out, since a lookup of it shows the function.
     let result = bynk_ide::diagnose_project(
         &root,
         &bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::Project(root.clone())),
@@ -218,5 +216,10 @@ fn a_suite_let_named_like_a_scaffold_binding_is_left_out() {
     assert!(
         !seen.contains(&"total"),
         "`total` would show the destructured function, not the let: {seen:?}"
+    );
+    assert_eq!(seen, vec!["other"], "the case's other let is offered");
+    assert!(
+        ts.contains("const other = "),
+        "`other` is declared under its own name:\n{ts}"
     );
 }

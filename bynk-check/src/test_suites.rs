@@ -152,6 +152,7 @@ pub fn phase_test_bodies(
     unit_uses: &HashMap<String, Vec<String>>,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
+    locals: &mut LocalsSink,
     tys: &Arc<Types>,
 ) -> HashMap<String, HashMap<String, ResolvedStub>> {
     let mut ready: HashMap<String, HashMap<String, ResolvedStub>> = HashMap::new();
@@ -253,6 +254,7 @@ pub fn phase_test_bodies(
             unit_consumes_aliases,
             unit_uses,
             refs,
+            locals,
             tys,
         );
         let bodies_failed = !bodies_errs.is_empty();
@@ -1052,6 +1054,7 @@ fn check_test_bodies(
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_uses: &HashMap<String, Vec<String>>,
     refs: &mut RefSink,
+    locals: &mut LocalsSink,
     tys: &Arc<Types>,
 ) -> Vec<CompileError> {
     let mut errors = Vec::new();
@@ -1181,6 +1184,8 @@ fn check_test_bodies(
             target_name,
             parsed[i].is_synthetic(),
         );
+        // #2517: and so do the case and property locals.
+        locals.enter_file(&parsed[i].identity_path(), parsed[i].is_synthetic());
         for case in &test_decl.cases {
             check_test_case_body(
                 target_name,
@@ -1192,6 +1197,7 @@ fn check_test_bodies(
                 unit_consumes_aliases,
                 &mut errors,
                 refs,
+                locals,
                 tys,
             );
             let tier = case_effective_tier(case, test_decl);
@@ -1218,6 +1224,7 @@ fn check_test_bodies(
                 unit_consumes_aliases,
                 &mut errors,
                 refs,
+                locals,
                 tys,
             );
             crossing.check_property(target_name, prop, &mut errors);
@@ -2674,6 +2681,39 @@ pub fn typecheck_case_body(
     HashMap<ExprId, checker::TypedExpr>,
     HashMap<ExprId, checker::Callee>,
 ) {
+    // The emitter has no use for the body's locals — a throwaway sink.
+    typecheck_case_body_recording(
+        target_name,
+        body,
+        unit_span,
+        unit_tables,
+        resolved,
+        errors,
+        refs,
+        &mut LocalsSink::new(),
+        initial_scope,
+        tys,
+    )
+}
+
+/// [`typecheck_case_body`], recording the body's local bindings into `locals`
+/// (#2517) so the language server can offer inline values inside a test.
+#[allow(clippy::too_many_arguments)]
+fn typecheck_case_body_recording(
+    target_name: &str,
+    body: &Block,
+    unit_span: Span,
+    unit_tables: &HashMap<String, UnitTable>,
+    resolved: &ResolvedCommons,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    locals: &mut LocalsSink,
+    initial_scope: HashMap<String, checker::TyId>,
+    tys: &Arc<Types>,
+) -> (
+    HashMap<ExprId, checker::TypedExpr>,
+    HashMap<ExprId, checker::Callee>,
+) {
     let mut expr_types: HashMap<ExprId, checker::TypedExpr> = HashMap::new();
     let mut callees: HashMap<ExprId, checker::Callee> = HashMap::new();
     // Synthesise an Effect[Result[(), ValidationError]] return type as a
@@ -2719,7 +2759,6 @@ pub fn typecheck_case_body(
     let return_ty_span = unit_span;
     // Test bodies record no hints (out of v0.27 scope) — a throwaway sink.
     let mut no_hints = HintSink::new();
-    let mut no_locals = LocalsSink::new();
     // Test bodies record no capability requirements either — muted sink.
     let mut no_requirements = RequirementSink::new();
     let _ = checker::check_body(
@@ -2749,7 +2788,7 @@ pub fn typecheck_case_body(
             errors,
             refs,
             hints: &mut no_hints,
-            locals: &mut no_locals,
+            locals,
             requirements: &mut no_requirements,
             callees: &mut callees,
         },
@@ -2768,6 +2807,7 @@ fn check_test_case_body(
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
+    locals: &mut LocalsSink,
     tys: &Arc<Types>,
 ) {
     let Some((mut resolved, _)) = build_privileged_resolved(
@@ -2781,7 +2821,7 @@ fn check_test_case_body(
     };
     register_call_record_types(&mut resolved, target_name, unit_tables);
     let _ = target_kind;
-    let _ = typecheck_case_body(
+    let _ = typecheck_case_body_recording(
         target_name,
         &case.body,
         case.span,
@@ -2789,6 +2829,7 @@ fn check_test_case_body(
         &resolved,
         errors,
         refs,
+        locals,
         HashMap::new(),
         tys,
     );
@@ -3591,6 +3632,7 @@ fn check_property_body(
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
+    locals: &mut LocalsSink,
     tys: &Arc<Types>,
 ) {
     let Some((mut resolved, _)) = build_privileged_resolved(
@@ -3735,7 +3777,6 @@ fn check_property_body(
     let return_ty = checker::resolve_type_ref(&synthetic_return, &resolved.types, tys).unwrap();
     let return_ty_span = prop.span;
     let mut no_hints = HintSink::new();
-    let mut no_locals = LocalsSink::new();
     let mut no_requirements = RequirementSink::new();
     // The optional `where` filter is checked first (against `Bool`), sharing
     // `check_body`'s `Ctx` with the body below; the body is the one predicate
@@ -3767,7 +3808,7 @@ fn check_property_body(
             errors,
             refs,
             hints: &mut no_hints,
-            locals: &mut no_locals,
+            locals,
             requirements: &mut no_requirements,
             callees: &mut callees,
         },
