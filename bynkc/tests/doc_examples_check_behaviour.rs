@@ -129,21 +129,41 @@ fn a_fence_that_is_neither_statements_nor_declarations_is_a_parse_error_at_the_f
     assert!(text.contains("calc.bynk:6:"), "{text}");
 }
 
+fn context_project(tag: &str, shop: &str) -> PathBuf {
+    let root = project(
+        tag,
+        &UNIT.replace("let x: Int = \"oops\"", "let x: Int = 4"),
+    );
+    std::fs::write(root.join("src/demo/shop.bynk"), shop).unwrap();
+    root
+}
+
 #[test]
-fn a_declaration_fence_in_a_context_is_not_checked_but_statements_are() {
-    let root = project("context", UNIT);
-    std::fs::write(
-        root.join("src/demo/shop.bynk"),
-        "---\n```bynk\nfn total(o: Order) -> Int { o.cents }\n```\n\n```bynk\nlet x: Int = \"oops\"\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n",
-    )
-    .unwrap();
-    let unit = UNIT.replace("let x: Int = \"oops\"", "let x: Int = 4");
-    std::fs::write(root.join("src/demo/calc.bynk"), unit).unwrap();
+fn a_declaration_fence_in_a_context_is_checked_and_may_redeclare_what_it_documents() {
+    // The fence shows `type Order` on `type Order`, and uses it.
+    let shop = "---\n```bynk\ntype Order = { cents: Int }\n\nfn total(o: Order) -> Int { o.cents }\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n";
+    let root = context_project("context-ok", shop);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(ok, "{text}");
+
+    // A broken line in the fence fails at that line of the real file.
+    let broken = shop.replace("o.cents }", "o.cents + \"x\" }");
+    let root = context_project("context-broken", &broken);
     let (ok, text) = bynkc_test(&root, "json");
     assert!(!ok, "{text}");
-    // Only the statement fence is reported; `Order` is not a false error.
+    assert!(text.contains("bynk.types.type_mismatch"), "{text}");
+    assert!(text.contains("shop.bynk:5:"), "{text}");
+}
+
+#[test]
+fn a_context_fence_is_checked_against_the_rest_of_the_context() {
+    let shop = "---\n```bynk\nfn total(o: Order) -> Int { o.cents }\n```\n\n```bynk\nlet x: Int = \"oops\"\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n";
+    let root = context_project("context-rest", shop);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(!ok, "{text}");
+    // Only the statement fence is reported; `Order` resolves in the copy.
     assert!(text.contains("shop.bynk:7:"), "{text}");
-    assert!(!text.contains("Order"), "{text}");
+    assert!(!text.contains("shop.bynk:3:"), "{text}");
 }
 
 /// A `bynk test` fence is run, so these need the runner `behaviour_fixtures.rs`
