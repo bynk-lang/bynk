@@ -1824,8 +1824,9 @@ The claim types as `Bool`.
 
 *(v0.20b)* `List[T]` and `Map[K, V]` are built-in generic types
 ([§6.2](/book/spec/type-system/#62-built-in-generic-types)); this section is their
-static semantics. `Set[T]` (standard-library K6a, #2596) joins them: `Set`
-followed by `[` is the built-in, and a bare `Set` remains an ordinary name. Its
+static semantics. `Set[T]` (standard-library K6a, #2596) joins them, and like
+them `Set` is a reserved built-in type name (`bynk.resolve.reserved_builtin_type`
+for a `type Set`). Its
 element type MUST be value-keyable, by the `Map`-key rule
 (`bynk.types.unkeyable_set_element`), checked at a written `Set[T]` and at the
 inferred element of `Set.of`. `Set.empty()` obeys the empty-collection rule

@@ -1973,15 +1973,6 @@
         {
           "type": "SYMBOL",
           "name": "identifier"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "STRING",
-            "value": "Set"
-          },
-          "named": true,
-          "value": "identifier"
         }
       ]
     },

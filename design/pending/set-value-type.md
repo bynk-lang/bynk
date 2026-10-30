@@ -13,15 +13,20 @@ saying what it meant, and `List.contains` is linear. ADR 0035 made `List` and
 `Map` built-in because the boundary machinery must know their shape; a value
 `Set` has the same need. The store kind `Set` (`store x: Set[T]`, ADR 0110) is
 parsed by its own path, so a value type can share the name, as `Map` does.
-`List` and `Map` are not lexer keywords, only names the type parser
-recognises, so a built-in `Set` breaks no user `type Set`. A JS `Set` compares
-by identity, so only value-comparable elements can be members.
+`List` and `Map` are not lexer keywords but reserved built-in type names: the
+type parser dispatches on them, and a `type List` is
+`bynk.resolve.reserved_builtin_type`. No source in the repository declares a
+`Set`. A JS `Set` compares by identity, so only value-comparable elements can
+be members.
 
 **Decision.**
 
-- **A. A built-in, immutable `Set[T]`, lowered to `ReadonlySet<T>`.** `Set`
-  followed by `[` is the built-in; a bare `Set` stays an ordinary name in both
-  the Rust parser and the tree-sitter grammar. It is insertion-ordered,
+- **A. A built-in, immutable `Set[T]`, lowered to `ReadonlySet<T>`.** Like
+  `List` and `Map`, `Set` is a reserved built-in type name: the type parser
+  dispatches on it, a bare `Set` asks for its type argument, and a `type Set`
+  declaration is `bynk.resolve.reserved_builtin_type`. No source in the
+  repository declares one. It is not a lexer keyword, so `Set` stays usable
+  as a store kind and in other positions. It is insertion-ordered,
   normatively, as `Map` is: `toList` and the wire form list elements in the
   order they were first added, and inserting a present element keeps its
   place.

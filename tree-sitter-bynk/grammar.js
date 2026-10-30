@@ -523,9 +523,6 @@ module.exports = grammar({
         $.generic_type_ref,
         $.applied_type_ref,
         $.identifier,
-        // K6a (#2596): `Set` is the built-in only before `[`; bare, it is a
-        // user's own type name, as the Rust parser reads it.
-        alias("Set", $.identifier),
       ),
 
     // v0.157 (ADR 0183): `Name[Arg, …]` — an application of a user-declared
