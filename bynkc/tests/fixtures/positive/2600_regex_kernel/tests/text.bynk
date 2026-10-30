@@ -42,3 +42,16 @@ case "a handler rewrites request text" {
 	let slug <- clean.call("  Hello, World!  ")
 	expect slug == "-ello-orld-"
 }
+
+case "matchesRegex stays whole-string under (?m)" {
+	expect !"foo\nbar".matchesRegex("(?m)foo")
+	expect "foo\nbar".matchesRegex("(?m)foo\\nbar")
+	expect "foo\nbar".containsRegex("(?m)^bar$")
+}
+
+case "splitRegex and findAllRegex follow JS on empty matches" {
+	expect "abc".splitRegex("x*") == ["a", "b", "c"]
+	expect ",a,".splitRegex(",") == ["", "a", ""]
+	expect "".splitRegex("x*") == []
+	expect "ab".findAllRegex("x*").length() == 3
+}

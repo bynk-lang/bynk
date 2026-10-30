@@ -17,7 +17,7 @@ export const Sku = {
 };
 
 export function isSku(s: string): boolean {
-  return new globalThis.RegExp("^(?:[A-Z]{3}-[0-9]{4})$", "").test(s);
+  return new globalThis.RegExp("(?<![\\s\\S])(?:[A-Z]{3}-[0-9]{4})(?![\\s\\S])", "").test(s);
 }
 
 export function skuAgrees(s: string): boolean {

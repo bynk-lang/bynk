@@ -4721,14 +4721,15 @@ fn lower_bytes_kernel(
 /// indices to `0` (no TS wrap-around); `indexOf` turns `-1` into `None`.
 /// K6c (#2600): a regex method's pattern literal as a `RegExp` construction,
 /// its inline flags moved into the flags argument, plus `extra` flags (`g` for
-/// a global scan, `y` for a sticky one). `anchored` wraps it `^(?:…)$`, as a
-/// `Matches` refinement does. V8 caches a `RegExp`'s compilation by source and
+/// a global scan, `y` for a sticky one). `anchored` pins it to the whole
+/// string with lookarounds rather than `^…$`, which an `m` flag would turn into
+/// line anchors. V8 caches a `RegExp`'s compilation by source and
 /// flags, so building one per call compiles each pattern once; a fresh object
 /// also keeps no `lastIndex` state between calls.
 fn regex_construction(literal: &str, extra: &str, anchored: bool) -> String {
     let (pat, flags) = bynk_check::checker::split_regex_flags(literal);
     let source = if anchored {
-        format!("^(?:{pat})$")
+        format!("(?<![\\s\\S])(?:{pat})(?![\\s\\S])")
     } else {
         pat
     };

@@ -506,6 +506,7 @@ pub(crate) fn check_refinement(
                     );
                 } else if let Some(e) = ambiguity_diagnostic(
                     pat,
+                    "",
                     pred.span,
                     &format!("`Matches(\"{pat}\")`"),
                     // The tightest length bound the refinement states. Length
@@ -932,12 +933,15 @@ fn regex_matches_empty(pattern: &str) -> bool {
 /// possible (a K6c regex method runs on any string), which changes the advice.
 fn ambiguity_diagnostic(
     pat: &str,
+    flags: &str,
     span: Span,
     label: &str,
     bound: Option<Option<i64>>,
 ) -> Option<CompileError> {
-    use super::regex_ambiguity::{Verdict, analyse};
-    Some(match analyse(pat) {
+    use super::regex_ambiguity::{Verdict, analyse_with_flags};
+    // K6c (#2600): the flags change what `.` and a cased letter match, so the
+    // analysis must read the pattern under them (`Matches` has none).
+    Some(match analyse_with_flags(pat, flags) {
         Verdict::Linear => return None,
         Verdict::Exponential(a, b) => CompileError::new(
             "bynk.types.catastrophic_regex",
@@ -1069,7 +1073,7 @@ pub(crate) fn check_regex_literal(
              quantifier is nested inside another",
         ));
     }
-    if let Some(e) = ambiguity_diagnostic(&pat, span, &label, None) {
+    if let Some(e) = ambiguity_diagnostic(&pat, &flags, span, &label, None) {
         return Err(e);
     }
     Ok((pat, flags))
