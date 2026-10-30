@@ -5327,8 +5327,8 @@ fn platform_double(
         // the binding does; observation sees what was sent.
         ("bynk.cloudflare", "Queue") => QUEUE_DOUBLE_BODY.to_string(),
         // P3b (#2582): there is no dataset in a test, so each instance accepts
-        // every write within the platform's limits; observation sees what was
-        // written.
+        // every write within the platform's limits; observation (the generic
+        // call wrapper, as for every double) sees what was written.
         ("bynk.cloudflare", "Analytics") => ANALYTICS_DOUBLE_BODY.to_string(),
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.

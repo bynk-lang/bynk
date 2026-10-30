@@ -563,6 +563,12 @@ without an action (`dataset shop_cart_signups (ANALYTICS_SIGNUPS; created on
 first write)`), and `--prune` never deletes one. If a dataset with the derived
 name is already on the account, the Worker writes into it.
 
+Two instances whose names meet are refused before the plan, since their events
+would mix for good: `shop.cart`'s `Signups` and `shop`'s `CartSignups` are both
+`shop_cart_signups`, and `shop`'s `SignupsStaging` is `shop`'s `Signups` under
+`--env staging` (checked once the project has deployed to `staging`). Rename one
+capability.
+
 ### Workers outside the project
 
 A [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/)

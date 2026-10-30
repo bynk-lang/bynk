@@ -58,6 +58,14 @@ as a non-goal.
   block qualifies each `dataset` by B's rule. There is no provisioning and no
   ledger record, so `find_orphans` and `--prune` never see a dataset. The plan
   lists each as `dataset <name> (<binding>; created on first write)`.
+  - **Collisions are refused before the plan.** Flattening makes distinct
+    instances meet: `shop.cart`'s `Signups` and `shop`'s `CartSignups` are both
+    `shop_cart_signups`, and `shop`'s `SignupsStaging` by default is `shop`'s
+    `Signups` under `--env staging`. Two instances of the build that would
+    write to one dataset are refused (`analytics_dataset_problem`), in the
+    environment being deployed and in every other environment the ledger has
+    deployed to, as R2 refuses a shared bucket name. A collision with a
+    dataset outside the build cannot be seen, since nothing records one.
 - **E. Tests at every tier; experimental.**
   - **Doubles.** The `unit` double accepts every write within the limits and
     faults on one over them, as the binding does. At `integration` and `system`

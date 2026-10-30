@@ -789,6 +789,12 @@ pub fn run(
         eprintln!("bynk: {message}");
         return ExitCode::FAILURE;
     }
+    // P3b (#2582): two instances whose derived dataset names meet would write
+    // into one table, silently and for the dataset's whole retention.
+    if let Some(message) = analytics_dataset_problem(&resources, &lock, &opts.environment) {
+        eprintln!("bynk: {message}");
+        return ExitCode::FAILURE;
+    }
     // #2055: a first deploy hands `wrangler deploy` Bynk's own
     // `--secrets-file`, so a passthrough one would be a second, with
     // wrangler deciding which wins. Refused before the plan, as `--env`'s
@@ -2265,6 +2271,55 @@ pub(crate) fn r2_action(
 /// at plan time, naming the instance, never a failed push; and two instances
 /// (or one here and one another environment's) must not share a name, since
 /// R2 scopes bucket names to the account.
+/// P3b (#2582): why the datasets the build declares would mix, or `None`.
+/// The derived name flattens both a context's `.` and a capability's word
+/// breaks to `_`, so `shop.cart`'s `Signups` and `shop`'s `CartSignups` are
+/// both `shop_cart_signups`; and `_<env>` meets a name that ends the same way,
+/// so `shop`'s `SignupsStaging` by default is `shop`'s `Signups` under
+/// `--env staging`. Datasets have no ledger record, so the check is against
+/// the build's own instances: in `environment`, and in every other
+/// environment the ledger has deployed to.
+pub(crate) fn analytics_dataset_problem(
+    resources: &BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Option<String> {
+    let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
+    for (worker, declared) in resources {
+        for dataset in &declared.analytics_datasets {
+            let name = analytics_dataset_name(environment, &dataset.name);
+            if let Some((other_worker, other_binding)) =
+                seen.insert(name.clone(), (worker, &dataset.binding))
+            {
+                return Some(format!(
+                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both write to the Analytics Engine dataset `{name}`; rename one capability",
+                    dataset.binding
+                ));
+            }
+        }
+    }
+    for other_env in lock
+        .environments
+        .keys()
+        .filter(|e| e.as_str() != environment)
+    {
+        for (worker, declared) in resources {
+            for dataset in &declared.analytics_datasets {
+                let there = analytics_dataset_name(other_env, &dataset.name);
+                if let Some((other_worker, other_binding)) = seen.get(&there)
+                    && (*other_worker != worker.as_str() || *other_binding != dataset.binding)
+                {
+                    return Some(format!(
+                        "`{other_binding}` of `{other_worker}` would write to the Analytics Engine dataset `{there}`, which `{}` of `{worker}` writes to in environment `{other_env}`; rename one capability",
+                        dataset.binding
+                    ));
+                }
+            }
+        }
+    }
+    None
+}
+
 pub(crate) fn r2_bucket_problem(
     resources: &BTreeMap<String, Resources>,
     lock: &DeployLock,
@@ -2696,6 +2751,54 @@ pub(crate) mod tests {
             r2_bucket_problem(&underscore, &lock, "default")
                 .unwrap()
                 .contains("lowercase letters, digits and hyphens")
+        );
+    }
+
+    #[test]
+    fn two_instances_that_would_share_a_dataset_are_refused() {
+        // P3b (#2582): `shop.cart`'s `Signups` and `shop`'s `CartSignups`.
+        let colliding = project(vec![
+            (
+                "shop-cart",
+                Resources::default().analytics(&[("ANALYTICS_SIGNUPS", "shop_cart_signups")]),
+            ),
+            (
+                "shop",
+                Resources::default().analytics(&[("ANALYTICS_CART_SIGNUPS", "shop_cart_signups")]),
+            ),
+        ]);
+        let message = analytics_dataset_problem(&colliding, &DeployLock::default(), "default")
+            .expect("a collision");
+        assert!(message.contains("`shop_cart_signups`"), "{message}");
+        // `SignupsStaging` by default meets `Signups` under `--env staging`,
+        // once the ledger knows the project deploys to `staging`.
+        let with_queue_in = |environment: &str| {
+            let mut lock = DeployLock::default();
+            lock.record_queue(environment, "jobs");
+            lock
+        };
+        let suffixed = project(vec![(
+            "shop",
+            Resources::default().analytics(&[
+                ("ANALYTICS_SIGNUPS", "shop_signups"),
+                ("ANALYTICS_SIGNUPS_STAGING", "shop_signups_staging"),
+            ]),
+        )]);
+        assert_eq!(
+            analytics_dataset_problem(&suffixed, &DeployLock::default(), "default"),
+            None
+        );
+        let message = analytics_dataset_problem(&suffixed, &with_queue_in("staging"), "default")
+            .expect("a collision across environments");
+        assert!(message.contains("`shop_signups_staging`"), "{message}");
+        // Distinct names, in any environment, are fine.
+        let distinct = project(vec![(
+            "shop",
+            Resources::default().analytics(&[("ANALYTICS_SIGNUPS", "shop_signups")]),
+        )]);
+        assert_eq!(
+            analytics_dataset_problem(&distinct, &with_queue_in("staging"), "default"),
+            None
         );
     }
 
