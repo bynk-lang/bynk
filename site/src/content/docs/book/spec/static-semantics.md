@@ -256,6 +256,28 @@ pinned to the platform the same way ADR 0046 pins the string kernel. Wrong arity
 is `bynk.types.method_arity`; an unknown method on a numeric receiver is
 `bynk.types.method_not_found`.
 
+**Integer division companions and power** (standard-library K6b, #2598). On
+`Int`, each faulting on a zero divisor as `/` does:
+- `a.rem(b)` is the remainder of `/` (which truncates). It takes the
+  dividend's sign: `(-7).rem(2) == -1`, and `a == b * (a / b) + a.rem(b)`.
+- `a.div(b)` is floor division (`(-7).div(2) == -4`), and `a.mod(b)` its
+  remainder, taking the divisor's sign: `(-7).mod(2) == 1`, and
+  `a == b * a.div(b) + a.mod(b)`. For a positive `n`, `x.mod(n)` is in
+  `0..n-1`.
+- `a.pow(n)` is an exact power. A negative `n` faults (there is no `Int`
+  result), and so does a result past ±(2^53 − 1). Unlike `*`, whose overflow
+  is unchecked, `pow` overflows too readily for an imprecise result to be
+  tolerable. `0.pow(0) == 1`.
+
+**`Float` functions** (K6b). On `Float`: `f.sqrt()`, `f.pow(y)`, `f.exp()`,
+`f.ln()`, `f.log10()`, `f.log2()`, and in radians `f.sin()`, `f.cos()`,
+`f.tan()`, `f.asin()`, `f.acos()`, `f.atan()` and `y.atan2(x)` (the angle of
+the point `(x, y)`), each `-> Float`. They are the host's `Math` functions, so
+outside a function's domain the result is host-defined like the rest of `Float`
+arithmetic (ADR 0042): `(0.0 - 1.0).sqrt()` is `NaN` and `0.0.ln()` is
+`-Infinity`, with no fault. The statics `Float.pi()` and `Float.e()` give the
+two constants.
+
 **The numeric parse statics** (v0.22a). `Int.parse(s) -> Option[Int]` and
 `Float.parse(s) -> Option[Float]` — statics, per 0041's rule (ways to
 *obtain* a value). Parsing is **full-string** in a strict decimal grammar

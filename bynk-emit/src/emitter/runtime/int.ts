@@ -23,3 +23,51 @@ export function __bynkToInt(converted: number, op: string): number {
   return converted;
 }
 
+// Standard-library K6b (#2598): the `Int` division companions and `pow`. Each
+// faults where `/` does (a zero divisor) and where a result would leave the
+// safe-integer domain, so they live here for the same coverage reason.
+
+function nonZero(r: number, op: string): void {
+  if (r === 0) throw new Error(`Int.${op}: division by zero`);
+}
+
+// The remainder of `/` (which truncates): the dividend's sign, so
+// `a == b * (a / b) + a.rem(b)`. `+ 0` turns a `-0` into `0`.
+export function __bynkIntRem(l: number, r: number): number {
+  nonZero(r, "rem");
+  return (l % r) + 0;
+}
+
+// Floor division: rounds toward negative infinity.
+export function __bynkIntDivFloor(l: number, r: number): number {
+  nonZero(r, "div");
+  return Math.floor(l / r);
+}
+
+// The remainder of floor division: the divisor's sign, so
+// `a == b * a.div(b) + a.mod(b)` and `x.mod(n)` is in `0..n-1` for `n > 0`.
+export function __bynkIntMod(l: number, r: number): number {
+  nonZero(r, "mod");
+  return (((l % r) + r) % r) + 0;
+}
+
+// An exact power by repeated squaring, checking each step stays a safe
+// integer (`Math.pow` loses precision before it overflows). A negative
+// exponent has no `Int` result; `0.pow(0)` is 1.
+export function __bynkIntPow(base: number, exp: number): number {
+  if (exp < 0) throw new Error(`Int.pow: a negative exponent (${exp}) has no Int result`);
+  let result = 1;
+  let b = base;
+  let e = exp;
+  const check = (v: number): number => {
+    if (!Number.isSafeInteger(v)) throw new Error(`Int.pow: ${base}^${exp} is past the safe Int range`);
+    return v;
+  };
+  while (e > 0) {
+    if (e % 2 === 1) result = check(result * b);
+    e = Math.floor(e / 2);
+    if (e > 0) b = check(b * b);
+  }
+  return result;
+}
+

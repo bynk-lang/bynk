@@ -3067,6 +3067,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     "RequestHeaders" => &["of", "empty"],
                     // #2380 (L5): the test-side constructor.
                     "TokenClaims" => &["of"],
+                    // K6b (#2598): the two constants beside `parse`.
+                    "Float" => &["parse", "pi", "e"],
                     _ => &["parse"],
                 };
                 let only = allowed.join("`/`");

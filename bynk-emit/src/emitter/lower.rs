@@ -2318,6 +2318,17 @@ fn lower_method_call(
     if let Some(s) = pre.absorb_opt(lower_json_codec_call(e, receiver, method, args, cx)) {
         return pre.finish(s);
     }
+    // K6b (#2598): `Float.pi()` and `Float.e()`.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == FLOAT && (op == "pi" || op == "e")
+        )
+        && args.is_empty()
+    {
+        let constant = if method.name == "pi" { "PI" } else { "E" };
+        return pre.finish(format!("globalThis.Math.{constant}"));
+    }
     // v0.22a: the numeric parse statics — `Int.parse(s)` /
     // `Float.parse(s)` (ADR 0048). #1657 (runtime-semantics track §3.4): the
     // whole string must match a strict decimal grammar before `Number(…)` sees
@@ -3133,8 +3144,11 @@ fn lower_method_call(
             // at runtime (the Int/Float distinction is erased);
             // the four `Float -> Int` roundings map onto `Math.*`.
             // v0.22a extends it (abs/min/max/clamp, isNaN/isFinite).
-            Ty::Base(BaseType::Int | BaseType::Float) => {
-                if let Some(s) = pre.absorb_opt(lower_numeric_kernel(receiver, method, args, cx)) {
+            Ty::Base(base @ (BaseType::Int | BaseType::Float)) => {
+                let base = *base;
+                if let Some(s) =
+                    pre.absorb_opt(lower_numeric_kernel(receiver, method, args, base, cx))
+                {
                     return pre.finish(s);
                 }
             }
@@ -3222,7 +3236,8 @@ fn lower_method_call(
             {
                 let lowered = match base {
                     BaseType::Int | BaseType::Float => {
-                        pre.absorb_opt(lower_numeric_kernel(receiver, method, args, cx))
+                        let base = *base;
+                        pre.absorb_opt(lower_numeric_kernel(receiver, method, args, base, cx))
                     }
                     BaseType::String => {
                         pre.absorb_opt(lower_string_kernel(receiver, method, args, cx))
@@ -4520,6 +4535,7 @@ fn lower_numeric_kernel(
     receiver: &Expr,
     method: &Ident,
     args: &[Expr],
+    base: BaseType,
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
@@ -4572,6 +4588,43 @@ fn lower_numeric_kernel(
         ("toString", []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("String({recv})"))
+        }
+        // K6b (#2598): the `Int` division companions and exact power, through
+        // `int.ts` helpers so their fault branches stay out of coverage.
+        ("div" | "rem" | "mod" | "pow", [other]) if base == BaseType::Int => {
+            let recv = pre.lower(receiver, cx);
+            let other = pre.lower(other, cx);
+            let helper = match method.name.as_str() {
+                "div" => "__bynkIntDivFloor",
+                "rem" => "__bynkIntRem",
+                "mod" => "__bynkIntMod",
+                _ => "__bynkIntPow",
+            };
+            cx.note_int();
+            Some(format!("{helper}({recv}, {other})"))
+        }
+        // K6b (#2598): the `Float` functions, straight onto JS `Math`.
+        (
+            "sqrt" | "exp" | "log10" | "log2" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan",
+            [],
+        ) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!("globalThis.Math.{}({recv})", method.name))
+        }
+        ("ln", []) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!("globalThis.Math.log({recv})"))
+        }
+        ("pow", [other]) => {
+            let recv = pre.lower(receiver, cx);
+            let other = pre.lower(other, cx);
+            Some(format!("globalThis.Math.pow({recv}, {other})"))
+        }
+        // `y.atan2(x)`: the angle of the point `(x, y)`.
+        ("atan2", [x]) => {
+            let recv = pre.lower(receiver, cx);
+            let x = pre.lower(x, cx);
+            Some(format!("globalThis.Math.atan2({recv}, {x})"))
         }
         _ => None,
     };

@@ -17,6 +17,7 @@
   redirect policy, and `Logger` levels with a structured `log`.
   P1 done (#2590): `Kv` gains metadata, expiry, binary values and paging.
   K3 done (#2592): `Instant` reads and writes RFC 3339 text.
+  K6b done (#2598): integer `div`/`rem`/`mod`/`pow` and `Float` functions.
 - **Realises:** `design/bynk-design-notes.md` "Three-tier output" (the runtime
   library and per-platform bindings, including the unbuilt `Crypto`),
   [ADR 0034](../decisions/0034-collections-hybrid-kernel-stdlib.md)'s promise
@@ -303,7 +304,7 @@ unit and is indicative only, not decided.
 | Hex, base64url, percent-encoding | P (base64, hex, base64url and UTF-8 on `Bytes`, K1 #2016; percent-encoding is K2) | L0 statics | Pure |
 | URL parse/build, query strings | A | L0 type + L1 helpers | Needed by Fetch users and HTTP handlers |
 | `Set[T]` value type | A | L0 | Store kind `Set` exists; value type does not |
-| Math (`pow`, `sqrt`, `log`, trig, integer `div`/`mod` semantics) | A | L0 statics | Check against ADR 0041/0042 |
+| Math (`pow`, `sqrt`, `log`, trig, integer `div`/`mod` semantics) | S (K6b #2598: `Int` `div`/`rem`/`mod`/`pow`, faulting on a zero divisor or past the safe range; `Float` `sqrt`/`pow`/`exp`/`ln`/`log10`/`log2`/trig/`atan2`, host-defined like `Float` arithmetic; `Float.pi()`/`Float.e()`) | L0 value methods (not `Math` statics: the numeric kernel is methods) | A `%`/`**` operator is grammar work |
 | Regex match/capture/replace | A (`Matches` refinement only) | L0 | Engine/flag semantics must be stated (JS `RegExp`) |
 | ISO-8601 parse/format for `Instant` (UTC) | S (K3 #2592: `Instant.fromIso`, `toIso`, RFC 3339 in UTC, offsets converted) | L0 | Pure. Time zones and calendar fields deferred (D7) |
 | String formatting (pad, repeat, `codePoints`) | P | L0/L1 | |
@@ -643,7 +644,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | K4 ✅ #2327 | `bynk.crypto`: digests, HMAC, sign/verify, key import, `Effect` over Web Crypto; `Random.bytes`; security review. One `Crypto` capability in a flat sibling unit (Tier 0, `id_block` 7, experimental until the registry signs with it in production), a binding per platform (`Binding::PerPlatformFiles`), opaque non-storable `SigningKey`/`VerifyKey` (`bynk.types.key_at_boundary`), the Node binding as the unit-tier test double | K1, D5, D6, S2 |
 | K5a | **Done** (#2586): `Method` gains `Patch`/`Head`/`Options`; `Fetch.sendWith(req, FetchOptions { timeout, redirect })` (experimental); `Logger.warn`/`debug`, and a structured `log` (experimental) | K1 |
 | K5b | Fetch `Bytes` request and response bodies: two operations beside `send`, since `Request` cannot grow a field without breaking every literal | K5a |
-| K6 | `Set` value type, Math statics, regex | — |
+| K6 | `Set` value type (K6a, #2596), Math (K6b, **done**, #2598: `Int` `div`/`rem`/`mod`/`pow` and the `Float` functions as value methods, `Float.pi()`/`Float.e()`), regex (K6c) | — |
 
 **Platform (L3):**
 
