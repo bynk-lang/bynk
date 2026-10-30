@@ -57,7 +57,10 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "bynk.cloudflare",
         "Kv",
         "the-cloudflare-surface--bynkcloudflare",
-        &["get", "put", "putTtl", "delete", "list"],
+        &[
+            "get", "put", "putTtl", "delete", "list", "getWith", "putWith", "getBytes", "putBytes",
+            "listPage",
+        ],
     ),
     (
         "bynk.cloudflare",

@@ -262,7 +262,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 
 | Capability | Operations |
 |---|---|
-| **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttlSeconds: Int) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]`. |
+| **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttlSeconds: Int) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]` · *(experimental)* `getWith(key, options: KvGet) -> Effect[Option[KvEntry]]` · `putWith(key, value: String, options: KvPut) -> Effect[()]` · `getBytes(key) -> Effect[Option[Bytes]]` · `putBytes(key, value: Bytes, options: KvPut) -> Effect[()]` · `listPage(options: KvList) -> Effect[KvListing]`; see [Metadata, expiry and binary values](#metadata-expiry-and-binary-values). |
 | **`Service`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance; see below. |
 | **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]`. Used only through a named instance; see below. |
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
@@ -278,6 +278,54 @@ For more than one namespace, declare each as a derived capability:
 operations and its own namespace, bound as `env.KV_SESSIONS`. A context may use
 the bare `Kv` alongside its instances, and the bare `KV` stanza is emitted only
 when it does. See [Derived capabilities](/book/reference/capabilities/#derived-capabilities-capability-x--k).
+
+### Metadata, expiry and binary values
+
+Five more `Kv` operations reach what the platform has beyond text. They are
+experimental: list each one you use under `[unstable] allow`
+(`"bynk.cloudflare.Kv.putWith"` and so on). The existing operations are
+unchanged.
+
+```bynk
+type KvExpiration = | Never | After(ttl: Duration) | At(instant: Instant)
+type KvPut      = { expiration: KvExpiration, metadata: Map[String, String] }
+type KvGet      = { cacheTtl: Option[Duration] }
+type KvEntry    = { value: String, metadata: Map[String, String] }
+type KvKey      = { name: String, expiration: Option[Instant], metadata: Map[String, String] }
+type KvList     = { prefix: Option[String], cursor: Option[String], limit: Option[Int] }
+type KvListing  = { keys: List[KvKey], cursor: Option[String] }
+```
+
+- `putWith(key, value, options)` writes text with an expiry and metadata.
+  `After(ttl)` is relative, with a part second rounding up, and `At(instant)` is
+  absolute. Either must be at least 60 seconds away. Metadata is at most 1024
+  bytes once serialised as JSON. `putTtl` stays as the short form of
+  `After`.
+- `getWith(key, options)` reads a value with its metadata. `cacheTtl` lets
+  Cloudflare's edge serve the read from cache for that long, at least 30
+  seconds; `None` keeps the platform's 60.
+- `getBytes` and `putBytes` read and write binary values. `putBytes` takes the
+  same `KvPut`.
+- `listPage(options)` reads one page of keys, in key order, with each key's
+  expiry and metadata. `limit` is 1 to 1000 (`None` for 1000). Pass the
+  previous page's `cursor` for the next; the last page's is `None`. A page can
+  be short and still have a cursor, so loop until the cursor is `None`. The
+  draining `list` still returns every key at once.
+
+```bynk,fragment
+let _ <- Sessions.putWith(id, body, KvPut { expiration: After(30.minutes), metadata: Map.empty().insert("user", who) })
+let page <- Sessions.listPage(KvList { prefix: Some("s:"), cursor: None, limit: Some(100) })
+```
+
+Text and binary values share a namespace, as on the platform. `getBytes` of a
+text value gives its UTF-8 bytes, and reading a binary value as text decodes it
+as UTF-8, replacing what isn't. Keep each key to one kind.
+
+A key over 512 bytes, metadata over the limit, an expiry under 60 seconds away,
+a `cacheTtl` under 30 seconds or a `limit` outside 1 to 1000 faults the call
+before the platform sees it. A value over 25 MiB faults with the platform's
+error. In tests the namespace is in memory: it keeps metadata and expiry
+(expiry is not enforced), checks the same limits, and pages in key order.
 
 ### Calling a Worker outside the project: `Service`
 

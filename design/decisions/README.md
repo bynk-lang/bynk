@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0656](0656-kv-complete.md) | **Complete KV with experimental operations beside the existing ones** (v0.442) — `Kv` gains `getWith`/`putWith` (an options record, as ADR 0051 anticipated), `getBytes`/`putBytes` and a paged `listPage` (superseding ADR 0050's deferral), all experimental, with the platform's limits checked before the call and the existing operations unchanged | Accepted (v0.442) |
 | [0655](0655-fetch-options-and-log-levels.md) | **Fetch options in a record beside send, more methods, and Logger levels** (v0.441) — `Fetch.sendWith` takes a `FetchOptions { timeout, redirect }` record instead of `Request` growing fields, since a new record field breaks every literal; `Method` gains `Patch`, `Head` and `Options`; `Logger` gains `warn`, `debug` and a structured `log` that nests its fields | Accepted (v0.441) |
 | [0654](0654-queue-consumer-name-rule.md) | **A queue consumer's name follows Cloudflare's queue-name rule** (v0.439) — Consumers and producers share one queue-name predicate | Accepted (v0.439) |
 | [0653](0653-analytics-engine-derived-capability.md) | **Analytics Engine datasets as option-free derived capabilities** (v0.438) — Cloudflare's Analytics Engine binding as an instance-only `Analytics` with no options, a dataset name deploy derives in snake case because it is a SQL table name, one `write(DataPoint)` whose limits are checked before the write, and no provisioning or ledger record | Accepted (v0.438) |

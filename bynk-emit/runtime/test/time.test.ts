@@ -73,8 +73,11 @@ test("fromIso(toIso(i)) is Some(i) across years 0000 to 9999", () => {
   const low = -62167219200000;
   const high = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
   const samples = [low, high, 0, -1, 1, 951782400000, 1793348090123];
+  // A fixed stride, odd in milliseconds, so every run checks the same 2000
+  // instants spread over the whole range.
+  const stride = Math.floor((high - low) / 2000) + 7;
   for (let i = 0; i < 2000; i++) {
-    samples.push(Math.floor(low + Math.random() * (high - low)));
+    samples.push(low + i * stride);
   }
   for (const ms of samples) {
     assert.deepEqual(__bynkInstantFromIso(__bynkInstantToIso(ms)), Some(ms), String(ms));

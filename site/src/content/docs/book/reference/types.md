@@ -65,7 +65,8 @@ let bad = Instant.fromIso("2026-10-30 08:54:50Z")             // None: a space, 
 ```
 
 - `YYYY-MM-DD`, `T` (or `t`), `HH:mm:ss`, an optional fraction of any length,
-  then `Z` (or `z`) or an offset `±HH:mm`, converted to UTC.
+  then `Z` (or `z`) or an offset `±HH:mm`, converted to UTC. `-00:00`
+  ("offset unknown", RFC 3339) reads as `Z`: the time written is UTC.
 - A fraction past milliseconds is truncated toward the earlier instant.
 - The date must exist (`2026-02-29` is `None`, `2028-02-29` is not), and a leap
   second (`:60`) is `None`, since epoch milliseconds cannot name it.

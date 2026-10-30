@@ -88,6 +88,35 @@ service api from http {
 \t\t\tNone => NotFound
 \t\t}
 \t}
+
+\ton GET(\"/meta/put/:key/:who\") (key: String, who: String) -> Effect[HttpResult[String]] by Visitor given Kv {
+\t\tlet _ <- Kv.putWith(key, \"v\", KvPut { expiration: After(5.minutes), metadata: Map.empty().insert(\"user\", who) })
+\t\tOk(\"put\")
+\t}
+
+\ton GET(\"/meta/get/:key\") (key: String) -> Effect[HttpResult[String]] by Visitor given Kv {
+\t\tlet found <- Kv.getWith(key, KvGet { cacheTtl: Some(30.seconds) })
+\t\tmatch found {
+\t\t\tSome(e) => Ok(\"\\(e.value) \\(e.metadata.get(\"user\").getOrElse(\"?\"))\")
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/bytes/:key\") (key: String) -> Effect[HttpResult[String]] by Visitor given Sessions {
+\t\tlet _ <- Sessions.putBytes(key, Bytes.fromHex(\"00ff07\").getOrElse(Bytes.empty()), KvPut { expiration: Never, metadata: Map.empty() })
+\t\tlet back <- Sessions.getBytes(key)
+\t\tmatch back {
+\t\t\tSome(b) => Ok(b.toHex())
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/pages/:prefix\") (prefix: String) -> Effect[HttpResult[String]] by Visitor given Kv {
+\t\tlet first <- Kv.listPage(KvList { prefix: Some(prefix), cursor: None, limit: Some(2) })
+\t\tlet second <- Kv.listPage(KvList { prefix: Some(prefix), cursor: first.cursor, limit: Some(2) })
+\t\tlet expiring = first.keys.filter((k) => k.expiration.isSome()).length()
+\t\tOk(\"\\(first.keys.length()) \\(first.cursor.isSome()) \\(second.keys.length()) \\(second.cursor.isSome()) \\(expiring)\")
+\t}
 }
 ";
 
@@ -179,7 +208,7 @@ fn run_smoke(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.Fetch.sendWith\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.Fetch.sendWith\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -274,6 +303,13 @@ fn workers_kv_round_trips_on_workerd() {
         ("/get/user:2", 200, r#""b""#),
         ("/prices/get/user:2", 404, ""),
         ("/sessions/get/user:3", 404, ""),
+        // P1 (#2590): metadata and an expiry, binary values, and paging.
+        ("/meta/put/user:4/ada", 200, r#""put""#),
+        ("/meta/get/user:4", 200, r#""v ada""#),
+        ("/meta/get/absent", 404, ""),
+        ("/bytes/blob:1", 200, r#""00ff07""#),
+        // user:2, user:3 (TTL'd) and user:4 (expiring): two pages.
+        ("/pages/user:", 200, r#""2 true 1 false 1""#),
     ];
     let Some((failures, log)) = run_smoke("kv-smoke", "kv", SOURCE, "/get/boot", 0, &|port| {
         check_steps(port, steps)

@@ -28,7 +28,9 @@ that differ by engine, and `toISOString` throws past ±8.64e15 ms.
   ±8.64e15 ms no date names the instant, so it faults.
 - **C. `fromIso` reads the strict RFC 3339 date-time profile.** `T` or `t`, a
   fraction of any length (truncated toward the earlier instant past
-  milliseconds), and `Z`, `z` or a `±HH:mm` offset, converted to UTC. The
+  milliseconds), and `Z`, `z` or a `±HH:mm` offset, converted to UTC.
+  RFC 3339 §4.3 gives `-00:00` the meaning "the offset is unknown": the
+  instant is still the UTC time written, so it reads as `Z` does. The
   calendar is checked, leap years included. A leap second (`:60`) is `None`,
   since epoch milliseconds cannot name it. A space separator, a missing offset,
   the basic form, week and ordinal dates, and the expanded year are `None`.

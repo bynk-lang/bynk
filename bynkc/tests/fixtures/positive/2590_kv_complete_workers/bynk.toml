@@ -1,0 +1,15 @@
+[project]
+name = "kv-complete-workers"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = [
+	"bynk.cloudflare.Kv.getWith",
+	"bynk.cloudflare.Kv.putWith",
+	"bynk.cloudflare.Kv.getBytes",
+	"bynk.cloudflare.Kv.putBytes",
+	"bynk.cloudflare.Kv.listPage",
+]
