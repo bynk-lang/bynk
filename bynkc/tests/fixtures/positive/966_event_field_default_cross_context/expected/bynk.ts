@@ -106,7 +106,8 @@ export const Redirect = {
 /**
  * The options of a `Fetch.sendWith`. `timeout` bounds the whole exchange,
  * response body included; when it elapses the result is `Err(Timeout)`. A
- * timeout of zero or less faults the call, with nothing sent. `None` waits as
+ * timeout of zero or less, or over 2,147,483,647 ms (about 24 days, the
+ * longest a platform timer takes), faults the call, with nothing sent. `None` waits as
  * long as the platform does.
  */
 export interface FetchOptions {

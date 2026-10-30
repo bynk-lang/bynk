@@ -54,8 +54,14 @@ export class LoggerProvider implements Logger {
   // K5a (#2586): the message, then the fields, which a browser console shows
   // as an expandable object.
   async log(level: LogLevel, msg: string, fields: ReadonlyMap<string, string>): Promise<void> {
-    const write = { Debug: console.debug, Info: console.log, Warn: console.warn, Error: console.error }[level.tag];
-    write(msg, Object.fromEntries(fields));
+    const fieldsObject = Object.fromEntries(fields);
+    const write = {
+      Debug: () => console.debug(msg, fieldsObject),
+      Info: () => console.log(msg, fieldsObject),
+      Warn: () => console.warn(msg, fieldsObject),
+      Error: () => console.error(msg, fieldsObject),
+    }[level.tag];
+    write();
   }
 }
 

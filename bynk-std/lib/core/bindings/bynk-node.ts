@@ -78,23 +78,31 @@ const FORBIDDEN_REQUEST_HEADERS: ReadonlySet<string> = new Set([
   "expect",
 ]);
 
+// K5a (#2586): the longest timeout a timer takes, 2^31-1 ms.
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 export class FetchProvider implements Fetch {
   async send(req: FetchRequest): Promise<Result<FetchResponse, FetchError>> {
     return this.exchange(req, undefined, "follow");
   }
 
   // K5a (#2586): a timeout bounds the whole exchange, body included, through
-  // the same abort signal; one of zero or less is a caller's mistake, so it
-  // faults before anything is sent.
+  // the same abort signal. `AbortSignal.timeout` takes whole milliseconds up to
+  // 2^31-1: past that a timer fires at once (Node) or the call throws, which
+  // would read as `Err(Timeout)` or `Err(Network)`. So a timeout outside that
+  // range, like one of zero or less, is a caller's mistake that faults before
+  // anything is sent; a part millisecond rounds up.
   async sendWith(req: FetchRequest, options: FetchOptions): Promise<Result<FetchResponse, FetchError>> {
-    if (options.timeout.tag === "Some" && !(options.timeout.value > 0)) {
-      throw new Error(`Fetch.sendWith: a timeout is more than zero, not ${options.timeout.value} ms`);
+    let timeoutMs: number | undefined;
+    if (options.timeout.tag === "Some") {
+      timeoutMs = Math.ceil(options.timeout.value);
+      if (!(timeoutMs > 0 && timeoutMs <= MAX_TIMEOUT_MS)) {
+        throw new Error(
+          `Fetch.sendWith: a timeout is more than zero and at most ${MAX_TIMEOUT_MS} ms (about 24 days), not ${options.timeout.value} ms`,
+        );
+      }
     }
-    return this.exchange(
-      req,
-      options.timeout.tag === "Some" ? options.timeout.value : undefined,
-      options.redirect.tag === "Manual" ? "manual" : "follow",
-    );
+    return this.exchange(req, timeoutMs, options.redirect.tag === "Manual" ? "manual" : "follow");
   }
 
   private async exchange(

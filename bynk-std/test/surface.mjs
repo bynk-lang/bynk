@@ -301,11 +301,29 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
       );
     });
 
-    t("FetchProvider.sendWith: a timeout of zero or less faults, and nothing is sent", async () => {
+    t("FetchProvider.sendWith: a part millisecond rounds up, and the longest timer is accepted", async () => {
+      await withFetch(
+        () => new Response("ok"),
+        async (calls) => {
+          for (const ms of [0.5, 2 ** 31 - 1]) {
+            const res = await new b.FetchProvider().sendWith(request(), {
+              timeout: Some(ms),
+              redirect: bynk.Redirect.Follow,
+            });
+            assert.equal(res.tag, "Ok", String(ms));
+          }
+          assert.equal(calls.length, 2);
+          assert.ok(calls.every((c) => c.init.signal instanceof AbortSignal));
+        },
+      );
+    });
+
+    t("FetchProvider.sendWith: a timeout of zero or less, or past the longest timer, faults, and nothing is sent", async () => {
       await withFetch(
         () => new Response("unexpected"),
         async (calls) => {
-          for (const ms of [0, -5]) {
+          // Past 2^31-1 ms a timer fires at once or throws, so those fault too.
+          for (const ms of [0, -5, 2 ** 31, 2 ** 32]) {
             await assert.rejects(
               new b.FetchProvider().sendWith(request(), { timeout: Some(ms), redirect: bynk.Redirect.Follow }),
               /a timeout is more than zero/,

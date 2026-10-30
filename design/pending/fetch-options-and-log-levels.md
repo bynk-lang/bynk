@@ -32,7 +32,10 @@ either already carries a wildcard arm.
 - **B. A timeout bounds the whole exchange.** `AbortSignal.timeout(ms)` is the
   request's signal, so it covers the response body as well. When it elapses
   the result is `Err(Timeout)`. A timeout of zero or less faults the call
-  before anything is sent, as `Random.bytes(0)` does. `send` stays exactly
+  before anything is sent, as `Random.bytes(0)` does, and so does one over
+  2^31-1 ms (about 24 days): past that, Node's timer fires at once and
+  `AbortSignal.timeout` throws, which would read as `Err(Timeout)` or
+  `Err(Network)`. `send` stays exactly
   `sendWith` with no timeout and `Follow`.
 - **C. Two redirect policies.** `Follow`, and `Manual`, which returns the `3xx`
   with its `location`. `Redirect` is extensible, so an `Error` policy can be

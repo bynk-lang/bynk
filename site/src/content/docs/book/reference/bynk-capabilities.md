@@ -215,8 +215,9 @@ let res <- Fetch.sendWith(req, FetchOptions { timeout: Some(5.seconds), redirect
 ```
 
 - `timeout` bounds the whole exchange, the response body included. When it
-  elapses the result is `Err(Timeout)`. A timeout of zero or less faults the
-  call, with nothing sent. `None` waits as long as `send` does.
+  elapses the result is `Err(Timeout)`. A timeout of zero or less, or over
+  2,147,483,647 ms (about 24 days, the longest a platform timer takes),
+  faults the call, with nothing sent. `None` waits as long as `send` does.
 - `redirect: Follow` follows redirects, as `send` does. `Manual` returns the
   `3xx` itself, with its `location` header, so the service decides whether to
   follow it (to refuse a redirect to an internal host, say).
