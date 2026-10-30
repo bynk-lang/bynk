@@ -2038,17 +2038,21 @@ pub(crate) fn derive_plan<'a>(
                         })
                         .collect(),
                     // P2 (#2578): the queues it sends to, with those it
-                    // consumes. An unrecorded one is `create`, a forecast as
-                    // ever: one that is already there is reused (and, if only
-                    // produced to, left unrecorded).
+                    // consumes. An unrecorded consumed queue is `create`, a
+                    // forecast that the first deploy's record corrects. A
+                    // queue only sent to is recorded only if Bynk made it, so
+                    // an adopted one would read `create` forever: it is
+                    // `create or reuse` until a record says otherwise.
                     queues: declared
                         .all_queues()
                         .iter()
                         .map(|queue| PlanQueue {
                             action: if lock.has_queue(environment, queue) {
                                 "reuse"
-                            } else {
+                            } else if declared.queues.contains(queue) {
                                 "create"
+                            } else {
+                                "create or reuse"
                             },
                             queue: env_qualify(environment, queue),
                         })
@@ -2881,6 +2885,29 @@ pub(crate) mod tests {
         // context consuming `intake` means the same queue.
         assert!(with_queue(DeployLock::default(), "intake").has_queue("default", "intake"));
         assert!(!with_queue(DeployLock::default(), "intake").has_queue("default", "other"));
+    }
+
+    #[test]
+    fn an_unrecorded_queue_only_sent_to_may_be_created_or_reused() {
+        // P2 (#2578): an adopted producer-only queue is never recorded, so
+        // the plan cannot claim it will be created.
+        let order = names(&["shop"]);
+        let declared = project(vec![("shop", Resources::default().produces(&["events"]))]);
+        let line =
+            |lock: &DeployLock| plan_of(&order, &declared, lock).contexts[0].queues[0].action;
+        assert_eq!(line(&DeployLock::default()), "create or reuse");
+        assert_eq!(line(&with_queue(DeployLock::default(), "events")), "reuse");
+        // Consumed as well as sent to, it is recorded either way: `create`.
+        let both = project(vec![(
+            "shop",
+            Resources::default()
+                .consumes(&["events"])
+                .produces(&["events"]),
+        )]);
+        assert_eq!(
+            plan_of(&order, &both, &DeployLock::default()).contexts[0].queues[0].action,
+            "create"
+        );
     }
 
     #[test]

@@ -535,6 +535,7 @@ t("WorkersQueue.sendWith: a delay over 12 hours or below zero faults", async () 
   const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");
   await assert.rejects(queue.sendWith("1", { delay: Some(43_201_000) }), /between 0 seconds and 12 hours/);
   await assert.rejects(queue.sendWith("1", { delay: Some(-1_000) }), /between 0 seconds and 12 hours/);
+  await assert.rejects(queue.sendWith("1", { delay: Some(-500) }), /between 0 seconds and 12 hours/);
   assert.equal(q.sends.length, 0);
 });
 

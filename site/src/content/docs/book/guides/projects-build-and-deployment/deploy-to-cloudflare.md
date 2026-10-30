@@ -98,7 +98,9 @@ A queue a context sends to (`capability OrderEvents = Queue @name("n")`) is
 created the same way. There is one difference: `bynk deploy` records a queue
 that only producers name in `bynk.deploy.lock` **only if it created it**. A
 queue that was already there may belong to a Worker outside the project, so it
-never becomes an orphan that `--prune` could delete. In a named environment the
+never becomes an orphan that `--prune` could delete. Until it is recorded, the
+plan shows such a queue as `queue create or reuse n`, since it can't tell which
+the deploy will do. In a named environment the
 producer's queue is qualified as a consumer's is (`n-staging`), so staging
 never sends into the default environment's queue.
 

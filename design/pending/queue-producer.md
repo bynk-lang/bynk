@@ -97,7 +97,9 @@ reused one that was already there.
 and a Bynk consumer of the same queue decodes it unchanged. A body that does
 not match the consumer's message type is caught only at the consumer, which
 retries it. A queue a producer adopts from outside the project is never pruned,
-and a queue Bynk created for a producer is. Completion offers `Queue` after
+and a queue Bynk created for a producer is. Because an adopted queue stays
+unrecorded, the plan shows an unrecorded producer-only queue as `create or
+reuse`, not `create`. Completion offers `Queue` after
 `capability X =` and the `@name("order-events")` snippet after it, and a
 producer's hover shows its emitted stanza. Existing goldens change only where
 they embed the `bynk.cloudflare` binding and adapter.

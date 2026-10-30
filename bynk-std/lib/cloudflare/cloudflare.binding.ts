@@ -278,8 +278,10 @@ export class WorkersQueue implements Queue {
   // part second rounds up (a message is never delivered early).
   private delaySeconds(delay: Option<number>): number | undefined {
     if (delay.tag === "None") return undefined;
+    // The raw value is checked first: `Math.ceil(-500 / 1000)` is `-0`, which
+    // passes `< 0`, and a negative delay is a caller's mistake however small.
     const seconds = Math.ceil(delay.value / 1000);
-    if (seconds < 0 || seconds > WorkersQueue.MAX_DELAY_SECONDS) {
+    if (delay.value < 0 || seconds > WorkersQueue.MAX_DELAY_SECONDS) {
       throw new Error(`bynk.cloudflare.Queue: a delay is between 0 seconds and 12 hours, not ${delay.value} ms`);
     }
     return seconds;
