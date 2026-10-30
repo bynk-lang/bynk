@@ -4700,7 +4700,8 @@ fn validate_cron_handler(handler: &Handler, expr: &str, errors: &mut Vec<Compile
 }
 
 /// Validate an `on message(message: T) -> Effect[QueueResult]` handler of a
-/// `from queue("name")` service (v0.10b §4.2, v0.44): a non-empty queue name,
+/// `from queue("name")` service (v0.10b §4.2, v0.44): a queue name Cloudflare
+/// accepts (`is_queue_name`),
 /// exactly one parameter (the message, any wire-deserialisable type), and the
 /// `Effect[QueueResult]` return — the verdict sum, where `Ack` acknowledges the
 /// message and `Retry(...)` has it redelivered. The service-only rule is
@@ -4712,6 +4713,17 @@ fn validate_queue_handler(handler: &Handler, name: &str, errors: &mut Vec<Compil
             handler.span,
             "`on queue` requires a non-empty queue name",
         ));
+    } else if !crate::project_model::is_queue_name(name) {
+        errors.push(
+            CompileError::new(
+                "bynk.queue.invalid_name",
+                handler.span,
+                format!("`{name}` is not a queue name Cloudflare accepts"),
+            )
+            .with_note(
+                "a queue name is 1 to 63 lowercase letters, digits or `-`, and starts and ends with a letter or digit",
+            ),
+        );
     }
     // Exactly one parameter — the message. (Conventionally named `message`.)
     if handler.params.len() != 1 {
