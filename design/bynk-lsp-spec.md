@@ -727,7 +727,22 @@ A primitive has no declaration, so its `TypeHierarchyItem` is anchored at an occ
 
 `bynk/refinedTypeModel` — the sixth custom request, wired like §3.23–§3.27 (`custom_method("bynk/refinedTypeModel", Backend::refined_type_model)`, advertised as `experimental.refinedTypeModel: true`). Params are a text-document position (`{ textDocument, position }`); the response is a `RefinedModel` or `null` when the position names no refined (or opaque-refined) `Int`, `Float` or `String` type that carries a predicate. The name resolves through the binding index (any file of the project), else lexically over the live buffer and the project's files, as hover's declaration rungs do.
 
-The model carries `name`, `base`, `opaque`, `declaration`, `clauses`, `examples`, `examplesNote` and `seed`. Each clause has the predicate as written (`source`), in words (`description`), and the emitter's own lowering of it: `check`, the JavaScript condition over `value` that `.of` evaluates (`bynk_emit::emitter::pred_condition_and_message`, printed by `bynk_ts`), and `message`, the failure text `.of` reports. Clauses are in runtime check order (a `Matches` last, #1651). The server evaluates nothing: the client runs the `check` strings, so what it reports is what the compiled `.of` would decide. No project code is involved — the text is generated from the closed set of predicate forms, and a `Matches` pattern is only ever a string literal in it.
+The model carries `name`, `base`, `opaque`, `declaration`, `clauses`, `examples`, `examplesNote` and `seed`. Each clause has the predicate as written (`source`), in words (`description`), in structured form (`predicate`, #2587), and the emitter's own lowering of it: `check`, the JavaScript condition over `value` that `.of` evaluates (`bynk_emit::emitter::pred_condition_and_message`, printed by `bynk_ts`), and `message`, the failure text `.of` reports. Clauses are in runtime check order (a `Matches` last, #1651). The server evaluates nothing, and no project code is involved.
+
+`predicate` is one of eight forms, tagged by `kind`; each holds exactly when the emitter's condition does, so a client that interprets it reports what the compiled `.of` would decide without running any JavaScript:
+
+| `kind` | Fields | Holds when |
+|---|---|---|
+| `nonNegative` | — | `value >= 0` |
+| `positive` | — | `value > 0` |
+| `range` | `min`, `max` | `min <= value <= max` (a JSON integer for an `Int` type, a finite number for a `Float`) |
+| `nonEmpty` | — | `value.length > 0` |
+| `minLength` | `length` | `value.length >= length` |
+| `maxLength` | `length` | `value.length <= length` |
+| `length` | `length` | `value.length === length` |
+| `matches` | `pattern` | `new RegExp("^(?:" + pattern + ")$").test(value)`, no flags; `pattern` as written, neither escaped nor anchored |
+
+A length is JavaScript `.length`, in UTF-16 code units. `check` is kept for clients that predate `predicate`: running it (in the extension, a `node:vm` context — not a security boundary) is safe only while the printer escapes a `Matches` pattern correctly, which is why a client should prefer `predicate`. `check` goes once clients have moved.
 
 `examples` are candidate input texts drawn deterministically from the refinement's domain — the boundaries first, then draws from the test runtime's `__bynkRng` under the fixed seed `seed` — so the list is identical on every open. A `Matches` type has no generator (`bynk.val.needs_pin`): drawn strings are kept only if they match, and `examplesNote` says so when none does.
 
