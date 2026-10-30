@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`Set[T]` is a built-in immutable, insertion-ordered set beside `List` and `Map`: `Set.of(xs)`, `Set.empty()`, a `length`/`contains`/`insert`/`remove`/`toList` kernel, membership equality, and a JSON-array wire form that refuses a repeated element; members follow the `Map`-key rule (`bynk.types.unkeyable_set_element`), and a new `bynk.set` commons adds `union`, `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet` (standard-library K6a, [#2596](https://github.com/bynk-lang/bynk/issues/2596))"
----
+# 0658 — Set is a third built-in immutable collection
 
-## ADR: set-value-type
-title: Set is a third built-in immutable collection
-summary: `Set[T]` joins `List` and `Map` as a built-in generic (ADR 0035), insertion-ordered, with members confined to the `Map`-key rule, a five-method kernel plus `Set.of`/`Set.empty`, combinators in a `bynk.set` commons, membership equality, and a JSON array on the wire that refuses duplicates
+- **Status:** Accepted (v0.444)
 
 **Context.** A set was a `Map[K, Bool]` or a deduplicated `List`, neither
 saying what it meant, and `List.contains` is linear. ADR 0035 made `List` and
