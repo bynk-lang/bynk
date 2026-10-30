@@ -467,7 +467,14 @@ export function makeIntegrationD1(): D1Database {
     last_row_id: Number(r.lastInsertRowid),
   });
   const statement = (sql: string, params: unknown[]): D1PreparedStatement & { exec(): D1Result } => {
-    const bound = params.map((v) => (typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v));
+    const values = params.map((v) => (typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v));
+    // Node before 22.18 refuses positional values for numbered parameters
+    // (`?1`), so those bind by name: `{ "?1": … }`, one key per number used.
+    const numbered = [...new Set(sql.match(/\?\d+/g) ?? [])];
+    const bound: unknown[] =
+      numbered.length === 0
+        ? values
+        : [Object.fromEntries(numbered.map((name) => [name, values[Number(name.slice(1)) - 1] ?? null]))];
     const prepared = () => attempt(() => db.prepare(sql));
     return {
       bind: (...values: unknown[]) => statement(sql, values),
