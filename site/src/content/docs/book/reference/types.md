@@ -60,8 +60,8 @@ still gives the epoch milliseconds, and the JSON codec still writes a number.
 `Instant.fromIso(s) -> Option[Instant]` reads the RFC 3339 date-time profile:
 
 ```bynk,fragment
-Instant.fromIso("2026-10-30T08:54:50.123+02:00")   // Some(…06:54:50.123Z)
-Instant.fromIso("2026-10-30 08:54:50Z")            // None: a space, not `T`
+let utc = Instant.fromIso("2026-10-30T08:54:50.123+02:00")   // Some(…06:54:50.123Z)
+let bad = Instant.fromIso("2026-10-30 08:54:50Z")             // None: a space, not `T`
 ```
 
 - `YYYY-MM-DD`, `T` (or `t`), `HH:mm:ss`, an optional fraction of any length,
