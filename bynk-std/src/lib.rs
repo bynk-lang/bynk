@@ -1139,6 +1139,7 @@ mod tests {
             [
                 ("bynk", "FetchError"),
                 ("bynk", "Method"),
+                ("bynk", "Redirect"),
                 ("bynk.cloudflare", "R2Condition"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
