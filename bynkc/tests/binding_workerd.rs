@@ -179,7 +179,7 @@ fn run_smoke(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.Fetch.sendWith\"]\n"
         ),
     )
     .unwrap();
@@ -651,6 +651,90 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersQueue on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+/// K5a (#2586): an upstream on `127.0.0.1` for the Fetch smoke. `/redirect`
+/// answers `302` to `/landed`, `/landed` answers `200 landed`, and `/hang`
+/// reads the request and never answers. Each connection gets its own thread,
+/// so a hanging one blocks nothing else.
+fn upstream() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind the upstream");
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut stream = stream;
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]);
+                let path = head.split_whitespace().nth(1).unwrap_or("/");
+                let reply = match path {
+                    "/redirect" => "HTTP/1.1 302 Found\r\nlocation: /landed\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_string(),
+                    "/landed" => "HTTP/1.1 200 OK\r\ncontent-length: 6\r\nconnection: close\r\n\r\nlanded".to_string(),
+                    _ => {
+                        std::thread::sleep(Duration::from_secs(30));
+                        return;
+                    }
+                };
+                let _ = stream.write_all(reply.as_bytes());
+            });
+        }
+    });
+    port
+}
+
+fn fetch_source(upstream: u16) -> String {
+    format!(
+        "context f.smoke
+
+consumes bynk {{ Fetch }}
+
+service api from http {{
+\ton GET(\"/go/:path/:manual/:wait\") (path: String, manual: String, wait: String) -> Effect[HttpResult[String]] by Visitor given Fetch {{
+\t\tlet req = Request {{ method: Get, url: \"http://127.0.0.1:{upstream}/\\(path)\", contentType: None, authorization: None, headers: Map.empty(), body: None }}
+\t\tlet redirect = if manual == \"manual\" {{ Manual }} else {{ Follow }}
+\t\tlet timeout = if wait == \"short\" {{ 300.milliseconds }} else {{ 5.seconds }}
+\t\tlet res <- Fetch.sendWith(req, FetchOptions {{ timeout: Some(timeout), redirect: redirect }})
+\t\tmatch res {{
+\t\t\tOk(r) => Ok(\"\\(r.status) \\(r.body)\")
+\t\t\tErr(Timeout) => Ok(\"timeout\")
+\t\t\tErr(_) => Ok(\"other\")
+\t\t}}
+\t}}
+
+\ton GET(\"/ready\") () -> Effect[HttpResult[String]] by Visitor {{
+\t\tOk(\"ready\")
+\t}}
+}}
+"
+    )
+}
+
+#[test]
+fn fetch_send_with_times_out_and_returns_a_manual_redirect_on_workerd() {
+    // K5a (#2586): `sendWith`'s two options against workerd's own `fetch`,
+    // which is what `AbortSignal.timeout` and `redirect: "manual"` have to
+    // agree with: a followed redirect lands, a manual one comes back as the
+    // `302`, and an upstream that never answers is `Err(Timeout)`.
+    let upstream = upstream();
+    let source = fetch_source(upstream);
+    let Some((failures, log)) = run_smoke("f-smoke", "f", &source, "/ready", 6, &|port| {
+        check_steps(
+            port,
+            &[
+                ("/go/redirect/follow/long", 200, r#""200 landed""#),
+                ("/go/redirect/manual/long", 200, r#""302 ""#),
+                ("/go/hang/follow/short", 200, r#""timeout""#),
+            ],
+        )
+    }) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "Fetch.sendWith on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

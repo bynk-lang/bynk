@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "headProbe": "ceed2c3e442b7626",
+    "probe": "c57d00e0023b6cb0"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "headProbe": "Svc(\"headProbe\",P(\"url\",B(\"String\")),Ret(B(\"Int\")))",
+    "probe": "Svc(\"probe\",P(\"url\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}

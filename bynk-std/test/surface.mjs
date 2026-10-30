@@ -37,6 +37,19 @@ async function capture(method, body) {
   return seen;
 }
 
+/** As `capture`, keeping each call's arguments as they were passed. */
+async function captureArgs(method, body) {
+  const original = console[method];
+  const seen = [];
+  console[method] = (...args) => seen.push(args);
+  try {
+    await body();
+  } finally {
+    console[method] = original;
+  }
+  return seen;
+}
+
 /** Replace `globalThis.fetch` for the duration of `body`, returning its calls. */
 async function withFetch(stub, body) {
   const original = globalThis.fetch;
@@ -152,6 +165,36 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     assert.deepEqual(err, ["hello error"]);
   });
 
+  // K5a (#2586).
+  t("LoggerProvider.warn: writes the message with console.warn", async () => {
+    const logger = new b.LoggerProvider();
+    assert.deepEqual(await capture("warn", () => logger.warn("hello warn")), ["hello warn"]);
+  });
+
+  t("LoggerProvider.debug: writes the message with console.debug", async () => {
+    const logger = new b.LoggerProvider();
+    assert.deepEqual(await capture("debug", () => logger.debug("hello debug")), ["hello debug"]);
+  });
+
+  t("LoggerProvider.log: writes a structured record through the level's console method", async () => {
+    const logger = new b.LoggerProvider();
+    const fields = new Map([["orderId", "o-1"], ["message", "a field, not the message"]]);
+    const seen = await captureArgs("warn", () => logger.log(bynk.LogLevel.Warn, "slow order", fields));
+    const record = { message: "slow order", level: "warn", fields: { orderId: "o-1", message: "a field, not the message" } };
+    if (shape.log === "object") {
+      assert.deepEqual(seen, [[record]]);
+    } else if (shape.log === "json") {
+      assert.deepEqual(seen.map((args) => JSON.parse(args[0])), [record]);
+    } else {
+      assert.deepEqual(seen, [["slow order", record.fields]]);
+    }
+    // Each level has its own method.
+    for (const [level, method] of [["Debug", "debug"], ["Info", "log"], ["Error", "error"]]) {
+      const lines = await captureArgs(method, () => logger.log(bynk.LogLevel[level], "m", new Map()));
+      assert.equal(lines.length, 1, level);
+    }
+  });
+
   // --- Fetch -------------------------------------------------------------
 
   const request = (overrides = {}) => ({
@@ -206,7 +249,86 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
         );
       }
     });
+
+    // K5a (#2586).
+    t("FetchProvider.send: sends PATCH, HEAD and OPTIONS upper-cased, following redirects with no timeout", async () => {
+      await withFetch(
+        () => new Response(null, { status: 204 }),
+        async (calls) => {
+          for (const m of ["Patch", "Head", "Options"]) {
+            const res = await new b.FetchProvider().send(request({ method: bynk.Method[m] }));
+            assert.equal(res.tag, "Ok");
+            assert.equal(res.value.body, "");
+          }
+          assert.deepEqual(calls.map((c) => c.init.method), ["PATCH", "HEAD", "OPTIONS"]);
+          assert.ok(calls.every((c) => c.init.redirect === "follow" && c.init.signal === undefined));
+        },
+      );
+    });
+
+    t("FetchProvider.sendWith: a manual redirect returns the 3xx with its location", async () => {
+      await withFetch(
+        () => new Response(null, { status: 302, headers: { location: "https://elsewhere.test/" } }),
+        async (calls) => {
+          const res = await new b.FetchProvider().sendWith(request(), {
+            timeout: None,
+            redirect: bynk.Redirect.Manual,
+          });
+          assert.equal(res.tag, "Ok");
+          assert.equal(res.value.status, 302);
+          assert.equal(res.value.headers.get("location"), "https://elsewhere.test/");
+          assert.equal(calls[0].init.redirect, "manual");
+        },
+      );
+    });
+
+    t("FetchProvider.sendWith: a timeout that elapses is Err(Timeout)", async () => {
+      // A fetch that answers only when its signal aborts, as the platform does.
+      await withFetch(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init.signal.addEventListener("abort", () => reject(init.signal.reason));
+          }),
+        async (calls) => {
+          const res = await new b.FetchProvider().sendWith(request(), {
+            timeout: Some(20),
+            redirect: bynk.Redirect.Follow,
+          });
+          assert.equal(res.tag, "Err");
+          assert.equal(res.error.tag, "Timeout");
+          assert.equal(calls[0].init.redirect, "follow");
+        },
+      );
+    });
+
+    t("FetchProvider.sendWith: a timeout of zero or less faults, and nothing is sent", async () => {
+      await withFetch(
+        () => new Response("unexpected"),
+        async (calls) => {
+          for (const ms of [0, -5]) {
+            await assert.rejects(
+              new b.FetchProvider().sendWith(request(), { timeout: Some(ms), redirect: bynk.Redirect.Follow }),
+              /a timeout is more than zero/,
+            );
+          }
+          assert.equal(calls.length, 0);
+        },
+      );
+    });
   } else {
+    t("FetchProvider.sendWith: is withheld — it throws, and nothing is sent", async () => {
+      await withFetch(
+        () => new Response("unexpected"),
+        async (calls) => {
+          await assert.rejects(
+            new b.FetchProvider().sendWith(request(), { timeout: None, redirect: bynk.Redirect.Follow }),
+            /Fetch is unavailable/,
+          );
+          assert.equal(calls.length, 0);
+        },
+      );
+    });
+
     t("FetchProvider.send: is withheld — it throws, and nothing is sent", async () => {
       await withFetch(
         () => new Response("unexpected"),

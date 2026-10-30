@@ -11,4 +11,5 @@ surfaceSuite("bynk-cloudflare", binding, runtime, bynk, {
   fetch: "real",
   secrets: "env",
   locale: "negotiated",
+  log: "object",
 });

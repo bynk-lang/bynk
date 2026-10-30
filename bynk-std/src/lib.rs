@@ -512,8 +512,9 @@ pub const UNITS: &[Unit] = &[
         platform: None,
         env_providers: &["SecretsProvider"],
         stability: Stability::Stable,
-        experimental: &[],
-        extensible: &["FetchError", "Method"],
+        // K5a (#2586): the new operations, until a service has used them.
+        experimental: &["Fetch.sendWith", "Logger.log"],
+        extensible: &["FetchError", "Method", "Redirect"],
         instantiable: &[],
     },
     Unit {
@@ -1119,6 +1120,8 @@ mod tests {
         assert_eq!(
             experimental_items(),
             [
+                "bynk.Fetch.sendWith",
+                "bynk.Logger.log",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",

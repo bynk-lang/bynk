@@ -5257,7 +5257,8 @@ fn platform_double(
     harness_clock: bool,
 ) -> Option<String> {
     let body = match (owner, cap) {
-        ("bynk", "Logger") => "  return {\n    async info() {},\n    async error() {},\n  };\n".to_string(),
+        // K5a (#2586): every level a no-op, as `info` and `error` are.
+        ("bynk", "Logger") => "  return {\n    async info() {},\n    async error() {},\n    async warn() {},\n    async debug() {},\n    async log() {},\n  };\n".to_string(),
         ("bynk", "Events") => "  return {\n    async emit() {},\n  };\n".to_string(),
         ("bynk", "Clock") if harness_clock => {
             "  __bynkClockNow = 0;\n  return __bynkClock;\n".to_string()
@@ -5271,7 +5272,7 @@ fn platform_double(
         ("bynk.crypto", "Crypto") => "  return new bynk_crypto__binding.CryptoProvider();\n".to_string(),
         ("bynk", "Secrets") => "  return {\n    async get() {\n      return None;\n    },\n  };\n".to_string(),
         ("bynk", "Locale") => "  return {\n    async current() {\n      return \"en\" as never;\n    },\n  };\n".to_string(),
-        ("bynk", "Fetch") => "  return {\n    async send() {\n      throw new globalThis.Error(\"bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`\");\n    },\n  };\n".to_string(),
+        ("bynk", "Fetch") => "  return {\n    async send() {\n      throw new globalThis.Error(\"bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`\");\n    },\n    async sendWith() {\n      throw new globalThis.Error(\"bynk: `Fetch.sendWith` is not stubbed, and a test never reaches the network — add `stub Fetch.sendWith(_, _) returns …`\");\n    },\n  };\n".to_string(),
         ("bynk", "Idempotency") => "  const store = new globalThis.Map<string, unknown>();\n  return {\n    async dedup(key) {\n      return (store.has(key) ? Some(store.get(key)) : None) as never;\n    },\n    async remember(key, value) {\n      store.set(key, value);\n    },\n  };\n".to_string(),
         ("bynk.cloudflare", "Kv") => "  const store = new globalThis.Map<string, string>();\n  return {\n    async get(key) {\n      const v = store.get(key);\n      return v === undefined ? None : Some(v);\n    },\n    async put(key, value) {\n      store.set(key, value);\n    },\n    async putTtl(key, value) {\n      store.set(key, value);\n    },\n    async delete(key) {\n      store.delete(key);\n    },\n    async list(prefix) {\n      return [...store.keys()].filter((k) => prefix.tag === \"None\" || k.startsWith(prefix.value)).sort();\n    },\n  };\n".to_string(),
         // P5 (#2323): each `R2` instance is an in-memory bucket honouring

@@ -400,6 +400,8 @@ mod tests {
         assert_eq!(
             p.experimental,
             [
+                "bynk.Fetch.sendWith",
+                "bynk.Logger.log",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
@@ -409,6 +411,12 @@ mod tests {
             ]
         );
         assert!(!p.blocks("bynk.cloudflare.Kv.list"));
+        // K5a (#2586): new operations of stable capabilities, alone.
+        assert!(p.blocks("bynk.Fetch.sendWith"));
+        assert!(!p.blocks("bynk.Fetch.send"));
+        assert!(!p.blocks("bynk.FetchOptions"));
+        assert!(p.blocks("bynk.Logger.log"));
+        assert!(!p.blocks("bynk.Logger.warn"));
         assert!(p.blocks("bynk.cloudflare.Service"));
         assert!(p.blocks("bynk.cloudflare.Service.send"));
         assert!(p.blocks("bynk.cloudflare.R2"));

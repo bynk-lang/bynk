@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk { Fetch }
+
+// #2586: `Fetch.sendWith` ships experimental, though `Fetch` is stable.
+service probe {
+  on call(req: Request) -> Effect[Int] given Fetch {
+    let _ <- Fetch.sendWith(req, FetchOptions { timeout: None, redirect: Follow })
+    Effect.pure(0)
+  }
+}
