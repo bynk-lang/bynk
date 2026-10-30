@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.437**.
+written against **v0.439**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.439.0** | A `from queue("…")` consumer's name is checked against Cloudflare's queue-name rule (1–63 lowercase letters, digits or `-`, starting and ending alphanumeric); names Cloudflare would refuse at `wrangler queues create` are now a compile error |
+| **v0.438.0** | "`bynk.cloudflare` gains `Analytics`, a Workers Analytics Engine dataset as an instance-only derived capability with no options (`capability Signups = Analytics`), whose `write(DataPoint)` checks the platform's per-point limits before writing; `bynk deploy` derives the dataset's name in snake case (`shop_cart_signups`, `shop_cart_signups_staging`) and has nothing to create (standard-library P3b, [#2582](https://github.com/bynk-lang/bynk/issues/2582))" |
 | **v0.437.1** | bynk deploy --prune no longer deletes a consumed queue the deploy only reused rather than created |
 | **v0.437.0** | "`bynk.cloudflare` gains `Queue`, a Cloudflare Queue producer as an instance-only derived capability (`capability OrderEvents = Queue @name(\"order-events\")`) with `send`, `sendWith` (a delay) and `sendBatch` over JSON text from `Json.encode`; `bynk deploy` creates a missing producer queue, recording it only when it created it (standard-library P2, [#2578](https://github.com/bynk-lang/bynk/issues/2578))" |
 | **v0.436.10** | The "Show capability path" command also sends each chain's sites, shared sites repeated, so a client can mark where one path ends |

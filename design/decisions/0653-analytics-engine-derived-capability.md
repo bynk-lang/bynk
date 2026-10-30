@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: "`bynk.cloudflare` gains `Analytics`, a Workers Analytics Engine dataset as an instance-only derived capability with no options (`capability Signups = Analytics`), whose `write(DataPoint)` checks the platform's per-point limits before writing; `bynk deploy` derives the dataset's name in snake case (`shop_cart_signups`, `shop_cart_signups_staging`) and has nothing to create (standard-library P3b, [#2582](https://github.com/bynk-lang/bynk/issues/2582))"
----
+# 0653 — Analytics Engine datasets as option-free derived capabilities
 
-## ADR: analytics-engine-derived-capability
-title: Analytics Engine datasets as option-free derived capabilities
-summary: Cloudflare's Analytics Engine binding as an instance-only `Analytics` with no options, a dataset name deploy derives in snake case because it is a SQL table name, one `write(DataPoint)` whose limits are checked before the write, and no provisioning or ledger record
+- **Status:** Accepted (v0.438)
 
 **Context.** A Bynk Worker had no way to record high-cardinality events or
 metrics short of an outbound `Fetch`. The standard-library track listed Analytics

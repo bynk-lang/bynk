@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `from queue("…")` consumer's name is checked against Cloudflare's queue-name rule (1–63 lowercase letters, digits or `-`, starting and ending alphanumeric); names Cloudflare would refuse at `wrangler queues create` are now a compile error
----
+# 0654 — A queue consumer's name follows Cloudflare's queue-name rule
 
-## ADR: queue-consumer-name-rule
-title: A queue consumer's name follows Cloudflare's queue-name rule
-summary: Consumers and producers share one queue-name predicate
+- **Status:** Accepted (v0.439)
 
 **Context.** `service … from queue("n")` only checked that `n` was non-empty, so a name Cloudflare refuses (uppercase, `_`, over 63 characters, a leading or trailing `-`) compiled and failed at `wrangler queues create`. The producer's `@name` (#2578) already applied the rule.
 
