@@ -25,8 +25,8 @@ return a library record, and a new built-in type is reserved-name work.
   `polynomial_regex`, with no length bound to excuse a polynomial pattern
   (a method runs on any string). **Rejected:** run-time patterns with a
   run-time guard, which JS cannot enforce.
-- **B. Six methods.** `matchesRegex` (whole string, anchored `^(?:…)$` as
-  `Matches` is) and `containsRegex` (anywhere) `-> Bool`; `findRegex ->
+- **B. Six methods.** `matchesRegex` (the whole string, anchored with
+  lookarounds so no flag can loosen it) and `containsRegex` (anywhere) `-> Bool`; `findRegex ->
   Option[List[Option[String]]]` and `findAllRegex -> List[List[Option[String]]]`
   (element 0 the whole match, then each group, `None` for one that did not
   take part; `findAllRegex` is `matchAll`'s non-overlapping, left-to-right
@@ -51,6 +51,8 @@ return a library record, and a new built-in type is reserved-name work.
 - **E. Stable.**
 
 **Consequences.** Every regex in a Bynk program, refinement or method, has had
-its syntax and backtracking cost checked before it runs. Ambiguity that only
-case-folding creates under `(?i)` is not detected, since the analysis reads the
-pattern as written. Named-group maps (`findNamedRegex`) can follow.
+its syntax and backtracking cost checked before it runs, under the flags it
+runs with: the ambiguity analysis treats `.` as every code unit under `s` and
+case-folds character sets under `i` (folding only adds code units, so it errs
+towards refusing). `matchesRegex` anchors with lookarounds, so `(?m)` cannot
+make it a line match. Named-group maps (`findNamedRegex`) can follow.

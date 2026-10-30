@@ -302,8 +302,10 @@ groups it would splice in).
   classes work on UTF-16 code units. A pattern may open with one inline-flag
   group, `(?i)`, `(?m)`, `(?s)` or a combination, which becomes the `RegExp`
   flags; an unknown or repeated flag is `invalid_regex`. The ambiguity analysis
-  reads the pattern as written, so ambiguity that only case-folding creates
-  under `(?i)` is not detected.
+  runs under those flags: under `s`, `.` matches every code unit, and under
+  `i`, every character set is case-folded, so `(?i)(a|A)+` is refused.
+- `matchesRegex` anchors with lookarounds, `(?<![\s\S])(?:…)(?![\s\S])`,
+  not `^…$`, so an `m` flag cannot turn it into a line match.
 
 **Refined receivers inherit the base kernel** (v0.143, ADR 0168). A method
 call whose receiver is a **refined** type resolves against that type's declared
