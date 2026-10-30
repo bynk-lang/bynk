@@ -1,0 +1,26 @@
+context stamps
+
+// #2592: ISO-8601 for `Instant`. `toIso` writes RFC 3339 in UTC; `fromIso`
+// reads it, converting an offset, and is `None` on anything else.
+
+fn stamp(ms: Int) -> String {
+	Instant.fromEpochMillis(ms).toIso()
+}
+
+fn epoch(text: String) -> Option[Int] {
+	Instant.fromIso(text).map((i) => i.toEpochMillis())
+}
+
+fn roundTrips(ms: Int) -> Bool {
+	let i = Instant.fromEpochMillis(ms)
+	Instant.fromIso(i.toIso()) == Some(i)
+}
+
+service clock {
+	on call(text: String) -> Effect[String] {
+		match Instant.fromIso(text) {
+			Some(i) => Effect.pure((i + 1.hours).toIso())
+			None => Effect.pure("not an instant")
+		}
+	}
+}

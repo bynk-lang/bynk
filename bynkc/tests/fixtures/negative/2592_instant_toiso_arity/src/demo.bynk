@@ -1,0 +1,12 @@
+context demo
+
+// #2592: `toIso` takes no argument; there is no format string.
+fn show(i: Instant) -> String {
+	i.toIso("yyyy")
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

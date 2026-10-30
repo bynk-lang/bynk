@@ -1499,6 +1499,8 @@ pub(crate) fn check_instant_kernel_method(
     let sig: Option<(Vec<TyId>, Ty)> = match method.name.as_str() {
         "toEpochMillis" => Some((vec![], Ty::Base(BaseType::Int))),
         "toString" => Some((vec![], Ty::Base(BaseType::String))),
+        // K3 (#2592): RFC 3339 text in UTC.
+        "toIso" => Some((vec![], Ty::Base(BaseType::String))),
         _ => None,
     };
     let Some((params, ret)) = sig else {
@@ -1506,7 +1508,7 @@ pub(crate) fn check_instant_kernel_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "the built-in `Instant` type has no method `{}` — the kernel is `toEpochMillis`, `toString`",
+                "the built-in `Instant` type has no method `{}` — the kernel is `toEpochMillis`, `toString`, `toIso`",
                 method.name
             ),
         ));
@@ -2586,7 +2588,8 @@ pub(crate) fn check_duration_static(
 
 /// v0.90 (ADR 0114 D6): the `Instant.fromEpochMillis(n)` static constructor —
 /// the way to build an `Instant` from a runtime `Int` (a wire/stored epoch
-/// value); instants are otherwise minted only by `Clock.now()`.
+/// value); instants are otherwise minted only by `Clock.now()`. K3 (#2592):
+/// `Instant.fromIso(s)` reads RFC 3339 text, `None` on anything else.
 pub(crate) fn check_instant_static(
     method: &Ident,
     args: &[Expr],
@@ -2594,18 +2597,29 @@ pub(crate) fn check_instant_static(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    if method.name != "fromEpochMillis" {
+    // (param, return) keyed on the static name; `None` = unknown (the resolver
+    // owns the unknown-static diagnostic; don't double up).
+    let sig: Option<(Ty, Ty)> = match method.name.as_str() {
+        "fromEpochMillis" => Some((Ty::Base(BaseType::Int), Ty::Base(BaseType::Instant))),
+        "fromIso" => Some((
+            Ty::Base(BaseType::String),
+            Ty::Option(tys.intern(Ty::Base(BaseType::Instant))),
+        )),
+        _ => None,
+    };
+    let Some((param, ret)) = sig else {
         for a in args {
             let _ = type_of(a, None, ctx);
         }
         return None;
-    }
+    };
     if args.len() != 1 {
         ctx.errors.push(CompileError::new(
             "bynk.types.method_arity",
             span,
             format!(
-                "`Instant.fromEpochMillis` takes 1 argument, got {}",
+                "`Instant.{}` takes 1 argument, got {}",
+                method.name,
                 args.len()
             ),
         ));
@@ -2616,11 +2630,11 @@ pub(crate) fn check_instant_static(
     }
     check_arg(
         &args[0],
-        tys.intern(Ty::Base(BaseType::Int)),
-        "the `Instant.fromEpochMillis` argument",
+        tys.intern(param),
+        &format!("the `Instant.{}` argument", method.name),
         ctx,
     );
-    Some(tys.intern(Ty::Base(BaseType::Instant)))
+    Some(tys.intern(ret))
 }
 
 /// v0.110 (ADR 0142 D2): the `Bytes` static constructors — the only way to

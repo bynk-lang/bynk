@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "clock": "7d675b6a30fc104e"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "clock": "Svc(\"clock\",P(\"text\",B(\"String\")),Ret(B(\"String\")))"
+  }
+}

@@ -3,6 +3,7 @@
 // modules below (in this dependency order) into one flat file.
 export * from "./result.ts";
 export * from "./bytes.ts";
+export * from "./time.ts";
 export * from "./equality.ts";
 export * from "./int.ts";
 export * from "./errors.ts";

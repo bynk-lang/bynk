@@ -3049,8 +3049,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     "Json" => &["encode", "decode"],
                     // v0.86 (ADR 0112): `Duration.millis(n)`.
                     "Duration" => &["millis"],
-                    // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)`.
-                    "Instant" => &["fromEpochMillis"],
+                    // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)`; K3
+                    // (#2592): `Instant.fromIso(s)`.
+                    "Instant" => &["fromEpochMillis", "fromIso"],
                     // v0.100: `Stream.of(xs)`.
                     "Stream" => &["of"],
                     // v0.110 (ADR 0142): `Bytes.fromUtf8(s)`/`fromBase64(s)`/`empty()`;

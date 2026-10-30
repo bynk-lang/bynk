@@ -3927,6 +3927,13 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.time_ops() {
+            parts.extend(
+                TIME_OPS_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
         if ctx.runtime_use.request_headers() {
             parts.extend(
                 REQUEST_HEADERS_RUNTIME_IMPORTS
@@ -4009,6 +4016,12 @@ fn write_header_single(
         } else {
             ""
         };
+        // K3 (#2592): the `Instant` ISO-8601 helpers, imported only when called.
+        let time_ops_imports = if runtime_use.time_ops() {
+            TIME_OPS_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #2341 (L4): the `RequestHeaders` constructor, imported only when a
         // body built one (`RequestHeaders.of`/`empty`).
         let request_headers_imports = if runtime_use.request_headers() {
@@ -4044,7 +4057,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4060,12 +4073,16 @@ fn write_header_single(
 pub(crate) const BYTES_RUNTIME_IMPORTS: &str =
     ", __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8";
 
-/// #2016: the `Bytes` operation helpers (`concat`, `compare`, hex, base64url),
-/// appended only when the body calls one, so a module that merely builds or
-/// compares `Bytes` keeps the [`BYTES_RUNTIME_IMPORTS`] list it had.
 /// #2341 (L4): the `RequestHeaders` constructor a test builds headers with.
 pub(crate) const REQUEST_HEADERS_RUNTIME_IMPORTS: &str = ", __requestHeaders";
 
+/// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
+/// appended only when the body calls one.
+pub(crate) const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkInstantFromIso";
+
+/// #2016: the `Bytes` operation helpers (`concat`, `compare`, hex, base64url),
+/// appended only when the body calls one, so a module that merely builds or
+/// compares `Bytes` keeps the [`BYTES_RUNTIME_IMPORTS`] list it had.
 pub(crate) const BYTES_OPS_RUNTIME_IMPORTS: &str = ", __bynkBytesConcat, __bynkBytesCompare, __bynkBytesToHex, __bynkBytesFromHex, __bynkBytesToBase64Url, __bynkBytesFromBase64Url";
 
 /// #1652 (runtime-semantics track §3.1): the structural-equality walker,
@@ -5297,6 +5314,11 @@ impl<'a> LowerCtx<'a> {
     /// the module imports that group.
     fn note_bytes_ops(&self) {
         self.runtime_use().note_bytes_ops();
+    }
+
+    /// Record that this lowering emitted an `Instant` ISO-8601 helper (#2592).
+    fn note_time_ops(&self) {
+        self.runtime_use().note_time_ops();
     }
 
     /// Record that this lowering built a `RequestHeaders` value (#2341), so
@@ -7196,6 +7218,25 @@ mod conditional_runtime_import_tests {
         let line = runtime_import_line(&ops);
         assert!(line.contains("__bynkBytesToHex"), "{ops}");
         assert!(!line.contains("__bynkBytesEqual"), "{ops}");
+    }
+
+    /// K3 (#2592): the `Instant` ISO-8601 helpers come in only when called,
+    /// and each lowers to its own helper.
+    #[test]
+    fn instant_iso_helpers_are_imported_only_when_called() {
+        let base = emit_source("commons t\n\nfn ms(i: Instant) -> Int {\n  i.toEpochMillis()\n}\n");
+        assert!(
+            !runtime_import_line(&base).contains("__bynkInstant"),
+            "{base}"
+        );
+        let ts = emit_source(
+            "commons t\n\nfn iso(i: Instant) -> String {\n  i.toIso()\n}\n\nfn read(s: String) -> Option[Instant] {\n  Instant.fromIso(s)\n}\n",
+        );
+        let line = runtime_import_line(&ts);
+        assert!(line.contains("__bynkInstantToIso"), "{ts}");
+        assert!(line.contains("__bynkInstantFromIso"), "{ts}");
+        assert!(ts.contains("__bynkInstantToIso(i)"), "{ts}");
+        assert!(ts.contains("__bynkInstantFromIso(s)"), "{ts}");
     }
 
     /// #2016: `slice` lowers inline, so it pulls in no helper at all.
