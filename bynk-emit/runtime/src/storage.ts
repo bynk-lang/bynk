@@ -138,13 +138,15 @@ export function makeIntegrationKv(): KVNamespace {
       : value instanceof ArrayBuffer
         ? new Uint8Array(value.slice(0))
         : new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
-  const get = async (key: string, type?: "arrayBuffer"): Promise<any> => {
+  function get(key: string): Promise<string | null>;
+  function get(key: string, type: "arrayBuffer"): Promise<ArrayBuffer | null>;
+  async function get(key: string, type?: "arrayBuffer"): Promise<string | ArrayBuffer | null> {
     const e = entries.get(key);
     if (e === undefined) return null;
     return type === "arrayBuffer" ? e.bytes.slice().buffer : new TextDecoder().decode(e.bytes);
-  };
+  }
   return {
-    get: get as KVNamespace["get"],
+    get,
     async getWithMetadata(key: string) {
       const e = entries.get(key);
       return e === undefined
