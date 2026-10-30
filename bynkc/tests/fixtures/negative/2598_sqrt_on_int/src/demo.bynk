@@ -1,0 +1,12 @@
+context demo
+
+// #2598: `sqrt` is a `Float` function; an `Int` converts first.
+fn root(n: Int) -> Float {
+	n.sqrt()
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

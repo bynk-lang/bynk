@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "divide": "213506244cf1d5f0",
+    "power": "94a6668432e889c0"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "divide": "Svc(\"divide\",P(\"a\",B(\"Int\")),P(\"b\",B(\"Int\")),Ret(B(\"Int\")))",
+    "power": "Svc(\"power\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
+}

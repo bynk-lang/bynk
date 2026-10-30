@@ -1,0 +1,2 @@
+bynk.types.method_not_found
+the built-in `Int` type has no method `sqrt`

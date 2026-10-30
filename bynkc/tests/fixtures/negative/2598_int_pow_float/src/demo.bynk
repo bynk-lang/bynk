@@ -1,0 +1,12 @@
+context demo
+
+// #2598: `Int.pow` takes an `Int` exponent; there is no numeric coercion.
+fn half(n: Int) -> Int {
+	n.pow(0.5)
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}
