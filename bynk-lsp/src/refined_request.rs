@@ -7,14 +7,23 @@
 //! The link opens a panel: a few example values, and a box that checks a
 //! candidate against the predicate and names every clause that fails.
 //!
-//! **Where the check runs (DECISION A).** In the extension host, over the same
-//! condition the emitter lowers for `.of` — [`bynk_emit::emitter::pred_condition_and_message`],
-//! printed to a JavaScript expression over `value`. The server does not run
-//! anything; it ships each clause's condition as text. No project code is ever
-//! evaluated: the only source is a closed set of eight predicate forms the
-//! compiler itself generates (the sole user-written part, a `Matches` pattern,
-//! sits inside a string literal), and the client evaluates it in a fresh
-//! `node:vm` context with a time limit. A `bynk eval` driver would instead
+//! **Where the check runs (DECISION A).** In the client, over the same
+//! condition the emitter lowers for `.of` — [`bynk_emit::emitter::pred_condition_and_message`].
+//! The server does not run anything. Each clause carries its condition twice:
+//!
+//! - `predicate` (#2587), the clause in structured form — one of a closed set
+//!   of eight [`Predicate`] kinds, with its numbers and its `Matches` pattern
+//!   as plain JSON values. A client interprets it directly and runs no
+//!   JavaScript, so nothing hangs on the server escaping a user-written
+//!   pattern correctly. This is the form to use.
+//! - `check`, the same condition printed to a JavaScript expression over
+//!   `value`, kept for clients that predate `predicate`. Evaluating it (the
+//!   extension used a fresh `node:vm` context with a time limit) is safe only
+//!   while the printer escapes the one user-written part, a `Matches` pattern,
+//!   correctly; `node:vm` is not a security boundary. It goes once clients
+//!   have moved to `predicate`.
+//!
+//! Either way no project code is evaluated: a `bynk eval` driver would instead
 //! compile and run the project's output, which is the thing to avoid.
 //!
 //! **Examples (DECISION B).** Drawn here, deterministically, from the domain
@@ -65,11 +74,73 @@ pub struct Clause {
     pub source: String,
     /// In words: `1 ≤ value ≤ 100`.
     pub description: String,
+    /// The condition in structured form, for the client to interpret (#2587).
+    pub predicate: Predicate,
     /// The emitter's own condition over `value`, as JavaScript: true when the
-    /// clause holds.
+    /// clause holds. Kept for clients that predate `predicate`.
     pub check: String,
     /// The emitter's failure message, as `.of` reports it.
     pub message: String,
+}
+
+/// A clause's condition in structured form: the eight predicate forms, each
+/// holding exactly when the emitter's `check` for it does. Serialised with its
+/// variant in `kind` (`{ "kind": "range", "min": 1, "max": 100 }`).
+///
+/// Lengths are JavaScript `.length`, in UTF-16 code units. A `matches` holds
+/// when `new RegExp("^(?:" + pattern + ")$")` (no flags) tests true on the
+/// value: `pattern` is as written, neither escaped nor anchored.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Predicate {
+    /// `value >= 0`.
+    NonNegative,
+    /// `value > 0`.
+    Positive,
+    /// `min <= value <= max`, for an `Int` or a `Float` alike.
+    Range { min: Bound, max: Bound },
+    /// The value's length is at least 1.
+    NonEmpty,
+    /// The value's length is at least `length`.
+    MinLength { length: i64 },
+    /// The value's length is at most `length`.
+    MaxLength { length: i64 },
+    /// The value's length is exactly `length`.
+    Length { length: i64 },
+    /// The whole string matches `pattern`.
+    Matches { pattern: String },
+}
+
+/// A `range` bound: a JSON integer for an `Int` type, a number for a `Float`.
+/// A float is always finite — the lexer refuses an overflowing literal
+/// (`bynk.lex.float_literal_overflow`) — so it never serialises as `null`.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+#[serde(untagged)]
+pub enum Bound {
+    Int(i64),
+    Float(f64),
+}
+
+impl Predicate {
+    fn of(kind: &PredKind) -> Self {
+        match kind {
+            PredKind::NonNegative => Predicate::NonNegative,
+            PredKind::Positive => Predicate::Positive,
+            PredKind::InRange(a, b) => Predicate::Range {
+                min: Bound::Int(a.value),
+                max: Bound::Int(b.value),
+            },
+            PredKind::InRangeF(a, b) => Predicate::Range {
+                min: Bound::Float(a.value),
+                max: Bound::Float(b.value),
+            },
+            PredKind::NonEmpty => Predicate::NonEmpty,
+            PredKind::MinLength(n) => Predicate::MinLength { length: *n },
+            PredKind::MaxLength(n) => Predicate::MaxLength { length: *n },
+            PredKind::Length(n) => Predicate::Length { length: *n },
+            PredKind::Matches(p) => Predicate::Matches { pattern: p.clone() },
+        }
+    }
 }
 
 /// The `bynk/refinedTypeModel` response.
@@ -183,6 +254,7 @@ fn clause(kind: &PredKind) -> Clause {
             span: bynk_syntax::span::Span::default(),
         }),
         description,
+        predicate: Predicate::of(kind),
         check: bynk_ts::print_expr(&cond),
         message,
     }
@@ -585,6 +657,69 @@ mod tests {
         // The only quote characters left unescaped are the literal's own.
         let body = &check[check.find("\"^(?:\"").unwrap()..];
         assert!(body.contains("\\\""), "{check}");
+    }
+
+    #[test]
+    fn every_predicate_form_has_its_structured_json() {
+        use serde_json::json;
+        let src = "commons demo\n\n\
+            type A = Int where NonNegative\n\
+            type B = Int where Positive\n\
+            type C = Int where InRange(-5, 5)\n\
+            type F = Float where InRange(0.5, 2.5)\n\
+            type E = String where NonEmpty\n\
+            type Lo = String where MinLength(3)\n\
+            type Hi = String where MaxLength(2)\n\
+            type Ex = String where Length(4)\n\
+            type M = String where Matches(\"[a-z]+\")\n";
+        let cases = [
+            ("A", json!({ "kind": "nonNegative" })),
+            ("B", json!({ "kind": "positive" })),
+            ("C", json!({ "kind": "range", "min": -5, "max": 5 })),
+            ("F", json!({ "kind": "range", "min": 0.5, "max": 2.5 })),
+            ("E", json!({ "kind": "nonEmpty" })),
+            ("Lo", json!({ "kind": "minLength", "length": 3 })),
+            ("Hi", json!({ "kind": "maxLength", "length": 2 })),
+            ("Ex", json!({ "kind": "length", "length": 4 })),
+            ("M", json!({ "kind": "matches", "pattern": "[a-z]+" })),
+        ];
+        for (name, want) in cases {
+            let m = model(src, name);
+            let clause = serde_json::to_value(&m.clauses[0]).unwrap();
+            assert_eq!(clause["predicate"], want, "{name}");
+            assert!(clause["check"].is_string(), "{name}: `check` is kept");
+        }
+    }
+
+    #[test]
+    fn an_int_range_bound_is_a_json_integer() {
+        let src = "commons demo\n\ntype C = Int where InRange(1, 100)\n";
+        let p = serde_json::to_string(&model(src, "C").clauses[0].predicate).unwrap();
+        assert_eq!(p, r#"{"kind":"range","min":1,"max":100}"#);
+    }
+
+    #[test]
+    fn a_hostile_pattern_reaches_the_structured_form_unchanged() {
+        let src = "commons demo\n\ntype T = String where Matches(\"a\\\\\\\"); process.exit(1); (\\\"\")\n";
+        let decl = find_type_decl(src, "T").unwrap();
+        let TypeBody::Refined {
+            refinement: Some(r),
+            ..
+        } = &decl.body
+        else {
+            panic!("refined");
+        };
+        let PredKind::Matches(written) = &r.predicates[0].kind else {
+            panic!("matches");
+        };
+        let m = model_for(&decl, false).unwrap();
+        assert_eq!(
+            m.clauses[0].predicate,
+            Predicate::Matches {
+                pattern: written.clone()
+            }
+        );
+        assert!(written.contains("process.exit(1)"), "{written}");
     }
 
     #[test]
