@@ -730,7 +730,8 @@ pub const UNITS: &[Unit] = &[
         identity_path: "bynk/set.bynk",
         source: BYNK_SET_SRC,
         binding: Binding::None,
-        id_block: 8,
+        // 9, not 8: K2's `bynk.url` (#2594) takes 8 in parallel.
+        id_block: 9,
         platform: None,
         env_providers: &[],
         stability: Stability::Stable,
@@ -1285,7 +1286,7 @@ mod tests {
                 ("bynk.locale", 6),
                 ("bynk.locale.types", 5),
                 ("bynk.crypto", 7),
-                ("bynk.set", 8),
+                ("bynk.set", 9),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
