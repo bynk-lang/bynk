@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: "`bynk.cloudflare`'s `Kv` gains five experimental operations: `getWith` and `putWith` (metadata, a `Never`/`After`/`At` expiry, `cacheTtl`), `getBytes` and `putBytes` for binary values, and a paged `listPage` with each key's expiry and metadata; the platform's limits are checked before the call, and the existing operations are unchanged (standard-library P1, [#2590](https://github.com/bynk-lang/bynk/issues/2590))"
----
+# 0656 — Complete KV with experimental operations beside the existing ones
 
-## ADR: kv-complete
-title: Complete KV with experimental operations beside the existing ones
-summary: `Kv` gains `getWith`/`putWith` (an options record, as ADR 0051 anticipated), `getBytes`/`putBytes` and a paged `listPage` (superseding ADR 0050's deferral), all experimental, with the platform's limits checked before the call and the existing operations unchanged
+- **Status:** Accepted (v0.442)
 
 **Context.** `Kv` shipped as text values with `get`, `put`, `putTtl`,
 `delete` and a draining `list`. ADR 0050 deferred paging because no Bynk routine
