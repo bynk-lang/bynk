@@ -1,7 +1,17 @@
 adapter bynk {
 	uses bynk.locale.types
 	exports capability { Clock, Random, Logger, Fetch, Secrets, Locale, Idempotency, Events }
-	exports transparent { Uuid, Method, FetchError, Request, Response, FetchOptions, Redirect, LogLevel, EventEnvelope }
+	exports transparent {
+		Uuid,
+		Method,
+		FetchError,
+		Request,
+		Response,
+		FetchOptions,
+		Redirect,
+		LogLevel,
+		EventEnvelope,
+	}
 
 	---
 	A UUID in canonical 8-4-4-4-12 lowercase-hex form.
