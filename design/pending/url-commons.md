@@ -38,8 +38,8 @@ string's UTF-8 bytes.
   `scheme://host[:port][path][?query][#fragment]`: scheme and host lowered, the
   path kept as written, the query split on `&` and each pair on its first `=`,
   `+` read as a space, then percent-decoded. A user-info part, an IPv6 literal,
-  a missing `//`, a port over 65535 or a malformed escape is `None`; nothing is
-  repaired. `format` writes it back, and `parse(format(u))` is `Some(u)` for
+  a missing `//`, a port over 65535, a malformed escape anywhere, or a path
+  character RFC 3986 does not allow unencoded is `None`; nothing is repaired. `format` writes it back, and `parse(format(u))` is `Some(u)` for
   every `u` that `parse` returned. **Rejected:** WHATWG parsing through the
   platform's `URL`, which needs a kernel static returning this commons' record
   (new checker machinery) and normalises input a request-building library
@@ -49,7 +49,7 @@ string's UTF-8 bytes.
   `decodeQuery`, plus `param`, `params`, `withParam`, `withoutParam` and
   `segments`.
 - **E. Every helper is exported.** A commons has no private functions, so the
-  pieces `parse` is built from (`isScheme`, `isHost`, `parsePort`,
+  pieces `parse` is built from (`isScheme`, `isHost`, `isPath`, `parsePort`,
   `decodePair`) are public and documented as such.
 - **F. Stable**, like K1's additions.
 

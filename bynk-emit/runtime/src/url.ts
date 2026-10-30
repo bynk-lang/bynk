@@ -41,8 +41,10 @@ export function __bynkPercentDecode(s: string): Option<string> {
     bytes.push(parseInt(hex, 16));
     i += 2;
   }
+  // `ignoreBOM`: the default strips a leading U+FEFF, which would break
+  // `percentDecode(percentEncode(s)) == Some(s)` for a string starting with one.
   try {
-    return Some(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(bytes)));
+    return Some(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(new Uint8Array(bytes)));
   } catch {
     return None;
   }

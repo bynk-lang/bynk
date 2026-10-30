@@ -26,9 +26,9 @@ commons bynk.url {
 	after RFC 3986, not the WHATWG URL standard: nothing is repaired. The
 	scheme is a letter, then letters, digits, `+`, `-` or `.`. The host is not
 	empty and holds no `@`, `[`, `]`, `:`, space or `%`, so a user-info part or
-	an IPv6 literal is refused. The port is 0 to 65535. The query is read as
-	`decodeQuery` reads it. Anything else, a malformed escape included, is
-	`None`.
+	an IPv6 literal is refused. The port is 0 to 65535. The path is checked by
+	`isPath`. The query is read as `decodeQuery` reads it. Anything else, a
+	malformed escape included, is `None`.
 	---
 	fn parse(s: String) -> Option[Url] {
 		let schemeEnd = s.indexOf("://").getOrElse(-1)
@@ -58,7 +58,7 @@ commons bynk.url {
 		} else {
 			parsePort(authority.slice(colonAt + 1, authority.length())).map((p) => Some(p))
 		}
-		if schemeEnd < 0 || !isScheme(scheme) || !isHost(host) {
+		if schemeEnd < 0 || !isScheme(scheme) || !isHost(host) || !isPath(path) {
 			None
 		} else {
 			fragment.andThen((f) => query.andThen((q) => port.map((p) => Url {
@@ -107,6 +107,19 @@ commons bynk.url {
 	---
 	fn isHost(s: String) -> Bool {
 		s.length() > 0 && s.chars().all((c) => !"@[]:/?# %".contains(c))
+	}
+
+	---
+	Whether `s` is a path `parse` accepts: empty or starting with `/`, holding
+	only RFC 3986 path characters (letters, digits, `-._~!$&'()*+,;=:@/` and
+	`%`), with every `%` starting a valid escape. A space or a non-ASCII
+	character must be percent-encoded.
+	---
+	fn isPath(s: String) -> Bool {
+		let allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:@/%"
+		(s.length() == 0 || s.startsWith("/"))
+			&& s.chars().all((c) => allowed.contains(c))
+			&& s.percentDecode().isSome()
 	}
 
 	---
@@ -209,8 +222,10 @@ commons bynk.url {
 
 	---
 	The path's segments, split on `/` and percent-decoded, with no empty first
-	segment: `/a/b%20c/` is `["a", "b c", ""]`. A segment that does not decode
-	is kept as written.
+	segment: `/a/b%20c/` is `["a", "b c", ""]`, so a trailing `/` gives an empty
+	last segment and the path `/` alone is `[""]`. An empty path is `[]`. A
+	segment that does not decode is kept as written (a `Url` built by hand may
+	hold one; `parse` refuses it).
 	---
 	fn segments(u: Url) -> List[String] {
 		let parts = u.path.split("/")

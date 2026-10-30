@@ -39,9 +39,9 @@ export const Url = {
  * after RFC 3986, not the WHATWG URL standard: nothing is repaired. The
  * scheme is a letter, then letters, digits, `+`, `-` or `.`. The host is not
  * empty and holds no `@`, `[`, `]`, `:`, space or `%`, so a user-info part or
- * an IPv6 literal is refused. The port is 0 to 65535. The query is read as
- * `decodeQuery` reads it. Anything else, a malformed escape included, is
- * `None`.
+ * an IPv6 literal is refused. The port is 0 to 65535. The path is checked by
+ * `isPath`. The query is read as `decodeQuery` reads it. Anything else, a
+ * malformed escape included, is `None`.
  */
 export function parse(s: string): Option<Url> {
   const schemeEnd = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(s.indexOf("://")), -1);
@@ -59,7 +59,7 @@ export function parse(s: string): Option<Url> {
   const colonAt = ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__i: number) => __i < 0 ? None : Some(__i))(authority.indexOf(":")), (authority).length);
   const host = authority.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, colonAt));
   const port: Option<Option<number>> = (colonAt === (authority).length ? Some(None) : ((__o: Option<number>, __f: (x: number) => Option<number>) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parsePort(authority.slice(globalThis.Math.max(0, colonAt + 1), globalThis.Math.max(0, (authority).length))), (p) => Some(p)));
-  return (schemeEnd < 0 || !isScheme(scheme) || !isHost(host) ? None : ((__o: Option<Option<string>>, __f: (x: Option<string>) => Option<Url>) => __o.tag === "Some" ? __f(__o.value) : None)(fragment, (f) => ((__o: Option<readonly QueryParam[]>, __f: (x: readonly QueryParam[]) => Option<Url>) => __o.tag === "Some" ? __f(__o.value) : None)(query, (q) => ((__o: Option<Option<number>>, __f: (x: Option<number>) => Url) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(port, (p) => ({ scheme: scheme.toLowerCase(), host: host.toLowerCase(), port: p, path: path, query: q, fragment: f })))));
+  return (schemeEnd < 0 || !isScheme(scheme) || !isHost(host) || !isPath(path) ? None : ((__o: Option<Option<string>>, __f: (x: Option<string>) => Option<Url>) => __o.tag === "Some" ? __f(__o.value) : None)(fragment, (f) => ((__o: Option<readonly QueryParam[]>, __f: (x: readonly QueryParam[]) => Option<Url>) => __o.tag === "Some" ? __f(__o.value) : None)(query, (q) => ((__o: Option<Option<number>>, __f: (x: Option<number>) => Url) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(port, (p) => ({ scheme: scheme.toLowerCase(), host: host.toLowerCase(), port: p, path: path, query: q, fragment: f })))));
 }
 
 /**
@@ -91,6 +91,17 @@ export function isScheme(s: string): boolean {
  */
 export function isHost(s: string): boolean {
   return (s).length > 0 && ([...s]).every((__x: string) => ((c) => !"@[]:/?# %".includes(c))(__x));
+}
+
+/**
+ * Whether `s` is a path `parse` accepts: empty or starting with `/`, holding
+ * only RFC 3986 path characters (letters, digits, `-._~!$&'()*+,;=:@/` and
+ * `%`), with every `%` starting a valid escape. A space or a non-ASCII
+ * character must be percent-encoded.
+ */
+export function isPath(s: string): boolean {
+  const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:@/%";
+  return ((s).length === 0 || s.startsWith("/")) && ([...s]).every((__x: string) => ((c) => allowed.includes(c))(__x)) && (__bynkPercentDecode(s).tag === "Some");
 }
 
 /**
@@ -185,8 +196,10 @@ export function withoutParam(u: Url, name: string): Url {
 
 /**
  * The path's segments, split on `/` and percent-decoded, with no empty first
- * segment: `/a/b%20c/` is `["a", "b c", ""]`. A segment that does not decode
- * is kept as written.
+ * segment: `/a/b%20c/` is `["a", "b c", ""]`, so a trailing `/` gives an empty
+ * last segment and the path `/` alone is `[""]`. An empty path is `[]`. A
+ * segment that does not decode is kept as written (a `Url` built by hand may
+ * hold one; `parse` refuses it).
  */
 export function segments(u: Url): readonly string[] {
   const parts = u.path.split("/");

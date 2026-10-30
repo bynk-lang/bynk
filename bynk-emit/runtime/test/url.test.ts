@@ -19,6 +19,9 @@ test("percentDecode reads either case and keeps + as +", () => {
   assert.deepEqual(__bynkPercentDecode("a+b"), Some("a+b"));
   assert.deepEqual(__bynkPercentDecode("plain é"), Some("plain é"));
   assert.deepEqual(__bynkPercentDecode(""), Some(""));
+  // A leading U+FEFF is content, not a byte-order mark to drop.
+  assert.deepEqual(__bynkPercentDecode("%EF%BB%BFx"), Some("\ufeffx"));
+  assert.deepEqual(__bynkPercentDecode("\ufeff"), Some("\ufeff"));
 });
 
 test("percentDecode is None for a malformed escape or bytes that are not UTF-8", () => {
@@ -28,7 +31,7 @@ test("percentDecode is None for a malformed escape or bytes that are not UTF-8",
 });
 
 test("percentDecode(percentEncode(s)) is Some(s)", () => {
-  for (const s of ["", "hello", "a b&c=d", "é€😀", "%41", "100%", "+-*/", "\u0000\u007f"]) {
+  for (const s of ["", "hello", "a b&c=d", "é€😀", "%41", "100%", "+-*/", "\u0000\u007f", "\ufeffbom", "\ufeff"]) {
     assert.deepEqual(__bynkPercentDecode(__bynkPercentEncode(s)), Some(s), s);
   }
 });

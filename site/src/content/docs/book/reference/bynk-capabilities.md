@@ -810,8 +810,9 @@ type Url = {
 - `parse(s) -> Option[Url]` reads an absolute URL,
   `scheme://host[:port][path][?query][#fragment]`, after RFC 3986, not the
   WHATWG URL standard: nothing is repaired. A user-info part (`user:pw@`), an
-  IPv6 literal, a missing `//`, a port over 65535 or a malformed escape is
-  `None`. In the query, `+` reads as a space.
+  IPv6 literal, a missing `//`, a port over 65535, a malformed escape, or a
+  path character RFC 3986 doesn't allow unencoded (a space, a non-ASCII
+  character) is `None`. In the query, `+` reads as a space.
 - `format(u) -> String` writes it back, percent-encoding the query and the
   fragment and writing the path as given. `parse(format(u))` is `Some(u)` for
   every `u` that `parse` returned.
@@ -822,7 +823,7 @@ type Url = {
   `withoutParam(u, name)` and `segments(u)` (the decoded path segments) cover
   the usual edits. A `Url` is a record, so `Url { ...u, path: "/v2" }` works
   too.
-- `isScheme`, `isHost`, `parsePort` and `decodePair` are the pieces `parse` is
+- `isScheme`, `isHost`, `isPath`, `parsePort` and `decodePair` are the pieces `parse` is
   built from, exported because a commons has no private functions.
 
 A `Fetch` caller usually needs only `formatQuery`:

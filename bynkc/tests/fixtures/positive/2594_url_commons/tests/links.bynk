@@ -33,6 +33,9 @@ case "parse refuses what RFC 3986 does not define here" {
 	expect rejected("1http://a.test/")
 	expect rejected("https://a.test/?q=%zz")
 	expect rejected("https://a test/")
+	expect rejected("https://a.test/%zz")
+	expect rejected("https://a.test/a b")
+	expect rejected("https://a.test/é")
 }
 
 case "segments split and decode the path" {
