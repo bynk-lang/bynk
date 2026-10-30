@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: "`bynk`'s `Method` gains `Patch`, `Head` and `Options`; `Fetch.sendWith(req, FetchOptions { timeout, redirect })` adds a timeout (`Err(Timeout)` when it elapses) and a `Manual` redirect policy; `Logger` gains `warn`, `debug` and a structured `log(level, msg, fields)`. `sendWith` and `log` are experimental (standard-library K5a, [#2586](https://github.com/bynk-lang/bynk/issues/2586))"
----
+# 0655 — Fetch options in a record beside send, more methods, and Logger levels
 
-## ADR: fetch-options-and-log-levels
-title: Fetch options in a record beside send, more methods, and Logger levels
-summary: `Fetch.sendWith` takes a `FetchOptions { timeout, redirect }` record instead of `Request` growing fields, since a new record field breaks every literal; `Method` gains `Patch`, `Head` and `Options`; `Logger` gains `warn`, `debug` and a structured `log` that nests its fields
+- **Status:** Accepted (v0.441)
 
 **Context.** `bynk.Fetch` had four methods, no timeout (so `FetchError.Timeout`
 was unreachable), and always followed redirects. `Logger` had `info` and
