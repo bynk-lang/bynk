@@ -304,6 +304,15 @@ astral characters). `slice` clamps negative indices to `0` — there is no
 wrap-around. `indexOf` returns `None` for a missing substring, never a
 sentinel `-1`.
 
+**Percent-encoding** (standard-library K2, #2594) works on the **UTF-8 bytes**,
+not code units. `s.percentEncode() -> String` keeps RFC 3986's unreserved set
+(`A–Z a–z 0–9 - . _ ~`) and writes every other byte as `%XX` in upper-case hex,
+so `! ' ( ) *` are encoded too, and a lone surrogate is encoded as U+FFFD.
+`s.percentDecode() -> Option[String]` reads `%XX` in either case and is `None`
+for a `%` without two hex digits after it, or for bytes that are not UTF-8; it
+leaves `+` as `+`. `percentDecode(percentEncode(s))` is `Some(s)`. URL structure
+is the `bynk.url` commons, written in Bynk over these.
+
 **Refined receivers inherit the base kernel** (v0.143, ADR 0168). A method
 call whose receiver is a **refined** type resolves against that type's declared
 instance methods first; on a miss, it resolves against its **base type's

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "search": "b7354ee5872ad7e1"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "search": "Svc(\"search\",P(\"term\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}

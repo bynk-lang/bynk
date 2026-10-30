@@ -96,6 +96,8 @@ pub(crate) struct RuntimeUse {
     bytes_ops: Cell<bool>,
     /// K3 (#2592): the module references the `Instant` ISO-8601 helpers.
     time_ops: Cell<bool>,
+    /// K2 (#2594): the module references the percent-encoding helpers.
+    url_ops: Cell<bool>,
     /// #2341 (L4): the module builds a `RequestHeaders` (`__requestHeaders`).
     request_headers: Cell<bool>,
     /// #2341 (L4): a system-tier driver sends a test's headers
@@ -155,6 +157,11 @@ impl RuntimeUse {
     /// Record that the module references the `Instant` ISO-8601 helpers (#2592).
     pub fn note_time_ops(&self) {
         self.time_ops.set(true);
+    }
+
+    /// Record that the module references the percent-encoding helpers (#2594).
+    pub fn note_url_ops(&self) {
+        self.url_ops.set(true);
     }
 
     /// Record that the module builds a `RequestHeaders` value (#2341).
@@ -279,6 +286,11 @@ impl RuntimeUse {
     /// Whether the `Instant` ISO-8601 helpers must be imported (#2592).
     pub fn time_ops(&self) -> bool {
         self.time_ops.get()
+    }
+
+    /// Whether the percent-encoding helpers must be imported (#2594).
+    pub fn url_ops(&self) -> bool {
+        self.url_ops.get()
     }
 
     /// Whether `__bynkEq` must be imported (#1652).

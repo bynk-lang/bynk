@@ -1,0 +1,12 @@
+context demo
+
+// #2594: `percentDecode` can fail, so it gives an `Option`, not a `String`.
+fn decoded(s: String) -> String {
+	s.percentDecode()
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

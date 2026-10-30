@@ -1,0 +1,239 @@
+commons bynk.url {
+	---
+	One `name=value` pair of a query string, decoded.
+	---
+	type QueryParam = {
+		name: String,
+		value: String,
+	}
+
+	---
+	An absolute URL with an authority, as `parse` reads it: `scheme` and `host`
+	in lower case, `path` as written (percent-encoded, `""` or starting with
+	`/`), and `query` and `fragment` decoded. `format` writes it back.
+	---
+	type Url = {
+		scheme: String,
+		host: String,
+		port: Option[Int],
+		path: String,
+		query: List[QueryParam],
+		fragment: Option[String],
+	}
+
+	---
+	Reads an absolute URL, `scheme://host[:port][path][?query][#fragment]`,
+	after RFC 3986, not the WHATWG URL standard: nothing is repaired. The
+	scheme is a letter, then letters, digits, `+`, `-` or `.`. The host is not
+	empty and holds no `@`, `[`, `]`, `:`, space or `%`, so a user-info part or
+	an IPv6 literal is refused. The port is 0 to 65535. The path is checked by
+	`isPath`. The query is read as `decodeQuery` reads it. Anything else, a
+	malformed escape included, is `None`.
+	---
+	fn parse(s: String) -> Option[Url] {
+		let schemeEnd = s.indexOf("://").getOrElse(-1)
+		let scheme = s.slice(0, schemeEnd)
+		let rest = s.slice(schemeEnd + 3, s.length())
+		let hashAt = rest.indexOf("#").getOrElse(rest.length())
+		let beforeHash = rest.slice(0, hashAt)
+		let fragment: Option[Option[String]] = if hashAt == rest.length() {
+			Some(None)
+		} else {
+			rest.slice(hashAt + 1, rest.length()).percentDecode().map((f) => Some(f))
+		}
+		let queryAt = beforeHash.indexOf("?").getOrElse(beforeHash.length())
+		let beforeQuery = beforeHash.slice(0, queryAt)
+		let query: Option[List[QueryParam]] = if queryAt == beforeHash.length() {
+			Some(List.empty())
+		} else {
+			decodeQuery(beforeHash.slice(queryAt + 1, beforeHash.length()))
+		}
+		let pathAt = beforeQuery.indexOf("/").getOrElse(beforeQuery.length())
+		let authority = beforeQuery.slice(0, pathAt)
+		let path = beforeQuery.slice(pathAt, beforeQuery.length())
+		let colonAt = authority.indexOf(":").getOrElse(authority.length())
+		let host = authority.slice(0, colonAt)
+		let port: Option[Option[Int]] = if colonAt == authority.length() {
+			Some(None)
+		} else {
+			parsePort(authority.slice(colonAt + 1, authority.length())).map((p) => Some(p))
+		}
+		if schemeEnd < 0 || !isScheme(scheme) || !isHost(host) || !isPath(path) {
+			None
+		} else {
+			fragment.andThen((f) => query.andThen((q) => port.map((p) => Url {
+				scheme: scheme.toLower(),
+				host: host.toLower(),
+				port: p,
+				path: path,
+				query: q,
+				fragment: f,
+			})))
+		}
+	}
+
+	---
+	Writes `u` as `scheme://host[:port]path[?query][#fragment]`. The query is
+	`formatQuery(u.query)` and the fragment is percent-encoded; the path is
+	written as given, so it should already be encoded. An empty query writes no
+	`?`. `parse(format(u))` is `Some(u)` for every `u` that `parse` returned.
+	---
+	fn format(u: Url) -> String {
+		let port = u.port.map((p) => ":".concat(p.toString())).getOrElse("")
+		let query = if u.query.length() == 0 { "" } else { "?".concat(formatQuery(u.query)) }
+		let fragment = u.fragment.map((f) => "#".concat(f.percentEncode())).getOrElse("")
+		u.scheme
+			.concat("://")
+			.concat(u.host)
+			.concat(port)
+			.concat(u.path)
+			.concat(query)
+			.concat(fragment)
+	}
+
+	---
+	Whether `s` is a URL scheme: a letter, then letters, digits, `+`, `-` or
+	`.`.
+	---
+	fn isScheme(s: String) -> Bool {
+		let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		let rest = letters.concat("0123456789+-.")
+		s.length() > 0 && letters.contains(s.slice(0, 1)) && s.chars().all((c) => rest.contains(c))
+	}
+
+	---
+	Whether `s` can be the host of a URL `parse` reads: not empty, and holding
+	no `@`, `[`, `]`, `:`, `/`, `?`, `#`, space or `%`.
+	---
+	fn isHost(s: String) -> Bool {
+		s.length() > 0 && s.chars().all((c) => !"@[]:/?# %".contains(c))
+	}
+
+	---
+	Whether `s` is a path `parse` accepts: empty or starting with `/`, holding
+	only RFC 3986 path characters (letters, digits, `-._~!$&'()*+,;=:@/` and
+	`%`), with every `%` starting a valid escape. A space or a non-ASCII
+	character must be percent-encoded.
+	---
+	fn isPath(s: String) -> Bool {
+		let allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:@/%"
+		(s.length() == 0 || s.startsWith("/"))
+			&& s.chars().all((c) => allowed.contains(c))
+			&& s.percentDecode().isSome()
+	}
+
+	---
+	Reads a port: 1 to 5 digits, at most 65535.
+	---
+	fn parsePort(s: String) -> Option[Int] {
+		let none: Option[Int] = None
+		let digits = s.length() > 0
+			&& s.length() <= 5
+			&& s.chars().all((c) => "0123456789".contains(c))
+		let parsed = if digits { Int.parse(s) } else { none }
+		parsed.andThen((p) => if p > 65535 { none } else { Some(p) })
+	}
+
+	---
+	Reads a query string strictly: split on `&` (empty pairs skipped), each
+	pair on its first `=` (none means an empty value), `+` read as a space, then
+	percent-decoded. `None` if any pair has a malformed escape. A leading `?`
+	is part of the first name; `parseQuery` drops it.
+	---
+	fn decodeQuery(raw: String) -> Option[List[QueryParam]] {
+		let pairs = raw.split("&").filter((p) => p.length() > 0).map((p) => decodePair(p))
+		if pairs.all((p) => p.isSome()) {
+			Some(pairs.flatMap((p) => p.map((q) => [q]).getOrElse(List.empty())))
+		} else {
+			None
+		}
+	}
+
+	---
+	Reads one `name=value` pair as `decodeQuery` does.
+	---
+	fn decodePair(pair: String) -> Option[QueryParam] {
+		let eqAt = pair.indexOf("=").getOrElse(pair.length())
+		let name = pair.slice(0, eqAt).replace("+", " ").percentDecode()
+		let value = pair.slice(eqAt + 1, pair.length()).replace("+", " ").percentDecode()
+		name.andThen((n) => value.map((v) => QueryParam { name: n, value: v }))
+	}
+
+	---
+	Reads a query string leniently, as a handler reading user input usually
+	wants: a leading `?` is dropped, and a pair with a malformed escape is
+	skipped rather than failing the whole string.
+	---
+	fn parseQuery(s: String) -> List[QueryParam] {
+		let raw = if s.startsWith("?") { s.slice(1, s.length()) } else { s }
+		raw.split("&").filter((p) => p.length() > 0).flatMap((p) => decodePair(p)
+			.map((q) => [q])
+			.getOrElse(List.empty()))
+	}
+
+	---
+	Writes `params` as a query string, without the `?`: each name and value
+	percent-encoded, pairs joined with `&`, in order.
+	---
+	fn formatQuery(params: List[QueryParam]) -> String {
+		let init: Option[String] = None
+		params.fold(init, (acc, p) => {
+			let pair = p.name.percentEncode().concat("=").concat(p.value.percentEncode())
+			match acc {
+				Some(s) => Some(s.concat("&").concat(pair)),
+				None => Some(pair),
+			}
+		}).getOrElse("")
+	}
+
+	---
+	The first value of the query parameter `name`, if there is one.
+	---
+	fn param(u: Url, name: String) -> Option[String] {
+		u.query.filter((p) => p.name == name).first().map((p) => p.value)
+	}
+
+	---
+	Every value of the query parameter `name`, in order.
+	---
+	fn params(u: Url, name: String) -> List[String] {
+		u.query.filter((p) => p.name == name).map((p) => p.value)
+	}
+
+	---
+	`u` with `name=value` appended to its query.
+	---
+	fn withParam(u: Url, name: String, value: String) -> Url {
+		Url {
+			...u,
+			query: u.query.append(QueryParam { name: name, value: value }),
+		}
+	}
+
+	---
+	`u` with every `name` parameter removed from its query.
+	---
+	fn withoutParam(u: Url, name: String) -> Url {
+		Url {
+			...u,
+			query: u.query.filter((p) => p.name != name),
+		}
+	}
+
+	---
+	The path's segments, split on `/` and percent-decoded, with no empty first
+	segment: `/a/b%20c/` is `["a", "b c", ""]`, so a trailing `/` gives an empty
+	last segment and the path `/` alone is `[""]`. An empty path is `[]`. A
+	segment that does not decode is kept as written (a `Url` built by hand may
+	hold one; `parse` refuses it).
+	---
+	fn segments(u: Url) -> List[String] {
+		let parts = u.path.split("/")
+		let rest = if u.path.startsWith("/") { parts.skip(1) } else { parts }
+		if u.path.length() == 0 {
+			List.empty()
+		} else {
+			rest.map((s) => s.percentDecode().getOrElse(s))
+		}
+	}
+}

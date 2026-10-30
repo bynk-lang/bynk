@@ -1,0 +1,12 @@
+context demo
+
+// #2594: `bynk.url` is a commons, so its functions need `uses bynk.url`.
+fn host(s: String) -> Bool {
+	parse(s) == None
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}
