@@ -1,0 +1,13 @@
+context demo
+
+// #2600: under `(?i)`, `a` and `A` match the same characters, so `(a|A)+`
+// repeats one character two ways: exponential backtracking, refused.
+fn f(s: String) -> Bool {
+	s.containsRegex("(?i)(a|A)+$")
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

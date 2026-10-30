@@ -1,0 +1,12 @@
+context demo
+
+// #2600: a pattern built at run time would escape the ReDoS check.
+fn f(s: String, p: String) -> Bool {
+	s.containsRegex(p)
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

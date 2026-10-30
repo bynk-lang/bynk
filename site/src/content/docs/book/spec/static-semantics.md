@@ -313,6 +313,31 @@ for a `%` without two hex digits after it, or for bytes that are not UTF-8; it
 leaves `+` as `+`. `percentDecode(percentEncode(s))` is `Some(s)`. URL structure
 is the `bynk.url` commons, written in Bynk over these.
 
+**Regular expressions** (standard-library K6c, #2600). Six string methods take a
+pattern: `s.matchesRegex(p)` (the whole string, anchored as `Matches` is) and
+`s.containsRegex(p)` (anywhere), `-> Bool`; `s.findRegex(p) ->
+Option[List[Option[String]]]` (the first match: element 0 the whole match,
+element `i` group `i`, `None` for a group that did not take part);
+`s.findAllRegex(p) -> List[List[Option[String]]]` (every match, left to right,
+an empty match advancing by one code unit); `s.replaceRegex(p, with) -> String`
+(every match, `with` read with JS replacement syntax: `$1`, `$<name>`, `$&`,
+`$$`); and `s.splitRegex(p) -> List[String]` (JS `split`, without the captured
+groups it would splice in).
+- The pattern MUST be a string literal (`bynk.types.regex_not_literal`), so it is
+  checked at compile time exactly as a `Matches` pattern is: ECMAScript syntax
+  (`bynk.types.invalid_regex`), no nested unbounded quantifier and no ambiguity
+  the analysis finds (`bynk.types.catastrophic_regex`,
+  `bynk.types.polynomial_regex`; no length bound can excuse a polynomial one
+  here).
+- Semantics are JS `RegExp` with `Matches`' flag set: no `u`, so `.` and
+  classes work on UTF-16 code units. A pattern may open with one inline-flag
+  group, `(?i)`, `(?m)`, `(?s)` or a combination, which becomes the `RegExp`
+  flags; an unknown or repeated flag is `invalid_regex`. The ambiguity analysis
+  runs under those flags: under `s`, `.` matches every code unit, and under
+  `i`, every character set is case-folded, so `(?i)(a|A)+` is refused.
+- `matchesRegex` anchors with lookarounds, `(?<![\s\S])(?:…)(?![\s\S])`,
+  not `^…$`, so an `m` flag cannot turn it into a line match.
+
 **Refined receivers inherit the base kernel** (v0.143, ADR 0168). A method
 call whose receiver is a **refined** type resolves against that type's declared
 instance methods first; on a miss, it resolves against its **base type's

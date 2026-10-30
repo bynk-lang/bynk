@@ -21,6 +21,7 @@
   K6a done (#2596): a built-in immutable `Set[T]` and the `bynk.set`
   combinators.
   K6b done (#2598): integer `div`/`rem`/`mod`/`pow` and `Float` functions.
+  K6c done (#2600): literal-pattern regex methods on `String`.
 - **Realises:** `design/bynk-design-notes.md` "Three-tier output" (the runtime
   library and per-platform bindings, including the unbuilt `Crypto`),
   [ADR 0034](../decisions/0034-collections-hybrid-kernel-stdlib.md)'s promise
@@ -308,7 +309,7 @@ unit and is indicative only, not decided.
 | URL parse/build, query strings | S (K2 #2594: the `bynk.url` commons, a `Url` record with RFC 3986 `parse`/`format` and query-string helpers, in Bynk) | L1 commons over L0 percent-encoding (not an L0 type: a base type's name is a lexer token) | WHATWG semantics (IDNA, normalisation), relative URLs and IPv6 hosts are out |
 | `Set[T]` value type | S (K6a #2596: built-in, immutable, insertion-ordered; `Set.of`/`Set.empty`, a five-method kernel, the `bynk.set` combinators; members by the `Map`-key rule; a JSON array that refuses duplicates) | L0 + L1 commons | Elements beyond the key rule (records, enums, `Bytes`) need content hashing |
 | Math (`pow`, `sqrt`, `log`, trig, integer `div`/`mod` semantics) | S (K6b #2598: `Int` `div`/`rem`/`mod`/`pow`, faulting on a zero divisor or past the safe range; `Float` `sqrt`/`pow`/`exp`/`ln`/`log10`/`log2`/trig/`atan2`, host-defined like `Float` arithmetic; `Float.pi()`/`Float.e()`) | L0 value methods (not `Math` statics: the numeric kernel is methods) | A `%`/`**` operator is grammar work |
-| Regex match/capture/replace | A (`Matches` refinement only) | L0 | Engine/flag semantics must be stated (JS `RegExp`) |
+| Regex match/capture/replace | S (K6c #2600: `matchesRegex`/`containsRegex`/`findRegex`/`findAllRegex`/`replaceRegex`/`splitRegex` on `String`, literal patterns only, checked for ReDoS as `Matches` patterns are; JS `RegExp` without `u`, inline `(?ims)` flags) | L0 | Run-time patterns (refused: no ReDoS check), named-group maps |
 | ISO-8601 parse/format for `Instant` (UTC) | S (K3 #2592: `Instant.fromIso`, `toIso`, RFC 3339 in UTC, offsets converted) | L0 | Pure. Time zones and calendar fields deferred (D7) |
 | String formatting (pad, repeat, `codePoints`) | P | L0/L1 | |
 | `Bytes` ops (concat, slice, compare, hex) | S (K1 #2016; octet access and orderability are follow-ons) | L0 | Prerequisite for R2, crypto, binary Fetch bodies |
@@ -649,7 +650,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | K5b | Fetch `Bytes` request and response bodies: two operations beside `send`, since `Request` cannot grow a field without breaking every literal | K5a |
 | K6a | **Done** (#2596): the `Set[T]` value type, its kernel and the `bynk.set` combinators | — |
 | K6b | **Done** (#2598): `Int` `div`/`rem`/`mod`/`pow` and the `Float` functions as value methods, `Float.pi()`/`Float.e()` | — |
-| K6c | Regex: match, capture and replace | — |
+| K6c | **Done** (#2600): literal-pattern `matchesRegex`/`containsRegex`/`findRegex`/`findAllRegex`/`replaceRegex`/`splitRegex` on `String` | — |
 
 **Platform (L3):**
 

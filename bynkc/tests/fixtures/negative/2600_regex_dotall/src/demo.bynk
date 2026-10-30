@@ -1,0 +1,13 @@
+context demo
+
+// #2600: under `(?s)`, `.` matches a newline too, so `(.|\n)+` repeats one
+// character two ways: exponential backtracking, refused.
+fn f(s: String) -> Bool {
+	s.containsRegex("(?s)(.|\\n)+$")
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

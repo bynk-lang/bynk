@@ -1,0 +1,57 @@
+suite text
+
+// #2600: match, capture, replace and split, with inline flags.
+
+case "matchesRegex is whole-string, containsRegex is anywhere" {
+	expect isSku("ABC-1234")
+	expect !isSku("xABC-1234")
+	expect "xABC-1234".containsRegex("[A-Z]{3}-[0-9]{4}")
+	expect skuAgrees("ABC-1234") && skuAgrees("abc-12")
+}
+
+case "findRegex gives the whole match then each group, None for one that did not take part" {
+	expect version("release v2.14 today") == Some([Some("v2.14"), Some("2"), Some("14"), None])
+	expect version("v1.2.3") == Some([Some("v1.2.3"), Some("1"), Some("2"), Some("3")])
+	expect version("no version") == None
+}
+
+case "findAllRegex gives every match in order" {
+	expect numbers("a1 b22 c333") == ["1", "22", "333"]
+	expect numbers("none") == []
+}
+
+case "replaceRegex replaces every match, with group references and $$" {
+	expect tidy("a   b \t c") == "a b c"
+	expect swapped("ada@home") == "home at ada, cost $1"
+}
+
+case "splitRegex splits on whole matches and drops the groups" {
+	expect fields("a , b;c ,d") == ["a", "b", "c", "d"]
+	expect fields("") == [""]
+}
+
+case "inline flags" {
+	expect "HELLO".matchesRegex("(?i)hello")
+	expect !"HELLO".matchesRegex("hello")
+	expect "a\nb".containsRegex("(?m)^b$")
+	expect "a\nb".matchesRegex("(?s)a.b")
+	expect !"a\nb".matchesRegex("a.b")
+}
+
+case "a handler rewrites request text" {
+	let slug <- clean.call("  Hello, World!  ")
+	expect slug == "-ello-orld-"
+}
+
+case "matchesRegex stays whole-string under (?m)" {
+	expect !"foo\nbar".matchesRegex("(?m)foo")
+	expect "foo\nbar".matchesRegex("(?m)foo\\nbar")
+	expect "foo\nbar".containsRegex("(?m)^bar$")
+}
+
+case "splitRegex and findAllRegex follow JS on empty matches" {
+	expect "abc".splitRegex("x*") == ["a", "b", "c"]
+	expect ",a,".splitRegex(",") == ["", "a", ""]
+	expect "".splitRegex("x*") == []
+	expect "ab".findAllRegex("x*").length() == 3
+}

@@ -1,0 +1,40 @@
+context text
+
+// #2600: the regex methods over literal patterns, and a pattern shared with
+// a `Matches` refinement.
+
+type Sku = String where Matches("[A-Z]{3}-[0-9]{4}")
+
+fn isSku(s: String) -> Bool {
+	s.matchesRegex("[A-Z]{3}-[0-9]{4}")
+}
+
+fn skuAgrees(s: String) -> Bool {
+	Sku.of(s).isOk() == isSku(s)
+}
+
+fn version(s: String) -> Option[List[Option[String]]] {
+	s.findRegex("v(\\d+)\\.(\\d+)(?:\\.(\\d+))?")
+}
+
+fn numbers(s: String) -> List[String] {
+	s.findAllRegex("\\d+").map((m) => m.get(0).andThen((g) => g).getOrElse("?"))
+}
+
+fn tidy(s: String) -> String {
+	s.replaceRegex("\\s+", " ")
+}
+
+fn swapped(s: String) -> String {
+	s.replaceRegex("(?<first>\\w+)@(\\w+)", "$2 at $<first>, cost $$1")
+}
+
+fn fields(s: String) -> List[String] {
+	s.splitRegex("\\s*(,|;)\\s*")
+}
+
+service clean {
+	on call(input: String) -> Effect[String] {
+		Effect.pure(input.trim().replaceRegex("[^a-z0-9]+", "-"))
+	}
+}

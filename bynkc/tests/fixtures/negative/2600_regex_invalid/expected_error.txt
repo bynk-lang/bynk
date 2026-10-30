@@ -1,0 +1,2 @@
+bynk.types.invalid_regex
+invalid regular expression

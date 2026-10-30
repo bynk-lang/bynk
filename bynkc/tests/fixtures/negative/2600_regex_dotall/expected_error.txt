@@ -1,0 +1,2 @@
+bynk.types.catastrophic_regex
+exponentially many ways

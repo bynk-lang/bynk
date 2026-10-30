@@ -93,7 +93,17 @@ pub(crate) enum Verdict {
 /// Decide whether `pattern` (already accepted by `regress`) can backtrack
 /// super-linearly. Lookaround bodies are analysed too, and the worst verdict
 /// wins.
+#[cfg(test)]
 pub(crate) fn analyse(pattern: &str) -> Verdict {
+    analyse_with_flags(pattern, "")
+}
+
+/// K6c (#2600): [`analyse`] under `RegExp` flags. `s` makes `.` match every
+/// code unit, line terminators included; `i` case-folds every character set,
+/// so `(a|A)+` is seen to repeat one set two ways. Folding only adds code
+/// units, so a fold too generous errs towards refusing, never towards
+/// accepting. Other flags do not change what an atom matches here.
+pub(crate) fn analyse_with_flags(pattern: &str, flags: &str) -> Verdict {
     let units: Vec<u16> = pattern.encode_utf16().collect();
     let groups = scan_groups(&units);
     let mut parser = Parser {
@@ -101,6 +111,8 @@ pub(crate) fn analyse(pattern: &str) -> Verdict {
         i: 0,
         groups: &groups,
         next_group: 0,
+        dot_all: flags.contains('s'),
+        ignore_case: flags.contains('i'),
     };
     let root = parser.alternation();
     if parser.i < units.len() {
@@ -208,6 +220,38 @@ impl CharSet {
         for &(a, b) in &other.0 {
             self.add(a, b);
         }
+    }
+
+    /// K6c (#2600): the set with every code unit's other cases added, as the
+    /// `i` flag matches them. Built through a bitmap, so a large set costs one
+    /// pass rather than an `add` (and a sort) per code unit.
+    fn case_folded(&self) -> CharSet {
+        let mut member = vec![false; 0x10000];
+        for &(a, b) in &self.0 {
+            for c in u32::from(a)..=u32::from(b) {
+                member[c as usize] = true;
+                if let Some(ch) = char::from_u32(c) {
+                    for other in ch.to_lowercase().chain(ch.to_uppercase()) {
+                        if let Ok(unit) = u16::try_from(u32::from(other)) {
+                            member[usize::from(unit)] = true;
+                        }
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        let mut c = 0usize;
+        while c < member.len() {
+            if member[c] {
+                let start = c;
+                while c + 1 < member.len() && member[c + 1] {
+                    c += 1;
+                }
+                out.push((start as u16, c as u16));
+            }
+            c += 1;
+        }
+        CharSet(out)
     }
 
     fn negate(&self) -> CharSet {
@@ -387,6 +431,10 @@ struct Parser<'a> {
     i: usize,
     groups: &'a Groups,
     next_group: usize,
+    /// K6c (#2600): the `s` flag: `.` matches line terminators too.
+    dot_all: bool,
+    /// K6c (#2600): the `i` flag: character sets are case-folded.
+    ignore_case: bool,
 }
 
 impl Parser<'_> {
@@ -521,6 +569,7 @@ impl Parser<'_> {
         let set = match c {
             c if c == u('(') => return self.group(),
             c if c == u('[') => self.class(),
+            c if c == u('.') && self.dot_all => CharSet::from_ranges(&[(0, 0xFFFF)]),
             c if c == u('.') => dot(),
             c if c == u('^') || c == u('$') => return Node::Empty,
             c if c == u('\\') => match self.escape() {
@@ -529,6 +578,11 @@ impl Parser<'_> {
                 Escaped::Backref(index) => return Node::Backref(index),
             },
             c => CharSet::unit(c),
+        };
+        let set = if self.ignore_case {
+            set.case_folded()
+        } else {
+            set
         };
         Node::Atom {
             set,

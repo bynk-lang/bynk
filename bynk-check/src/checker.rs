@@ -44,6 +44,7 @@ mod expressions;
 mod kernels;
 mod linearity;
 mod refinements;
+pub use refinements::split_regex_flags;
 mod regex_ambiguity;
 
 use calls::*;
