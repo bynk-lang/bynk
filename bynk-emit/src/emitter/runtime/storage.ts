@@ -98,11 +98,23 @@ export function makeTestState(name: string): DurableObjectState {
 
 export interface KVNamespace {
   get(key: string): Promise<string | null>;
-  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  // P1 (#2590): a value as bytes.
+  get(key: string, type: "arrayBuffer"): Promise<ArrayBuffer | null>;
+  // P1 (#2590): a text value with its metadata, optionally edge-cached.
+  getWithMetadata(
+    key: string,
+    options: { type: "text"; cacheTtl?: number },
+  ): Promise<{ value: string | null; metadata: unknown }>;
+  put(
+    key: string,
+    value: string | ArrayBuffer | ArrayBufferView,
+    options?: { expirationTtl?: number; expiration?: number; metadata?: unknown },
+  ): Promise<void>;
   delete(key: string): Promise<void>;
-  // v0.23: the page shape WorkersKv's drain consumes (0050).
-  list(options?: { prefix?: string; cursor?: string }): Promise<{
-    keys: { name: string }[];
+  // v0.23: the page shape WorkersKv's drain consumes (0050); P1 (#2590) adds
+  // `limit` and each key's expiry and metadata, for `listPage`.
+  list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{
+    keys: { name: string; expiration?: number; metadata?: unknown }[];
     list_complete: boolean;
     cursor?: string;
   }>;
@@ -116,21 +128,64 @@ export interface KVNamespace {
  * ignored, since a test case does not outlive it.
  */
 export function makeIntegrationKv(): KVNamespace {
-  const values = new Map<string, string>();
+  // P1 (#2590): values are bytes, as on the platform (text is its UTF-8), with
+  // metadata and an expiry beside them. Expiry is kept, not enforced.
+  type Entry = { bytes: Uint8Array; metadata: unknown; expiration?: number };
+  const entries = new Map<string, Entry>();
+  const encode = (value: string | ArrayBuffer | ArrayBufferView): Uint8Array =>
+    typeof value === "string"
+      ? new TextEncoder().encode(value)
+      : value instanceof ArrayBuffer
+        ? new Uint8Array(value.slice(0))
+        : new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
+  const get = async (key: string, type?: "arrayBuffer"): Promise<any> => {
+    const e = entries.get(key);
+    if (e === undefined) return null;
+    return type === "arrayBuffer" ? e.bytes.slice().buffer : new TextDecoder().decode(e.bytes);
+  };
   return {
-    async get(key: string): Promise<string | null> {
-      return values.get(key) ?? null;
+    get: get as KVNamespace["get"],
+    async getWithMetadata(key: string) {
+      const e = entries.get(key);
+      return e === undefined
+        ? { value: null, metadata: null }
+        : { value: new TextDecoder().decode(e.bytes), metadata: e.metadata ?? null };
     },
-    async put(key: string, value: string): Promise<void> {
-      values.set(key, value);
+    async put(
+      key: string,
+      value: string | ArrayBuffer | ArrayBufferView,
+      options?: { expirationTtl?: number; expiration?: number; metadata?: unknown },
+    ): Promise<void> {
+      const expiration =
+        options?.expiration ??
+        (options?.expirationTtl === undefined ? undefined : Math.floor(Date.now() / 1000) + options.expirationTtl);
+      entries.set(key, { bytes: encode(value), metadata: options?.metadata, expiration });
     },
     async delete(key: string): Promise<void> {
-      values.delete(key);
+      entries.delete(key);
     },
-    async list(options?: { prefix?: string; cursor?: string }) {
+    // Pages in key order; the cursor is the last key of the page.
+    async list(options?: { prefix?: string; cursor?: string; limit?: number }) {
       const prefix = options?.prefix ?? "";
-      const names = [...values.keys()].filter((k) => k.startsWith(prefix)).sort();
-      return { keys: names.map((name) => ({ name })), list_complete: true };
+      const after = options?.cursor;
+      const limit = options?.limit ?? 1000;
+      const names = [...entries.keys()]
+        .filter((k) => k.startsWith(prefix) && (after === undefined || k > after))
+        .sort();
+      const page = names.slice(0, limit);
+      const complete = page.length === names.length;
+      return {
+        keys: page.map((name) => {
+          const e = entries.get(name)!;
+          return {
+            name,
+            ...(e.expiration === undefined ? {} : { expiration: e.expiration }),
+            ...(e.metadata === undefined ? {} : { metadata: e.metadata }),
+          };
+        }),
+        list_complete: complete,
+        ...(complete ? {} : { cursor: page[page.length - 1] }),
+      };
     },
   };
 }

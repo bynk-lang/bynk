@@ -5173,6 +5173,91 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 
 /// P5 (#2323): the body of `bynk.cloudflare`'s `R2` unit-tier double
 /// ([`platform_double`]).
+/// P1 (#2590): the body of `bynk.cloudflare`'s `Kv` unit-tier double
+/// ([`platform_double`]). Expiry is kept, not enforced, as `putTtl`'s always was.
+const KV_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>();
+  const enc = new globalThis.TextEncoder();
+  const dec = new globalThis.TextDecoder();
+  const fault = (why: string): never => {
+    throw new globalThis.Error(`bynk.cloudflare.Kv: ${why}`);
+  };
+  const checkKey = (key: string) => {
+    const n = enc.encode(key).length;
+    if (n > 512) fault(`a key is at most 512 bytes, not ${n}`);
+  };
+  const expiryOf = (e: any): any => {
+    if (e.tag === "After") {
+      if (globalThis.Math.ceil(e.ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${e.ttl} ms`);
+      return Some(globalThis.Date.now() + globalThis.Math.ceil(e.ttl / 1000) * 1000);
+    }
+    if (e.tag === "At") {
+      if (globalThis.Math.ceil(e.instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      return Some(globalThis.Math.ceil(e.instant / 1000) * 1000);
+    }
+    return None;
+  };
+  const write = (key: string, bytes: Uint8Array, options: any) => {
+    checkKey(key);
+    const size = enc.encode(globalThis.JSON.stringify(globalThis.Object.fromEntries(options.metadata))).length;
+    if (size > 1024) fault(`metadata is at most 1024 bytes as JSON, not ${size}`);
+    store.set(key, { bytes, metadata: new globalThis.Map(options.metadata), expiration: expiryOf(options.expiration) });
+  };
+  const plain = (bytes: Uint8Array) => ({ bytes, metadata: new globalThis.Map(), expiration: None });
+  return {
+    async get(key) {
+      const e = store.get(key);
+      return e === undefined ? None : Some(dec.decode(e.bytes));
+    },
+    async put(key, value) {
+      store.set(key, plain(enc.encode(value)));
+    },
+    async putTtl(key, value) {
+      store.set(key, plain(enc.encode(value)));
+    },
+    async delete(key) {
+      store.delete(key);
+    },
+    async list(prefix) {
+      return [...store.keys()].filter((k) => prefix.tag === "None" || k.startsWith(prefix.value)).sort();
+    },
+    async getWith(key, options) {
+      checkKey(key);
+      if (options.cacheTtl.tag === "Some" && globalThis.Math.ceil(options.cacheTtl.value / 1000) < 30) {
+        fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
+      }
+      const e = store.get(key);
+      return e === undefined ? None : Some({ value: dec.decode(e.bytes), metadata: new globalThis.Map(e.metadata) });
+    },
+    async putWith(key, value, options) {
+      write(key, enc.encode(value), options);
+    },
+    async getBytes(key) {
+      checkKey(key);
+      const e = store.get(key);
+      return e === undefined ? None : Some(e.bytes.slice());
+    },
+    async putBytes(key, value, options) {
+      write(key, value.slice(), options);
+    },
+    async listPage(options) {
+      const limit = options.limit.tag === "Some" ? options.limit.value : 1000;
+      if (!globalThis.Number.isInteger(limit) || limit < 1 || limit > 1000) fault(`a page holds 1 to 1000 keys, not ${limit}`);
+      const after = options.cursor.tag === "Some" ? options.cursor.value : undefined;
+      const names = [...store.keys()]
+        .filter((k) => (options.prefix.tag === "None" || k.startsWith(options.prefix.value)) && (after === undefined || k > after))
+        .sort();
+      const page = names.slice(0, limit);
+      return {
+        keys: page.map((name) => {
+          const e = store.get(name);
+          return { name, expiration: e.expiration, metadata: new globalThis.Map(e.metadata) };
+        }),
+        cursor: page.length < names.length ? Some(page[page.length - 1]) : None,
+      };
+    },
+  };
+"#;
+
 const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>();
   let version = 0;
   const meta = (key: string) => {
@@ -5299,7 +5384,10 @@ fn platform_double(
         ("bynk", "Locale") => "  return {\n    async current() {\n      return \"en\" as never;\n    },\n  };\n".to_string(),
         ("bynk", "Fetch") => "  return {\n    async send() {\n      throw new globalThis.Error(\"bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`\");\n    },\n  };\n".to_string(),
         ("bynk", "Idempotency") => "  const store = new globalThis.Map<string, unknown>();\n  return {\n    async dedup(key) {\n      return (store.has(key) ? Some(store.get(key)) : None) as never;\n    },\n    async remember(key, value) {\n      store.set(key, value);\n    },\n  };\n".to_string(),
-        ("bynk.cloudflare", "Kv") => "  const store = new globalThis.Map<string, string>();\n  return {\n    async get(key) {\n      const v = store.get(key);\n      return v === undefined ? None : Some(v);\n    },\n    async put(key, value) {\n      store.set(key, value);\n    },\n    async putTtl(key, value) {\n      store.set(key, value);\n    },\n    async delete(key) {\n      store.delete(key);\n    },\n    async list(prefix) {\n      return [...store.keys()].filter((k) => prefix.tag === \"None\" || k.startsWith(prefix.value)).sort();\n    },\n  };\n".to_string(),
+        // P1 (#2590): values are bytes (text is its UTF-8, so the two views
+        // agree as on the platform), with metadata and an expiry beside them;
+        // the new operations check the platform's limits as `WorkersKv` does.
+        ("bynk.cloudflare", "Kv") => KV_DOUBLE_BODY.to_string(),
         // P5 (#2323): each `R2` instance is an in-memory bucket honouring
         // `putWith`'s conditions, its metadata and `list`'s paging (R2's own
         // page of 1000, the cursor being the last key). `uploaded` reads `0`,

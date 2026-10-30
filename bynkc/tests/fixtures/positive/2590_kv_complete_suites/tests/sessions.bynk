@@ -1,0 +1,31 @@
+suite sessions
+
+// #2590: the unit double keeps metadata, bytes and pages as the platform does.
+
+case "metadata written with putWith reads back with getWith" {
+	let who <- store.call("s:9", "ada")
+	expect who == "ada"
+	expect Kv.putWith called once
+}
+
+case "an expiry under a minute away faults" {
+	expect expireSoon.call("s:8") faults
+}
+
+case "binary values round-trip on a derived namespace" {
+	let n <- blob.call("b:1", Bytes.fromHex("00ff07").getOrElse(Bytes.empty()))
+	expect n == 3
+}
+
+case "the first page holds the limit and a cursor" {
+	let page <- pages.call(None)
+	expect page.keys.length() == 2
+	expect page.cursor.isSome()
+}
+
+case "the next page from that cursor is the last" {
+	let first <- pages.call(None)
+	let next <- pages.call(first.cursor)
+	expect next.keys.length() == 1
+	expect next.cursor is None
+}

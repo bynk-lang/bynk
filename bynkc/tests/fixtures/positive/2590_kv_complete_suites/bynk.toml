@@ -1,0 +1,15 @@
+[project]
+name = "kv-complete-suites"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = [
+	"bynk.cloudflare.Kv.getWith",
+	"bynk.cloudflare.Kv.putWith",
+	"bynk.cloudflare.Kv.getBytes",
+	"bynk.cloudflare.Kv.putBytes",
+	"bynk.cloudflare.Kv.listPage",
+]

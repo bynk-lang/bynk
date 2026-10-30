@@ -22,17 +22,37 @@ import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
+  // Values are text or bytes, as KV stores them; `meta` and `expiry` sit
+  // beside them (P1, #2590), and `reads` records each read's options.
   const entries = new Map();
+  const meta = new Map();
+  const expiry = new Map();
   const puts = [];
+  const reads = [];
+  const bytesOf = (v) => (typeof v === "string" ? new TextEncoder().encode(v) : new Uint8Array(v));
   return {
     entries,
+    meta,
     puts,
-    async get(key) {
-      return entries.has(key) ? entries.get(key) : null;
+    reads,
+    async get(key, type) {
+      reads.push({ key, type });
+      if (!entries.has(key)) return null;
+      const v = entries.get(key);
+      if (type === "arrayBuffer") return bytesOf(v).slice().buffer;
+      return typeof v === "string" ? v : new TextDecoder().decode(v);
+    },
+    async getWithMetadata(key, options) {
+      reads.push({ key, options });
+      if (!entries.has(key)) return { value: null, metadata: null };
+      const v = entries.get(key);
+      return { value: typeof v === "string" ? v : new TextDecoder().decode(v), metadata: meta.get(key) ?? null };
     },
     async put(key, value, options) {
       puts.push({ key, value, options });
       entries.set(key, value);
+      if (options?.metadata !== undefined) meta.set(key, options.metadata);
+      if (options?.expiration !== undefined) expiry.set(key, options.expiration);
     },
     async delete(key) {
       entries.delete(key);
@@ -41,7 +61,11 @@ function fakeKv(pageSize = 2) {
       const keys = [...entries.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort();
       const start = cursor === undefined ? 0 : Number(cursor);
       const size = Math.min(limit ?? 1000, pageSize);
-      const page = keys.slice(start, start + size).map((name) => ({ name }));
+      const page = keys.slice(start, start + size).map((name) => ({
+        name,
+        ...(expiry.has(name) ? { expiration: expiry.get(name) } : {}),
+        ...(meta.has(name) ? { metadata: meta.get(name) } : {}),
+      }));
       const next = start + size;
       return next < keys.length
         ? { keys: page, list_complete: false, cursor: String(next) }
@@ -661,4 +685,96 @@ t("WorkersAnalytics.write: a missing binding names it", async () => {
     new WorkersAnalytics({}, "ANALYTICS_SIGNUPS").write({ index: None, blobs: [], doubles: [] }),
     /requires an Analytics Engine binding \(env\.ANALYTICS_SIGNUPS\)/,
   );
+});
+
+// P1 (#2590): the new `Kv` operations.
+const never = { tag: "Never" };
+const putOpts = (o = {}) => ({ expiration: never, metadata: new Map(), ...o });
+
+t("WorkersKv.putWith: passes a relative or absolute expiry in seconds, and the metadata", async () => {
+  const kv = fakeKv();
+  const store = new WorkersKv({ KV: kv });
+  await store.putWith("a", "1", putOpts({ expiration: { tag: "After", ttl: 90_500 }, metadata: new Map([["k", "v"]]) }));
+  const at = Date.now() + 3_600_000;
+  await store.putWith("b", "2", putOpts({ expiration: { tag: "At", instant: at } }));
+  await store.putWith("c", "3", putOpts());
+  assert.deepEqual(kv.puts.map((p) => p.options), [
+    { expirationTtl: 91, metadata: { k: "v" } },
+    { expiration: Math.ceil(at / 1000), metadata: {} },
+    { metadata: {} },
+  ]);
+});
+
+t("WorkersKv.putWith: a near expiry, oversized metadata or a long key faults, and nothing is written", async () => {
+  const kv = fakeKv();
+  const store = new WorkersKv({ KV: kv });
+  await assert.rejects(store.putWith("a", "1", putOpts({ expiration: { tag: "After", ttl: 59_000 } })), /at least 60 seconds/);
+  await assert.rejects(store.putWith("a", "1", putOpts({ expiration: { tag: "At", instant: Date.now() + 10_000 } })), /at least 60 seconds/);
+  await assert.rejects(store.putWith("a", "1", putOpts({ metadata: new Map([["k", "x".repeat(1100)]]) })), /at most 1024 bytes as JSON/);
+  await assert.rejects(store.putWith("é".repeat(257), "1", putOpts()), /at most 512 bytes, not 514/);
+  assert.equal(kv.puts.length, 0);
+  // Exactly at the limits, the write goes through.
+  await store.putWith("k".repeat(512), "1", putOpts({ expiration: { tag: "After", ttl: 60_000 } }));
+  assert.equal(kv.puts.length, 1);
+});
+
+t("WorkersKv.getWith: a value with its metadata, edge-cached for cacheTtl", async () => {
+  const kv = fakeKv();
+  const store = new WorkersKv({ KV: kv });
+  assert.deepEqual(await store.getWith("absent", { cacheTtl: None }), None);
+  await store.putWith("a", "1", putOpts({ metadata: new Map([["k", "v"]]) }));
+  kv.entries.set("b", "2");
+  kv.meta.set("b", { n: 3, ok: true });
+  const a = await store.getWith("a", { cacheTtl: Some(45_000) });
+  assert.equal(a.tag, "Some");
+  assert.equal(a.value.value, "1");
+  assert.deepEqual([...a.value.metadata], [["k", "v"]]);
+  // Metadata written outside Bynk may hold any JSON: a non-string is its text.
+  const b = await store.getWith("b", { cacheTtl: None });
+  assert.deepEqual([...b.value.metadata], [["n", "3"], ["ok", "true"]]);
+  assert.deepEqual(kv.reads.filter((r) => r.options).map((r) => r.options), [
+    { type: "text" },
+    { type: "text", cacheTtl: 45 },
+    { type: "text" },
+  ]);
+  await assert.rejects(store.getWith("a", { cacheTtl: Some(29_000) }), /at least 30 seconds/);
+});
+
+t("WorkersKv.getBytes: a binary value as bytes, and a text value as its UTF-8", async () => {
+  const kv = fakeKv();
+  const store = new WorkersKv({ KV: kv });
+  assert.deepEqual(await store.getBytes("absent"), None);
+  kv.entries.set("text", "é");
+  const r = await store.getBytes("text");
+  assert.deepEqual([...r.value], [0xc3, 0xa9]);
+});
+
+t("WorkersKv.putBytes: writes the bytes with the options, readable as text when UTF-8", async () => {
+  const kv = fakeKv();
+  const store = new WorkersKv({ KV: kv });
+  await store.putBytes("b", new Uint8Array([0, 255, 7]), putOpts({ metadata: new Map([["kind", "blob"]]) }));
+  assert.deepEqual([...(await store.getBytes("b")).value], [0, 255, 7]);
+  assert.deepEqual(kv.puts[0].options, { metadata: { kind: "blob" } });
+  await store.putBytes("t", new TextEncoder().encode("hi"), putOpts());
+  assert.deepEqual(await store.get("t"), Some("hi"));
+});
+
+t("WorkersKv.listPage: one page at a time, with each key's expiry and metadata, to a None cursor", async () => {
+  const kv = fakeKv(2);
+  const store = new WorkersKv({ KV: kv });
+  for (const k of ["a", "b", "c"]) await store.put(k, k);
+  kv.meta.set("a", { k: "v" });
+  await store.putWith("b", "b", putOpts({ expiration: { tag: "At", instant: 4_000_000_000_000 } }));
+  const first = await store.listPage({ prefix: None, cursor: None, limit: Some(2) });
+  assert.deepEqual(first.keys.map((k) => k.name), ["a", "b"]);
+  assert.deepEqual([...first.keys[0].metadata], [["k", "v"]]);
+  assert.deepEqual(first.keys[0].expiration, None);
+  assert.deepEqual(first.keys[1].expiration, Some(4_000_000_000_000));
+  assert.equal(first.cursor.tag, "Some");
+  const second = await store.listPage({ prefix: None, cursor: first.cursor, limit: Some(2) });
+  assert.deepEqual(second.keys.map((k) => k.name), ["c"]);
+  assert.deepEqual(second.cursor, None);
+  for (const bad of [0, 1001, 1.5]) {
+    await assert.rejects(store.listPage({ prefix: None, cursor: None, limit: Some(bad) }), /1 to 1000 keys/);
+  }
 });

@@ -550,6 +550,8 @@ pub const UNITS: &[Unit] = &[
         // L7 (#2414): EdgeCache likewise.
         // P2 (#2578): Queue too, until a first-party service has sent on it.
         // P3b (#2582): Analytics too, until a first-party service writes to it.
+        // P1 (#2590): the new operations of the stable `Kv`, until a service
+        // has used them.
         experimental: &[
             "Service",
             "R2",
@@ -557,8 +559,13 @@ pub const UNITS: &[Unit] = &[
             "EdgeCache",
             "Queue",
             "Analytics",
+            "Kv.getWith",
+            "Kv.putWith",
+            "Kv.getBytes",
+            "Kv.putBytes",
+            "Kv.listPage",
         ],
-        extensible: &["R2Condition"],
+        extensible: &["R2Condition", "KvExpiration"],
         instantiable: &[
             Instantiable {
                 capability: "Kv",
@@ -1151,6 +1158,11 @@ mod tests {
                 "bynk.cloudflare.EdgeCache",
                 "bynk.cloudflare.Queue",
                 "bynk.cloudflare.Analytics",
+                "bynk.cloudflare.Kv.getWith",
+                "bynk.cloudflare.Kv.putWith",
+                "bynk.cloudflare.Kv.getBytes",
+                "bynk.cloudflare.Kv.putBytes",
+                "bynk.cloudflare.Kv.listPage",
                 "bynk.crypto"
             ]
         );
@@ -1164,6 +1176,7 @@ mod tests {
                 ("bynk", "FetchError"),
                 ("bynk", "Method"),
                 ("bynk.cloudflare", "R2Condition"),
+                ("bynk.cloudflare", "KvExpiration"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
                 ("bynk.crypto", "CryptoError"),

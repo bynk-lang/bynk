@@ -12,7 +12,8 @@
   slices, compares, and converts to and from hex and base64url. P2 done
   (#2578): a context sends to a Cloudflare Queue through a named `Queue`.
   P3b done (#2582): a context writes events to a Workers Analytics Engine
-  dataset through a named `Analytics`.
+  dataset through a named `Analytics`. P1 done (#2590): `Kv` gains metadata,
+  expiry, binary values and paging.
 - **Realises:** `design/bynk-design-notes.md` "Three-tier output" (the runtime
   library and per-platform bindings, including the unbuilt `Crypto`),
   [ADR 0034](../decisions/0034-collections-hybrid-kernel-stdlib.md)'s promise
@@ -343,7 +344,7 @@ the resource-instance model (PR-2).
 | Durable Objects | S (language: `agent`) | n/a | | DO alarms are language, §6.4 |
 | Service bindings | S (language: `consumes context`) | n/a | | Binding to a *non-Bynk* Worker: P, experimental `bynk.cloudflare` `Service` (interop track D4, I5 #1972) |
 | Secrets | S (`bynk.Secrets`) | L2 | | |
-| KV | P (`get`/`put`/`putTtl`/`delete`/`list`; String values; **one fixed `KV` binding**) | L3 | **yes** | Missing: `Bytes` values, metadata, `cacheTtl`, list cursors/limits, multiple namespaces |
+| KV | P (`get`/`put`/`putTtl`/`delete`/`list` over text; several namespaces as derived capabilities, S4; P1 #2590, experimental: `getWith`/`putWith` with metadata, an expiry and `cacheTtl`, `getBytes`/`putBytes`, paged `listPage`) | L3 | **yes** | Bulk reads, streamed values (K-streams) |
 | Environment variables | A | L2 | | §6.1 Config |
 | Queues (producer) | P (shipped, experimental: `send`/`sendWith`/`sendBatch` over JSON text from `Json.encode`; instance-only `Queue @name("…")`; P2 #2578) | L3 `Queue` | yes | Consumer side shipped as protocol. A typed `send[T]`, and checking a producer's message against the consumer's, wait for a codec-carrying generic op |
 | D1 | A | L3 `D1` | **yes** | D4 (typed rows), migrations story vs state-migrations gate, `Bytes` |
@@ -644,7 +645,7 @@ increment** (ADR 0023), and the ordering follows §13.
 
 | Slice | What | Needs |
 |---|---|---|
-| P1 | Complete KV: `Bytes` values, metadata, list cursors and limits, a `putWith` options record (ADR 0051) | S4, K1 |
+| P1 | **Done** (#2590): complete KV, five experimental operations beside the unchanged ones: `getWith`/`putWith` (metadata, a `Never`/`After`/`At` expiry, `cacheTtl`; ADR 0051's options record), `getBytes`/`putBytes`, and a paged `listPage` (superseding ADR 0050's deferral); limits checked before the platform call | S4, K1 |
 | P2 | **Done** (#2578): Queue producer, `capability X = Queue @name("…")` (not `@queue`: a keyword), `send`/`sendWith`/`sendBatch` over JSON text from `Json.encode`, sent parsed so a Bynk consumer decodes it; deploy creates a missing queue and records a producer-only one only when it created it | S4, D4 |
 | P3 | **Done** (#2342), re-scoped: Rate Limiting (`@limit`, `@period`; ledger-allocated `namespace_id`, §11 Q7), with typed instance options. Analytics Engine split out (below) | S4 |
 | P3b | **Done** (#2582): Analytics Engine, `capability X = Analytics` with no options (A12: deploy derives the dataset, `<worker>_<capability>` in snake case since it is a SQL table name), one `write(DataPoint)` with the platform's limits checked first; deploy only qualifies the name per environment, with nothing to create or record | S4 |
@@ -1254,7 +1255,7 @@ Per kind, from Cloudflare's configuration reference (2026-10-14):
 
 | Kind | Table | Physical name | Minted id | Instances? | Notes |
 |---|---|---|---|---|---|
-| KV | `[[kv_namespaces]]` | title (not in the stanza) | `id` | yes | Shipped as one fixed `KV` binding |
+| KV | `[[kv_namespaces]]` | title (not in the stanza) | `id` | yes | Shipped as the bare `KV` binding and derived instances (S4) |
 | D1 | `[[d1_databases]]` | `database_name` | `database_id` | yes | `migrations_dir` is a D1-slice question: SQL schema migrations versus Gate 3 |
 | R2 | `[[r2_buckets]]` | `bucket_name` (is the identity) | none | yes | Bucket names are unique per account, as Worker names are, so the derived name inherits Worker-name uniqueness (§11 Q3); optional `jurisdiction` |
 | Queue producer | `[[queues.producers]]` | `queue` (is the identity, chosen in source) | none | yes | The only kind whose physical name the *source* picks |

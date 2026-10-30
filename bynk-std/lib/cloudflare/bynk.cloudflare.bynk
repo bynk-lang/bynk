@@ -1,11 +1,110 @@
 adapter bynk.cloudflare {
 	consumes bynk { Fetch }
 	exports capability { Kv, Service, R2, RateLimit, Queue, Analytics, EdgeCache }
-	exports transparent { R2Object, R2Put, R2Condition, R2Listing, QueueSend, DataPoint }
+	exports transparent {
+		KvExpiration,
+		KvPut,
+		KvGet,
+		KvEntry,
+		KvKey,
+		KvList,
+		KvListing,
+		R2Object,
+		R2Put,
+		R2Condition,
+		R2Listing,
+		QueueSend,
+		DataPoint,
+	}
+
+	---
+	When a `Kv.putWith` or `Kv.putBytes` entry expires: `Never`, `After` a
+	duration (a part second rounds up), or `At` an instant. Either must be at
+	least 60 seconds away. KV has further expiry forms, so a `match` over this
+	type needs a wildcard.
+	---
+	type KvExpiration =
+		| Never
+		| After(ttl: Duration)
+		| At(instant: Instant)
+
+	---
+	The options of a `Kv.putWith` or `Kv.putBytes` write: when the entry
+	expires, and the metadata stored beside it (at most 1024 bytes once
+	serialised as JSON).
+	---
+	type KvPut = {
+		expiration: KvExpiration,
+		metadata: Map[String, String],
+	}
+
+	---
+	The options of a `Kv.getWith` read. `cacheTtl` is how long the read may be
+	served from Cloudflare's edge cache, at least 30 seconds; `None` keeps the
+	platform's default of 60.
+	---
+	type KvGet = {
+		cacheTtl: Option[Duration],
+	}
+
+	---
+	A value read by `Kv.getWith`, with the metadata written beside it.
+	---
+	type KvEntry = {
+		value: String,
+		metadata: Map[String, String],
+	}
+
+	---
+	One key of a `Kv.listPage`: its name, when it expires (`None` for never),
+	and its metadata.
+	---
+	type KvKey = {
+		name: String,
+		expiration: Option[Instant],
+		metadata: Map[String, String],
+	}
+
+	---
+	The options of a `Kv.listPage`: the keys under `prefix`, from `cursor` (the
+	previous page's; `None` for the first), at most `limit` of them (1 to 1000;
+	`None` for 1000).
+	---
+	type KvList = {
+		prefix: Option[String],
+		cursor: Option[String],
+		limit: Option[Int],
+	}
+
+	---
+	One page of a `Kv.listPage`: its keys in key order, and the cursor of the
+	next page, `None` on the last. A page may be short and still have a
+	cursor, so loop until the cursor is `None`, not until a page is short.
+	---
+	type KvListing = {
+		keys: List[KvKey],
+		cursor: Option[String],
+	}
 
 	---
 	A Cloudflare Workers KV namespace: a key/value store with optional per-entry
 	expiry and prefix listing.
+
+	`get`, `put`, `putTtl`, `delete` and `list` work on text. The rest
+	(experimental) add what the platform has beyond that:
+	- `getWith` reads a value with its metadata, optionally edge-cached for
+	  `cacheTtl`; `putWith` writes one with an expiry and metadata.
+	- `getBytes` and `putBytes` read and write binary values.
+	- `listPage` reads one page of keys, with each key's expiry and metadata.
+
+	Text and binary values share the namespace, as on the platform: `getBytes`
+	of a text value gives its UTF-8 bytes, and reading a binary value as text
+	decodes it as UTF-8, replacing what is not. Keep each key to one kind.
+
+	A key over 512 bytes, metadata over 1024 bytes, an expiry under 60 seconds
+	away, a `cacheTtl` under 30 seconds, or a `limit` outside 1 to 1000 faults
+	the new operations before the platform is called; a value over 25 MiB
+	faults with the platform's error.
 	---
 	capability Kv {
 		fn get(key: String) -> Effect[Option[String]]
@@ -13,6 +112,11 @@ adapter bynk.cloudflare {
 		fn putTtl(key: String, value: String, ttlSeconds: Int) -> Effect[()]
 		fn delete(key: String) -> Effect[()]
 		fn list(prefix: Option[String]) -> Effect[List[String]]
+		fn getWith(key: String, options: KvGet) -> Effect[Option[KvEntry]]
+		fn putWith(key: String, value: String, options: KvPut) -> Effect[()]
+		fn getBytes(key: String) -> Effect[Option[Bytes]]
+		fn putBytes(key: String, value: Bytes, options: KvPut) -> Effect[()]
+		fn listPage(options: KvList) -> Effect[KvListing]
 	}
 
 	---

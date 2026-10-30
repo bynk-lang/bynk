@@ -242,7 +242,14 @@ test("integration KV: get, put, delete, and list by prefix", async () => {
   assert.equal(await kv.get("user:1"), "al");
   assert.equal(await kv.get("missing"), null);
   const page = await kv.list({ prefix: "user:" });
-  assert.deepEqual(page, { keys: [{ name: "user:1" }, { name: "user:2" }], list_complete: true });
+  // A key written with a TTL lists with its expiry, in epoch seconds (P1, #2590).
+  assert.deepEqual(
+    page.keys.map((k) => k.name),
+    ["user:1", "user:2"],
+  );
+  assert.equal(page.list_complete, true);
+  assert.equal(typeof page.keys[0].expiration, "number");
+  assert.equal(page.keys[1].expiration, undefined);
   await kv.delete("user:1");
   assert.equal(await kv.get("user:1"), null);
 });
