@@ -1,7 +1,17 @@
 adapter bynk {
 	uses bynk.locale.types
 	exports capability { Clock, Random, Logger, Fetch, Secrets, Locale, Idempotency, Events }
-	exports transparent { Uuid, Method, FetchError, Request, Response, EventEnvelope }
+	exports transparent {
+		Uuid,
+		Method,
+		FetchError,
+		Request,
+		Response,
+		FetchOptions,
+		Redirect,
+		LogLevel,
+		EventEnvelope,
+	}
 
 	---
 	A UUID in canonical 8-4-4-4-12 lowercase-hex form.
@@ -9,9 +19,9 @@ adapter bynk {
 	type Uuid = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 	---
-	An HTTP request method.
+	An HTTP request method. A `Head` response's `body` is `""`.
 	---
-	type Method = enum { Get, Post, Put, Delete }
+	type Method = enum { Get, Post, Put, Delete, Patch, Head, Options }
 
 	---
 	Why an outbound `Fetch.send` failed: a network error, a timeout, or a
@@ -46,6 +56,30 @@ adapter bynk {
 		headers: Map[String, String],
 		body: Option[String],
 	}
+
+	---
+	What `Fetch.sendWith` does with a redirect: `Follow` it, as `send` does, or
+	return the `3xx` itself (`Manual`), `location` header included, so the
+	caller decides where to go.
+	---
+	type Redirect = enum { Follow, Manual }
+
+	---
+	The options of a `Fetch.sendWith`. `timeout` bounds the whole exchange,
+	response body included; when it elapses the result is `Err(Timeout)`. A
+	timeout of zero or less, or over 2,147,483,647 ms (about 24 days, the
+	longest a platform timer takes), faults the call, with nothing sent. `None` waits as
+	long as the platform does.
+	---
+	type FetchOptions = {
+		timeout: Option[Duration],
+		redirect: Redirect,
+	}
+
+	---
+	The level of a `Logger.log` record.
+	---
+	type LogLevel = enum { Debug, Info, Warn, Error }
 
 	---
 	An HTTP response: a status code, its headers, and a body. `headers` keys
@@ -109,18 +143,29 @@ adapter bynk {
 	}
 
 	---
-	Structured logging at info and error levels.
+	Logging at four levels. `debug`, `info`, `warn` and `error` write the
+	message as it is. `log` writes a structured record, `{ message, level,
+	fields }`: on Cloudflare one object (Workers Logs indexes its keys, so
+	`fields.orderId` is queryable), under Node one JSON line, in the browser
+	the message and then the fields. Fields are nested under `fields`, so none
+	can overwrite the record's own keys. Values are text: format a number with
+	`toString()` and a structure with `Json.encode`.
 	---
 	capability Logger {
 		fn info(msg: String) -> Effect[()]
 		fn error(msg: String) -> Effect[()]
+		fn warn(msg: String) -> Effect[()]
+		fn debug(msg: String) -> Effect[()]
+		fn log(level: LogLevel, msg: String, fields: Map[String, String]) -> Effect[()]
 	}
 
 	---
-	Performs outbound HTTP requests.
+	Performs outbound HTTP requests. `send` follows redirects and waits as long
+	as the platform does; `sendWith` takes a timeout and a redirect policy.
 	---
 	capability Fetch {
 		fn send(req: Request) -> Effect[Result[Response, FetchError]]
+		fn sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]
 	}
 
 	---

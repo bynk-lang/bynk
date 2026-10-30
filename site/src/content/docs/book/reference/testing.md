@@ -767,7 +767,7 @@ fresh for each case:
 | `Random` | `uuid()` counts up (`00000000-0000-4000-8000-000000000001`, `…002`, …); `int(lo, hi)` draws from a fixed seed |
 | `Secrets` | `get(name)` is the [`env`](#env) entry for `name`, else `None` |
 | `Locale` | `current()` is `"en"` |
-| `Logger` | records, prints nothing |
+| `Logger` | records every level (`log` too), prints nothing |
 | `Events` | records, delivers nothing |
 | `Idempotency` | in memory; `remember`'s `expiresAfter` is accepted and ignored |
 | `Kv` | in memory; `putTtl`'s TTL is accepted and ignored |
@@ -776,7 +776,7 @@ fresh for each case:
 | `Queue` | each instance accepts every send, checking each body is JSON and a delay is in range; nothing is delivered — at `integration` and `system` each Worker binds a recorder |
 | `Analytics` | each instance accepts every write within the platform's limits (20 blobs totalling 16 KB, 20 finite doubles, a 96-byte index) and faults on one over them — at `integration` and `system` each Worker binds a recorder |
 | `Service` | each instance's `send(_)` **faults** until stubbed: a test never reaches the Worker behind it |
-| `Fetch` | `send(_)` **faults**: a test never reaches the network |
+| `Fetch` | `send(_)` and `sendWith(_, _)` **fault**: a test never reaches the network |
 
 Expiry is not modelled: a value written with a TTL stays readable for the whole
 case, so a test of TTL expiry on `Kv` or `Idempotency` stubs the read instead

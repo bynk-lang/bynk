@@ -13,6 +13,8 @@
   (#2578): a context sends to a Cloudflare Queue through a named `Queue`.
   P3b done (#2582): a context writes events to a Workers Analytics Engine
   dataset through a named `Analytics`.
+  K5a done (#2586): more `Method`s, `Fetch.sendWith` with a timeout and a
+  redirect policy, and `Logger` levels with a structured `log`.
 - **Realises:** `design/bynk-design-notes.md` "Three-tier output" (the runtime
   library and per-platform bindings, including the unbuilt `Crypto`),
   [ADR 0034](../decisions/0034-collections-hybrid-kernel-stdlib.md)'s promise
@@ -304,8 +306,8 @@ unit and is indicative only, not decided.
 | ISO-8601 parse/format for `Instant` (UTC) | P (`toString`, epoch millis) | L0 | Pure. Time zones and calendar fields deferred (D7) |
 | String formatting (pad, repeat, `codePoints`) | P | L0/L1 | |
 | `Bytes` ops (concat, slice, compare, hex) | S (K1 #2016; octet access and orderability are follow-ons) | L0 | Prerequisite for R2, crypto, binary Fetch bodies |
-| Fetch: more methods (`Patch`/`Head`/`Options`), `Bytes`/stream bodies, redirect & timeout options, `AbortSignal` | P (`Method` is Get/Post/Put/Delete; `String` bodies) | L2 `Fetch` | ADR 0022/0453 shape |
-| Logger levels (`warn`/`debug`) and structured fields | P (`info`/`error`) | L2 `Logger` | Workers Logs / Observability ingest JSON |
+| Fetch: more methods (`Patch`/`Head`/`Options`), `Bytes`/stream bodies, redirect & timeout options, `AbortSignal` | P (K5a #2586: `Patch`/`Head`/`Options`; experimental `sendWith(req, FetchOptions { timeout, redirect })`. Still `String` bodies: `Bytes` bodies are K5b, streams K-streams) | L2 `Fetch` | ADR 0022/0453 shape. Options go in a record beside `send`, never in `Request`: a new `Request` field breaks every literal |
+| Logger levels (`warn`/`debug`) and structured fields | P (K5a #2586: `warn`/`debug`; experimental `log(level, msg, fields)` writing `{ message, level, fields }`) | L2 `Logger` | Workers Logs / Observability ingest JSON |
 | Config / non-secret env vars (`[vars]`) | A | Existing `Secrets.get` (reads `env[name]`) | No new capability (D6). The gap is `[vars]` emission and deploy, which is deploy work |
 | `Sagas`, `Tracer`, durable `Idempotency` | D | L2 | Design notes Tier 2. `Sagas` is post-1.0 language-adjacent (D8) |
 
@@ -637,7 +639,8 @@ increment** (ADR 0023), and the ordering follows §13.
 | K2 | URL type, query strings, percent-encoding | — |
 | K3 | ISO-8601 parse and format for `Instant`, UTC | D7 |
 | K4 ✅ #2327 | `bynk.crypto`: digests, HMAC, sign/verify, key import, `Effect` over Web Crypto; `Random.bytes`; security review. One `Crypto` capability in a flat sibling unit (Tier 0, `id_block` 7, experimental until the registry signs with it in production), a binding per platform (`Binding::PerPlatformFiles`), opaque non-storable `SigningKey`/`VerifyKey` (`bynk.types.key_at_boundary`), the Node binding as the unit-tier test double | K1, D5, D6, S2 |
-| K5 | Fetch: `Patch`/`Head`/`Options`, `Bytes` bodies, timeouts; `Logger` levels and structured fields | K1 |
+| K5a | **Done** (#2586): `Method` gains `Patch`/`Head`/`Options`; `Fetch.sendWith(req, FetchOptions { timeout, redirect })` (experimental); `Logger.warn`/`debug`, and a structured `log` (experimental) | K1 |
+| K5b | Fetch `Bytes` request and response bodies: two operations beside `send`, since `Request` cannot grow a field without breaking every literal | K5a |
 | K6 | `Set` value type, Math statics, regex | — |
 
 **Platform (L3):**

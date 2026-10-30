@@ -1,0 +1,37 @@
+context mirror
+
+// #2586: `Fetch.sendWith` with a timeout and a manual redirect, the new
+// `Method` variants, and every `Logger` level, structured `log` included.
+
+consumes bynk { Fetch, Logger }
+
+service probe {
+	on call(url: String) -> Effect[Int] given Fetch, Logger {
+		let req = Request { method: Patch, url: url, contentType: None, authorization: None, headers: Map.empty(), body: Some("{}") }
+		let res <- Fetch.sendWith(req, FetchOptions { timeout: Some(5.seconds), redirect: Manual })
+		match res {
+			Ok(r) => {
+				let _ <- Logger.log(Info, "probed", Map.empty().insert("status", r.status.toString()))
+				Effect.pure(r.status)
+			}
+			Err(Timeout) => {
+				let _ <- Logger.warn("probe timed out")
+				Effect.pure(0)
+			}
+			Err(_) => {
+				let _ <- Logger.debug("probe failed")
+				Effect.pure(-1)
+			}
+		}
+	}
+}
+
+service headProbe {
+	on call(url: String) -> Effect[Int] given Fetch {
+		let res <- Fetch.send(Request { method: Head, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })
+		match res {
+			Ok(r) => Effect.pure(r.status)
+			Err(_) => Effect.pure(-1)
+		}
+	}
+}

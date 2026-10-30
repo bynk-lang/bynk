@@ -11,4 +11,5 @@ surfaceSuite("bynk-node", binding, runtime, bynk, {
   fetch: "real",
   secrets: "env",
   locale: "fixed",
+  log: "json",
 });

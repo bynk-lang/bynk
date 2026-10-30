@@ -36,9 +36,14 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "bynk",
         "Logger",
         "the-portable-surface--bynk",
-        &["info", "error"],
+        &["info", "error", "warn", "debug", "log"],
     ),
-    ("bynk", "Fetch", "the-portable-surface--bynk", &["send"]),
+    (
+        "bynk",
+        "Fetch",
+        "the-portable-surface--bynk",
+        &["send", "sendWith"],
+    ),
     ("bynk", "Secrets", "the-portable-surface--bynk", &["get"]),
     ("bynk", "Locale", "the-portable-surface--bynk", &["current"]),
     (

@@ -37,10 +37,13 @@ function __bynkShow(v: unknown): string {
 
 class __Stub_Locale {
   async current(): globalThis.Promise<__ns_bynk_locale_types.LocaleTag> {
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -93,10 +96,13 @@ async function test_no_params_renders_just_the_code() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -121,10 +127,13 @@ async function test_one_param_renders_code_plus_the_substitution() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -149,10 +158,13 @@ async function test_multiple_params_render_sorted_by_key__not_call_order() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;

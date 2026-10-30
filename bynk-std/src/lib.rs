@@ -518,8 +518,9 @@ pub const UNITS: &[Unit] = &[
         platform: None,
         env_providers: &["SecretsProvider"],
         stability: Stability::Stable,
-        experimental: &[],
-        extensible: &["FetchError", "Method"],
+        // K5a (#2586): the new operations, until a service has used them.
+        experimental: &["Fetch.sendWith", "Logger.log"],
+        extensible: &["FetchError", "Method", "Redirect"],
         instantiable: &[],
     },
     Unit {
@@ -831,13 +832,24 @@ pub fn is_extensible_in(units: &[Unit], unit: &str, name: &str) -> bool {
 /// source, so the list cannot fall behind it.
 pub fn exported_names(unit: &Unit) -> Vec<&'static str> {
     let mut out = Vec::new();
-    for line in unit.source.lines() {
+    let source = unit.source;
+    let mut offset = 0;
+    for line in source.lines() {
+        let start = offset;
+        offset += line.len() + 1;
         let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("exports ")
-            && let Some((_, list)) = rest.split_once('{')
-            && let Some((names, _)) = list.split_once('}')
+        // The list may run over several lines (`bynk-fmt` wraps a long one,
+        // one name a line), so it is read from the source up to its `}`.
+        if trimmed.starts_with("exports ")
+            && let Some(open) = source[start..].find('{').map(|i| start + i)
+            && let Some(close) = source[open..].find('}').map(|i| open + i)
         {
-            out.extend(names.split(',').map(str::trim).filter(|n| !n.is_empty()));
+            out.extend(
+                source[open + 1..close]
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|n| !n.is_empty()),
+            );
         } else if unit.kind == UnitKind::Commons
             // A commons' own declarations: at column 0 in the flat form, one tab
             // in the braced `commons bynk.list { … }` form the first-party
@@ -1036,6 +1048,12 @@ mod tests {
     #[test]
     fn exported_names_and_item_existence_come_from_the_sources() {
         assert_eq!(exported_names(&SYNTH[0]), ["Clock", "Fetch", "FetchError"]);
+        // K5a (#2586): a list `bynk-fmt` wrapped, one name a line.
+        let wrapped = Unit {
+            source: "adapter bynk {\n\texports transparent {\n\t\tMethod,\n\t\tRedirect,\n\t}\n\texports capability { Fetch }\n}\n",
+            ..SYNTH[0]
+        };
+        assert_eq!(exported_names(&wrapped), ["Method", "Redirect", "Fetch"]);
         assert_eq!(exported_names(&SYNTH[3]), ["Slug", "shout"]);
         let names = |p| names_first_party_item_in(SYNTH, p);
         assert!(names("bynk.cloudflare"));
@@ -1145,6 +1163,8 @@ mod tests {
         assert_eq!(
             experimental_items(),
             [
+                "bynk.Fetch.sendWith",
+                "bynk.Logger.log",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
@@ -1163,6 +1183,7 @@ mod tests {
             [
                 ("bynk", "FetchError"),
                 ("bynk", "Method"),
+                ("bynk", "Redirect"),
                 ("bynk.cloudflare", "R2Condition"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),

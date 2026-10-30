@@ -55,6 +55,7 @@ function __bynkRecordDeps(deps: any, spec: Record<string, string[]>, obs: { log:
 
 type __Clock_now_Call = {  };
 type __Fetch_send_Call = { req: __ns_bynk.Request };
+type __Fetch_sendWith_Call = { req: __ns_bynk.Request; options: __ns_bynk.FetchOptions };
 type __Idempotency_dedup_Call = { key: string };
 type __Idempotency_remember_Call = { key: string; value: unknown; expiresAfter: number };
 type __Kv_get_Call = { key: string };
@@ -65,6 +66,9 @@ type __Kv_list_Call = { prefix: Option<string> };
 type __Locale_current_Call = {  };
 type __Logger_info_Call = { msg: string };
 type __Logger_error_Call = { msg: string };
+type __Logger_warn_Call = { msg: string };
+type __Logger_debug_Call = { msg: string };
+type __Logger_log_Call = { level: __ns_bynk.LogLevel; msg: string; fields: ReadonlyMap<string, string> };
 type __Random_uuid_Call = {  };
 type __Random_int_Call = { lo: number; hi: number };
 type __Random_bytes_Call = { n: number };
@@ -80,10 +84,13 @@ class __Stub_Fetch {
     return true;
   }
   async send(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk.FetchError>> {
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -114,10 +121,13 @@ class __Stub_Kv {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<string>> {
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -168,6 +178,9 @@ function __bynkTest_Fetch(): __ns_bynk.Fetch {
     async send() {
       throw new globalThis.Error("bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`");
     },
+    async sendWith() {
+      throw new globalThis.Error("bynk: `Fetch.sendWith` is not stubbed, and a test never reaches the network — add `stub Fetch.sendWith(_, _) returns …`");
+    },
   };
 }
 
@@ -217,6 +230,9 @@ function __bynkTest_Logger(): __ns_bynk.Logger {
   return {
     async info() {},
     async error() {},
+    async warn() {},
+    async debug() {},
+    async log() {},
   };
 }
 
@@ -267,10 +283,13 @@ async function test_the_clock_reads_the_epoch() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -301,10 +320,13 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -335,10 +357,13 @@ async function test_random_uuids_count_up() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -369,10 +394,13 @@ async function test_no_secret_is_set() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -403,10 +431,13 @@ async function test_the_locale_is_en() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -432,16 +463,19 @@ async function test_the_locale_is_en() {
 async function test_the_logger_records_without_printing() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["send", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -473,10 +507,13 @@ async function test_idempotency_remembers_within_a_case() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -509,10 +546,13 @@ async function test_idempotency_is_fresh_per_case() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -538,16 +578,19 @@ async function test_idempotency_is_fresh_per_case() {
 async function test_kv_is_in_memory() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["send", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -579,10 +622,13 @@ async function test_kv_is_fresh_per_case() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -608,16 +654,19 @@ async function test_kv_is_fresh_per_case() {
 async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed operation answers; the rest reach the double"), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed operation answers; the rest reach the double"), { Clock: ["now"], Fetch: ["send", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -644,16 +693,19 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
 async function test_a_stubbed_fetch_answers_for_the_network() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed fetch answers for the network"), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed fetch answers for the network"), { Clock: ["now"], Fetch: ["send", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -680,16 +732,19 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
 async function test_a_fetch_double_sees_the_request_s_headers() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a fetch double sees the request's headers"), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a fetch double sees the request's headers"), { Clock: ["now"], Fetch: ["send", "sendWith"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -721,10 +776,13 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
@@ -755,10 +813,13 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { EventEnvelope, FetchError, Method, Request, Response, Uuid } = __ns_bynk;
+    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
