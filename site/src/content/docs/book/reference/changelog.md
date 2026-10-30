@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.436**.
+written against **v0.437**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.437.0** | "`bynk.cloudflare` gains `Queue`, a Cloudflare Queue producer as an instance-only derived capability (`capability OrderEvents = Queue @name(\"order-events\")`) with `send`, `sendWith` (a delay) and `sendBatch` over JSON text from `Json.encode`; `bynk deploy` creates a missing producer queue, recording it only when it created it (standard-library P2, [#2578](https://github.com/bynk-lang/bynk/issues/2578))" |
 | **v0.436.10** | The "Show capability path" command also sends each chain's sites, shared sites repeated, so a client can mark where one path ends |
 | **v0.436.9** | Doc-link resolution goes through one context-aware resolver in `bynk-ide` (#2531) |
 | **v0.436.8** | The documentation panel and the editor attach a method's doc links at the same place, its name (#2569) |

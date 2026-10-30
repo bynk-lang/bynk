@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: "`bynk.cloudflare` gains `Queue`, a Cloudflare Queue producer as an instance-only derived capability (`capability OrderEvents = Queue @name(\"order-events\")`) with `send`, `sendWith` (a delay) and `sendBatch` over JSON text from `Json.encode`; `bynk deploy` creates a missing producer queue, recording it only when it created it (standard-library P2, [#2578](https://github.com/bynk-lang/bynk/issues/2578))"
----
+# 0652 — Queue producers as instance-only derived capabilities
 
-## ADR: queue-producer-derived-capability
-title: Queue producers as instance-only derived capabilities
-summary: Cloudflare's queue producer binding as an instance-only `Queue` named by `@name` (not ADR 0469's `@queue`, a keyword), JSON-text bodies sent parsed so a Bynk consumer decodes them, and producer-only queues recorded in the ledger only when Bynk created them
+- **Status:** Accepted (v0.437)
 
 **Context.** A Bynk service could consume a queue (`service … from queue("n")`,
 ADR 0078) but not write to one. ADR 0002 left the producer side waiting for a
