@@ -1067,7 +1067,7 @@ codes and result; the tag's syntax is checked at run time
 ([§7.4.3](/book/spec/runtime-library/#743-httpresult)), not here. An cron handler MUST take at most one
 `Int` parameter, a valid five-field schedule, and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
-parameter, a non-empty queue name, and the same return shape (the `bynk.queue.*`
+parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
 codes).
 
 ### §5.7.1 CORS policy (v0.131) {#cors}

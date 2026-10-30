@@ -1029,7 +1029,7 @@
     },
     {
       "code": "bynk.queue.invalid_name",
-      "summary": "A `from queue(\"…\")` binding has an empty queue name."
+      "summary": "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses."
     }
   ],
   "record_construction": [

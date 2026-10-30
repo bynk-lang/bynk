@@ -1994,7 +1994,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.queue.invalid_name",
-        "A `from queue(\"…\")` binding has an empty queue name.",
+        "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses.",
         &["queue_handler"],
     ),
     dg(
