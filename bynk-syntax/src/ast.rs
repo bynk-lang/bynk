@@ -2836,6 +2836,10 @@ pub enum TypeRef {
     /// Keys are confined to value-keyable types
     /// (`bynk.types.unkeyable_map_key`).
     Map(Box<TypeRef>, Box<TypeRef>, Span),
+    /// `Set[T]` — the built-in generic immutable set type (standard-library
+    /// K6a, #2596). Insertion-ordered like `Map`; elements are confined to the
+    /// `Map`-key rule (`bynk.types.unkeyable_set_element`).
+    Set(Box<TypeRef>, Span),
     /// `Query[T]` — the built-in lazy storage-read description (v0.91, ADR 0115).
     /// Nameable in a pure helper's return type; non-storable and non-boundary
     /// (like `Effect`/`Fn`).
@@ -2896,6 +2900,7 @@ impl TypeRef {
             TypeRef::BoundaryRejection(s) => *s,
             TypeRef::List(_, s) => *s,
             TypeRef::Map(_, _, s) => *s,
+            TypeRef::Set(_, s) => *s,
             TypeRef::Query(_, s) => *s,
             TypeRef::Stream(_, s) => *s,
             TypeRef::Connection(_, s) => *s,
@@ -2942,6 +2947,7 @@ pub fn generic_record_is_recursive(
             }
             TypeRef::Option(a, _)
             | TypeRef::List(a, _)
+            | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
             | TypeRef::HttpResult(a, _)
             | TypeRef::Query(a, _)

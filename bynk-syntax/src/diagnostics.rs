@@ -3026,6 +3026,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["generic_type_ref"],
     ),
     dg(
+        "bynk.types.unkeyable_set_element",
+        "A `Set` element type is not value-keyable (`String`, `Int`, or a refined/opaque type over them), written or inferred through `Set.of`.",
+        &["generic_type_ref"],
+    ),
+    dg(
         "bynk.types.unknown_field",
         "Referenced a field the record type does not declare.",
         &["field_access"],

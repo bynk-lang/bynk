@@ -580,6 +580,8 @@ module.exports = grammar({
               alias("HttpResult", $.builtin_type),
               // v0.20b: the built-in list collection.
               alias("List", $.builtin_type),
+              // K6a (#2596): the built-in set collection.
+              alias("Set", $.builtin_type),
               // v0.100/v0.92/v0.102: stream, lazy storage query, held connection.
               alias("Stream", $.builtin_type),
               alias("Query", $.builtin_type),

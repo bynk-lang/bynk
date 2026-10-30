@@ -108,6 +108,7 @@ fn canon_type_in(
         // promise, so it is not part of the wire contract.
         TypeRef::Effect(inner, _) => canon_type_in(inner, types, seen, subst, mode),
         TypeRef::List(a, _) => format!("List[{}]", canon_type_in(a, types, seen, subst, mode)),
+        TypeRef::Set(a, _) => format!("Set[{}]", canon_type_in(a, types, seen, subst, mode)),
         TypeRef::Option(a, _) => format!("Option[{}]", canon_type_in(a, types, seen, subst, mode)),
         TypeRef::Result(a, b, _) => format!(
             "Result[{}, {}]",

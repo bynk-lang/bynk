@@ -963,6 +963,22 @@ impl<'a> Parser<'a> {
                             self.expect(TokenKind::RBracket, "to close the `List` type argument")?;
                         return Ok(TypeRef::List(Box::new(arg), t.span.merge(close.span)));
                     }
+                    // K6a (#2596): `Set[T]`, the built-in immutable set. Like
+                    // `List`, a reserved built-in type name (`keywords.rs`).
+                    if name == "Set" {
+                        if self.peek_kind() != Some(TokenKind::LBracket) {
+                            return Err(CompileError::new(
+                                "bynk.parse.expected_token",
+                                t.span,
+                                "the built-in `Set` type requires one type argument: `Set[T]`",
+                            ));
+                        }
+                        self.bump();
+                        let arg = self.parse_type_ref("as the `Set` type argument")?;
+                        let close =
+                            self.expect(TokenKind::RBracket, "to close the `Set` type argument")?;
+                        return Ok(TypeRef::Set(Box::new(arg), t.span.merge(close.span)));
+                    }
                     // v0.91 (ADR 0115): `Query[T]` — the lazy storage-read type.
                     if name == "Query" {
                         if self.peek_kind() != Some(TokenKind::LBracket) {

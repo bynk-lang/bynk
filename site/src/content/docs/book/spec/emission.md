@@ -741,6 +741,7 @@ clear error when the binding is absent. Neither instance kind adds the bare
 |---|---|
 | `List[T]` | `readonly T[]` |
 | `Map[K, V]` | `ReadonlyMap<K, V>` |
+| `Set[T]` | `ReadonlySet<T>`; `Set.of(xs)` → `new Set<T>(xs)`; `insert`/`remove` copy, so the receiver is never mutated; on the wire a JSON array, and a repeated element fails the decode |
 | `[a, b, c]` | the array literal `[a, b, c]` |
 | `List.empty()` / `Map.empty()` | `[] as readonly T[]` / `new Map<K, V>()`, with the checked type arguments written out |
 

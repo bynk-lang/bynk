@@ -144,6 +144,15 @@ pub const STRING_UNIT: &str = "bynk.string";
 /// yet" from "first element was empty").
 pub const BYNK_STRING_SRC: &str = include_str!("../lib/core/bynk.string.bynk");
 
+/// Inside the reserved `bynk.*` prefix; injected when `uses`-imported.
+pub const SET_UNIT: &str = "bynk.set";
+
+/// `bynk.set` (standard-library K6a, #2596) — Bynk-written combinators over
+/// the built-in `Set` kernel (`length`, `contains`, `insert`, `remove`,
+/// `toList`, `Set.of`): `union`, `intersect`, `difference`, `isSubsetOf`,
+/// `filter`, `map`.
+pub const BYNK_SET_SRC: &str = include_str!("../lib/core/bynk.set.bynk");
+
 /// Inside the reserved `bynk.*` prefix; injected when `uses`-imported by
 /// application code (a message-bundle commons, ADR 0272) — never directly by
 /// the `bynk` adapter itself any more (see [`LOCALE_TYPES_UNIT`]).
@@ -715,6 +724,21 @@ pub const UNITS: &[Unit] = &[
         extensible: &["Digest", "Signature", "CryptoError"],
         instantiable: &[],
     },
+    Unit {
+        name: SET_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/set.bynk",
+        source: BYNK_SET_SRC,
+        binding: Binding::None,
+        // 9, not 8: K2's `bynk.url` (#2594) takes 8 in parallel.
+        id_block: 9,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+    },
 ];
 
 /// The registry entry for `name`, if it is a first-party unit.
@@ -1262,6 +1286,7 @@ mod tests {
                 ("bynk.locale", 6),
                 ("bynk.locale.types", 5),
                 ("bynk.crypto", 7),
+                ("bynk.set", 9),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -1286,6 +1311,7 @@ mod tests {
                 "bynk.locale",
                 "bynk.locale.types",
                 "bynk.crypto",
+                "bynk.set",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

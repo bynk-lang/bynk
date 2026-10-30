@@ -666,6 +666,10 @@
     {
       "code": "bynk.types.unkeyable_map_key",
       "summary": "A `Map` key type is not value-keyable (`String`, `Int`, or a refined/opaque type over them)."
+    },
+    {
+      "code": "bynk.types.unkeyable_set_element",
+      "summary": "A `Set` element type is not value-keyable (`String`, `Int`, or a refined/opaque type over them), written or inferred through `Set.of`."
     }
   ],
   "given_clause": [

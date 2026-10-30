@@ -496,7 +496,7 @@ fn collect_type_names(
         TypeRef::HttpResult(a, _) => collect_type_names(a, stack, types, recursive),
         // v0.20b: collections serialise element-/entry-wise; their inner
         // named types need helpers.
-        TypeRef::List(a, _) => collect_type_names(a, stack, types, recursive),
+        TypeRef::List(a, _) | TypeRef::Set(a, _) => collect_type_names(a, stack, types, recursive),
         TypeRef::Map(k, v, _) => {
             collect_type_names(k, stack, types, recursive);
             collect_type_names(v, stack, types, recursive);
@@ -537,6 +537,7 @@ fn subst_type_ref(t: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef {
         TypeRef::Effect(a, s) => TypeRef::Effect(Box::new(subst_type_ref(a, subst)), *s),
         TypeRef::HttpResult(a, s) => TypeRef::HttpResult(Box::new(subst_type_ref(a, subst)), *s),
         TypeRef::List(a, s) => TypeRef::List(Box::new(subst_type_ref(a, subst)), *s),
+        TypeRef::Set(a, s) => TypeRef::Set(Box::new(subst_type_ref(a, subst)), *s),
         TypeRef::Map(k, v, s) => TypeRef::Map(
             Box::new(subst_type_ref(k, subst)),
             Box::new(subst_type_ref(v, subst)),
@@ -596,6 +597,7 @@ pub fn rename_type_ref(t: &TypeRef, renames: &HashMap<String, String>) -> TypeRe
         TypeRef::Effect(a, s) => TypeRef::Effect(Box::new(rename_type_ref(a, renames)), *s),
         TypeRef::HttpResult(a, s) => TypeRef::HttpResult(Box::new(rename_type_ref(a, renames)), *s),
         TypeRef::List(a, s) => TypeRef::List(Box::new(rename_type_ref(a, renames)), *s),
+        TypeRef::Set(a, s) => TypeRef::Set(Box::new(rename_type_ref(a, renames)), *s),
         TypeRef::Map(k, v, s) => TypeRef::Map(
             Box::new(rename_type_ref(k, renames)),
             Box::new(rename_type_ref(v, renames)),
@@ -732,6 +734,7 @@ pub fn codec_suffix(t: &TypeRef) -> String {
         TypeRef::Effect(a, _) => format!("Effect_{}", codec_suffix(a)),
         TypeRef::HttpResult(a, _) => format!("HttpResult_{}", codec_suffix(a)),
         TypeRef::List(a, _) => format!("List_{}", codec_suffix(a)),
+        TypeRef::Set(a, _) => format!("Set_{}", codec_suffix(a)),
         TypeRef::Map(k, v, _) => format!("Map_{}_{}", codec_suffix(k), codec_suffix(v)),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
@@ -938,6 +941,11 @@ pub enum WireInst {
     ListInst {
         elem: TypeRef,
     },
+    /// K6a (#2596): a `Set[T]` boundary instantiation — a JSON array in
+    /// insertion order; a duplicate element fails the decode.
+    SetInst {
+        elem: TypeRef,
+    },
     /// v0.20b: a `Map[K, V]` boundary instantiation — entries-array wire
     /// format (`[[k, v], …]`), insertion-ordered.
     MapInst {
@@ -970,6 +978,7 @@ impl WireInst {
                 format!("Option_{}", codec_suffix(inner))
             }
             WireInst::ListInst { elem } => format!("List_{}", codec_suffix(elem)),
+            WireInst::SetInst { elem } => format!("Set_{}", codec_suffix(elem)),
             WireInst::MapInst { key, val } => {
                 format!("Map_{}_{}", codec_suffix(key), codec_suffix(val))
             }
@@ -1067,6 +1076,16 @@ fn walk_generic_inst(
         TypeRef::HttpResult(a, _) => walk_generic_inst(a, out, seen, types, recursive),
         TypeRef::List(a, _) => {
             let inst = WireInst::ListInst {
+                elem: (**a).clone(),
+            };
+            let key = inst.ts_name();
+            if seen.insert(key) {
+                out.push(inst);
+            }
+            walk_generic_inst(a, out, seen, types, recursive);
+        }
+        TypeRef::Set(a, _) => {
+            let inst = WireInst::SetInst {
                 elem: (**a).clone(),
             };
             let key = inst.ts_name();
@@ -1190,6 +1209,7 @@ pub fn wire_ref(t: &TypeRef, _types: &HashMap<String, Arc<TypeDecl>>) -> WireRef
         | TypeRef::Result(..)
         | TypeRef::Option(..)
         | TypeRef::List(..)
+        | TypeRef::Set(..)
         | TypeRef::Map(..) => WireRef::Inst {
             key: codec_suffix(t),
         },

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "count": "5e6f44b79893041b"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "count": "Svc(\"count\",P(\"xs\",L(B(\"Int\"))),Ret(B(\"Int\")))"
+  }
+}
