@@ -4794,6 +4794,17 @@ fn lower_string_kernel(
                 "((__i: number) => __i < 0 ? None : Some(__i))({recv}.indexOf({sub}))"
             ))
         }
+        // K2 (#2594): percent-encoding over the UTF-8 bytes.
+        ("percentEncode", []) => {
+            let recv = pre.lower(receiver, cx);
+            cx.note_url_ops();
+            Some(format!("__bynkPercentEncode({recv})"))
+        }
+        ("percentDecode", []) => {
+            let recv = pre.lower(receiver, cx);
+            cx.note_url_ops();
+            Some(format!("__bynkPercentDecode({recv})"))
+        }
         _ => None,
     };
     text.map(|expr| pre.finish(expr))

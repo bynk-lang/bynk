@@ -1,0 +1,55 @@
+suite links
+
+// #2594: what `bynk.url` reads, writes and refuses.
+
+case "parse lower-cases the scheme and host and reads the port" {
+	expect hostOf("HTTPS://Api.Example.TEST:8443/v1") == "api.example.test"
+	expect portOf("https://api.test:8443/v1") == Some(8443)
+	expect portOf("https://api.test/v1") == None
+}
+
+case "the query is decoded, with + as a space and repeats kept in order" {
+	expect firstParam("https://a.test/s?q=hello+world&tag=x", "q") == Some("hello world")
+	expect firstParam("https://a.test/s?q=a%26b%3Dc", "q") == Some("a&b=c")
+	expect allParams("https://a.test/s?tag=x&tag=y&tag=%C3%A9", "tag") == ["x", "y", "é"]
+	expect firstParam("https://a.test/s?flag", "flag") == Some("")
+}
+
+case "format writes it back, and parse(format(u)) is u" {
+	expect reformat("https://a.test/p?q=a+b&r=%2F#Top%20Part") == "https://a.test/p?q=a%20b&r=%2F#Top%20Part"
+	expect reformat("http://a.test") == "http://a.test"
+	expect roundTrips("https://a.test:8080/x/y?q=a%26b&q=%C3%A9#f")
+	expect roundTrips("https://a.test")
+}
+
+case "parse refuses what RFC 3986 does not define here" {
+	expect rejected("a.test/path")
+	expect rejected("https:/a.test")
+	expect rejected("https://user:pw@a.test/")
+	expect rejected("https://[::1]/")
+	expect rejected("https:///path")
+	expect rejected("https://a.test:99999/")
+	expect rejected("https://a.test:8x/")
+	expect rejected("1http://a.test/")
+	expect rejected("https://a.test/?q=%zz")
+	expect rejected("https://a test/")
+	expect rejected("https://a.test/%zz")
+	expect rejected("https://a.test/a b")
+	expect rejected("https://a.test/é")
+}
+
+case "segments split and decode the path" {
+	expect pathSegments("https://a.test/a/b%20c/") == ["a", "b c", ""]
+	expect pathSegments("https://a.test") == []
+}
+
+case "withParam and withoutParam edit the query" {
+	expect edited("https://a.test/s?page=2&x=1") == "https://a.test/s?x=1&q=a%26b%20c"
+}
+
+case "a Fetch URL built with formatQuery is escaped" {
+	stub Fetch.send(_) returns Ok(Response { status: 200, headers: Map.empty(), body: "" })
+	let status <- search.call("rust & bynk")
+	expect status == 200
+	expect Fetch.send called once with req.url == "https://api.test/search?q=rust%20%26%20bynk&limit=10"
+}
