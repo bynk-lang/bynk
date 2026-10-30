@@ -742,7 +742,7 @@ The model carries `name`, `base`, `opaque`, `declaration`, `clauses`, `examples`
 | `length` | `length` | `value.length === length` |
 | `matches` | `pattern` | `new RegExp("^(?:" + pattern + ")$").test(value)`, no flags; `pattern` as written, neither escaped nor anchored |
 
-A length is JavaScript `.length`, in UTF-16 code units. `check` is kept for clients that predate `predicate`: running it (in the extension, a `node:vm` context — not a security boundary) is safe only while the printer escapes a `Matches` pattern correctly, which is why a client should prefer `predicate`. `check` goes once clients have moved.
+A clause applies to a candidate already read as `base`: a client first parses the input as an `Int`, `Float` or `String` (refusing `1.5` for an `Int` type), then tests each `predicate` on that value — `range` does not itself say the bounds are integral. A length is JavaScript `.length`, in UTF-16 code units. `check` is kept for clients that predate `predicate`: running it (in the extension, a `node:vm` context — not a security boundary) is safe only while the printer escapes a `Matches` pattern correctly, which is why a client should prefer `predicate`. `check` goes once clients have moved.
 
 `examples` are candidate input texts drawn deterministically from the refinement's domain — the boundaries first, then draws from the test runtime's `__bynkRng` under the fixed seed `seed` — so the list is identical on every open. A `Matches` type has no generator (`bynk.val.needs_pin`): drawn strings are kept only if they match, and `examplesNote` says so when none does.
 
