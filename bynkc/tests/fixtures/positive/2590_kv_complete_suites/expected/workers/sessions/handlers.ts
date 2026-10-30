@@ -5,8 +5,9 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 
-import { KvExpiration, KvGet, KvList, KvListing, KvPut } from "../../bynk/cloudflare.js";
+import { KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut } from "../../bynk/cloudflare.js";
 
+import * as bynk from "../../bynk.js";
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 import { __serialise_KvKey, __deserialise_KvKey, __serialise_KvListing, __deserialise_KvListing } from "../../bynk/cloudflare.js";
 
@@ -34,6 +35,21 @@ export const store = {
 export const expireSoon = {
   async call(id: string, deps: { Kv: bynk_cloudflare.Kv }): globalThis.Promise<void> {
     return deps.Kv.putWith(id, "body", { expiration: KvExpiration.After(10000), metadata: new globalThis.Map<string, string>() });
+  },
+};
+
+export const expireAt = {
+  async call(id: string, inSeconds: number, deps: { Kv: bynk_cloudflare.Kv; Clock: bynk.Clock }): globalThis.Promise<void> {
+    const now = await deps.Clock.now();
+    return deps.Kv.putWith(id, "body", { expiration: KvExpiration.At(now + inSeconds * 1000), metadata: new globalThis.Map<string, string>() });
+  },
+};
+
+export const ttlListed = {
+  async call(deps: { Kv: bynk_cloudflare.Kv }): globalThis.Promise<boolean> {
+    const __r0 = await deps.Kv.putTtl("t:1", "v", 120);
+    const page = await deps.Kv.listPage({ prefix: Some("t:"), cursor: None, limit: None });
+    return (page.keys).length === 1 && (page.keys).every((__x: KvKey) => ((k) => (k.expiration.tag === "Some"))(__x));
   },
 };
 

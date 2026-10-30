@@ -111,8 +111,9 @@ export class WorkersKv implements Kv {
     }
     if (e.tag === "At") {
       const seconds = Math.ceil(e.instant / 1000);
-      if (seconds - Date.now() / 1000 < WorkersKv.MIN_EXPIRY_SECONDS) {
-        WorkersKv.fault("an expiry is at least 60 seconds away");
+      const away = seconds - Date.now() / 1000;
+      if (away < WorkersKv.MIN_EXPIRY_SECONDS) {
+        WorkersKv.fault(`an expiry is at least 60 seconds away, not ${Math.floor(away)} s`);
       }
       return { expiration: seconds, metadata };
     }

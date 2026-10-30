@@ -5,6 +5,7 @@ import type { Option } from "../../__bynk_runtime/result.js";
 import type { __KVNamespace } from "../../__bynk_runtime/storage.js";
 import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
 import * as handlers from "./handlers.js";
+import * as bynk__binding from "../../bynk-cloudflare.js";
 import * as bynk_cloudflare__binding from "../../bynk/cloudflare.binding.js";
 
 export interface Env {
@@ -13,12 +14,16 @@ export interface Env {
 }
 
 export function compose(env: Env) {
+  const Clock = new bynk__binding.ClockProvider();
   const Kv = new bynk_cloudflare__binding.WorkersKv(env);
   const Blobs = new bynk_cloudflare__binding.WorkersKv(env, "KV_BLOBS");
-  const deps = { Blobs, Kv };
+  const deps = { Blobs, Clock, Kv };
   return {
     async blob(id: string, bytes: globalThis.Uint8Array) {
       return handlers.blob.call(id, bytes, deps);
+    },
+    async expireAt(id: string, inSeconds: number) {
+      return handlers.expireAt.call(id, inSeconds, deps);
     },
     async expireSoon(id: string) {
       return handlers.expireSoon.call(id, deps);
@@ -28,6 +33,9 @@ export function compose(env: Env) {
     },
     async store(id: string, who: string) {
       return handlers.store.call(id, who, deps);
+    },
+    async ttlListed() {
+      return handlers.ttlListed.call(deps);
     },
   };
 }

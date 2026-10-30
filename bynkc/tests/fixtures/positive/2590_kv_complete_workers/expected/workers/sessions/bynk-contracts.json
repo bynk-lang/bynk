@@ -2,15 +2,19 @@
   "version": 1,
   "provides": {
     "blob": "4c1bc35ce63a85fb",
+    "expireAt": "8cddcba9a6a796a9",
     "expireSoon": "1c61164dc9594fde",
     "pages": "ed899da493293d1e",
-    "store": "1777aa4ef6bd6caa"
+    "store": "1777aa4ef6bd6caa",
+    "ttlListed": "f942b2daeaafe868"
   },
   "expects": {},
   "provides_shapes": {
     "blob": "Svc(\"blob\",P(\"id\",B(\"String\")),P(\"bytes\",B(\"Bytes\")),Ret(B(\"Int\")))",
+    "expireAt": "Svc(\"expireAt\",P(\"id\",B(\"String\")),P(\"inSeconds\",B(\"Int\")),Ret(U()))",
     "expireSoon": "Svc(\"expireSoon\",P(\"id\",B(\"String\")),Ret(U()))",
     "pages": "Svc(\"pages\",P(\"cursor\",O(B(\"String\"))),Ret(N(\"KvListing\")))",
-    "store": "Svc(\"store\",P(\"id\",B(\"String\")),P(\"who\",B(\"String\")),Ret(B(\"String\")))"
+    "store": "Svc(\"store\",P(\"id\",B(\"String\")),P(\"who\",B(\"String\")),Ret(B(\"String\")))",
+    "ttlListed": "Svc(\"ttlListed\",Ret(B(\"Bool\")))"
   }
 }

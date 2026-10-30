@@ -152,11 +152,12 @@ function __bynkTest_PriceCache(): __ns_bynk_cloudflare.Kv {
     if (e.tag === "After") {
       const ttl = e.ttl ?? 0;
       if (globalThis.Math.ceil(ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${ttl} ms`);
-      return globalThis.Date.now() + globalThis.Math.ceil(ttl / 1000) * 1000;
+      return 0 + globalThis.Math.ceil(ttl / 1000) * 1000;
     }
     if (e.tag === "At") {
       const instant = e.instant ?? 0;
-      if (globalThis.Math.ceil(instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      const away = globalThis.Math.ceil(instant / 1000) - 0 / 1000;
+      if (away < 60) fault(`an expiry is at least 60 seconds away, not ${globalThis.Math.floor(away)} s`);
       return globalThis.Math.ceil(instant / 1000) * 1000;
     }
     return undefined;
@@ -176,8 +177,10 @@ function __bynkTest_PriceCache(): __ns_bynk_cloudflare.Kv {
     async put(key, value) {
       store.set(key, plain(enc.encode(value)));
     },
-    async putTtl(key, value) {
-      store.set(key, plain(enc.encode(value)));
+    // Unchecked, as `putTtl` always was; its expiry is kept and listed, as
+    // the platform and the integration tier do.
+    async putTtl(key, value, ttlSeconds) {
+      store.set(key, { ...plain(enc.encode(value)), expiration: 0 + ttlSeconds * 1000 });
     },
     async delete(key) {
       store.delete(key);
@@ -240,11 +243,12 @@ function __bynkTest_Sessions(): __ns_bynk_cloudflare.Kv {
     if (e.tag === "After") {
       const ttl = e.ttl ?? 0;
       if (globalThis.Math.ceil(ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${ttl} ms`);
-      return globalThis.Date.now() + globalThis.Math.ceil(ttl / 1000) * 1000;
+      return 0 + globalThis.Math.ceil(ttl / 1000) * 1000;
     }
     if (e.tag === "At") {
       const instant = e.instant ?? 0;
-      if (globalThis.Math.ceil(instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      const away = globalThis.Math.ceil(instant / 1000) - 0 / 1000;
+      if (away < 60) fault(`an expiry is at least 60 seconds away, not ${globalThis.Math.floor(away)} s`);
       return globalThis.Math.ceil(instant / 1000) * 1000;
     }
     return undefined;
@@ -264,8 +268,10 @@ function __bynkTest_Sessions(): __ns_bynk_cloudflare.Kv {
     async put(key, value) {
       store.set(key, plain(enc.encode(value)));
     },
-    async putTtl(key, value) {
-      store.set(key, plain(enc.encode(value)));
+    // Unchecked, as `putTtl` always was; its expiry is kept and listed, as
+    // the platform and the integration tier do.
+    async putTtl(key, value, ttlSeconds) {
+      store.set(key, { ...plain(enc.encode(value)), expiration: 0 + ttlSeconds * 1000 });
     },
     async delete(key) {
       store.delete(key);
@@ -328,11 +334,12 @@ function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
     if (e.tag === "After") {
       const ttl = e.ttl ?? 0;
       if (globalThis.Math.ceil(ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${ttl} ms`);
-      return globalThis.Date.now() + globalThis.Math.ceil(ttl / 1000) * 1000;
+      return 0 + globalThis.Math.ceil(ttl / 1000) * 1000;
     }
     if (e.tag === "At") {
       const instant = e.instant ?? 0;
-      if (globalThis.Math.ceil(instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      const away = globalThis.Math.ceil(instant / 1000) - 0 / 1000;
+      if (away < 60) fault(`an expiry is at least 60 seconds away, not ${globalThis.Math.floor(away)} s`);
       return globalThis.Math.ceil(instant / 1000) * 1000;
     }
     return undefined;
@@ -352,8 +359,10 @@ function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
     async put(key, value) {
       store.set(key, plain(enc.encode(value)));
     },
-    async putTtl(key, value) {
-      store.set(key, plain(enc.encode(value)));
+    // Unchecked, as `putTtl` always was; its expiry is kept and listed, as
+    // the platform and the integration tier do.
+    async putTtl(key, value, ttlSeconds) {
+      store.set(key, { ...plain(enc.encode(value)), expiration: 0 + ttlSeconds * 1000 });
     },
     async delete(key) {
       store.delete(key);

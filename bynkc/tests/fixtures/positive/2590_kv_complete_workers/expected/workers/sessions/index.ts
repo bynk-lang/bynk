@@ -55,6 +55,31 @@ export default {
             const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
+          case "expireAt": {
+            __route = "call expireAt";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "8cddcba9a6a796a9") {
+              globalThis.console.error("ContractMismatch sessions call expireAt", { service: "expireAt", expected: "8cddcba9a6a796a9", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "expireAt", expected: "8cddcba9a6a796a9", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            const argsObj = args as { [k: string]: __JsonValue };
+            const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.id", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["id"]);
+            if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_id.error), { status: 400, headers: { "content-type": "application/json" } });
+            const id = __r_id.value;
+            const __r_inSeconds = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.inSeconds", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.inSeconds", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["inSeconds"]);
+            if (__r_inSeconds.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_inSeconds.error), { status: 400, headers: { "content-type": "application/json" } });
+            const inSeconds = __r_inSeconds.value;
+            const result = await surface.expireAt(id, inSeconds);
+            const body = null;
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
           case "expireSoon": {
             __route = "call expireSoon";
             const __contract = request.headers.get("X-Bynk-Contract");
@@ -117,6 +142,25 @@ export default {
             if (__r_who.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_who.error), { status: 400, headers: { "content-type": "application/json" } });
             const who = __r_who.value;
             const result = await surface.store(id, who);
+            const body = result as __JsonValue;
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
+          case "ttlListed": {
+            __route = "call ttlListed";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "f942b2daeaafe868") {
+              globalThis.console.error("ContractMismatch sessions call ttlListed", { service: "ttlListed", expected: "f942b2daeaafe868", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "ttlListed", expected: "f942b2daeaafe868", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            const argsObj = args as { [k: string]: __JsonValue };
+            const result = await surface.ttlListed();
             const body = result as __JsonValue;
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }

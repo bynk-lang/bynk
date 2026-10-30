@@ -5171,10 +5171,10 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 }
 ";
 
-/// P5 (#2323): the body of `bynk.cloudflare`'s `R2` unit-tier double
-/// ([`platform_double`]).
 /// P1 (#2590): the body of `bynk.cloudflare`'s `Kv` unit-tier double
-/// ([`platform_double`]). Expiry is kept, not enforced, as `putTtl`'s always was.
+/// ([`platform_double`]). Expiry is kept and listed, not enforced, as on the
+/// integration tier, on the clock `Clock.now()` reads (`__NOW__`, substituted
+/// as `RateLimit`'s is).
 const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; metadata: globalThis.Map<string, string>; expiration: number | undefined };
   type Expiration = { tag: string; ttl?: number; instant?: number };
   const store = new globalThis.Map<string, Entry>();
@@ -5191,11 +5191,12 @@ const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; metadata: gl
     if (e.tag === "After") {
       const ttl = e.ttl ?? 0;
       if (globalThis.Math.ceil(ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${ttl} ms`);
-      return globalThis.Date.now() + globalThis.Math.ceil(ttl / 1000) * 1000;
+      return __NOW__ + globalThis.Math.ceil(ttl / 1000) * 1000;
     }
     if (e.tag === "At") {
       const instant = e.instant ?? 0;
-      if (globalThis.Math.ceil(instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      const away = globalThis.Math.ceil(instant / 1000) - __NOW__ / 1000;
+      if (away < 60) fault(`an expiry is at least 60 seconds away, not ${globalThis.Math.floor(away)} s`);
       return globalThis.Math.ceil(instant / 1000) * 1000;
     }
     return undefined;
@@ -5215,8 +5216,10 @@ const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; metadata: gl
     async put(key, value) {
       store.set(key, plain(enc.encode(value)));
     },
-    async putTtl(key, value) {
-      store.set(key, plain(enc.encode(value)));
+    // Unchecked, as `putTtl` always was; its expiry is kept and listed, as
+    // the platform and the integration tier do.
+    async putTtl(key, value, ttlSeconds) {
+      store.set(key, { ...plain(enc.encode(value)), expiration: __NOW__ + ttlSeconds * 1000 });
     },
     async delete(key) {
       store.delete(key);
@@ -5262,6 +5265,8 @@ const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; metadata: gl
   };
 "#;
 
+/// P5 (#2323): the body of `bynk.cloudflare`'s `R2` unit-tier double
+/// ([`platform_double`]).
 const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>();
   let version = 0;
   const meta = (key: string) => {
@@ -5392,7 +5397,12 @@ fn platform_double(
         // P1 (#2590): values are bytes (text is its UTF-8, so the two views
         // agree as on the platform), with metadata and an expiry beside them;
         // the new operations check the platform's limits as `WorkersKv` does.
-        ("bynk.cloudflare", "Kv") => KV_DOUBLE_BODY.to_string(),
+        // Expiry reads the clock `Clock.now()` does, so an `At` built from
+        // it is judged on the same timeline (the harness clock at `unit`).
+        ("bynk.cloudflare", "Kv") => KV_DOUBLE_BODY.replace(
+            "__NOW__",
+            if harness_clock { "__bynkClockNow" } else { "0" },
+        ),
         // P5 (#2323): each `R2` instance is an in-memory bucket honouring
         // `putWith`'s conditions, its metadata and `list`'s paging (R2's own
         // page of 1000, the cursor being the last key). `uploaded` reads `0`,

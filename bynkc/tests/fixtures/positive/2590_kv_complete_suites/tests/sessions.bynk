@@ -29,3 +29,14 @@ case "the next page from that cursor is the last" {
 	expect next.keys.length() == 1
 	expect next.cursor is None
 }
+
+case "an absolute expiry under a minute away faults, and one an hour away is written" {
+	expect expireAt.call("s:7", 30) faults
+	let _ <- expireAt.call("s:7", 3600)
+	expect Kv.putWith called 2 times
+}
+
+case "a key written with putTtl lists with its expiry" {
+	let listed <- ttlListed.call()
+	expect listed
+}

@@ -4,7 +4,7 @@ context sessions
 // against the unit double: metadata and expiry with `putWith`/`getWith`,
 // binary values, and `listPage` a page at a time.
 
-consumes bynk
+consumes bynk { Clock }
 consumes bynk.cloudflare { Kv }
 
 capability Blobs = Kv
@@ -23,6 +23,21 @@ service store {
 service expireSoon {
 	on call(id: String) -> Effect[()] given Kv {
 		Kv.putWith(id, "body", KvPut { expiration: After(10.seconds), metadata: Map.empty() })
+	}
+}
+
+service expireAt {
+	on call(id: String, inSeconds: Int) -> Effect[()] given Kv, Clock {
+		let now <- Clock.now()
+		Kv.putWith(id, "body", KvPut { expiration: At(now + Duration.millis(inSeconds * 1000)), metadata: Map.empty() })
+	}
+}
+
+service ttlListed {
+	on call() -> Effect[Bool] given Kv {
+		let _ <- Kv.putTtl("t:1", "v", 120)
+		let page <- Kv.listPage(KvList { prefix: Some("t:"), cursor: None, limit: None })
+		Effect.pure(page.keys.length() == 1 && page.keys.all((k) => k.expiration.isSome()))
 	}
 }
 
