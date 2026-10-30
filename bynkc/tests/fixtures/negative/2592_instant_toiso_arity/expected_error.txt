@@ -1,0 +1,2 @@
+bynk.types.method_arity
+`Instant.toIso` takes 0 arguments, got 1

@@ -1,0 +1,32 @@
+suite stamps
+
+// #2592: the format, the profile and the round trip.
+
+case "toIso writes three fraction digits and Z" {
+	expect stamp(0) == "1970-01-01T00:00:00.000Z"
+	expect stamp(1793343290123) == "2026-10-30T06:54:50.123Z"
+}
+
+case "fromIso converts an offset and truncates a long fraction" {
+	expect epoch("2026-10-30T08:54:50.1239+02:00") == Some(1793343290123)
+	expect epoch("1970-01-01T00:00:00Z") == Some(0)
+}
+
+case "fromIso is None outside RFC 3339 or the calendar" {
+	expect epoch("2026-10-30 06:54:50Z") == None
+	expect epoch("2026-10-30T06:54:50") == None
+	expect epoch("2026-02-29T00:00:00Z") == None
+	expect epoch("2026-12-31T23:59:60Z") == None
+}
+
+case "an instant round-trips" {
+	expect roundTrips(1793343290123)
+	expect roundTrips(-1)
+}
+
+case "a service reads and writes ISO text" {
+	let later <- clock.call("2026-10-30T06:54:50.123Z")
+	expect later == "2026-10-30T07:54:50.123Z"
+	let bad <- clock.call("yesterday")
+	expect bad == "not an instant"
+}

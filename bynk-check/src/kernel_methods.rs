@@ -270,6 +270,8 @@ pub const DURATION_METHODS: &[KernelMethod] = &[
 pub const INSTANT_METHODS: &[KernelMethod] = &[
     m("toEpochMillis", "toEpochMillis() -> Int"),
     m("toString", "toString() -> String"),
+    // K3 (#2592): RFC 3339 in UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`.
+    m("toIso", "toIso() -> String"),
 ];
 
 /// The `Bytes` kernel (v0.110, ADR 0142). Equality is an operator (D4, content

@@ -1,0 +1,12 @@
+context demo
+
+// #2592: `Instant.fromIso` reads `String` text, not epoch milliseconds.
+fn read(ms: Int) -> Option[Instant] {
+	Instant.fromIso(ms)
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

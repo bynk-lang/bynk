@@ -28,6 +28,7 @@ const SRC = join(pkgRoot, "src");
 const MODULES = [
   "result",
   "bytes",
+  "time",
   "equality",
   "int",
   "errors",

@@ -2375,6 +2375,18 @@ fn lower_method_call(
         let inner = pre.lower(&args[0], cx);
         return pre.finish(inner);
     }
+    // K3 (#2592): `Instant.fromIso(s)`, a guarded RFC 3339 read.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromIso"
+        )
+        && args.len() == 1
+    {
+        let s = pre.lower(&args[0], cx);
+        cx.note_time_ops();
+        return pre.finish(format!("__bynkInstantFromIso({s})"));
+    }
     // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)` — an `Instant` lowers to
     // its epoch milliseconds, so this is the identity on the argument.
     if let ExprKind::Ident(_) = &receiver.kind
@@ -4601,6 +4613,12 @@ fn lower_instant_kernel(
         ("toString", []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("String({recv})"))
+        }
+        // K3 (#2592): RFC 3339 in UTC.
+        ("toIso", []) => {
+            let recv = pre.lower(receiver, cx);
+            cx.note_time_ops();
+            Some(format!("__bynkInstantToIso({recv})"))
         }
         _ => None,
     };

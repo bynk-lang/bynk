@@ -56,7 +56,8 @@ fixed operator surface; every other numeric mix between them â€” or with `Int` â
 `Clock.now() + 5.minutes` is `Instant + Duration`. The earlier `Int + Duration ->
 Int` clock-math coercion was **withdrawn** at v0.90; mixing `Instant` with `Int`
 now errors. Convert explicitly with `d.toMillis()` / `Duration.millis(n)` and
-`t.toEpochMillis()` / `Instant.fromEpochMillis(n)`. See [types](/book/reference/types/#duration).
+`t.toEpochMillis()` / `Instant.fromEpochMillis(n)`, and to RFC 3339 text through
+`t.toIso()` / `Instant.fromIso(s)`. See [types](/book/reference/types/#duration).
 
 ## Other expression forms
 

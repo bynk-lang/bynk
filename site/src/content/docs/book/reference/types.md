@@ -10,7 +10,7 @@ title: Type system
 | `String` | string literals (`"…"`) | `string` |
 | `Bool` | `true`, `false` | `boolean` |
 | `Duration` | unit literals (`5.minutes`, `30.seconds`) | `number` (millis) |
-| `Instant` | no literal — `Clock.now()` / `Instant.fromEpochMillis(n)` | `number` (epoch millis) |
+| `Instant` | no literal — `Clock.now()` / `Instant.fromEpochMillis(n)` / `Instant.fromIso(s)` | `number` (epoch millis) |
 | `Bytes` | no literal — `Bytes.fromUtf8(s)` / `Bytes.fromBase64(s)` / `Bytes.fromHex(s)` / `Bytes.fromBase64Url(s)` / `Bytes.empty()` | `Uint8Array` |
 
 The unit type is written `()`. `Int` and `Float` are **distinct and
@@ -48,6 +48,33 @@ millis is `t.toEpochMillis() -> Int`; the zero is the epoch. Timestamp math goes
 `Int + Duration -> Int` clock-math coercion was withdrawn at v0.90, so every
 `Instant`↔`Int` mix is a `no_numeric_coercion` error. See
 [Operators](/book/reference/operators/#duration--instant-arithmetic).
+
+#### ISO-8601 text
+
+`t.toIso() -> String` writes an instant as RFC 3339 text in UTC, always
+`YYYY-MM-DDTHH:mm:ss.sssZ`: three fraction digits and `Z`, so the text sorts in
+time order. Outside the years 0000 to 9999 the year takes the expanded `±YYYYYY`
+form, and an instant beyond ±8.64e15 ms (past any date) faults. `toString()`
+still gives the epoch milliseconds, and the JSON codec still writes a number.
+
+`Instant.fromIso(s) -> Option[Instant]` reads the RFC 3339 date-time profile:
+
+```bynk,fragment
+Instant.fromIso("2026-10-30T08:54:50.123+02:00")   // Some(…06:54:50.123Z)
+Instant.fromIso("2026-10-30 08:54:50Z")            // None: a space, not `T`
+```
+
+- `YYYY-MM-DD`, `T` (or `t`), `HH:mm:ss`, an optional fraction of any length,
+  then `Z` (or `z`) or an offset `±HH:mm`, converted to UTC.
+- A fraction past milliseconds is truncated toward the earlier instant.
+- The date must exist (`2026-02-29` is `None`, `2028-02-29` is not), and a leap
+  second (`:60`) is `None`, since epoch milliseconds cannot name it.
+- Anything else is `None`: a space instead of `T`, a time with no offset (it
+  names no instant without a zone), the basic form without separators, week and
+  ordinal dates, and the expanded year.
+
+`Instant.fromIso(t.toIso())` is `Some(t)` for every instant in the years 0000 to
+9999. Time zones, calendar fields and ISO durations are not part of the kernel.
 
 ### Bytes
 

@@ -3,6 +3,7 @@
 pub(crate) const RUNTIME_MODULES: &[(&str, &str)] = &[
     ("result", include_str!("runtime/result.ts")),
     ("bytes", include_str!("runtime/bytes.ts")),
+    ("time", include_str!("runtime/time.ts")),
     ("equality", include_str!("runtime/equality.ts")),
     ("int", include_str!("runtime/int.ts")),
     ("errors", include_str!("runtime/errors.ts")),
@@ -117,6 +118,8 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__bynkBytesToBase64Url", "bytes"),
     ("__bynkBytesToHex", "bytes"),
     ("__bynkEq", "equality"),
+    ("__bynkInstantFromIso", "time"),
+    ("__bynkInstantToIso", "time"),
     ("__bynkIntDiv", "int"),
     ("__bynkToInt", "int"),
     ("__callService", "boundary"),

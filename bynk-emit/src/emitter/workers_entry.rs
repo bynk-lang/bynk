@@ -1828,6 +1828,9 @@ pub(crate) fn emit_worker_entry(
     if runtime_use.bytes_ops() {
         append_missing_bindings(&mut imports, crate::emitter::BYTES_OPS_RUNTIME_IMPORTS);
     }
+    if runtime_use.time_ops() {
+        append_missing_bindings(&mut imports, crate::emitter::TIME_OPS_RUNTIME_IMPORTS);
+    }
     if runtime_use.request_headers() {
         append_missing_bindings(
             &mut imports,
