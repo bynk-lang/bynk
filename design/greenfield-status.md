@@ -17,7 +17,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `ide_emit_edge` | yes | absent |
 | `ast_importers` | yes | 5 |
 | `emit_abi_shapes` | yes | 29 (bynk-browser.ts:FetchOptions, bynk-browser.ts:LogLevel, bynk-cloudflare.ts:FetchOptions, bynk-cloudflare.ts:LogLevel, bynk-cloudflare.ts:negotiateLocale, bynk-node.ts:FetchOptions, bynk-node.ts:LogLevel, cloudflare.binding.ts:Analytics, cloudflare.binding.ts:DataPoint, cloudflare.binding.ts:EdgeCache, cloudflare.binding.ts:KvEntry, cloudflare.binding.ts:KvExpiration, cloudflare.binding.ts:KvGet, cloudflare.binding.ts:KvKey, cloudflare.binding.ts:KvList, cloudflare.binding.ts:KvListing, cloudflare.binding.ts:KvPut, cloudflare.binding.ts:Queue, cloudflare.binding.ts:QueueSend, cloudflare.binding.ts:R2, cloudflare.binding.ts:R2Listing, cloudflare.binding.ts:R2Object, cloudflare.binding.ts:R2Put, cloudflare.binding.ts:RateLimit, cloudflare.binding.ts:AnalyticsDataset, cloudflare.binding.ts:QueueProducer, cloudflare.binding.ts:R2Bucket, cloudflare.binding.ts:R2ObjectMeta, cloudflare.binding.ts:RateLimiter) |
-| `ts_writes` | yes | 996 |
+| `ts_writes` | yes | 1002 |
 | `ts_any` | yes | 28 |
 | `verbatim_origins` | yes | 2 |
 | `verbatim_sites` | yes | 13 |

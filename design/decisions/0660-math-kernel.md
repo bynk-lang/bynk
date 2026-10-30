@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: "`Int` gains `div` (floor), `rem` (the remainder of `/`), `mod` (the remainder of `div`, taking the divisor's sign) and an exact `pow`, each faulting on a zero divisor or a result past the safe range; `Float` gains `sqrt`, `pow`, `exp`, `ln`, `log10`, `log2`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan` and `atan2`, and `Float.pi()`/`Float.e()` (standard-library K6b, [#2598](https://github.com/bynk-lang/bynk/issues/2598))"
----
+# 0660 — Integer division companions and Float functions as numeric kernel methods
 
-## ADR: math-kernel
-title: Integer division companions and Float functions as numeric kernel methods
-summary: `Int` gains `rem` (pairing with truncating `/`), `div`/`mod` (floored, the divisor's sign) and an exact, overflow-faulting `pow`; `Float` gains the `Math` functions, host-defined outside their domains; all as value methods, with `Float.pi()`/`Float.e()` statics, not a `Math` namespace
+- **Status:** Accepted (v0.446)
 
 **Context.** Bynk had no remainder (no `%`, and `BinOp` has no `Mod`), so
 bucketing, wrap-around and parity could not be written. There was no square
