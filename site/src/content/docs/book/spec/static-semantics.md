@@ -857,13 +857,13 @@ and `expect` apply to it unchanged. The rules:
 - `K` MUST be a capability the unit selects with `consumes U { K }`
   (`bynk.capability.unknown_base`).
 - `K` MUST be a platform resource kind with instances. `bynk.cloudflare`'s
-  `Kv`, `Service`, `R2`, `RateLimit` and `EdgeCache` have them
+  `Kv`, `Service`, `R2`, `RateLimit`, `Queue` and `EdgeCache` have them
   (`bynk.capability.base_not_instantiable`).
 - Each `@annotation` MUST be one of `K`'s instance options
   (`bynk.capability.unknown_option`), given at most once, with one positional
   literal of the option's kind (`bynk.capability.invalid_option`): a string for
-  `@worker` and `@jurisdiction`, a positive `Int` for `@limit`, a `Duration` for
-  `@period`. Every option `K` requires MUST be present
+  `@worker`, `@jurisdiction` and `@name`, a positive `Int` for `@limit`, a
+  `Duration` for `@period`. Every option `K` requires MUST be present
   (`bynk.capability.missing_option`). `Kv` takes none. `R2` takes an optional
   `@jurisdiction("eu" | "fedramp")`. `RateLimit` requires `@limit(n)` and
   `@period(d)`, where `d` is exactly 10 or 60 seconds (standard-library P3).
@@ -871,9 +871,13 @@ and `expect` apply to it unchanged. The rules:
   letters, digits, `-` or `_`, not starting or ending with `-`, and not the
   Worker of a context in the project (`bynk.capability.invalid_option`): the
   Worker outside the project the instance reaches (interop I5, #1972).
+  `Queue` requires `@name("queue")`, where `queue` is 1 to 63 lowercase letters,
+  digits or `-`, starting and ending with a letter or digit
+  (`bynk.capability.invalid_option`): the queue the instance sends to
+  (standard-library P2, #2578).
 - A kind used only through instances MUST NOT be named bare in a `given`
-  clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit` and
-  `EdgeCache` are such kinds.
+  clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
+  `Queue` and `EdgeCache` are such kinds.
 - A context MUST declare at most one `EdgeCache` instance
   (`bynk.cloudflare.edge_cache_duplicate`). The instance has no binding: it
   makes the Worker's `wrangler.toml` carry `[cache] enabled = true`. An agent

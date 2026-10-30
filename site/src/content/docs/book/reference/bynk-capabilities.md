@@ -342,6 +342,59 @@ is experimental: list `"bynk.cloudflare.RateLimit"` under `[unstable] allow`.
 `bynk deploy` allocates each limiter's `namespace_id`; see
 [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#rate-limiters).
 
+### Sending to a queue: `Queue`
+
+`Queue` sends messages to a Cloudflare Queue. Each producer is a named
+instance that names its queue, and a bare `given Queue` is refused
+(`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Queue }
+
+capability OrderEvents = Queue @name("order-events")
+```
+
+`OrderEvents` binds as `env.QUEUE_ORDER_EVENTS`, a `[[queues.producers]]`
+entry with `queue = "order-events"`.
+
+- `@name("…")` is the queue's name on the Cloudflare account: 1 to 63 lowercase
+  letters, digits or `-`, starting and ending with a letter or digit. It is
+  required (`bynk.capability.missing_option`); anything else is
+  `bynk.capability.invalid_option`. The option is `@name`, not `@queue`,
+  because `queue` is a keyword.
+- The name is account-wide. Every Worker that names the same queue shares it,
+  and a Bynk consumer reads it with `service … from queue("order-events")`.
+
+A body is JSON text, normally `Json.encode(value)`, and the consumer decodes it
+with its own message type:
+
+```bynk,fragment
+on POST("/orders") (order: Order) -> Effect[HttpResult[String]] by Visitor given OrderEvents {
+	let _ <- OrderEvents.send(Json.encode(order))
+	Created("queued")
+}
+```
+
+- `send(body)` sends one message.
+- `sendWith(body, QueueSend { delay: Some(30.seconds) })` holds the message
+  back before it can be delivered. The delay is whole seconds (a part second
+  rounds up), at most 12 hours.
+- `sendBatch(bodies)` sends its bodies in one call, all or none.
+
+Text that is not JSON faults the send, and so does going over the platform's
+caps: 128 KB a message, and 100 messages or 256 KB a batch. Delivery is at least
+once and the platform stores the messages, so make consumers idempotent and keep
+secrets out of bodies. Nothing checks that a producer's message matches the
+consumer's message type: the body is text, encoded by the caller.
+
+In tests each instance accepts every send, checking that each body is JSON (and
+a delay is in range) as the platform binding does; nothing is delivered to a
+consumer. `stub OrderEvents.send(_)` and `expect OrderEvents.send called` work as
+for any capability. `Queue` is experimental: list `"bynk.cloudflare.Queue"`
+under `[unstable] allow`. `bynk deploy` creates the queue when it is missing;
+see [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#queues).
+
 ### Edge caching: `EdgeCache`
 
 `@cache` on its own only sets `Cache-Control`: Cloudflare doesn't store a

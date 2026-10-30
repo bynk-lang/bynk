@@ -70,6 +70,18 @@ export const R2Listing = {
 };
 
 /**
+ * The options of a `Queue.sendWith`. `delay` holds the message back before
+ * it can be delivered: whole seconds (a part second rounds up), at most 12
+ * hours; `None` delivers as soon as the queue can.
+ */
+export interface QueueSend {
+  readonly delay: Option<number>;
+}
+
+export const QueueSend = {
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  */
@@ -165,6 +177,30 @@ export interface RateLimit {
 export const __RateLimitToken: symbol = globalThis.Symbol("RateLimit");
 
 /**
+ * A Cloudflare Queue to send messages to. Used only through a named instance
+ * that names the queue, `capability OrderEvents = Queue @name("order-events")`,
+ * which binds as `QUEUE_ORDER_EVENTS`; a bare `given Queue` names no queue and
+ * is refused. The name is account-wide: every Worker that names the same
+ * queue shares it, and a Bynk consumer reads it with
+ * `service … from queue("order-events")`. `bynk deploy` creates the queue
+ * when it is missing, environment-qualified as a consumer's is.
+ *
+ * A body is JSON text, normally `Json.encode(value)`, and the consumer
+ * decodes it with its message type; text that is not JSON faults the send.
+ * `sendBatch` sends its bodies in one call, all or none. The platform caps a
+ * message at 128 KB and a batch at 100 messages and 256 KB; over a cap, the
+ * send faults. Delivery is at least once and messages are stored by the
+ * platform, so make consumers idempotent and keep secrets out of bodies.
+ */
+export interface Queue {
+  send(body: string): globalThis.Promise<void>;
+  sendWith(body: string, options: QueueSend): globalThis.Promise<void>;
+  sendBatch(bodies: readonly string[]): globalThis.Promise<void>;
+}
+
+export const __QueueToken: symbol = globalThis.Symbol("Queue");
+
+/**
  * Cloudflare's edge cache for this context's Worker (Workers Cache), and its
  * purge. Used only through a named instance, `capability Edge = EdgeCache`,
  * at most one per context; declaring it is what turns the cache on, so a bare
@@ -198,6 +234,23 @@ export interface EdgeCache {
 }
 
 export const __EdgeCacheToken: symbol = globalThis.Symbol("EdgeCache");
+
+export function __serialise_QueueSend(value: QueueSend): __JsonValue {
+  return {
+    delay: __serialise_Option_Duration(value.delay),
+  };
+}
+
+export function __deserialise_QueueSend(json: __JsonValue, path: string = "$"): Result<QueueSend, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_delay = __deserialise_Option_Duration(obj["delay"], `${path}.delay`);
+  if (__r_delay.tag === "Err") return __r_delay;
+  const __delay = __r_delay.value;
+  return Ok({ delay: __delay } as QueueSend);
+}
 
 export function __serialise_R2Condition(value: R2Condition): __JsonValue {
   switch (value.tag) {
@@ -327,6 +380,50 @@ export function __deserialise_R2Put(json: __JsonValue, path: string = "$"): Resu
   return Ok({ contentType: __contentType, metadata: __metadata, onlyIf: __onlyIf } as R2Put);
 }
 
+
+export function __serialise_Option_Duration(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Duration(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Duration(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Duration(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Duration(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
 
 export function __serialise_List_R2Object(value: readonly R2Object[]): __JsonValue {
   return value.map((v) => __serialise_R2Object(v));

@@ -1,7 +1,7 @@
 adapter bynk.cloudflare {
 	consumes bynk { Fetch }
-	exports capability { Kv, Service, R2, RateLimit, EdgeCache }
-	exports transparent { R2Object, R2Put, R2Condition, R2Listing }
+	exports capability { Kv, Service, R2, RateLimit, Queue, EdgeCache }
+	exports transparent { R2Object, R2Put, R2Condition, R2Listing, QueueSend }
 
 	---
 	A Cloudflare Workers KV namespace: a key/value store with optional per-entry
@@ -91,6 +91,15 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	The options of a `Queue.sendWith`. `delay` holds the message back before
+	it can be delivered: whole seconds (a part second rounds up), at most 12
+	hours; `None` delivers as soon as the queue can.
+	---
+	type QueueSend = {
+		delay: Option[Duration],
+	}
+
+	---
 	An R2 bucket: objects stored and read whole, as `Bytes`, with metadata
 	and conditional writes. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
@@ -138,6 +147,28 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	A Cloudflare Queue to send messages to. Used only through a named instance
+	that names the queue, `capability OrderEvents = Queue @name("order-events")`,
+	which binds as `QUEUE_ORDER_EVENTS`; a bare `given Queue` names no queue and
+	is refused. The name is account-wide: every Worker that names the same
+	queue shares it, and a Bynk consumer reads it with
+	`service … from queue("order-events")`. `bynk deploy` creates the queue
+	when it is missing, environment-qualified as a consumer's is.
+
+	A body is JSON text, normally `Json.encode(value)`, and the consumer
+	decodes it with its message type; text that is not JSON faults the send.
+	`sendBatch` sends its bodies in one call, all or none. The platform caps a
+	message at 128 KB and a batch at 100 messages and 256 KB; over a cap, the
+	send faults. Delivery is at least once and messages are stored by the
+	platform, so make consumers idempotent and keep secrets out of bodies.
+	---
+	capability Queue {
+		fn send(body: String) -> Effect[()]
+		fn sendWith(body: String, options: QueueSend) -> Effect[()]
+		fn sendBatch(bodies: List[String]) -> Effect[()]
+	}
+
+	---
 	Cloudflare's edge cache for this context's Worker (Workers Cache), and its
 	purge. Used only through a named instance, `capability Edge = EdgeCache`,
 	at most one per context; declaring it is what turns the cache on, so a bare
@@ -177,6 +208,8 @@ adapter bynk.cloudflare {
 	provides R2 = WorkersR2
 
 	provides RateLimit = WorkersRateLimit
+
+	provides Queue = WorkersQueue
 
 	provides EdgeCache = WorkersEdgeCache
 }

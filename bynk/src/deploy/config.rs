@@ -76,6 +76,15 @@ struct KvNamespaceBinding {
 struct QueueBindings {
     #[serde(default)]
     consumers: Vec<QueueConsumer>,
+    /// P2 (#2578): the `[[queues.producers]]` of the `Queue` instances.
+    #[serde(default)]
+    producers: Vec<QueueProducer>,
+}
+
+#[derive(Debug, Deserialize)]
+struct QueueProducer {
+    /// The queue's user-given name, straight from `@name("n")`.
+    queue: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -146,6 +155,11 @@ pub(crate) struct Resources {
     /// (ADR 0194 D3): a `[[queues.consumers]]` binding whose queue does not
     /// exist fails the deploy.
     pub(crate) queues: Vec<String>,
+    /// P2 (#2578): the queues this context's `Queue` instances send to, by
+    /// name. Created before the push like a consumed queue (a producer binding
+    /// to a missing queue fails the deploy too), but recorded in the ledger
+    /// only when Bynk created it.
+    pub(crate) producer_queues: Vec<String>,
     /// #1796: the Durable Object classes the config declares in `exports`
     /// (each agent, plus the events fan-out class), in class-name order.
     /// **Advisory** — Cloudflare reconciles the declared set against the
@@ -209,6 +223,16 @@ pub(crate) struct ForeignCaller {
     pub(crate) worker: Option<String>,
 }
 
+impl Resources {
+    /// P2 (#2578): every queue this context names, consumed or produced to,
+    /// in name order, each once: what deploy creates and what keeps a queue
+    /// from being an orphan.
+    pub(crate) fn all_queues(&self) -> Vec<String> {
+        let all: BTreeSet<&String> = self.queues.iter().chain(&self.producer_queues).collect();
+        all.into_iter().cloned().collect()
+    }
+}
+
 impl Default for Resources {
     /// Hand-written for one field: `reads_complete` is **true** by vacuity — a
     /// context that names no secret has none out of sight — whereas `bool`'s
@@ -219,6 +243,7 @@ impl Default for Resources {
             binds_to: Vec::new(),
             foreign_services: Vec::new(),
             queues: Vec::new(),
+            producer_queues: Vec::new(),
             durable_objects: Vec::new(),
             renamed_durable_objects: Vec::new(),
             deleted_durable_objects: Vec::new(),
@@ -327,6 +352,14 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
     // rather than an emitter detail deploy happens to inherit.
     queues.sort();
     queues.dedup();
+    let mut producer_queues: Vec<String> = parsed
+        .queues
+        .producers
+        .into_iter()
+        .map(|p| p.queue)
+        .collect();
+    producer_queues.sort();
+    producer_queues.dedup();
     // A `BTreeMap`, so already in class-name order. A live class always has
     // a backend: Wrangler's schema requires `storage` unless `state` is a
     // tombstone. One without is refused, not skipped (review of #1803):
@@ -389,6 +422,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
             })
             .collect(),
         queues,
+        producer_queues,
         durable_objects,
         renamed_durable_objects,
         deleted_durable_objects,
@@ -785,21 +819,26 @@ pub(crate) fn synthesise_environment_block(
         env_block.insert("ratelimits".to_string(), ratelimits.clone());
     }
 
+    // P2 (#2578): a producer's queue is qualified as a consumer's is, or
+    // staging would send into the default environment's queue.
     if let Some(mut queues) = doc.get("queues").cloned() {
-        if let toml::Value::Table(q) = &mut queues
-            && let Some(toml::Value::Array(consumers)) = q.get_mut("consumers")
-        {
-            for consumer in consumers.iter_mut() {
-                if let toml::Value::Table(t) = consumer
-                    && let Some(name) = t
-                        .get("queue")
-                        .and_then(toml::Value::as_str)
-                        .map(str::to_owned)
-                {
-                    t.insert(
-                        "queue".to_string(),
-                        toml::Value::String(env_qualify(environment, &name)),
-                    );
+        if let toml::Value::Table(q) = &mut queues {
+            for side in ["consumers", "producers"] {
+                let Some(toml::Value::Array(entries)) = q.get_mut(side) else {
+                    continue;
+                };
+                for entry in entries.iter_mut() {
+                    if let toml::Value::Table(t) = entry
+                        && let Some(name) = t
+                            .get("queue")
+                            .and_then(toml::Value::as_str)
+                            .map(str::to_owned)
+                    {
+                        t.insert(
+                            "queue".to_string(),
+                            toml::Value::String(env_qualify(environment, &name)),
+                        );
+                    }
                 }
             }
         }
@@ -867,6 +906,11 @@ pub(crate) mod tests {
         }
         pub(crate) fn consumes(mut self, queues: &[&str]) -> Self {
             self.queues = names(queues);
+            self
+        }
+        /// P2 (#2578): the queues its `Queue` instances send to.
+        pub(crate) fn produces(mut self, queues: &[&str]) -> Self {
+            self.producer_queues = names(queues);
             self
         }
         /// SQLite-backed Durable Object classes — the only backend the
@@ -1262,6 +1306,51 @@ max_batch_size = 10
             ),
             Resources::default().consumes(&["high-priority", "low-priority"]),
         );
+    }
+
+    #[test]
+    fn a_producer_declares_the_queues_it_sends_to_apart_from_those_it_consumes() {
+        // P2 (#2578): `capability OrderEvents = Queue @name("order-events")`
+        // beside a consumer of another queue, and a second producer to it.
+        let declared = parse_config(
+            "producers",
+            r#"
+name = "shop"
+main = "index.ts"
+
+[[queues.producers]]
+binding = "QUEUE_ORDER_EVENTS"
+queue = "order-events"
+
+[[queues.producers]]
+binding = "QUEUE_AUDIT"
+queue = "audit"
+
+[[queues.consumers]]
+queue = "order-events"
+max_batch_size = 10
+"#,
+        );
+        assert_eq!(
+            declared,
+            Resources::default()
+                .consumes(&["order-events"])
+                .produces(&["audit", "order-events"]),
+        );
+        assert_eq!(declared.all_queues(), names(&["audit", "order-events"]));
+    }
+
+    #[test]
+    fn synthesise_environment_block_qualifies_a_producer_queue() {
+        // P2 (#2578): unqualified, staging would send into the default
+        // environment's queue.
+        let config = "name = \"shop\"\n\n[[queues.producers]]\nbinding = \"QUEUE_ORDER_EVENTS\"\nqueue = \"order-events\"\n";
+        let out = synthesise_environment_block(config, "staging", &kv_ids(&[]), &BTreeSet::new())
+            .unwrap();
+        let doc: toml::Table = out.parse().unwrap();
+        let producer = &doc["env"]["staging"]["queues"]["producers"][0];
+        assert_eq!(producer["queue"].as_str(), Some("order-events-staging"));
+        assert_eq!(producer["binding"].as_str(), Some("QUEUE_ORDER_EVENTS"));
     }
 
     #[test]

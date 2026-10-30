@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeIntegrationRateLimit } from "../src/storage.ts";
+import { makeIntegrationQueue, makeIntegrationRateLimit } from "../src/storage.ts";
 
 // Standard-library P3 (#2342): the integration tier's rate limiter.
 test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", async () => {
@@ -18,4 +18,11 @@ test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", a
 test("makeIntegrationRateLimit stands still without a clock", async () => {
   const rl = makeIntegrationRateLimit(1, 10);
   assert.deepEqual([(await rl.limit({ key: "a" })).success, (await rl.limit({ key: "a" })).success], [true, false]);
+});
+
+test("makeIntegrationQueue keeps every body it is sent, in order", async () => {
+  const q = makeIntegrationQueue();
+  await q.send({ id: 1 }, { contentType: "json" });
+  await q.sendBatch([{ body: "two" }, { body: [3] }]);
+  assert.deepEqual(q.sent, [{ id: 1 }, "two", [3]]);
 });

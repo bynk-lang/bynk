@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { Queue }
+
+// #2578: Queue ships experimental, so it needs an `[unstable] allow`.
+capability OrderEvents = Queue @name("order-events")
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

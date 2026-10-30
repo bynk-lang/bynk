@@ -1069,6 +1069,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Service" => "Billing",
         "RateLimit" => "LoginLimit",
         "EdgeCache" => "Edge",
+        "Queue" => "OrderEvents",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1084,6 +1085,7 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::R2_JURISDICTION_OPTION => "\"eu\"",
         firstparty::RATELIMIT_LIMIT_OPTION => "100",
         firstparty::RATELIMIT_PERIOD_OPTION => "60.seconds",
+        firstparty::QUEUE_NAME_OPTION => "\"order-events\"",
         _ => "\"legacy-billing\"",
     }
 }
@@ -1093,7 +1095,8 @@ fn option_sample(option: &str) -> &'static str {
 /// so it must be a Worker name as Cloudflare takes one: lowercase letters,
 /// digits, `-` and `_`, at most 63 characters, not starting or ending with
 /// `-`. `@jurisdiction` is one of R2's; `@limit` a positive `Int`; `@period`
-/// one of the rate limiting windows. `None`, with the error pushed, when the
+/// one of the rate limiting windows; a `Queue`'s `@name` a queue name (P2,
+/// #2578). `None`, with the error pushed, when the
 /// value is not one of these.
 fn instance_option_value(
     ann: &bynk_syntax::ast::Annotation,
@@ -1215,7 +1218,33 @@ fn instance_option_value(
         );
         return None;
     }
+    if option == crate::firstparty::QUEUE_NAME_OPTION && base == "Queue" && !is_queue_name(text) {
+        errors.push_for(
+            Some(path),
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                ann.span,
+                format!("`{text}` is not a queue name a `{base}` can send to"),
+            )
+            .with_note(
+                "a queue name is 1 to 63 lowercase letters, digits or `-`, and starts and ends with a letter or digit",
+            ),
+        );
+        return None;
+    }
     Some(value)
+}
+
+/// Whether `name` is a Cloudflare queue name ([`instance_option_value`]):
+/// Cloudflare allows letters, digits and `-`, starting and ending with a letter
+/// or digit, 1 to 63 characters. Lowercase only, as every name `bynk deploy`
+/// derives is, and so `env_qualify`'s `-<env>` suffix reads the same.
+fn is_queue_name(name: &str) -> bool {
+    let alnum = |b: u8| b.is_ascii_lowercase() || b.is_ascii_digit();
+    (1..=63).contains(&name.len())
+        && name.bytes().all(|b| alnum(b) || b == b'-')
+        && name.bytes().next().is_some_and(alnum)
+        && name.bytes().last().is_some_and(alnum)
 }
 
 /// Whether `name` is a Cloudflare Worker name ([`instance_option_value`]).

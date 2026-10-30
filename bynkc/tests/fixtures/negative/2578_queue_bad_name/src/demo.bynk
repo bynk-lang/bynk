@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { Queue }
+
+// #2578: a queue name is lowercase letters, digits and `-`.
+capability OrderEvents = Queue @name("Order_Events")
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

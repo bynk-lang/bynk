@@ -79,7 +79,10 @@ pub(crate) struct Environment {
     /// queue another Worker owns must not be deleted, with its undelivered
     /// messages, because this project stopped consuming it. A queue absent from
     /// this set is one the run created, or one an older ledger recorded without
-    /// saying — which keeps its old, prunable meaning. Additive and
+    /// saying — which keeps its old, prunable meaning, so a ledger written
+    /// before this field still holds its reused queues as prunable; the
+    /// ledger cannot tell them apart. An entry no context declares any more
+    /// stays here, harmlessly: `--prune` never reaches it. Additive and
     /// `default`ed, so an older ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     reused_queues: BTreeSet<String>,
@@ -788,9 +791,15 @@ pub(crate) fn find_orphans(
     let Some(env) = lock.environments.get(environment) else {
         return Orphans::default();
     };
+    // P2 (#2578): a queue a context only sends to is as live as a consumed one.
     let live_queues: BTreeSet<&str> = resources
         .values()
-        .flat_map(|r| r.queues.iter().map(String::as_str))
+        .flat_map(|r| {
+            r.queues
+                .iter()
+                .chain(&r.producer_queues)
+                .map(String::as_str)
+        })
         .collect();
     // S4b (#1967): an instance is orphaned with its Worker, or on its own
     // when its Worker no longer declares it.
@@ -2309,6 +2318,21 @@ pub(crate) mod tests {
             orphans.queues.is_empty(),
             "jobs is still consumed by two live contexts: {orphans:?}"
         );
+    }
+
+    #[test]
+    fn a_queue_a_context_only_sends_to_is_not_orphaned() {
+        // P2 (#2578): a recorded queue no context consumes but one sends to.
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_queue("default", "order-events");
+        let resources = BTreeMap::from([(
+            "shop".into(),
+            Resources::default().produces(&["order-events"]),
+        )]);
+        assert!(find_orphans(&lock, "default", &resources).queues.is_empty());
     }
 
     #[test]

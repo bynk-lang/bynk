@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+`@name` takes a string literal

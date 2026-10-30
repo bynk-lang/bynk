@@ -72,7 +72,8 @@ class __Stub_Billing {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
@@ -104,7 +105,8 @@ class __Stub_Ledger {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
@@ -177,7 +179,8 @@ async function test_a_stubbed_instance_answers() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
@@ -207,7 +210,8 @@ async function test_a_failing_call_is_the_instance_s_error() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
@@ -236,7 +240,8 @@ async function test_an_instance_is_stubbed_under_its_own_name_at_integration() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;

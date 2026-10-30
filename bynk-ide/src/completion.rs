@@ -879,6 +879,7 @@ fn option_sample(option: &str) -> &'static str {
         "limit" => "100",
         "period" => "60.seconds",
         "jurisdiction" => "\"eu\"",
+        "name" => "\"order-events\"",
         _ => "\"legacy-billing\"",
     }
 }
@@ -3342,7 +3343,10 @@ mod tests {
             .into_iter()
             .map(|(label, ..)| label)
             .collect();
-        assert_eq!(bases, ["Kv", "Service", "R2", "RateLimit", "EdgeCache"]);
+        assert_eq!(
+            bases,
+            ["Kv", "Service", "R2", "RateLimit", "Queue", "EdgeCache"]
+        );
         let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")
             .into_iter()
             .map(|(label, ..)| label)
@@ -3353,6 +3357,10 @@ mod tests {
         assert_eq!(options.len(), 1);
         assert_eq!(options[0].0, "@limit(…) @period(…)");
         assert_eq!(options[0].2, "@limit(${1:100}) @period(${2:60.seconds})");
+        // P2 (#2578): a `Queue` names its queue.
+        let options = instance_declaration_completions("capability OrderEvents = Queue ");
+        assert_eq!(options[0].0, "@name(…)");
+        assert_eq!(options[0].2, "@name(${1:\"order-events\"})");
         // A kind with no required option, or a line already carrying them,
         // gets nothing; nor does any other line.
         assert!(instance_declaration_completions("capability A = R2 ").is_empty());

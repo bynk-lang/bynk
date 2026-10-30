@@ -446,6 +446,16 @@ pub const RATELIMIT_PERIOD_OPTION: &str = "period";
 /// The windows the Workers Rate Limiting binding offers, in seconds.
 pub const RATELIMIT_PERIODS: &[i64] = &[10, 60];
 
+/// The Worker binding prefix of a `Queue` instance (standard-library P2,
+/// #2578): `capability OrderEvents = Queue @name("order-events")` binds as
+/// `QUEUE_ORDER_EVENTS`, a `[[queues.producers]]` entry.
+pub const QUEUE_BINDING_PREFIX: &str = "QUEUE";
+
+/// The option of a `Queue` instance that names the queue it sends to.
+/// `name`, not the track's `queue`: `queue` is a keyword, so `@queue(…)` does
+/// not parse (as `Service`'s `@worker`, ADR 0023).
+pub const QUEUE_NAME_OPTION: &str = "name";
+
 /// The prefix an `EdgeCache` instance's binding name would carry (first-party
 /// registry L7, #2414). Workers Cache is a Worker-wide `[cache]` setting with
 /// no `env` binding, so the name is never emitted: the instance is built from
@@ -522,6 +532,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersService",
             "WorkersR2",
             "WorkersRateLimit",
+            "WorkersQueue",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -530,7 +541,8 @@ pub const UNITS: &[Unit] = &[
         // run on it (#2308 R6); its conditions are extensible meanwhile.
         // P3 (#2342): RateLimit too, until the registry has run on it.
         // L7 (#2414): EdgeCache likewise.
-        experimental: &["Service", "R2", "RateLimit", "EdgeCache"],
+        // P2 (#2578): Queue too, until a first-party service has sent on it.
+        experimental: &["Service", "R2", "RateLimit", "EdgeCache", "Queue"],
         extensible: &["R2Condition"],
         instantiable: &[
             Instantiable {
@@ -562,6 +574,13 @@ pub const UNITS: &[Unit] = &[
                     (RATELIMIT_PERIOD_OPTION, OptionKind::Duration),
                 ],
                 required: &[RATELIMIT_LIMIT_OPTION, RATELIMIT_PERIOD_OPTION],
+                bare: false,
+            },
+            Instantiable {
+                capability: "Queue",
+                binding_prefix: QUEUE_BINDING_PREFIX,
+                options: &[(QUEUE_NAME_OPTION, OptionKind::Str)],
+                required: &[QUEUE_NAME_OPTION],
                 bare: false,
             },
             Instantiable {
@@ -1040,6 +1059,7 @@ mod tests {
                 ("bynk.cloudflare", "Service", "SERVICE"),
                 ("bynk.cloudflare", "R2", "R2"),
                 ("bynk.cloudflare", "RateLimit", "RATELIMIT"),
+                ("bynk.cloudflare", "Queue", "QUEUE"),
                 ("bynk.cloudflare", "EdgeCache", "EDGE_CACHE")
             ]
         );
@@ -1057,6 +1077,10 @@ mod tests {
         assert_eq!(rl.option_kind("period"), Some(OptionKind::Duration));
         assert_eq!(rl.required, ["limit", "period"]);
         assert!(!rl.bare);
+        let queue = instantiable("bynk.cloudflare", "Queue").expect("Queue is instantiable");
+        assert_eq!(queue.option_kind("name"), Some(OptionKind::Str));
+        assert_eq!(queue.required, ["name"]);
+        assert!(!queue.bare);
         let edge = instantiable("bynk.cloudflare", "EdgeCache").expect("EdgeCache is instantiable");
         assert!(edge.options.is_empty() && !edge.bare);
         for u in UNITS {
@@ -1099,6 +1123,7 @@ mod tests {
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
                 "bynk.cloudflare.EdgeCache",
+                "bynk.cloudflare.Queue",
                 "bynk.crypto"
             ]
         );
