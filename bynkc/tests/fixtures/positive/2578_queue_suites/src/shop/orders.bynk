@@ -1,0 +1,30 @@
+context shop.orders
+
+// #2578: a `Queue` producer at every test tier: the unit double checks each
+// body is JSON and accepts it; integration and system bind a recorder per
+// participant Worker.
+
+consumes bynk
+consumes bynk.cloudflare { Queue }
+
+type Placed = {
+	id: String,
+	total: Int,
+}
+
+capability OrderEvents = Queue @name("order-events")
+
+service api from http {
+	on POST("/orders/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given OrderEvents {
+		let _ <- OrderEvents.send(Json.encode(Placed { id: id, total: 3 }))
+		Created("queued")
+	}
+}
+
+service place {
+	on call(id: String) -> Effect[Int] given OrderEvents {
+		let _ <- OrderEvents.sendWith(Json.encode(id), QueueSend { delay: Some(30.seconds) })
+		let _ <- OrderEvents.sendBatch([Json.encode(1), Json.encode(2)])
+		Effect.pure(3)
+	}
+}

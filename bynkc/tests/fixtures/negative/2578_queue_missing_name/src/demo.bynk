@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { Queue }
+
+// #2578: a producer names the queue it sends to.
+capability OrderEvents = Queue
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

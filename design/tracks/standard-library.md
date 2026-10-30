@@ -9,7 +9,8 @@
   opt-in, extensible enums (`FetchError`, `Method`), the D2 tiers ADR and the
   Gate 1 amendment (R-17 met; §11 Q5, Q6 built). S4 done (#1966, #1967):
   derived KV capabilities, built and deployed. K1 done (#2016): `Bytes` joins,
-  slices, compares, and converts to and from hex and base64url.
+  slices, compares, and converts to and from hex and base64url. P2 done
+  (#2578): a context sends to a Cloudflare Queue through a named `Queue`.
 - **Realises:** `design/bynk-design-notes.md` "Three-tier output" (the runtime
   library and per-platform bindings, including the unbuilt `Crypto`),
   [ADR 0034](../decisions/0034-collections-hybrid-kernel-stdlib.md)'s promise
@@ -342,7 +343,7 @@ the resource-instance model (PR-2).
 | Secrets | S (`bynk.Secrets`) | L2 | | |
 | KV | P (`get`/`put`/`putTtl`/`delete`/`list`; String values; **one fixed `KV` binding**) | L3 | **yes** | Missing: `Bytes` values, metadata, `cacheTtl`, list cursors/limits, multiple namespaces |
 | Environment variables | A | L2 | | §6.1 Config |
-| Queues (producer) | D (ADRs 0002, 0122) | L3 `Queue` | yes | Consumer side shipped as protocol. Typed message via codec |
+| Queues (producer) | P (shipped, experimental: `send`/`sendWith`/`sendBatch` over JSON text from `Json.encode`; instance-only `Queue @name("…")`; P2 #2578) | L3 `Queue` | yes | Consumer side shipped as protocol. A typed `send[T]`, and checking a producer's message against the consumer's, wait for a codec-carrying generic op |
 | D1 | A | L3 `D1` | **yes** | D4 (typed rows), migrations story vs state-migrations gate, `Bytes` |
 | R2 | P (shipped, experimental: `get`/`head`/`put`/`putWith`/`delete`/`list` over whole `Bytes` objects; instance-only; P5 #2323) | L3 `R2` | **yes** | Byte streams (split out of P5, see P5b), multipart, further conditions |
 | Rate Limiting | P (shipped, experimental: `allow(key) -> Effect[Bool]`; instance-only `RateLimit @limit(n) @period(10.seconds \| 60.seconds)`; P3 #2342) | L3 `RateLimit` | **yes** | `namespace_id` allocated in the ledger, unique across its environments; a listing API to detect ids used outside Bynk |
@@ -480,7 +481,7 @@ ADR.
 
     capability Sessions = Kv
     capability Orders = D1
-    capability OrderEvents = Queue @queue("order-events")
+    capability OrderEvents = Queue @name("order-events")
     ```
     - **Meaning.** `capability X = K` declares a new capability `X` whose
       operations are those of platform capability `K`. Each declaration is a
@@ -502,8 +503,9 @@ ADR.
       across the context's files (#1820), so a misspelled reference is
       `bynk.given.unknown_capability`, not a silent second resource (A4).
     - **Options.** Creation parameters are `@annotations` on the declaration,
-      mirroring `@ttl` on `store` fields: `@queue("…")` (the account-shared
-      queue name), and later Vectorize dimensions/metric or R2 jurisdiction.
+      mirroring `@ttl` on `store` fields: `@name("…")` (the account-shared
+      queue name; `@queue`, the first spelling, does not parse, since `queue`
+      is a keyword, P2 #2578), and later Vectorize dimensions/metric or R2 jurisdiction.
       An annotation outside the kind's closed set is a diagnostic. Changing
       one means re-creating the resource.
     - **`wrangler.toml` mapping (A12).** The compiler derives the binding name
@@ -641,7 +643,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | Slice | What | Needs |
 |---|---|---|
 | P1 | Complete KV: `Bytes` values, metadata, list cursors and limits, a `putWith` options record (ADR 0051) | S4, K1 |
-| P2 | Queue producer: `capability X = Queue @queue("…")`, `send` with `Json.encode` | S4, D4 |
+| P2 | **Done** (#2578): Queue producer, `capability X = Queue @name("…")` (not `@queue`: a keyword), `send`/`sendWith`/`sendBatch` over JSON text from `Json.encode`, sent parsed so a Bynk consumer decodes it; deploy creates a missing queue and records a producer-only one only when it created it | S4, D4 |
 | P3 | **Done** (#2342), re-scoped: Rate Limiting (`@limit`, `@period`; ledger-allocated `namespace_id`, §11 Q7), with typed instance options. Analytics Engine split out (below) | S4 |
 | P3b | Analytics Engine: write-only `writeDataPoint` | S4 |
 | P4 | D1: `SqlValue` parameters, two-step rows, the 0/1-Bool and blob codec gaps, the `migrations_dir` question | S4, K1, D4 |
@@ -671,7 +673,8 @@ slice that first depends on it. Numbers are assigned at merge.
    meaning, implied provision, `@annotation` options, the `wrangler.toml`
    three-name mapping, ownership and the six rules. Lands with S4a.
 5. **Structured platform payloads decode in two steps.** D4. Lands with the
-   first slice that returns a structured payload (P2 or P4).
+   first slice that returns a structured payload: P4, since P2 (#2578) only
+   encodes.
 
 ## 11. Settling-review questions (all resolved)
 
@@ -1060,7 +1063,7 @@ consumes bynk.cloudflare { Queue("order-events") as OrderEvents }
 ---
 Order lifecycle events. Consumed by `fulfilment` (`service … from queue("order-events")`).
 ---
-capability OrderEvents = Queue @queue("order-events")
+capability OrderEvents = Queue @name("order-events")
 
 … given OrderEvents {
   let _ <- OrderEvents.send(Json.encode(placed))    // D4: encode is the caller's step
@@ -1173,7 +1176,7 @@ infrastructure lie that ADR 0016 rules out.
    semantics.
 3. **Borrow from `store` where the meaning matches:**
    - **`@annotation` for per-declaration options**, in place of `= "…"`:
-     `capability OrderEvents = Queue @queue("order-events")`, `@ttl` defaults
+     `capability OrderEvents = Queue @name("order-events")`, `@ttl` defaults
      for KV. (Not `@adopt`: see A12.) This is one option mechanism instead of a
      new one.
    - **Type arguments on the declaration** (`capability Sessions = Kv[Token, Cart]`)
@@ -1222,7 +1225,7 @@ consumes bynk.cloudflare { Kv, D1, R2, Queue }
 capability Sessions = Kv
 capability Orders = D1
 capability Invoices = R2
-capability OrderEvents = Queue @queue("order-events")
+capability OrderEvents = Queue @name("order-events")
 ```
 
 ```toml
@@ -1271,7 +1274,7 @@ Per kind, from Cloudflare's configuration reference (2026-10-14):
   concrete mechanism: the ledger key is (environment, Worker, capability)
   (D3).
 - **Options on the declaration are creation parameters, not identity.**
-  `@queue("…")` (account-shared name), Vectorize's dimensions and metric,
+  `@name("…")` (account-shared name), Vectorize's dimensions and metric,
   R2's jurisdiction. Each is fixed for the resource's life, so changing one
   is also a re-create.
 - **Wrangler can now auto-provision** KV, D1, R2 and Queues when the id is
@@ -1320,7 +1323,7 @@ without the user writing `provides`. That is why the derivation sits on
 ```bynk
 capability Sessions = Kv                            // shape: Kv's ops; provision: WorkersKv over KV_SESSIONS
 capability Orders = D1
-capability OrderEvents = Queue @queue("order-events")
+capability OrderEvents = Queue @name("order-events")
 ```
 
 The two halves stay separable, so `provides` keeps its existing meaning if a
@@ -1335,12 +1338,12 @@ ADR 0016 endorses exactly this kind of user-authored abstraction. It is not
 needed for the first slices, but the form doesn't foreclose it.
 
 Your instinct to put the queue name *inside* the provision
-(`provides OrderEvents = Queue { @queue(…) }`) is semantically right. The
+(`provides OrderEvents = Queue { @name(…) }`) is semantically right. The
 queue name says *which resource implements* the capability, not what its
 shape is. With the provision implied, the annotation has to sit on the
 derived declaration, as `@ttl` does on a `store` field. That is the one place
 the implied form blurs the layers. If an explicit, bodiless platform provision
-were ever allowed in contexts, `@queue` would move there.
+were ever allowed in contexts, `@name` would move there.
 
 ### Scorecard
 

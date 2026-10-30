@@ -500,6 +500,15 @@ impl DerivedInstance {
             .then(|| self.option(crate::firstparty::SERVICE_WORKER_OPTION))
             .flatten()
     }
+
+    /// The queue a `Queue` instance sends to (standard-library P2, #2578), as
+    /// written, before `bynk deploy` environment-qualifies it; `None` for any
+    /// other kind.
+    pub fn queue(&self) -> Option<&str> {
+        (self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Queue")
+            .then(|| self.option(crate::firstparty::QUEUE_NAME_OPTION))
+            .flatten()
+    }
 }
 
 /// #291: record each unit's flattened capabilities (`consumes U { Cap }`, from

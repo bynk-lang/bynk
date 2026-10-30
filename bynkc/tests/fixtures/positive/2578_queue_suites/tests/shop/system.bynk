@@ -1,0 +1,8 @@
+// #2578: at `system`, each participant Worker binds a queue recorder per
+// instance.
+suite shop.orders as system {
+	case "a send goes over the wire" {
+		let r <- api.POST("/orders/:id", "o-4") by Visitor
+		expect r is Created("queued")
+	}
+}

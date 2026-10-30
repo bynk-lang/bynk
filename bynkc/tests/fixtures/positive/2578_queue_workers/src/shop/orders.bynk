@@ -1,0 +1,48 @@
+context shop.orders
+
+// #2578: two named `Queue` instances of `bynk.cloudflare`, each its own
+// `[[queues.producers]]` binding (`QUEUE_ORDER_EVENTS`, `QUEUE_AUDIT`) naming
+// its queue, and no others; one reached by a handler, the other through a
+// local provider's `given`. The context also consumes `order-events`, so the
+// queue it sends to is the one it reads.
+
+consumes bynk
+consumes bynk.cloudflare { Queue }
+
+type Placed = {
+	id: String,
+	total: Int,
+}
+
+---
+Order lifecycle events, consumed below.
+---
+capability OrderEvents = Queue @name("order-events")
+
+capability Audit = Queue @name("audit-log")
+
+capability Trail {
+	fn note(entries: List[String]) -> Effect[()]
+}
+
+provides Trail = QueuedTrail given Audit {
+	fn note(entries: List[String]) -> Effect[()] { Audit.sendBatch(entries) }
+}
+
+service api from http {
+	on POST("/orders/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given OrderEvents {
+		let _ <- OrderEvents.send(Json.encode(Placed { id: id, total: 3 }))
+		let _ <- OrderEvents.sendWith(Json.encode(id), QueueSend { delay: Some(30.seconds) })
+		Created("queued")
+	}
+}
+
+service audit {
+	on call(entries: List[String]) -> Effect[()] given Trail { Trail.note(entries) }
+}
+
+service fulfilment from queue("order-events") {
+	on message(m: Placed) -> Effect[QueueResult] {
+		Ack
+	}
+}

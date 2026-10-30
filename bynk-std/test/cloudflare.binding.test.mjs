@@ -2,7 +2,8 @@
 // tested against a KV namespace fake (standard-library S2, #1952), its
 // `WorkersService` (interop I5, #1972) against a Service Binding fake, and its
 // `WorkersR2` (standard-library P5, #2323) against an R2 bucket fake, and its
-// `WorkersRateLimit` (standard-library P3, #2342) against a rate limiter fake, and
+// `WorkersRateLimit` (standard-library P3, #2342) against a rate limiter fake,
+// `WorkersQueue` (standard-library P2, #2578) against a queue producer fake, and
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
@@ -15,7 +16,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersEdgeCache, WorkersKv, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
+import { WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -474,6 +475,83 @@ t("WorkersRateLimit.allow: a missing binding names it", async () => {
     new WorkersRateLimit({}, "RATELIMIT_LOGIN").allow("k"),
     /requires a rate limiting binding \(env\.RATELIMIT_LOGIN\)/,
   );
+});
+
+// P2 (#2578): `WorkersQueue`, against a fake of Cloudflare's queue producer:
+// `send(body, { contentType, delaySeconds })` and `sendBatch(messages)`, each
+// message `{ body, contentType, delaySeconds }`.
+function fakeQueue() {
+  const sends = [];
+  const batches = [];
+  return {
+    sends,
+    batches,
+    async send(body, options) {
+      sends.push({ body, options });
+    },
+    async sendBatch(messages) {
+      batches.push([...messages]);
+    },
+  };
+}
+
+t("WorkersQueue.send: sends the JSON text parsed, as contentType json", async () => {
+  const q = fakeQueue();
+  await new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS").send('{"id":7,"tags":["a"]}');
+  assert.deepEqual(q.sends, [{ body: { id: 7, tags: ["a"] }, options: { contentType: "json" } }]);
+});
+
+t("WorkersQueue.send: text that is not JSON faults, and nothing is sent", async () => {
+  const q = fakeQueue();
+  await assert.rejects(
+    new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS").send("not json"),
+    /sends JSON text .* this body is not JSON/,
+  );
+  assert.equal(q.sends.length, 0);
+});
+
+t("WorkersQueue.send: a missing binding names it", async () => {
+  await assert.rejects(
+    new WorkersQueue({}, "QUEUE_ORDERS").send("1"),
+    /requires a queue producer binding \(env\.QUEUE_ORDERS\)/,
+  );
+});
+
+t("WorkersQueue.sendWith: a delay goes as whole seconds, a part second rounded up", async () => {
+  const q = fakeQueue();
+  const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");
+  await queue.sendWith('"a"', { delay: Some(90_000) });
+  await queue.sendWith('"b"', { delay: Some(1_500) });
+  await queue.sendWith('"c"', { delay: None });
+  assert.deepEqual(q.sends, [
+    { body: "a", options: { contentType: "json", delaySeconds: 90 } },
+    { body: "b", options: { contentType: "json", delaySeconds: 2 } },
+    { body: "c", options: { contentType: "json" } },
+  ]);
+});
+
+t("WorkersQueue.sendWith: a delay over 12 hours or below zero faults", async () => {
+  const q = fakeQueue();
+  const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");
+  await assert.rejects(queue.sendWith("1", { delay: Some(43_201_000) }), /between 0 seconds and 12 hours/);
+  await assert.rejects(queue.sendWith("1", { delay: Some(-1_000) }), /between 0 seconds and 12 hours/);
+  await assert.rejects(queue.sendWith("1", { delay: Some(-500) }), /between 0 seconds and 12 hours/);
+  assert.equal(q.sends.length, 0);
+});
+
+t("WorkersQueue.sendBatch: one call, every body parsed; all or none", async () => {
+  const q = fakeQueue();
+  const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");
+  await queue.sendBatch(["1", '{"k":"v"}']);
+  assert.deepEqual(q.batches, [
+    [
+      { body: 1, contentType: "json" },
+      { body: { k: "v" }, contentType: "json" },
+    ],
+  ]);
+  await assert.rejects(queue.sendBatch(["2", "nope"]), /this body is not JSON/);
+  await queue.sendBatch([]);
+  assert.equal(q.batches.length, 1);
 });
 
 // L7 (#2414): `WorkersEdgeCache`, against a fake of the Workers

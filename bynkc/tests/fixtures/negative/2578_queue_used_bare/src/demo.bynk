@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk.cloudflare { Queue }
+
+// #2578: a bare `Queue` names no queue.
+service probe {
+  on call(body: String) -> Effect[()] given Queue {
+    Queue.send(body)
+  }
+}

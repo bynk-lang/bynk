@@ -1,0 +1,22 @@
+suite shop.orders
+
+// #2578: the unit double accepts JSON sends; observation sees them.
+
+case "a send, a delayed send and a batch all go" {
+	let n <- place.call("o-1")
+	expect n == 3
+	expect OrderEvents.sendWith called once
+	expect OrderEvents.sendBatch called once
+}
+
+case "a stubbed send is observed" {
+	stub OrderEvents.send(_) returns ()
+	let r <- api.POST("/orders/:id", "o-2") by Visitor
+	expect r is Created("queued")
+	expect OrderEvents.send called once
+}
+
+case "a send at integration goes to the participant's recorder" as integration {
+	let n <- place.call("o-3")
+	expect n == 3
+}

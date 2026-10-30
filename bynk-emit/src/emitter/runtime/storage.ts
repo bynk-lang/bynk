@@ -280,6 +280,37 @@ export function makeIntegrationRateLimit(
   };
 }
 
+/**
+ * Standard-library P2 (#2578): the part of Cloudflare's queue producer binding
+ * that `WorkersQueue` uses. `delaySeconds` is whole seconds; every body is sent
+ * as `contentType: "json"`, so the consumer's `msg.body` is the parsed value.
+ */
+export interface QueueProducer {
+  send(body: unknown, options?: { contentType?: "json"; delaySeconds?: number }): Promise<void>;
+  sendBatch(
+    messages: Iterable<{ body: unknown; contentType?: "json"; delaySeconds?: number }>,
+  ): Promise<void>;
+}
+
+/**
+ * An in-memory queue producer for multi-Worker integration tests, bound as that
+ * participant's `env.QUEUE_<NAME>` and fresh per test case, as
+ * `makeIntegrationKv` is. It accepts every send and keeps the bodies it was
+ * given in `sent`, in order; nothing is delivered to a consumer.
+ */
+export function makeIntegrationQueue(): QueueProducer & { sent: unknown[] } {
+  const sent: unknown[] = [];
+  return {
+    sent,
+    async send(body: unknown): Promise<void> {
+      sent.push(body);
+    },
+    async sendBatch(messages: Iterable<{ body: unknown }>): Promise<void> {
+      for (const m of messages) sent.push(m.body);
+    },
+  };
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationKv as __makeIntegrationKv, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeTestState as __makeTestState };
-export type { DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter };
+export { makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeTestState as __makeTestState };
+export type { DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter };

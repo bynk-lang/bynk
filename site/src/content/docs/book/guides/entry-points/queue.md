@@ -76,6 +76,24 @@ delivered through the deployable Worker's own `queue` entry point, as the
 platform delivers it. A consumer that faults is retried, so the address yields
 `Retry`. See [Cron and queue at `system`](/book/reference/testing/#cron-queue-system).
 
+## Send to the queue
+
+A context sends messages with a `bynk.cloudflare` `Queue` instance that names
+the queue, encoding each body with `Json.encode`:
+
+```bynk,fragment
+capability Outbound = Queue @name("outbound-email")
+
+service signup from http {
+  on POST("/welcome") (to: String) -> Effect[HttpResult[String]] by Visitor given Outbound {
+    let _ <- Outbound.send(Json.encode(EmailJob { to: to, subject: "Welcome" }))
+    Accepted("queued")
+  }
+}
+```
+
+See [Sending to a queue](/book/reference/bynk-capabilities/#sending-to-a-queue-queue).
+
 ## Build and run
 
 Queue services compile to a Cloudflare Worker with `--target workers`; each

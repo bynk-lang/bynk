@@ -773,6 +773,7 @@ fresh for each case:
 | `Kv` | in memory; `putTtl`'s TTL is accepted and ignored |
 | `R2` | each instance an in-memory bucket, honouring `putWith`'s conditions, metadata and `list`'s paging |
 | `RateLimit` | each instance counts calls per key over windows of its `@period`, allowing `@limit` per window — on the harness clock at `unit`, the real clock at `integration` |
+| `Queue` | each instance accepts every send, checking each body is JSON and a delay is in range; nothing is delivered — at `integration` and `system` each Worker binds a recorder |
 | `Service` | each instance's `send(_)` **faults** until stubbed: a test never reaches the Worker behind it |
 | `Fetch` | `send(_)` **faults**: a test never reaches the network |
 

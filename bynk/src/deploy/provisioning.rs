@@ -220,18 +220,31 @@ pub(crate) fn deploy_one(
     // ledger still keys by the *logical* name — the outer `environments` map
     // already separates `staging` from `default`, so no schema change is
     // needed, only the wrangler-facing name changes.
+    //
+    // P2 (#2578): a producer's queue (`capability X = Queue @name("n")`) is
+    // created the same way, but recorded only when this run created it. A
+    // queue only producers name may belong to a Worker outside the project,
+    // and what the ledger records becomes an orphan `--prune` can delete once
+    // nothing names it; a queue the project consumes is recorded either way.
+    let mut created = BTreeSet::new();
     for queue in unattempted_queues(declared, attempted_queues) {
         let physical = env_qualify(environment, &queue);
         if !queue_exists(provenance, &physical, project_root) {
             create_queue(provenance, &physical, project_root).map_err(|e| {
                 DeployFailure::driver(format!("could not create the queue `{physical}`: {e}"))
             })?;
+            created.insert(queue);
         }
-        // Recorded before the push, as KV is: what the ledger claims is only
-        // ever what it watched succeed. Recorded for a queue that was already
-        // there, too — the set's use is the plan's `create`/`reuse` wording, and
-        // "we confirmed this exists" is exactly what makes `reuse` the true word.
+    }
+    // Recorded before the push, as KV is: what the ledger claims is only
+    // ever what it watched succeed. Recorded for a consumed queue that was
+    // already there, too — the set's use is the plan's `create`/`reuse`
+    // wording, and "we confirmed this exists" is exactly what makes `reuse` the
+    // true word. A consumed queue another context already checked this run is
+    // recorded here as well, so the order contexts deploy in changes nothing.
+    for queue in queues_to_record(declared, &created) {
         if lock.record_queue(environment, &queue) {
+            let physical = env_qualify(environment, &queue);
             write_lock(lock_path, lock).map_err(|e| {
                 DeployFailure::driver(format!(
                     "provisioned the queue `{physical}` but could not record it in {}: {e}",
@@ -941,12 +954,25 @@ fn wrangler_said(output: &std::process::Output) -> String {
 /// Scoped to one run, deliberately: every queue is still attempted on every
 /// fresh deploy, which is the property the self-healing rests on. Pure but for
 /// the marker, so the rule is tested without spawning wrangler.
+///
+/// P2 (#2578): a context's producer queues are attempted with its consumed
+/// ones, in name order, each once.
 fn unattempted_queues(declared: &Resources, attempted: &mut BTreeSet<String>) -> Vec<String> {
     declared
-        .queues
-        .iter()
-        .filter(|queue| attempted.insert((*queue).to_string()))
-        .cloned()
+        .all_queues()
+        .into_iter()
+        .filter(|queue| attempted.insert(queue.clone()))
+        .collect()
+}
+
+/// P2 (#2578): the queues one context's deploy records in the ledger: every
+/// queue it consumes, and a queue it only produces to when this run `created`
+/// it. Pure, so the rule is tested without spawning wrangler.
+fn queues_to_record(declared: &Resources, created: &BTreeSet<String>) -> Vec<String> {
+    declared
+        .all_queues()
+        .into_iter()
+        .filter(|queue| declared.queues.contains(queue) || created.contains(queue))
         .collect()
 }
 
@@ -1380,6 +1406,38 @@ mod tests {
         assert_eq!(
             unattempted_queues(&billing, &mut later),
             names(&["billing-only", "jobs"])
+        );
+    }
+
+    #[test]
+    fn a_producer_queue_is_attempted_with_the_consumed_ones() {
+        // P2 (#2578): created if missing, the same way, once per run.
+        let shop = Resources::default()
+            .consumes(&["returns"])
+            .produces(&["order-events", "returns"]);
+        let mut run = BTreeSet::new();
+        assert_eq!(
+            unattempted_queues(&shop, &mut run),
+            names(&["order-events", "returns"])
+        );
+    }
+
+    #[test]
+    fn a_queue_only_produced_to_is_recorded_only_when_this_run_created_it() {
+        // P2 (#2578): a queue only producers name may be another Worker's, so
+        // reusing it records nothing (nothing `--prune` could later delete). A
+        // consumed queue is recorded either way, even when another context
+        // already checked it this run.
+        let shop = Resources::default()
+            .consumes(&["returns"])
+            .produces(&["order-events", "audit"]);
+        assert_eq!(
+            queues_to_record(&shop, &BTreeSet::new()),
+            names(&["returns"])
+        );
+        assert_eq!(
+            queues_to_record(&shop, &BTreeSet::from(["audit".to_string()])),
+            names(&["audit", "returns"])
         );
     }
 

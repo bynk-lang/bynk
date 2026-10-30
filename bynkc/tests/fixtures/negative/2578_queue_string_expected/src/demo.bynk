@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { Queue }
+
+// #2578: the queue is named by a string literal.
+capability OrderEvents = Queue @name(42)
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

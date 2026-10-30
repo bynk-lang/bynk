@@ -69,6 +69,18 @@ export const R2Listing = {
 };
 
 /**
+ * The options of a `Queue.sendWith`. `delay` holds the message back before
+ * it can be delivered: whole seconds (a part second rounds up), at most 12
+ * hours; `None` delivers as soon as the queue can.
+ */
+export interface QueueSend {
+  readonly delay: Option<number>;
+}
+
+export const QueueSend = {
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  */
@@ -162,6 +174,30 @@ export interface RateLimit {
 }
 
 export const __RateLimitToken: symbol = globalThis.Symbol("RateLimit");
+
+/**
+ * A Cloudflare Queue to send messages to. Used only through a named instance
+ * that names the queue, `capability OrderEvents = Queue @name("order-events")`,
+ * which binds as `QUEUE_ORDER_EVENTS`; a bare `given Queue` names no queue and
+ * is refused. The name is account-wide: every Worker that names the same
+ * queue shares it, and a Bynk consumer reads it with
+ * `service … from queue("order-events")`. `bynk deploy` creates the queue
+ * when it is missing, environment-qualified as a consumer's is.
+ *
+ * A body is JSON text, normally `Json.encode(value)`, and the consumer
+ * decodes it with its message type; text that is not JSON faults the send.
+ * `sendBatch` sends its bodies in one call, all or none. The platform caps a
+ * message at 128 KB and a batch at 100 messages and 256 KB; over a cap, the
+ * send faults. Delivery is at least once and messages are stored by the
+ * platform, so make consumers idempotent and keep secrets out of bodies.
+ */
+export interface Queue {
+  send(body: string): globalThis.Promise<void>;
+  sendWith(body: string, options: QueueSend): globalThis.Promise<void>;
+  sendBatch(bodies: readonly string[]): globalThis.Promise<void>;
+}
+
+export const __QueueToken: symbol = globalThis.Symbol("Queue");
 
 /**
  * Cloudflare's edge cache for this context's Worker (Workers Cache), and its
