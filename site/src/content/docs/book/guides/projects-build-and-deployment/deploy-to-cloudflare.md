@@ -68,6 +68,7 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 | `capability PublishLimit = RateLimit …` | Allocates the limiter a `namespace_id` and records it; nothing is created on the account |
 | An `agent` | Nothing to create — the config declares its Durable Object class, and Cloudflare registers it |
 | `service … from queue("n")` | Creates the queue `n` before pushing |
+| `capability Events = Queue @name("n")` | Creates the queue `n` before pushing, if it isn't there |
 | An `on cron` handler | Nothing to create — the schedule rides the config |
 | `consumes` another context | Nothing to create — it sets the deploy order |
 | An `actor` with `auth = Bearer/Signature` | Sets that secret, and refuses to deploy without it |
@@ -92,6 +93,14 @@ Queues are created *before* the Worker is pushed, and this step is doing real
 work: `wrangler deploy` does **not** create a queue for you — it checks, and
 fails with `Queue "n" does not exist. To create it, run: wrangler queues create n`.
 Creating them is what makes a queue-consuming context deployable in one command.
+
+A queue a context sends to (`capability OrderEvents = Queue @name("n")`) is
+created the same way. There is one difference: `bynk deploy` records a queue
+that only producers name in `bynk.deploy.lock` **only if it created it**. A
+queue that was already there may belong to a Worker outside the project, so it
+never becomes an orphan that `--prune` could delete. In a named environment the
+producer's queue is qualified as a consumer's is (`n-staging`), so staging
+never sends into the default environment's queue.
 
 ### Durable Objects
 

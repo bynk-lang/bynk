@@ -404,6 +404,7 @@ mod tests {
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
                 "bynk.cloudflare.EdgeCache",
+                "bynk.cloudflare.Queue",
                 "bynk.crypto"
             ]
         );
@@ -414,6 +415,8 @@ mod tests {
         assert!(p.blocks("bynk.cloudflare.R2.putWith"));
         assert!(!p.blocks("bynk.cloudflare.R2Put"));
         assert!(p.blocks("bynk.cloudflare.RateLimit.allow"));
+        assert!(p.blocks("bynk.cloudflare.Queue.sendBatch"));
+        assert!(!p.blocks("bynk.cloudflare.QueueSend"));
         assert!(p.blocks("bynk.cloudflare.EdgeCache.purge"));
         assert!(p.manifest_diagnostics().is_empty());
     }

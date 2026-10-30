@@ -179,7 +179,7 @@ fn run_smoke(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\"]\n"
         ),
     )
     .unwrap();
@@ -554,6 +554,103 @@ fn workers_ratelimit_counts_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersRateLimit on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+const QUEUE_SOURCE: &str = "context q.smoke
+
+consumes bynk
+consumes bynk.cloudflare { Kv, Queue }
+
+type Placed = {
+\tid: String,
+\ttotal: Int,
+}
+
+capability Orders = Queue @name(\"q-smoke-orders\")
+
+service api from http {
+\ton GET(\"/send/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet _ <- Orders.send(Json.encode(Placed { id: id, total: 7 }))
+\t\tOk(\"sent\")
+\t}
+
+\ton GET(\"/later/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet _ <- Orders.sendWith(Json.encode(Placed { id: id, total: 8 }), QueueSend { delay: Some(1.seconds) })
+\t\tOk(\"sent\")
+\t}
+
+\ton GET(\"/batch/:a/:b\") (a: String, b: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet _ <- Orders.sendBatch([Json.encode(Placed { id: a, total: 1 }), Json.encode(Placed { id: b, total: 2 })])
+\t\tOk(\"sent\")
+\t}
+
+\ton GET(\"/raw/:text\") (text: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet _ <- Orders.send(text)
+\t\tOk(\"sent\")
+\t}
+
+\ton GET(\"/seen/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Kv {
+\t\tlet found <- Kv.get(id)
+\t\tmatch found {
+\t\t\tSome(total) => Ok(total)
+\t\t\tNone => NotFound
+\t\t}
+\t}
+}
+
+service fulfilment from queue(\"q-smoke-orders\") {
+\ton message(m: Placed) -> Effect[QueueResult] given Kv {
+\t\tlet _ <- Kv.put(m.id, m.total.toString())
+\t\tAck
+\t}
+}
+";
+
+#[test]
+fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
+    // P2 (#2578): Miniflare simulates `[[queues.producers]]` and
+    // `[[queues.consumers]]` in one Worker. A body sent as parsed JSON reaches
+    // the generated consumer as the value its decoder expects, which is the
+    // contract `WorkersQueue` exists to keep; text that is not JSON is refused
+    // before anything is sent.
+    let Some((failures, log)) = run_smoke("q-smoke", "q", QUEUE_SOURCE, "/seen/boot", 3, &|port| {
+        let mut failures = check_steps(
+            port,
+            &[
+                ("/send/o-1", 200, r#""sent""#),
+                ("/later/o-2", 200, r#""sent""#),
+                ("/batch/o-3/o-4", 200, r#""sent""#),
+                ("/raw/not-json", 500, ""),
+            ],
+        );
+        // Local queues deliver in batches, after a timeout: poll.
+        let expected = [("o-1", "7"), ("o-2", "8"), ("o-3", "1"), ("o-4", "2")];
+        let deadline = Instant::now() + Duration::from_secs(60);
+        loop {
+            let seen = expected
+                .iter()
+                .map(|(id, _)| get(port, &format!("/seen/{id}")))
+                .collect::<Vec<_>>();
+            let all = seen.iter().zip(&expected).all(
+                |(r, (_, total))| matches!(r, Ok((200, b)) if b.trim() == format!("\"{total}\"")),
+            );
+            if all || Instant::now() > deadline {
+                if !all {
+                    failures.push(format!("not every message was consumed: {seen:?}"));
+                }
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        failures
+    }) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "WorkersQueue on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

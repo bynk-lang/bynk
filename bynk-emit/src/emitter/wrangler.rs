@@ -326,6 +326,15 @@ pub(crate) fn emit_wrangler_toml(
                     ),
                 ],
             ),
+            // P2 (#2578): the queue as the declaration names it; `bynk
+            // deploy` environment-qualifies it, as it does a consumer's.
+            BindingSource::QueueProducer { queue, .. } => TomlBlock::array_table(
+                "queues.producers",
+                vec![
+                    TomlEntry::kv("binding", name),
+                    TomlEntry::kv("queue", TomlValue::str(queue.clone())),
+                ],
+            ),
             // Interop I5 (#1972): the Worker as the declaration names it,
             // not a project context's `worker_dir_name`.
             BindingSource::ForeignService { worker, .. } => TomlBlock::array_table(
@@ -493,6 +502,13 @@ pub(crate) fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::RateLimitInstance { .. }))
             .cloned(),
     );
+    // P2 (#2578): the queue producers, after the rate limiters.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::QueueProducer { .. }))
+            .cloned(),
+    );
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
     // emit gets its own fan-out DO among the agents' — Cloudflare only cares
     // that `index.ts` (this Worker's `main`) exports a class with this name,
@@ -544,6 +560,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::Kv | BindingSource::KvInstance { .. } => "__KVNamespace",
         BindingSource::R2Instance { .. } => "__R2Bucket",
         BindingSource::RateLimitInstance { .. } => "__RateLimiter",
+        BindingSource::QueueProducer { .. } => "__QueueProducer",
         BindingSource::Agent { .. } | BindingSource::EventsFanout { .. } => {
             "__DurableObjectNamespace"
         }

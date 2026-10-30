@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { Queue }
+
+// #2578: a producer takes `@name` only; a delay is per send.
+capability OrderEvents = Queue @name("order-events") @delay(5)
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

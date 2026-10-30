@@ -540,6 +540,7 @@ fn emit_integration_module(
     let has_kv = binds(|s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }));
     let has_r2 = binds(|s| matches!(s, BindingSource::R2Instance { .. }));
     let has_ratelimit = binds(|s| matches!(s, BindingSource::RateLimitInstance { .. }));
+    let has_queue = binds(|s| matches!(s, BindingSource::QueueProducer { .. }));
     let runtime_import = emitter::runtime_import_for(&module_path, ImportExt::Js);
     let mut runtime_names: Vec<String> = [
         "Ok",
@@ -573,6 +574,9 @@ fn emit_integration_module(
     }
     if has_ratelimit {
         runtime_names.push("__makeIntegrationRateLimit".to_string());
+    }
+    if has_queue {
+        runtime_names.push("__makeIntegrationQueue".to_string());
     }
     if has_objects {
         runtime_names.push("__makeIntegrationDoNamespace".to_string());
@@ -2535,6 +2539,11 @@ fn emit_integration_harness<'a>(
                         },
                     ],
                 ),
+                // P2 (#2578): each instance its own recorder; nothing is
+                // delivered to a consumer participant.
+                BindingSource::QueueProducer { .. } => {
+                    call(ident("__makeIntegrationQueue"), vec![])
+                }
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.
                 BindingSource::ForeignService { worker, .. } => {
@@ -5197,6 +5206,31 @@ const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>(
   };
 "#;
 
+/// P2 (#2578): the body of `bynk.cloudflare`'s `Queue` unit-tier double
+/// ([`platform_double`]).
+const QUEUE_DOUBLE_BODY: &str = r#"  const json = (body: string) => {
+    try {
+      globalThis.JSON.parse(body);
+    } catch {
+      throw new globalThis.Error("bynk.cloudflare.Queue sends JSON text (normally `Json.encode(value)`), and this body is not JSON");
+    }
+  };
+  return {
+    async send(body) {
+      json(body);
+    },
+    async sendWith(body, options) {
+      json(body);
+      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.ceil(options.delay.value / 1000) > 43200)) {
+        throw new globalThis.Error(`bynk.cloudflare.Queue: a delay is between 0 seconds and 12 hours, not ${options.delay.value} ms`);
+      }
+    },
+    async sendBatch(bodies) {
+      for (const b of bodies) json(b);
+    },
+  };
+"#;
+
 /// #291: the deterministic test double for platform capability `cap` (owned by
 /// first-party unit `owner`, imported in the test module as `ns`), as the
 /// definition of a `__bynkTest_<name>()` factory — `name` is `cap`, or a
@@ -5262,6 +5296,10 @@ fn platform_double(
         // `stub Edge.purge(_) returns false` refuses one, and observation
         // sees what was purged.
         ("bynk.cloudflare", "EdgeCache") => "  return {\n    async purge(prefixes) {\n      for (const p of prefixes) {\n        if (!p.startsWith(\"/\") || /[\\u0000-\\u001f\\u007f?#]/.test(p)) throw new globalThis.Error(`bynk.cloudflare.EdgeCache.purge takes paths starting with \\`/\\`, with no query, fragment or control characters; got ${globalThis.JSON.stringify(p)}`);\n      }\n      return true;\n    },\n  };\n".to_string(),
+        // P2 (#2578): there is no queue in a test, so each instance accepts
+        // every send, checking its bodies are JSON (and a delay in range) as
+        // the binding does; observation sees what was sent.
+        ("bynk.cloudflare", "Queue") => QUEUE_DOUBLE_BODY.to_string(),
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),

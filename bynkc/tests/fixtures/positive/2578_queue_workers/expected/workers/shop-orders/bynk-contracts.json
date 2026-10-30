@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "audit": "e98856d6ae1dea22"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "audit": "Svc(\"audit\",P(\"entries\",L(B(\"String\"))),Ret(U()))"
+  }
+}

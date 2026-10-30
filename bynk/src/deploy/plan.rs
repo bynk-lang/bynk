@@ -94,7 +94,8 @@ struct ContextPlan<'a> {
     /// order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     ratelimits: Vec<PlanRateLimit<'a>>,
-    /// One line per queue this context consumes, in name order.
+    /// One line per queue this context consumes or (P2, #2578) sends to, in
+    /// name order.
     queues: Vec<PlanQueue>,
     /// #1796: one line per Durable Object class the push declares in
     /// `exports`, in class-name order. Empty for a context with no agent and
@@ -2036,8 +2037,12 @@ pub(crate) fn derive_plan<'a>(
                             }
                         })
                         .collect(),
+                    // P2 (#2578): the queues it sends to, with those it
+                    // consumes. An unrecorded one is `create`, a forecast as
+                    // ever: one that is already there is reused (and, if only
+                    // produced to, left unrecorded).
                     queues: declared
-                        .queues
+                        .all_queues()
                         .iter()
                         .map(|queue| PlanQueue {
                             action: if lock.has_queue(environment, queue) {

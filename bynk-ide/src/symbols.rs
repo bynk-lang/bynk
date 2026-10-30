@@ -2166,6 +2166,22 @@ pub(crate) fn describe_derived_capability(
             ));
         }
     }
+    // P2 (#2578): a queue producer's emitted stanza, and the queue it names.
+    if d.base.name == "Queue"
+        && let Some(queue) = d
+            .annotations
+            .iter()
+            .find(|a| a.name.name == "name")
+            .and_then(|a| a.args.first())
+            .and_then(|arg| match &arg.value.kind {
+                ExprKind::StrLit(s) => Some(s.clone()),
+                _ => None,
+            })
+    {
+        out.push_str(&format!(
+            "\nEmits `[[queues.producers]]` sending to queue `{queue}` (environment-qualified by `bynk deploy`). Bodies are JSON text, normally `Json.encode(value)`.\n"
+        ));
+    }
     if d.base.name == "EdgeCache" {
         out.push_str("\nEmits `[cache] enabled = true`: a `@cache` route's `2xx` is cached at Cloudflare's edge, and every other `GET` or `HEAD` answer is `no-store`.\n");
     }
@@ -3676,6 +3692,30 @@ mod tests {
         let hover = describe_derived_capability(decl, Some("bynk.cloudflare"), None);
         assert!(hover.contains("Emits `[cache] enabled = true`"), "{hover}");
         assert!(!hover.contains("its own storage"), "{hover}");
+    }
+
+    #[test]
+    fn a_queue_producer_hovers_with_its_stanza() {
+        // P2 (#2578): the queue it sends to, as the stanza names it.
+        let src = "context a\nconsumes bynk.cloudflare { Queue }\ncapability OrderEvents = Queue @name(\"order-events\")\n";
+        let tokens = tokenize(src).unwrap();
+        let (unit, _) = parse_unit_with_recovery(&tokens, src);
+        let Some(SourceUnit::Context(ctx)) = unit else {
+            panic!("a context")
+        };
+        let decl = ctx
+            .items
+            .iter()
+            .find_map(|i| match i {
+                CommonsItem::Capability(c) => Some(c),
+                _ => None,
+            })
+            .unwrap();
+        let hover = describe_derived_capability(decl, Some("bynk.cloudflare"), None);
+        assert!(
+            hover.contains("Emits `[[queues.producers]]` sending to queue `order-events`"),
+            "{hover}"
+        );
     }
 
     #[test]
