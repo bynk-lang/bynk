@@ -2,7 +2,7 @@
 // commons commerce.money
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import { __bynkIntDiv, __bynkToInt } from "../__bynk_runtime/int.js";
+import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow } from "../__bynk_runtime/int.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export function discount(p: number, pct: number): number {

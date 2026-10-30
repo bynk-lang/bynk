@@ -1504,14 +1504,30 @@ pub(crate) fn check_numeric_kernel_method(
         // (`Int.parse` covers parsing). Total on both `Int` and `Float`.
         (_, "toString") => Some((vec![], Ty::Base(BaseType::String))),
         (BaseType::Float, "isNaN" | "isFinite") => Some((vec![], Ty::Base(BaseType::Bool))),
+        // K6b (#2598): integer division companions and an exact power, each
+        // faulting on a zero divisor or a result past the safe-integer range.
+        (BaseType::Int, "div" | "rem" | "mod" | "pow") => {
+            Some((vec![tys.intern(b.clone())], b.clone()))
+        }
+        // K6b (#2598): the `Float` functions over JS `Math`, host-defined
+        // outside their domains as `Float` arithmetic is (ADR 0042).
+        (
+            BaseType::Float,
+            "sqrt" | "exp" | "ln" | "log10" | "log2" | "sin" | "cos" | "tan" | "asin" | "acos"
+            | "atan",
+        ) => Some((vec![], b.clone())),
+        (BaseType::Float, "pow" | "atan2") => Some((vec![tys.intern(b.clone())], b.clone())),
         _ => None,
     };
     let Some((params, ret)) = sig else {
         let kernel = match base {
-            BaseType::Int => "`toFloat`, `toString`, `abs`, `min`, `max`, `clamp`",
+            BaseType::Int => {
+                "`toFloat`, `toString`, `abs`, `min`, `max`, `clamp`, `div`, `rem`, `mod`, `pow`"
+            }
             _ => {
                 "`round`, `floor`, `ceil`, `truncate`, `toString`, `abs`, `min`, `max`, \
-                 `clamp`, `isNaN`, `isFinite`"
+                 `clamp`, `isNaN`, `isFinite`, `sqrt`, `pow`, `exp`, `ln`, `log10`, `log2`, \
+                 `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`"
             }
         };
         ctx.errors.push(CompileError::new(
@@ -2640,6 +2656,25 @@ pub(crate) fn check_numeric_parse_static(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    // K6b (#2598): `Float.pi()` and `Float.e()`, the two constants.
+    if type_name.name == FLOAT && matches!(method.name.as_str(), "pi" | "e") {
+        if !args.is_empty() {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.method_arity",
+                span,
+                format!(
+                    "`Float.{}` takes no arguments, got {}",
+                    method.name,
+                    args.len()
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+        return Some(tys.intern(Ty::Base(BaseType::Float)));
+    }
     if method.name != "parse" {
         // The resolver owns the unknown-static diagnostic; don't double up.
         for a in args {

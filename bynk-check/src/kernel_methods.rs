@@ -254,6 +254,11 @@ pub const INT_METHODS: &[KernelMethod] = &[
     m("min", "min(other: Int) -> Int"),
     m("max", "max(other: Int) -> Int"),
     m("clamp", "clamp(lo: Int, hi: Int) -> Int"),
+    // K6b (#2598): division companions (fault on zero) and an exact power.
+    m("div", "div(other: Int) -> Int"),
+    m("rem", "rem(other: Int) -> Int"),
+    m("mod", "mod(other: Int) -> Int"),
+    m("pow", "pow(exp: Int) -> Int"),
 ];
 
 /// The `Float` numeric kernel (v0.21).
@@ -269,6 +274,20 @@ pub const FLOAT_METHODS: &[KernelMethod] = &[
     m("clamp", "clamp(lo: Float, hi: Float) -> Float"),
     m("isNaN", "isNaN() -> Bool"),
     m("isFinite", "isFinite() -> Bool"),
+    // K6b (#2598): `Math` functions, host-defined outside their domains.
+    m("sqrt", "sqrt() -> Float"),
+    m("pow", "pow(exp: Float) -> Float"),
+    m("exp", "exp() -> Float"),
+    m("ln", "ln() -> Float"),
+    m("log10", "log10() -> Float"),
+    m("log2", "log2() -> Float"),
+    m("sin", "sin() -> Float"),
+    m("cos", "cos() -> Float"),
+    m("tan", "tan() -> Float"),
+    m("asin", "asin() -> Float"),
+    m("acos", "acos() -> Float"),
+    m("atan", "atan() -> Float"),
+    m("atan2", "atan2(x: Float) -> Float"),
 ];
 
 /// The `Duration` kernel (v0.86, ADR 0112). Comparison/arithmetic are operators

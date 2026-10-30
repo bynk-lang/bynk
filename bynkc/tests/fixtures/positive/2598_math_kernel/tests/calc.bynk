@@ -1,0 +1,52 @@
+suite calc
+
+// #2598: signs, identities, faults and known values.
+
+case "div floors and mod takes the divisor's sign" {
+	expect (-7).div(2) == -4
+	expect (-7).mod(2) == 1
+	expect 7.mod(-2) == -1
+	expect (-7).rem(2) == -1
+	expect 7.rem(-2) == 1
+}
+
+case "both pairs satisfy their identity in every sign" {
+	expect floorIdentity(7, 2) && floorIdentity(-7, 2) && floorIdentity(7, -2) && floorIdentity(-7, -2)
+	expect truncIdentity(7, 2) && truncIdentity(-7, 2) && truncIdentity(7, -2) && truncIdentity(-7, -2)
+	expect bucket(-1, 7) == 6
+	expect bucket(13, 7) == 6
+}
+
+case "a zero divisor faults" {
+	expect divide.call(1, 0) faults
+}
+
+case "Int pow is exact, and faults past the safe range" {
+	expect 3.pow(4) == 81
+	expect 0.pow(0) == 1
+	expect (-2).pow(3) == -8
+	let big <- power.call(52)
+	expect big == 4503599627370496
+	expect power.call(53) faults
+}
+
+case "Float functions at known points" {
+	expect near(16.0.sqrt(), 4.0)
+	expect near(2.0.pow(0.5), 2.0.sqrt())
+	expect near(1.0.exp().ln(), 1.0)
+	expect near(1000.0.log10(), 3.0)
+	expect near(8.0.log2(), 3.0)
+}
+
+case "trigonometry in radians, and the constants" {
+	expect near(Float.pi().cos(), 0.0 - 1.0)
+	expect near((Float.pi() / 2.0).sin(), 1.0)
+	expect near(1.0.atan2(1.0), Float.pi() / 4.0)
+	expect near(Float.e().ln(), 1.0)
+	expect near(0.0.asin() + 1.0.acos() + 0.0.atan() + 0.0.tan(), 0.0)
+}
+
+case "outside its domain a Float function is NaN, not a fault" {
+	expect (0.0 - 1.0).sqrt().isNaN()
+	expect !0.0.ln().isFinite()
+}

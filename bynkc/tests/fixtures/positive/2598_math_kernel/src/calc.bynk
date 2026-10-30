@@ -1,0 +1,32 @@
+context calc
+
+// #2598: the `Int` division companions and power, the `Float` functions,
+// and the two constants.
+
+fn floorIdentity(a: Int, b: Int) -> Bool {
+	b * a.div(b) + a.mod(b) == a
+}
+
+fn truncIdentity(a: Int, b: Int) -> Bool {
+	b * (a / b) + a.rem(b) == a
+}
+
+fn near(a: Float, b: Float) -> Bool {
+	(a - b).abs() < 0.000000001
+}
+
+fn bucket(n: Int, size: Int) -> Int {
+	n.mod(size)
+}
+
+service divide {
+	on call(a: Int, b: Int) -> Effect[Int] {
+		Effect.pure(a.mod(b))
+	}
+}
+
+service power {
+	on call(n: Int) -> Effect[Int] {
+		Effect.pure(2.pow(n))
+	}
+}
