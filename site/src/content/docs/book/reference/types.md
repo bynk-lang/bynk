@@ -621,6 +621,33 @@ type OrderId = opaque String
 
 A base type plus a predicate. See the [refined-type reference](/book/reference/refined-types/).
 
+## Regular expressions
+
+A refined `String where Matches("…")` checks a whole string against a pattern.
+Six `String` methods use the same patterns to look inside one:
+
+```bynk,fragment
+let ok = sku.matchesRegex("[A-Z]{3}-[0-9]{4}")         // the whole string
+let has = text.containsRegex("(?i)error")               // anywhere, ignoring case
+let v = text.findRegex("v(\\d+)\\.(\\d+)")            // Some([Some("v2.14"), Some("2"), Some("14")])
+let all = text.findAllRegex("\\d+")                     // every match
+let tidy = text.replaceRegex("\\s+", " ")              // every match; `$1`, `$<name>`, `$$`
+let parts = csv.splitRegex("\\s*,\\s*")              // captured groups are not kept
+```
+
+- **The pattern must be a string literal.** It is checked when the program
+  compiles, as a `Matches` pattern is: its syntax, and that it cannot take
+  catastrophic time on a crafted input (ReDoS). A pattern built at run time
+  would escape that check, so it is refused (`bynk.types.regex_not_literal`).
+- **Captures** come back as a list: element 0 is the whole match, then each
+  group, `None` for a group that did not take part.
+- **Flags** go at the start of the pattern: `(?i)` ignores case, `(?m)` lets
+  `^`/`$` match at line breaks, `(?s)` lets `.` match a newline.
+- **Semantics** are JavaScript's `RegExp`, without the `u` flag, as `Matches`
+  uses.
+- **`replaceRegex`** reads `$1`, `$<name>`, `$&` and `$$` in the replacement,
+  unlike `replace`, which inserts its text literally.
+
 ## Matching
 
 `match` branches on every variant of a sum/`Result`/`Option`, binding payloads:

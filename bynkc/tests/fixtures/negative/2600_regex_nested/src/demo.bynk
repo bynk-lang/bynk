@@ -1,0 +1,12 @@
+context demo
+
+// #2600: nested unbounded quantifiers are refused (ReDoS).
+fn f(s: String, p: String) -> Bool {
+	s.containsRegex("(a+)+b")
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

@@ -1,0 +1,12 @@
+context demo
+
+// #2600: only the inline flags i, m and s are known.
+fn f(s: String, p: String) -> Bool {
+	s.containsRegex("(?ix)abc")
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

@@ -282,6 +282,29 @@ astral characters). `slice` clamps negative indices to `0` — there is no
 wrap-around. `indexOf` returns `None` for a missing substring, never a
 sentinel `-1`.
 
+**Regular expressions** (standard-library K6c, #2600). Six string methods take a
+pattern: `s.matchesRegex(p)` (the whole string, anchored as `Matches` is) and
+`s.containsRegex(p)` (anywhere), `-> Bool`; `s.findRegex(p) ->
+Option[List[Option[String]]]` (the first match: element 0 the whole match,
+element `i` group `i`, `None` for a group that did not take part);
+`s.findAllRegex(p) -> List[List[Option[String]]]` (every match, left to right,
+an empty match advancing by one code unit); `s.replaceRegex(p, with) -> String`
+(every match, `with` read with JS replacement syntax: `$1`, `$<name>`, `$&`,
+`$$`); and `s.splitRegex(p) -> List[String]` (JS `split`, without the captured
+groups it would splice in).
+- The pattern MUST be a string literal (`bynk.types.regex_not_literal`), so it is
+  checked at compile time exactly as a `Matches` pattern is: ECMAScript syntax
+  (`bynk.types.invalid_regex`), no nested unbounded quantifier and no ambiguity
+  the analysis finds (`bynk.types.catastrophic_regex`,
+  `bynk.types.polynomial_regex`; no length bound can excuse a polynomial one
+  here).
+- Semantics are JS `RegExp` with `Matches`' flag set: no `u`, so `.` and
+  classes work on UTF-16 code units. A pattern may open with one inline-flag
+  group, `(?i)`, `(?m)`, `(?s)` or a combination, which becomes the `RegExp`
+  flags; an unknown or repeated flag is `invalid_regex`. The ambiguity analysis
+  reads the pattern as written, so ambiguity that only case-folding creates
+  under `(?i)` is not detected.
+
 **Refined receivers inherit the base kernel** (v0.143, ADR 0168). A method
 call whose receiver is a **refined** type resolves against that type's declared
 instance methods first; on a miss, it resolves against its **base type's

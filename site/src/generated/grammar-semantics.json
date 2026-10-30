@@ -912,6 +912,10 @@
     {
       "code": "bynk.types.method_on_non_named_type",
       "summary": "A method was called on a built-in type that has no methods."
+    },
+    {
+      "code": "bynk.types.regex_not_literal",
+      "summary": "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time."
     }
   ],
   "none_expr": [
@@ -1107,7 +1111,7 @@
     },
     {
       "code": "bynk.types.catastrophic_regex",
-      "summary": "A `Matches` pattern can match the same text in exponentially many ways (nested or ambiguous repetition, bounded or not), or cannot be analysed, risking catastrophic backtracking (ReDoS)."
+      "summary": "A `Matches` pattern, or a regex method's pattern, can match the same text in exponentially many ways (nested or ambiguous repetition, bounded or not), or cannot be analysed, risking catastrophic backtracking (ReDoS)."
     },
     {
       "code": "bynk.types.empty_refinement",
@@ -1115,7 +1119,7 @@
     },
     {
       "code": "bynk.types.invalid_regex",
-      "summary": "A `Matches` predicate contains an invalid regular expression."
+      "summary": "A `Matches` predicate, or a regex method's pattern (`containsRegex`, …), contains an invalid regular expression or malformed inline flags."
     },
     {
       "code": "bynk.types.inverted_range",
@@ -1131,7 +1135,7 @@
     },
     {
       "code": "bynk.types.polynomial_regex",
-      "summary": "A `Matches` pattern can split the same text between repetitions, so matching time grows polynomially with input length, and no length predicate bounds the input small enough for its degree."
+      "summary": "A `Matches` pattern can split the same text between repetitions, so matching time grows polynomially with input length, and no length predicate bounds the input small enough for its degree; a regex method's pattern has no bound to excuse it."
     },
     {
       "code": "bynk.types.polynomial_regex_capped",

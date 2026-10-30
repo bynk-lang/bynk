@@ -231,6 +231,22 @@ pub const STRING_METHODS: &[KernelMethod] = &[
     m("indexOf", "indexOf(s: String) -> Option[Int]"),
     m("chars", "chars() -> List[String]"),
     m("concat", "concat(s: String) -> String"),
+    // K6c (#2600): regex methods over a string-literal pattern.
+    m("matchesRegex", "matchesRegex(pattern: String) -> Bool"),
+    m("containsRegex", "containsRegex(pattern: String) -> Bool"),
+    m(
+        "findRegex",
+        "findRegex(pattern: String) -> Option[List[Option[String]]]",
+    ),
+    m(
+        "findAllRegex",
+        "findAllRegex(pattern: String) -> List[List[Option[String]]]",
+    ),
+    m(
+        "replaceRegex",
+        "replaceRegex(pattern: String, with: String) -> String",
+    ),
+    m("splitRegex", "splitRegex(pattern: String) -> List[String]"),
 ];
 
 /// The `Int` numeric kernel (v0.21).

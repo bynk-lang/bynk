@@ -1,0 +1,12 @@
+context demo
+
+// #2600: a polynomially ambiguous pattern is refused: no length bound can excuse it.
+fn f(s: String, p: String) -> Bool {
+	s.containsRegex("\\d*\\d*x")
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

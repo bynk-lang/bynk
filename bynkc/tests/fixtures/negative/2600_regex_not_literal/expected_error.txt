@@ -1,0 +1,2 @@
+bynk.types.regex_not_literal
+must be a string literal

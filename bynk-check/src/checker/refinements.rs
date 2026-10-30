@@ -504,7 +504,24 @@ pub(crate) fn check_refinement(
                              pattern so no unbounded quantifier is nested inside another",
                         ),
                     );
-                } else if let Some(e) = ambiguity_diagnostic(pat, pred.span, refinement) {
+                } else if let Some(e) = ambiguity_diagnostic(
+                    pat,
+                    pred.span,
+                    &format!("`Matches(\"{pat}\")`"),
+                    // The tightest length bound the refinement states. Length
+                    // predicates run before `Matches` (`in_check_order`), so it
+                    // caps the input the pattern ever sees.
+                    Some(
+                        refinement
+                            .predicates
+                            .iter()
+                            .filter_map(|p| match p.kind {
+                                PredKind::MaxLength(n) | PredKind::Length(n) => Some(n),
+                                _ => None,
+                            })
+                            .min(),
+                    ),
+                ) {
                     errors.push(e);
                 }
             }
@@ -909,7 +926,16 @@ fn regex_matches_empty(pattern: &str) -> bool {
 /// emitter checks length predicates before `Matches`
 /// (`bynk_syntax::ast::in_check_order`), so such a bound caps the cost, and it
 /// is a warning.
-fn ambiguity_diagnostic(pat: &str, span: Span, refinement: &Refinement) -> Option<CompileError> {
+/// `label` names the pattern in the message (`` `Matches("…")` ``, or a K6c
+/// regex argument). `bound` is the input-length bound a refinement states:
+/// `Some(None)` when it could state one but does not, `None` when no bound is
+/// possible (a K6c regex method runs on any string), which changes the advice.
+fn ambiguity_diagnostic(
+    pat: &str,
+    span: Span,
+    label: &str,
+    bound: Option<Option<i64>>,
+) -> Option<CompileError> {
     use super::regex_ambiguity::{Verdict, analyse};
     Some(match analyse(pat) {
         Verdict::Linear => return None,
@@ -917,7 +943,7 @@ fn ambiguity_diagnostic(pat: &str, span: Span, refinement: &Refinement) -> Optio
             "bynk.types.catastrophic_regex",
             span,
             format!(
-                "the pattern in `Matches(\"{pat}\")` can match the same text in \
+                "the pattern in {label} can match the same text in \
                  exponentially many ways, which can cause catastrophic backtracking (ReDoS)"
             ),
         )
@@ -931,7 +957,7 @@ fn ambiguity_diagnostic(pat: &str, span: Span, refinement: &Refinement) -> Optio
             "bynk.types.catastrophic_regex",
             span,
             format!(
-                "the pattern in `Matches(\"{pat}\")` cannot be shown free of catastrophic \
+                "the pattern in {label} cannot be shown free of catastrophic \
                  backtracking (ReDoS): {why}"
             ),
         )
@@ -940,19 +966,8 @@ fn ambiguity_diagnostic(pat: &str, span: Span, refinement: &Refinement) -> Optio
              engine, so a pattern that cannot be analysed is rejected; simplify it",
         ),
         Verdict::Polynomial(degree, a, b) => {
-            // The tightest length bound the refinement states. Length
-            // predicates run before `Matches` (`in_check_order`), so it caps
-            // the input the pattern ever sees.
-            let bound = refinement
-                .predicates
-                .iter()
-                .filter_map(|p| match p.kind {
-                    PredKind::MaxLength(n) | PredKind::Length(n) => Some(n),
-                    _ => None,
-                })
-                .min();
             let largest = largest_safe_bound(degree);
-            let (code, advice) = match bound {
+            let (code, advice) = match bound.flatten() {
                 Some(n) if n <= largest => (
                     "bynk.types.polynomial_regex_capped",
                     format!(
@@ -970,19 +985,25 @@ fn ambiguity_diagnostic(pat: &str, span: Span, refinement: &Refinement) -> Optio
                          repetitions cannot overlap"
                     ),
                 ),
-                None => (
+                None if bound.is_some() => (
                     "bynk.types.polynomial_regex",
                     format!(
                         "add a `MaxLength(n)` predicate with `n` at most {largest} to bound \
                          the input, or rewrite the pattern so the repetitions cannot overlap"
                     ),
                 ),
+                None => (
+                    "bynk.types.polynomial_regex",
+                    "a regex method runs on input of any length, so rewrite the pattern so \
+                     the repetitions cannot overlap"
+                        .to_string(),
+                ),
             };
             CompileError::new(
                 code,
                 span,
                 format!(
-                    "the pattern in `Matches(\"{pat}\")` can split the same text between \
+                    "the pattern in {label} can split the same text between \
                      repetitions in many ways, so matching time grows with the input's \
                      length to the power {degree} (ReDoS)"
                 ),
@@ -993,6 +1014,86 @@ fn ambiguity_diagnostic(pat: &str, span: Span, refinement: &Refinement) -> Optio
             ))
         }
     })
+}
+
+/// K6c (#2594's sibling, #2600): check a regex method's pattern argument the
+/// way a `Matches` pattern is checked: valid under ECMAScript semantics
+/// (`regress`), no nested unbounded quantifier, and no ambiguity the automaton
+/// analysis finds — with no length bound to excuse a polynomial one. A pattern
+/// may open with one inline-flag group, `(?i)`, `(?m)`, `(?s)` or a
+/// combination, which JS lacks; it is stripped here and returned as the
+/// `RegExp` flags. On success, the pattern without that group and its flags.
+pub(crate) fn check_regex_literal(
+    literal: &str,
+    span: Span,
+) -> Result<(String, String), CompileError> {
+    let label = format!("`\"{literal}\"`");
+    let (pat, flags) = match leading_flag_group(literal) {
+        Some((pat, flags)) => {
+            let mut seen = String::new();
+            for c in flags.chars() {
+                if !"ims".contains(c) || seen.contains(c) {
+                    return Err(CompileError::new(
+                        "bynk.types.invalid_regex",
+                        span,
+                        format!("invalid inline flags `(?{flags})` in {label}"),
+                    )
+                    .with_note("the inline flags are `i`, `m` and `s`, each at most once"));
+                }
+                seen.push(c);
+            }
+            (pat.to_string(), seen)
+        }
+        None => (literal.to_string(), String::new()),
+    };
+    if let Err(e) = regress::Regex::with_flags(&pat, flags.as_str()) {
+        return Err(CompileError::new(
+            "bynk.types.invalid_regex",
+            span,
+            format!("invalid regular expression {label}"),
+        )
+        .with_note(format!("regex parse error (JS `RegExp` semantics): {e}")));
+    }
+    if has_nested_unbounded_quantifier(&pat) {
+        return Err(CompileError::new(
+            "bynk.types.catastrophic_regex",
+            span,
+            format!(
+                "the pattern {label} nests unbounded quantifiers, which can cause \
+                 catastrophic backtracking (ReDoS)"
+            ),
+        )
+        .with_note(
+            "a repeated group that itself contains `*`, `+`, or `{n,}` makes matching take \
+             exponential time on crafted input; restructure the pattern so no unbounded \
+             quantifier is nested inside another",
+        ));
+    }
+    if let Some(e) = ambiguity_diagnostic(&pat, span, &label, None) {
+        return Err(e);
+    }
+    Ok((pat, flags))
+}
+
+/// A leading `(?flags)` group of letters, split off: the rest of the pattern
+/// and the letters. `None` when the literal opens with no such group (a
+/// lookaround `(?=`, `(?!`, `(?<` or a non-capturing `(?:` is not one).
+fn leading_flag_group(literal: &str) -> Option<(&str, &str)> {
+    let rest = literal.strip_prefix("(?")?;
+    let end = rest.find(')')?;
+    let flags = &rest[..end];
+    (!flags.is_empty() && flags.chars().all(|c| c.is_ascii_alphabetic()))
+        .then(|| (&rest[end + 1..], flags))
+}
+
+/// K6c (#2600): a checked regex literal as the emitter writes it, the pattern
+/// and its `RegExp` flags. The checker has already refused a malformed flag
+/// group, so this only splits.
+pub fn split_regex_flags(literal: &str) -> (String, String) {
+    match leading_flag_group(literal) {
+        Some((pat, flags)) => (pat.to_string(), flags.to_string()),
+        None => (literal.to_string(), String::new()),
+    }
 }
 
 /// #1651: how many steps a polynomially ambiguous pattern may take on its

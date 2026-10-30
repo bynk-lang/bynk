@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "clean": "0059bab868f8e700"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "clean": "Svc(\"clean\",P(\"input\",B(\"String\")),Ret(B(\"String\")))"
+  }
+}

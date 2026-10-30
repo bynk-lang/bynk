@@ -1737,7 +1737,25 @@ pub(crate) fn check_string_kernel_method(
         "length" => Some((vec![], int.clone())),
         "split" => Some((vec![tys.intern(s.clone())], strings.clone())),
         "trim" | "toUpper" | "toLower" => Some((vec![], s.clone())),
-        "contains" | "startsWith" | "endsWith" => Some((vec![tys.intern(s.clone())], boolean)),
+        "contains" | "startsWith" | "endsWith" => {
+            Some((vec![tys.intern(s.clone())], boolean.clone()))
+        }
+        // K6c (#2600): the regex methods. The pattern is a checked literal
+        // (below); the rest of the signature is ordinary.
+        "matchesRegex" | "containsRegex" => Some((vec![tys.intern(s.clone())], boolean)),
+        "findRegex" => Some((
+            vec![tys.intern(s.clone())],
+            Ty::Option(tys.intern(Ty::List(tys.intern(Ty::Option(tys.intern(s.clone())))))),
+        )),
+        "findAllRegex" => Some((
+            vec![tys.intern(s.clone())],
+            Ty::List(tys.intern(Ty::List(tys.intern(Ty::Option(tys.intern(s.clone())))))),
+        )),
+        "replaceRegex" => Some((
+            vec![tys.intern(s.clone()), tys.intern(s.clone())],
+            s.clone(),
+        )),
+        "splitRegex" => Some((vec![tys.intern(s.clone())], strings.clone())),
         "replace" => Some((
             vec![tys.intern(s.clone()), tys.intern(s.clone())],
             s.clone(),
@@ -1758,7 +1776,9 @@ pub(crate) fn check_string_kernel_method(
             format!(
                 "the built-in `String` type has no method `{}` — the kernel is \
                  `length`, `split`, `trim`, `contains`, `startsWith`, `endsWith`, \
-                 `replace`, `slice`, `indexOf`, `toUpper`, `toLower`, `chars`, `concat`",
+                 `replace`, `slice`, `indexOf`, `toUpper`, `toLower`, `chars`, `concat`, \
+                 `matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, \
+                 `splitRegex`",
                 method.name
             ),
         ));
@@ -1791,6 +1811,34 @@ pub(crate) fn check_string_kernel_method(
             &format!("the `String.{}` argument", method.name),
             ctx,
         );
+    }
+    // K6c (#2600): a regex method's pattern must be a string literal, so the
+    // compile-time ReDoS checks can see it; then it is checked as a `Matches`
+    // pattern is.
+    if method.name.ends_with("Regex")
+        && let Some(pattern) = args.first()
+    {
+        match &pattern.kind {
+            ExprKind::StrLit(literal) => {
+                if let Err(e) = super::refinements::check_regex_literal(literal, pattern.span) {
+                    ctx.errors.push(e);
+                }
+            }
+            _ => ctx.errors.push(
+                CompileError::new(
+                    "bynk.types.regex_not_literal",
+                    pattern.span,
+                    format!(
+                        "the pattern of `String.{}` must be a string literal",
+                        method.name
+                    ),
+                )
+                .with_note(
+                    "a pattern is checked for catastrophic backtracking (ReDoS) at compile \
+                     time, which a pattern built at run time would escape; write it as a literal",
+                ),
+            ),
+        }
     }
     Some(tys.intern(ret))
 }

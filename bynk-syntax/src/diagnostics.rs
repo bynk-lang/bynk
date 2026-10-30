@@ -2681,7 +2681,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.catastrophic_regex",
-        "A `Matches` pattern can match the same text in exponentially many ways (nested or ambiguous repetition, bounded or not), or cannot be analysed, risking catastrophic backtracking (ReDoS).",
+        "A `Matches` pattern, or a regex method's pattern, can match the same text in exponentially many ways (nested or ambiguous repetition, bounded or not), or cannot be analysed, risking catastrophic backtracking (ReDoS).",
         &["refinement"],
     ),
     d(
@@ -2795,7 +2795,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.invalid_regex",
-        "A `Matches` predicate contains an invalid regular expression.",
+        "A `Matches` predicate, or a regex method's pattern (`containsRegex`, …), contains an invalid regular expression or malformed inline flags.",
         &["refinement"],
     ),
     dg(
@@ -2943,7 +2943,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.polynomial_regex",
-        "A `Matches` pattern can split the same text between repetitions, so matching time grows polynomially with input length, and no length predicate bounds the input small enough for its degree.",
+        "A `Matches` pattern can split the same text between repetitions, so matching time grows polynomially with input length, and no length predicate bounds the input small enough for its degree; a regex method's pattern has no bound to excuse it.",
         &["refinement"],
     ),
     warn(dg(
@@ -2979,6 +2979,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.question_outside_result",
         "`?` used in a function that does not return a `Result`.",
         &["question_expr"],
+    ),
+    dg(
+        "bynk.types.regex_not_literal",
+        "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time.",
+        &["method_call"],
     ),
     d(
         "bynk.types.rejection_at_boundary",

@@ -4694,6 +4694,25 @@ fn lower_bytes_kernel(
 /// replacement literally (#1650); `chars()` is
 /// code **points** (`[...s]`), not code units; `slice` clamps negative
 /// indices to `0` (no TS wrap-around); `indexOf` turns `-1` into `None`.
+/// K6c (#2600): a regex method's pattern literal as a `RegExp` construction,
+/// its inline flags moved into the flags argument, plus `extra` flags (`g` for
+/// a global scan, `y` for a sticky one). `anchored` wraps it `^(?:…)$`, as a
+/// `Matches` refinement does. V8 caches a `RegExp`'s compilation by source and
+/// flags, so building one per call compiles each pattern once; a fresh object
+/// also keeps no `lastIndex` state between calls.
+fn regex_construction(literal: &str, extra: &str, anchored: bool) -> String {
+    let (pat, flags) = bynk_check::checker::split_regex_flags(literal);
+    let source = if anchored {
+        format!("^(?:{pat})$")
+    } else {
+        pat
+    };
+    format!(
+        "new globalThis.RegExp(\"{}\", \"{flags}{extra}\")",
+        crate::emitter::escape_ts_string(&source)
+    )
+}
+
 fn lower_string_kernel(
     receiver: &Expr,
     method: &Ident,
@@ -4701,6 +4720,60 @@ fn lower_string_kernel(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
+    // K6c (#2600): the checker admits a regex method only with a literal
+    // pattern; anything else never reaches here.
+    let pattern = match args.first().map(|a| &a.kind) {
+        Some(ExprKind::StrLit(literal)) if method.name.ends_with("Regex") => Some(literal.clone()),
+        _ => None,
+    };
+    if let Some(literal) = pattern {
+        let recv = pre.lower(receiver, cx);
+        let groups = "(__m: globalThis.RegExpMatchArray): Option<string>[] => \
+                      [...__m].map((__g: string | undefined): Option<string> => \
+                      __g === undefined ? None : Some(__g))";
+        let text = match (method.name.as_str(), args.len()) {
+            ("matchesRegex", 1) => Some(format!(
+                "{}.test({recv})",
+                regex_construction(&literal, "", true)
+            )),
+            ("containsRegex", 1) => Some(format!(
+                "{}.test({recv})",
+                regex_construction(&literal, "", false)
+            )),
+            ("findRegex", 1) => Some(format!(
+                "((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => \
+                 __m === null ? None : Some(({groups})(__m)))({}.exec({recv}))",
+                regex_construction(&literal, "", false)
+            )),
+            ("findAllRegex", 1) => Some(format!(
+                "([...({recv}).matchAll({})].map({groups}) as readonly (readonly Option<string>[])[])",
+                regex_construction(&literal, "g", false)
+            )),
+            ("replaceRegex", 2) => {
+                let with = pre.lower(&args[1], cx);
+                Some(format!(
+                    "({recv}).replace({}, {with})",
+                    regex_construction(&literal, "g", false)
+                ))
+            }
+            // JS `split` with a regex, minus the captured groups it splices in:
+            // its own algorithm over a sticky scan, an empty match at the last
+            // split point advancing by one code unit.
+            ("splitRegex", 1) => Some(format!(
+                "((__s: string, __r: globalThis.RegExp): readonly string[] => {{ \
+                 if (__s.length === 0) {{ return __r.exec(__s) === null ? [\"\"] : []; }} \
+                 const __out: string[] = []; let __p = 0; let __q = 0; \
+                 while (__q < __s.length) {{ __r.lastIndex = __q; const __hit = __r.exec(__s); \
+                 const __e = __r.lastIndex; \
+                 if (__hit === null || __e === __p) {{ __q++; }} \
+                 else {{ __out.push(__s.slice(__p, __q)); __p = __e; __q = __p; }} }} \
+                 __out.push(__s.slice(__p)); return __out; }})({recv}, {})",
+                regex_construction(&literal, "y", false)
+            )),
+            _ => None,
+        };
+        return text.map(|expr| pre.finish(expr));
+    }
     let text: Option<String> = match (method.name.as_str(), args) {
         ("length", []) => {
             let recv = pre.lower(receiver, cx);

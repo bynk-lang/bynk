@@ -1,0 +1,12 @@
+context demo
+
+// #2600: an invalid pattern is refused at compile time.
+fn f(s: String, p: String) -> Bool {
+	s.containsRegex("(ab")
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}
