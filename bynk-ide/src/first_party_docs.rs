@@ -85,6 +85,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
     ),
     (
         "bynk.cloudflare",
+        "Analytics",
+        "writing-events-analytics",
+        &["write"],
+    ),
+    (
+        "bynk.cloudflare",
         "EdgeCache",
         "edge-caching-edgecache",
         &["purge"],

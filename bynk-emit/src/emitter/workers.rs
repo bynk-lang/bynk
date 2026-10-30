@@ -449,6 +449,9 @@ pub(crate) fn emit_worker_compose(
     if binds(|s| matches!(s, BindingSource::QueueProducer { .. })) {
         runtime_imports.push("type __QueueProducer".to_string());
     }
+    if binds(|s| matches!(s, BindingSource::AnalyticsDataset { .. })) {
+        runtime_imports.push("type __AnalyticsDataset".to_string());
+    }
     runtime_imports.push("type __ServiceBinding".to_string());
     if has_bearer || has_sum || has_oidc {
         runtime_imports.push("HttpResult".to_string());

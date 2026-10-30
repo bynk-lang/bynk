@@ -97,6 +97,11 @@ struct ContextPlan<'a> {
     /// One line per queue this context consumes or (P2, #2578) sends to, in
     /// name order.
     queues: Vec<PlanQueue>,
+    /// P3b (#2582): one line per Analytics Engine dataset the Worker writes
+    /// to, in binding order. No action: the platform creates a dataset on its
+    /// first write, and Bynk never deletes one.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    datasets: Vec<PlanDataset<'a>>,
     /// #1796: one line per Durable Object class the push declares in
     /// `exports`, in class-name order. Empty for a context with no agent and
     /// no events fan-out.
@@ -183,6 +188,15 @@ struct PlanR2<'a> {
     bucket: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     jurisdiction: Option<&'a str>,
+}
+
+/// P3b (#2582): one Analytics Engine dataset.
+#[derive(Debug, Serialize)]
+struct PlanDataset<'a> {
+    /// `ANALYTICS_<SNAKE>`.
+    binding: &'a str,
+    /// The dataset's account-facing name, [`analytics_dataset_name`]d.
+    dataset: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -772,6 +786,12 @@ pub fn run(
     // P5 (#2323): likewise a bucket's derived name, which R2 scopes to the
     // account and holds to its own character rules.
     if let Some(message) = r2_bucket_problem(&resources, &lock, &opts.environment) {
+        eprintln!("bynk: {message}");
+        return ExitCode::FAILURE;
+    }
+    // P3b (#2582): two instances whose derived dataset names meet would write
+    // into one table, silently and for the dataset's whole retention.
+    if let Some(message) = analytics_dataset_problem(&resources, &lock, &opts.environment) {
         eprintln!("bynk: {message}");
         return ExitCode::FAILURE;
     }
@@ -1870,6 +1890,12 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 for queue in &context.queues {
                     out.push_str(&format!("queue {} {}\n", queue.action, queue.queue));
                 }
+                for dataset in &context.datasets {
+                    out.push_str(&format!(
+                        "dataset {} ({}; created on first write)\n",
+                        dataset.dataset, dataset.binding
+                    ));
+                }
                 // Interop I5 (#1972): bound, not provisioned — the Worker is
                 // not Bynk's, so the line says so rather than an action.
                 for service in &context.foreign_services {
@@ -2057,6 +2083,14 @@ pub(crate) fn derive_plan<'a>(
                             queue: env_qualify(environment, queue),
                         })
                         .collect(),
+                    datasets: declared
+                        .analytics_datasets
+                        .iter()
+                        .map(|dataset| PlanDataset {
+                            binding: &dataset.binding,
+                            dataset: analytics_dataset_name(environment, &dataset.name),
+                        })
+                        .collect(),
                     durable_objects: declared
                         .durable_objects
                         .iter()
@@ -2237,6 +2271,55 @@ pub(crate) fn r2_action(
 /// at plan time, naming the instance, never a failed push; and two instances
 /// (or one here and one another environment's) must not share a name, since
 /// R2 scopes bucket names to the account.
+/// P3b (#2582): why the datasets the build declares would mix, or `None`.
+/// The derived name flattens both a context's `.` and a capability's word
+/// breaks to `_`, so `shop.cart`'s `Signups` and `shop`'s `CartSignups` are
+/// both `shop_cart_signups`; and `_<env>` meets a name that ends the same way,
+/// so `shop`'s `SignupsStaging` by default is `shop`'s `Signups` under
+/// `--env staging`. Datasets have no ledger record, so the check is against
+/// the build's own instances: in `environment`, and in every other
+/// environment the ledger has deployed to.
+pub(crate) fn analytics_dataset_problem(
+    resources: &BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Option<String> {
+    let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
+    for (worker, declared) in resources {
+        for dataset in &declared.analytics_datasets {
+            let name = analytics_dataset_name(environment, &dataset.name);
+            if let Some((other_worker, other_binding)) =
+                seen.insert(name.clone(), (worker, &dataset.binding))
+            {
+                return Some(format!(
+                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both write to the Analytics Engine dataset `{name}`; rename one capability",
+                    dataset.binding
+                ));
+            }
+        }
+    }
+    for other_env in lock
+        .environments
+        .keys()
+        .filter(|e| e.as_str() != environment)
+    {
+        for (worker, declared) in resources {
+            for dataset in &declared.analytics_datasets {
+                let there = analytics_dataset_name(other_env, &dataset.name);
+                if let Some((other_worker, other_binding)) = seen.get(&there)
+                    && (*other_worker != worker.as_str() || *other_binding != dataset.binding)
+                {
+                    return Some(format!(
+                        "`{other_binding}` of `{other_worker}` would write to the Analytics Engine dataset `{there}`, which `{}` of `{worker}` writes to in environment `{other_env}`; rename one capability",
+                        dataset.binding
+                    ));
+                }
+            }
+        }
+    }
+    None
+}
+
 pub(crate) fn r2_bucket_problem(
     resources: &BTreeMap<String, Resources>,
     lock: &DeployLock,
@@ -2672,6 +2755,54 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn two_instances_that_would_share_a_dataset_are_refused() {
+        // P3b (#2582): `shop.cart`'s `Signups` and `shop`'s `CartSignups`.
+        let colliding = project(vec![
+            (
+                "shop-cart",
+                Resources::default().analytics(&[("ANALYTICS_SIGNUPS", "shop_cart_signups")]),
+            ),
+            (
+                "shop",
+                Resources::default().analytics(&[("ANALYTICS_CART_SIGNUPS", "shop_cart_signups")]),
+            ),
+        ]);
+        let message = analytics_dataset_problem(&colliding, &DeployLock::default(), "default")
+            .expect("a collision");
+        assert!(message.contains("`shop_cart_signups`"), "{message}");
+        // `SignupsStaging` by default meets `Signups` under `--env staging`,
+        // once the ledger knows the project deploys to `staging`.
+        let with_queue_in = |environment: &str| {
+            let mut lock = DeployLock::default();
+            lock.record_queue(environment, "jobs");
+            lock
+        };
+        let suffixed = project(vec![(
+            "shop",
+            Resources::default().analytics(&[
+                ("ANALYTICS_SIGNUPS", "shop_signups"),
+                ("ANALYTICS_SIGNUPS_STAGING", "shop_signups_staging"),
+            ]),
+        )]);
+        assert_eq!(
+            analytics_dataset_problem(&suffixed, &DeployLock::default(), "default"),
+            None
+        );
+        let message = analytics_dataset_problem(&suffixed, &with_queue_in("staging"), "default")
+            .expect("a collision across environments");
+        assert!(message.contains("`shop_signups_staging`"), "{message}");
+        // Distinct names, in any environment, are fine.
+        let distinct = project(vec![(
+            "shop",
+            Resources::default().analytics(&[("ANALYTICS_SIGNUPS", "shop_signups")]),
+        )]);
+        assert_eq!(
+            analytics_dataset_problem(&distinct, &with_queue_in("staging"), "default"),
+            None
+        );
+    }
+
+    #[test]
     fn two_instances_that_would_share_a_bucket_name_are_refused() {
         let colliding = project(vec![
             (
@@ -2908,6 +3039,28 @@ pub(crate) mod tests {
             plan_of(&order, &both, &DeployLock::default()).contexts[0].queues[0].action,
             "create"
         );
+    }
+
+    #[test]
+    fn a_dataset_is_listed_under_its_qualified_name_with_no_action() {
+        // P3b (#2582): nothing to create or record, so the line only names it.
+        let order = names(&["shop"]);
+        let declared = project(vec![(
+            "shop",
+            Resources::default().analytics(&[("ANALYTICS_SIGNUPS", "shop_signups")]),
+        )]);
+        let plan = derive_plan(
+            &order,
+            &declared,
+            &DeployLock::default(),
+            &SecretSource::default(),
+            false,
+            "staging",
+        );
+        assert_eq!(plan.contexts[0].datasets[0].dataset, "shop_signups_staging");
+        assert!(plan_report(&plan, DeployFormat::Short).contains(
+            "dataset shop_signups_staging (ANALYTICS_SIGNUPS; created on first write)\n"
+        ));
     }
 
     #[test]

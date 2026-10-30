@@ -2182,6 +2182,10 @@ pub(crate) fn describe_derived_capability(
             "\nEmits `[[queues.producers]]` sending to queue `{queue}` (environment-qualified by `bynk deploy`). Bodies are JSON text, normally `Json.encode(value)`.\n"
         ));
     }
+    // P3b (#2582): an Analytics Engine dataset, named by deploy, not source.
+    if d.base.name == "Analytics" {
+        out.push_str("\nEmits `[[analytics_engine_datasets]]`: the dataset is named for the context and the capability in snake case (`shop.cart`'s `Signups` writes to `shop_cart_signups`), environment-qualified by `bynk deploy`, and created on the first write.\n");
+    }
     if d.base.name == "EdgeCache" {
         out.push_str("\nEmits `[cache] enabled = true`: a `@cache` route's `2xx` is cached at Cloudflare's edge, and every other `GET` or `HEAD` answer is `no-store`.\n");
     }
@@ -3714,6 +3718,32 @@ mod tests {
         let hover = describe_derived_capability(decl, Some("bynk.cloudflare"), None);
         assert!(
             hover.contains("Emits `[[queues.producers]]` sending to queue `order-events`"),
+            "{hover}"
+        );
+    }
+
+    #[test]
+    fn an_analytics_dataset_hovers_with_its_stanza() {
+        // P3b (#2582): how the dataset is named, since the source never says.
+        let src =
+            "context a\nconsumes bynk.cloudflare { Analytics }\ncapability Signups = Analytics\n";
+        let tokens = tokenize(src).unwrap();
+        let (unit, _) = parse_unit_with_recovery(&tokens, src);
+        let Some(SourceUnit::Context(ctx)) = unit else {
+            panic!("a context")
+        };
+        let decl = ctx
+            .items
+            .iter()
+            .find_map(|i| match i {
+                CommonsItem::Capability(c) => Some(c),
+                _ => None,
+            })
+            .unwrap();
+        let hover = describe_derived_capability(decl, Some("bynk.cloudflare"), None);
+        assert!(
+            hover.contains("Emits `[[analytics_engine_datasets]]`")
+                && hover.contains("shop_cart_signups"),
             "{hover}"
         );
     }

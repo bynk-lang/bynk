@@ -99,6 +99,11 @@ pub enum BindingSource {
     /// Never seen by handlers: they reach it through the instance's
     /// `WorkersQueue`.
     QueueProducer { capability: String, queue: String },
+    /// Standard-library P3b (#2582): the `[[analytics_engine_datasets]]`
+    /// binding of an `Analytics` instance (`capability Signups = Analytics`),
+    /// one dataset per instance under a derived name. Never seen by handlers:
+    /// they reach it through the instance's `WorkersAnalytics`.
+    AnalyticsDataset { capability: String },
     /// A `[[durable_objects.bindings]]` entry for one of the context's agents.
     /// A handler that constructs an agent sees every local agent's binding.
     Agent { class_name: String },
@@ -132,6 +137,9 @@ impl BindingSource {
             Self::QueueProducer { capability, queue } => format!(
                 "the queue producer binding of derived capability `{capability}` (to queue `{queue}`)"
             ),
+            Self::AnalyticsDataset { capability } => {
+                format!("the Analytics Engine binding of derived capability `{capability}`")
+            }
             Self::Agent { class_name } => {
                 format!("the Durable Object binding of agent `{class_name}`")
             }
@@ -245,7 +253,8 @@ fn declared_at(
             | BindingSource::ForeignService { capability, .. }
             | BindingSource::R2Instance { capability, .. }
             | BindingSource::RateLimitInstance { capability, .. }
-            | BindingSource::QueueProducer { capability, .. } => c.items.iter().find_map(|item| {
+            | BindingSource::QueueProducer { capability, .. }
+            | BindingSource::AnalyticsDataset { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;
                 };

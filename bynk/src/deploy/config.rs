@@ -33,6 +33,19 @@ struct WranglerConfig {
     /// P3 (#2342): the `[[ratelimits]]` of the `RateLimit` instances.
     #[serde(default)]
     ratelimits: Vec<RateLimitBinding>,
+    /// P3b (#2582): the `[[analytics_engine_datasets]]` of the `Analytics`
+    /// instances.
+    #[serde(default)]
+    analytics_engine_datasets: Vec<AnalyticsDatasetBinding>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnalyticsDatasetBinding {
+    /// `ANALYTICS_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The unqualified derived name (`<worker>_<capability, snake>`), which
+    /// [`analytics_dataset_name`] environment-qualifies.
+    dataset: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -127,6 +140,17 @@ struct R2BucketBinding {
     jurisdiction: Option<String>,
 }
 
+/// P3b (#2582): one `Analytics` instance's dataset, as the emitted config
+/// declares it. Never provisioned or recorded: the platform creates a dataset
+/// on its first write, and there is no id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AnalyticsDecl {
+    /// `ANALYTICS_<SNAKE>`.
+    pub(crate) binding: String,
+    /// The derived name before any environment qualification.
+    pub(crate) name: String,
+}
+
 /// P5 (#2323): one `R2` instance's bucket, as the emitted config declares it.
 /// Unlike a KV namespace it has no minted id: the name is the identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -187,6 +211,9 @@ pub(crate) struct Resources {
     /// order. Each has a `namespace_id` the ledger allocates; the limit and
     /// the window are configuration the push carries, not identity.
     pub(crate) ratelimits: Vec<String>,
+    /// P3b (#2582): the datasets of the `Analytics` instances, in binding
+    /// order. Listed in the plan and environment-qualified, nothing more.
+    pub(crate) analytics_datasets: Vec<AnalyticsDecl>,
     /// Slice 3: the secret names this context's handlers will read from `env` —
     /// an `actor`'s `auth` secret, read from the emitted `bynk-secrets.json`.
     ///
@@ -251,6 +278,7 @@ impl Default for Resources {
             kv_instances: Vec::new(),
             r2_buckets: Vec::new(),
             ratelimits: Vec::new(),
+            analytics_datasets: Vec::new(),
             declared_secrets: Vec::new(),
             read_secrets: Vec::new(),
             reads_complete: true,
@@ -412,6 +440,15 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
     r2_buckets.sort_by(|a, b| a.binding.cmp(&b.binding));
     let mut ratelimits: Vec<String> = parsed.ratelimits.into_iter().map(|r| r.name).collect();
     ratelimits.sort();
+    let mut analytics_datasets: Vec<AnalyticsDecl> = parsed
+        .analytics_engine_datasets
+        .into_iter()
+        .map(|d| AnalyticsDecl {
+            binding: d.binding,
+            name: d.dataset,
+        })
+        .collect();
+    analytics_datasets.sort_by(|a, b| a.binding.cmp(&b.binding));
     Ok(Resources {
         binds_to: binds_to.into_iter().map(|s| s.service).collect(),
         foreign_services: foreign
@@ -442,6 +479,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         },
         r2_buckets,
         ratelimits,
+        analytics_datasets,
         declared_secrets: secrets.declared,
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
@@ -686,6 +724,20 @@ pub(crate) fn r2_bucket_name(environment: &str, name: &str) -> String {
     env_qualify(environment, name)
 }
 
+/// P3b (#2582): the name an `Analytics` instance's dataset has in
+/// `environment`: its derived name, qualified as [`env_qualify`] does but with
+/// `_` (`shop_cart_signups_staging`), since the dataset is a SQL table name.
+pub(crate) fn analytics_dataset_name(environment: &str, name: &str) -> String {
+    if environment == "default" {
+        name.to_string()
+    } else {
+        format!(
+            "{name}_{}",
+            environment.to_ascii_lowercase().replace('-', "_")
+        )
+    }
+}
+
 /// P5 (#2323): why `name` cannot be an R2 bucket's, or `None` when it can.
 /// R2 takes 3 to 63 characters of lowercase letters, digits and hyphens, not
 /// starting or ending with a hyphen. Checked at plan time, so a derived name
@@ -809,6 +861,29 @@ pub(crate) fn synthesise_environment_block(
             }
         }
         env_block.insert("r2_buckets".to_string(), toml::Value::Array(buckets));
+    }
+
+    // P3b (#2582): each dataset under its environment-qualified name, or
+    // staging would write into the default environment's dataset.
+    if let Some(toml::Value::Array(datasets)) = doc.get("analytics_engine_datasets") {
+        let mut datasets = datasets.clone();
+        for dataset in &mut datasets {
+            if let toml::Value::Table(t) = dataset
+                && let Some(name) = t
+                    .get("dataset")
+                    .and_then(toml::Value::as_str)
+                    .map(str::to_owned)
+            {
+                t.insert(
+                    "dataset".to_string(),
+                    toml::Value::String(analytics_dataset_name(environment, &name)),
+                );
+            }
+        }
+        env_block.insert(
+            "analytics_engine_datasets".to_string(),
+            toml::Value::Array(datasets),
+        );
     }
 
     // P3 (#2342): the rate limiters, copied as the top level has them. The
@@ -939,6 +1014,16 @@ pub(crate) mod tests {
         /// Derived `RateLimit` instances, by binding (P3, #2342).
         pub(crate) fn ratelimits(mut self, bindings: &[&str]) -> Self {
             self.ratelimits = names(bindings);
+            self
+        }
+        pub(crate) fn analytics(mut self, datasets: &[(&str, &str)]) -> Self {
+            self.analytics_datasets = datasets
+                .iter()
+                .map(|(binding, name)| AnalyticsDecl {
+                    binding: binding.to_string(),
+                    name: name.to_string(),
+                })
+                .collect();
             self
         }
         pub(crate) fn r2_buckets(mut self, buckets: &[(&str, &str, Option<&str>)]) -> Self {
@@ -1516,6 +1601,35 @@ state = "deleted"
             ["RATELIMIT_PUBLISH_LIMIT", "RATELIMIT_READ_LIMIT"]
         );
         assert!(!resources.needs_kv && resources.r2_buckets.is_empty());
+    }
+
+    #[test]
+    fn analytics_datasets_are_read_and_qualified_per_environment() {
+        // P3b (#2582): read in binding order, and qualified with `_`.
+        let config = "name = \"shop-cart\"\n\n[[analytics_engine_datasets]]\nbinding = \"ANALYTICS_SIGNUPS\"\ndataset = \"shop_cart_signups\"\n";
+        assert_eq!(
+            parse_config("analytics", config).analytics_datasets,
+            [AnalyticsDecl {
+                binding: "ANALYTICS_SIGNUPS".into(),
+                name: "shop_cart_signups".into(),
+            }]
+        );
+        let out =
+            synthesise_environment_block(config, "eu-staging", &BTreeMap::new(), &BTreeSet::new())
+                .unwrap();
+        let doc: toml::Table = out.parse().unwrap();
+        let datasets = doc["env"]["eu-staging"]["analytics_engine_datasets"]
+            .as_array()
+            .unwrap();
+        assert_eq!(
+            datasets[0]["dataset"].as_str(),
+            Some("shop_cart_signups_eu_staging")
+        );
+        assert_eq!(datasets[0]["binding"].as_str(), Some("ANALYTICS_SIGNUPS"));
+        assert_eq!(
+            analytics_dataset_name("default", "shop_cart_signups"),
+            "shop_cart_signups"
+        );
     }
 
     #[test]

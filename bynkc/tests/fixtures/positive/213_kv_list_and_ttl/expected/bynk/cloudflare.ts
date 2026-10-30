@@ -82,6 +82,22 @@ export const QueueSend = {
 };
 
 /**
+ * One event written to an `Analytics` dataset. `index` is the sampling key
+ * (at most 96 bytes; `None` samples the dataset as a whole), `blobs` are
+ * text dimensions (at most 20, totalling at most 16 KB), and `doubles` are
+ * numeric values (at most 20, each finite). In the SQL API they are the
+ * columns `index1`, `blob1`…`blob20` and `double1`…`double20`, in order.
+ */
+export interface DataPoint {
+  readonly index: Option<string>;
+  readonly blobs: readonly string[];
+  readonly doubles: readonly number[];
+}
+
+export const DataPoint = {
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  */
@@ -201,6 +217,27 @@ export interface Queue {
 export const __QueueToken: symbol = globalThis.Symbol("Queue");
 
 /**
+ * A Workers Analytics Engine dataset to write events to. Used only through a
+ * named instance, `capability Signups = Analytics`, which binds as
+ * `ANALYTICS_SIGNUPS`; a bare `given Analytics` is refused. The dataset's
+ * name is derived, never written: context `shop.cart`'s `Signups` writes to
+ * `shop_cart_signups`, and to `shop_cart_signups_staging` under
+ * `--env staging`. The platform creates it on the first write.
+ *
+ * `write` checks the point against the platform's limits (see `DataPoint`)
+ * and faults on a breach; a Worker invocation may write at most 250 points.
+ * Writes are sent after the response, so one never delays it. Reading is
+ * the account's SQL API, outside Bynk. Data is kept for three months and
+ * readable with any account analytics token, so keep secrets and personal
+ * data out of it.
+ */
+export interface Analytics {
+  write(point: DataPoint): globalThis.Promise<void>;
+}
+
+export const __AnalyticsToken: symbol = globalThis.Symbol("Analytics");
+
+/**
  * Cloudflare's edge cache for this context's Worker (Workers Cache), and its
  * purge. Used only through a named instance, `capability Edge = EdgeCache`,
  * at most one per context; declaring it is what turns the cache on, so a bare
@@ -234,6 +271,31 @@ export interface EdgeCache {
 }
 
 export const __EdgeCacheToken: symbol = globalThis.Symbol("EdgeCache");
+
+export function __serialise_DataPoint(value: DataPoint): __JsonValue {
+  return {
+    index: __serialise_Option_String(value.index),
+    blobs: __serialise_List_String(value.blobs),
+    doubles: __serialise_List_Float(value.doubles),
+  };
+}
+
+export function __deserialise_DataPoint(json: __JsonValue, path: string = "$"): Result<DataPoint, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_index = __deserialise_Option_String(obj["index"], `${path}.index`);
+  if (__r_index.tag === "Err") return __r_index;
+  const __index = __r_index.value;
+  const __r_blobs = __deserialise_List_String(obj["blobs"], `${path}.blobs`);
+  if (__r_blobs.tag === "Err") return __r_blobs;
+  const __blobs = __r_blobs.value;
+  const __r_doubles = __deserialise_List_Float(obj["doubles"], `${path}.doubles`);
+  if (__r_doubles.tag === "Err") return __r_doubles;
+  const __doubles = __r_doubles.value;
+  return Ok({ index: __index, blobs: __blobs, doubles: __doubles } as DataPoint);
+}
 
 export function __serialise_QueueSend(value: QueueSend): __JsonValue {
   return {
@@ -381,6 +443,90 @@ export function __deserialise_R2Put(json: __JsonValue, path: string = "$"): Resu
 }
 
 
+export function __serialise_Option_String(value: Option<string>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_String(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "string") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "string", actual: typeof raw });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_String(json: __JsonValue, path: string = "$"): Result<Option<string>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<string>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<string>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_String(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as string) as Option<string>);
+    }
+  }
+  const __b = __option_value_String(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as string) as Option<string>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_List_String(value: readonly string[]): __JsonValue {
+  return value.map((v) => v as __JsonValue);
+}
+
+export function __deserialise_List_String(json: __JsonValue, path: string = "$"): Result<readonly string[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: string[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  if (typeof item !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+  }
+  const __el = item;
+  out.push(__el as string);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_Float(value: readonly number[]): __JsonValue {
+  return value.map((v) => ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(v));
+}
+
+export function __deserialise_List_Float(json: __JsonValue, path: string = "$"): Result<readonly number[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: number[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  if (typeof item !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+  }
+  if (!globalThis.Number.isFinite(item)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: String(item) });
+  }
+  const __el = item;
+  out.push(__el as number);
+  }
+  return Ok(out);
+}
+
 export function __serialise_Option_Duration(value: Option<number>): __JsonValue {
   if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
   return { kind: "None" };
@@ -442,47 +588,6 @@ export function __deserialise_List_R2Object(json: __JsonValue, path: string = "$
   out.push(__el as R2Object);
   }
   return Ok(out);
-}
-
-export function __serialise_Option_String(value: Option<string>): __JsonValue {
-  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
-  return { kind: "None" };
-}
-
-function __option_value_String(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
-  if (typeof raw !== "string") {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "string", actual: typeof raw });
-  }
-  const __v = raw;
-  return Ok(__v);
-}
-
-export function __deserialise_Option_String(json: __JsonValue, path: string = "$"): Result<Option<string>, __BoundaryError> {
-  if (json === undefined || json === null) {
-    return Ok(None as Option<string>);
-  }
-  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
-    const obj = json as { [k: string]: __JsonValue };
-    const __keys = globalThis.Object.keys(obj);
-    if (obj["kind"] === "None" && __keys.length === 1) {
-      return Ok(None as Option<string>);
-    }
-    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
-      const __t = __option_value_String(obj["value"], `${path}.value`);
-      if (__t.tag === "Err") {
-        return __t;
-      }
-      return Ok(Some(__t.value as string) as Option<string>);
-    }
-  }
-  const __b = __option_value_String(json, path);
-  if (__b.tag === "Ok") {
-    return Ok(Some(__b.value as string) as Option<string>);
-  }
-  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
-    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
-  }
-  return __b;
 }
 
 export function __serialise_Map_String_String(value: ReadonlyMap<string, string>): __JsonValue {

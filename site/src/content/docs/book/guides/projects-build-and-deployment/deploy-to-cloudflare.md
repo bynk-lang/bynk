@@ -69,6 +69,7 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 | An `agent` | Nothing to create — the config declares its Durable Object class, and Cloudflare registers it |
 | `service … from queue("n")` | Creates the queue `n` before pushing |
 | `capability Events = Queue @name("n")` | Creates the queue `n` before pushing, if it isn't there |
+| `capability Signups = Analytics` | Nothing to create — names the dataset; the platform makes it on the first write |
 | An `on cron` handler | Nothing to create — the schedule rides the config |
 | `consumes` another context | Nothing to create — it sets the deploy order |
 | An `actor` with `auth = Bearer/Signature` | Sets that secret, and refuses to deploy without it |
@@ -547,6 +548,26 @@ capability forgets its row once the push succeeds. Nothing can tell whether a
 Worker that `bynk deploy` doesn't manage, on the same account, already uses a
 number; if one does, the two would share counters. Hand-chosen ids are usually
 small, and allocated ones rarely are.
+
+### Analytics Engine datasets
+
+An `Analytics` instance (`capability Signups = Analytics`) writes to a dataset
+named for its Worker and the capability, in snake case: `shop.cart`'s `Signups`
+is `shop_cart_signups`. In a named environment the name gains `_<env>`, with
+`-` as `_` (`shop_cart_signups_staging`), so staging never writes into the
+default environment's dataset.
+
+There is nothing to create: the platform makes a dataset on its first write,
+and it has no id. So the ledger records nothing, the plan names the dataset
+without an action (`dataset shop_cart_signups (ANALYTICS_SIGNUPS; created on
+first write)`), and `--prune` never deletes one. If a dataset with the derived
+name is already on the account, the Worker writes into it.
+
+Two instances whose names meet are refused before the plan, since their events
+would mix for good: `shop.cart`'s `Signups` and `shop`'s `CartSignups` are both
+`shop_cart_signups`, and `shop`'s `SignupsStaging` is `shop`'s `Signups` under
+`--env staging` (checked once the project has deployed to `staging`). Rename one
+capability.
 
 ### Workers outside the project
 

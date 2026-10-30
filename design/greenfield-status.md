@@ -13,10 +13,10 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `options_sources` | yes | present |
 | `hoist_sinks` | yes | 0 |
 | `span_keyed_maps` | yes | 4 |
-| `emit_diagnostics` | yes | bynk-emit=14/19, bynk-check=523/555 (true/naive) |
+| `emit_diagnostics` | yes | bynk-emit=14/19, bynk-check=523/558 (true/naive) |
 | `ide_emit_edge` | yes | absent |
 | `ast_importers` | yes | 5 |
-| `emit_abi_shapes` | yes | 13 (bynk-cloudflare.ts:negotiateLocale, cloudflare.binding.ts:EdgeCache, cloudflare.binding.ts:Queue, cloudflare.binding.ts:QueueSend, cloudflare.binding.ts:R2, cloudflare.binding.ts:R2Listing, cloudflare.binding.ts:R2Object, cloudflare.binding.ts:R2Put, cloudflare.binding.ts:RateLimit, cloudflare.binding.ts:QueueProducer, cloudflare.binding.ts:R2Bucket, cloudflare.binding.ts:R2ObjectMeta, cloudflare.binding.ts:RateLimiter) |
+| `emit_abi_shapes` | yes | 16 (bynk-cloudflare.ts:negotiateLocale, cloudflare.binding.ts:Analytics, cloudflare.binding.ts:DataPoint, cloudflare.binding.ts:EdgeCache, cloudflare.binding.ts:Queue, cloudflare.binding.ts:QueueSend, cloudflare.binding.ts:R2, cloudflare.binding.ts:R2Listing, cloudflare.binding.ts:R2Object, cloudflare.binding.ts:R2Put, cloudflare.binding.ts:RateLimit, cloudflare.binding.ts:AnalyticsDataset, cloudflare.binding.ts:QueueProducer, cloudflare.binding.ts:R2Bucket, cloudflare.binding.ts:R2ObjectMeta, cloudflare.binding.ts:RateLimiter) |
 | `ts_writes` | yes | 983 |
 | `ts_any` | yes | 28 |
 | `verbatim_origins` | yes | 2 |

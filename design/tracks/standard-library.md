@@ -11,6 +11,8 @@
   derived KV capabilities, built and deployed. K1 done (#2016): `Bytes` joins,
   slices, compares, and converts to and from hex and base64url. P2 done
   (#2578): a context sends to a Cloudflare Queue through a named `Queue`.
+  P3b done (#2582): a context writes events to a Workers Analytics Engine
+  dataset through a named `Analytics`.
   K5a done (#2586): more `Method`s, `Fetch.sendWith` with a timeout and a
   redirect policy, and `Logger` levels with a structured `log`.
 - **Realises:** `design/bynk-design-notes.md` "Three-tier output" (the runtime
@@ -349,7 +351,7 @@ the resource-instance model (PR-2).
 | D1 | A | L3 `D1` | **yes** | D4 (typed rows), migrations story vs state-migrations gate, `Bytes` |
 | R2 | P (shipped, experimental: `get`/`head`/`put`/`putWith`/`delete`/`list` over whole `Bytes` objects; instance-only; P5 #2323) | L3 `R2` | **yes** | Byte streams (split out of P5, see P5b), multipart, further conditions |
 | Rate Limiting | P (shipped, experimental: `allow(key) -> Effect[Bool]`; instance-only `RateLimit @limit(n) @period(10.seconds \| 60.seconds)`; P3 #2342) | L3 `RateLimit` | **yes** | `namespace_id` allocated in the ledger, unique across its environments; a listing API to detect ids used outside Bynk |
-| Analytics Engine | A | L3 | yes | Write-only `writeDataPoint`: good early candidate |
+| Analytics Engine | P (shipped, experimental: `write(DataPoint)`, limits checked before the write; instance-only `Analytics`, no options; dataset name derived in snake case; P3b #2582) | L3 `Analytics` | yes | `Bytes` blobs, and a typed `write[T]` mapping a record onto blobs and doubles |
 | Analytics SQL binding | A | L3 | | Verify scope before admitting |
 | Version metadata | A | L3 | | Trivial; observability |
 | Secrets Store | A | L2 `Secrets` widened, or L3 | | Account-level secrets |
@@ -648,7 +650,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | P1 | Complete KV: `Bytes` values, metadata, list cursors and limits, a `putWith` options record (ADR 0051) | S4, K1 |
 | P2 | **Done** (#2578): Queue producer, `capability X = Queue @name("…")` (not `@queue`: a keyword), `send`/`sendWith`/`sendBatch` over JSON text from `Json.encode`, sent parsed so a Bynk consumer decodes it; deploy creates a missing queue and records a producer-only one only when it created it | S4, D4 |
 | P3 | **Done** (#2342), re-scoped: Rate Limiting (`@limit`, `@period`; ledger-allocated `namespace_id`, §11 Q7), with typed instance options. Analytics Engine split out (below) | S4 |
-| P3b | Analytics Engine: write-only `writeDataPoint` | S4 |
+| P3b | **Done** (#2582): Analytics Engine, `capability X = Analytics` with no options (A12: deploy derives the dataset, `<worker>_<capability>` in snake case since it is a SQL table name), one `write(DataPoint)` with the platform's limits checked first; deploy only qualifies the name per environment, with nothing to create or record | S4 |
 | P4 | D1: `SqlValue` parameters, two-step rows, the 0/1-Bool and blob codec gaps, the `migrations_dir` question | S4, K1, D4 |
 | P5 | **Done** (#2323), re-scoped: R2 with whole `Bytes` objects, metadata, conditional ops, paged `list`, ledger-provisioned buckets. Byte streams split out (below); the §11 Q3 scope is treated as account-wide, since R2's docs state naming rules but not the scope | S4, K1 |
 | K-streams | Byte streams: `Stream[Bytes]` across the boundary, a streamed `Raw` response. Language work (ADR 0023). Filed when a consumer needs objects too large to buffer | |
@@ -1260,7 +1262,7 @@ Per kind, from Cloudflare's configuration reference (2026-10-14):
 | R2 | `[[r2_buckets]]` | `bucket_name` (is the identity) | none | yes | Bucket names are unique per account, as Worker names are, so the derived name inherits Worker-name uniqueness (§11 Q3); optional `jurisdiction` |
 | Queue producer | `[[queues.producers]]` | `queue` (is the identity, chosen in source) | none | yes | The only kind whose physical name the *source* picks |
 | Vectorize | `[[vectorize]]` | `index_name` | none | yes | Index creation needs dimensions and metric, i.e. declaration options |
-| Analytics Engine | `[[analytics_engine_datasets]]` | `dataset` (defaults to binding) | none | yes | Datasets appear on first write; no provisioning |
+| Analytics Engine | `[[analytics_engine_datasets]]` | `dataset` (defaults to binding) | none | yes | Datasets appear on first write; no provisioning. Derived in snake case (`shop_cart_signups`, `…_staging`), not kebab, because it is the SQL API's table name (P3b #2582) |
 | Hyperdrive | `[[hyperdrive]]` | config name | `id` | yes | Creation needs a database connection string, which is a *secret* input to deploy |
 | Workers AI | `[ai]` | none | none | **no**: one per Worker | Stays a plain capability (`consumes bynk.cloudflare { Ai }`), with no derived capability |
 | Rate limiting | `[[ratelimits]]` (key `name`, not `binding`) | none | `namespace_id`: an integer the *user* picks, unique per account; the ledger allocates it | yes | `limit`, and `period` of 10 or 60, are creation annotations (§11 Q7) |

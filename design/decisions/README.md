@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0654](0654-queue-consumer-name-rule.md) | **A queue consumer's name follows Cloudflare's queue-name rule** (v0.439) — Consumers and producers share one queue-name predicate | Accepted (v0.439) |
+| [0653](0653-analytics-engine-derived-capability.md) | **Analytics Engine datasets as option-free derived capabilities** (v0.438) — Cloudflare's Analytics Engine binding as an instance-only `Analytics` with no options, a dataset name deploy derives in snake case because it is a SQL table name, one `write(DataPoint)` whose limits are checked before the write, and no provisioning or ledger record | Accepted (v0.438) |
 | [0652](0652-queue-producer-derived-capability.md) | **Queue producers as instance-only derived capabilities** (v0.437) — Cloudflare's queue producer binding as an instance-only `Queue` named by `@name` (not ADR 0469's `@queue`, a keyword), JSON-text bodies sent parsed so a Bynk consumer decodes them, and producer-only queues recorded in the ledger only when Bynk created them | Accepted (v0.437) |
 | [0651](0651-doc-examples-context-declarations.md) | **Declaration doc examples in a context are checked in a copy of it** (v0.436.4) — A context's declaration fence is checked in a copy where its items replace the documented declarations | Accepted (v0.436.4) |
 | [0650](0650-hover-ladder-in-bynk-ide.md) | **The hover ladder lives in `bynk-ide`, shared by the language server and `bynk mcp`** (v0.436.3) — One pure ladder, so an agent outside the editor reads what the editor shows | Accepted (v0.436.3) |

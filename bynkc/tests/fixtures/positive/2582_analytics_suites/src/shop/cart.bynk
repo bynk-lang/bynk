@@ -1,0 +1,24 @@
+context shop.cart
+
+// #2582: an `Analytics` dataset at every test tier: the unit double checks
+// each point against the platform's limits and accepts it; integration and
+// system bind a recorder per participant Worker.
+
+consumes bynk
+consumes bynk.cloudflare { Analytics }
+
+capability Signups = Analytics
+
+service api from http {
+	on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
+		let _ <- Signups.write(DataPoint { index: Some(plan), blobs: [plan], doubles: [1.0] })
+		Created("counted")
+	}
+}
+
+service count {
+	on call(blobs: List[String]) -> Effect[Int] given Signups {
+		let _ <- Signups.write(DataPoint { index: None, blobs: blobs, doubles: [] })
+		Effect.pure(blobs.length())
+	}
+}

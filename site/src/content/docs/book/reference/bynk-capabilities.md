@@ -450,6 +450,56 @@ for any capability. `Queue` is experimental: list `"bynk.cloudflare.Queue"`
 under `[unstable] allow`. `bynk deploy` creates the queue when it is missing;
 see [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#queues).
 
+### Writing events: `Analytics`
+
+`Analytics` writes events to a Workers Analytics Engine dataset. Each dataset is
+a named instance that takes no options, and a bare `given Analytics` is refused
+(`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Analytics }
+
+capability Signups = Analytics
+```
+
+`Signups` binds as `env.ANALYTICS_SIGNUPS`, an `[[analytics_engine_datasets]]`
+entry. The dataset's name is derived, never written: the context's Worker and
+the capability in snake case, so `shop.cart`'s `Signups` writes to
+`shop_cart_signups`, and to `shop_cart_signups_staging` under `--env staging`.
+Underscores, not hyphens, because the dataset is the table you query in the SQL
+API (`SELECT … FROM shop_cart_signups`). An option is
+`bynk.capability.unknown_option`, `@dataset("…")` included.
+
+A data point is a `DataPoint`:
+
+```bynk,fragment
+on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
+	let _ <- Signups.write(DataPoint { index: Some(plan), blobs: [plan, "web"], doubles: [1.0] })
+	Created("counted")
+}
+```
+
+- `index` is the sampling key, at most 96 bytes; `None` samples the dataset as
+  a whole. In SQL it is `index1`.
+- `blobs` are text dimensions, at most 20 and at most 16 KB in total
+  (`blob1`…`blob20`, in order).
+- `doubles` are numbers, at most 20, each finite (`double1`…`double20`).
+
+A point over a limit faults the write; the platform's own cap of 250 writes per
+Worker invocation faults with the platform's error. The write is sent after the
+response, so it never delays one. Reading is the account's SQL API, outside
+Bynk. The platform keeps data for three months, readable with any account
+analytics token, so keep secrets and personal data out of it.
+
+In tests each instance accepts every write within the limits, and faults on one
+over them, as the platform binding does. `stub Signups.write(_)` and
+`expect Signups.write called` work as for any capability. `Analytics` is
+experimental: list `"bynk.cloudflare.Analytics"` under `[unstable] allow`.
+`bynk deploy` has nothing to create, since the platform makes a dataset on its
+first write; see
+[Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#analytics-engine-datasets).
+
 ### Edge caching: `EdgeCache`
 
 `@cache` on its own only sets `Cache-Control`: Cloudflare doesn't store a

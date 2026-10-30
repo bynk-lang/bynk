@@ -786,7 +786,10 @@ pub fn phase_resolve_derived(
                         }
                     }
                     if kind.option_kind(&ann.name.name).is_none() {
-                        let allowed = if kind.options.is_empty() {
+                        let allowed = if d.base.name == "Analytics" {
+                            // P3b (#2582): the dataset's name is derived.
+                            "`Analytics` instances take no options: `bynk deploy` names the dataset for the context and the capability".to_string()
+                        } else if kind.options.is_empty() {
                             format!("`{}` instances take no options", d.base.name)
                         } else {
                             format!(
@@ -1070,6 +1073,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "RateLimit" => "LoginLimit",
         "EdgeCache" => "Edge",
         "Queue" => "OrderEvents",
+        "Analytics" => "Signups",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1238,8 +1242,10 @@ fn instance_option_value(
 /// Whether `name` is a Cloudflare queue name ([`instance_option_value`]):
 /// Cloudflare allows letters, digits and `-`, starting and ending with a letter
 /// or digit, 1 to 63 characters. Lowercase only, as every name `bynk deploy`
-/// derives is, and so `env_qualify`'s `-<env>` suffix reads the same.
-fn is_queue_name(name: &str) -> bool {
+/// derives is, and so `env_qualify`'s `-<env>` suffix reads the same. The suffix
+/// counts toward the 63, which this cannot see: a name near the limit can
+/// overflow once qualified, and nothing checks that before `wrangler queues create`.
+pub(crate) fn is_queue_name(name: &str) -> bool {
     let alnum = |b: u8| b.is_ascii_lowercase() || b.is_ascii_digit();
     (1..=63).contains(&name.len())
         && name.bytes().all(|b| alnum(b) || b == b'-')

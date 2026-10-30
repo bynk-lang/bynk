@@ -3345,7 +3345,15 @@ mod tests {
             .collect();
         assert_eq!(
             bases,
-            ["Kv", "Service", "R2", "RateLimit", "Queue", "EdgeCache"]
+            [
+                "Kv",
+                "Service",
+                "R2",
+                "RateLimit",
+                "Queue",
+                "Analytics",
+                "EdgeCache"
+            ]
         );
         let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")
             .into_iter()

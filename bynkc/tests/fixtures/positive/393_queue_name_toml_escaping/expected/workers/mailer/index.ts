@@ -44,16 +44,16 @@ export default {
   async queue(batch: { readonly queue: string; readonly messages: ReadonlyArray<{ readonly body: unknown; ack(): void; retry(): void }> }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
     const surface = compose(env);
     switch (batch.queue) {
-      case "q\nkey = \"injected": {
+      case "outbox": {
         for (const msg of batch.messages) {
           try {
             const __r = handlers.__deserialise_EmailJob((msg.body as __JsonValue), "$");
-            if (__r.tag === "Err") { globalThis.console.error("queue q\nkey = \"injected deserialise failed", __r.error); msg.retry(); continue; }
+            if (__r.tag === "Err") { globalThis.console.error("queue outbox deserialise failed", __r.error); msg.retry(); continue; }
             const result = await surface.queue_outbox_0(__r.value);
             if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue q\nkey = \"injected retry", result.reason); msg.retry(); }
+            else { globalThis.console.error("queue outbox retry", result.reason); msg.retry(); }
           } catch (e) {
-            globalThis.console.error("queue q\nkey = \"injected threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+            globalThis.console.error("queue outbox threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
           }
         }
         return;

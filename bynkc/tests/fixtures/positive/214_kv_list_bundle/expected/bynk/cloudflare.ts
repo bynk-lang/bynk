@@ -81,6 +81,22 @@ export const QueueSend = {
 };
 
 /**
+ * One event written to an `Analytics` dataset. `index` is the sampling key
+ * (at most 96 bytes; `None` samples the dataset as a whole), `blobs` are
+ * text dimensions (at most 20, totalling at most 16 KB), and `doubles` are
+ * numeric values (at most 20, each finite). In the SQL API they are the
+ * columns `index1`, `blob1`…`blob20` and `double1`…`double20`, in order.
+ */
+export interface DataPoint {
+  readonly index: Option<string>;
+  readonly blobs: readonly string[];
+  readonly doubles: readonly number[];
+}
+
+export const DataPoint = {
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  */
@@ -198,6 +214,27 @@ export interface Queue {
 }
 
 export const __QueueToken: symbol = globalThis.Symbol("Queue");
+
+/**
+ * A Workers Analytics Engine dataset to write events to. Used only through a
+ * named instance, `capability Signups = Analytics`, which binds as
+ * `ANALYTICS_SIGNUPS`; a bare `given Analytics` is refused. The dataset's
+ * name is derived, never written: context `shop.cart`'s `Signups` writes to
+ * `shop_cart_signups`, and to `shop_cart_signups_staging` under
+ * `--env staging`. The platform creates it on the first write.
+ *
+ * `write` checks the point against the platform's limits (see `DataPoint`)
+ * and faults on a breach; a Worker invocation may write at most 250 points.
+ * Writes are sent after the response, so one never delays it. Reading is
+ * the account's SQL API, outside Bynk. Data is kept for three months and
+ * readable with any account analytics token, so keep secrets and personal
+ * data out of it.
+ */
+export interface Analytics {
+  write(point: DataPoint): globalThis.Promise<void>;
+}
+
+export const __AnalyticsToken: symbol = globalThis.Symbol("Analytics");
 
 /**
  * Cloudflare's edge cache for this context's Worker (Workers Cache), and its

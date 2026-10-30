@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk.cloudflare { Analytics }
+
+// #2582: a bare `Analytics` has no dataset of its own.
+service probe {
+  on call(point: DataPoint) -> Effect[()] given Analytics {
+    Analytics.write(point)
+  }
+}

@@ -1,0 +1,37 @@
+context shop.cart
+
+// #2582: two named `Analytics` instances of `bynk.cloudflare`, each its own
+// `[[analytics_engine_datasets]]` binding (`ANALYTICS_SIGNUPS`,
+// `ANALYTICS_CHECKOUT_TIMINGS`) with a derived dataset name, and no others;
+// one reached by a handler, the other through a local provider's `given`.
+
+consumes bynk
+consumes bynk.cloudflare { Analytics }
+
+---
+Sign-ups by plan and channel.
+---
+capability Signups = Analytics
+
+capability CheckoutTimings = Analytics
+
+capability Timer {
+	fn took(region: String, ms: Float) -> Effect[()]
+}
+
+provides Timer = DatasetTimer given CheckoutTimings {
+	fn took(region: String, ms: Float) -> Effect[()] {
+		CheckoutTimings.write(DataPoint { index: Some(region), blobs: [], doubles: [ms] })
+	}
+}
+
+service api from http {
+	on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
+		let _ <- Signups.write(DataPoint { index: None, blobs: [plan, "web"], doubles: [1.0] })
+		Created("counted")
+	}
+}
+
+service checkout {
+	on call(region: String) -> Effect[()] given Timer { Timer.took(region, 12.5) }
+}

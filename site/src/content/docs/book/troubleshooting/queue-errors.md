@@ -24,9 +24,9 @@ type.
 [bynk.queue.invalid_name] `from queue` requires a non-empty queue name
 ```
 
-**Cause:** the queue name string is empty.
+**Cause:** the queue name string is empty, or is not a name Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`, starting and ending with a letter or digit. (`bynk deploy` suffixes `-<env>` to the name in a non-default environment, which counts toward the 63.)
 
-**Fix:** give the queue a name matching the Cloudflare queue you are binding to.
+**Fix:** give the queue a valid name matching the Cloudflare queue you are binding to.
 
 ## `bynk.queue.return_not_queue_result`
 
