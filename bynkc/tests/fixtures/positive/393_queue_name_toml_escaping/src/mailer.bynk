@@ -1,14 +1,15 @@
 context mailer
 
-// #722: a queue name whose decoded string carries a quote + newline must be
-// TOML-escaped in wrangler.toml, or it breaks out of the `queue = "…"` string
-// and injects config keys into the generated Worker's deploy config.
+// #722: a queue name used to be able to carry a quote + newline and break out
+// of the `queue = "…"` string in wrangler.toml. #2580 refuses such a name at
+// check time (see negative/2580_queue_name_injection); the TOML escaping stays
+// as defence in depth, and the cron site in `reaper` still exercises it.
 type EmailJob = {
   to:      String,
   subject: String,
 }
 
-service outbox from queue("q\nkey = \"injected") {
+service outbox from queue("outbox") {
   on message(message: EmailJob) -> Effect[QueueResult] {
     Ack
   }
