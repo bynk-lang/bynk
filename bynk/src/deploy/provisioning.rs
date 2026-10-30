@@ -229,10 +229,11 @@ pub(crate) fn deploy_one(
     let mut created = BTreeSet::new();
     for queue in unattempted_queues(declared, attempted_queues) {
         let physical = env_qualify(environment, &queue);
-        if !queue_exists(provenance, &physical, project_root) {
-            create_queue(provenance, &physical, project_root).map_err(|e| {
+        if !queue_exists(provenance, &physical, project_root)
+            && create_queue(provenance, &physical, project_root).map_err(|e| {
                 DeployFailure::driver(format!("could not create the queue `{physical}`: {e}"))
-            })?;
+            })?
+        {
             created.insert(queue);
         }
     }
@@ -240,10 +241,12 @@ pub(crate) fn deploy_one(
     // ever what it watched succeed. Recorded for a consumed queue that was
     // already there, too — the set's use is the plan's `create`/`reuse`
     // wording, and "we confirmed this exists" is exactly what makes `reuse` the
-    // true word. A consumed queue another context already checked this run is
-    // recorded here as well, so the order contexts deploy in changes nothing.
+    // true word — but marked as reused, so `--prune` never deletes a queue this
+    // run did not create (#2579). A consumed queue another context already
+    // checked this run is recorded here as well, so the order contexts deploy
+    // in changes nothing.
     for queue in queues_to_record(declared, &created) {
-        if lock.record_queue(environment, &queue) {
+        if record_provisioned_queue(lock, environment, &queue, created.contains(&queue)) {
             let physical = env_qualify(environment, &queue);
             write_lock(lock_path, lock).map_err(|e| {
                 DeployFailure::driver(format!(
@@ -812,13 +815,14 @@ fn parse_kv_namespace_ids(stdout: &str) -> Option<BTreeSet<String>> {
     )
 }
 
-/// Create `name`, or accept that it is already there.
+/// Create `name`, or accept that it is already there. Returns whether this call
+/// created it: a race-loser, finding it made in between, did not (#2579).
 ///
 /// Unlike KV there is no id to scrape: Cloudflare addresses a queue by the name
 /// `from queue("n")` already gave it, so a successful create and an
 /// already-existing queue are the same end state and both return `Ok`
 /// (ADR 0194 D2).
-fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Result<(), String> {
+fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Result<bool, String> {
     let Some(mut command) = workers::wrangler_command(provenance, "queues") else {
         return Err("wrangler not found".into());
     };
@@ -832,7 +836,7 @@ fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Res
         .output()
         .map_err(|e| e.to_string())?;
     if output.status.success() {
-        return Ok(());
+        return Ok(true);
     }
     // The race-loser's path, not the common one: `queue_exists` has already
     // answered for a queue that was simply there. Someone else creating it
@@ -847,7 +851,7 @@ fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Res
     // shape, every re-deploy of every queue project.
     let said = wrangler_said(&output);
     if queue_already_exists(&said) {
-        return Ok(());
+        return Ok(false);
     }
     Err(said)
 }
@@ -974,6 +978,23 @@ fn queues_to_record(declared: &Resources, created: &BTreeSet<String>) -> Vec<Str
         .into_iter()
         .filter(|queue| declared.queues.contains(queue) || created.contains(queue))
         .collect()
+}
+
+/// #2579: record one queue in the ledger, as Bynk's own when this run `created`
+/// it and as merely reused otherwise. Returns whether the ledger changed. Pure,
+/// so the decision that keeps `--prune` off another Worker's queue is tested
+/// without spawning wrangler.
+fn record_provisioned_queue(
+    lock: &mut DeployLock,
+    environment: &str,
+    queue: &str,
+    created: bool,
+) -> bool {
+    if created {
+        lock.record_queue(environment, queue)
+    } else {
+        lock.record_reused_queue(environment, queue)
+    }
 }
 
 /// Does this `wrangler queues create` failure just mean the queue is already
@@ -1468,6 +1489,31 @@ mod tests {
             "A queue with this name already exists",
             ""
         )));
+    }
+
+    #[test]
+    fn a_queue_the_run_only_found_is_recorded_as_reused() {
+        // #2579: the decision that keeps `--prune` off another Worker's queue.
+        let resources = BTreeMap::from([("orders".into(), Resources::default())]);
+        let mut lock = DeployLock::default();
+        assert!(record_provisioned_queue(
+            &mut lock, "default", "theirs", false
+        ));
+        assert!(record_provisioned_queue(&mut lock, "default", "ours", true));
+        let orphans = crate::deploy::ledger::find_orphans(&lock, "default", &resources);
+        assert_eq!(orphans.queues, vec!["ours".to_string()]);
+    }
+
+    #[test]
+    fn a_queue_bynk_created_stays_prunable_when_a_redeploy_finds_it_there() {
+        let resources = BTreeMap::from([("orders".into(), Resources::default())]);
+        let mut lock = DeployLock::default();
+        record_provisioned_queue(&mut lock, "default", "ours", true);
+        assert!(!record_provisioned_queue(
+            &mut lock, "default", "ours", false
+        ));
+        let orphans = crate::deploy::ledger::find_orphans(&lock, "default", &resources);
+        assert_eq!(orphans.queues, vec!["ours".to_string()]);
     }
 
     #[test]
