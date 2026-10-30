@@ -189,10 +189,12 @@ on it unchanged.
   ([Sending to a queue](/book/reference/bynk-capabilities/#sending-to-a-queue-queue)).
   `Analytics` takes none: `bynk deploy` names its dataset
   ([Writing events](/book/reference/bynk-capabilities/#writing-events-analytics)).
+  `D1` takes none: `bynk deploy` names and creates its database
+  ([SQL databases](/book/reference/bynk-capabilities/#sql-databases-d1)).
   `EdgeCache` takes none, and a context declares at most one
   (`bynk.cloudflare.edge_cache_duplicate`): it turns on the Worker's edge cache
   and has no binding ([Edge caching](/book/reference/bynk-capabilities/#edge-caching-edgecache)).
-  `Service`, `R2`, `RateLimit`, `Queue`, `Analytics` and `EdgeCache` are used only through instances
+  `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `D1` and `EdgeCache` are used only through instances
   (`bynk.capability.instance_only`).
 - Only a context declares one (`bynk.capability.derived_outside_context`), and
   it cannot be exported (`bynk.exports.derived_capability`). The data belongs to

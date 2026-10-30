@@ -2,6 +2,7 @@
 // adapter bynk.cloudflare
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
+import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../__bynk_runtime/boundary.js";
 
@@ -188,6 +189,65 @@ export interface DataPoint {
 }
 
 export const DataPoint = {
+};
+
+/**
+ * A value bound to a `?n` parameter of a `D1` statement, by SQLite storage
+ * class. `Boolean` binds as `1` or `0`, as SQLite has no boolean.
+ */
+export type SqlValue =
+    { readonly tag: "Null" }
+  | { readonly tag: "Integer"; readonly value: number }
+  | { readonly tag: "Real"; readonly value: number }
+  | { readonly tag: "Text"; readonly value: string }
+  | { readonly tag: "Blob"; readonly value: globalThis.Uint8Array }
+  | { readonly tag: "Boolean"; readonly value: boolean };
+
+export const SqlValue = {
+  Null: { tag: "Null" } as SqlValue,
+  Integer: (value: number): SqlValue => ({ tag: "Integer", value }),
+  Real: (value: number): SqlValue => ({ tag: "Real", value }),
+  Text: (value: string): SqlValue => ({ tag: "Text", value }),
+  Blob: (value: globalThis.Uint8Array): SqlValue => ({ tag: "Blob", value }),
+  Boolean: (value: boolean): SqlValue => ({ tag: "Boolean", value }),
+};
+
+/**
+ * One statement of a `D1.batch`: its SQL and its positional parameters.
+ */
+export interface SqlStatement {
+  readonly sql: string;
+  readonly params: readonly SqlValue[];
+}
+
+export const SqlStatement = {
+};
+
+/**
+ * What a `D1.run` (or one statement of a `D1.batch`) changed: the rows it
+ * wrote, and the rowid of the last row it inserted.
+ */
+export interface SqlRun {
+  readonly changes: number;
+  readonly lastRowId: number;
+}
+
+export const SqlRun = {
+};
+
+/**
+ * Why a `D1` statement failed. `Constraint` is a UNIQUE, CHECK, NOT NULL or
+ * foreign-key violation, an outcome a handler answers (with a `409`, say);
+ * `Failed` is anything else, with the database's message. D1 has further
+ * failure kinds, so a `match` over this type needs a wildcard.
+ */
+export type SqlError =
+    { readonly tag: "Constraint"; readonly message: string }
+  | { readonly tag: "Failed"; readonly message: string };
+
+export const SqlError = {
+  Constraint: (message: string): SqlError => ({ tag: "Constraint", message }),
+  Failed: (message: string): SqlError => ({ tag: "Failed", message }),
 };
 
 /**
@@ -385,6 +445,35 @@ export interface EdgeCache {
 }
 
 export const __EdgeCacheToken: symbol = globalThis.Symbol("EdgeCache");
+
+/**
+ * A D1 database: SQLite, queried with SQL text and positional parameters
+ * (`?1`, `?2`, …) bound from `SqlValue`s, never spliced into the text. Used
+ * only through a named instance, `capability Orders = D1`, which binds as
+ * `D1_ORDERS`; a bare `given D1` names no database and is refused.
+ * `bynk deploy` creates the database, named `<worker>-<capability, kebab>`
+ * and environment-qualified, and records its id.
+ *
+ * Rows come back as JSON text for `Json.decode`: `all` gives every row as an
+ * array of objects keyed by column name (`Json.decode[List[Row]]`), `first`
+ * the first row as one object, or `None` when there is none. A blob column
+ * arrives as base64, so a `Bytes` field decodes it. SQLite has no boolean:
+ * a flag column arrives as `0` or `1`, so declare that field `Int`. An
+ * integer past ±2^53 cannot be represented and fails the decode.
+ *
+ * `run` executes a write and reports what it changed. `batch` runs its
+ * statements in order in one transaction: all apply, or none do and the
+ * result is the failing statement's error. Every operation gives a
+ * `SqlError` rather than faulting.
+ */
+export interface D1 {
+  all(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<string, SqlError>>;
+  first(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<Option<string>, SqlError>>;
+  run(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<SqlRun, SqlError>>;
+  batch(statements: readonly SqlStatement[]): globalThis.Promise<Result<readonly SqlRun[], SqlError>>;
+}
+
+export const __D1Token: symbol = globalThis.Symbol("D1");
 
 export function __serialise_DataPoint(value: DataPoint): __JsonValue {
   return {
@@ -735,6 +824,175 @@ export function __deserialise_R2Put(json: __JsonValue, path: string = "$"): Resu
   return Ok({ contentType: __contentType, metadata: __metadata, onlyIf: __onlyIf } as R2Put);
 }
 
+export function __serialise_SqlError(value: SqlError): __JsonValue {
+  switch (value.tag) {
+    case "Constraint": {
+      return { kind: "Constraint", message: value.message as __JsonValue };
+    }
+    case "Failed": {
+      return { kind: "Failed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_SqlError(json: __JsonValue, path: string = "$"): Result<SqlError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Constraint": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "Constraint", message: __message } as SqlError);
+    }
+    case "Failed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "Failed", message: __message } as SqlError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_SqlRun(value: SqlRun): __JsonValue {
+  return {
+    changes: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.changes),
+    lastRowId: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.lastRowId),
+  };
+}
+
+export function __deserialise_SqlRun(json: __JsonValue, path: string = "$"): Result<SqlRun, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["changes"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.changes`, expected: "number", actual: typeof obj["changes"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["changes"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.changes`, expected: "safe integer", actual: String(obj["changes"]) });
+  }
+  const __changes = obj["changes"];
+  if (typeof obj["lastRowId"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.lastRowId`, expected: "number", actual: typeof obj["lastRowId"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["lastRowId"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.lastRowId`, expected: "safe integer", actual: String(obj["lastRowId"]) });
+  }
+  const __lastRowId = obj["lastRowId"];
+  return Ok({ changes: __changes, lastRowId: __lastRowId } as SqlRun);
+}
+
+export function __serialise_SqlStatement(value: SqlStatement): __JsonValue {
+  return {
+    sql: value.sql as __JsonValue,
+    params: __serialise_List_SqlValue(value.params),
+  };
+}
+
+export function __deserialise_SqlStatement(json: __JsonValue, path: string = "$"): Result<SqlStatement, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["sql"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.sql`, expected: "string", actual: typeof obj["sql"] });
+  }
+  const __sql = obj["sql"];
+  const __r_params = __deserialise_List_SqlValue(obj["params"], `${path}.params`);
+  if (__r_params.tag === "Err") return __r_params;
+  const __params = __r_params.value;
+  return Ok({ sql: __sql, params: __params } as SqlStatement);
+}
+
+export function __serialise_SqlValue(value: SqlValue): __JsonValue {
+  switch (value.tag) {
+    case "Null":
+      return { kind: "Null" };
+    case "Integer": {
+      return { kind: "Integer", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "Real": {
+      return { kind: "Real", value: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "Text": {
+      return { kind: "Text", value: value.value as __JsonValue };
+    }
+    case "Blob": {
+      return { kind: "Blob", value: __bynkBytesToBase64(value.value) as __JsonValue };
+    }
+    case "Boolean": {
+      return { kind: "Boolean", value: value.value as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_SqlValue(json: __JsonValue, path: string = "$"): Result<SqlValue, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Null":
+      return Ok({ tag: "Null" } as SqlValue);
+    case "Integer": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "Integer", value: __value } as SqlValue);
+    }
+    case "Real": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isFinite(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "Real", value: __value } as SqlValue);
+    }
+    case "Text": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "Text", value: __value } as SqlValue);
+    }
+    case "Blob": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "base64 string", actual: typeof obj["value"] });
+  }
+  const __b_value = __bynkBytesFromBase64(obj["value"]);
+  if (__b_value.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __value = __b_value.value;
+      return Ok({ tag: "Blob", value: __value } as SqlValue);
+    }
+    case "Boolean": {
+  if (typeof obj["value"] !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "boolean", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "Boolean", value: __value } as SqlValue);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
 
 export function __serialise_Option_String(value: Option<string>): __JsonValue {
   if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
@@ -1019,6 +1277,25 @@ export function __deserialise_List_R2Object(json: __JsonValue, path: string = "$
   if (__r_el.tag === "Err") return __r_el;
   const __el = __r_el.value;
   out.push(__el as R2Object);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_SqlValue(value: readonly SqlValue[]): __JsonValue {
+  return value.map((v) => __serialise_SqlValue(v));
+}
+
+export function __deserialise_List_SqlValue(json: __JsonValue, path: string = "$"): Result<readonly SqlValue[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: SqlValue[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_SqlValue(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as SqlValue);
   }
   return Ok(out);
 }

@@ -1,0 +1,59 @@
+suite shop.orders
+
+// #2602: the unit double is real SQLite, so statements run as on D1.
+
+case "rows written with every SqlValue decode back" {
+	let ok <- setup.call()
+	expect ok
+	let _ <- save.call("a", 100, true)
+	let _ <- save.call("b", 5, false)
+	let rows <- listing.call()
+	expect rows == Ok([
+		Order { id: "a", total: 100, paid: 1, receipt: Bytes.fromUtf8("a") },
+		Order { id: "b", total: 5, paid: 0, receipt: Bytes.fromUtf8("b") },
+	])
+	let b <- lookup.call("b")
+	expect b == Some(Order { id: "b", total: 5, paid: 0, receipt: Bytes.fromUtf8("b") })
+	let none <- lookup.call("c")
+	expect none == None
+}
+
+case "a duplicate key is a Constraint, not a fault" {
+	let _ <- setup.call()
+	let first <- save.call("a", 1, false)
+	expect first == Ok(SqlRun { changes: 1, lastRowId: 1 })
+	let again <- save.call("a", 1, false)
+	expect again is Err(Constraint(_))
+}
+
+case "a batch is all or nothing" {
+	let _ <- setup.call()
+	let _ <- save.call("a", 95, false)
+	let _ <- save.call("b", 5, false)
+	let _ <- save.call("c", 95, false)
+	let moved <- move.call("a", "b")
+	expect moved == Ok(2)
+	// The first update applies, the second breaks the CHECK: neither stays.
+	let over <- move.call("a", "c")
+	expect over is Err(Constraint(_))
+	let rows <- listing.call()
+	expect rows == Ok([
+		Order { id: "a", total: 85, paid: 0, receipt: Bytes.fromUtf8("a") },
+		Order { id: "b", total: 15, paid: 0, receipt: Bytes.fromUtf8("b") },
+		Order { id: "c", total: 95, paid: 0, receipt: Bytes.fromUtf8("c") }
+	])
+}
+
+case "a duplicate POST is a 409" {
+	let r <- api.POST("/orders/:id", "x") by Visitor
+	expect r is Created("x")
+	let again <- api.POST("/orders/:id", "x") by Visitor
+	expect again is Conflict(_)
+}
+
+case "a write at integration runs on the participant's database" as integration {
+	let ok <- setup.call()
+	expect ok
+	let made <- save.call("a", 1, true)
+	expect made == Ok(SqlRun { changes: 1, lastRowId: 1 })
+}

@@ -542,6 +542,7 @@ fn emit_integration_module(
     let has_ratelimit = binds(|s| matches!(s, BindingSource::RateLimitInstance { .. }));
     let has_queue = binds(|s| matches!(s, BindingSource::QueueProducer { .. }));
     let has_analytics = binds(|s| matches!(s, BindingSource::AnalyticsDataset { .. }));
+    let has_d1 = binds(|s| matches!(s, BindingSource::D1Database { .. }));
     let runtime_import = emitter::runtime_import_for(&module_path, ImportExt::Js);
     let mut runtime_names: Vec<String> = [
         "Ok",
@@ -581,6 +582,9 @@ fn emit_integration_module(
     }
     if has_analytics {
         runtime_names.push("__makeIntegrationAnalytics".to_string());
+    }
+    if has_d1 {
+        runtime_names.push("__makeIntegrationD1".to_string());
     }
     if has_objects {
         runtime_names.push("__makeIntegrationDoNamespace".to_string());
@@ -2558,6 +2562,8 @@ fn emit_integration_harness<'a>(
                 BindingSource::AnalyticsDataset { .. } => {
                     call(ident("__makeIntegrationAnalytics"), vec![])
                 }
+                // P4a (#2602): each instance its own empty in-memory database.
+                BindingSource::D1Database { .. } => call(ident("__makeIntegrationD1"), vec![]),
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.
                 BindingSource::ForeignService { worker, .. } => {
@@ -3238,17 +3244,38 @@ fn emit_test_module(
     }
     // #1975: the binding module of each adapter a factory builds for real,
     // under the alias the composition root gives it. K4: and `bynk.crypto`'s,
-    // whose test double is its own binding ([`platform_double`]).
-    let mut binding_units: BTreeSet<&String> = deps_units.clone();
-    binding_units.extend(
+    // whose test double is its own binding ([`platform_double`]). P4a
+    // (#2602): and `bynk.cloudflare`'s for a `D1` double, which is the real
+    // `WorkersD1` over an in-memory database.
+    let all_doubles = || {
         deps.doubles
             .iter()
             .chain(integration_deps.iter().flat_map(|d| d.doubles.iter()))
-            .filter(|(owner, _, _)| owner == bynk_check::firstparty::CRYPTO_UNIT)
+    };
+    let d1_double = |owner: &String, cap: &String| {
+        owner == bynk_check::firstparty::CLOUDFLARE_UNIT && cap == "D1"
+    };
+    let mut binding_units: BTreeSet<&String> = deps_units.clone();
+    binding_units.extend(
+        all_doubles()
+            .filter(|(owner, cap, _)| {
+                owner == bynk_check::firstparty::CRYPTO_UNIT || d1_double(owner, cap)
+            })
             .map(|(owner, _, _)| owner),
     );
+    if all_doubles().any(|(owner, cap, _)| d1_double(owner, cap)) {
+        runtime_names.push("__makeIntegrationD1".to_string());
+    }
     for unit in &binding_units {
-        if let Some(module) = binding_modules.get(*unit) {
+        // P4a (#2602): `bynk.cloudflare`'s binding is first-party, so it is
+        // never in `binding_modules` (a test keeps its doubles); the `D1`
+        // double imports it from its fixed path.
+        let first_party = (unit.as_str() == bynk_check::firstparty::CLOUDFLARE_UNIT).then(|| {
+            bynk_check::firstparty::CLOUDFLARE_BINDING_FILENAME
+                .trim_end_matches(".ts")
+                .to_string()
+        });
+        if let Some(module) = binding_modules.get(*unit).or(first_party.as_ref()) {
             stmts.push(TsStmt::decl(
                 TsDecl::ImportNamespace {
                     type_only: false,
@@ -5445,6 +5472,10 @@ fn platform_double(
         // every write within the platform's limits; observation (the generic
         // call wrapper, as for every double) sees what was written.
         ("bynk.cloudflare", "Analytics") => ANALYTICS_DOUBLE_BODY.to_string(),
+        // P4a (#2602): each `D1` instance is the real `WorkersD1` over its own
+        // empty in-memory SQLite database (`node:sqlite`), so a test runs its
+        // statements as D1 would; the case creates its tables.
+        ("bynk.cloudflare", "D1") => "  return new bynk_cloudflare__binding.WorkersD1({ D1: __makeIntegrationD1() }, \"D1\");\n".to_string(),
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),

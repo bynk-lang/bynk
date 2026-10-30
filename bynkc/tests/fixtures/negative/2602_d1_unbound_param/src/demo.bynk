@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+// #2602: a parameter is a `SqlValue`, never a bare value, so its storage
+// class is stated.
+service probe {
+  on call(id: String) -> Effect[Result[String, SqlError]] given Orders {
+    Orders.all("SELECT * FROM t WHERE id = ?1", [id])
+  }
+}

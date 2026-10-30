@@ -3361,6 +3361,7 @@ mod tests {
                 "RateLimit",
                 "Queue",
                 "Analytics",
+                "D1",
                 "EdgeCache"
             ]
         );

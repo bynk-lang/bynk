@@ -1,0 +1,82 @@
+context shop.orders
+
+// #2602: a `D1` database at every test tier: the unit double and the
+// integration binding are real SQLite in memory, so each case creates its
+// table, writes with every `SqlValue`, and decodes the rows it reads back.
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Order = { id: String, total: Int, paid: Int, receipt: Bytes }
+
+service setup {
+	on call() -> Effect[Bool] given Orders {
+		let made <- Orders.run("CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, total INTEGER NOT NULL CHECK (total BETWEEN 0 AND 100), paid INTEGER NOT NULL, receipt BLOB NOT NULL, note TEXT, weight REAL)", [])
+		match made {
+			Ok(_) => true
+			Err(_) => false
+		}
+	}
+}
+
+service save {
+	on call(id: String, total: Int, paid: Bool) -> Effect[Result[SqlRun, SqlError]] given Orders {
+		Orders.run(
+			"INSERT INTO orders (id, total, paid, receipt, note, weight) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+			[Text(id), Integer(total), Boolean(paid), Blob(Bytes.fromUtf8(id)), Null, Real(1.5)]
+		)
+	}
+}
+
+service listing {
+	on call() -> Effect[Result[List[Order], String]] given Orders {
+		let rows <- Orders.all("SELECT id, total, paid, receipt FROM orders ORDER BY id", [])
+		match rows {
+			Ok(text) => match Json.decode[List[Order]](text) {
+				Ok(orders) => Ok(orders)
+				Err(_) => Err("rows did not decode")
+			}
+			Err(_) => Err("query failed")
+		}
+	}
+}
+
+service lookup {
+	on call(id: String) -> Effect[Option[Order]] given Orders {
+		let row <- Orders.first("SELECT id, total, paid, receipt FROM orders WHERE id = ?1", [Text(id)])
+		match row {
+			Ok(Some(text)) => match Json.decode[Order](text) {
+				Ok(order) => Some(order)
+				Err(_) => None
+			}
+			_ => None
+		}
+	}
+}
+
+service move {
+	on call(source: String, target: String) -> Effect[Result[Int, SqlError]] given Orders {
+		let ran <- Orders.batch([
+			SqlStatement { sql: "UPDATE orders SET total = total - 10 WHERE id = ?1", params: [Text(source)] },
+			SqlStatement { sql: "UPDATE orders SET total = total + 10 WHERE id = ?1", params: [Text(target)] }
+		])
+		match ran {
+			Ok(runs) => Ok(runs.length())
+			Err(e) => Err(e)
+		}
+	}
+}
+
+service api from http {
+	on POST("/orders/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+		let _ <- Orders.run("CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, total INTEGER NOT NULL CHECK (total BETWEEN 0 AND 100), paid INTEGER NOT NULL, receipt BLOB NOT NULL, note TEXT, weight REAL)", [])
+		let made <- Orders.run("INSERT INTO orders (id, total, paid, receipt) VALUES (?1, 100, 0, x'')", [Text(id)])
+		match made {
+			Ok(_) => Created(id)
+			Err(Constraint(_)) => Conflict("order \(id) exists")
+			Err(_) => ServerError("could not store the order")
+		}
+	}
+}

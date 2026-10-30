@@ -350,6 +350,25 @@ pub(crate) fn emit_wrangler_toml(
                     ),
                 ],
             ),
+            // P4a (#2602): the database's derived name, which `bynk deploy`
+            // environment-qualifies, and an id placeholder it fills from the
+            // ledger. Miniflare takes the placeholder as a local id, so
+            // `bynk dev` runs with it.
+            BindingSource::D1Database { .. } => TomlBlock::array_table(
+                "d1_databases",
+                vec![
+                    TomlEntry::kv("binding", name),
+                    TomlEntry::kv(
+                        "database_name",
+                        TomlValue::str(d1_database_name(&worker_dir_name(context), &binding.name)),
+                    ),
+                    TomlEntry::with_comment(
+                        "database_id",
+                        TomlValue::str(d1_database_id_placeholder(&binding.name)),
+                        "set at deploy time",
+                    ),
+                ],
+            ),
             // Interop I5 (#1972): the Worker as the declaration names it,
             // not a project context's `worker_dir_name`.
             BindingSource::ForeignService { worker, .. } => TomlBlock::array_table(
@@ -531,6 +550,13 @@ pub(crate) fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::AnalyticsDataset { .. }))
             .cloned(),
     );
+    // P4a (#2602): the D1 databases, after the datasets.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::D1Database { .. }))
+            .cloned(),
+    );
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
     // emit gets its own fan-out DO among the agents' — Cloudflare only cares
     // that `index.ts` (this Worker's `main`) exports a class with this name,
@@ -584,6 +610,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::RateLimitInstance { .. } => "__RateLimiter",
         BindingSource::QueueProducer { .. } => "__QueueProducer",
         BindingSource::AnalyticsDataset { .. } => "__AnalyticsDataset",
+        BindingSource::D1Database { .. } => "__D1Database",
         BindingSource::Agent { .. } | BindingSource::EventsFanout { .. } => {
             "__DurableObjectNamespace"
         }
@@ -759,6 +786,85 @@ pub fn analytics_dataset_name(worker: &str, binding: &str) -> String {
     format!("{worker}_{stem}")
         .to_ascii_lowercase()
         .replace('-', "_")
+}
+
+/// P4a (#2602): the account-facing name of a `D1` instance's database,
+/// `<worker>-<capability, kebab>`: `shop-cart` and `D1_ORDERS` give
+/// `shop-cart-orders`. D1 database names are scoped to the account, as R2
+/// bucket names are. `bynk deploy` environment-qualifies it.
+pub fn d1_database_name(worker: &str, binding: &str) -> String {
+    let prefix = format!("{}_", bynk_check::firstparty::D1_BINDING_PREFIX);
+    let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
+    format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"))
+}
+
+/// P4a (#2602): the placeholder `database_id` of D1 binding `binding`, which
+/// `bynk deploy` replaces with the id it records in the ledger.
+pub fn d1_database_id_placeholder(binding: &str) -> String {
+    format!("<{binding}_ID>")
+}
+
+/// P4a (#2602): a generated `wrangler.toml`'s `[[d1_databases]]` entries as
+/// `(binding, database_name)`, in file order; an entry missing either is
+/// skipped.
+pub fn d1_database_entries(text: &str) -> Result<Vec<(String, String)>, String> {
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    Ok(doc
+        .get("d1_databases")
+        .and_then(|i| i.as_array_of_tables())
+        .into_iter()
+        .flatten()
+        .filter_map(|t| {
+            Some((
+                t.get("binding")?.as_str()?.to_string(),
+                t.get("database_name")?.as_str()?.to_string(),
+            ))
+        })
+        .collect())
+}
+
+/// P4a (#2602): point `[[d1_databases]]` entries at their deployed databases,
+/// structurally, by binding: each entry whose binding `databases` lists gets
+/// that `(database_name, database_id)`. Unchanged text when nothing differs,
+/// as [`materialise_r2_bucket_names`].
+pub fn materialise_d1_databases(
+    text: &str,
+    databases: &std::collections::BTreeMap<String, (String, String)>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("d1_databases")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            let Some((name, id)) = entry
+                .get("binding")
+                .and_then(|b| b.as_str())
+                .and_then(|b| databases.get(b))
+                .cloned()
+            else {
+                continue;
+            };
+            for (key, value) in [("database_name", name), ("database_id", id)] {
+                if let Some(item) = entry.get_mut(key)
+                    && item.as_str() != Some(value.as_str())
+                {
+                    set_string_preserving_decor(item, &value);
+                    changed = true;
+                }
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
 }
 
 /// A generated `wrangler.toml`'s `[[r2_buckets]]` entries as `(binding,

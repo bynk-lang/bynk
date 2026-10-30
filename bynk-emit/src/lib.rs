@@ -170,6 +170,15 @@ fn check_single_file(
 /// source-mapped breakpoints) and says so when it isn't met.
 pub const NODE_MAJOR_FLOOR: u32 = 22;
 
+/// The minor version within [`NODE_MAJOR_FLOOR`] the floor sits at: 22.13,
+/// the first 22.x whose built-in `node:sqlite` loads without
+/// `--experimental-sqlite` (standard-library P4a, #2602: the `D1` test double
+/// runs on it). CI's floor job installs exactly this version.
+pub const NODE_MINOR_FLOOR: u32 = 13;
+
+/// The Node floor as `(major, minor)`: what `bynk doctor` compares against.
+pub const NODE_FLOOR: (u32, u32) = (NODE_MAJOR_FLOOR, NODE_MINOR_FLOOR);
+
 /// #1672: the oldest TypeScript major the emitted output is verified against.
 /// CI type-checks every positive fixture under it (`tsc_verify`, with
 /// `typescript@5` installed on every test leg).

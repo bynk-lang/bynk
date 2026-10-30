@@ -1,6 +1,6 @@
 adapter bynk.cloudflare {
 	consumes bynk { Fetch }
-	exports capability { Kv, Service, R2, RateLimit, Queue, Analytics, EdgeCache }
+	exports capability { Kv, Service, R2, RateLimit, Queue, Analytics, EdgeCache, D1 }
 	exports transparent {
 		KvExpiration,
 		KvPut,
@@ -15,6 +15,10 @@ adapter bynk.cloudflare {
 		R2Listing,
 		QueueSend,
 		DataPoint,
+		SqlValue,
+		SqlStatement,
+		SqlRun,
+		SqlError,
 	}
 
 	---
@@ -217,6 +221,45 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	A value bound to a `?n` parameter of a `D1` statement, by SQLite storage
+	class. `Boolean` binds as `1` or `0`, as SQLite has no boolean.
+	---
+	type SqlValue =
+		| Null
+		| Integer(value: Int)
+		| Real(value: Float)
+		| Text(value: String)
+		| Blob(value: Bytes)
+		| Boolean(value: Bool)
+
+	---
+	One statement of a `D1.batch`: its SQL and its positional parameters.
+	---
+	type SqlStatement = {
+		sql: String,
+		params: List[SqlValue],
+	}
+
+	---
+	What a `D1.run` (or one statement of a `D1.batch`) changed: the rows it
+	wrote, and the rowid of the last row it inserted.
+	---
+	type SqlRun = {
+		changes: Int,
+		lastRowId: Int,
+	}
+
+	---
+	Why a `D1` statement failed. `Constraint` is a UNIQUE, CHECK, NOT NULL or
+	foreign-key violation, an outcome a handler answers (with a `409`, say);
+	`Failed` is anything else, with the database's message. D1 has further
+	failure kinds, so a `match` over this type needs a wildcard.
+	---
+	type SqlError =
+		| Constraint(message: String)
+		| Failed(message: String)
+
+	---
 	An R2 bucket: objects stored and read whole, as `Bytes`, with metadata
 	and conditional writes. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
@@ -337,6 +380,33 @@ adapter bynk.cloudflare {
 		fn purge(prefixes: List[String]) -> Effect[Bool]
 	}
 
+	---
+	A D1 database: SQLite, queried with SQL text and positional parameters
+	(`?1`, `?2`, …) bound from `SqlValue`s, never spliced into the text. Used
+	only through a named instance, `capability Orders = D1`, which binds as
+	`D1_ORDERS`; a bare `given D1` names no database and is refused.
+	`bynk deploy` creates the database, named `<worker>-<capability, kebab>`
+	and environment-qualified, and records its id.
+
+	Rows come back as JSON text for `Json.decode`: `all` gives every row as an
+	array of objects keyed by column name (`Json.decode[List[Row]]`), `first`
+	the first row as one object, or `None` when there is none. A blob column
+	arrives as base64, so a `Bytes` field decodes it. SQLite has no boolean:
+	a flag column arrives as `0` or `1`, so declare that field `Int`. An
+	integer past ±2^53 cannot be represented and fails the decode.
+
+	`run` executes a write and reports what it changed. `batch` runs its
+	statements in order in one transaction: all apply, or none do and the
+	result is the failing statement's error. Every operation gives a
+	`SqlError` rather than faulting.
+	---
+	capability D1 {
+		fn all(sql: String, params: List[SqlValue]) -> Effect[Result[String, SqlError]]
+		fn first(sql: String, params: List[SqlValue]) -> Effect[Result[Option[String], SqlError]]
+		fn run(sql: String, params: List[SqlValue]) -> Effect[Result[SqlRun, SqlError]]
+		fn batch(statements: List[SqlStatement]) -> Effect[Result[List[SqlRun], SqlError]]
+	}
+
 	provides Kv = WorkersKv
 
 	provides Service = WorkersService
@@ -350,4 +420,6 @@ adapter bynk.cloudflare {
 	provides Analytics = WorkersAnalytics
 
 	provides EdgeCache = WorkersEdgeCache
+
+	provides D1 = WorkersD1
 }

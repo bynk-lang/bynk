@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "provides": {
+    "listing": "afca6a450ae76cbc",
+    "lookup": "ed68d225138bb7df",
+    "move": "4a82751d3eff94ba",
+    "save": "6ec478f6b57fab97",
+    "setup": "9c9f7ed81132d5d4"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"paid\",B(\"Int\")),F(\"receipt\",B(\"Bytes\")),F(\"total\",B(\"Int\")))),B(\"String\"))))",
+    "lookup": "Svc(\"lookup\",P(\"id\",B(\"String\")),Ret(O(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"paid\",B(\"Int\")),F(\"receipt\",B(\"Bytes\")),F(\"total\",B(\"Int\"))))))",
+    "move": "Svc(\"move\",P(\"source\",B(\"String\")),P(\"target\",B(\"String\")),Ret(R(B(\"Int\"),N(\"SqlError\"))))",
+    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"total\",B(\"Int\")),P(\"paid\",B(\"Bool\")),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))",
+    "setup": "Svc(\"setup\",Ret(B(\"Bool\")))"
+  }
+}

@@ -4,7 +4,8 @@
 // `WorkersR2` (standard-library P5, #2323) against an R2 bucket fake, and its
 // `WorkersRateLimit` (standard-library P3, #2342) against a rate limiter fake,
 // `WorkersQueue` (standard-library P2, #2578) against a queue producer fake,
-// `WorkersAnalytics` (standard-library P3b, #2582) against a dataset fake, and
+// `WorkersAnalytics` (standard-library P3b, #2582) against a dataset fake,
+// `WorkersD1` (standard-library P4a, #2602) against a database fake, and
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
@@ -17,7 +18,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAnalytics, WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
+import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -777,4 +778,131 @@ t("WorkersKv.listPage: one page at a time, with each key's expiry and metadata, 
   for (const bad of [0, 1001, 1.5]) {
     await assert.rejects(store.listPage({ prefix: None, cursor: None, limit: Some(bad) }), /1 to 1000 keys/);
   }
+});
+
+// P4a (#2602): `WorkersD1`, against a fake of Cloudflare's D1 binding:
+// `prepare(sql).bind(...values)` and a statement's `all`/`first`/`run`, each
+// answering what the fake was given, and `batch(statements)`. It records each
+// statement's SQL and bound values; `fail` makes every call reject with it.
+function fakeD1({ rows = [], meta = { changes: 0, last_row_id: 0 }, fail } = {}) {
+  const seen = [];
+  const batches = [];
+  const statement = (sql, values) => ({
+    sql,
+    values,
+    bind: (...v) => statement(sql, v),
+    async all() {
+      seen.push({ sql, values });
+      if (fail) throw fail;
+      return { results: rows, meta };
+    },
+    async first() {
+      seen.push({ sql, values });
+      if (fail) throw fail;
+      return rows[0] ?? null;
+    },
+    async run() {
+      seen.push({ sql, values });
+      if (fail) throw fail;
+      return { results: [], meta };
+    },
+  });
+  return {
+    seen,
+    batches,
+    prepare: (sql) => statement(sql, []),
+    async batch(statements) {
+      batches.push(statements.map((s) => ({ sql: s.sql, values: s.values })));
+      if (fail) throw fail;
+      return statements.map(() => ({ results: [], meta }));
+    },
+  };
+}
+
+const d1 = (db) => new WorkersD1({ D1_ORDERS: db }, "D1_ORDERS");
+const text = (value) => ({ tag: "Text", value });
+
+t("WorkersD1: binds each SqlValue positionally, a Boolean as 1 or 0", async () => {
+  const db = fakeD1();
+  const bytes = new Uint8Array([1, 2]);
+  await d1(db).run("INSERT INTO t VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", [
+    { tag: "Null" },
+    { tag: "Integer", value: 7 },
+    { tag: "Real", value: 1.5 },
+    text("a"),
+    { tag: "Blob", value: bytes },
+    { tag: "Boolean", value: true },
+    { tag: "Boolean", value: false },
+  ]);
+  assert.deepEqual(db.seen, [
+    { sql: "INSERT INTO t VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", values: [null, 7, 1.5, "a", bytes, 1, 0] },
+  ]);
+});
+
+t("WorkersD1.all: the rows as JSON, each blob as standard base64 whatever its shape", async () => {
+  const ab = new Uint8Array([0xfb, 0xff]).buffer;
+  const db = fakeD1({
+    rows: [
+      { id: "a", n: 1, f: 0.5, none: null, ab, view: new Uint8Array([104, 105]), arr: [0, 255] },
+    ],
+  });
+  const r = await d1(db).all("SELECT * FROM t", []);
+  assert.equal(r.tag, "Ok");
+  assert.deepEqual(JSON.parse(r.value), [
+    { id: "a", n: 1, f: 0.5, none: null, ab: "+/8=", view: "aGk=", arr: "AP8=" },
+  ]);
+  assert.deepEqual(await d1(fakeD1()).all("SELECT 1 WHERE 0", []), { tag: "Ok", value: "[]" });
+});
+
+t("WorkersD1.first: one row as JSON, or None", async () => {
+  const one = await d1(fakeD1({ rows: [{ id: "a" }, { id: "b" }] })).first("SELECT id FROM t", []);
+  assert.deepEqual(one, { tag: "Ok", value: Some(JSON.stringify({ id: "a" })) });
+  assert.deepEqual(await d1(fakeD1()).first("SELECT id FROM t", []), { tag: "Ok", value: None });
+});
+
+t("WorkersD1.run: what the write changed", async () => {
+  const r = await d1(fakeD1({ meta: { changes: 3, last_row_id: 9 } })).run("DELETE FROM t", []);
+  assert.deepEqual(r, { tag: "Ok", value: { changes: 3, lastRowId: 9 } });
+});
+
+t("WorkersD1: a constraint failure is Constraint, any other failure Failed, never a fault", async () => {
+  const unique = new Error("D1_ERROR: UNIQUE constraint failed: t.id: SQLITE_CONSTRAINT");
+  const syntax = new Error('D1_ERROR: near "SELEC": syntax error at offset 0: SQLITE_ERROR');
+  assert.deepEqual(await d1(fakeD1({ fail: unique })).run("INSERT …", []), {
+    tag: "Err",
+    error: { tag: "Constraint", message: unique.message },
+  });
+  for (const op of [(d) => d.all("SELEC", []), (d) => d.first("SELEC", []), (d) => d.run("SELEC", [])]) {
+    assert.deepEqual(await op(d1(fakeD1({ fail: syntax }))), {
+      tag: "Err",
+      error: { tag: "Failed", message: syntax.message },
+    });
+  }
+});
+
+t("WorkersD1.batch: one platform batch, a run per statement, or the failure", async () => {
+  const db = fakeD1({ meta: { changes: 1, last_row_id: 2 } });
+  const r = await d1(db).batch([
+    { sql: "UPDATE t SET n = n - 1 WHERE id = ?1", params: [text("a")] },
+    { sql: "UPDATE t SET n = n + 1 WHERE id = ?1", params: [text("b")] },
+  ]);
+  assert.deepEqual(r, { tag: "Ok", value: [{ changes: 1, lastRowId: 2 }, { changes: 1, lastRowId: 2 }] });
+  assert.deepEqual(db.batches, [
+    [
+      { sql: "UPDATE t SET n = n - 1 WHERE id = ?1", values: ["a"] },
+      { sql: "UPDATE t SET n = n + 1 WHERE id = ?1", values: ["b"] },
+    ],
+  ]);
+  // D1 refuses an empty batch; an empty one is nothing to do.
+  assert.deepEqual(await d1(db).batch([]), { tag: "Ok", value: [] });
+  assert.equal(db.batches.length, 1);
+  const failing = fakeD1({ fail: new Error("D1_ERROR: CHECK constraint failed: n >= 0: SQLITE_CONSTRAINT") });
+  assert.equal((await d1(failing).batch([{ sql: "UPDATE t", params: [] }])).error.tag, "Constraint");
+});
+
+t("WorkersD1: a missing binding names it", async () => {
+  await assert.rejects(
+    new WorkersD1({}, "D1_ORDERS").all("SELECT 1", []),
+    /requires a D1 database binding \(env\.D1_ORDERS\)/,
+  );
 });

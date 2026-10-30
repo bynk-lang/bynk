@@ -569,6 +569,38 @@ would mix for good: `shop.cart`'s `Signups` and `shop`'s `CartSignups` are both
 `--env staging` (checked once the project has deployed to `staging`). Rename one
 capability.
 
+### D1 databases
+
+Each [`D1` instance](/book/reference/bynk-capabilities/#sql-databases-d1)
+(`capability Orders = D1`) is a database of its own, named `<worker>-<capability>`
+with an environment suffix under `--env` (`shop-cart-orders-staging`).
+Cloudflare mints its id, so the plan says `create` until the ledger records the
+database and `reuse` after:
+
+```
+d1 create shop-cart-orders (D1_ORDERS)
+deploy shop-cart
+```
+
+The first deploy runs `wrangler d1 create`, records the name and the
+`database_id` Cloudflare minted, in `d1_instances`, before the push (an
+interrupted run never makes a second one), and writes both into the generated
+`[[d1_databases]]` entry. If a database of that name is already on the account,
+deploy adopts it, looking its id up with `wrangler d1 list`. Under `--env` the
+environment gets its own database and id.
+
+Removing or renaming the capability leaves an orphan, reported as
+`orphan d1 shop-cart D1_ORDERS (shop-cart-orders; not deleted)`. `--prune`
+never deletes a database: it holds data. Delete it yourself, then remove its
+entry from `bynk.deploy.lock`. `bynk dev -- --remote` binds the recorded
+database and refuses one no deploy has created; plain `bynk dev` uses a local
+database of wrangler's.
+
+A new database is empty, and applying a schema at deploy time is a later
+increment: create the tables from the application for now (for example with
+`CREATE TABLE IF NOT EXISTS` before the first statement that needs them) or
+with `wrangler d1 execute`.
+
 ### Workers outside the project
 
 A [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/)

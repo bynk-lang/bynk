@@ -43,6 +43,15 @@ pub(crate) struct Environment {
     /// reads and a project without R2 writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) r2_instances: BTreeMap<String, BTreeMap<String, R2Bucket>>,
+    /// P4a (#2602): each Worker's `D1` instances (`capability Orders = D1`),
+    /// keyed by the instance's binding (`D1_ORDERS`), as `kv_instances` is:
+    /// the database's account-facing name and the id Cloudflare minted for it
+    /// (ADR 0194: the ledger owns the ids it mints).
+    ///
+    /// Additive, `default`ed and omitted when empty, so an older ledger still
+    /// reads and a project without D1 writes the same file.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) d1_instances: BTreeMap<String, BTreeMap<String, D1Record>>,
     /// P3 (#2342): each Worker's `RateLimit` instances, keyed by binding
     /// (`RATELIMIT_LOGIN_LIMIT`), as `kv_instances` is. The `namespace_id` is
     /// minted here, not by Cloudflare: a positive integer unique across every
@@ -153,6 +162,16 @@ pub(crate) struct R2Bucket {
     /// (and are reported as orphans) until their entry is removed by hand.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) superseded: Vec<R2Past>,
+}
+
+/// P4a (#2602): one D1 database this project created or adopted, as the
+/// account names it, with the id the push binds.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct D1Record {
+    /// The database's account-facing name, environment-qualified.
+    pub(crate) name: String,
+    /// Cloudflare's `database_id` for it.
+    pub(crate) id: String,
 }
 
 /// A bucket a binding no longer uses (see [`R2Bucket::superseded`]).
@@ -543,6 +562,31 @@ impl DeployLock {
         );
     }
 
+    /// P4a (#2602): record the database this project created (or adopted, when
+    /// one of its name was already there) for `worker`'s `D1` `binding`.
+    pub(crate) fn record_d1(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+        name: &str,
+        id: &str,
+    ) {
+        self.environments
+            .entry(environment.to_string())
+            .or_default()
+            .d1_instances
+            .entry(worker.to_string())
+            .or_default()
+            .insert(
+                binding.to_string(),
+                D1Record {
+                    name: name.to_string(),
+                    id: id.to_string(),
+                },
+            );
+    }
+
     /// P3 (#2342): the `namespace_id` for `worker`'s rate limiter `binding`
     /// in `environment`: the recorded one, else a new one — the first id from
     /// its [`ratelimit_seed`] upward (wrapping within the span) that no rate
@@ -684,6 +728,10 @@ pub(crate) struct Orphans {
     /// refuses to delete a non-empty one anyway).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) r2: Vec<OrphanR2>,
+    /// P4a (#2602): recorded D1 databases the build no longer declares.
+    /// Reported only, as buckets are: a database holds data.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) d1: Vec<OrphanD1>,
     pub(crate) workers: Vec<String>,
     pub(crate) queues: Vec<String>,
 }
@@ -708,6 +756,16 @@ pub(crate) struct OrphanR2 {
     pub(crate) bucket: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) jurisdiction: Option<String>,
+}
+
+/// One recorded D1 database the build no longer declares (P4a, #2602): a
+/// capability removed or renamed, or a whole Worker gone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct OrphanD1 {
+    pub(crate) worker: String,
+    pub(crate) binding: String,
+    /// The database's name on the account, which stays there.
+    pub(crate) database: String,
 }
 
 impl OrphanKv {
@@ -756,6 +814,7 @@ impl Orphans {
                     jurisdiction: r2.jurisdiction.clone(),
                 })
                 .collect(),
+            d1: self.d1.clone(),
             workers: self
                 .workers
                 .iter()
@@ -848,8 +907,28 @@ pub(crate) fn find_orphans(
             })
         }))
         .collect();
+    // P4a (#2602): a database likewise, with its Worker or on its own.
+    let d1_orphans = env
+        .d1_instances
+        .iter()
+        .flat_map(|(worker, instances)| {
+            instances
+                .iter()
+                .filter(move |(binding, _)| {
+                    resources
+                        .get(worker)
+                        .is_none_or(|r| !r.d1_databases.iter().any(|d| &d.binding == *binding))
+                })
+                .map(move |(binding, db)| OrphanD1 {
+                    worker: worker.clone(),
+                    binding: binding.clone(),
+                    database: db.name.clone(),
+                })
+        })
+        .collect();
     Orphans {
         r2: r2_orphans,
+        d1: d1_orphans,
         // The bare namespace likewise: with its Worker, or on its own once
         // the live Worker stops using the bare `Kv` (review of #1974).
         kv: env
@@ -888,6 +967,19 @@ pub(crate) fn recorded_r2<'a>(
     lock.environments
         .get(environment)
         .and_then(|env| env.r2_instances.get(worker))
+        .and_then(|instances| instances.get(binding))
+}
+
+/// The database recorded for `worker`'s `D1` `binding` (P4a, #2602).
+pub(crate) fn recorded_d1<'a>(
+    lock: &'a DeployLock,
+    worker: &str,
+    binding: &str,
+    environment: &str,
+) -> Option<&'a D1Record> {
+    lock.environments
+        .get(environment)
+        .and_then(|env| env.d1_instances.get(worker))
         .and_then(|instances| instances.get(binding))
 }
 
@@ -1100,7 +1192,10 @@ pub fn materialise_deploy_state(
     let buckets = bynk_emit::emitter::wrangler::r2_bucket_entries(&text)?;
     // P3 (#2342): each rate limiter must have had its id allocated by a deploy.
     let limiters = bynk_emit::emitter::wrangler::ratelimits_needing_ids(&text)?;
-    if needed.is_empty() && buckets.is_empty() && limiters.is_empty() {
+    // P4a (#2602): each `D1` database must have been created by a deploy, and
+    // is then bound by the name and id that environment's deploy recorded.
+    let databases = bynk_emit::emitter::wrangler::d1_database_entries(&text)?;
+    if needed.is_empty() && buckets.is_empty() && limiters.is_empty() && databases.is_empty() {
         return Ok(false);
     }
     let lock = read_lock(&project_root.join(LOCK_FILE))?;
@@ -1127,7 +1222,25 @@ pub fn materialise_deploy_state(
         }
         names.insert(binding.clone(), r2_bucket_name(environment, name));
     }
+    let mut d1 = BTreeMap::new();
+    for (binding, _) in &databases {
+        let Some(recorded) = recorded_d1(&lock, worker, binding, environment) else {
+            return Err(format!(
+                "remote D1 database `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
+            ));
+        };
+        d1.insert(
+            binding.clone(),
+            (recorded.name.clone(), recorded.id.clone()),
+        );
+    }
     let mut changed = false;
+    if !d1.is_empty() {
+        if !materialise_d1_databases(config, &d1) {
+            return Err("could not write generated configuration".into());
+        }
+        changed = true;
+    }
     if !limiter_ids.is_empty() {
         if !materialise_ratelimit_ids(config, &limiter_ids) {
             return Err("could not write generated configuration".into());
@@ -1462,6 +1575,16 @@ pub(crate) mod tests {
                                     name: "api-archives".into(),
                                     jurisdiction: None,
                                 }],
+                            },
+                        )]),
+                    )]),
+                    d1_instances: BTreeMap::from([(
+                        "api".into(),
+                        BTreeMap::from([(
+                            "D1_ORDERS".into(),
+                            D1Record {
+                                name: "api-orders".into(),
+                                id: "0d1d0000-0000-4000-8000-000000000001".into(),
                             },
                         )]),
                     )]),
@@ -2096,6 +2219,35 @@ pub(crate) mod tests {
 
     // ---- P5 (#2323): R2 buckets ----
 
+    // ---- P4a (#2602): D1 databases ----
+
+    #[test]
+    fn a_removed_database_is_a_reported_orphan_that_prune_leaves_alone() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_d1("default", "shop", "D1_ORDERS", "shop-orders", "id-1");
+        lock.record_d1("default", "shop", "D1_OLD", "shop-old", "id-2");
+        let resources = BTreeMap::from([(
+            "shop".to_string(),
+            Resources::default().d1_databases(&[("D1_ORDERS", "shop-orders")]),
+        )]);
+        let orphans = find_orphans(&lock, "default", &resources);
+        assert_eq!(
+            orphans.d1,
+            [OrphanD1 {
+                worker: "shop".into(),
+                binding: "D1_OLD".into(),
+                database: "shop-old".into(),
+            }]
+        );
+        // A database holds data: `--prune` neither offers nor attempts it.
+        assert!(!orphans.has_prunable());
+        // With its Worker gone, every database it had is reported.
+        assert_eq!(find_orphans(&lock, "default", &BTreeMap::new()).d1.len(), 2);
+    }
+
     fn r2_lock() -> DeployLock {
         let mut lock = DeployLock {
             version: 1,
@@ -2201,6 +2353,45 @@ pub(crate) mod tests {
         assert!(
             text.contains("bucket_name = \"shop-archives-staging\""),
             "{text}"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    // P4a (#2602): `dev --remote` binds a recorded database by name and id.
+    const D1_CONFIG: &str = "name = \"shop\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\" # set at deploy time\n";
+
+    #[test]
+    fn dev_remote_binds_a_recorded_database_and_refuses_an_unrecorded_one() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_d1(
+            "staging",
+            "shop",
+            "D1_ORDERS",
+            "shop-orders-staging",
+            "id-7",
+        );
+        let (root, config) = r2_project("d1-staging", D1_CONFIG, &lock);
+        assert_eq!(
+            materialise_deploy_state(&root, "shop", &config, "staging"),
+            Ok(true)
+        );
+        let text = std::fs::read_to_string(&config).unwrap();
+        assert!(
+            text.contains("database_name = \"shop-orders-staging\"")
+                && text.contains("database_id = \"id-7\""),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(root);
+        // Nothing recorded under `default`: refused, naming the remedy.
+        let (root, config) = r2_project("d1-default", D1_CONFIG, &lock);
+        let err = materialise_deploy_state(&root, "shop", &config, "default").unwrap_err();
+        assert!(
+            err.contains("remote D1 database `D1_ORDERS` for `shop` has not been provisioned")
+                && err.contains("bynk deploy --env default"),
+            "{err}"
         );
         let _ = std::fs::remove_dir_all(root);
     }

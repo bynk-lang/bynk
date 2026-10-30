@@ -71,6 +71,8 @@ impl Toolbox for Fake {
 /// #1674: the floor the shipped driver uses, not a copy of it, so these tests
 /// model the real floor and a bump can't leave them asserting a stale one.
 const FLOOR: u32 = bynk_emit::NODE_MAJOR_FLOOR;
+/// P4a (#2602): the minor within it, 22.13.
+const FLOOR_MINOR: u32 = bynk_emit::NODE_MINOR_FLOOR;
 
 /// #1732: a `wrangler` exactly at `bynk_emit::WRANGLER_MIN`, the oldest whose
 /// `workerd` serves the pinned compatibility date, read from the constant so a
@@ -93,7 +95,7 @@ fn just_below(min: Version) -> Version {
 
 /// A `node` exactly at the floor: the oldest one `doctor` reports `ok`.
 fn node_at_floor() -> Version {
-    v(FLOOR, 0, 0)
+    v(FLOOR, FLOOR_MINOR, 0)
 }
 
 fn v(major: u32, minor: u32, patch: u32) -> Version {
@@ -150,7 +152,7 @@ fn ctx(in_repo: bool) -> Context {
     Context {
         project_root: None,
         in_repo,
-        node_floor: FLOOR,
+        node_floor: bynk_emit::NODE_FLOOR,
     }
 }
 
@@ -492,13 +494,20 @@ fn node_below_the_floor_warns() {
     for c in [Capability::Test, Capability::Deploy] {
         let r = cap(&report, c);
         assert_eq!(r.level, Level::Warn, "{c:?} with a below-floor node");
-        let detail = format!("v{}.11.0 below floor (≥ {FLOOR})", FLOOR - 2);
+        let detail = format!("v{}.11.0 below floor (≥ {FLOOR}.{FLOOR_MINOR})", FLOOR - 2);
         assert!(
             r.rows.iter().any(|row| row.detail == detail),
             "{c:?} names the floor: {:?}",
             r.rows
         );
     }
+    // P4a (#2602): the floor has a minor, so a 22.x before 22.13 warns too.
+    let fake = Fake::default()
+        .path_tool("node", "/usr/bin/node", Some(v(FLOOR, FLOOR_MINOR - 1, 9)))
+        .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
+        .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()));
+    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    assert_eq!(cap(&report, Capability::Test).level, Level::Warn);
     // At the floor, the same environment is all green.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))

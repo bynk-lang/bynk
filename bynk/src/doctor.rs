@@ -105,8 +105,9 @@ pub struct Context {
     pub project_root: Option<PathBuf>,
     /// Whether to include the contributor `build` capability.
     pub in_repo: bool,
-    /// Minimum supported Node major (single-sourced from `bynkc`).
-    pub node_floor: u32,
+    /// Minimum supported Node `(major, minor)` (single-sourced from
+    /// `bynk_emit::NODE_FLOOR`).
+    pub node_floor: (u32, u32),
 }
 
 impl Report {
@@ -273,7 +274,7 @@ fn capability(cap: Capability, rows: Vec<Row>) -> CapabilityReport {
     }
 }
 
-fn detect_node(tb: &dyn Toolbox, root: Option<&std::path::Path>, floor: u32) -> Row {
+fn detect_node(tb: &dyn Toolbox, root: Option<&std::path::Path>, floor: (u32, u32)) -> Row {
     // A runtime is never npx-provisionable.
     let probe = probe::detect(
         tb,
@@ -283,7 +284,8 @@ fn detect_node(tb: &dyn Toolbox, root: Option<&std::path::Path>, floor: u32) -> 
             allow_npx: false,
         },
     );
-    let remedy = format!("install Node.js ≥ {floor} from https://nodejs.org");
+    let shown = format!("{}.{}", floor.0, floor.1);
+    let remedy = format!("install Node.js ≥ {shown} from https://nodejs.org");
     if probe.is_missing() {
         return Row {
             label: "node".into(),
@@ -292,13 +294,16 @@ fn detect_node(tb: &dyn Toolbox, root: Option<&std::path::Path>, floor: u32) -> 
             remedy: Some(remedy),
         };
     }
-    let below = probe.version.map(|v| v.major < floor).unwrap_or(false);
+    let below = probe
+        .version
+        .map(|v| (v.major, v.minor) < floor)
+        .unwrap_or(false);
     if below {
         let v = probe.version.unwrap();
         return Row {
             label: "node".into(),
             level: Level::Warn,
-            detail: format!("v{v} below floor (≥ {floor})"),
+            detail: format!("v{v} below floor (≥ {shown})"),
             remedy: Some(remedy),
         };
     }

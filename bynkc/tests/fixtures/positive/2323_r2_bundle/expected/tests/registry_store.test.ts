@@ -80,7 +80,7 @@ class __Stub_Archives {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<globalThis.Uint8Array>> {
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -94,6 +94,10 @@ class __Stub_Archives {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     if (this.__case === "a stubbed instance answers") {
       return Some(new globalThis.TextEncoder().encode("stubbed"));
     }
@@ -256,7 +260,7 @@ async function test_an_object_round_trips() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -270,6 +274,10 @@ async function test_an_object_round_trips() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const stored = await archive.call("a", new globalThis.TextEncoder().encode("hello"), deps);
     if (!(stored)) { throw __bynkExpectFailure("tests/registry/store.bynk:8:9", 237, 243, "expect stored"); }
     const body = await fetch.call("a", deps);
@@ -290,7 +298,7 @@ async function test_an_absent_only_write_refuses_an_existing_key() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -304,6 +312,10 @@ async function test_an_absent_only_write_refuses_an_existing_key() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const first = await archive.call("a", new globalThis.TextEncoder().encode("one"), deps);
     const second = await archive.call("a", new globalThis.TextEncoder().encode("two"), deps);
     if (!(first)) { throw __bynkExpectFailure("tests/registry/store.bynk:18:9", 541, 546, "expect first"); }
@@ -324,7 +336,7 @@ async function test_an_etag_match_write_swaps_only_the_current_version() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -338,6 +350,10 @@ async function test_an_etag_match_write_swaps_only_the_current_version() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const etag = await write.call("idx", new globalThis.TextEncoder().encode("v1"), deps);
     const stale = await swap.call("idx", "nope", new globalThis.TextEncoder().encode("v2"), deps);
     const fresh = await swap.call("idx", etag, new globalThis.TextEncoder().encode("v2"), deps);
@@ -357,7 +373,7 @@ async function test_delete_is_idempotent_and_list_pages_by_prefix() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -371,6 +387,10 @@ async function test_delete_is_idempotent_and_list_pages_by_prefix() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const __r0 = await archive.call("p/1", new globalThis.TextEncoder().encode("x"), deps);
     const __r1 = await archive.call("p/2", new globalThis.TextEncoder().encode("y"), deps);
     const __r2 = await archive.call("q/1", new globalThis.TextEncoder().encode("z"), deps);
@@ -392,7 +412,7 @@ async function test_instances_are_separate() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -406,6 +426,10 @@ async function test_instances_are_separate() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const __r0 = await write.call("a", new globalThis.TextEncoder().encode("idx"), deps);
     const body = await fetch.call("a", deps);
     if (!(body.tag === "None")) { throw __bynkExpectFailure("tests/registry/store.bynk:45:9", 1345, 1357, "expect body is None"); }
@@ -424,7 +448,7 @@ async function test_a_stubbed_instance_answers() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a stubbed instance answers"), { Archives: ["delete", "get", "head", "list", "put", "putWith"], Indexes: ["delete", "get", "head", "list", "put", "putWith"], R2: ["delete", "get", "head", "list", "put", "putWith"] }, __obs);
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -438,6 +462,10 @@ async function test_a_stubbed_instance_answers() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const body = await fetch.call("anything", deps);
     if (!(__bynkEq(body, Some(new globalThis.TextEncoder().encode("stubbed"))))) { throw __bynkExpectFailure("tests/registry/store.bynk:51:9", 1503, 1542, "expect body == Some(Bytes.fromUtf8(\"stubbed\"))\n  expected: body == Some(Bytes.fromUtf8(\"stubbed\"))\n  actual:   " + __bynkShow((body)) + " == " + __bynkShow((Some(new globalThis.TextEncoder().encode("stubbed"))))); }
     if (!(((__obs.log["Archives.get"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/registry/store.bynk:52:9", 1551, 1575, "expect Archives.get called once"); }
@@ -455,7 +483,7 @@ async function test_instances_are_separate_at_integration() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -469,6 +497,10 @@ async function test_instances_are_separate_at_integration() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const __r0 = await write.call("a", new globalThis.TextEncoder().encode("idx"), deps);
     const body = await fetch.call("a", deps);
     if (!(body.tag === "None")) { throw __bynkExpectFailure("tests/registry/store.bynk:58:9", 1727, 1739, "expect body is None"); }

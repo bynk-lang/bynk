@@ -1,0 +1,10 @@
+// #2602: at `system`, each participant Worker binds an in-memory database per
+// instance.
+suite shop.orders as system {
+	case "a duplicate order over the wire is a 409" {
+		let r <- api.POST("/orders/:id", "x") by Visitor
+		expect r is Created("x")
+		let again <- api.POST("/orders/:id", "x") by Visitor
+		expect again is Conflict(_)
+	}
+}

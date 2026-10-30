@@ -1074,6 +1074,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "EdgeCache" => "Edge",
         "Queue" => "OrderEvents",
         "Analytics" => "Signups",
+        "D1" => "Orders",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);

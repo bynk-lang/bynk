@@ -174,6 +174,42 @@ pub(crate) fn deploy_one(
             ))
         })?;
     }
+    // P4a (#2602): each `D1` database, created by name with the id Cloudflare
+    // mints recorded before the push (an interrupted run never makes a second
+    // one), then bound by that name and id. One of the same name already on
+    // the account is adopted, as a bucket is: the name is account-unique and
+    // derived from this project's, so it is this project's. A database the
+    // ledger already holds under this environment's name is not asked of
+    // the account again.
+    let mut d1_databases = BTreeMap::new();
+    for db in &declared.d1_databases {
+        let physical = d1_database_name(environment, &db.name);
+        let id = match recorded_d1(lock, worker, &db.binding, environment) {
+            Some(recorded) if recorded.name == physical => recorded.id.clone(),
+            _ => {
+                let id = create_d1(provenance, &physical, project_root).map_err(|e| {
+                    DeployFailure::driver(format!(
+                        "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
+                        db.binding
+                    ))
+                })?;
+                lock.record_d1(environment, worker, &db.binding, &physical, &id);
+                write_lock(lock_path, lock).map_err(|e| {
+                    DeployFailure::driver(format!(
+                        "created the D1 database `{physical}` but could not record it in {}: {e}",
+                        lock_path.display()
+                    ))
+                })?;
+                id
+            }
+        };
+        d1_databases.insert(db.binding.clone(), (physical, id));
+    }
+    if !d1_databases.is_empty() && !materialise_d1_databases(&config, &d1_databases) {
+        return Err(DeployFailure::driver(format!(
+            "could not materialise the D1 database ids into `{worker}`'s generated configuration"
+        )));
+    }
     // P3 (#2342): each rate limiter's `namespace_id`, allocated in the ledger
     // (no account call: the id is ours to choose) and recorded before the
     // push, so an interrupted run never allocates a second one and resets
@@ -854,6 +890,79 @@ fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Res
         return Ok(false);
     }
     Err(said)
+}
+
+/// Create the D1 database `name` and return its `database_id`, or adopt the
+/// one already there under that name (P4a, #2602). Run from the project root,
+/// as KV and buckets are.
+fn create_d1(provenance: &Provenance, name: &str, project_root: &Path) -> Result<String, String> {
+    let Some(mut command) = workers::wrangler_command(provenance, "d1") else {
+        return Err("wrangler not found".into());
+    };
+    let output = command
+        .arg("create")
+        .arg(name)
+        .current_dir(project_root)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return parse_d1_id(&stdout).ok_or_else(|| {
+            format!("`wrangler d1 create` succeeded but printed no `database_id`:\n{stdout}")
+        });
+    }
+    let said = wrangler_said(&output);
+    if !d1_database_already_exists(&said) {
+        return Err(said);
+    }
+    let Some(mut list) = workers::wrangler_command(provenance, "d1") else {
+        return Err("wrangler not found".into());
+    };
+    let listed = list
+        .args(["list", "--json"])
+        .current_dir(project_root)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !listed.status.success() {
+        return Err(format!(
+            "it already exists, and listing the account's databases failed: {}",
+            wrangler_said(&listed)
+        ));
+    }
+    parse_d1_listed_id(&String::from_utf8_lossy(&listed.stdout), name)
+        .ok_or_else(|| "it already exists, but `wrangler d1 list` does not show it".to_string())
+}
+
+/// The `database_id` in `wrangler d1 create`'s output: the config snippet it
+/// prints, as TOML (`database_id = "…"`) or JSON (`"database_id": "…"`).
+fn parse_d1_id(output: &str) -> Option<String> {
+    let at = output.find("database_id")?;
+    let rest = &output[at + "database_id".len()..];
+    let rest = rest.trim_start_matches('"').trim_start();
+    let rest = rest.strip_prefix(['=', ':'])?.trim_start();
+    let id = rest.strip_prefix('"')?.split('"').next()?;
+    (!id.is_empty() && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
+        .then(|| id.to_string())
+}
+
+/// The `uuid` of database `name` in `wrangler d1 list --json`'s array.
+fn parse_d1_listed_id(json: &str, name: &str) -> Option<String> {
+    let start = json.find('[')?;
+    let listed: Vec<serde_json::Value> = serde_json::from_str(&json[start..]).ok()?;
+    listed
+        .iter()
+        .find(|db| db.get("name").and_then(|n| n.as_str()) == Some(name))?
+        .get("uuid")?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// Does this `wrangler d1 create` failure just mean a database of that name
+/// is already on the account? Wrangler says "A database with that name
+/// already exists".
+fn d1_database_already_exists(said: &str) -> bool {
+    said.to_ascii_lowercase()
+        .contains("database with that name already exists")
 }
 
 /// Create the R2 bucket `name`, in `jurisdiction` when given, or accept that it
@@ -1615,6 +1724,14 @@ mod tests {
                 bucket.binding, bucket.name
             ));
         }
+        for db in &declared.d1_databases {
+            config.push_str(&format!(
+                "\n[[d1_databases]]\nbinding = \"{}\"\ndatabase_name = \"{}\"\ndatabase_id = \"{}\" # set at deploy time\n",
+                db.binding,
+                db.name,
+                bynk_emit::emitter::wrangler::d1_database_id_placeholder(&db.binding)
+            ));
+        }
         for binding in &declared.ratelimits {
             config.push_str(&format!(
                 "\n[[ratelimits]]\nname = \"{binding}\"\nnamespace_id = \"{}\" # set at deploy time\nsimple = {{ limit = 20, period = 60 }}\n",
@@ -1627,7 +1744,7 @@ mod tests {
         write_stand_in(
             &fake,
             &format!(
-                "#!/bin/sh\necho \"$*\" >> '{}'\ncase \"$*\" in *--json*) echo '✘ [ERROR] Unknown argument: json' >&2; exit 1;; esac\nif [ \"$1\" = kv ]; then printf '[[kv_namespaces]]\\nbinding = \"t\"\\nid = \"minted-id\"\\n'; fi\nexit 0\n",
+                "#!/bin/sh\necho \"$*\" >> '{}'\ncase \"$*\" in 'd1 create '*taken*) echo '✘ [ERROR] A database with that name already exists' >&2; exit 1;; 'd1 create '*) printf '[[d1_databases]]\\nbinding = \"DB\"\\ndatabase_name = \"%s\"\\ndatabase_id = \"0d1d0000-0000-4000-8000-00000000000%s\"\\n' \"$3\" \"${{#3}}\"; exit 0;; 'd1 list --json') printf '[{{\"uuid\": \"adadadad-0000-4000-8000-000000000000\", \"name\": \"api-taken\"}}]\\n'; exit 0;; esac\ncase \"$*\" in *--json*) echo '✘ [ERROR] Unknown argument: json' >&2; exit 1;; esac\nif [ \"$1\" = kv ]; then printf '[[kv_namespaces]]\\nbinding = \"t\"\\nid = \"minted-id\"\\n'; fi\nexit 0\n",
                 log.display()
             ),
         );
@@ -1672,6 +1789,119 @@ mod tests {
         let config = std::fs::read_to_string(workers_dir.join("api/wrangler.toml")).unwrap();
         let _ = std::fs::remove_dir_all(root);
         (calls, lock, pushed, config)
+    }
+
+    // ---- P4a (#2602): D1 databases are created, recorded and bound by id ----
+
+    #[cfg(unix)]
+    fn d1_calls(calls: &[String]) -> Vec<&str> {
+        calls
+            .iter()
+            .map(String::as_str)
+            .filter(|c| c.starts_with("d1 "))
+            .collect()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn each_d1_database_is_created_recorded_and_bound_by_its_minted_id() {
+        let (calls, lock, pushed, config) = provision_api_with_config(
+            "default",
+            Resources::default().d1_databases(&[("D1_ORDERS", "api-orders")]),
+            DeployLock::default(),
+            None,
+        );
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        assert_eq!(d1_calls(&calls), ["d1 create api-orders"]);
+        let recorded = recorded_d1(&lock, "api", "D1_ORDERS", "default").unwrap();
+        assert_eq!(recorded.name, "api-orders");
+        assert_eq!(recorded.id, "0d1d0000-0000-4000-8000-0000000000010");
+        assert!(
+            config.contains("database_id = \"0d1d0000-0000-4000-8000-0000000000010\""),
+            "{config}"
+        );
+        // Recorded, so the next deploy binds it without asking the account.
+        let (calls, _, pushed) = provision_api(
+            "default",
+            Resources::default().d1_databases(&[("D1_ORDERS", "api-orders")]),
+            lock,
+            None,
+        );
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        assert_eq!(d1_calls(&calls), Vec::<&str>::new());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_named_environment_creates_and_binds_its_own_database() {
+        let (calls, lock, _, config) = provision_api_with_config(
+            "staging",
+            Resources::default().d1_databases(&[("D1_ORDERS", "api-orders")]),
+            DeployLock::default(),
+            None,
+        );
+        assert_eq!(d1_calls(&calls), ["d1 create api-orders-staging"]);
+        assert_eq!(
+            recorded_d1(&lock, "api", "D1_ORDERS", "staging")
+                .unwrap()
+                .name,
+            "api-orders-staging"
+        );
+        assert!(recorded_d1(&lock, "api", "D1_ORDERS", "default").is_none());
+        let doc: toml::Table = config.parse().unwrap();
+        let block = &doc["env"]["staging"]["d1_databases"][0];
+        assert_eq!(block["database_name"].as_str(), Some("api-orders-staging"));
+        assert_eq!(
+            block["database_id"].as_str(),
+            Some("0d1d0000-0000-4000-8000-0000000000018")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_database_of_the_same_name_already_there_is_adopted() {
+        let (calls, lock, pushed) = provision_api(
+            "default",
+            Resources::default().d1_databases(&[("D1_TAKEN", "api-taken")]),
+            DeployLock::default(),
+            None,
+        );
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        assert_eq!(d1_calls(&calls), ["d1 create api-taken", "d1 list --json"]);
+        assert_eq!(
+            recorded_d1(&lock, "api", "D1_TAKEN", "default").unwrap().id,
+            "adadadad-0000-4000-8000-000000000000"
+        );
+    }
+
+    #[test]
+    fn the_d1_id_is_read_from_either_snippet_format() {
+        let toml = "✅ Successfully created DB 'shop-orders' in region WEUR\nCreated your new D1 database.\n\n[[d1_databases]]\nbinding = \"shop_orders\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n";
+        assert_eq!(
+            parse_d1_id(toml).as_deref(),
+            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
+        );
+        let json = "{\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-orders\",\n      \"database_id\": \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n    }\n  ]\n}";
+        assert_eq!(
+            parse_d1_id(json).as_deref(),
+            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
+        );
+        assert_eq!(parse_d1_id("Created your new D1 database."), None);
+        assert!(d1_database_already_exists(
+            "✘ [ERROR] A database with that name already exists"
+        ));
+        assert!(!d1_database_already_exists(
+            "✘ [ERROR] Authentication error"
+        ));
+        assert_eq!(
+            parse_d1_listed_id(
+                "[{\"uuid\": \"u-1\", \"name\": \"a\"}, {\"uuid\": \"u-2\", \"name\": \"b\"}]",
+                "b"
+            )
+            .as_deref(),
+            Some("u-2")
+        );
+        assert_eq!(parse_d1_listed_id("[]", "b"), None);
     }
 
     // ---- P3 (#2342): rate limiter ids are allocated in the ledger ----

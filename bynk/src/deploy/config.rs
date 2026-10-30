@@ -30,6 +30,9 @@ struct WranglerConfig {
     /// P5 (#2323): the `[[r2_buckets]]` of the `R2` instances.
     #[serde(default)]
     r2_buckets: Vec<R2BucketBinding>,
+    /// P4a (#2602): the `[[d1_databases]]` of the `D1` instances.
+    #[serde(default)]
+    d1_databases: Vec<D1DatabaseBinding>,
     /// P3 (#2342): the `[[ratelimits]]` of the `RateLimit` instances.
     #[serde(default)]
     ratelimits: Vec<RateLimitBinding>,
@@ -151,6 +154,25 @@ pub(crate) struct AnalyticsDecl {
     pub(crate) name: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct D1DatabaseBinding {
+    /// `D1_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The unqualified derived name (`<worker>-<capability, kebab>`), which
+    /// [`d1_database_name`] environment-qualifies.
+    database_name: String,
+}
+
+/// P4a (#2602): one `D1` instance's database, as the emitted config declares
+/// it. Its id is minted by Cloudflare at creation and kept in the ledger.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct D1Decl {
+    /// `D1_<SNAKE>`, the key the ledger records the database under.
+    pub(crate) binding: String,
+    /// The derived name before any environment qualification.
+    pub(crate) name: String,
+}
+
 /// P5 (#2323): one `R2` instance's bucket, as the emitted config declares it.
 /// Unlike a KV namespace it has no minted id: the name is the identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -207,6 +229,11 @@ pub(crate) struct Resources {
     /// created by name (the name is the identity), recorded in the ledger, and
     /// reported, never deleted, when its instance goes.
     pub(crate) r2_buckets: Vec<R2Decl>,
+    /// P4a (#2602): the databases of the `D1` instances, in binding order.
+    /// Each is created by name, its minted id recorded in the ledger and
+    /// written into the config before the push; reported, never deleted, when
+    /// its instance goes.
+    pub(crate) d1_databases: Vec<D1Decl>,
     /// P3 (#2342): the bindings of the `RateLimit` instances, in binding
     /// order. Each has a `namespace_id` the ledger allocates; the limit and
     /// the window are configuration the push carries, not identity.
@@ -277,6 +304,7 @@ impl Default for Resources {
             needs_kv: false,
             kv_instances: Vec::new(),
             r2_buckets: Vec::new(),
+            d1_databases: Vec::new(),
             ratelimits: Vec::new(),
             analytics_datasets: Vec::new(),
             declared_secrets: Vec::new(),
@@ -449,6 +477,15 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     analytics_datasets.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut d1_databases: Vec<D1Decl> = parsed
+        .d1_databases
+        .into_iter()
+        .map(|d| D1Decl {
+            binding: d.binding,
+            name: d.database_name,
+        })
+        .collect();
+    d1_databases.sort_by(|a, b| a.binding.cmp(&b.binding));
     Ok(Resources {
         binds_to: binds_to.into_iter().map(|s| s.service).collect(),
         foreign_services: foreign
@@ -478,6 +515,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
             instances
         },
         r2_buckets,
+        d1_databases,
         ratelimits,
         analytics_datasets,
         declared_secrets: secrets.declared,
@@ -738,6 +776,33 @@ pub(crate) fn analytics_dataset_name(environment: &str, name: &str) -> String {
     }
 }
 
+/// P4a (#2602): the name a `D1` instance's database has on the account in
+/// `environment`: its derived name, [`env_qualify`]d, as a bucket's is.
+pub(crate) fn d1_database_name(environment: &str, name: &str) -> String {
+    env_qualify(environment, name)
+}
+
+/// P4a (#2602): materialise each `D1` database's environment's name and
+/// recorded id into the generated config at `path`, by binding, as
+/// [`materialise_kv_ids`] does KV ids. A named environment's block copies the
+/// stanza from here ([`synthesise_environment_block`]).
+pub(crate) fn materialise_d1_databases(
+    path: &Path,
+    databases: &BTreeMap<String, (String, String)>,
+) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(patched) = bynk_emit::emitter::wrangler::materialise_d1_databases(&text, databases)
+    else {
+        return false;
+    };
+    if patched == text {
+        return true;
+    }
+    std::fs::write(path, patched).is_ok()
+}
+
 /// P5 (#2323): why `name` cannot be an R2 bucket's, or `None` when it can.
 /// R2 takes 3 to 63 characters of lowercase letters, digits and hyphens, not
 /// starting or ending with a hyphen. Checked at plan time, so a derived name
@@ -861,6 +926,12 @@ pub(crate) fn synthesise_environment_block(
             }
         }
         env_block.insert("r2_buckets".to_string(), toml::Value::Array(buckets));
+    }
+
+    // P4a (#2602): each database as the deploy materialised it, under this
+    // environment's name and id (`materialise_d1_databases` runs first).
+    if let Some(databases) = doc.get("d1_databases") {
+        env_block.insert("d1_databases".to_string(), databases.clone());
     }
 
     // P3b (#2582): each dataset under its environment-qualified name, or
@@ -1026,6 +1097,18 @@ pub(crate) mod tests {
                 .collect();
             self
         }
+        /// Derived `D1` instances, as `(binding, derived name)` (P4a, #2602).
+        pub(crate) fn d1_databases(mut self, databases: &[(&str, &str)]) -> Self {
+            self.d1_databases = databases
+                .iter()
+                .map(|(binding, name)| D1Decl {
+                    binding: binding.to_string(),
+                    name: name.to_string(),
+                })
+                .collect();
+            self
+        }
+
         pub(crate) fn r2_buckets(mut self, buckets: &[(&str, &str, Option<&str>)]) -> Self {
             self.r2_buckets = buckets
                 .iter()
@@ -1655,6 +1738,54 @@ state = "deleted"
             ]
         );
         assert!(!resources.needs_kv && resources.kv_instances.is_empty());
+    }
+
+    #[test]
+    fn d1_databases_are_read_in_binding_order_and_copied_into_a_named_environment() {
+        // P4a (#2602).
+        let config = "name = \"shop-cart\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-cart-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\"\n\n[[d1_databases]]\nbinding = \"D1_AUDIT\"\ndatabase_name = \"shop-cart-audit\"\ndatabase_id = \"<D1_AUDIT_ID>\"\n";
+        let resources = parse_config("d1-databases", config);
+        assert_eq!(
+            resources.d1_databases,
+            [
+                D1Decl {
+                    binding: "D1_AUDIT".into(),
+                    name: "shop-cart-audit".into()
+                },
+                D1Decl {
+                    binding: "D1_ORDERS".into(),
+                    name: "shop-cart-orders".into()
+                },
+            ]
+        );
+        assert_eq!(
+            d1_database_name("staging", "shop-cart-orders"),
+            "shop-cart-orders-staging"
+        );
+        let materialised = bynk_emit::emitter::wrangler::materialise_d1_databases(
+            config,
+            &BTreeMap::from([(
+                "D1_ORDERS".to_string(),
+                ("shop-cart-orders-staging".to_string(), "id-9".to_string()),
+            )]),
+        )
+        .unwrap();
+        let out = synthesise_environment_block(
+            &materialised,
+            "staging",
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+        )
+        .unwrap();
+        let doc: toml::Table = out.parse().unwrap();
+        let databases = doc["env"]["staging"]["d1_databases"].as_array().unwrap();
+        assert_eq!(
+            databases[0]["database_name"].as_str(),
+            Some("shop-cart-orders-staging")
+        );
+        assert_eq!(databases[0]["database_id"].as_str(), Some("id-9"));
+        // An entry not named is left as the emitter wrote it.
+        assert_eq!(databases[1]["database_id"].as_str(), Some("<D1_AUDIT_ID>"));
     }
 
     #[test]

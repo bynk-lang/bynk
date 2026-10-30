@@ -1,0 +1,2 @@
+bynk.capability.unknown_option
+`@name` is not an option of a `D1` instance
