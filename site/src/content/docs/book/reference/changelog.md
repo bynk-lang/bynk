@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.446**.
+written against **v0.447**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.447.0** | "`String` gains `matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex` and `splitRegex`, each over a string-literal pattern checked at compile time exactly as a `Matches` pattern is (syntax and ReDoS), with leading inline `(?i)`/`(?m)`/`(?s)` flags; a non-literal pattern is `bynk.types.regex_not_literal` (standard-library K6c, [#2600](https://github.com/bynk-lang/bynk/issues/2600))" |
 | **v0.446.0** | "`Int` gains `div` (floor), `rem` (the remainder of `/`), `mod` (the remainder of `div`, taking the divisor's sign) and an exact `pow`, each faulting on a zero divisor or a result past the safe range; `Float` gains `sqrt`, `pow`, `exp`, `ln`, `log10`, `log2`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan` and `atan2`, and `Float.pi()`/`Float.e()` (standard-library K6b, [#2598](https://github.com/bynk-lang/bynk/issues/2598))" |
 | **v0.445.0** | "`String` gains `percentEncode()` and `percentDecode() -> Option[String]` (RFC 3986, over the UTF-8 bytes), and a new `bynk.url` commons, written in Bynk, adds a `Url` record with `parse`/`format`, `parseQuery`/`formatQuery` and helpers (standard-library K2, [#2594](https://github.com/bynk-lang/bynk/issues/2594))" |
 | **v0.444.0** | "`Set[T]` is a built-in immutable, insertion-ordered set beside `List` and `Map`: `Set.of(xs)`, `Set.empty()`, a `length`/`contains`/`insert`/`remove`/`toList` kernel, membership equality, and a JSON-array wire form that refuses a repeated element; members follow the `Map`-key rule (`bynk.types.unkeyable_set_element`), and a new `bynk.set` commons adds `union`, `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet` (standard-library K6a, [#2596](https://github.com/bynk-lang/bynk/issues/2596))" |

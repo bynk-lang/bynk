@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`String` gains `matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex` and `splitRegex`, each over a string-literal pattern checked at compile time exactly as a `Matches` pattern is (syntax and ReDoS), with leading inline `(?i)`/`(?m)`/`(?s)` flags; a non-literal pattern is `bynk.types.regex_not_literal` (standard-library K6c, [#2600](https://github.com/bynk-lang/bynk/issues/2600))"
----
+# 0661 — Regex methods on String take literal patterns, checked as Matches patterns are
 
-## ADR: regex-kernel
-title: Regex methods on String take literal patterns, checked as Matches patterns are
-summary: six `String` methods match, capture, replace and split over JS `RegExp`, but only with a string-literal pattern, so the compile-time ECMAScript validation and ReDoS analysis that `Matches` patterns get (#724, #1651) cover every pattern; captures come back as `List[Option[String]]`, flags as a leading `(?ims)` group
+- **Status:** Accepted (v0.447)
 
 **Context.** A service could only check a string against a pattern, through a
 `Matches` refinement; it could not extract, rewrite or split. For `Matches`
