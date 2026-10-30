@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: "`String` gains `percentEncode()` and `percentDecode() -> Option[String]` (RFC 3986, over the UTF-8 bytes), and a new `bynk.url` commons, written in Bynk, adds a `Url` record with `parse`/`format`, `parseQuery`/`formatQuery` and helpers (standard-library K2, [#2594](https://github.com/bynk-lang/bynk/issues/2594))"
----
+# 0659 — URLs as a pure-Bynk commons over two percent-encoding kernel methods
 
-## ADR: url-commons
-title: URLs as a pure-Bynk commons over two percent-encoding kernel methods
-summary: `Url` is a record in a `bynk.url` commons written in Bynk (RFC 3986 `parse`/`format`, query-string helpers), not a base type, because a base type's name is a lexer token; only percent-encoding is kernel, since it needs a string's UTF-8 bytes
+- **Status:** Accepted (v0.445)
 
 **Context.** Track §6.1 lists URL parse and build, query strings and
 percent-encoding as missing; a Fetch caller built query strings by `concat`
