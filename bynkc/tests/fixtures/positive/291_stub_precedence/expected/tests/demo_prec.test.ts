@@ -116,7 +116,9 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 }
 
 function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
-  const store = new globalThis.Map<string, any>();
+  type Entry = { bytes: Uint8Array; metadata: globalThis.Map<string, string>; expiration: number | undefined };
+  type Expiration = { tag: string; ttl?: number; instant?: number };
+  const store = new globalThis.Map<string, Entry>();
   const enc = new globalThis.TextEncoder();
   const dec = new globalThis.TextDecoder();
   const fault = (why: string): never => {
@@ -126,24 +128,26 @@ function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
     const n = enc.encode(key).length;
     if (n > 512) fault(`a key is at most 512 bytes, not ${n}`);
   };
-  const expiryOf = (e: any): any => {
+  const expiryOf = (e: Expiration): number | undefined => {
     if (e.tag === "After") {
-      if (globalThis.Math.ceil(e.ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${e.ttl} ms`);
-      return Some(globalThis.Date.now() + globalThis.Math.ceil(e.ttl / 1000) * 1000);
+      const ttl = e.ttl ?? 0;
+      if (globalThis.Math.ceil(ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${ttl} ms`);
+      return globalThis.Date.now() + globalThis.Math.ceil(ttl / 1000) * 1000;
     }
     if (e.tag === "At") {
-      if (globalThis.Math.ceil(e.instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
-      return Some(globalThis.Math.ceil(e.instant / 1000) * 1000);
+      const instant = e.instant ?? 0;
+      if (globalThis.Math.ceil(instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      return globalThis.Math.ceil(instant / 1000) * 1000;
     }
-    return None;
+    return undefined;
   };
-  const write = (key: string, bytes: Uint8Array, options: any) => {
+  const write = (key: string, bytes: Uint8Array, options: { expiration: Expiration; metadata: ReadonlyMap<string, string> }) => {
     checkKey(key);
     const size = enc.encode(globalThis.JSON.stringify(globalThis.Object.fromEntries(options.metadata))).length;
     if (size > 1024) fault(`metadata is at most 1024 bytes as JSON, not ${size}`);
     store.set(key, { bytes, metadata: new globalThis.Map(options.metadata), expiration: expiryOf(options.expiration) });
   };
-  const plain = (bytes: Uint8Array) => ({ bytes, metadata: new globalThis.Map(), expiration: None });
+  const plain = (bytes: Uint8Array): Entry => ({ bytes, metadata: new globalThis.Map<string, string>(), expiration: undefined });
   return {
     async get(key) {
       const e = store.get(key);
@@ -190,8 +194,8 @@ function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
       const page = names.slice(0, limit);
       return {
         keys: page.map((name) => {
-          const e = store.get(name);
-          return { name, expiration: e.expiration, metadata: new globalThis.Map(e.metadata) };
+          const e = store.get(name)!;
+          return { name, expiration: e.expiration === undefined ? None : Some(e.expiration), metadata: new globalThis.Map(e.metadata) };
         }),
         cursor: page.length < names.length ? Some(page[page.length - 1]) : None,
       };
