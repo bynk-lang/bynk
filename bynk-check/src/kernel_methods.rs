@@ -106,6 +106,16 @@ pub const LIST_METHODS: &[KernelMethod] = &[
 ];
 
 /// `Map[K, V]` (v0.20b).
+/// The `Set` kernel (K6a, #2596): what Bynk cannot write over a list. The
+/// combinators (`union`, `intersect`, …) are the `bynk.set` commons.
+pub const SET_METHODS: &[KernelMethod] = &[
+    m("length", "length() -> Int"),
+    m("contains", "contains(item: T) -> Bool"),
+    m("insert", "insert(item: T) -> Set[T]"),
+    m("remove", "remove(item: T) -> Set[T]"),
+    m("toList", "toList() -> List[T]"),
+];
+
 pub const MAP_METHODS: &[KernelMethod] = &[
     m("length", "length() -> Int"),
     m("keys", "keys() -> List[K]"),
@@ -321,6 +331,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::TokenClaims => TOKEN_CLAIMS_METHODS,
         Ty::List(_) => LIST_METHODS,
         Ty::Map(_, _) => MAP_METHODS,
+        Ty::Set(_) => SET_METHODS,
         Ty::Query(_) => QUERY_METHODS,
         Ty::Option(_) => OPTION_METHODS,
         Ty::Result(_, _) => RESULT_METHODS,

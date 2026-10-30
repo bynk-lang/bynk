@@ -1,0 +1,48 @@
+commons bynk.set {
+	---
+	Every element of `a`, then every element of `b` not already in `a`, in
+	that order.
+	---
+	fn union[T](a: Set[T], b: Set[T]) -> Set[T] {
+		b.toList().fold(a, (acc, x) => acc.insert(x))
+	}
+
+	---
+	The elements of `a` that are also in `b`, in `a`'s order.
+	---
+	fn intersect[T](a: Set[T], b: Set[T]) -> Set[T] {
+		Set.of(a.toList().filter((x) => b.contains(x)))
+	}
+
+	---
+	The elements of `a` that are not in `b`, in `a`'s order.
+	---
+	fn difference[T](a: Set[T], b: Set[T]) -> Set[T] {
+		Set.of(a.toList().filter((x) => !b.contains(x)))
+	}
+
+	---
+	Whether every element of `a` is in `b`.
+	---
+	fn isSubsetOf[T](a: Set[T], b: Set[T]) -> Bool {
+		a.toList().all((x) => b.contains(x))
+	}
+
+	---
+	The elements of `s` for which `p` holds, in order. Named apart from
+	`bynk.list`'s `filter`, so a unit can use both commons.
+	---
+	fn filterSet[T](s: Set[T], p: T -> Bool) -> Set[T] {
+		Set.of(s.toList().filter(p))
+	}
+
+	---
+	`f` applied to each element of `s`, in order. Elements that map to the same
+	value collapse to one, at the first one's position; the result type must
+	itself be value-keyable. Named apart from `bynk.list`'s `map`, so a unit can
+	use both commons.
+	---
+	fn mapSet[A, B](s: Set[A], f: A -> B) -> Set[B] {
+		Set.of(s.toList().map(f))
+	}
+}

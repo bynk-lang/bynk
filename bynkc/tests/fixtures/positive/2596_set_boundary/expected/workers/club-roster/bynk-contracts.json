@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "members": "a47af6d47d577cc2"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "members": "Svc(\"members\",P(\"extra\",St(B(\"String\"))),Ret(St(B(\"String\"))))"
+  }
+}

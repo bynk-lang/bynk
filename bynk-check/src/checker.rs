@@ -329,6 +329,9 @@ pub enum Ty {
     /// `Map[K, V]` — built-in immutable map (v0.20b). The key type is
     /// confined to value-keyable types at TypeRef resolution.
     Map(TyId, TyId),
+    /// `Set[T]` — built-in immutable set (K6a, #2596). The element type is
+    /// confined to the `Map`-key rule at TypeRef resolution.
+    Set(TyId),
     /// `Query[T]` — a lazy, by-reference description of a read over agent-local
     /// storage (v0.91, ADR 0115). The inner type is the element a terminal
     /// yields. Built by the lazy combinator vocabulary over a `store` field,
@@ -435,6 +438,7 @@ impl Ty {
             Ty::RequestHeaders => "RequestHeaders".to_string(),
             Ty::TokenClaims => "TokenClaims".to_string(),
             Ty::List(t) => format!("List[{}]", types.display(*t)),
+            Ty::Set(t) => format!("Set[{}]", types.display(*t)),
             Ty::Map(k, v) => format!("Map[{}, {}]", types.display(*k), types.display(*v)),
             Ty::Query(t) => format!("Query[{}]", types.display(*t)),
             Ty::Stream(t) => format!("Stream[{}]", types.display(*t)),
@@ -2805,6 +2809,7 @@ pub fn resolve_type_ref_in(
         TypeRef::Effect(t, _) => Ty::Effect(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::HttpResult(t, _) => Ty::HttpResult(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::List(t, _) => Ty::List(resolve_type_ref_in(t, types, vars, tys)?),
+        TypeRef::Set(t, _) => Ty::Set(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::Query(t, _) => Ty::Query(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::Stream(t, _) => Ty::Stream(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::Connection(t, _) => Ty::Connection(resolve_type_ref_in(t, types, vars, tys)?),
@@ -2852,6 +2857,7 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         Ty::HttpResult(a) => Ty::HttpResult(substitute(*a, subst, tys)),
         Ty::HttpOutcome(a) => Ty::HttpOutcome(substitute(*a, subst, tys)),
         Ty::List(a) => Ty::List(substitute(*a, subst, tys)),
+        Ty::Set(a) => Ty::Set(substitute(*a, subst, tys)),
         Ty::Query(a) => Ty::Query(substitute(*a, subst, tys)),
         Ty::Stream(a) => Ty::Stream(substitute(*a, subst, tys)),
         Ty::Connection(a) => Ty::Connection(substitute(*a, subst, tys)),
@@ -2902,6 +2908,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
         | Ty::HttpResult(a)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
+        | Ty::Set(a)
         | Ty::Query(a)
         | Ty::Stream(a)
         | Ty::Connection(a) => contains_var(*a, tys),
@@ -2941,6 +2948,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
         | Ty::HttpResult(a)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
+        | Ty::Set(a)
         | Ty::Query(a)
         | Ty::Stream(a)
         | Ty::Connection(a) => contains_flexible_var(*a, rigid, tys),
@@ -2999,6 +3007,7 @@ pub(crate) fn unify(
         | (Ty::HttpResult(a1), Ty::HttpResult(a2))
         | (Ty::HttpOutcome(a1), Ty::HttpOutcome(a2))
         | (Ty::List(a1), Ty::List(a2))
+        | (Ty::Set(a1), Ty::Set(a2))
         | (Ty::Query(a1), Ty::Query(a2))
         | (Ty::Stream(a1), Ty::Stream(a2))
         | (Ty::Connection(a1), Ty::Connection(a2)) => unify(*a1, *a2, subst, tys),
@@ -3049,6 +3058,7 @@ pub(crate) fn unify(
             | Ty::RequestHeaders
             | Ty::TokenClaims
             | Ty::List(_)
+            | Ty::Set(_)
             | Ty::Map(..)
             | Ty::Query(_)
             | Ty::Stream(_)
@@ -3103,7 +3113,8 @@ pub fn record_type_refs(
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
         | TypeRef::History(t, _)
-        | TypeRef::List(t, _) => record_type_refs(t, types, skip, refs),
+        | TypeRef::List(t, _)
+        | TypeRef::Set(t, _) => record_type_refs(t, types, skip, refs),
         // v0.157 (ADR 0183): a `Name[Arg, …]` application records the generic
         // type's name plus every argument.
         TypeRef::App { name, args, .. } => {
@@ -3207,6 +3218,7 @@ fn first_unresolved_type_name<'a>(
         | TypeRef::Effect(t, _)
         | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
+        | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
@@ -3287,6 +3299,7 @@ pub fn resolve_type_ref(
         TypeRef::Effect(t, _) => Ty::Effect(resolve_type_ref(t, types, tys)?),
         TypeRef::HttpResult(t, _) => Ty::HttpResult(resolve_type_ref(t, types, tys)?),
         TypeRef::List(t, _) => Ty::List(resolve_type_ref(t, types, tys)?),
+        TypeRef::Set(t, _) => Ty::Set(resolve_type_ref(t, types, tys)?),
         TypeRef::Query(t, _) => Ty::Query(resolve_type_ref(t, types, tys)?),
         TypeRef::Stream(t, _) => Ty::Stream(resolve_type_ref(t, types, tys)?),
         TypeRef::Connection(t, _) => Ty::Connection(resolve_type_ref(t, types, tys)?),
@@ -3379,6 +3392,8 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         // Map keys must match exactly — key-position widening would split a
         // map's keys across refined/base identities at lookup time.
         (Ty::List(a), Ty::List(b)) => compatible(*a, *b, tys),
+        // K6a (#2596): a `Set`'s element must match exactly, as a `Map` key must.
+        (Ty::Set(a), Ty::Set(b)) => a == b,
         // v0.100: `Stream[T]` is covariant in its element, like `List`/`Effect`.
         // (Assignability only — streams are not value-comparable for `==`.)
         (Ty::Stream(a), Ty::Stream(b)) => compatible(*a, *b, tys),
@@ -3432,6 +3447,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
             | Ty::RequestHeaders
             | Ty::TokenClaims
             | Ty::List(_)
+            | Ty::Set(_)
             | Ty::Map(..)
             | Ty::Query(_)
             | Ty::Stream(_)
@@ -4676,6 +4692,15 @@ fn peel_to_list(ty: TyId, tys: &Types) -> Option<TyId> {
     }
 }
 
+/// K6a (#2596): companion to `peel_to_list` for `Set[T]`.
+fn peel_to_set(ty: TyId, tys: &Types) -> Option<TyId> {
+    match &*tys.get(ty) {
+        Ty::Set(t) => Some(*t),
+        Ty::Effect(inner) => peel_to_set(*inner, tys),
+        _ => None,
+    }
+}
+
 /// Companion to `peel_to_list` for `Map[K, V]` (v0.20b).
 fn peel_to_map(ty: TyId, tys: &Types) -> Option<(TyId, TyId)> {
     match &*tys.get(ty) {
@@ -4740,6 +4765,7 @@ fn rebrand_return_type(
             tys.intern(Ty::HttpOutcome(rebrand_return_type(*t, caller_types, tys)))
         }
         Ty::List(t) => tys.intern(Ty::List(rebrand_return_type(*t, caller_types, tys))),
+        Ty::Set(t) => tys.intern(Ty::Set(rebrand_return_type(*t, caller_types, tys))),
         Ty::Query(t) => tys.intern(Ty::Query(rebrand_return_type(*t, caller_types, tys))),
         Ty::Stream(t) => tys.intern(Ty::Stream(rebrand_return_type(*t, caller_types, tys))),
         Ty::Connection(t) => tys.intern(Ty::Connection(rebrand_return_type(*t, caller_types, tys))),
@@ -4802,7 +4828,7 @@ fn rebrand_conflict(
                 .then(|| name.clone())
         }
         Ty::Result(a, b) | Ty::Map(a, b) => walk(*a).or_else(|| walk(*b)),
-        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a) | Ty::List(a) => walk(*a),
+        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a) | Ty::List(a) | Ty::Set(a) => walk(*a),
         // `Query`, `Stream` and `Connection` are non-boundary, so a
         // cross-context return never carries one.
         _ => None,
@@ -4934,7 +4960,7 @@ pub(crate) fn ambiguous_projection_note(
         }
         Ty::Result(a, b) | Ty::Map(a, b) => ambiguous_projection_note(*a, ambiguous, tys)
             .or_else(|| ambiguous_projection_note(*b, ambiguous, tys)),
-        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a) | Ty::List(a) => {
+        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a) | Ty::List(a) | Ty::Set(a) => {
             ambiguous_projection_note(*a, ambiguous, tys)
         }
         _ => None,
@@ -4975,7 +5001,7 @@ fn structurally_compatible_inner(
         // The boundary-crossing collections walk their element types like
         // `Result`/`Option` — without these arms an identical `List[Int]`
         // was rejected against itself at a context boundary.
-        (Ty::List(a), Ty::List(b)) => {
+        (Ty::List(a), Ty::List(b)) | (Ty::Set(a), Ty::Set(b)) => {
             structurally_compatible_inner(*a, *b, arg_types, param_types, tys, visited)
         }
         (Ty::Map(k1, v1), Ty::Map(k2, v2)) => {
@@ -5047,6 +5073,7 @@ fn structurally_compatible_inner(
             | Ty::RequestHeaders
             | Ty::TokenClaims
             | Ty::List(_)
+            | Ty::Set(_)
             | Ty::Map(..)
             | Ty::Query(_)
             | Ty::Stream(_)

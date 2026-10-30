@@ -785,9 +785,11 @@ first-party enum, not the name.
 ## Related first-party modules
 
 Beyond capabilities, the `bynk` namespace also ships pure **commons** you bring
-in with `uses` (not `consumes`) — `bynk.list` and `bynk.map` (combinators over
-the `List`/`Map` kernels), `bynk.string` (string helpers) and `bynk.url` (URLs
-and query strings, below). These are ordinary functions with no effects; see the
+in with `uses` (not `consumes`) — `bynk.list`, `bynk.map` and `bynk.set`
+(combinators over the `List`/`Map`/`Set` kernels; `bynk.set` has `union`,
+`intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet`),
+`bynk.string` (string helpers) and `bynk.url` (URLs and query strings, below).
+These are ordinary functions with no effects; see the
 [type system reference](/book/reference/types/).
 
 ### URLs and query strings: `bynk.url`

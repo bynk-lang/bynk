@@ -1572,6 +1572,7 @@ impl Gate<'_> {
             | TypeRef::Effect(t, _)
             | TypeRef::HttpResult(t, _)
             | TypeRef::List(t, _)
+            | TypeRef::Set(t, _)
             | TypeRef::Query(t, _)
             | TypeRef::Stream(t, _)
             | TypeRef::Connection(t, _)
@@ -2198,6 +2199,11 @@ fn check_type_ref_resolves_in(
         TypeRef::List(t, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
+        // K6a (#2596): a `Set`'s element follows the `Map`-key rule.
+        TypeRef::Set(t, _) => {
+            check_type_ref_resolves_in(t, types, type_params, errors);
+            check_keyable(t, types, type_params, errors, KeyRole::SetElement);
+        }
         TypeRef::Query(t, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
@@ -2226,7 +2232,7 @@ fn check_type_ref_resolves_in(
         TypeRef::Map(k, v, _) => {
             check_type_ref_resolves_in(k, types, type_params, errors);
             check_type_ref_resolves_in(v, types, type_params, errors);
-            check_map_key_keyable(k, types, type_params, errors);
+            check_keyable(k, types, type_params, errors, KeyRole::MapKey);
         }
         TypeRef::ValidationError(_) | TypeRef::JsonError(_) => {}
         TypeRef::Unit(_) => {}
@@ -2238,11 +2244,20 @@ fn check_type_ref_resolves_in(
 /// value equality (object keys would compare by reference). A type parameter
 /// is admitted in key position: it can only ever be instantiated through a
 /// concrete `Map[K, V]` reference elsewhere, and that site is checked.
-fn check_map_key_keyable(
+/// Which value-keyable position [`check_keyable`] is checking.
+#[derive(Clone, Copy)]
+enum KeyRole {
+    MapKey,
+    /// K6a (#2596): a `Set`'s element.
+    SetElement,
+}
+
+fn check_keyable(
     k: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
     type_params: &HashSet<String>,
     errors: &mut Sinks,
+    role: KeyRole,
 ) {
     let keyable = match k {
         TypeRef::Base(BaseType::String | BaseType::Int, _) => true,
@@ -2262,11 +2277,15 @@ fn check_map_key_keyable(
         _ => false,
     };
     if !keyable {
+        let (code, what) = match role {
+            KeyRole::MapKey => ("bynk.types.unkeyable_map_key", "a `Map` key"),
+            KeyRole::SetElement => ("bynk.types.unkeyable_set_element", "a `Set` element"),
+        };
         errors.push(
             CompileError::new(
-                "bynk.types.unkeyable_map_key",
+                code,
                 k.span(),
-                "a `Map` key must be value-keyable — `String`, `Int`, or a refined/opaque type over them",
+                format!("{what} must be value-keyable — `String`, `Int`, or a refined/opaque type over them"),
             )
             .with_note(
                 "record, sum, collection, and function keys are rejected in v0.20b; value-equality keys need bounded generics",
@@ -3032,6 +3051,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     id.name.as_str(),
                     "List"
                         | "Map"
+                        | "Set"
                         | "Int"
                         | "Float"
                         | "Json"
@@ -3046,6 +3066,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             {
                 let allowed: &[&str] = match id.name.as_str() {
                     "List" | "Map" => &["empty"],
+                    // K6a (#2596): `Set.empty()` and `Set.of(xs)`.
+                    "Set" => &["empty", "of"],
                     "Json" => &["encode", "decode"],
                     // v0.86 (ADR 0112): `Duration.millis(n)`.
                     "Duration" => &["millis"],

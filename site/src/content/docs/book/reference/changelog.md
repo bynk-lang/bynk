@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.442**.
+written against **v0.443**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.443.0** | "`Instant` reads and writes ISO-8601: `t.toIso()` gives RFC 3339 text in UTC (`YYYY-MM-DDTHH:mm:ss.sssZ`), and `Instant.fromIso(s)` reads the RFC 3339 date-time profile, converting an offset, as `Option[Instant]` (standard-library K3, [#2592](https://github.com/bynk-lang/bynk/issues/2592))" |
 | **v0.442.0** | "`bynk.cloudflare`'s `Kv` gains five experimental operations: `getWith` and `putWith` (metadata, a `Never`/`After`/`At` expiry, `cacheTtl`), `getBytes` and `putBytes` for binary values, and a paged `listPage` with each key's expiry and metadata; the platform's limits are checked before the call, and the existing operations are unchanged (standard-library P1, [#2590](https://github.com/bynk-lang/bynk/issues/2590))" |
 | **v0.441.0** | "`bynk`'s `Method` gains `Patch`, `Head` and `Options`; `Fetch.sendWith(req, FetchOptions { timeout, redirect })` adds a timeout (`Err(Timeout)` when it elapses) and a `Manual` redirect policy; `Logger` gains `warn`, `debug` and a structured `log(level, msg, fields)`. `sendWith` and `log` are experimental (standard-library K5a, [#2586](https://github.com/bynk-lang/bynk/issues/2586))" |
 | **v0.440.0** | bynk/refinedTypeModel sends each clause's predicate in structured form, so a client checks a candidate without running JavaScript |

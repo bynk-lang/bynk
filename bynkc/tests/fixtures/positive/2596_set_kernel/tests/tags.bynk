@@ -1,0 +1,33 @@
+suite tags
+
+// #2596: what `Set[T]` keeps, drops and compares.
+
+case "Set.of drops repeats, keeping each element's first position" {
+	expect labelled().toList() == ["b", "a"]
+	expect labelled().length() == 2
+}
+
+case "insert and remove copy, and a present element keeps its place" {
+	expect edited().toList() == ["b", "c"]
+	expect labelled().contains("a")
+	expect !edited().contains("a")
+}
+
+case "an empty set takes its type from context" {
+	expect none().length() == 0
+	expect !none().contains(1)
+}
+
+case "equality is membership, not order" {
+	expect sameMembers()
+	expect Set.of([1, 2]) != Set.of([1, 3])
+	expect Set.of([1, 2]) != Set.of([1])
+}
+
+case "the JSON codec reads an array and refuses a duplicate" {
+	expect decoded("[1, 2]")
+	expect !decoded("[1, 1]")
+	expect Json.encode(Set.of([3, 1])) == "[3,1]"
+	let n <- count.call([4, 4, 5])
+	expect n == 2
+}

@@ -317,6 +317,7 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
         "RequestHeaders",
         "An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`).",
     ),
+    k("Set", "The immutable set type, `Set[T]`."),
     k("Stream", "The value-over-time primitive, `Stream[T]`."),
     k(
         "TokenClaims",

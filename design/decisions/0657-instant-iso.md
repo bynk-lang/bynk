@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: "`Instant` reads and writes ISO-8601: `t.toIso()` gives RFC 3339 text in UTC (`YYYY-MM-DDTHH:mm:ss.sssZ`), and `Instant.fromIso(s)` reads the RFC 3339 date-time profile, converting an offset, as `Option[Instant]` (standard-library K3, [#2592](https://github.com/bynk-lang/bynk/issues/2592))"
----
+# 0657 — Instant reads and writes RFC 3339 text in UTC
 
-## ADR: instant-iso
-title: Instant reads and writes RFC 3339 text in UTC
-summary: `toIso()` writes `YYYY-MM-DDTHH:mm:ss.sssZ` and `Instant.fromIso(s) -> Option[Instant]` reads the strict RFC 3339 date-time profile, offsets converted, fractions truncated, the calendar checked, through a hand-written recogniser in the shared runtime
+- **Status:** Accepted (v0.443)
 
 **Context.** ADR 0114 made `Instant` a base type erased to epoch milliseconds,
 with explicit conversions to and from `Int` (D6) and a JSON number codec (D7).

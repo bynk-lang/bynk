@@ -8,6 +8,8 @@ pub mod types {
     pub const JSON: &str = "Json";
     pub const LIST: &str = "List";
     pub const MAP: &str = "Map";
+    /// K6a (#2596): the built-in immutable set.
+    pub const SET: &str = "Set";
     pub const INT: &str = "Int";
     pub const FLOAT: &str = "Float";
     pub const DURATION: &str = "Duration";

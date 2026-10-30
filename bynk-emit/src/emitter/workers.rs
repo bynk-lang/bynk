@@ -2400,6 +2400,7 @@ fn named_types_in(r: &TypeRef) -> Vec<String> {
             }
             TypeRef::Option(a, _)
             | TypeRef::List(a, _)
+            | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
             | TypeRef::HttpResult(a, _) => walk(a, out),
             _ => {}
@@ -2448,6 +2449,7 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
         }
         TypeRef::Effect(t, _)
         | TypeRef::List(t, _)
+        | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _) => collect_runtime_type_names(t, out),
         TypeRef::Map(k, v, _) => {

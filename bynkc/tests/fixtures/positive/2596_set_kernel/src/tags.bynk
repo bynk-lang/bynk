@@ -1,0 +1,36 @@
+context tags
+
+// #2596: the built-in `Set[T]`: `Set.of`, `Set.empty`, the kernel,
+// insertion order, membership equality, a refined element type, and the
+// JSON codec, which refuses a duplicate element.
+
+type Tag = String where MinLength(1)
+
+fn labelled() -> Set[Tag] {
+	Set.of(["b", "a", "b"])
+}
+
+fn edited() -> Set[Tag] {
+	labelled().insert("c").remove("a").insert("b")
+}
+
+fn none() -> Set[Int] {
+	Set.empty()
+}
+
+fn sameMembers() -> Bool {
+	Set.of([1, 2, 3]) == Set.of([3, 1, 2])
+}
+
+fn decoded(text: String) -> Bool {
+	match Json.decode[Set[Int]](text) {
+		Ok(s) => s.length() == 2,
+		Err(_) => false,
+	}
+}
+
+service count {
+	on call(xs: List[Int]) -> Effect[Int] {
+		Set.of(xs).length()
+	}
+}

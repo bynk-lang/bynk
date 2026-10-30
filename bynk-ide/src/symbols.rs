@@ -2567,6 +2567,7 @@ pub fn type_ref_str(t: &TypeRef) -> String {
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         // v0.20b: the built-in collection types.
         TypeRef::List(t, _) => format!("List[{}]", type_ref_str(t)),
+        TypeRef::Set(t, _) => format!("Set[{}]", type_ref_str(t)),
         TypeRef::Query(t, _) => format!("Query[{}]", type_ref_str(t)),
         TypeRef::Stream(t, _) => format!("Stream[{}]", type_ref_str(t)),
         TypeRef::Connection(t, _) => format!("Connection[{}]", type_ref_str(t)),
