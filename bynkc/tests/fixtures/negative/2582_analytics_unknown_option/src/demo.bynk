@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { Analytics }
+
+// #2582: `bynk deploy` names the dataset, so the source cannot.
+capability Signups = Analytics @dataset("signups")
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

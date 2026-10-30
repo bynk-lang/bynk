@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { Analytics }
+
+// #2582: Analytics ships experimental, so it needs an `[unstable] allow`.
+capability Signups = Analytics
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

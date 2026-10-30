@@ -1,0 +1,26 @@
+suite shop.cart
+
+// #2582: the unit double accepts a point within the limits, faults on one
+// over them, and observation sees the writes.
+
+case "a point within the limits is written" {
+	let n <- count.call(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t"])
+	expect n == 20
+	expect Signups.write called once
+}
+
+case "a point with too many blobs faults" {
+	expect count.call(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u"]) faults
+}
+
+case "a stubbed write is observed" {
+	stub Signups.write(_) returns ()
+	let r <- api.POST("/signup/:plan", "pro") by Visitor
+	expect r is Created("counted")
+	expect Signups.write called once
+}
+
+case "a write at integration goes to the participant's recorder" as integration {
+	let n <- count.call(["a", "b"])
+	expect n == 2
+}

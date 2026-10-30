@@ -179,7 +179,7 @@ fn run_smoke(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\"]\n"
         ),
     )
     .unwrap();
@@ -651,6 +651,56 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersQueue on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+const ANALYTICS_SOURCE: &str = "context a.smoke
+
+consumes bynk
+consumes bynk.cloudflare { Analytics }
+
+capability Signups = Analytics
+
+service api from http {
+\ton GET(\"/write/:plan\") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
+\t\tlet _ <- Signups.write(DataPoint { index: Some(plan), blobs: [plan, \"web\"], doubles: [1.0, 2.5] })
+\t\tOk(\"written\")
+\t}
+
+\ton GET(\"/bare\") () -> Effect[HttpResult[String]] by Visitor given Signups {
+\t\tlet _ <- Signups.write(DataPoint { index: None, blobs: [], doubles: [] })
+\t\tOk(\"written\")
+\t}
+
+\ton GET(\"/wide\") () -> Effect[HttpResult[String]] by Visitor given Signups {
+\t\tlet _ <- Signups.write(DataPoint { index: None, blobs: [], doubles: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0] })
+\t\tOk(\"written\")
+\t}
+}
+";
+
+#[test]
+fn workers_analytics_writes_on_workerd() {
+    // P3b (#2582): `wrangler dev` binds `[[analytics_engine_datasets]]` and
+    // drops the writes, so this shows the stanza and the binding agree and a
+    // write within the limits goes through; a point over them is refused
+    // before the platform sees it.
+    let Some((failures, log)) = run_smoke("a-smoke", "a", ANALYTICS_SOURCE, "/bare", 4, &|port| {
+        check_steps(
+            port,
+            &[
+                ("/write/pro", 200, r#""written""#),
+                ("/bare", 200, r#""written""#),
+                ("/wide", 500, ""),
+            ],
+        )
+    }) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "WorkersAnalytics on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

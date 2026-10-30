@@ -311,6 +311,33 @@ export function makeIntegrationQueue(): QueueProducer & { sent: unknown[] } {
   };
 }
 
+/**
+ * Standard-library P3b (#2582): the part of Cloudflare's Analytics Engine
+ * binding that `WorkersAnalytics` uses. The write is synchronous: the platform
+ * batches it and sends it after the response.
+ */
+export interface AnalyticsDataset {
+  writeDataPoint(point: { indexes?: string[]; blobs?: string[]; doubles?: number[] }): void;
+}
+
+/**
+ * An in-memory Analytics Engine dataset for multi-Worker integration tests,
+ * bound as that participant's `env.ANALYTICS_<NAME>` and fresh per test case,
+ * as `makeIntegrationKv` is. It keeps every data point it is given in
+ * `written`, in order.
+ */
+export function makeIntegrationAnalytics(): AnalyticsDataset & {
+  written: { indexes?: string[]; blobs?: string[]; doubles?: number[] }[];
+} {
+  const written: { indexes?: string[]; blobs?: string[]; doubles?: number[] }[] = [];
+  return {
+    written,
+    writeDataPoint(point): void {
+      written.push(point);
+    },
+  };
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeTestState as __makeTestState };
-export type { DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter };
+export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeTestState as __makeTestState };
+export type { AnalyticsDataset as __AnalyticsDataset, DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter };

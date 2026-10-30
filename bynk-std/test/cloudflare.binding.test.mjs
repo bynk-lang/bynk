@@ -3,7 +3,8 @@
 // `WorkersService` (interop I5, #1972) against a Service Binding fake, and its
 // `WorkersR2` (standard-library P5, #2323) against an R2 bucket fake, and its
 // `WorkersRateLimit` (standard-library P3, #2342) against a rate limiter fake,
-// `WorkersQueue` (standard-library P2, #2578) against a queue producer fake, and
+// `WorkersQueue` (standard-library P2, #2578) against a queue producer fake,
+// `WorkersAnalytics` (standard-library P3b, #2582) against a dataset fake, and
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
@@ -16,7 +17,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
+import { WorkersAnalytics, WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -608,4 +609,56 @@ t("WorkersEdgeCache.purge: with no ctx.cache it logs and is true", async () => {
     "bynk: EdgeCache.purge is a no-op under bynk dev",
     "bynk: EdgeCache.purge is a no-op under bynk dev",
   ]);
+});
+
+// P3b (#2582): `WorkersAnalytics`, against a fake of Cloudflare's Analytics
+// Engine dataset: a synchronous `writeDataPoint({ indexes, blobs, doubles })`.
+function fakeDataset() {
+  const points = [];
+  return {
+    points,
+    writeDataPoint(point) {
+      points.push(point);
+    },
+  };
+}
+
+const analytics = (d) => new WorkersAnalytics({ ANALYTICS_SIGNUPS: d }, "ANALYTICS_SIGNUPS");
+
+t("WorkersAnalytics.write: writes the index, blobs and doubles in order", async () => {
+  const d = fakeDataset();
+  await analytics(d).write({ index: Some("eu"), blobs: ["pro", "web"], doubles: [1, 2.5] });
+  await analytics(d).write({ index: None, blobs: [], doubles: [] });
+  assert.deepEqual(d.points, [
+    { indexes: ["eu"], blobs: ["pro", "web"], doubles: [1, 2.5] },
+    { indexes: [], blobs: [], doubles: [] },
+  ]);
+});
+
+t("WorkersAnalytics.write: a point over the platform's limits faults, and nothing is written", async () => {
+  const d = fakeDataset();
+  const point = (p) => ({ index: None, blobs: [], doubles: [], ...p });
+  await assert.rejects(analytics(d).write(point({ blobs: Array(21).fill("x") })), /at most 20 blobs, not 21/);
+  await assert.rejects(analytics(d).write(point({ doubles: Array(21).fill(0) })), /at most 20 doubles, not 21/);
+  // Bytes, not characters: 49 two-byte characters are 98 bytes.
+  await assert.rejects(analytics(d).write(point({ index: Some("é".repeat(49)) })), /at most 96 bytes, not 98/);
+  await assert.rejects(
+    analytics(d).write(point({ blobs: ["a".repeat(10_000), "b".repeat(6_385)] })),
+    /total at most 16 KB, not 16385 bytes/,
+  );
+  await assert.rejects(analytics(d).write(point({ doubles: [Number.NaN] })), /finite/);
+  await assert.rejects(analytics(d).write(point({ doubles: [Infinity] })), /finite/);
+  assert.equal(d.points.length, 0);
+  // At the limits exactly, the write goes through.
+  await analytics(d).write(
+    point({ index: Some("a".repeat(96)), blobs: ["a".repeat(16_384)], doubles: Array(20).fill(0) }),
+  );
+  assert.equal(d.points.length, 1);
+});
+
+t("WorkersAnalytics.write: a missing binding names it", async () => {
+  await assert.rejects(
+    new WorkersAnalytics({}, "ANALYTICS_SIGNUPS").write({ index: None, blobs: [], doubles: [] }),
+    /requires an Analytics Engine binding \(env\.ANALYTICS_SIGNUPS\)/,
+  );
 });

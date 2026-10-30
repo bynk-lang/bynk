@@ -1,7 +1,7 @@
 adapter bynk.cloudflare {
 	consumes bynk { Fetch }
-	exports capability { Kv, Service, R2, RateLimit, Queue, EdgeCache }
-	exports transparent { R2Object, R2Put, R2Condition, R2Listing, QueueSend }
+	exports capability { Kv, Service, R2, RateLimit, Queue, Analytics, EdgeCache }
+	exports transparent { R2Object, R2Put, R2Condition, R2Listing, QueueSend, DataPoint }
 
 	---
 	A Cloudflare Workers KV namespace: a key/value store with optional per-entry
@@ -100,6 +100,19 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	One event written to an `Analytics` dataset. `index` is the sampling key
+	(at most 96 bytes; `None` samples the dataset as a whole), `blobs` are
+	text dimensions (at most 20, totalling at most 16 KB), and `doubles` are
+	numeric values (at most 20, each finite). In the SQL API they are the
+	columns `index1`, `blob1`…`blob20` and `double1`…`double20`, in order.
+	---
+	type DataPoint = {
+		index: Option[String],
+		blobs: List[String],
+		doubles: List[Float],
+	}
+
+	---
 	An R2 bucket: objects stored and read whole, as `Bytes`, with metadata
 	and conditional writes. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
@@ -169,6 +182,25 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	A Workers Analytics Engine dataset to write events to. Used only through a
+	named instance, `capability Signups = Analytics`, which binds as
+	`ANALYTICS_SIGNUPS`; a bare `given Analytics` is refused. The dataset's
+	name is derived, never written: context `shop.cart`'s `Signups` writes to
+	`shop_cart_signups`, and to `shop_cart_signups_staging` under
+	`--env staging`. The platform creates it on the first write.
+
+	`write` checks the point against the platform's limits (see `DataPoint`)
+	and faults on a breach; a Worker invocation may write at most 250 points.
+	Writes are sent after the response, so one never delays it. Reading is
+	the account's SQL API, outside Bynk. Data is kept for three months and
+	readable with any account analytics token, so keep secrets and personal
+	data out of it.
+	---
+	capability Analytics {
+		fn write(point: DataPoint) -> Effect[()]
+	}
+
+	---
 	Cloudflare's edge cache for this context's Worker (Workers Cache), and its
 	purge. Used only through a named instance, `capability Edge = EdgeCache`,
 	at most one per context; declaring it is what turns the cache on, so a bare
@@ -210,6 +242,8 @@ adapter bynk.cloudflare {
 	provides RateLimit = WorkersRateLimit
 
 	provides Queue = WorkersQueue
+
+	provides Analytics = WorkersAnalytics
 
 	provides EdgeCache = WorkersEdgeCache
 }

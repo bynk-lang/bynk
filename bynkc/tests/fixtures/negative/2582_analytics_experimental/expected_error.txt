@@ -1,0 +1,2 @@
+bynk.stability.experimental
+`bynk.cloudflare.Analytics` is experimental

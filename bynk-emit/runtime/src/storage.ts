@@ -310,3 +310,30 @@ export function makeIntegrationQueue(): QueueProducer & { sent: unknown[] } {
     },
   };
 }
+
+/**
+ * Standard-library P3b (#2582): the part of Cloudflare's Analytics Engine
+ * binding that `WorkersAnalytics` uses. The write is synchronous: the platform
+ * batches it and sends it after the response.
+ */
+export interface AnalyticsDataset {
+  writeDataPoint(point: { indexes?: string[]; blobs?: string[]; doubles?: number[] }): void;
+}
+
+/**
+ * An in-memory Analytics Engine dataset for multi-Worker integration tests,
+ * bound as that participant's `env.ANALYTICS_<NAME>` and fresh per test case,
+ * as `makeIntegrationKv` is. It keeps every data point it is given in
+ * `written`, in order.
+ */
+export function makeIntegrationAnalytics(): AnalyticsDataset & {
+  written: { indexes?: string[]; blobs?: string[]; doubles?: number[] }[];
+} {
+  const written: { indexes?: string[]; blobs?: string[]; doubles?: number[] }[] = [];
+  return {
+    written,
+    writeDataPoint(point): void {
+      written.push(point);
+    },
+  };
+}
