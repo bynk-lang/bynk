@@ -74,6 +74,15 @@ pub(crate) struct Environment {
     /// Additive and `default`ed, so a slice-0 or slice-2 ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     queues: BTreeSet<String>,
+    /// #2579: the subset of [`Environment::queues`] this project only found
+    /// already on the account, never created. `--prune` leaves them alone: a
+    /// queue another Worker owns must not be deleted, with its undelivered
+    /// messages, because this project stopped consuming it. A queue absent from
+    /// this set is one the run created, or one an older ledger recorded without
+    /// saying — which keeps its old, prunable meaning. Additive and
+    /// `default`ed, so an older ledger still reads.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    reused_queues: BTreeSet<String>,
     /// State-migrations S3 (#2248, #2253 review): per Worker, the agent classes
     /// whose `deleted` tombstone a successful push carried in this
     /// environment. A `removed agent` declaration stays in source (and its
@@ -625,11 +634,30 @@ impl DeployLock {
     /// Note that this project has created `queue`. Returns whether the ledger
     /// changed, so a re-run that provisions nothing also writes nothing.
     pub(crate) fn record_queue(&mut self, environment: &str, queue: &str) -> bool {
-        self.environments
+        let env = self
+            .environments
             .entry(environment.to_string())
-            .or_default()
-            .queues
-            .insert(queue.to_string())
+            .or_default();
+        // Created by this run, so whatever the ledger held before it is
+        // stale: the queue is Bynk's to prune now.
+        let was_reused = env.reused_queues.remove(queue);
+        env.queues.insert(queue.to_string()) || was_reused
+    }
+
+    /// Note that `queue` was already on the account when this project met it
+    /// (#2579): confirmed to exist, so the plan says `reuse`, but not Bynk's to
+    /// prune. A queue the ledger already holds is left as it was, whichever
+    /// way. Returns whether the ledger changed.
+    pub(crate) fn record_reused_queue(&mut self, environment: &str, queue: &str) -> bool {
+        let env = self
+            .environments
+            .entry(environment.to_string())
+            .or_default();
+        if !env.queues.insert(queue.to_string()) {
+            return false;
+        }
+        env.reused_queues.insert(queue.to_string());
+        true
     }
 }
 
@@ -835,6 +863,7 @@ pub(crate) fn find_orphans(
             .queues
             .iter()
             .filter(|queue| !live_queues.contains(queue.as_str()))
+            .filter(|queue| !env.reused_queues.contains(queue.as_str()))
             .cloned()
             .collect(),
     }
@@ -1220,6 +1249,7 @@ pub(crate) fn prune_orphans(
         })?;
         if let Some(env) = lock.environments.get_mut(environment) {
             env.queues.remove(queue);
+            env.reused_queues.remove(queue);
         }
         write_lock(lock_path, lock).map_err(|e| {
             DeployFailure::driver(format!(
@@ -1445,6 +1475,7 @@ pub(crate) mod tests {
                         },
                     )]),
                     queues: BTreeSet::from(["intake".to_string()]),
+                    reused_queues: BTreeSet::new(),
                 },
             )]),
         };
@@ -2291,6 +2322,44 @@ pub(crate) mod tests {
 
         let orphans = find_orphans(&lock, "default", &resources);
         assert_eq!(orphans.queues, names(&["stale-jobs"]));
+    }
+
+    #[test]
+    fn a_queue_only_reused_is_never_orphaned() {
+        // #2579: a consumed queue another Worker owns is recorded so the plan
+        // says `reuse`, but dropping the consumer must not make it prunable.
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        assert!(lock.record_reused_queue("default", "theirs"));
+        assert!(!lock.record_reused_queue("default", "theirs"));
+        lock.record_queue("default", "ours");
+        let resources = BTreeMap::from([("orders".into(), Resources::default())]);
+
+        assert!(
+            lock.has_queue("default", "theirs"),
+            "the plan still says reuse"
+        );
+        let orphans = find_orphans(&lock, "default", &resources);
+        assert_eq!(orphans.queues, names(&["ours"]));
+
+        // Recreated by a later run (deleted out-of-band), it becomes Bynk's.
+        assert!(lock.record_queue("default", "theirs"));
+        let orphans = find_orphans(&lock, "default", &resources);
+        assert_eq!(orphans.queues, names(&["ours", "theirs"]));
+    }
+
+    #[test]
+    fn a_ledger_with_reused_queues_round_trips() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_reused_queue("default", "theirs");
+        let text = toml::to_string_pretty(&lock).unwrap();
+        assert!(text.contains("reused_queues"));
+        assert_eq!(toml::from_str::<DeployLock>(&text).unwrap(), lock);
     }
 
     #[test]
