@@ -21,19 +21,25 @@ export const Uuid = {
 };
 
 /**
- * An HTTP request method.
+ * An HTTP request method. A `Head` response's `body` is `""`.
  */
 export type Method =
     { readonly tag: "Get" }
   | { readonly tag: "Post" }
   | { readonly tag: "Put" }
-  | { readonly tag: "Delete" };
+  | { readonly tag: "Delete" }
+  | { readonly tag: "Patch" }
+  | { readonly tag: "Head" }
+  | { readonly tag: "Options" };
 
 export const Method = {
   Get: { tag: "Get" } as Method,
   Post: { tag: "Post" } as Method,
   Put: { tag: "Put" } as Method,
   Delete: { tag: "Delete" } as Method,
+  Patch: { tag: "Patch" } as Method,
+  Head: { tag: "Head" } as Method,
+  Options: { tag: "Options" } as Method,
 };
 
 /**
@@ -80,6 +86,51 @@ export interface Request {
 }
 
 export const Request = {
+};
+
+/**
+ * What `Fetch.sendWith` does with a redirect: `Follow` it, as `send` does, or
+ * return the `3xx` itself (`Manual`), `location` header included, so the
+ * caller decides where to go.
+ */
+export type Redirect =
+    { readonly tag: "Follow" }
+  | { readonly tag: "Manual" };
+
+export const Redirect = {
+  Follow: { tag: "Follow" } as Redirect,
+  Manual: { tag: "Manual" } as Redirect,
+};
+
+/**
+ * The options of a `Fetch.sendWith`. `timeout` bounds the whole exchange,
+ * response body included; when it elapses the result is `Err(Timeout)`. A
+ * timeout of zero or less, or over 2,147,483,647 ms (about 24 days, the
+ * longest a platform timer takes), faults the call, with nothing sent. `None` waits as
+ * long as the platform does.
+ */
+export interface FetchOptions {
+  readonly timeout: Option<number>;
+  readonly redirect: Redirect;
+}
+
+export const FetchOptions = {
+};
+
+/**
+ * The level of a `Logger.log` record.
+ */
+export type LogLevel =
+    { readonly tag: "Debug" }
+  | { readonly tag: "Info" }
+  | { readonly tag: "Warn" }
+  | { readonly tag: "Error" };
+
+export const LogLevel = {
+  Debug: { tag: "Debug" } as LogLevel,
+  Info: { tag: "Info" } as LogLevel,
+  Warn: { tag: "Warn" } as LogLevel,
+  Error: { tag: "Error" } as LogLevel,
 };
 
 /**
@@ -154,20 +205,31 @@ export interface Random {
 export const __RandomToken: symbol = globalThis.Symbol("Random");
 
 /**
- * Structured logging at info and error levels.
+ * Logging at four levels. `debug`, `info`, `warn` and `error` write the
+ * message as it is. `log` writes a structured record, `{ message, level,
+ * fields }`: on Cloudflare one object (Workers Logs indexes its keys, so
+ * `fields.orderId` is queryable), under Node one JSON line, in the browser
+ * the message and then the fields. Fields are nested under `fields`, so none
+ * can overwrite the record's own keys. Values are text: format a number with
+ * `toString()` and a structure with `Json.encode`.
  */
 export interface Logger {
   info(msg: string): globalThis.Promise<void>;
   error(msg: string): globalThis.Promise<void>;
+  warn(msg: string): globalThis.Promise<void>;
+  debug(msg: string): globalThis.Promise<void>;
+  log(level: LogLevel, msg: string, fields: ReadonlyMap<string, string>): globalThis.Promise<void>;
 }
 
 export const __LoggerToken: symbol = globalThis.Symbol("Logger");
 
 /**
- * Performs outbound HTTP requests.
+ * Performs outbound HTTP requests. `send` follows redirects and waits as long
+ * as the platform does; `sendWith` takes a timeout and a redirect policy.
  */
 export interface Fetch {
   send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
+  sendWith(req: Request, options: FetchOptions): globalThis.Promise<Result<Response, FetchError>>;
 }
 
 export const __FetchToken: symbol = globalThis.Symbol("Fetch");

@@ -31,8 +31,8 @@ environment), so code that stays on this surface is portable.
 |---|---|
 | **`Clock`** | `now() -> Effect[Instant]` — the current instant (an absolute point in time; epoch-millis under the hood). |
 | **`Random`** | `uuid() -> Effect[Uuid]` · `int(lo: Int, hi: Int) -> Effect[Int]` (lo-inclusive, hi-exclusive) · `bytes(n: Int) -> Effect[Bytes]` — `n` random bytes. `int` is **not** for secrets; use `bytes`. |
-| **`Logger`** | `info(msg: String) -> Effect[()]` · `error(msg: String) -> Effect[()]`. |
-| **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request. |
+| **`Logger`** | `info(msg: String) -> Effect[()]` · `error(msg: String) -> Effect[()]` · `warn(msg: String) -> Effect[()]` · `debug(msg: String) -> Effect[()]` · `log(level: LogLevel, msg: String, fields: Map[String, String]) -> Effect[()]` — a structured record (experimental). See [Log levels and structured fields](#log-levels-and-structured-fields). |
+| **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental). See [Timeouts and redirects](#timeouts-and-redirects). |
 | **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
 | **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/guides/localisation/understand-localisation/). |
 | **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` — mechanical dedup for at-least-once delivery. See below. |
@@ -123,8 +123,15 @@ The `bynk` unit also exports the transparent types these operations use:
 
 ```bynk
 type Uuid       = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-type Method     = enum { Get, Post, Put, Delete }
+type Method     = enum { Get, Post, Put, Delete, Patch, Head, Options }
 type FetchError = enum { Network, Timeout, InvalidHeader }
+type Redirect   = enum { Follow, Manual }
+type LogLevel   = enum { Debug, Info, Warn, Error }
+
+type FetchOptions = {
+  timeout:  Option[Duration],
+  redirect: Redirect,
+}
 
 type Request = {
   method: Method,
@@ -197,6 +204,55 @@ split back into its cookies reliably. A `stub Fetch.send(_) returns Ok(Response 
 gives it `headers: Map.empty()` (or the headers the case needs), and an
 `expect Fetch.send called once with req.headers.get("user-agent") == Some("…")`
 matches on what was sent.
+
+### Timeouts and redirects
+
+`send` follows redirects and waits as long as the platform does. `sendWith`
+takes the same request with a `FetchOptions`:
+
+```bynk,fragment
+let res <- Fetch.sendWith(req, FetchOptions { timeout: Some(5.seconds), redirect: Manual })
+```
+
+- `timeout` bounds the whole exchange, the response body included. When it
+  elapses the result is `Err(Timeout)`. A timeout of zero or less, or over
+  2,147,483,647 ms (about 24 days, the longest a platform timer takes),
+  faults the call, with nothing sent. `None` waits as long as `send` does.
+- `redirect: Follow` follows redirects, as `send` does. `Manual` returns the
+  `3xx` itself, with its `location` header, so the service decides whether to
+  follow it (to refuse a redirect to an internal host, say).
+
+The options are a record of their own, not fields of `Request`, because adding a
+field to `Request` would break every request literal: record fields have no
+defaults. `sendWith` is experimental: list `"bynk.Fetch.sendWith"` under
+`[unstable] allow`. A test stubs it as it does `send`:
+`stub Fetch.sendWith(_, _) returns Ok(Response { … })`.
+
+`Method` also has `Patch`, `Head` and `Options`. A `Head` response's `body` is
+`""`. `Method` is extensible, so a `match` on it needs a wildcard arm.
+
+### Log levels and structured fields
+
+`debug`, `info`, `warn` and `error` write the message as it is, through the
+console method of that name (`info` through `console.log`). `log` writes a
+structured record:
+
+```bynk,fragment
+let _ <- Logger.log(Warn, "slow checkout", Map.empty().insert("orderId", id).insert("ms", ms.toString()))
+```
+
+The record is `{ message, level, fields }`, with `level` in lowercase:
+
+- **On Cloudflare** it is logged as one object, and Workers Logs indexes its
+  keys, so `fields.orderId` is queryable.
+- **Under Node** it is one JSON line.
+- **In the browser** it is the message, then the fields.
+
+Fields are nested under `fields`, so a field named `message` or `level` cannot
+overwrite the record's own. Values are text: format a number with `toString()`
+and a structure with `Json.encode`. `log` is experimental: list
+`"bynk.Logger.log"` under `[unstable] allow`. In tests every level is a no-op
+that `expect Logger.log called once with …` can observe.
 
 ## The Cloudflare surface — `bynk.cloudflare`
 

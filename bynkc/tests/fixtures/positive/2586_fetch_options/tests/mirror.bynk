@@ -1,0 +1,32 @@
+suite mirror
+
+// #2586: `sendWith` stubs as `send` does; every Logger level is observed.
+
+case "a redirect is returned, not followed, and logged with its status" {
+	stub Fetch.sendWith(_, _) returns Ok(Response { status: 302, headers: Map.empty().insert("location", "https://elsewhere.test/"), body: "" })
+	let n <- probe.call("https://upstream.test/")
+	expect n == 302
+	expect Fetch.sendWith called once with req.method == Patch
+	expect Logger.log called once with fields.get("status") == Some("302")
+}
+
+case "a timeout warns" {
+	stub Fetch.sendWith(_, _) returns Err(Timeout)
+	let n <- probe.call("https://upstream.test/")
+	expect n == 0
+	expect Logger.warn called once
+}
+
+case "any other failure is a debug line" {
+	stub Fetch.sendWith(_, _) returns Err(Network)
+	let n <- probe.call("https://upstream.test/")
+	expect n == -1
+	expect Logger.debug called once
+}
+
+case "a HEAD goes through send" {
+	stub Fetch.send(_) returns Ok(Response { status: 200, headers: Map.empty(), body: "" })
+	let n <- headProbe.call("https://upstream.test/")
+	expect n == 200
+	expect Fetch.send called once with req.method == Head
+}

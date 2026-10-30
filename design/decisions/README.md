@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0655](0655-fetch-options-and-log-levels.md) | **Fetch options in a record beside send, more methods, and Logger levels** (v0.441) — `Fetch.sendWith` takes a `FetchOptions { timeout, redirect }` record instead of `Request` growing fields, since a new record field breaks every literal; `Method` gains `Patch`, `Head` and `Options`; `Logger` gains `warn`, `debug` and a structured `log` that nests its fields | Accepted (v0.441) |
 | [0654](0654-queue-consumer-name-rule.md) | **A queue consumer's name follows Cloudflare's queue-name rule** (v0.439) — Consumers and producers share one queue-name predicate | Accepted (v0.439) |
 | [0653](0653-analytics-engine-derived-capability.md) | **Analytics Engine datasets as option-free derived capabilities** (v0.438) — Cloudflare's Analytics Engine binding as an instance-only `Analytics` with no options, a dataset name deploy derives in snake case because it is a SQL table name, one `write(DataPoint)` whose limits are checked before the write, and no provisioning or ledger record | Accepted (v0.438) |
 | [0652](0652-queue-producer-derived-capability.md) | **Queue producers as instance-only derived capabilities** (v0.437) — Cloudflare's queue producer binding as an instance-only `Queue` named by `@name` (not ADR 0469's `@queue`, a keyword), JSON-text bodies sent parsed so a Bynk consumer decodes them, and producer-only queues recorded in the ledger only when Bynk created them | Accepted (v0.437) |

@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.440**.
+written against **v0.441**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.441.0** | "`bynk`'s `Method` gains `Patch`, `Head` and `Options`; `Fetch.sendWith(req, FetchOptions { timeout, redirect })` adds a timeout (`Err(Timeout)` when it elapses) and a `Manual` redirect policy; `Logger` gains `warn`, `debug` and a structured `log(level, msg, fields)`. `sendWith` and `log` are experimental (standard-library K5a, [#2586](https://github.com/bynk-lang/bynk/issues/2586))" |
 | **v0.440.0** | bynk/refinedTypeModel sends each clause's predicate in structured form, so a client checks a candidate without running JavaScript |
 | **v0.439.0** | A `from queue("…")` consumer's name is checked against Cloudflare's queue-name rule (1–63 lowercase letters, digits or `-`, starting and ending alphanumeric); names Cloudflare would refuse at `wrangler queues create` are now a compile error |
 | **v0.438.0** | "`bynk.cloudflare` gains `Analytics`, a Workers Analytics Engine dataset as an instance-only derived capability with no options (`capability Signups = Analytics`), whose `write(DataPoint)` checks the platform's per-point limits before writing; `bynk deploy` derives the dataset's name in snake case (`shop_cart_signups`, `shop_cart_signups_staging`) and has nothing to create (standard-library P3b, [#2582](https://github.com/bynk-lang/bynk/issues/2582))" |

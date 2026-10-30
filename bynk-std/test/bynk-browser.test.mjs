@@ -11,4 +11,5 @@ surfaceSuite("bynk-browser", binding, runtime, bynk, {
   fetch: "withheld",
   secrets: "unavailable",
   locale: "fixed",
+  log: "split",
 });

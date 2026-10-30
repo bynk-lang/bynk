@@ -22,19 +22,25 @@ export const Uuid = {
 };
 
 /**
- * An HTTP request method.
+ * An HTTP request method. A `Head` response's `body` is `""`.
  */
 export type Method =
     { readonly tag: "Get" }
   | { readonly tag: "Post" }
   | { readonly tag: "Put" }
-  | { readonly tag: "Delete" };
+  | { readonly tag: "Delete" }
+  | { readonly tag: "Patch" }
+  | { readonly tag: "Head" }
+  | { readonly tag: "Options" };
 
 export const Method = {
   Get: { tag: "Get" } as Method,
   Post: { tag: "Post" } as Method,
   Put: { tag: "Put" } as Method,
   Delete: { tag: "Delete" } as Method,
+  Patch: { tag: "Patch" } as Method,
+  Head: { tag: "Head" } as Method,
+  Options: { tag: "Options" } as Method,
 };
 
 /**
@@ -81,6 +87,51 @@ export interface Request {
 }
 
 export const Request = {
+};
+
+/**
+ * What `Fetch.sendWith` does with a redirect: `Follow` it, as `send` does, or
+ * return the `3xx` itself (`Manual`), `location` header included, so the
+ * caller decides where to go.
+ */
+export type Redirect =
+    { readonly tag: "Follow" }
+  | { readonly tag: "Manual" };
+
+export const Redirect = {
+  Follow: { tag: "Follow" } as Redirect,
+  Manual: { tag: "Manual" } as Redirect,
+};
+
+/**
+ * The options of a `Fetch.sendWith`. `timeout` bounds the whole exchange,
+ * response body included; when it elapses the result is `Err(Timeout)`. A
+ * timeout of zero or less, or over 2,147,483,647 ms (about 24 days, the
+ * longest a platform timer takes), faults the call, with nothing sent. `None` waits as
+ * long as the platform does.
+ */
+export interface FetchOptions {
+  readonly timeout: Option<number>;
+  readonly redirect: Redirect;
+}
+
+export const FetchOptions = {
+};
+
+/**
+ * The level of a `Logger.log` record.
+ */
+export type LogLevel =
+    { readonly tag: "Debug" }
+  | { readonly tag: "Info" }
+  | { readonly tag: "Warn" }
+  | { readonly tag: "Error" };
+
+export const LogLevel = {
+  Debug: { tag: "Debug" } as LogLevel,
+  Info: { tag: "Info" } as LogLevel,
+  Warn: { tag: "Warn" } as LogLevel,
+  Error: { tag: "Error" } as LogLevel,
 };
 
 /**
@@ -155,20 +206,31 @@ export interface Random {
 export const __RandomToken: symbol = globalThis.Symbol("Random");
 
 /**
- * Structured logging at info and error levels.
+ * Logging at four levels. `debug`, `info`, `warn` and `error` write the
+ * message as it is. `log` writes a structured record, `{ message, level,
+ * fields }`: on Cloudflare one object (Workers Logs indexes its keys, so
+ * `fields.orderId` is queryable), under Node one JSON line, in the browser
+ * the message and then the fields. Fields are nested under `fields`, so none
+ * can overwrite the record's own keys. Values are text: format a number with
+ * `toString()` and a structure with `Json.encode`.
  */
 export interface Logger {
   info(msg: string): globalThis.Promise<void>;
   error(msg: string): globalThis.Promise<void>;
+  warn(msg: string): globalThis.Promise<void>;
+  debug(msg: string): globalThis.Promise<void>;
+  log(level: LogLevel, msg: string, fields: ReadonlyMap<string, string>): globalThis.Promise<void>;
 }
 
 export const __LoggerToken: symbol = globalThis.Symbol("Logger");
 
 /**
- * Performs outbound HTTP requests.
+ * Performs outbound HTTP requests. `send` follows redirects and waits as long
+ * as the platform does; `sendWith` takes a timeout and a redirect policy.
  */
 export interface Fetch {
   send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
+  sendWith(req: Request, options: FetchOptions): globalThis.Promise<Result<Response, FetchError>>;
 }
 
 export const __FetchToken: symbol = globalThis.Symbol("Fetch");
@@ -295,6 +357,60 @@ export function __deserialise_FetchError(json: __JsonValue, path: string = "$"):
   }
 }
 
+export function __serialise_FetchOptions(value: FetchOptions): __JsonValue {
+  return {
+    timeout: __serialise_Option_Duration(value.timeout),
+    redirect: __serialise_Redirect(value.redirect),
+  };
+}
+
+export function __deserialise_FetchOptions(json: __JsonValue, path: string = "$"): Result<FetchOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_timeout = __deserialise_Option_Duration(obj["timeout"], `${path}.timeout`);
+  if (__r_timeout.tag === "Err") return __r_timeout;
+  const __timeout = __r_timeout.value;
+  const __r_redirect = __deserialise_Redirect(obj["redirect"], `${path}.redirect`);
+  if (__r_redirect.tag === "Err") return __r_redirect;
+  const __redirect = __r_redirect.value;
+  return Ok({ timeout: __timeout, redirect: __redirect } as FetchOptions);
+}
+
+export function __serialise_LogLevel(value: LogLevel): __JsonValue {
+  switch (value.tag) {
+    case "Debug":
+      return { kind: "Debug" };
+    case "Info":
+      return { kind: "Info" };
+    case "Warn":
+      return { kind: "Warn" };
+    case "Error":
+      return { kind: "Error" };
+  }
+}
+
+export function __deserialise_LogLevel(json: __JsonValue, path: string = "$"): Result<LogLevel, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Debug":
+      return Ok({ tag: "Debug" } as LogLevel);
+    case "Info":
+      return Ok({ tag: "Info" } as LogLevel);
+    case "Warn":
+      return Ok({ tag: "Warn" } as LogLevel);
+    case "Error":
+      return Ok({ tag: "Error" } as LogLevel);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
 export function __serialise_Method(value: Method): __JsonValue {
   switch (value.tag) {
     case "Get":
@@ -305,6 +421,12 @@ export function __serialise_Method(value: Method): __JsonValue {
       return { kind: "Put" };
     case "Delete":
       return { kind: "Delete" };
+    case "Patch":
+      return { kind: "Patch" };
+    case "Head":
+      return { kind: "Head" };
+    case "Options":
+      return { kind: "Options" };
   }
 }
 
@@ -323,6 +445,37 @@ export function __deserialise_Method(json: __JsonValue, path: string = "$"): Res
       return Ok({ tag: "Put" } as Method);
     case "Delete":
       return Ok({ tag: "Delete" } as Method);
+    case "Patch":
+      return Ok({ tag: "Patch" } as Method);
+    case "Head":
+      return Ok({ tag: "Head" } as Method);
+    case "Options":
+      return Ok({ tag: "Options" } as Method);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_Redirect(value: Redirect): __JsonValue {
+  switch (value.tag) {
+    case "Follow":
+      return { kind: "Follow" };
+    case "Manual":
+      return { kind: "Manual" };
+  }
+}
+
+export function __deserialise_Redirect(json: __JsonValue, path: string = "$"): Result<Redirect, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Follow":
+      return Ok({ tag: "Follow" } as Redirect);
+    case "Manual":
+      return Ok({ tag: "Manual" } as Redirect);
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
@@ -413,6 +566,50 @@ export function __deserialise_Uuid(json: __JsonValue, path: string = "$"): Resul
   return Ok(validated.value as Uuid);
 }
 
+
+export function __serialise_Option_Duration(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Duration(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Duration(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Duration(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Duration(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
 
 export function __serialise_Option_String(value: Option<string>): __JsonValue {
   if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
