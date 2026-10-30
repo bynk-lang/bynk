@@ -1,0 +1,2 @@
+bynk.types.return_mismatch
+function body has type `Option[String]`, but the declared return type is `String`

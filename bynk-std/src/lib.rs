@@ -144,6 +144,17 @@ pub const STRING_UNIT: &str = "bynk.string";
 /// yet" from "first element was empty").
 pub const BYNK_STRING_SRC: &str = include_str!("../lib/core/bynk.string.bynk");
 
+/// Inside the reserved `bynk.*` prefix; injected when `uses`-imported.
+pub const URL_UNIT: &str = "bynk.url";
+
+/// `bynk.url` (standard-library K2, #2594) — a `Url` record with RFC 3986
+/// `parse`/`format` and query-string helpers, written in Bynk over the
+/// `String` kernel. Only percent-encoding is kernel (`percentEncode`,
+/// `percentDecode`): it needs a string's UTF-8 bytes. `Url` is a record here,
+/// not a base type, because a base type's name is a lexer token, and `Url`
+/// as a keyword would break every user `type Url`.
+pub const BYNK_URL_SRC: &str = include_str!("../lib/core/bynk.url.bynk");
+
 /// Inside the reserved `bynk.*` prefix; injected when `uses`-imported by
 /// application code (a message-bundle commons, ADR 0272) — never directly by
 /// the `bynk` adapter itself any more (see [`LOCALE_TYPES_UNIT`]).
@@ -715,6 +726,20 @@ pub const UNITS: &[Unit] = &[
         extensible: &["Digest", "Signature", "CryptoError"],
         instantiable: &[],
     },
+    Unit {
+        name: URL_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/url.bynk",
+        source: BYNK_URL_SRC,
+        binding: Binding::None,
+        id_block: 8,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+    },
 ];
 
 /// The registry entry for `name`, if it is a first-party unit.
@@ -1262,6 +1287,7 @@ mod tests {
                 ("bynk.locale", 6),
                 ("bynk.locale.types", 5),
                 ("bynk.crypto", 7),
+                ("bynk.url", 8),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -1286,6 +1312,7 @@ mod tests {
                 "bynk.locale",
                 "bynk.locale.types",
                 "bynk.crypto",
+                "bynk.url",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

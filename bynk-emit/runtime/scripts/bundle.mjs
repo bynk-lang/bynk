@@ -29,6 +29,7 @@ const MODULES = [
   "result",
   "bytes",
   "time",
+  "url",
   "equality",
   "int",
   "errors",

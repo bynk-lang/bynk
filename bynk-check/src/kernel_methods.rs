@@ -231,6 +231,9 @@ pub const STRING_METHODS: &[KernelMethod] = &[
     m("indexOf", "indexOf(s: String) -> Option[Int]"),
     m("chars", "chars() -> List[String]"),
     m("concat", "concat(s: String) -> String"),
+    // K2 (#2594): RFC 3986 percent-encoding over the UTF-8 bytes.
+    m("percentEncode", "percentEncode() -> String"),
+    m("percentDecode", "percentDecode() -> Option[String]"),
 ];
 
 /// The `Int` numeric kernel (v0.21).

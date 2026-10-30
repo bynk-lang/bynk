@@ -1749,6 +1749,9 @@ pub(crate) fn check_string_kernel_method(
         "indexOf" => Some((vec![tys.intern(s.clone())], Ty::Option(tys.intern(int)))),
         "chars" => Some((vec![], strings)),
         "concat" => Some((vec![tys.intern(s.clone())], s.clone())),
+        // K2 (#2594): percent-encoding over the UTF-8 bytes.
+        "percentEncode" => Some((vec![], s.clone())),
+        "percentDecode" => Some((vec![], Ty::Option(tys.intern(s.clone())))),
         _ => None,
     };
     let Some((params, ret)) = sig else {
@@ -1758,7 +1761,8 @@ pub(crate) fn check_string_kernel_method(
             format!(
                 "the built-in `String` type has no method `{}` — the kernel is \
                  `length`, `split`, `trim`, `contains`, `startsWith`, `endsWith`, \
-                 `replace`, `slice`, `indexOf`, `toUpper`, `toLower`, `chars`, `concat`",
+                 `replace`, `slice`, `indexOf`, `toUpper`, `toLower`, `chars`, `concat`, \
+                 `percentEncode`, `percentDecode`",
                 method.name
             ),
         ));

@@ -786,8 +786,54 @@ first-party enum, not the name.
 
 Beyond capabilities, the `bynk` namespace also ships pure **commons** you bring
 in with `uses` (not `consumes`) — `bynk.list` and `bynk.map` (combinators over
-the `List`/`Map` kernels) and `bynk.string` (string helpers). These are ordinary
-functions with no effects; see the [type system reference](/book/reference/types/).
+the `List`/`Map` kernels), `bynk.string` (string helpers) and `bynk.url` (URLs
+and query strings, below). These are ordinary functions with no effects; see the
+[type system reference](/book/reference/types/).
+
+### URLs and query strings: `bynk.url`
+
+`uses bynk.url` brings in a `Url` record and functions over it, written in Bynk
+over two `String` kernel methods, `percentEncode()` and `percentDecode()`.
+
+```bynk
+type QueryParam = { name: String, value: String }
+type Url = {
+  scheme: String,            // lower case
+  host: String,              // lower case
+  port: Option[Int],
+  path: String,              // as written: percent-encoded, "" or starting with /
+  query: List[QueryParam],   // decoded, in order, repeats kept
+  fragment: Option[String],  // decoded
+}
+```
+
+- `parse(s) -> Option[Url]` reads an absolute URL,
+  `scheme://host[:port][path][?query][#fragment]`, after RFC 3986, not the
+  WHATWG URL standard: nothing is repaired. A user-info part (`user:pw@`), an
+  IPv6 literal, a missing `//`, a port over 65535 or a malformed escape is
+  `None`. In the query, `+` reads as a space.
+- `format(u) -> String` writes it back, percent-encoding the query and the
+  fragment and writing the path as given. `parse(format(u))` is `Some(u)` for
+  every `u` that `parse` returned.
+- `formatQuery(params)` and `parseQuery(s)` work on a query string alone.
+  `parseQuery` drops a leading `?` and skips a pair it can't decode;
+  `decodeQuery(s)` is the strict form, `None` if any pair is malformed.
+- `param(u, name)`, `params(u, name)`, `withParam(u, name, value)`,
+  `withoutParam(u, name)` and `segments(u)` (the decoded path segments) cover
+  the usual edits. A `Url` is a record, so `Url { ...u, path: "/v2" }` works
+  too.
+- `isScheme`, `isHost`, `parsePort` and `decodePair` are the pieces `parse` is
+  built from, exported because a commons has no private functions.
+
+A `Fetch` caller usually needs only `formatQuery`:
+
+```bynk,fragment
+let q = formatQuery([QueryParam { name: "q", value: term }])
+let res <- Fetch.send(Request { method: Get, url: "https://api.test/search?".concat(q), contentType: None, authorization: None, headers: Map.empty(), body: None })
+```
+
+`Url` is a record in a commons, not a built-in type, so a project's own `Url`
+type is untouched unless it also writes `uses bynk.url`.
 
 Two more serve the `Locale` capability above.
 **`bynk.locale.types`** is a dependency-free leaf declaring `LocaleTag`,
