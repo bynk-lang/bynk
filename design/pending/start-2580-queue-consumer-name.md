@@ -11,4 +11,4 @@ summary: Consumers and producers share one queue-name predicate
 
 **Decision.** `bynk.queue.invalid_name` now also fires when the name fails `is_queue_name`, the predicate the producer uses. This is a language change (ADR 0023): a project with such a consumer name compiled before and is refused now.
 
-**Consequences.** The two sides agree. `env_qualify`'s `-<env>` suffix counts toward the 63 characters but is not visible at compile time, so `bynk deploy` still refuses a name that overflows once qualified.
+**Consequences.** The two sides agree. `env_qualify`'s `-<env>` suffix counts toward the 63 characters but is not visible at compile time, so a name near the limit can overflow once qualified. No check catches that before `wrangler queues create`; that is left as a follow-up.

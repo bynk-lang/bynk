@@ -1239,8 +1239,8 @@ fn instance_option_value(
 /// Cloudflare allows letters, digits and `-`, starting and ending with a letter
 /// or digit, 1 to 63 characters. Lowercase only, as every name `bynk deploy`
 /// derives is, and so `env_qualify`'s `-<env>` suffix reads the same. The suffix
-/// counts toward the 63, which this cannot see: `bynk deploy` still refuses a
-/// name that overflows once qualified.
+/// counts toward the 63, which this cannot see: a name near the limit can
+/// overflow once qualified, and nothing checks that before `wrangler queues create`.
 pub(crate) fn is_queue_name(name: &str) -> bool {
     let alnum = |b: u8| b.is_ascii_lowercase() || b.is_ascii_digit();
     (1..=63).contains(&name.len())
