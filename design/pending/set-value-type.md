@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, ts_writes
+probes: emit_diagnostics, ts_writes, diagnostic_coverage
 changelog: "`Set[T]` is a built-in immutable, insertion-ordered set beside `List` and `Map`: `Set.of(xs)`, `Set.empty()`, a `length`/`contains`/`insert`/`remove`/`toList` kernel, membership equality, and a JSON-array wire form that refuses a repeated element; members follow the `Map`-key rule (`bynk.types.unkeyable_set_element`), and a new `bynk.set` commons adds `union`, `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet` (standard-library K6a, [#2596](https://github.com/bynk-lang/bynk/issues/2596))"
 ---
 
