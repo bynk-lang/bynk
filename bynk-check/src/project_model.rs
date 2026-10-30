@@ -786,7 +786,10 @@ pub fn phase_resolve_derived(
                         }
                     }
                     if kind.option_kind(&ann.name.name).is_none() {
-                        let allowed = if kind.options.is_empty() {
+                        let allowed = if d.base.name == "Analytics" {
+                            // P3b (#2582): the dataset's name is derived.
+                            "`Analytics` instances take no options: `bynk deploy` names the dataset for the context and the capability".to_string()
+                        } else if kind.options.is_empty() {
                             format!("`{}` instances take no options", d.base.name)
                         } else {
                             format!(
@@ -1070,6 +1073,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "RateLimit" => "LoginLimit",
         "EdgeCache" => "Edge",
         "Queue" => "OrderEvents",
+        "Analytics" => "Signups",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);

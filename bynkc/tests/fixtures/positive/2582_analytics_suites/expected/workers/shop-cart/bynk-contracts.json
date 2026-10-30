@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "count": "1b29abf4899cf682"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "count": "Svc(\"count\",P(\"blobs\",L(B(\"String\"))),Ret(B(\"Int\")))"
+  }
+}

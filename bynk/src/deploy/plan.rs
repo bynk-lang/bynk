@@ -97,6 +97,11 @@ struct ContextPlan<'a> {
     /// One line per queue this context consumes or (P2, #2578) sends to, in
     /// name order.
     queues: Vec<PlanQueue>,
+    /// P3b (#2582): one line per Analytics Engine dataset the Worker writes
+    /// to, in binding order. No action: the platform creates a dataset on its
+    /// first write, and Bynk never deletes one.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    datasets: Vec<PlanDataset<'a>>,
     /// #1796: one line per Durable Object class the push declares in
     /// `exports`, in class-name order. Empty for a context with no agent and
     /// no events fan-out.
@@ -183,6 +188,15 @@ struct PlanR2<'a> {
     bucket: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     jurisdiction: Option<&'a str>,
+}
+
+/// P3b (#2582): one Analytics Engine dataset.
+#[derive(Debug, Serialize)]
+struct PlanDataset<'a> {
+    /// `ANALYTICS_<SNAKE>`.
+    binding: &'a str,
+    /// The dataset's account-facing name, [`analytics_dataset_name`]d.
+    dataset: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -1870,6 +1884,12 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 for queue in &context.queues {
                     out.push_str(&format!("queue {} {}\n", queue.action, queue.queue));
                 }
+                for dataset in &context.datasets {
+                    out.push_str(&format!(
+                        "dataset {} ({}; created on first write)\n",
+                        dataset.dataset, dataset.binding
+                    ));
+                }
                 // Interop I5 (#1972): bound, not provisioned — the Worker is
                 // not Bynk's, so the line says so rather than an action.
                 for service in &context.foreign_services {
@@ -2055,6 +2075,14 @@ pub(crate) fn derive_plan<'a>(
                                 "create or reuse"
                             },
                             queue: env_qualify(environment, queue),
+                        })
+                        .collect(),
+                    datasets: declared
+                        .analytics_datasets
+                        .iter()
+                        .map(|dataset| PlanDataset {
+                            binding: &dataset.binding,
+                            dataset: analytics_dataset_name(environment, &dataset.name),
                         })
                         .collect(),
                     durable_objects: declared
@@ -2908,6 +2936,28 @@ pub(crate) mod tests {
             plan_of(&order, &both, &DeployLock::default()).contexts[0].queues[0].action,
             "create"
         );
+    }
+
+    #[test]
+    fn a_dataset_is_listed_under_its_qualified_name_with_no_action() {
+        // P3b (#2582): nothing to create or record, so the line only names it.
+        let order = names(&["shop"]);
+        let declared = project(vec![(
+            "shop",
+            Resources::default().analytics(&[("ANALYTICS_SIGNUPS", "shop_signups")]),
+        )]);
+        let plan = derive_plan(
+            &order,
+            &declared,
+            &DeployLock::default(),
+            &SecretSource::default(),
+            false,
+            "staging",
+        );
+        assert_eq!(plan.contexts[0].datasets[0].dataset, "shop_signups_staging");
+        assert!(plan_report(&plan, DeployFormat::Short).contains(
+            "dataset shop_signups_staging (ANALYTICS_SIGNUPS; created on first write)\n"
+        ));
     }
 
     #[test]

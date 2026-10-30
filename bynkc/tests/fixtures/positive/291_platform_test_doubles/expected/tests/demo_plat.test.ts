@@ -87,7 +87,8 @@ class __Stub_Fetch {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -120,7 +121,8 @@ class __Stub_Kv {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -272,7 +274,8 @@ async function test_the_clock_reads_the_epoch() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -305,7 +308,8 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -338,7 +342,8 @@ async function test_random_uuids_count_up() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -371,7 +376,8 @@ async function test_no_secret_is_set() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -404,7 +410,8 @@ async function test_the_locale_is_en() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -438,7 +445,8 @@ async function test_the_logger_records_without_printing() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -472,7 +480,8 @@ async function test_idempotency_remembers_within_a_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -507,7 +516,8 @@ async function test_idempotency_is_fresh_per_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -541,7 +551,8 @@ async function test_kv_is_in_memory() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -575,7 +586,8 @@ async function test_kv_is_fresh_per_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -609,7 +621,8 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -644,7 +657,8 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -679,7 +693,8 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -713,7 +728,8 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -746,7 +762,8 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;

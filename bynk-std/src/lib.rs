@@ -456,6 +456,12 @@ pub const QUEUE_BINDING_PREFIX: &str = "QUEUE";
 /// not parse (as `Service`'s `@worker`, ADR 0023).
 pub const QUEUE_NAME_OPTION: &str = "name";
 
+/// The Worker binding prefix of an `Analytics` instance (standard-library
+/// P3b, #2582): `capability Signups = Analytics` binds as
+/// `ANALYTICS_SIGNUPS`, an `[[analytics_engine_datasets]]` entry. It takes no
+/// options: `bynk deploy` derives the dataset's name (track A12).
+pub const ANALYTICS_BINDING_PREFIX: &str = "ANALYTICS";
+
 /// The prefix an `EdgeCache` instance's binding name would carry (first-party
 /// registry L7, #2414). Workers Cache is a Worker-wide `[cache]` setting with
 /// no `env` binding, so the name is never emitted: the instance is built from
@@ -533,6 +539,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersR2",
             "WorkersRateLimit",
             "WorkersQueue",
+            "WorkersAnalytics",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -542,7 +549,15 @@ pub const UNITS: &[Unit] = &[
         // P3 (#2342): RateLimit too, until the registry has run on it.
         // L7 (#2414): EdgeCache likewise.
         // P2 (#2578): Queue too, until a first-party service has sent on it.
-        experimental: &["Service", "R2", "RateLimit", "EdgeCache", "Queue"],
+        // P3b (#2582): Analytics too, until a first-party service writes to it.
+        experimental: &[
+            "Service",
+            "R2",
+            "RateLimit",
+            "EdgeCache",
+            "Queue",
+            "Analytics",
+        ],
         extensible: &["R2Condition"],
         instantiable: &[
             Instantiable {
@@ -581,6 +596,13 @@ pub const UNITS: &[Unit] = &[
                 binding_prefix: QUEUE_BINDING_PREFIX,
                 options: &[(QUEUE_NAME_OPTION, OptionKind::Str)],
                 required: &[QUEUE_NAME_OPTION],
+                bare: false,
+            },
+            Instantiable {
+                capability: "Analytics",
+                binding_prefix: ANALYTICS_BINDING_PREFIX,
+                options: &[],
+                required: &[],
                 bare: false,
             },
             Instantiable {
@@ -1060,6 +1082,7 @@ mod tests {
                 ("bynk.cloudflare", "R2", "R2"),
                 ("bynk.cloudflare", "RateLimit", "RATELIMIT"),
                 ("bynk.cloudflare", "Queue", "QUEUE"),
+                ("bynk.cloudflare", "Analytics", "ANALYTICS"),
                 ("bynk.cloudflare", "EdgeCache", "EDGE_CACHE")
             ]
         );
@@ -1081,6 +1104,9 @@ mod tests {
         assert_eq!(queue.option_kind("name"), Some(OptionKind::Str));
         assert_eq!(queue.required, ["name"]);
         assert!(!queue.bare);
+        let analytics =
+            instantiable("bynk.cloudflare", "Analytics").expect("Analytics is instantiable");
+        assert!(analytics.options.is_empty() && !analytics.bare);
         let edge = instantiable("bynk.cloudflare", "EdgeCache").expect("EdgeCache is instantiable");
         assert!(edge.options.is_empty() && !edge.bare);
         for u in UNITS {
@@ -1124,6 +1150,7 @@ mod tests {
                 "bynk.cloudflare.RateLimit",
                 "bynk.cloudflare.EdgeCache",
                 "bynk.cloudflare.Queue",
+                "bynk.cloudflare.Analytics",
                 "bynk.crypto"
             ]
         );

@@ -857,7 +857,7 @@ and `expect` apply to it unchanged. The rules:
 - `K` MUST be a capability the unit selects with `consumes U { K }`
   (`bynk.capability.unknown_base`).
 - `K` MUST be a platform resource kind with instances. `bynk.cloudflare`'s
-  `Kv`, `Service`, `R2`, `RateLimit`, `Queue` and `EdgeCache` have them
+  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics` and `EdgeCache` have them
   (`bynk.capability.base_not_instantiable`).
 - Each `@annotation` MUST be one of `K`'s instance options
   (`bynk.capability.unknown_option`), given at most once, with one positional
@@ -874,10 +874,11 @@ and `expect` apply to it unchanged. The rules:
   `Queue` requires `@name("queue")`, where `queue` is 1 to 63 lowercase letters,
   digits or `-`, starting and ending with a letter or digit
   (`bynk.capability.invalid_option`): the queue the instance sends to
-  (standard-library P2, #2578).
+  (standard-library P2, #2578). `Analytics` takes none (standard-library P3b,
+  #2582).
 - A kind used only through instances MUST NOT be named bare in a `given`
   clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
-  `Queue` and `EdgeCache` are such kinds.
+  `Queue`, `Analytics` and `EdgeCache` are such kinds.
 - A context MUST declare at most one `EdgeCache` instance
   (`bynk.cloudflare.edge_cache_duplicate`). The instance has no binding: it
   makes the Worker's `wrangler.toml` carry `[cache] enabled = true`. An agent

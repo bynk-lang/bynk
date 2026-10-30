@@ -1,0 +1,2 @@
+bynk.capability.unknown_option
+`@dataset` is not an option of a `Analytics` instance

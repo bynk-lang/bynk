@@ -335,6 +335,21 @@ pub(crate) fn emit_wrangler_toml(
                     TomlEntry::kv("queue", TomlValue::str(queue.clone())),
                 ],
             ),
+            // P3b (#2582): the dataset's derived name, which `bynk deploy`
+            // environment-qualifies; the platform creates it on first write.
+            BindingSource::AnalyticsDataset { .. } => TomlBlock::array_table(
+                "analytics_engine_datasets",
+                vec![
+                    TomlEntry::kv("binding", name),
+                    TomlEntry::kv(
+                        "dataset",
+                        TomlValue::str(analytics_dataset_name(
+                            &worker_dir_name(context),
+                            &binding.name,
+                        )),
+                    ),
+                ],
+            ),
             // Interop I5 (#1972): the Worker as the declaration names it,
             // not a project context's `worker_dir_name`.
             BindingSource::ForeignService { worker, .. } => TomlBlock::array_table(
@@ -509,6 +524,13 @@ pub(crate) fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::QueueProducer { .. }))
             .cloned(),
     );
+    // P3b (#2582): the Analytics Engine datasets, after the queue producers.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::AnalyticsDataset { .. }))
+            .cloned(),
+    );
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
     // emit gets its own fan-out DO among the agents' — Cloudflare only cares
     // that `index.ts` (this Worker's `main`) exports a class with this name,
@@ -561,6 +583,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::R2Instance { .. } => "__R2Bucket",
         BindingSource::RateLimitInstance { .. } => "__RateLimiter",
         BindingSource::QueueProducer { .. } => "__QueueProducer",
+        BindingSource::AnalyticsDataset { .. } => "__AnalyticsDataset",
         BindingSource::Agent { .. } | BindingSource::EventsFanout { .. } => {
             "__DurableObjectNamespace"
         }
@@ -722,6 +745,20 @@ pub fn r2_bucket_name(worker: &str, binding: &str) -> String {
     let prefix = format!("{}_", bynk_check::firstparty::R2_BINDING_PREFIX);
     let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
     format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"))
+}
+
+/// P3b (#2582): the account-facing name of an `Analytics` instance's dataset,
+/// `<worker>_<capability>` in snake case: `shop-cart` and `ANALYTICS_SIGNUPS`
+/// give `shop_cart_signups`. Underscores, not R2's hyphens, because the dataset
+/// is the table name in the SQL API, where a hyphen would need quoting in
+/// every query. `bynk deploy` environment-qualifies it
+/// (`shop_cart_signups_staging`).
+pub fn analytics_dataset_name(worker: &str, binding: &str) -> String {
+    let prefix = format!("{}_", bynk_check::firstparty::ANALYTICS_BINDING_PREFIX);
+    let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
+    format!("{worker}_{stem}")
+        .to_ascii_lowercase()
+        .replace('-', "_")
 }
 
 /// A generated `wrangler.toml`'s `[[r2_buckets]]` entries as `(binding,

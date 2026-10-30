@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "checkout": "f03cfb6a3f5183c9"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "checkout": "Svc(\"checkout\",P(\"region\",B(\"String\")),Ret(U()))"
+  }
+}

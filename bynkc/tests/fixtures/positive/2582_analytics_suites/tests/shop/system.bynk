@@ -1,0 +1,8 @@
+// #2582: at `system`, each participant Worker binds a dataset recorder per
+// instance.
+suite shop.cart as system {
+	case "a write goes over the wire" {
+		let r <- api.POST("/signup/:plan", "pro") by Visitor
+		expect r is Created("counted")
+	}
+}

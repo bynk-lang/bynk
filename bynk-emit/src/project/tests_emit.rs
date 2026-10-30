@@ -541,6 +541,7 @@ fn emit_integration_module(
     let has_r2 = binds(|s| matches!(s, BindingSource::R2Instance { .. }));
     let has_ratelimit = binds(|s| matches!(s, BindingSource::RateLimitInstance { .. }));
     let has_queue = binds(|s| matches!(s, BindingSource::QueueProducer { .. }));
+    let has_analytics = binds(|s| matches!(s, BindingSource::AnalyticsDataset { .. }));
     let runtime_import = emitter::runtime_import_for(&module_path, ImportExt::Js);
     let mut runtime_names: Vec<String> = [
         "Ok",
@@ -577,6 +578,9 @@ fn emit_integration_module(
     }
     if has_queue {
         runtime_names.push("__makeIntegrationQueue".to_string());
+    }
+    if has_analytics {
+        runtime_names.push("__makeIntegrationAnalytics".to_string());
     }
     if has_objects {
         runtime_names.push("__makeIntegrationDoNamespace".to_string());
@@ -2543,6 +2547,10 @@ fn emit_integration_harness<'a>(
                 // delivered to a consumer participant.
                 BindingSource::QueueProducer { .. } => {
                     call(ident("__makeIntegrationQueue"), vec![])
+                }
+                // P3b (#2582): each instance its own fresh recorder.
+                BindingSource::AnalyticsDataset { .. } => {
+                    call(ident("__makeIntegrationAnalytics"), vec![])
                 }
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.
@@ -5231,6 +5239,24 @@ const QUEUE_DOUBLE_BODY: &str = r#"  const json = (body: string) => {
   };
 "#;
 
+/// P3b (#2582): the body of `bynk.cloudflare`'s `Analytics` unit-tier double
+/// ([`platform_double`]), which checks a point as `WorkersAnalytics` does.
+const ANALYTICS_DOUBLE_BODY: &str = r#"  const bytes = (text: string) => new globalThis.TextEncoder().encode(text).length;
+  const fault = (why: string): never => {
+    throw new globalThis.Error(`bynk.cloudflare.Analytics: ${why}`);
+  };
+  return {
+    async write(point) {
+      if (point.blobs.length > 20) fault(`a data point has at most 20 blobs, not ${point.blobs.length}`);
+      if (point.doubles.length > 20) fault(`a data point has at most 20 doubles, not ${point.doubles.length}`);
+      if (point.index.tag === "Some" && bytes(point.index.value) > 96) fault(`an index is at most 96 bytes, not ${bytes(point.index.value)}`);
+      const blobBytes = point.blobs.reduce((n: number, b: string) => n + bytes(b), 0);
+      if (blobBytes > 16384) fault(`a data point's blobs total at most 16 KB, not ${blobBytes} bytes`);
+      if (!point.doubles.every(globalThis.Number.isFinite)) fault("a double is finite (not NaN or an infinity)");
+    },
+  };
+"#;
+
 /// #291: the deterministic test double for platform capability `cap` (owned by
 /// first-party unit `owner`, imported in the test module as `ns`), as the
 /// definition of a `__bynkTest_<name>()` factory — `name` is `cap`, or a
@@ -5300,6 +5326,10 @@ fn platform_double(
         // every send, checking its bodies are JSON (and a delay in range) as
         // the binding does; observation sees what was sent.
         ("bynk.cloudflare", "Queue") => QUEUE_DOUBLE_BODY.to_string(),
+        // P3b (#2582): there is no dataset in a test, so each instance accepts
+        // every write within the platform's limits; observation sees what was
+        // written.
+        ("bynk.cloudflare", "Analytics") => ANALYTICS_DOUBLE_BODY.to_string(),
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),

@@ -1,0 +1,2 @@
+bynk.capability.instance_only
+`bynk.cloudflare.Analytics` is used only through a named instance
