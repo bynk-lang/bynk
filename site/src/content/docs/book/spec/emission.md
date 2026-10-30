@@ -798,7 +798,8 @@ module already has:
 | `s.chars()` | `[...s]` — code points, normatively |
 | `s.slice(lo, hi)` | `slice(Math.max(0, lo), Math.max(0, hi))` — negatives clamp, no wrap |
 | `s.indexOf(sub)` | a typed IIFE turning `-1` into `None`, else `Some(i)` |
-| regex methods (#2600) | `new RegExp(pattern, flags)` built from the checked literal, inline flags moved into `flags` (`matchesRegex` anchored `^(?:…)$`; `g` for `findAllRegex`/`replaceRegex`; a sticky scan for `splitRegex`); `test`/`exec`/`matchAll`/`replace`, captures mapped to `Option` |
+| `s.percentEncode()` / `s.percentDecode()` | the runtime's `__bynkPercentEncode` / `__bynkPercentDecode` (#2594), imported only when called |
+| regex methods (#2600) | `new RegExp(pattern, flags)` built from the checked literal, inline flags moved into `flags` (`matchesRegex` anchored with lookarounds, `(?<![\s\S])(?:…)(?![\s\S])`; `g` for `findAllRegex`/`replaceRegex`; a sticky scan for `splitRegex`); `test`/`exec`/`matchAll`/`replace`, captures mapped to `Option` |
 | `Option`/`Result` combinators | typed IIFEs branching on `.tag`; the miss branch returns the narrowed receiver or `None` |
 | `Effect[Result]` combinators (v0.152) | an `async` IIFE that `await`s the receiver `Promise<Result<…>>` and rebuilds: `mapOk`/`mapErr` branch on `.tag` and re-wrap the mapped side (`Ok(__f(__r.value))` / `Err(__f(__r.error))`), else return the narrowed receiver; `flatMapOk`/`flatMapErr` `await __f(…)` on the matching tag, else return the receiver — yielding `Promise<Result<…>>`. No runtime import |
 | numeric `abs`/`min`/`max` | `Math.*` |

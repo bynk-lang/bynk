@@ -1,0 +1,54 @@
+context links
+  uses bynk.url
+
+// #2594: `bynk.url` over the two percent-encoding kernel methods: parse,
+// format, the query-string helpers, and building a Fetch URL.
+
+consumes bynk { Fetch }
+
+fn hostOf(s: String) -> String {
+	parse(s).map((u) => u.host).getOrElse("-")
+}
+
+fn portOf(s: String) -> Option[Int] {
+	parse(s).andThen((u) => u.port)
+}
+
+fn firstParam(s: String, name: String) -> Option[String] {
+	parse(s).andThen((u) => param(u, name))
+}
+
+fn allParams(s: String, name: String) -> List[String] {
+	parse(s).map((u) => params(u, name)).getOrElse(List.empty())
+}
+
+fn reformat(s: String) -> String {
+	parse(s).map((u) => format(u)).getOrElse("-")
+}
+
+fn roundTrips(s: String) -> Bool {
+	parse(s).map((u) => parse(format(u)) == Some(u)).getOrElse(false)
+}
+
+fn rejected(s: String) -> Bool {
+	parse(s) == None
+}
+
+fn pathSegments(s: String) -> List[String] {
+	parse(s).map((u) => segments(u)).getOrElse(List.empty())
+}
+
+fn edited(s: String) -> String {
+	parse(s).map((u) => format(withParam(withoutParam(u, "page"), "q", "a&b c"))).getOrElse("-")
+}
+
+service search {
+	on call(term: String) -> Effect[Int] given Fetch {
+		let q = formatQuery([QueryParam { name: "q", value: term }, QueryParam { name: "limit", value: "10" }])
+		let res <- Fetch.send(Request { method: Get, url: "https://api.test/search?".concat(q), contentType: None, authorization: None, headers: Map.empty(), body: None })
+		match res {
+			Ok(r) => Effect.pure(r.status)
+			Err(_) => Effect.pure(-1)
+		}
+	}
+}

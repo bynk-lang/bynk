@@ -16,7 +16,8 @@
   K5a done (#2586): more `Method`s, `Fetch.sendWith` with a timeout and a
   redirect policy, and `Logger` levels with a structured `log`.
   P1 done (#2590): `Kv` gains metadata, expiry, binary values and paging.
-  K3 done (#2592): `Instant` reads and writes RFC 3339 text.
+  K3 done (#2592): `Instant` reads and writes RFC 3339 text. K2 done (#2594):
+  percent-encoding on `String`, and URLs in the `bynk.url` commons.
   K6a done (#2596): a built-in immutable `Set[T]` and the `bynk.set`
   combinators.
   K6c done (#2600): literal-pattern regex methods on `String`.
@@ -303,8 +304,8 @@ unit and is indicative only, not decided.
 | Hashing (SHA-256/384/512), HMAC, constant-time compare | A (internal only, in `runtime/auth.ts`) | L2 `bynk.crypto` `Crypto` (D5/D6), `Effect`-returning over Web Crypto | Design notes name `Crypto`. Security review (R-16) |
 | Signing/verification (Ed25519, ECDSA, RSA), JWK import | A | L2 `bynk.crypto` `Crypto` | Key material is a secret: interacts with `Secrets` |
 | Random bytes | A (`Random.uuid`/`int` only) | L2 `Random` | Trivial extension |
-| Hex, base64url, percent-encoding | P (base64, hex, base64url and UTF-8 on `Bytes`, K1 #2016; percent-encoding is K2) | L0 statics | Pure |
-| URL parse/build, query strings | A | L0 type + L1 helpers | Needed by Fetch users and HTTP handlers |
+| Hex, base64url, percent-encoding | S (base64, hex, base64url and UTF-8 on `Bytes`, K1 #2016; `percentEncode`/`percentDecode` on `String`, K2 #2594) | L0 | Pure |
+| URL parse/build, query strings | S (K2 #2594: the `bynk.url` commons, a `Url` record with RFC 3986 `parse`/`format` and query-string helpers, in Bynk) | L1 commons over L0 percent-encoding (not an L0 type: a base type's name is a lexer token) | WHATWG semantics (IDNA, normalisation), relative URLs and IPv6 hosts are out |
 | `Set[T]` value type | S (K6a #2596: built-in, immutable, insertion-ordered; `Set.of`/`Set.empty`, a five-method kernel, the `bynk.set` combinators; members by the `Map`-key rule; a JSON array that refuses duplicates) | L0 + L1 commons | Elements beyond the key rule (records, enums, `Bytes`) need content hashing |
 | Math (`pow`, `sqrt`, `log`, trig, integer `div`/`mod` semantics) | A | L0 statics | Check against ADR 0041/0042 |
 | Regex match/capture/replace | S (K6c #2600: `matchesRegex`/`containsRegex`/`findRegex`/`findAllRegex`/`replaceRegex`/`splitRegex` on `String`, literal patterns only, checked for ReDoS as `Matches` patterns are; JS `RegExp` without `u`, inline `(?ims)` flags) | L0 | Run-time patterns (refused: no ReDoS check), named-group maps |
@@ -641,7 +642,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | Slice | What | Needs |
 |---|---|---|
 | K1 ✅ #2016 | `Bytes` operations: `concat`, `slice` (clamped like `String.slice`), a `compare` method (`Bytes` stays unorderable), `toHex`/`fromHex` and `toBase64Url`/`fromBase64Url`, all L0 and none constant-time | — |
-| K2 | URL type, query strings, percent-encoding | — |
+| K2 | **Done** (#2594): `percentEncode`/`percentDecode` on `String` (irreducible: UTF-8 bytes), and the pure-Bynk `bynk.url` commons (`Url`, `parse`/`format`, `parseQuery`/`formatQuery`, helpers) | — |
 | K3 | **Done** (#2592): `Instant.fromIso(s) -> Option[Instant]` (the RFC 3339 date-time profile, offsets converted, fractions truncated, calendar checked) and `toIso()` (`YYYY-MM-DDTHH:mm:ss.sssZ`), in the shared runtime | D7 |
 | K4 ✅ #2327 | `bynk.crypto`: digests, HMAC, sign/verify, key import, `Effect` over Web Crypto; `Random.bytes`; security review. One `Crypto` capability in a flat sibling unit (Tier 0, `id_block` 7, experimental until the registry signs with it in production), a binding per platform (`Binding::PerPlatformFiles`), opaque non-storable `SigningKey`/`VerifyKey` (`bynk.types.key_at_boundary`), the Node binding as the unit-tier test double | K1, D5, D6, S2 |
 | K5a | **Done** (#2586): `Method` gains `Patch`/`Head`/`Options`; `Fetch.sendWith(req, FetchOptions { timeout, redirect })` (experimental); `Logger.warn`/`debug`, and a structured `log` (experimental) | K1 |
