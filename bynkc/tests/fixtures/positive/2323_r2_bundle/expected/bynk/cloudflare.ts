@@ -7,6 +7,99 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 import { FetchError, Request, Response } from "../bynk.js";
 
 /**
+ * When a `Kv.putWith` or `Kv.putBytes` entry expires: `Never`, `After` a
+ * duration (a part second rounds up), or `At` an instant. Either must be at
+ * least 60 seconds away. KV has further expiry forms, so a `match` over this
+ * type needs a wildcard.
+ */
+export type KvExpiration =
+    { readonly tag: "Never" }
+  | { readonly tag: "After"; readonly ttl: number }
+  | { readonly tag: "At"; readonly instant: number };
+
+export const KvExpiration = {
+  Never: { tag: "Never" } as KvExpiration,
+  After: (ttl: number): KvExpiration => ({ tag: "After", ttl }),
+  At: (instant: number): KvExpiration => ({ tag: "At", instant }),
+};
+
+/**
+ * The options of a `Kv.putWith` or `Kv.putBytes` write: when the entry
+ * expires, and the metadata stored beside it (at most 1024 bytes once
+ * serialised as JSON).
+ */
+export interface KvPut {
+  readonly expiration: KvExpiration;
+  readonly metadata: ReadonlyMap<string, string>;
+}
+
+export const KvPut = {
+};
+
+/**
+ * The options of a `Kv.getWith` read. `cacheTtl` is how long the read may be
+ * served from Cloudflare's edge cache, at least 30 seconds; `None` keeps the
+ * platform's default of 60.
+ */
+export interface KvGet {
+  readonly cacheTtl: Option<number>;
+}
+
+export const KvGet = {
+};
+
+/**
+ * A value read by `Kv.getWith`, with the metadata written beside it.
+ */
+export interface KvEntry {
+  readonly value: string;
+  readonly metadata: ReadonlyMap<string, string>;
+}
+
+export const KvEntry = {
+};
+
+/**
+ * One key of a `Kv.listPage`: its name, when it expires (`None` for never),
+ * and its metadata.
+ */
+export interface KvKey {
+  readonly name: string;
+  readonly expiration: Option<number>;
+  readonly metadata: ReadonlyMap<string, string>;
+}
+
+export const KvKey = {
+};
+
+/**
+ * The options of a `Kv.listPage`: the keys under `prefix`, from `cursor` (the
+ * previous page's; `None` for the first), at most `limit` of them (1 to 1000;
+ * `None` for 1000).
+ */
+export interface KvList {
+  readonly prefix: Option<string>;
+  readonly cursor: Option<string>;
+  readonly limit: Option<number>;
+}
+
+export const KvList = {
+};
+
+/**
+ * One page of a `Kv.listPage`: its keys in key order, and the cursor of the
+ * next page, `None` on the last. A page may be short and still have a
+ * cursor, so loop until the cursor is `None`, not until a page is short.
+ */
+export interface KvListing {
+  readonly keys: readonly KvKey[];
+  readonly cursor: Option<string>;
+}
+
+export const KvListing = {
+};
+
+/**
  * An object in an R2 bucket, as `head`, `put`, `putWith` and `list` report
  * it: no body. `etag` is R2's opaque version tag (what `EtagMatches` compares
  * against), `uploaded` when the object was last written. `contentType` is
@@ -99,6 +192,22 @@ export const DataPoint = {
 /**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
+ *
+ * `get`, `put`, `putTtl`, `delete` and `list` work on text. The rest
+ * (experimental) add what the platform has beyond that:
+ * - `getWith` reads a value with its metadata, optionally edge-cached for
+ *   `cacheTtl`; `putWith` writes one with an expiry and metadata.
+ * - `getBytes` and `putBytes` read and write binary values.
+ * - `listPage` reads one page of keys, with each key's expiry and metadata.
+ *
+ * Text and binary values share the namespace, as on the platform: `getBytes`
+ * of a text value gives its UTF-8 bytes, and reading a binary value as text
+ * decodes it as UTF-8, replacing what is not. Keep each key to one kind.
+ *
+ * A key over 512 bytes, metadata over 1024 bytes, an expiry under 60 seconds
+ * away, a `cacheTtl` under 30 seconds, or a `limit` outside 1 to 1000 faults
+ * the new operations before the platform is called; a value over 25 MiB
+ * faults with the platform's error.
  */
 export interface Kv {
   get(key: string): globalThis.Promise<Option<string>>;
@@ -106,6 +215,11 @@ export interface Kv {
   putTtl(key: string, value: string, ttlSeconds: number): globalThis.Promise<void>;
   delete(key: string): globalThis.Promise<void>;
   list(prefix: Option<string>): globalThis.Promise<readonly string[]>;
+  getWith(key: string, options: KvGet): globalThis.Promise<Option<KvEntry>>;
+  putWith(key: string, value: string, options: KvPut): globalThis.Promise<void>;
+  getBytes(key: string): globalThis.Promise<Option<globalThis.Uint8Array>>;
+  putBytes(key: string, value: globalThis.Uint8Array, options: KvPut): globalThis.Promise<void>;
+  listPage(options: KvList): globalThis.Promise<KvListing>;
 }
 
 export const __KvToken: symbol = globalThis.Symbol("Kv");

@@ -57,17 +57,32 @@ type __Kv_put_Call = { key: string; value: string };
 type __Kv_putTtl_Call = { key: string; value: string; ttlSeconds: number };
 type __Kv_delete_Call = { key: string };
 type __Kv_list_Call = { prefix: Option<string> };
+type __Kv_getWith_Call = { key: string; options: __ns_bynk_cloudflare.KvGet };
+type __Kv_putWith_Call = { key: string; value: string; options: __ns_bynk_cloudflare.KvPut };
+type __Kv_getBytes_Call = { key: string };
+type __Kv_putBytes_Call = { key: string; value: globalThis.Uint8Array; options: __ns_bynk_cloudflare.KvPut };
+type __Kv_listPage_Call = { options: __ns_bynk_cloudflare.KvList };
 type __PriceCache_get_Call = { key: string };
 type __PriceCache_put_Call = { key: string; value: string };
 type __PriceCache_putTtl_Call = { key: string; value: string; ttlSeconds: number };
 type __PriceCache_delete_Call = { key: string };
 type __PriceCache_list_Call = { prefix: Option<string> };
+type __PriceCache_getWith_Call = { key: string; options: __ns_bynk_cloudflare.KvGet };
+type __PriceCache_putWith_Call = { key: string; value: string; options: __ns_bynk_cloudflare.KvPut };
+type __PriceCache_getBytes_Call = { key: string };
+type __PriceCache_putBytes_Call = { key: string; value: globalThis.Uint8Array; options: __ns_bynk_cloudflare.KvPut };
+type __PriceCache_listPage_Call = { options: __ns_bynk_cloudflare.KvList };
 type __Prices_price_Call = { sku: string };
 type __Sessions_get_Call = { key: string };
 type __Sessions_put_Call = { key: string; value: string };
 type __Sessions_putTtl_Call = { key: string; value: string; ttlSeconds: number };
 type __Sessions_delete_Call = { key: string };
 type __Sessions_list_Call = { prefix: Option<string> };
+type __Sessions_getWith_Call = { key: string; options: __ns_bynk_cloudflare.KvGet };
+type __Sessions_putWith_Call = { key: string; value: string; options: __ns_bynk_cloudflare.KvPut };
+type __Sessions_getBytes_Call = { key: string };
+type __Sessions_putBytes_Call = { key: string; value: globalThis.Uint8Array; options: __ns_bynk_cloudflare.KvPut };
+type __Sessions_listPage_Call = { options: __ns_bynk_cloudflare.KvList };
 
 class __Stub_PriceCache {
   __case: string | undefined;
@@ -79,8 +94,15 @@ class __Stub_PriceCache {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<string>> {
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -114,67 +136,253 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 }
 
 function __bynkTest_PriceCache(): __ns_bynk_cloudflare.Kv {
-  const store = new globalThis.Map<string, string>();
+  const store = new globalThis.Map<string, any>();
+  const enc = new globalThis.TextEncoder();
+  const dec = new globalThis.TextDecoder();
+  const fault = (why: string): never => {
+    throw new globalThis.Error(`bynk.cloudflare.Kv: ${why}`);
+  };
+  const checkKey = (key: string) => {
+    const n = enc.encode(key).length;
+    if (n > 512) fault(`a key is at most 512 bytes, not ${n}`);
+  };
+  const expiryOf = (e: any): any => {
+    if (e.tag === "After") {
+      if (globalThis.Math.ceil(e.ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${e.ttl} ms`);
+      return Some(globalThis.Date.now() + globalThis.Math.ceil(e.ttl / 1000) * 1000);
+    }
+    if (e.tag === "At") {
+      if (globalThis.Math.ceil(e.instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      return Some(globalThis.Math.ceil(e.instant / 1000) * 1000);
+    }
+    return None;
+  };
+  const write = (key: string, bytes: Uint8Array, options: any) => {
+    checkKey(key);
+    const size = enc.encode(globalThis.JSON.stringify(globalThis.Object.fromEntries(options.metadata))).length;
+    if (size > 1024) fault(`metadata is at most 1024 bytes as JSON, not ${size}`);
+    store.set(key, { bytes, metadata: new globalThis.Map(options.metadata), expiration: expiryOf(options.expiration) });
+  };
+  const plain = (bytes: Uint8Array) => ({ bytes, metadata: new globalThis.Map(), expiration: None });
   return {
     async get(key) {
-      const v = store.get(key);
-      return v === undefined ? None : Some(v);
+      const e = store.get(key);
+      return e === undefined ? None : Some(dec.decode(e.bytes));
     },
     async put(key, value) {
-      store.set(key, value);
+      store.set(key, plain(enc.encode(value)));
     },
     async putTtl(key, value) {
-      store.set(key, value);
+      store.set(key, plain(enc.encode(value)));
     },
     async delete(key) {
       store.delete(key);
     },
     async list(prefix) {
       return [...store.keys()].filter((k) => prefix.tag === "None" || k.startsWith(prefix.value)).sort();
+    },
+    async getWith(key, options) {
+      checkKey(key);
+      if (options.cacheTtl.tag === "Some" && globalThis.Math.ceil(options.cacheTtl.value / 1000) < 30) {
+        fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
+      }
+      const e = store.get(key);
+      return e === undefined ? None : Some({ value: dec.decode(e.bytes), metadata: new globalThis.Map(e.metadata) });
+    },
+    async putWith(key, value, options) {
+      write(key, enc.encode(value), options);
+    },
+    async getBytes(key) {
+      checkKey(key);
+      const e = store.get(key);
+      return e === undefined ? None : Some(e.bytes.slice());
+    },
+    async putBytes(key, value, options) {
+      write(key, value.slice(), options);
+    },
+    async listPage(options) {
+      const limit = options.limit.tag === "Some" ? options.limit.value : 1000;
+      if (!globalThis.Number.isInteger(limit) || limit < 1 || limit > 1000) fault(`a page holds 1 to 1000 keys, not ${limit}`);
+      const after = options.cursor.tag === "Some" ? options.cursor.value : undefined;
+      const names = [...store.keys()]
+        .filter((k) => (options.prefix.tag === "None" || k.startsWith(options.prefix.value)) && (after === undefined || k > after))
+        .sort();
+      const page = names.slice(0, limit);
+      return {
+        keys: page.map((name) => {
+          const e = store.get(name);
+          return { name, expiration: e.expiration, metadata: new globalThis.Map(e.metadata) };
+        }),
+        cursor: page.length < names.length ? Some(page[page.length - 1]) : None,
+      };
     },
   };
 }
 
 function __bynkTest_Sessions(): __ns_bynk_cloudflare.Kv {
-  const store = new globalThis.Map<string, string>();
+  const store = new globalThis.Map<string, any>();
+  const enc = new globalThis.TextEncoder();
+  const dec = new globalThis.TextDecoder();
+  const fault = (why: string): never => {
+    throw new globalThis.Error(`bynk.cloudflare.Kv: ${why}`);
+  };
+  const checkKey = (key: string) => {
+    const n = enc.encode(key).length;
+    if (n > 512) fault(`a key is at most 512 bytes, not ${n}`);
+  };
+  const expiryOf = (e: any): any => {
+    if (e.tag === "After") {
+      if (globalThis.Math.ceil(e.ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${e.ttl} ms`);
+      return Some(globalThis.Date.now() + globalThis.Math.ceil(e.ttl / 1000) * 1000);
+    }
+    if (e.tag === "At") {
+      if (globalThis.Math.ceil(e.instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      return Some(globalThis.Math.ceil(e.instant / 1000) * 1000);
+    }
+    return None;
+  };
+  const write = (key: string, bytes: Uint8Array, options: any) => {
+    checkKey(key);
+    const size = enc.encode(globalThis.JSON.stringify(globalThis.Object.fromEntries(options.metadata))).length;
+    if (size > 1024) fault(`metadata is at most 1024 bytes as JSON, not ${size}`);
+    store.set(key, { bytes, metadata: new globalThis.Map(options.metadata), expiration: expiryOf(options.expiration) });
+  };
+  const plain = (bytes: Uint8Array) => ({ bytes, metadata: new globalThis.Map(), expiration: None });
   return {
     async get(key) {
-      const v = store.get(key);
-      return v === undefined ? None : Some(v);
+      const e = store.get(key);
+      return e === undefined ? None : Some(dec.decode(e.bytes));
     },
     async put(key, value) {
-      store.set(key, value);
+      store.set(key, plain(enc.encode(value)));
     },
     async putTtl(key, value) {
-      store.set(key, value);
+      store.set(key, plain(enc.encode(value)));
     },
     async delete(key) {
       store.delete(key);
     },
     async list(prefix) {
       return [...store.keys()].filter((k) => prefix.tag === "None" || k.startsWith(prefix.value)).sort();
+    },
+    async getWith(key, options) {
+      checkKey(key);
+      if (options.cacheTtl.tag === "Some" && globalThis.Math.ceil(options.cacheTtl.value / 1000) < 30) {
+        fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
+      }
+      const e = store.get(key);
+      return e === undefined ? None : Some({ value: dec.decode(e.bytes), metadata: new globalThis.Map(e.metadata) });
+    },
+    async putWith(key, value, options) {
+      write(key, enc.encode(value), options);
+    },
+    async getBytes(key) {
+      checkKey(key);
+      const e = store.get(key);
+      return e === undefined ? None : Some(e.bytes.slice());
+    },
+    async putBytes(key, value, options) {
+      write(key, value.slice(), options);
+    },
+    async listPage(options) {
+      const limit = options.limit.tag === "Some" ? options.limit.value : 1000;
+      if (!globalThis.Number.isInteger(limit) || limit < 1 || limit > 1000) fault(`a page holds 1 to 1000 keys, not ${limit}`);
+      const after = options.cursor.tag === "Some" ? options.cursor.value : undefined;
+      const names = [...store.keys()]
+        .filter((k) => (options.prefix.tag === "None" || k.startsWith(options.prefix.value)) && (after === undefined || k > after))
+        .sort();
+      const page = names.slice(0, limit);
+      return {
+        keys: page.map((name) => {
+          const e = store.get(name);
+          return { name, expiration: e.expiration, metadata: new globalThis.Map(e.metadata) };
+        }),
+        cursor: page.length < names.length ? Some(page[page.length - 1]) : None,
+      };
     },
   };
 }
 
 function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
-  const store = new globalThis.Map<string, string>();
+  const store = new globalThis.Map<string, any>();
+  const enc = new globalThis.TextEncoder();
+  const dec = new globalThis.TextDecoder();
+  const fault = (why: string): never => {
+    throw new globalThis.Error(`bynk.cloudflare.Kv: ${why}`);
+  };
+  const checkKey = (key: string) => {
+    const n = enc.encode(key).length;
+    if (n > 512) fault(`a key is at most 512 bytes, not ${n}`);
+  };
+  const expiryOf = (e: any): any => {
+    if (e.tag === "After") {
+      if (globalThis.Math.ceil(e.ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${e.ttl} ms`);
+      return Some(globalThis.Date.now() + globalThis.Math.ceil(e.ttl / 1000) * 1000);
+    }
+    if (e.tag === "At") {
+      if (globalThis.Math.ceil(e.instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      return Some(globalThis.Math.ceil(e.instant / 1000) * 1000);
+    }
+    return None;
+  };
+  const write = (key: string, bytes: Uint8Array, options: any) => {
+    checkKey(key);
+    const size = enc.encode(globalThis.JSON.stringify(globalThis.Object.fromEntries(options.metadata))).length;
+    if (size > 1024) fault(`metadata is at most 1024 bytes as JSON, not ${size}`);
+    store.set(key, { bytes, metadata: new globalThis.Map(options.metadata), expiration: expiryOf(options.expiration) });
+  };
+  const plain = (bytes: Uint8Array) => ({ bytes, metadata: new globalThis.Map(), expiration: None });
   return {
     async get(key) {
-      const v = store.get(key);
-      return v === undefined ? None : Some(v);
+      const e = store.get(key);
+      return e === undefined ? None : Some(dec.decode(e.bytes));
     },
     async put(key, value) {
-      store.set(key, value);
+      store.set(key, plain(enc.encode(value)));
     },
     async putTtl(key, value) {
-      store.set(key, value);
+      store.set(key, plain(enc.encode(value)));
     },
     async delete(key) {
       store.delete(key);
     },
     async list(prefix) {
       return [...store.keys()].filter((k) => prefix.tag === "None" || k.startsWith(prefix.value)).sort();
+    },
+    async getWith(key, options) {
+      checkKey(key);
+      if (options.cacheTtl.tag === "Some" && globalThis.Math.ceil(options.cacheTtl.value / 1000) < 30) {
+        fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
+      }
+      const e = store.get(key);
+      return e === undefined ? None : Some({ value: dec.decode(e.bytes), metadata: new globalThis.Map(e.metadata) });
+    },
+    async putWith(key, value, options) {
+      write(key, enc.encode(value), options);
+    },
+    async getBytes(key) {
+      checkKey(key);
+      const e = store.get(key);
+      return e === undefined ? None : Some(e.bytes.slice());
+    },
+    async putBytes(key, value, options) {
+      write(key, value.slice(), options);
+    },
+    async listPage(options) {
+      const limit = options.limit.tag === "Some" ? options.limit.value : 1000;
+      if (!globalThis.Number.isInteger(limit) || limit < 1 || limit > 1000) fault(`a page holds 1 to 1000 keys, not ${limit}`);
+      const after = options.cursor.tag === "Some" ? options.cursor.value : undefined;
+      const names = [...store.keys()]
+        .filter((k) => (options.prefix.tag === "None" || k.startsWith(options.prefix.value)) && (after === undefined || k > after))
+        .sort();
+      const page = names.slice(0, limit);
+      return {
+        keys: page.map((name) => {
+          const e = store.get(name);
+          return { name, expiration: e.expiration, metadata: new globalThis.Map(e.metadata) };
+        }),
+        cursor: page.length < names.length ? Some(page[page.length - 1]) : None,
+      };
     },
   };
 }
@@ -189,10 +397,17 @@ async function test_an_instance_is_in_memory() {
   try {
     __ns_shop_cart.__resetAgents();
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "list", "put", "putTtl"], PriceCache: ["delete", "get", "list", "put", "putTtl"], Prices: ["price"], Sessions: ["delete", "get", "list", "put", "putTtl"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], PriceCache: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Prices: ["price"], Sessions: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"] }, __obs);
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -215,10 +430,17 @@ async function test_instances_are_separate() {
   try {
     __ns_shop_cart.__resetAgents();
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "list", "put", "putTtl"], PriceCache: ["delete", "get", "list", "put", "putTtl"], Prices: ["price"], Sessions: ["delete", "get", "list", "put", "putTtl"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], PriceCache: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Prices: ["price"], Sessions: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"] }, __obs);
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -243,8 +465,15 @@ async function test_a_stubbed_instance_answers() {
     __ns_shop_cart.__resetAgents();
     const deps = __makeTestDeps("a stubbed instance answers");
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -267,8 +496,15 @@ async function test_instances_are_separate_at_integration() {
     __ns_shop_cart.__resetAgents();
     const deps = __makeTestDeps();
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;

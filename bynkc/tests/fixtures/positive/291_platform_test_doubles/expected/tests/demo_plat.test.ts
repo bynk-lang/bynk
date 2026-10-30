@@ -62,6 +62,11 @@ type __Kv_put_Call = { key: string; value: string };
 type __Kv_putTtl_Call = { key: string; value: string; ttlSeconds: number };
 type __Kv_delete_Call = { key: string };
 type __Kv_list_Call = { prefix: Option<string> };
+type __Kv_getWith_Call = { key: string; options: __ns_bynk_cloudflare.KvGet };
+type __Kv_putWith_Call = { key: string; value: string; options: __ns_bynk_cloudflare.KvPut };
+type __Kv_getBytes_Call = { key: string };
+type __Kv_putBytes_Call = { key: string; value: globalThis.Uint8Array; options: __ns_bynk_cloudflare.KvPut };
+type __Kv_listPage_Call = { options: __ns_bynk_cloudflare.KvList };
 type __Locale_current_Call = {  };
 type __Logger_info_Call = { msg: string };
 type __Logger_error_Call = { msg: string };
@@ -87,8 +92,15 @@ class __Stub_Fetch {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -121,8 +133,15 @@ class __Stub_Kv {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -184,23 +203,85 @@ function __bynkTest_Idempotency(): __ns_bynk.Idempotency {
 }
 
 function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
-  const store = new globalThis.Map<string, string>();
+  const store = new globalThis.Map<string, any>();
+  const enc = new globalThis.TextEncoder();
+  const dec = new globalThis.TextDecoder();
+  const fault = (why: string): never => {
+    throw new globalThis.Error(`bynk.cloudflare.Kv: ${why}`);
+  };
+  const checkKey = (key: string) => {
+    const n = enc.encode(key).length;
+    if (n > 512) fault(`a key is at most 512 bytes, not ${n}`);
+  };
+  const expiryOf = (e: any): any => {
+    if (e.tag === "After") {
+      if (globalThis.Math.ceil(e.ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${e.ttl} ms`);
+      return Some(globalThis.Date.now() + globalThis.Math.ceil(e.ttl / 1000) * 1000);
+    }
+    if (e.tag === "At") {
+      if (globalThis.Math.ceil(e.instant / 1000) - globalThis.Date.now() / 1000 < 60) fault("an expiry is at least 60 seconds away");
+      return Some(globalThis.Math.ceil(e.instant / 1000) * 1000);
+    }
+    return None;
+  };
+  const write = (key: string, bytes: Uint8Array, options: any) => {
+    checkKey(key);
+    const size = enc.encode(globalThis.JSON.stringify(globalThis.Object.fromEntries(options.metadata))).length;
+    if (size > 1024) fault(`metadata is at most 1024 bytes as JSON, not ${size}`);
+    store.set(key, { bytes, metadata: new globalThis.Map(options.metadata), expiration: expiryOf(options.expiration) });
+  };
+  const plain = (bytes: Uint8Array) => ({ bytes, metadata: new globalThis.Map(), expiration: None });
   return {
     async get(key) {
-      const v = store.get(key);
-      return v === undefined ? None : Some(v);
+      const e = store.get(key);
+      return e === undefined ? None : Some(dec.decode(e.bytes));
     },
     async put(key, value) {
-      store.set(key, value);
+      store.set(key, plain(enc.encode(value)));
     },
     async putTtl(key, value) {
-      store.set(key, value);
+      store.set(key, plain(enc.encode(value)));
     },
     async delete(key) {
       store.delete(key);
     },
     async list(prefix) {
       return [...store.keys()].filter((k) => prefix.tag === "None" || k.startsWith(prefix.value)).sort();
+    },
+    async getWith(key, options) {
+      checkKey(key);
+      if (options.cacheTtl.tag === "Some" && globalThis.Math.ceil(options.cacheTtl.value / 1000) < 30) {
+        fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
+      }
+      const e = store.get(key);
+      return e === undefined ? None : Some({ value: dec.decode(e.bytes), metadata: new globalThis.Map(e.metadata) });
+    },
+    async putWith(key, value, options) {
+      write(key, enc.encode(value), options);
+    },
+    async getBytes(key) {
+      checkKey(key);
+      const e = store.get(key);
+      return e === undefined ? None : Some(e.bytes.slice());
+    },
+    async putBytes(key, value, options) {
+      write(key, value.slice(), options);
+    },
+    async listPage(options) {
+      const limit = options.limit.tag === "Some" ? options.limit.value : 1000;
+      if (!globalThis.Number.isInteger(limit) || limit < 1 || limit > 1000) fault(`a page holds 1 to 1000 keys, not ${limit}`);
+      const after = options.cursor.tag === "Some" ? options.cursor.value : undefined;
+      const names = [...store.keys()]
+        .filter((k) => (options.prefix.tag === "None" || k.startsWith(options.prefix.value)) && (after === undefined || k > after))
+        .sort();
+      const page = names.slice(0, limit);
+      return {
+        keys: page.map((name) => {
+          const e = store.get(name);
+          return { name, expiration: e.expiration, metadata: new globalThis.Map(e.metadata) };
+        }),
+        cursor: page.length < names.length ? Some(page[page.length - 1]) : None,
+      };
     },
   };
 }
@@ -274,8 +355,15 @@ async function test_the_clock_reads_the_epoch() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -308,8 +396,15 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -342,8 +437,15 @@ async function test_random_uuids_count_up() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -376,8 +478,15 @@ async function test_no_secret_is_set() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -410,8 +519,15 @@ async function test_the_locale_is_en() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -432,7 +548,7 @@ async function test_the_locale_is_en() {
 async function test_the_logger_records_without_printing() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
@@ -445,8 +561,15 @@ async function test_the_logger_records_without_printing() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -480,8 +603,15 @@ async function test_idempotency_remembers_within_a_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -516,8 +646,15 @@ async function test_idempotency_is_fresh_per_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -538,7 +675,7 @@ async function test_idempotency_is_fresh_per_case() {
 async function test_kv_is_in_memory() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
@@ -551,8 +688,15 @@ async function test_kv_is_in_memory() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -586,8 +730,15 @@ async function test_kv_is_fresh_per_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -608,7 +759,7 @@ async function test_kv_is_fresh_per_case() {
 async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed operation answers; the rest reach the double"), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed operation answers; the rest reach the double"), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
@@ -621,8 +772,15 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -644,7 +802,7 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
 async function test_a_stubbed_fetch_answers_for_the_network() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed fetch answers for the network"), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed fetch answers for the network"), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
@@ -657,8 +815,15 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -680,7 +845,7 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
 async function test_a_fetch_double_sees_the_request_s_headers() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a fetch double sees the request's headers"), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "list", "put", "putTtl"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a fetch double sees the request's headers"), { Clock: ["now"], Fetch: ["send"], Idempotency: ["dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["error", "info"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
@@ -693,8 +858,15 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -728,8 +900,15 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
@@ -762,8 +941,15 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;

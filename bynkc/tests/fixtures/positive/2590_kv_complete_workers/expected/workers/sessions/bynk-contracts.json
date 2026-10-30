@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "provides": {
+    "blob": "4c1bc35ce63a85fb",
+    "expireSoon": "1c61164dc9594fde",
+    "pages": "ed899da493293d1e",
+    "store": "1777aa4ef6bd6caa"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "blob": "Svc(\"blob\",P(\"id\",B(\"String\")),P(\"bytes\",B(\"Bytes\")),Ret(B(\"Int\")))",
+    "expireSoon": "Svc(\"expireSoon\",P(\"id\",B(\"String\")),Ret(U()))",
+    "pages": "Svc(\"pages\",P(\"cursor\",O(B(\"String\"))),Ret(N(\"KvListing\")))",
+    "store": "Svc(\"store\",P(\"id\",B(\"String\")),P(\"who\",B(\"String\")),Ret(B(\"String\")))"
+  }
+}
