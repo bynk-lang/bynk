@@ -2335,9 +2335,15 @@ pub(crate) fn check_method_call(
     if let ExprKind::Ident(id) = &receiver.kind
         && ctx.lookup(id.name.as_str()).is_none()
         && !ctx.input.types.contains_key(&id.name)
-        && (id.name == LIST || id.name == MAP)
+        && (id.name == LIST || id.name == MAP || id.name == SET)
     {
-        let ns = if id.name == LIST { LIST } else { MAP };
+        let ns = if id.name == LIST {
+            LIST
+        } else if id.name == MAP {
+            MAP
+        } else {
+            SET
+        };
         ctx.callees.insert(
             expr_id,
             Callee::Intrinsic {
@@ -2477,7 +2483,10 @@ pub(crate) fn check_method_call(
     // `let m: Map[String, Int] = Map.empty().insert("a", 1)` infers. #1889:
     // `append`/`concat` return their receiver's list type too.
     let recv_expected = match (expected, method.name.as_str()) {
-        (Some(t), "insert") => peel_to_map(t, tys).map(|(k, v)| tys.intern(Ty::Map(k, v))),
+        (Some(t), "insert") => peel_to_map(t, tys)
+            .map(|(k, v)| tys.intern(Ty::Map(k, v)))
+            .or_else(|| peel_to_set(t, tys).map(|e| tys.intern(Ty::Set(e)))),
+        (Some(t), "remove") => peel_to_set(t, tys).map(|e| tys.intern(Ty::Set(e))),
         (Some(t), "prepend" | "append" | "concat") => {
             peel_to_list(t, tys).map(|e| tys.intern(Ty::List(e)))
         }
@@ -2543,6 +2552,17 @@ pub(crate) fn check_method_call(
                 },
             );
             return check_map_kernel_method(method, args, *key, *val, span, ctx);
+        }
+        // K6a (#2596): the `Set` kernel.
+        Ty::Set(elem) => {
+            ctx.callees.insert(
+                expr_id,
+                Callee::Kernel {
+                    recv: recv_ty,
+                    op: method.name.clone(),
+                },
+            );
+            return check_set_kernel_method(method, args, *elem, span, ctx);
         }
         // v0.21: the numeric kernel — conversions as value methods on the
         // bare base types. A refined value reaches these too, but via the
@@ -4839,14 +4859,18 @@ fn collect_crossing_positions<'e>(
                 type_args,
                 args,
             },
-            Ty::List(_) | Ty::Map(..),
+            Ty::List(_) | Ty::Map(..) | Ty::Set(_),
         ) if method.name == "empty"
             && type_args.is_empty()
             && args.is_empty()
             && matches!(
                 &receiver.kind,
                 ExprKind::Ident(id)
-                    if id.name == if matches!(&*node, Ty::List(_)) { "List" } else { "Map" }
+                    if id.name == match &*node {
+                        Ty::List(_) => "List",
+                        Ty::Set(_) => "Set",
+                        _ => "Map",
+                    }
             ) => {}
         (ExprKind::Some(inner), Ty::Option(t)) => walk(inner, *t, found),
         (ExprKind::Ok(inner), Ty::Result(t, _)) => walk(inner, *t, found),

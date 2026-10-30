@@ -1,0 +1,27 @@
+==========================
+Set type and its statics (K6a)
+==========================
+
+commons inv {
+	fn make() -> Set[String] {
+		Set.of(["a"])
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier))
+    (fn_decl
+      name: (identifier)
+      return_type: (generic_type_ref
+        name: (builtin_type)
+        arg: (base_type))
+      body: (block
+        tail: (method_call
+          receiver: (identifier)
+          method: (identifier)
+          arg: (list_literal
+            element: (string_literal)))))))

@@ -31,6 +31,11 @@ pub(crate) fn check_collection_static(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    // K6a (#2596): `Set.of(xs)` builds a set from a list; its element type
+    // comes from the list, or from the expected `Set`.
+    if type_name.name == SET && method.name == "of" {
+        return check_set_of(args, span, expected, ctx);
+    }
     for a in args {
         let _ = type_of(a, None, ctx);
     }
@@ -50,6 +55,9 @@ pub(crate) fn check_collection_static(
         LIST => expected
             .and_then(|t| peel_to_list(t, tys))
             .map(|t| tys.intern(Ty::List(t))),
+        SET => expected
+            .and_then(|t| peel_to_set(t, tys))
+            .map(|t| tys.intern(Ty::Set(t))),
         _ => expected
             .and_then(|t| peel_to_map(t, tys))
             .map(|(k, v)| tys.intern(Ty::Map(k, v))),
@@ -70,6 +78,119 @@ pub(crate) fn check_collection_static(
         );
     }
     inferred
+}
+
+/// K6a (#2596): `Set.of(xs: List[T]) -> Set[T]`. An inferred element type
+/// never passes the resolver's `Set[T]` check, so the key rule is applied here.
+fn check_set_of(args: &[Expr], span: Span, expected: Option<TyId>, ctx: &mut Ctx) -> Option<TyId> {
+    let tys = ctx.tys;
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!("`Set.of` takes 1 argument, got {}", args.len()),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    // An expected element still holding a type variable (a generic `Set[T]`
+    // parameter) is no expectation yet: the list literal infers its own.
+    let expected_list = expected
+        .and_then(|t| peel_to_set(t, tys))
+        .filter(|t| !contains_var(*t, tys))
+        .map(|t| tys.intern(Ty::List(t)));
+    let list = type_of(&args[0], expected_list, ctx)?;
+    let Some(elem) = peel_to_list(list, tys) else {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.type_mismatch",
+            args[0].span,
+            format!(
+                "the `Set.of` argument has type `{}`, but a `List` is required",
+                list.display(tys)
+            ),
+        ));
+        return None;
+    };
+    require_set_element(elem, args[0].span, ctx);
+    Some(tys.intern(Ty::Set(elem)))
+}
+
+/// K6a (#2596): a `Set`'s element must be value-keyable (the `Map`-key rule),
+/// since a JS `Set` compares anything else by identity.
+fn require_set_element(elem: TyId, span: Span, ctx: &mut Ctx) {
+    let tys = ctx.tys;
+    if !is_keyable(elem, tys) && !matches!(&*tys.get(elem), Ty::Var(_)) {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.types.unkeyable_set_element",
+                span,
+                format!(
+                    "a `Set` element must be value-keyable — `String`, `Int`, or a refined/opaque type over them — not `{}`",
+                    elem.display(tys)
+                ),
+            )
+            .with_note(
+                "record, sum, collection, and function elements are rejected; value-equality elements need bounded generics",
+            ),
+        );
+    }
+}
+
+/// K6a (#2596): the `Set` kernel — `length`, `contains`, `insert`, `remove`
+/// and `toList`. Every operation returns a new set; none mutates.
+pub(crate) fn check_set_kernel_method(
+    method: &Ident,
+    args: &[Expr],
+    elem: TyId,
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let sig: Option<(Vec<TyId>, Ty)> = match method.name.as_str() {
+        "length" => Some((vec![], Ty::Base(BaseType::Int))),
+        "contains" => Some((vec![elem], Ty::Base(BaseType::Bool))),
+        "insert" | "remove" => Some((vec![elem], Ty::Set(elem))),
+        "toList" => Some((vec![], Ty::List(elem))),
+        _ => None,
+    };
+    let Some((params, ret)) = sig else {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_not_found",
+            method.span,
+            format!(
+                "the built-in `Set[{}]` type has no method `{}` — the kernel is `length`, `contains`, `insert`, `remove`, `toList` (and `bynk.set` has `union`, `intersect`, …)",
+                elem.display(tys),
+                method.name
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`Set.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(params.iter()) {
+        check_arg(a, *p, &format!("the `Set.{}` element", method.name), ctx);
+    }
+    Some(tys.intern(ret))
 }
 
 /// v0.88 (ADR 0116 D2): the closed orderable base set for `sortBy`/`min`/`max`.
@@ -2313,6 +2434,7 @@ fn first_recursive_generic(
             .or_else(|| first_recursive_generic(*b, types, tys)),
         Ty::Option(a)
         | Ty::List(a)
+        | Ty::Set(a)
         | Ty::Effect(a)
         | Ty::HttpResult(a)
         | Ty::HttpOutcome(a)
@@ -2342,7 +2464,7 @@ fn json_codable(t: TyId, tys: &Types) -> bool {
         Ty::Named { args, .. } if !args.is_empty() => args.iter().all(|a| json_codable(*a, tys)),
         Ty::Base(_) | Ty::Named { .. } | Ty::Unit => true,
         Ty::Result(a, b) => json_codable(*a, tys) && json_codable(*b, tys),
-        Ty::Option(a) | Ty::List(a) => json_codable(*a, tys),
+        Ty::Option(a) | Ty::List(a) | Ty::Set(a) => json_codable(*a, tys),
         Ty::Map(k, v) => json_codable(*k, tys) && json_codable(*v, tys),
         Ty::Fn { .. }
         | Ty::Effect(_)

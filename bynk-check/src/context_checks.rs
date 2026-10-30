@@ -1512,6 +1512,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", ts_type_ref_display(t)),
+        TypeRef::Set(t, _) => format!("Set[{}]", ts_type_ref_display(t)),
         TypeRef::Query(t, _) => format!("Query[{}]", ts_type_ref_display(t)),
         TypeRef::Stream(t, _) => format!("Stream[{}]", ts_type_ref_display(t)),
         TypeRef::Connection(t, _) => format!("Connection[{}]", ts_type_ref_display(t)),
@@ -4979,7 +4980,8 @@ pub fn reject_fn_types(
         TypeRef::Option(a, _)
         | TypeRef::Effect(a, _)
         | TypeRef::HttpResult(a, _)
-        | TypeRef::List(a, _) => reject_fn_types(a, what, types, errors),
+        | TypeRef::List(a, _)
+        | TypeRef::Set(a, _) => reject_fn_types(a, what, types, errors),
         // v0.119: a `History[Agent]` reaching a declared position is already
         // reported by the resolver (`bynk.history.outside_property`); nothing to
         // add here.

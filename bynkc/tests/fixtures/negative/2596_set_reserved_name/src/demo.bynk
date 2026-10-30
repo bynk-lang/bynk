@@ -1,0 +1,10 @@
+context demo
+
+// #2596: `Set` is a built-in type name, as `List` and `Map` are.
+type Set = { items: List[Int] }
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

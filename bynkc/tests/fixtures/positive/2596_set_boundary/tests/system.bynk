@@ -1,0 +1,12 @@
+// #2596: a `Set` crosses the wire both ways, in insertion order.
+suite club.front as system {
+  case "a set goes out and comes back merged" {
+    let all <- club.roster.members(Set.of(["cy", "ada"]))
+    expect all.toList() == ["ada", "bo", "cy"]
+  }
+
+  case "a caller context reads the returned set" {
+    let n <- club.front.count()
+    expect n == 3
+  }
+}

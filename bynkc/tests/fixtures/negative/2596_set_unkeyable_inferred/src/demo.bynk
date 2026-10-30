@@ -1,0 +1,14 @@
+context demo
+
+// #2596: an element type inferred through `Set.of` follows the same rule.
+type Point = { x: Int, y: Int }
+
+fn size(p: Point) -> Int {
+	Set.of([p]).length()
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

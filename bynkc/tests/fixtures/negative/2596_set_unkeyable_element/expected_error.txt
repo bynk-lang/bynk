@@ -1,0 +1,2 @@
+bynk.types.unkeyable_set_element
+a `Set` element must be value-keyable

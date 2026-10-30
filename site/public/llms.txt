@@ -308,7 +308,7 @@ Contextual words (keywords in one place only): `advance` `drop` `key` `migrate`
 
 Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 `Connection` `History` `HttpResult` `List` `Map` `Query` `QueueResult`
-`RequestHeaders` `Stream` `TokenClaims`.
+`RequestHeaders` `Set` `Stream` `TokenClaims`.
 
 ## CLI
 

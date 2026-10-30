@@ -1,0 +1,8 @@
+// #2596: a context taking and returning a `Set` across its boundary.
+context club.roster
+
+service members {
+  on call(extra: Set[String]) -> Effect[Set[String]] {
+    extra.toList().fold(Set.of(["ada", "bo"]), (acc, x) => acc.insert(x))
+  }
+}
