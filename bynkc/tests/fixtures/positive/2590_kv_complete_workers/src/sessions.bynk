@@ -1,0 +1,62 @@
+context sessions
+
+// #2590: the new `Kv` operations, on the bare namespace and a derived one,
+// against the unit double: metadata and expiry with `putWith`/`getWith`,
+// binary values, and `listPage` a page at a time.
+
+consumes bynk { Clock }
+consumes bynk.cloudflare { Kv }
+
+capability Blobs = Kv
+
+service store {
+	on call(id: String, who: String) -> Effect[String] given Kv {
+		let _ <- Kv.putWith(id, "body", KvPut { expiration: After(30.minutes), metadata: Map.empty().insert("user", who) })
+		let found <- Kv.getWith(id, KvGet { cacheTtl: Some(45.seconds) })
+		match found {
+			Some(e) => Effect.pure(e.metadata.get("user").getOrElse("?"))
+			None => Effect.pure("missing")
+		}
+	}
+}
+
+service expireSoon {
+	on call(id: String) -> Effect[()] given Kv {
+		Kv.putWith(id, "body", KvPut { expiration: After(10.seconds), metadata: Map.empty() })
+	}
+}
+
+service expireAt {
+	on call(id: String, inSeconds: Int) -> Effect[()] given Kv, Clock {
+		let now <- Clock.now()
+		Kv.putWith(id, "body", KvPut { expiration: At(now + Duration.millis(inSeconds * 1000)), metadata: Map.empty() })
+	}
+}
+
+service ttlListed {
+	on call() -> Effect[Bool] given Kv {
+		let _ <- Kv.putTtl("t:1", "v", 120)
+		let page <- Kv.listPage(KvList { prefix: Some("t:"), cursor: None, limit: None })
+		Effect.pure(page.keys.length() == 1 && page.keys.all((k) => k.expiration.isSome()))
+	}
+}
+
+service blob {
+	on call(id: String, bytes: Bytes) -> Effect[Int] given Blobs {
+		let _ <- Blobs.putBytes(id, bytes, KvPut { expiration: Never, metadata: Map.empty() })
+		let back <- Blobs.getBytes(id)
+		match back {
+			Some(b) => Effect.pure(b.length())
+			None => Effect.pure(-1)
+		}
+	}
+}
+
+service pages {
+	on call(cursor: Option[String]) -> Effect[KvListing] given Kv {
+		let _ <- Kv.put("s:1", "a")
+		let _ <- Kv.put("s:2", "b")
+		let _ <- Kv.put("s:3", "c")
+		Kv.listPage(KvList { prefix: Some("s:"), cursor: cursor, limit: Some(2) })
+	}
+}

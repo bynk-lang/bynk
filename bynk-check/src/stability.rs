@@ -408,6 +408,11 @@ mod tests {
                 "bynk.cloudflare.EdgeCache",
                 "bynk.cloudflare.Queue",
                 "bynk.cloudflare.Analytics",
+                "bynk.cloudflare.Kv.getWith",
+                "bynk.cloudflare.Kv.putWith",
+                "bynk.cloudflare.Kv.getBytes",
+                "bynk.cloudflare.Kv.putBytes",
+                "bynk.cloudflare.Kv.listPage",
                 "bynk.crypto"
             ]
         );
@@ -418,6 +423,11 @@ mod tests {
         assert!(!p.blocks("bynk.FetchOptions"));
         assert!(p.blocks("bynk.Logger.log"));
         assert!(!p.blocks("bynk.Logger.warn"));
+        // P1 (#2590): the new operations of the stable `Kv`, alone.
+        assert!(p.blocks("bynk.cloudflare.Kv.putWith"));
+        assert!(p.blocks("bynk.cloudflare.Kv.listPage"));
+        assert!(!p.blocks("bynk.cloudflare.Kv.put"));
+        assert!(!p.blocks("bynk.cloudflare.KvPut"));
         assert!(p.blocks("bynk.cloudflare.Service"));
         assert!(p.blocks("bynk.cloudflare.Service.send"));
         assert!(p.blocks("bynk.cloudflare.R2"));

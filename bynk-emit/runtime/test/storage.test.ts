@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeIntegrationAnalytics, makeIntegrationQueue, makeIntegrationRateLimit } from "../src/storage.ts";
+import { makeIntegrationAnalytics, makeIntegrationKv, makeIntegrationQueue, makeIntegrationRateLimit } from "../src/storage.ts";
 
 // Standard-library P3 (#2342): the integration tier's rate limiter.
 test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", async () => {
@@ -32,4 +32,21 @@ test("makeIntegrationAnalytics keeps every data point it is written, in order", 
   a.writeDataPoint({ indexes: ["k"], blobs: ["x"], doubles: [1] });
   a.writeDataPoint({ blobs: [], doubles: [] });
   assert.deepEqual(a.written, [{ indexes: ["k"], blobs: ["x"], doubles: [1] }, { blobs: [], doubles: [] }]);
+});
+
+test("makeIntegrationKv keeps text and bytes as one, with metadata, and pages in key order", async () => {
+  const kv = makeIntegrationKv();
+  await kv.put("a", "héllo", { metadata: { tag: "t" }, expirationTtl: 120 });
+  await kv.put("b", new Uint8Array([0, 255]));
+  await kv.put("c", "three");
+  assert.equal(await kv.get("a"), "héllo");
+  assert.deepEqual([...new Uint8Array((await kv.get("b", "arrayBuffer"))!)], [0, 255]);
+  assert.deepEqual(await kv.getWithMetadata("a", { type: "text" }), { value: "héllo", metadata: { tag: "t" } });
+  const first = await kv.list({ limit: 2 });
+  assert.deepEqual(first.keys.map((k) => k.name), ["a", "b"]);
+  assert.equal(first.list_complete, false);
+  assert.ok(typeof first.keys[0].expiration === "number");
+  const second = await kv.list({ limit: 2, cursor: first.cursor });
+  assert.deepEqual(second.keys.map((k) => k.name), ["c"]);
+  assert.equal(second.list_complete, true);
 });

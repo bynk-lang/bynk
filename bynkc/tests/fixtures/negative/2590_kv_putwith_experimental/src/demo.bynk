@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk.cloudflare { Kv }
+
+// #2590: `Kv.putWith` ships experimental, though `Kv` is stable.
+service probe {
+  on call(key: String) -> Effect[()] given Kv {
+    Kv.putWith(key, "v", KvPut { expiration: Never, metadata: Map.empty() })
+  }
+}

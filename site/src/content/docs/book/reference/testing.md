@@ -770,7 +770,7 @@ fresh for each case:
 | `Logger` | records every level (`log` too), prints nothing |
 | `Events` | records, delivers nothing |
 | `Idempotency` | in memory; `remember`'s `expiresAfter` is accepted and ignored |
-| `Kv` | in memory; `putTtl`'s TTL is accepted and ignored |
+| `Kv` | in memory, values kept as bytes with their metadata; `putTtl`'s TTL and `putWith`'s expiry are kept and listed but not enforced; the new operations check the platform's limits, and `listPage` pages in key order |
 | `R2` | each instance an in-memory bucket, honouring `putWith`'s conditions, metadata and `list`'s paging |
 | `RateLimit` | each instance counts calls per key over windows of its `@period`, allowing `@limit` per window — on the harness clock at `unit`, the real clock at `integration` |
 | `Queue` | each instance accepts every send, checking each body is JSON and a delay is in range; nothing is delivered — at `integration` and `system` each Worker binds a recorder |
