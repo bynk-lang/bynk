@@ -947,8 +947,13 @@ fn parse_d1_id(output: &str) -> Option<String> {
 
 /// The `uuid` of database `name` in `wrangler d1 list --json`'s array.
 fn parse_d1_listed_id(json: &str, name: &str) -> Option<String> {
-    let start = json.find('[')?;
-    let listed: Vec<serde_json::Value> = serde_json::from_str(&json[start..]).ok()?;
+    // From the first line starting with `[` that the rest parses from, so a
+    // bracketed banner line (`[WARNING] …`) before the array is skipped.
+    let listed: Vec<serde_json::Value> = std::iter::once(0)
+        .chain(json.match_indices('\n').map(|(i, _)| i + 1))
+        .map(|i| json[i..].trim_start())
+        .filter(|rest| rest.starts_with('['))
+        .find_map(|rest| serde_json::from_str(rest).ok())?;
     listed
         .iter()
         .find(|db| db.get("name").and_then(|n| n.as_str()) == Some(name))?
@@ -1902,6 +1907,15 @@ mod tests {
             Some("u-2")
         );
         assert_eq!(parse_d1_listed_id("[]", "b"), None);
+        // A bracketed banner before the array is skipped.
+        assert_eq!(
+            parse_d1_listed_id(
+                "[WARNING] a newer wrangler is available\n[\n  {\"uuid\": \"u-3\", \"name\": \"c\"}\n]\n",
+                "c"
+            )
+            .as_deref(),
+            Some("u-3")
+        );
     }
 
     // ---- P3 (#2342): rate limiter ids are allocated in the ledger ----

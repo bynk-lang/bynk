@@ -172,6 +172,18 @@ pub(crate) struct D1Record {
     pub(crate) name: String,
     /// Cloudflare's `database_id` for it.
     pub(crate) id: String,
+    /// Databases this binding used to have, under a name it no longer
+    /// derives. They hold data, so they stay recorded (and are reported as
+    /// orphans) until their entry is removed by hand, as R2's are.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) superseded: Vec<D1Past>,
+}
+
+/// A database a binding no longer uses (see [`D1Record::superseded`]).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct D1Past {
+    pub(crate) name: String,
+    pub(crate) id: String,
 }
 
 /// A bucket a binding no longer uses (see [`R2Bucket::superseded`]).
@@ -572,19 +584,32 @@ impl DeployLock {
         name: &str,
         id: &str,
     ) {
-        self.environments
+        let instances = self
+            .environments
             .entry(environment.to_string())
             .or_default()
             .d1_instances
             .entry(worker.to_string())
-            .or_default()
-            .insert(
-                binding.to_string(),
-                D1Record {
-                    name: name.to_string(),
-                    id: id.to_string(),
-                },
-            );
+            .or_default();
+        // A database this replaces is not forgotten: its rows are still there.
+        let mut superseded = Vec::new();
+        if let Some(old) = instances.remove(binding) {
+            superseded = old.superseded;
+            if old.name != name || old.id != id {
+                superseded.push(D1Past {
+                    name: old.name,
+                    id: old.id,
+                });
+            }
+        }
+        instances.insert(
+            binding.to_string(),
+            D1Record {
+                name: name.to_string(),
+                id: id.to_string(),
+                superseded,
+            },
+        );
     }
 
     /// P3 (#2342): the `namespace_id` for `worker`'s rate limiter `binding`
@@ -925,6 +950,17 @@ pub(crate) fn find_orphans(
                     database: db.name.clone(),
                 })
         })
+        .chain(env.d1_instances.iter().flat_map(|(worker, instances)| {
+            // A database a changed name left behind is an orphan while its
+            // binding is live, too.
+            instances.iter().flat_map(move |(binding, db)| {
+                db.superseded.iter().map(move |past| OrphanD1 {
+                    worker: worker.clone(),
+                    binding: binding.clone(),
+                    database: past.name.clone(),
+                })
+            })
+        }))
         .collect();
     Orphans {
         r2: r2_orphans,
@@ -1585,6 +1621,10 @@ pub(crate) mod tests {
                             D1Record {
                                 name: "api-orders".into(),
                                 id: "0d1d0000-0000-4000-8000-000000000001".into(),
+                                superseded: vec![D1Past {
+                                    name: "api-orders-old".into(),
+                                    id: "0d1d0000-0000-4000-8000-000000000000".into(),
+                                }],
                             },
                         )]),
                     )]),
@@ -2246,6 +2286,25 @@ pub(crate) mod tests {
         assert!(!orphans.has_prunable());
         // With its Worker gone, every database it had is reported.
         assert_eq!(find_orphans(&lock, "default", &BTreeMap::new()).d1.len(), 2);
+        // A database a binding stopped using stays recorded and reported,
+        // though the binding is live; recording the same one again does not.
+        lock.record_d1("default", "shop", "D1_ORDERS", "shop-orders", "id-1");
+        lock.record_d1("default", "shop", "D1_ORDERS", "shop-orders-v2", "id-3");
+        let orphans = find_orphans(&lock, "default", &resources);
+        assert!(
+            orphans
+                .d1
+                .iter()
+                .any(|o| o.binding == "D1_ORDERS" && o.database == "shop-orders"),
+            "{orphans:?}"
+        );
+        assert_eq!(
+            recorded_d1(&lock, "shop", "D1_ORDERS", "default")
+                .unwrap()
+                .superseded
+                .len(),
+            1
+        );
     }
 
     fn r2_lock() -> DeployLock {

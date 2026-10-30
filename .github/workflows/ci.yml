@@ -712,6 +712,10 @@ jobs:
           BYNK_REQUIRE_TSC: "1"
       - name: "@bynk/runtime tests under the floor"
         working-directory: bynk-emit/runtime
+        # The tests are `.ts`, which Node runs unflagged only from 22.18; the
+        # floor (22.13) has type-stripping behind this flag.
+        env:
+          NODE_OPTIONS: --experimental-strip-types
         run: |
           npm ci
           npm test

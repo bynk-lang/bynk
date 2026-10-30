@@ -80,3 +80,11 @@ test("makeIntegrationD1 runs a batch as one transaction", async () => {
   const all = await d.prepare("SELECT k FROM t ORDER BY k").all();
   assert.deepEqual(all.results.map((r) => r.k), ["a", "b"]);
 });
+
+test("makeIntegrationD1 binds an integral Real as INTEGER, as D1 does", async () => {
+  // `Real(2.0)` is the number 2 by the time it is bound: D1 stores it as an
+  // integer, and so does the double. A change in D1 here should change this.
+  const d = makeIntegrationD1();
+  const row = await d.prepare("SELECT typeof(?1) AS whole, typeof(?2) AS part, ?1 AS v").bind(2.0, 2.5).first();
+  assert.deepEqual({ ...row }, { whole: "integer", part: "real", v: 2 });
+});
