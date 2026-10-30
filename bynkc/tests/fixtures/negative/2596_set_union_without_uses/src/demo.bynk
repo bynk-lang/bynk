@@ -1,0 +1,13 @@
+context demo
+
+// #2596: the combinators are the `bynk.set` commons, so they need
+// `uses bynk.set`.
+fn both(a: Set[Int], b: Set[Int]) -> Set[Int] {
+	union(a, b)
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

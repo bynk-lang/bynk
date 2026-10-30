@@ -80,6 +80,7 @@ const GLOBAL_TYPES: &[&str] = &[
     "PromiseLike",
     "Map",
     "ReadonlyMap",
+    "ReadonlySet",
     "Set",
     "ReadonlySet",
     "WeakMap",

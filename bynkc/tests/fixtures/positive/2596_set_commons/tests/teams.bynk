@@ -1,0 +1,18 @@
+suite teams
+
+// #2596: each combinator keeps the left operand's order.
+
+case "union, intersect and difference" {
+	expect joined() == ["ada", "bo", "cy", "dee"]
+	expect shared() == ["ada", "cy"]
+	expect onlyA() == ["bo"]
+}
+
+case "mapSet collapses equal results at the first position, and filterSet keeps order" {
+	expect lengths() == [3, 2]
+	expect short() == ["bo", "cy"]
+}
+
+case "isSubsetOf" {
+	expect within()
+}

@@ -2293,11 +2293,15 @@ fn lower_method_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == LIST || *ns == MAP) && op == "empty"
+            Some(Callee::Intrinsic { ns, op }) if (*ns == LIST || *ns == MAP || *ns == SET) && op == "empty"
         )
         && args.is_empty()
     {
         match cx.commons().expr_ty(e.id).as_deref() {
+            // K6a (#2596).
+            Some(Ty::Set(t)) => {
+                return pre.finish(format!("new globalThis.Set<{}>()", ts_ty(*t, tys)));
+            }
             Some(Ty::List(t)) => {
                 return pre.finish(format!(
                     "([] as readonly {}[])",
@@ -2313,6 +2317,20 @@ fn lower_method_call(
             }
             _ => {}
         }
+    }
+    // K6a (#2596): `Set.of(xs)` — a set of the list's elements; the first
+    // occurrence keeps its position.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == SET && op == "of"
+        )
+        && args.len() == 1
+        && let Some(Ty::Set(t)) = cx.commons().expr_ty(e.id).as_deref()
+    {
+        let t = *t;
+        let xs = pre.lower(&args[0], cx);
+        return pre.finish(format!("new globalThis.Set<{}>({xs})", ts_ty(t, tys)));
     }
     // v0.22b: the typed JSON codec (ADR 0045).
     if let Some(s) = pre.absorb_opt(lower_json_codec_call(e, receiver, method, args, cx)) {
@@ -3136,6 +3154,13 @@ fn lower_method_call(
             Ty::Map(key, val) => {
                 if let Some(s) =
                     pre.absorb_opt(lower_map_kernel(receiver, method, args, *key, *val, cx))
+                {
+                    return pre.finish(s);
+                }
+            }
+            // K6a (#2596): the `Set` kernel.
+            Ty::Set(elem) => {
+                if let Some(s) = pre.absorb_opt(lower_set_kernel(receiver, method, args, *elem, cx))
                 {
                     return pre.finish(s);
                 }
@@ -5074,6 +5099,55 @@ fn lower_effect_result_kernel(
 /// v0.20b: lower a built-in `Map` kernel method. `insert` copies — the
 /// emitted `ReadonlyMap` is never mutated in place; updating an existing key
 /// keeps its insertion position (JS `Map` semantics, normative in §7).
+/// K6a (#2596): lower a `Set` kernel method over the `ReadonlySet`. `insert`
+/// and `remove` copy, so the receiver is never mutated; a copy keeps the
+/// insertion order, and inserting a present element keeps its position.
+fn lower_set_kernel(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    elem: TyId,
+    cx: &mut LowerCtx,
+) -> Option<Lowered> {
+    let tys = cx.commons().tys();
+    let mut pre = Pre::new();
+    let elem_ts = ts_ty(elem, tys);
+    let text: Option<String> = match (method.name.as_str(), args) {
+        ("length", []) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!("({recv}).size"))
+        }
+        ("contains", [x]) => {
+            let recv = pre.lower(receiver, cx);
+            let x = pre.lower(x, cx);
+            Some(format!("({recv}).has({x})"))
+        }
+        ("insert", [x]) => {
+            let recv = pre.lower(receiver, cx);
+            let x = pre.lower(x, cx);
+            Some(format!(
+                "(new globalThis.Set<{elem_ts}>({recv}).add({x}) as ReadonlySet<{elem_ts}>)"
+            ))
+        }
+        ("remove", [x]) => {
+            let recv = pre.lower(receiver, cx);
+            let x = pre.lower(x, cx);
+            Some(format!(
+                "((__s: globalThis.Set<{elem_ts}>) => (__s.delete({x}), __s as ReadonlySet<{elem_ts}>))(new globalThis.Set<{elem_ts}>({recv}))"
+            ))
+        }
+        ("toList", []) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!(
+                "([...({recv})] as readonly {}[])",
+                ts_array_elem(&elem_ts)
+            ))
+        }
+        _ => None,
+    };
+    text.map(|expr| pre.finish(expr))
+}
+
 fn lower_map_kernel(
     receiver: &Expr,
     method: &Ident,
@@ -5923,6 +5997,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::Option(_)
         | Ty::Result(..)
         | Ty::List(_)
+        | Ty::Set(_)
         | Ty::Map(..)
         | Ty::HttpResult(_)
         | Ty::HttpOutcome(_)

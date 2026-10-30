@@ -5146,6 +5146,7 @@ pub(crate) fn type_ref_names(r: &TypeRef, vars: &HashSet<&str>, out: &mut Vec<St
         | TypeRef::Effect(t, _)
         | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
+        | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)

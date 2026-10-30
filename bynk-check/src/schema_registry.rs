@@ -105,6 +105,7 @@ fn canon_type(t: &TypeRef) -> String {
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", canon_type(t)),
+        TypeRef::Set(t, _) => format!("Set[{}]", canon_type(t)),
         TypeRef::Map(k, v, _) => format!("Map[{}, {}]", canon_type(k), canon_type(v)),
         TypeRef::Query(t, _) => format!("Query[{}]", canon_type(t)),
         TypeRef::Stream(t, _) => format!("Stream[{}]", canon_type(t)),

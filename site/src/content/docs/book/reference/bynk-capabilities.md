@@ -785,8 +785,10 @@ first-party enum, not the name.
 ## Related first-party modules
 
 Beyond capabilities, the `bynk` namespace also ships pure **commons** you bring
-in with `uses` (not `consumes`) — `bynk.list` and `bynk.map` (combinators over
-the `List`/`Map` kernels) and `bynk.string` (string helpers). These are ordinary
+in with `uses` (not `consumes`) — `bynk.list`, `bynk.map` and `bynk.set`
+(combinators over the `List`/`Map`/`Set` kernels; `bynk.set` has `union`,
+`intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet`) and `bynk.string`
+(string helpers). These are ordinary
 functions with no effects; see the [type system reference](/book/reference/types/).
 
 Two more serve the `Locale` capability above.

@@ -1,0 +1,36 @@
+context teams
+  uses bynk.set
+
+// #2596: the `bynk.set` combinators over the `Set` kernel.
+
+fn a() -> Set[String] {
+	Set.of(["ada", "bo", "cy"])
+}
+
+fn b() -> Set[String] {
+	Set.of(["cy", "dee", "ada"])
+}
+
+fn joined() -> List[String] {
+	union(a(), b()).toList()
+}
+
+fn shared() -> List[String] {
+	intersect(a(), b()).toList()
+}
+
+fn onlyA() -> List[String] {
+	difference(a(), b()).toList()
+}
+
+fn lengths() -> List[Int] {
+	mapSet(a(), (s) => s.length()).toList()
+}
+
+fn short() -> List[String] {
+	filterSet(a(), (s) => s.length() < 3).toList()
+}
+
+fn within() -> Bool {
+	isSubsetOf(Set.of(["ada"]), a()) && !isSubsetOf(b(), a())
+}

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "provides": {
+    "count": "1a927e90f808a2d7"
+  },
+  "expects": {
+    "club.roster": {
+      "members": "a47af6d47d577cc2"
+    }
+  },
+  "provides_shapes": {
+    "count": "Svc(\"count\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "club.roster": {
+      "members": "Svc(\"members\",P(\"extra\",St(B(\"String\"))),Ret(St(B(\"String\"))))"
+    }
+  }
+}

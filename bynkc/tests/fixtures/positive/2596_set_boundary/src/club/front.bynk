@@ -1,0 +1,11 @@
+// #2596: a caller sending a `Set` to `club.roster` and reading one back.
+context club.front
+
+consumes club.roster
+
+service count {
+  on call() -> Effect[Int] {
+    let all <- club.roster.members(Set.of(["cy", "ada"]))
+    all.length()
+  }
+}

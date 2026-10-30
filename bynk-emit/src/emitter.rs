@@ -949,7 +949,8 @@ fn type_ref_mentions(t: &TypeRef, marker: TypeRefMarker) -> bool {
         | TypeRef::Query(a, _)
         | TypeRef::Stream(a, _)
         | TypeRef::History(a, _)
-        | TypeRef::List(a, _) => type_ref_mentions(a, marker),
+        | TypeRef::List(a, _)
+        | TypeRef::Set(a, _) => type_ref_mentions(a, marker),
         TypeRef::Fn(params, ret, _) => {
             params.iter().any(|p| type_ref_mentions(p, marker)) || type_ref_mentions(ret, marker)
         }
@@ -1099,6 +1100,7 @@ pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
         ),
         Ty::Option(a) => TypeRef::Option(Box::new(ty_to_type_ref(*a, tys)?), sp),
         Ty::List(a) => TypeRef::List(Box::new(ty_to_type_ref(*a, tys)?), sp),
+        Ty::Set(a) => TypeRef::Set(Box::new(ty_to_type_ref(*a, tys)?), sp),
         Ty::Map(k, v) => TypeRef::Map(
             Box::new(ty_to_type_ref(*k, tys)?),
             Box::new(ty_to_type_ref(*v, tys)?),
@@ -2744,6 +2746,7 @@ fn collect_refs_in_typeref(
         | TypeRef::Effect(t, _)
         | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
+        | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
@@ -3117,6 +3120,7 @@ fn record_ty_refs(
         | Ty::HttpResult(t)
         | Ty::HttpOutcome(t)
         | Ty::List(t)
+        | Ty::Set(t)
         | Ty::Query(t)
         | Ty::Stream(t)
         | Ty::Connection(t)
@@ -5991,6 +5995,10 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
         }
         // v0.20b: collections lower to immutable TS shapes.
         TypeRef::List(t, _) => TsType::readonly_array(ts_type_ref_to_ts_type(t, qualify)),
+        // K6a (#2596): an immutable, insertion-ordered JS `Set`.
+        TypeRef::Set(t, _) => {
+            TsType::named_with_args("ReadonlySet", vec![ts_type_ref_to_ts_type(t, qualify)])
+        }
         // A `Query[T]`'s own real shape is `(() => readonly T[])` — an
         // *outer* paren pair around the whole function type (found by the
         // zero-diff check this slice's own "Done when" requires: the
@@ -6441,6 +6449,7 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         },
         Ty::HttpResult(t) => TsType::named_with_args("HttpResult", vec![ts_ty_to_ts_type(*t, tys)]),
         Ty::List(t) => TsType::readonly_array(ts_ty_to_ts_type(*t, tys)),
+        Ty::Set(t) => TsType::named_with_args("ReadonlySet", vec![ts_ty_to_ts_type(*t, tys)]),
         // v0.91 (ADR 0119): a `Query[T]` lowers to a deferred producer of its
         // elements — a thunk run by the terminal. Same outer-paren shape as
         // `TypeRef::Query` (`ts_type_ref_to_ts_type`'s own comment explains
