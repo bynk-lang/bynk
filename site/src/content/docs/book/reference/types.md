@@ -145,6 +145,7 @@ bundle`.)
 | `HttpResult[T]` | see [HTTP](/book/reference/http/) | an HTTP response |
 | `Stream[T]` | — | a value-over-time source (see [Stream](#stream)) |
 | `Query[T]` | — | a lazy read over `store` storage (see [Query](#query)) |
+| `Set[T]` | — | an immutable set of value-keyable elements (see [Set](#set)) |
 
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
@@ -287,6 +288,37 @@ rejected (`bynk.types.key_not_orderable`). Numeric keys (`sum`/`average`) are
 `sum` the zero. The first-party `bynk.list` free functions are the deprecated
 predecessors of these methods (see [Operators & built-ins](/book/reference/operators/) and
 [First-party `bynk` capabilities](/book/reference/bynk-capabilities/)).
+
+## Set
+
+`Set[T]` is a built-in immutable set, beside `List` and `Map`. It keeps
+**insertion order**, as `Map` does: `toList()` and the wire form list the
+elements in the order they were first added, and inserting an element that is
+already there keeps its place.
+
+```bynk,fragment
+let tags = Set.of(["b", "a", "b"])        // {b, a}
+let more = tags.insert("c").remove("a")   // {b, c}; `tags` is unchanged
+let none: Set[Int] = Set.empty()
+```
+
+- **Members** follow the `Map`-key rule: `Int` or `String`, or a refined or
+  opaque type over them. Anything else is `bynk.types.unkeyable_set_element`,
+  whether written (`Set[Point]`) or inferred (`Set.of([p])`).
+- **Statics:** `Set.empty()` takes its element type from context, as
+  `List.empty()` does, and `Set.of(xs: List[T])` drops repeats, keeping each
+  element's first position.
+- **Kernel:** `length()`, `contains(x)`, `insert(x)`, `remove(x)` and
+  `toList()`. `insert` and `remove` return a new set.
+- **Combinators** are the `bynk.set` commons (`uses bynk.set`): `union`,
+  `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet`.
+- **Equality** is membership: `Set.of([1, 2]) == Set.of([2, 1])`.
+- **On the wire** a set is a JSON array in insertion order. Decoding one with a
+  repeated element fails, since a Bynk sender never writes one.
+
+A `store members: Set[T]` field is a different thing: the storage set of an
+agent, with effectful `add`/`remove`/`contains`/`size`. A `Set[T]` value is
+the immutable collection described here.
 
 ## Connection
 

@@ -18,6 +18,8 @@
 // - a `Uint8Array` (`Bytes`) compares by content;
 // - an array (`List`) compares element-wise;
 // - a `Map` (value-level `Map`) compares by size, then by key and value;
+// - a `Set` (K6a, #2596) compares by size, then membership, so order is
+//   ignored: its elements are value-keyable, so `has` is value equality;
 // - a plain object (a record, a sum value `{ tag, … }`, an `Option`/`Result`)
 //   compares by its own keys and their values, so `tag` decides first;
 // - an instance of any other class compares by identity. The checker rejects
@@ -40,6 +42,13 @@ export function __bynkEq(a: unknown, b: unknown): boolean {
     if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) {
       if (!__bynkEq(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (a instanceof Set || b instanceof Set) {
+    if (!(a instanceof Set) || !(b instanceof Set) || a.size !== b.size) return false;
+    for (const x of a) {
+      if (!b.has(x)) return false;
     }
     return true;
   }

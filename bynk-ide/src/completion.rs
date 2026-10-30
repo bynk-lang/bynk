@@ -1317,6 +1317,13 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
     ),
     ("List", &[("empty", "empty() -> List[T]")]),
     ("Map", &[("empty", "empty() -> Map[K, V]")]),
+    (
+        "Set",
+        &[
+            ("empty", "empty() -> Set[T]"),
+            ("of", "of(xs: List[T]) -> Set[T]"),
+        ],
+    ),
     ("Effect", &[("pure", "pure(value) -> Effect[T]")]),
     (
         "Bytes",
@@ -1518,6 +1525,7 @@ const BUILTIN_TYPES: &[&str] = &[
     "Effect",
     bynk_check::builtin_names::types::LIST,
     bynk_check::builtin_names::types::MAP,
+    bynk_check::builtin_names::types::SET,
 ];
 
 /// Declaration snippets (`CompletionItemKind::SNIPPET`), as LSP snippet bodies.
@@ -1828,6 +1836,7 @@ fn type_candidates(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> 
                 .or_else(|| match name {
                     "List" => Some("The built-in list type, `List[T]`.".to_string()),
                     "Map" => Some("The built-in map type, `Map[K, V]`.".to_string()),
+                    "Set" => Some("The built-in set type, `Set[T]`.".to_string()),
                     _ => Some("built-in type".to_string()),
                 });
             out.push(Completion::item(name, CompletionKind::Type, detail));

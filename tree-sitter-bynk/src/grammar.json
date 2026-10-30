@@ -1973,6 +1973,15 @@
         {
           "type": "SYMBOL",
           "name": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "Set"
+          },
+          "named": true,
+          "value": "identifier"
         }
       ]
     },
@@ -2195,6 +2204,15 @@
                     "content": {
                       "type": "STRING",
                       "value": "List"
+                    },
+                    "named": true,
+                    "value": "builtin_type"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "STRING",
+                      "value": "Set"
                     },
                     "named": true,
                     "value": "builtin_type"

@@ -1919,6 +1919,7 @@ fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
         | TypeRef::Effect(t, _)
         | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
+        | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)

@@ -1,0 +1,61 @@
+==========================
+Set type and its statics (K6a)
+==========================
+
+commons inv {
+	fn make() -> Set[String] {
+		Set.of(["a"])
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier))
+    (fn_decl
+      name: (identifier)
+      return_type: (generic_type_ref
+        name: (builtin_type)
+        arg: (base_type))
+      body: (block
+        tail: (method_call
+          receiver: (identifier)
+          method: (identifier)
+          arg: (list_literal
+            element: (string_literal)))))))
+
+==========================
+A bare Set is a user's own type name (K6a)
+==========================
+
+commons inv {
+	type Set = { n: Int }
+	fn f(s: Set) -> Int {
+		s.n
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier))
+    (type_decl
+      name: (identifier)
+      body: (record_type
+        (record_field
+          name: (identifier)
+          type: (base_type))))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (identifier))
+      return_type: (base_type)
+      body: (block
+        tail: (field_access
+          receiver: (identifier)
+          field: (identifier))))))

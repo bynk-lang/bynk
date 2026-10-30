@@ -2325,6 +2325,7 @@ pub(crate) fn deserialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsE
         t @ (TypeRef::Result(..)
         | TypeRef::Option(..)
         | TypeRef::List(..)
+        | TypeRef::Set(..)
         | TypeRef::Map(..)
         | TypeRef::App { .. }) => ident(format!("{ns}__deserialise_{}", inner_ts_name(t))),
         other => TsExpr::Arrow {
@@ -2355,6 +2356,7 @@ pub(crate) fn serialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExp
         t @ (TypeRef::Result(..)
         | TypeRef::Option(..)
         | TypeRef::List(..)
+        | TypeRef::Set(..)
         | TypeRef::Map(..)
         | TypeRef::App { .. }) => ident(format!("{ns}__serialise_{}", inner_ts_name(t))),
         other => TsExpr::Arrow {
@@ -2389,6 +2391,7 @@ pub(crate) fn agent_wire_passes_through(t: &TypeRef) -> bool {
         TypeRef::Effect(inner, _)
         | TypeRef::Option(inner, _)
         | TypeRef::List(inner, _)
+        | TypeRef::Set(inner, _)
         | TypeRef::HttpResult(inner, _) => agent_wire_passes_through(inner),
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
             agent_wire_passes_through(a) || agent_wire_passes_through(b)
@@ -2451,6 +2454,7 @@ pub(crate) fn deserialise_expr_via(
             | TypeRef::Result(..)
             | TypeRef::Option(..)
             | TypeRef::List(..)
+            | TypeRef::Set(..)
             | TypeRef::Map(..)
             | TypeRef::App { .. }
             | TypeRef::Effect(..)
@@ -2500,6 +2504,7 @@ pub(crate) fn deserialise_expr_via(
         TypeRef::Result(..)
         | TypeRef::Option(..)
         | TypeRef::List(..)
+        | TypeRef::Set(..)
         | TypeRef::Map(..)
         // v0.174 (#592): a generic-record instantiation decodes through its
         // monomorphised codec (`deserialise_Paginated_User`).
@@ -3533,6 +3538,116 @@ pub(crate) fn emit_generic_helpers_qualified(
                             Some(TsType::array(elem_ty)),
                             TsExpr::array(vec![]),
                             None,
+                        ),
+                        TsStmt::for_stmt(
+                            "i",
+                            TsExpr::Lit(TsLit::Num("0".to_string())),
+                            less_than(ident("i"), member(ident("json"), "length")),
+                            block(vec![raw_stmts_at_depth_one(loop_body)]),
+                            None,
+                        ),
+                        return_(call(ident("Ok"), vec![ident("out")])),
+                    ],
+                    is_async: false,
+                    inline: false,
+                }));
+
+                decls.extend([serialise, deserialise]);
+            }
+            // K6a (#2596): `Set[T]` — a JSON array in insertion order. The
+            // decoder refuses a duplicate element: a Bynk sender never writes
+            // one, so it means the payload is not the set it claims to be.
+            GenericInst::SetInst { elem } => {
+                let elem_ts = inner_ts_name(elem);
+                let elem_ty = TsType::named(bynk_ts::print_type(&qualified_ts_type(elem, qual)));
+                let set_ty = TsType::named_with_args("ReadonlySet", vec![elem_ty.clone()]);
+                let set_ctor = bynk_ts::print_type(&TsType::named_with_args(
+                    "globalThis.Set",
+                    vec![elem_ty.clone()],
+                ));
+
+                let serialise = TsDecl::Export(Box::new(TsDecl::Function {
+                    name: format!("__serialise_Set_{elem_ts}"),
+                    generics: Vec::new(),
+                    params: vec![TsParam {
+                        name: "value".to_string(),
+                        ty: Some(set_ty.clone()),
+                        optional: false,
+                    }],
+                    return_type: Some(TsType::named("__JsonValue")),
+                    body: vec![return_(call(
+                        member(
+                            call(ident("globalThis.Array.from"), vec![ident("value")]),
+                            "map",
+                        ),
+                        vec![TsExpr::Arrow {
+                            params: vec![TsParam {
+                                name: "v".to_string(),
+                                ty: None,
+                                optional: false,
+                            }],
+                            is_async: false,
+                            generics: Vec::new(),
+                            return_type: None,
+                            body: Box::new(TsArrowBody::Expr(Box::new(serialise_field_expr(
+                                elem, "v", ru,
+                            )))),
+                        }],
+                    ))],
+                    is_async: false,
+                    inline: false,
+                }));
+
+                let mut loop_body = vec![const_("item", index(ident("json"), ident("i")))];
+                loop_body.extend(emit_field_deserialise(
+                    "el",
+                    elem,
+                    "item",
+                    "`${path}[${i}]`",
+                    ru,
+                ));
+                loop_body.push(if_(
+                    call(
+                        member(ident("out"), "has"),
+                        vec![as_expr(ident("__el"), elem_ty.clone())],
+                    ),
+                    block(vec![return_(err_structural_mismatch(
+                        "`${path}[${i}]`",
+                        "a distinct set element",
+                        str_lit("a duplicate"),
+                    ))]),
+                ));
+                loop_body.push(TsStmt::expr_stmt(
+                    call(
+                        member(ident("out"), "add"),
+                        vec![as_expr(ident("__el"), elem_ty.clone())],
+                    ),
+                    None,
+                ));
+
+                let deserialise = TsDecl::Export(Box::new(TsDecl::Function {
+                    name: format!("__deserialise_Set_{elem_ts}"),
+                    generics: Vec::new(),
+                    params: vec![
+                        TsParam {
+                            name: "json".to_string(),
+                            ty: Some(TsType::named("__JsonValue")),
+                            optional: false,
+                        },
+                        deserialise_path_param(),
+                    ],
+                    return_type: Some(TsType::named_with_args(
+                        "Result",
+                        vec![set_ty, TsType::named("__BoundaryError")],
+                    )),
+                    body: vec![
+                        array_shape_guard(),
+                        const_(
+                            "out",
+                            TsExpr::New {
+                                callee: Box::new(ident(set_ctor)),
+                                args: vec![],
+                            },
                         ),
                         TsStmt::for_stmt(
                             "i",

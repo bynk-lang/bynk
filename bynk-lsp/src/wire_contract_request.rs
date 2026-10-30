@@ -266,6 +266,11 @@ pub enum WcInst {
         key: String,
         elem: WcRef,
     },
+    /// K6a (#2596): a `Set[T]` instantiation.
+    SetInst {
+        key: String,
+        elem: WcRef,
+    },
     MapInst {
         key: String,
         #[serde(rename = "mapKey")]
@@ -528,6 +533,10 @@ fn wc_inst(inst: &WireInst, types: &HashMap<String, Arc<TypeDecl>>) -> WcInst {
             inner: wc_ref(&wire::wire_ref(inner, types)),
         },
         WireInst::ListInst { elem } => WcInst::ListInst {
+            key,
+            elem: wc_ref(&wire::wire_ref(elem, types)),
+        },
+        WireInst::SetInst { elem } => WcInst::SetInst {
             key,
             elem: wc_ref(&wire::wire_ref(elem, types)),
         },

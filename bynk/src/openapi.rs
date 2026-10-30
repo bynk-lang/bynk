@@ -917,6 +917,12 @@ impl Renderer<'_> {
             WireInst::ListInst { elem } => {
                 json!({ "type": "array", "items": self.ref_schema(components, &shape(elem)) })
             }
+            // K6a (#2596): a JSON array, insertion-ordered, without duplicates.
+            WireInst::SetInst { elem } => json!({
+                "type": "array",
+                "items": self.ref_schema(components, &shape(elem)),
+                "uniqueItems": true,
+            }),
             // Entries array, insertion-ordered: `[[k, v], …]`.
             WireInst::MapInst { key, val } => json!({
                 "type": "array",

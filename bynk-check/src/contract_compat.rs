@@ -57,6 +57,9 @@ pub enum Shape {
     Base(String),
     Unit,
     List(Box<Shape>),
+    /// K6a (#2596): a `Set`, whose element must match exactly, as a `Map` key
+    /// must.
+    Set(Box<Shape>),
     Option(Box<Shape>),
     Result(Box<Shape>, Box<Shape>),
     Map(Box<Shape>, Box<Shape>),
@@ -363,6 +366,7 @@ fn shape_of(
         TypeRef::Unit(_) => Shape::Unit,
         TypeRef::Effect(inner, _) => go(inner),
         TypeRef::List(a, _) => Shape::List(Box::new(go(a))),
+        TypeRef::Set(a, _) => Shape::Set(Box::new(go(a))),
         TypeRef::Option(a, _) => Shape::Option(Box::new(go(a))),
         TypeRef::Result(a, b, _) => Shape::Result(Box::new(go(a)), Box::new(go(b))),
         TypeRef::Map(k, v, _) => Shape::Map(Box::new(go(k)), Box::new(go(v))),
@@ -507,6 +511,7 @@ fn render(s: &Shape) -> String {
         Shape::Base(b) => b.clone(),
         Shape::Unit => "()".to_string(),
         Shape::List(a) => format!("List[{}]", render(a)),
+        Shape::Set(a) => format!("Set[{}]", render(a)),
         Shape::Option(a) => format!("Option[{}]", render(a)),
         Shape::Result(a, b) => format!("Result[{}, {}]", render(a), render(b)),
         Shape::Map(k, v) => format!("Map[{}, {}]", render(k), render(v)),
@@ -667,6 +672,7 @@ fn shape_node(s: &Shape) -> Node {
         Shape::Base(b) => Node::call("B", vec![Node::Str(b.clone())]),
         Shape::Unit => Node::call("U", vec![]),
         Shape::List(a) => one("L", a),
+        Shape::Set(a) => one("St", a),
         Shape::Option(a) => one("O", a),
         Shape::HttpResult(a) => one("H", a),
         Shape::Result(a, b) => Node::call("R", vec![shape_node(a), shape_node(b)]),

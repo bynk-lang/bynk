@@ -792,6 +792,7 @@ There are **640** codes in total.
 | `bynk.types.uninferable_element_type` | An empty `[]` (or `List.empty()` / `Map.empty()`) has no expected type to infer its element type from. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |
 | `bynk.types.unkeyable_distinct` | A `distinct`/`distinctBy` element or key is not value-keyable (`String`, `Int`, or a refined/opaque type over them). |  | — |
 | `bynk.types.unkeyable_map_key` | A `Map` key type is not value-keyable (`String`, `Int`, or a refined/opaque type over them). | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
+| `bynk.types.unkeyable_set_element` | A `Set` element type is not value-keyable (`String`, `Int`, or a refined/opaque type over them), written or inferred through `Set.of`. | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
 | `bynk.types.unknown_field` | Referenced a field the record type does not declare. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
 | `bynk.types.unknown_pattern_field` | A pattern names a field the variant does not have. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | `bynk.types.unknown_static_member` | Referenced an unknown static member on a type. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |

@@ -98,6 +98,7 @@ pub fn lower_field_default_wire(
             _ => Err("a `List` field default must be a list literal".to_string()),
         },
         TypeRef::Map(..) => Err("a `Map` field has no closed-form default literal".to_string()),
+        TypeRef::Set(..) => Err("a `Set` field has no closed-form default literal".to_string()),
         TypeRef::App { .. } => Err(
             "a generic type's field cannot carry a default (events are never generic)".to_string(),
         ),
