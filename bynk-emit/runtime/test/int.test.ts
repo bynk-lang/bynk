@@ -66,3 +66,13 @@ test("pow is exact to the safe range and faults past it or on a negative exponen
   assert.throws(() => __bynkIntPow(10, 16), /past the safe Int range/);
   assert.throws(() => __bynkIntPow(2, -1), /negative exponent/);
 });
+
+test("mod stays exact for operands near the safe limit, and div never returns -0", () => {
+  const M = Number.MAX_SAFE_INTEGER;
+  assert.equal(__bynkIntMod(M - 1, M), M - 1);
+  assert.equal(__bynkIntMod(-(M - 1), M), 1);
+  assert.equal(__bynkIntMod(M - 1, -M), -1);
+  assert.equal(__bynkIntMod(-(M - 1), -M), -(M - 1));
+  assert.ok(!Object.is(__bynkIntDivFloor(0, -5), -0));
+  assert.equal(__bynkIntDivFloor(0, -5), 0);
+});

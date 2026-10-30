@@ -38,17 +38,22 @@ export function __bynkIntRem(l: number, r: number): number {
   return (l % r) + 0;
 }
 
-// Floor division: rounds toward negative infinity.
+// Floor division: rounds toward negative infinity. `+ 0` turns `0.div(-5)`'s
+// `-0` into `0`, as `rem` and `mod` do.
 export function __bynkIntDivFloor(l: number, r: number): number {
   nonZero(r, "div");
-  return Math.floor(l / r);
+  return Math.floor(l / r) + 0;
 }
 
 // The remainder of floor division: the divisor's sign, so
 // `a == b * a.div(b) + a.mod(b)` and `x.mod(n)` is in `0..n-1` for `n > 0`.
+// `r` is added only when the remainder's sign differs from the divisor's, so
+// the result stays within `(-|r|, |r|)`: `((l % r) + r) % r` would pass 2^53
+// for a large `r` and round before the second `%`.
 export function __bynkIntMod(l: number, r: number): number {
   nonZero(r, "mod");
-  return (((l % r) + r) % r) + 0;
+  const m = l % r;
+  return (m !== 0 && m < 0 !== r < 0 ? m + r : m) + 0;
 }
 
 // An exact power by repeated squaring, checking each step stays a safe
