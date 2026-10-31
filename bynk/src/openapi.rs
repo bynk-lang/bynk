@@ -608,6 +608,7 @@ fn responses_of(
             }
             HttpVariantPayload::Raw
             | HttpVariantPayload::RawTagged
+            | HttpVariantPayload::RawStreamed
             | HttpVariantPayload::RawError => {
                 // Author-owned bytes under an author-chosen media type; no codec.
                 body("*/*", json!({ "type": "string", "format": "binary" }), e);

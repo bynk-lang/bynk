@@ -1,0 +1,10 @@
+context svc
+
+// #2623: a stream-carrying record, inside a list, can't be a handler's result.
+type Download = { contentType: String, body: Stream[Bytes] }
+
+service s {
+	on call() -> Effect[List[Download]] {
+		Effect.pure([])
+	}
+}

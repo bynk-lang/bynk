@@ -1,0 +1,8 @@
+context svc
+
+// #2623: a stream-carrying record isn't comparable with `==`.
+type Download = { contentType: String, body: Stream[Bytes] }
+
+fn same(a: Download, b: Download) -> Bool {
+	a == b
+}

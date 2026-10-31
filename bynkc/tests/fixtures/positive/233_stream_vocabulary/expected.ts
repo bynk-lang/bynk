@@ -5,11 +5,11 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function doubled(xs: readonly number[]): AsyncIterable<number> {
-  return (async function* (__s) { for await (const __e of __s) { yield ((x) => x * 2)(__e); } })((async function* () { for (const __e of xs) { yield __e; } })());
+  return (async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; for await (const __e of __s) { yield ((x) => x * 2)(__e); } })((async function* () { for (const __e of xs) { yield __e; } })());
 }
 
 export async function firstTwoDoubled(xs: readonly number[]): globalThis.Promise<readonly number[]> {
-  return (async (__s) => { const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })((async function* (__s) { const __n = 2; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* (__s) { for await (const __e of __s) { yield ((x) => x * 2)(__e); } })((async function* () { for (const __e of xs) { yield __e; } })())));
+  return (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __n = 2; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; for await (const __e of __s) { yield ((x) => x * 2)(__e); } })((async function* () { for (const __e of xs) { yield __e; } })())));
 }
 
 export function passthrough(rs: readonly Result<number, string>[]): AsyncIterable<Result<number, string>> {

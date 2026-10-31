@@ -1,0 +1,8 @@
+context svc
+
+// #2623: `RawStreamed` takes a `Stream[Bytes]`; whole `Bytes` are `Raw`'s.
+service api from http {
+	on GET("/f") () -> Effect[HttpResult[()]] by Visitor {
+		RawStreamed(Bytes.fromUtf8("x"), "text/plain")
+	}
+}

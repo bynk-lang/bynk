@@ -63,12 +63,14 @@ The built-in HTTP-result sum ([§5.7](/book/spec/static-semantics/#57-handlers))
 common, modern HTTP status codes (RFC 9110) — success (`Ok`, `Created`,
 `Accepted`, `NoContent`), redirection carrying a `Location` URL (`Found`,
 `SeeOther`, `PermanentRedirect`, …), and the client/server failures
-(`BadRequest`, `NotFound`, `TooManyRequests`, `ServerError`, …). Three 200-only
+(`BadRequest`, `NotFound`, `TooManyRequests`, `ServerError`, …). Four 200-only
 variants carry a body that bypasses JSON serialisation: `Streaming` (an
 SSE-framed `Stream[String]`), `Raw` (a `Bytes` body written under an
 author-declared `content-type`, with `serialiseValue` bypassed entirely — no
-codec runs), and `RawTagged` (a `Raw` body plus the entity tag sent as its
-`ETag`). `RawCreated` writes a `Raw` body at `201`, with no `ETag` whatever
+codec runs), `RawTagged` (a `Raw` body plus the entity tag sent as its
+`ETag`), and `RawStreamed` (#2623: a `Stream[Bytes]` body written chunk by chunk
+as it is pulled, with no `ETag` whatever `opts.weakEtag` says, since its bytes
+can't be hashed without buffering them). `RawCreated` writes a `Raw` body at `201`, with no `ETag` whatever
 `opts.weakEtag` says, and `RawError` one at an author-chosen 4xx/5xx status. See
 the [HTTP reference](/book/reference/http/) for the full table.
 The runtime maps each variant to an HTTP response:
@@ -285,10 +287,16 @@ provider's public keys over the network.
 
 ## §7.4.9 Streams and connections (v0.100, v0.102+)
 
-A **`Stream[T]`** has no runtime-library export: it lowers to a host
-`AsyncIterable<T>` emitted inline ([§7.3.10](/book/spec/emission/#7310-streams-and-websockets-v0100-v0102)),
-so the runtime module gains nothing for stream code. A streamed HTTP response is a
-standard `Response` whose body is the stream encoded as Server-Sent Events.
+A **`Stream[T]`** lowers to a host `AsyncIterable<T>` emitted inline
+([§7.3.10](/book/spec/emission/#7310-streams-and-websockets-v0100-v0102)), so
+stream code needs no runtime import. A streamed HTTP response is a standard
+`Response` whose body pulls the stream lazily: encoded as Server-Sent Events for
+`Streaming`, written chunk by chunk for `RawStreamed`. Building the response
+claims the stream, as the inline ops do, through the exported
+`claimStream(stream)`, which throws `bynk: a stream can be read only once` on a
+stream already read. A `HEAD` answered from a streamed `GET` cancels the body
+unread, which returns the stream's iterator. A throw from the stream mid-body
+errors the response body.
 
 A **`Connection[F]`** is lowered against a runtime **`Connection<F>`** interface
 with `send(frame: F): void` (JSON-encodes and writes a frame) and `close(): void`

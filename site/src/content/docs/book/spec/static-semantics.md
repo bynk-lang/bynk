@@ -1118,6 +1118,8 @@ supply exactly two arguments — a `Bytes` body then a `String` content-type
 `HttpResult[()]`, the JSON body parameter `T` being unused, as for `Streaming`
 and the redirect variants. Constructing `RawCreated` (the `201` variant, #2403)
 MUST supply the same two arguments, with the same codes and result. Constructing
+`RawStreamed` (#2623) MUST supply exactly two — a `Stream[Bytes]` body then a
+`String` content-type — with the same codes and result. Constructing
 `RawTagged` MUST supply exactly three — a
 `Bytes` body, a `String` content-type, then a `String` entity tag — with the same
 codes and result; the tag's syntax is checked at run time

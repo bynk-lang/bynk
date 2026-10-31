@@ -4850,6 +4850,14 @@ pub fn validate_store_field_value_types(
     }
 }
 
+/// The `what` labels of the boundary positions whose rule differs by position
+/// (a `Stream` or a `bynk.crypto` key passes through some). [`reject_fn_types`]
+/// decides by them, so every caller names its position through these rather
+/// than a literal, and a reworded label can't silently change a check.
+pub const CAPABILITY_SIGNATURE: &str = "a capability operation signature";
+pub const RECORD_FIELD: &str = "a record field";
+pub const SUM_PAYLOAD: &str = "a sum-variant payload";
+
 pub fn reject_fn_types(
     r: &TypeRef,
     what: &str,
@@ -4937,6 +4945,11 @@ pub fn reject_fn_types(
                 ),
             );
         }
+        // K-streams (#2623): a capability operation's provider runs in the
+        // caller's isolate, so a stream passes through its signature as the
+        // same iterable; and a record or sum may carry one, becoming
+        // non-boundary itself (the `Named` arm below finds it at each use).
+        TypeRef::Stream(..) if stream_passes(what) => {}
         // v0.100: a `Stream[T]` is non-storable and non-boundary — a live
         // value-over-time source, built and consumed in place, never persisted
         // or sent.
@@ -5018,6 +5031,15 @@ pub fn reject_fn_types(
             for a in args {
                 reject_fn_types(a, what, types, errors);
             }
+            // K-streams (#2623): a generic record whose own fields carry a
+            // stream (`Wrap[T] = { s: Stream[T] }`) is found through its
+            // declaration; a stream argument was reported just above.
+            if !stream_passes(what)
+                && let Some(path) =
+                    bynk_syntax::ast::stream_path(&TypeRef::Named(name.clone()), types)
+            {
+                errors.push(stream_carrying_at_boundary(&name.name, &path, *span, what));
+            }
         }
         // #1883, slice 1a: an `Asset` names a file the platform serves; it
         // is not data. What crosses a boundary or is stored is its `.url`.
@@ -5040,8 +5062,7 @@ pub fn reject_fn_types(
         // A capability operation is where a key is meant to flow (`Crypto.sign`
         // takes one), in-process, so its signature is exempt.
         TypeRef::Named(id)
-            if what != "a capability operation signature"
-                && is_crypto_key_type(&id.name, types) =>
+            if what != CAPABILITY_SIGNATURE && is_crypto_key_type(&id.name, types) =>
         {
             errors.push(
                 CompileError::new(
@@ -5057,6 +5078,13 @@ pub fn reject_fn_types(
                 ),
             );
         }
+        // K-streams (#2623): a record or sum that carries a stream, at any
+        // depth, is non-boundary like the stream.
+        TypeRef::Named(id) if !stream_passes(what) => {
+            if let Some(path) = bynk_syntax::ast::stream_path(r, types) {
+                errors.push(stream_carrying_at_boundary(&id.name, &path, id.span, what));
+            }
+        }
         TypeRef::Base(..)
         | TypeRef::Named(_)
         | TypeRef::QueueResult(_)
@@ -5064,6 +5092,39 @@ pub fn reject_fn_types(
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => {}
     }
+}
+
+/// K-streams (#2623): the positions a `Stream` may appear in. A capability
+/// operation's provider runs in the caller's isolate, so nothing in its
+/// signature is serialised; a record field or sum payload makes its type
+/// stream-carrying, which is then checked where the type is used.
+fn stream_passes(what: &str) -> bool {
+    [CAPABILITY_SIGNATURE, RECORD_FIELD, SUM_PAYLOAD].contains(&what)
+}
+
+/// K-streams (#2623): `bynk.types.stream_at_boundary` for a type that carries
+/// a stream in a field, naming the field chain it is reached through.
+fn stream_carrying_at_boundary(
+    name: &str,
+    path: &[String],
+    span: Span,
+    what: &str,
+) -> CompileError {
+    let chain = path
+        .iter()
+        .map(|f| format!("`{f}`"))
+        .collect::<Vec<_>>()
+        .join(", then ");
+    CompileError::new(
+        "bynk.types.stream_at_boundary",
+        span,
+        format!(
+            "`{name}` cannot appear in {what} — it carries a `Stream`, a live value-over-time source, never persisted or sent across a boundary"
+        ),
+    )
+    .with_note(format!(
+        "the stream is reached through {chain}; drain it (`.collect()`) into a type without one before it crosses"
+    ))
 }
 
 /// Whether `name`, in the project's type table, is one of `bynk.crypto`'s key

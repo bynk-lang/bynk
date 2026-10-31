@@ -1,0 +1,1 @@
+bynk.types.json_uncodable `Download` cannot be encoded as JSON

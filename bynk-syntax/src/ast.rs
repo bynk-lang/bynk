@@ -1732,6 +1732,12 @@ pub enum HttpVariantPayload {
     /// responses), for a body too large to hash or a validator the handler has
     /// for free (a content hash, an object store's `etag`).
     RawTagged,
+    /// Carries `(body: Stream[Bytes], contentType: String)` — a raw body
+    /// streamed into the response as its chunks arrive, with no codec and no
+    /// validator: the bytes can't be hashed without buffering them. The
+    /// `RawStreamed` (200) variant (K-streams, #2623). Its status is sent
+    /// before the first chunk, so a fault mid-body aborts the response.
+    RawStreamed,
     /// Carries `(status: ErrorStatus, body: Bytes, contentType: String)` — an
     /// error status the author chooses, with an author-owned body and no codec
     /// (#2341, L4). The `RawError` variant; `status` is one of the vocabulary's
@@ -1781,6 +1787,14 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
     HttpVariant {
         name: "RawTagged",
         payload: HttpVariantPayload::RawTagged,
+        status: 200,
+    },
+    // K-streams (#2623): a `Raw` body streamed as a `Stream[Bytes]`, chunk by
+    // chunk, for a body too large to buffer. 200-only, like `Streaming`: the
+    // status is sent before the body.
+    HttpVariant {
+        name: "RawStreamed",
+        payload: HttpVariantPayload::RawStreamed,
         status: 200,
     },
     // #2403 (L6): a `Raw` body answered `201` — for an external contract that
@@ -2912,6 +2926,107 @@ impl TypeRef {
             TypeRef::App { span, .. } => *span,
         }
     }
+}
+
+/// K-streams (#2623): where `t` reaches a `Stream`, as the chain of fields it
+/// is reached through (`["Bundle.download", "Download.body"]`), or `None`. A
+/// bare `Stream` (or one inside a wrapper) is the empty chain. A record or sum
+/// may carry a stream; such a type is then non-boundary like the stream
+/// itself, and this is the walk every boundary check uses to find it. It
+/// follows named and applied types into their declarations (a generic
+/// record's own fields too, so `Wrap[T] = { s: Stream[T] }` is found through
+/// `Wrap[Int]`), but not into a function type, which is rejected at a
+/// boundary on its own. Terminates via the `visited` set.
+pub fn stream_path(
+    t: &TypeRef,
+    types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+) -> Option<Vec<String>> {
+    fn walk(
+        t: &TypeRef,
+        types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<Vec<String>> {
+        match t {
+            TypeRef::Stream(..) => Some(Vec::new()),
+            TypeRef::Named(id) => named(&id.name, types, visited),
+            TypeRef::App { name, args, .. } => named(&name.name, types, visited)
+                .or_else(|| args.iter().find_map(|a| walk(a, types, visited))),
+            TypeRef::Option(a, _)
+            | TypeRef::List(a, _)
+            | TypeRef::Set(a, _)
+            | TypeRef::Effect(a, _)
+            | TypeRef::HttpResult(a, _)
+            | TypeRef::Query(a, _)
+            | TypeRef::Connection(a, _)
+            | TypeRef::History(a, _) => walk(a, types, visited),
+            TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+                walk(a, types, visited).or_else(|| walk(b, types, visited))
+            }
+            TypeRef::Fn(..)
+            | TypeRef::Base(..)
+            | TypeRef::QueueResult(_)
+            | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
+            | TypeRef::TokenClaims(_)
+            | TypeRef::BoundaryRejection(_)
+            | TypeRef::ValidationError(_)
+            | TypeRef::JsonError(_)
+            | TypeRef::Unit(_) => None,
+        }
+    }
+    fn named(
+        name: &str,
+        types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<Vec<String>> {
+        if !visited.insert(name.to_string()) {
+            return None;
+        }
+        let decl = types.get(name)?;
+        let fields: Vec<(String, &TypeRef)> = match &decl.body {
+            TypeBody::Record(r) => r
+                .fields
+                .iter()
+                .map(|f| (format!("{name}.{}", f.name.name), &f.type_ref))
+                .collect(),
+            TypeBody::Sum(s) => s
+                .variants
+                .iter()
+                .flat_map(|v| {
+                    v.payload.iter().map(move |p| {
+                        (
+                            format!("{name}.{}.{}", v.name.name, p.name.name),
+                            &p.type_ref,
+                        )
+                    })
+                })
+                .collect(),
+            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => Vec::new(),
+        };
+        fields.into_iter().find_map(|(at, t)| {
+            walk(t, types, visited).map(|mut rest| {
+                rest.insert(0, at);
+                rest
+            })
+        })
+    }
+    walk(t, types, &mut std::collections::HashSet::new())
+}
+
+/// K-streams (#2623): whether the named type `name` carries a `Stream` in a
+/// field, at any depth ([`stream_path`]). Such a type has no codec.
+pub fn type_carries_stream(
+    name: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+) -> bool {
+    stream_path(
+        &TypeRef::Named(Ident {
+            name: name.to_string(),
+            span: Span::default(),
+        }),
+        types,
+    )
+    .is_some()
 }
 
 /// v0.174 (#592): does the generic record type `name` transitively contain a
@@ -4273,5 +4388,66 @@ fn f(x: Int) -> Int {
             }
         }
         assert!(checked > 50, "only {checked} nodes checked");
+    }
+}
+
+#[cfg(test)]
+mod stream_path_tests {
+    use super::*;
+
+    fn types(source: &str) -> std::collections::HashMap<String, std::sync::Arc<TypeDecl>> {
+        let tokens = crate::lexer::tokenize(source).unwrap();
+        let units = crate::parser::parse_units(&tokens, source).unwrap();
+        let SourceUnit::Commons(c) = &units[0] else {
+            panic!("a commons");
+        };
+        c.items
+            .iter()
+            .filter_map(|i| match i {
+                CommonsItem::Type(t) => Some((t.name.name.clone(), std::sync::Arc::new(t.clone()))),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn named(name: &str) -> TypeRef {
+        TypeRef::Named(Ident {
+            name: name.to_string(),
+            span: Span::default(),
+        })
+    }
+
+    /// K-streams (#2623): the chain of fields a stream is reached through,
+    /// across records, sums and a generic record's own fields, terminating on
+    /// a recursive type.
+    #[test]
+    fn the_stream_path_names_each_field_it_passes_through() {
+        let t = types(
+            "commons d\n\
+             type Download = { contentType: String, body: Stream[Bytes] }\n\
+             type Shelf = { name: String, latest: Option[Download] }\n\
+             type Pick = | Got(d: Download) | Nothing\n\
+             type Wrap[T] = { s: Stream[T] }\n\
+             type Tree = { kids: List[Tree], n: Int }\n\
+             type Plain = { n: Int }\n",
+        );
+        let path = |n: &str| stream_path(&named(n), &t);
+        assert_eq!(path("Download"), Some(vec!["Download.body".to_string()]));
+        assert_eq!(
+            path("Shelf"),
+            Some(vec![
+                "Shelf.latest".to_string(),
+                "Download.body".to_string()
+            ])
+        );
+        assert_eq!(
+            path("Pick"),
+            Some(vec!["Pick.Got.d".to_string(), "Download.body".to_string()])
+        );
+        assert_eq!(path("Wrap"), Some(vec!["Wrap.s".to_string()]));
+        assert_eq!(path("Tree"), None);
+        assert_eq!(path("Plain"), None);
+        assert!(type_carries_stream("Shelf", &t));
+        assert!(!type_carries_stream("Tree", &t));
     }
 }

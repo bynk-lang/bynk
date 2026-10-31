@@ -1,0 +1,76 @@
+context files.store
+
+uses files.model
+
+// #2623: a capability's provider runs in the caller's isolate, so a stream
+// passes through its signature as the same iterable.
+capability Blobs {
+	fn read(key: String) -> Effect[Download]
+	fn shelf(name: String) -> Effect[Shelf]
+	fn write(key: String, body: Stream[Bytes]) -> Effect[Receipt]
+}
+
+provides Blobs = MemoryBlobs {
+	fn read(key: String) -> Effect[Download] {
+		Effect.pure(Download {
+			contentType: "text/plain",
+			body: Stream.of([Bytes.fromUtf8("hello, "), Bytes.fromUtf8(key)]),
+		})
+	}
+
+	fn shelf(name: String) -> Effect[Shelf] {
+		Effect.pure(Shelf {
+			name: name,
+			latest: Download { contentType: "text/plain", body: Stream.of([Bytes.fromUtf8(name)]) },
+		})
+	}
+
+	fn write(key: String, body: Stream[Bytes]) -> Effect[Receipt] {
+		let parts <- body.collect()
+		Effect.pure(Receipt { key: key, parts: parts.length() })
+	}
+}
+
+fn join(parts: List[Bytes]) -> Bytes {
+	parts.fold(Bytes.fromUtf8(""), (acc, b) => acc.concat(b))
+}
+
+service reading {
+	on call(key: String) -> Effect[Option[String]] given Blobs {
+		let d <- Blobs.read(key)
+		let parts <- d.body.collect()
+		join(parts).decodeUtf8()
+	}
+}
+
+service upload {
+	on call(key: String) -> Effect[Receipt] given Blobs {
+		Blobs.write(key, Stream.of([Bytes.fromUtf8("a"), Bytes.fromUtf8("b"), Bytes.fromUtf8("c")]))
+	}
+}
+
+service twice {
+	on call(key: String) -> Effect[Int] given Blobs {
+		let d <- Blobs.read(key)
+		let first <- d.body.collect()
+		let second <- d.body.collect()
+		first.length() + second.length()
+	}
+}
+
+service api from http {
+	// The body streams from the capability straight into the response.
+	on GET("/files/:key") (key: String) -> Effect[HttpResult[()]] by Visitor given Blobs {
+		let d <- Blobs.read(key)
+		RawStreamed(d.body, d.contentType)
+	}
+
+	on GET("/shelves/:name") (name: String) -> Effect[HttpResult[()]] by Visitor given Blobs {
+		let s <- Blobs.shelf(name)
+		if name == "empty" {
+			NotFound
+		} else {
+			RawStreamed(s.latest.body.map((b) => b), s.latest.contentType)
+		}
+	}
+}

@@ -14,6 +14,12 @@ export type HttpResult<T> =
       readonly contentType: string;
       readonly etag: string;
     }
+  // 2xx raw body streamed chunk by chunk, with no validator (K-streams, #2623).
+  | {
+      readonly tag: "RawStreamed";
+      readonly body: AsyncIterable<Uint8Array>;
+      readonly contentType: string;
+    }
   // 201 raw body — author-owned bytes with an explicit content-type (#2403, L6).
   | { readonly tag: "RawCreated"; readonly body: Uint8Array; readonly contentType: string }
   | { readonly tag: "Created"; readonly value: T }
@@ -70,6 +76,12 @@ export const HttpResult = {
     body,
     contentType,
     etag,
+  }),
+  // 2xx raw body streamed — the chunks and their content-type.
+  RawStreamed: (body: AsyncIterable<Uint8Array>, contentType: string): HttpResult<never> => ({
+    tag: "RawStreamed",
+    body,
+    contentType,
   }),
   // 201 raw body — the octets and their content-type, as for `Raw`.
   RawCreated: (body: Uint8Array, contentType: string): HttpResult<never> => ({

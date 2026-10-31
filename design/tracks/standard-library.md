@@ -17,6 +17,8 @@
   redirect policy, and `Logger` levels with a structured `log`.
   K5b done (#2604): `Fetch.receiveBytes` and `sendBytes` carry `Bytes` bodies.
   P4b done (#2608): `D1` schema migrations, applied by deploy, dev and tests.
+  K-streams done (#2623): a `Stream` crosses capability signatures and rides
+  in records, streams are read once, and `RawStreamed` serves a byte stream.
   P1 done (#2590): `Kv` gains metadata, expiry, binary values and paging.
   K3 done (#2592): `Instant` reads and writes RFC 3339 text. K2 done (#2594):
   percent-encoding on `String`, and URLs in the `bynk.url` commons.
@@ -331,7 +333,7 @@ unit and is indicative only, not decided.
 | Web standards: URL, URLSearchParams, URLPattern, `structuredClone`, Intl, CompressionStream | A / P | L0/L1 (URL, compression); Intl → `Locale` | URLPattern is routing, so language-owned |
 | Console | P | L2 `Logger` | |
 | Performance and timers / Scheduler (`scheduler.wait`) | P (`Clock.now`) | L2 `Clock.sleep`? | Sleeping inside a DO handler interacts with input gates: decide before adding |
-| Streams | P (`Stream[T]` for responses) | L0 | Byte streams are a prerequisite for R2 and large bodies |
+| Streams | P (`Stream[T]` for responses; K-streams #2623: through capability signatures and in records, single-pass, a `RawStreamed` byte response) | L0 | Byte streams are a prerequisite for R2 and large bodies; the platform sources are K5c (Fetch) and P5b (R2) |
 | Cache API (`caches.default`) | A | L3 `bynk.cloudflare.Cache` | Cloudflare-specific semantics (per-colo, not global). Edge caching of a Worker's own responses, purgeable globally, is a different platform feature (Workers Cache) and shipped as `EdgeCache` (first-party registry L7, #2414) |
 | HTMLRewriter | A | L3 | Streaming, callback-based: may fail R14.4. Late |
 | TCP sockets (`connect()`) | A | L3 `Sockets` | Prerequisite for native DB drivers |
@@ -651,6 +653,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | K4 ✅ #2327 | `bynk.crypto`: digests, HMAC, sign/verify, key import, `Effect` over Web Crypto; `Random.bytes`; security review. One `Crypto` capability in a flat sibling unit (Tier 0, `id_block` 7, experimental until the registry signs with it in production), a binding per platform (`Binding::PerPlatformFiles`), opaque non-storable `SigningKey`/`VerifyKey` (`bynk.types.key_at_boundary`), the Node binding as the unit-tier test double | K1, D5, D6, S2 |
 | K5a | **Done** (#2586): `Method` gains `Patch`/`Head`/`Options`; `Fetch.sendWith(req, FetchOptions { timeout, redirect })` (experimental); `Logger.warn`/`debug`, and a structured `log` (experimental) | K1 |
 | K5b | **Done** (#2604): `Fetch.receiveBytes(req, options)` and `Fetch.sendBytes(req, body, options)` (experimental) return a `BytesResponse`; `FetchError.InvalidBody` refuses two bodies, or a body on `Get`/`Head` (on `send` too) | K5a |
+| K5c | Fetch streamed bodies: `receiveStream`/`sendStream` with a `StreamResponse { status, headers, body: Stream[Bytes] }`, on Cloudflare and Node (L2, the `bynk` adapter only) | K-streams, K5b |
 | K6a | **Done** (#2596): the `Set[T]` value type, its kernel and the `bynk.set` combinators | — |
 | K6b | **Done** (#2598): `Int` `div`/`rem`/`mod`/`pow` and the `Float` functions as value methods, `Float.pi()`/`Float.e()` | — |
 | K6c | **Done** (#2600): literal-pattern `matchesRegex`/`containsRegex`/`findRegex`/`findAllRegex`/`replaceRegex`/`splitRegex` on `String` | — |
@@ -666,7 +669,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | P4a | **Done** (#2602): D1, `capability X = D1` with `all`/`first`/`run`/`batch`, `SqlValue` parameters, rows as JSON text (blobs as base64; `0`/`1` flags decoded as `Int`), `SqlError` values; deploy creates the database, records its id in the ledger and binds it; tests on `node:sqlite` | S4, K1, D4 |
 | P4b | **Done** (#2608): D1 schema migrations, `migrations/<database>/NNNN_<name>.sql` copied beside the config under `migrations_dir`; `bynk deploy` applies pending ones before the push (the ledger records nothing: the database does), `bynk dev` applies them locally, and every test database starts migrated; `D1` stays experimental | P4a |
 | P5 | **Done** (#2323), re-scoped: R2 with whole `Bytes` objects, metadata, conditional ops, paged `list`, ledger-provisioned buckets. Byte streams split out (below); the §11 Q3 scope is treated as account-wide, since R2's docs state naming rules but not the scope | S4, K1 |
-| K-streams | Byte streams: `Stream[Bytes]` across the boundary, a streamed `Raw` response. Language work (ADR 0023). Filed when a consumer needs objects too large to buffer | |
+| K-streams | **Done** (#2623), the language half only (ADR 0023): a `Stream` in a capability operation's signature, stream-carrying records and sums (non-boundary, no codec), single-pass streams, and `RawStreamed(body: Stream[Bytes], contentType)`. Settles ADR 0128 D5 for in-process streams | |
 | P5b | R2 streamed `get`/`put`, multipart uploads | K-streams, P5 |
 | L7 | **Done** (#2414), filed by the first-party registry track: `EdgeCache`, Workers Cache on per context (`[cache] enabled = true`), a prefix `purge`, and `no-store` on every `GET`/`HEAD` answer of an opted-in Worker but a `@cache` route's `2xx` | S4 |
 | later | Cache API, Vectorize, Workers AI, Hyperdrive, TCP sockets, HTMLRewriter | case by case |

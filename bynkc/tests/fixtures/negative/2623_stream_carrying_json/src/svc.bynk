@@ -1,0 +1,10 @@
+context svc
+
+// #2623: a stream-carrying record has no JSON codec.
+type Download = { contentType: String, body: Stream[Bytes] }
+
+service s {
+	on call() -> Effect[String] {
+		Effect.pure(Json.encode(Download { contentType: "text/plain", body: Stream.of([Bytes.fromUtf8("x")]) }))
+	}
+}

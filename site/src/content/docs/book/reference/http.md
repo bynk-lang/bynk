@@ -79,8 +79,9 @@ target URL emitted as a `Location` header (`Location`), an explanatory
 `message` as an `{ "error": … }` JSON body (`Message`), a `Stream[String]`
 emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
 `Bytes` body under an author-declared `content-type` (`Raw`, and `RawCreated` at
-`201`), the same with the entity tag its `ETag` carries (`RawTagged`), or no body
-at all (`None`).
+`201`), the same with the entity tag its `ETag` carries (`RawTagged`), a
+`Stream[Bytes]` body streamed chunk by chunk (`RawStreamed`), or no body at all
+(`None`).
 
 ### 2xx success
 
@@ -90,6 +91,7 @@ at all (`None`).
 | `Streaming(stream)` | 200 | a `Stream[String]`, SSE-framed (see [Streamed responses](#streamed-responses)) |
 | `Raw(body, contentType)` | 200 | a `Bytes` body under the given `content-type` (see [Raw responses](#raw-responses)) |
 | `RawTagged(body, contentType, etag)` | 200 | as `Raw`, sent with `etag` as its `ETag` (see [Supplying the validator](#supplying-the-validator-rawtagged)) |
+| `RawStreamed(body, contentType)` | 200 | a `Stream[Bytes]` body, streamed chunk by chunk (see [Streamed raw responses](#streamed-raw-responses)) |
 | `RawCreated(body, contentType)` | 201 | as `Raw` (see [Raw responses](#raw-responses)) |
 | `Created(value)` | 201 | the value, as JSON |
 | `Accepted(value)` | 202 | the value, as JSON |
@@ -507,6 +509,39 @@ as an error event — because the HTTP status is already sent once streaming
 begins. A bounded `take` is the language-level guard against an unbounded
 response. A structured event type (named `event`/`id`/`retry` fields) is a
 planned follow-on; v1 streams plain `String` events.
+
+### Streamed raw responses
+
+`RawStreamed(body, contentType)` returns a **200** whose body is a
+[`Stream[Bytes]`](/book/reference/types/#stream), written into the response one
+chunk at a time as the stream yields them, so a body too large to buffer is never
+held whole. The stream usually comes from a capability, inside a record with its
+metadata:
+
+```bynk,fragment
+on GET("/files/:key") (key: String) -> Effect[HttpResult[()]] by v: Visitor given Blobs {
+  let d <- Blobs.read(key)
+  RawStreamed(d.body, d.contentType)
+}
+```
+
+It's `Raw` without the buffer, so it differs from `Raw` in three ways:
+
+- **No `ETag`.** The bytes can't be hashed without buffering them. `@cache` still
+  adds its freshness headers. Return `RawTagged` when you have the whole body and
+  a validator.
+- **No `content-length`.** The size isn't known until the stream ends.
+- **A fault mid-body aborts the response.** The status and headers are sent
+  before the first chunk, as for `Streaming`. Answer a failure you can detect
+  first (a missing object) with an ordinary variant instead, which shares
+  `HttpResult[()]`.
+
+The body is lazy: nothing is read from the stream until the client reads the
+response, and a `HEAD` answered from the `GET` never reads it at all. Handing a
+stream to a response consumes it, since [a stream is read once](/book/reference/types/#stream).
+A unit-tier test matches `RawStreamed(body, contentType)` and drains `body` with
+`.collect()`; at the system tier it reads as `Ok(_)`, with the body's text as the
+value.
 
 ## Raw request bodies
 

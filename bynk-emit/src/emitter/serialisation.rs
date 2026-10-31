@@ -615,6 +615,11 @@ pub(crate) fn emit_helpers_for_owner_qualified(
         if !decl.type_params.is_empty() {
             continue;
         }
+        // K-streams (#2623): a type carrying a `Stream` has no codec. The
+        // checker keeps it off every boundary, so nothing calls one.
+        if bynk_syntax::ast::type_carries_stream(name, types) {
+            continue;
+        }
         decls.extend(emit_one(name, decl, types, qual, ru));
     }
     decls
