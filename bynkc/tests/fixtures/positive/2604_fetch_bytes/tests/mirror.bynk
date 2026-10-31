@@ -1,0 +1,31 @@
+suite mirror
+
+// #2604: `receiveBytes` and `sendBytes` stub as `send` does.
+
+case "a download is uploaded unchanged" {
+	stub Fetch.receiveBytes(_, _) returns Ok(BytesResponse { status: 200, headers: Map.empty(), body: Bytes.fromUtf8("abc") })
+	stub Fetch.sendBytes(_, _, _) returns Ok(BytesResponse { status: 201, headers: Map.empty(), body: Bytes.empty() })
+	let n <- copy.call("https://a.test/x", "https://b.test/x")
+	expect n == 201
+	expect Fetch.sendBytes called once with body == Bytes.fromUtf8("abc")
+	expect Fetch.sendBytes called once with req.method == Put
+}
+
+case "a refused body is reported" {
+	stub Fetch.receiveBytes(_, _) returns Ok(BytesResponse { status: 200, headers: Map.empty(), body: Bytes.empty() })
+	stub Fetch.sendBytes(_, _, _) returns Err(InvalidBody)
+	let n <- copy.call("https://a.test/x", "https://b.test/x")
+	expect n == -2
+}
+
+case "a text body decodes" {
+	stub Fetch.receiveBytes(_, _) returns Ok(BytesResponse { status: 200, headers: Map.empty(), body: Bytes.fromUtf8("hello") })
+	let s <- note.call("https://a.test/n")
+	expect s == "hello"
+}
+
+case "a body that is not UTF-8 does not" {
+	stub Fetch.receiveBytes(_, _) returns Ok(BytesResponse { status: 200, headers: Map.empty(), body: Bytes.fromBase64("/w==").getOrElse(Bytes.empty()) })
+	let s <- note.call("https://a.test/n")
+	expect s == "<binary>"
+}

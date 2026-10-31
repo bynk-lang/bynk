@@ -44,7 +44,8 @@ class __Stub_Greeter {
     return true;
   }
   async hello(name: string): globalThis.Promise<string> {
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -71,7 +72,8 @@ class __Stub_Secrets {
     return true;
   }
   async get(name: string): globalThis.Promise<Option<string>> {
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -134,7 +136,8 @@ function __makeTestDeps(__case?: string) {
 async function test_the_binding_reads_its_secret() {
   try {
     const deps = __makeTestDeps("the binding reads its secret");
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -159,7 +162,8 @@ async function test_the_binding_reads_its_secret() {
 async function test_the_binding_falls_back_without_one() {
   try {
     const deps = __makeTestDeps();
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -184,7 +188,8 @@ async function test_the_binding_falls_back_without_one() {
 async function test_a_stub_on_the_adapter_s_capability_answers_instead() {
   try {
     const deps = __makeTestDeps("a stub on the adapter's capability answers instead");
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;

@@ -71,7 +71,8 @@ async function test_the_agent_s_emit_is_observed() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -100,7 +101,8 @@ async function test_two_agents__emits_are_observed() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -129,7 +131,8 @@ async function test_an_unobserved_agent_call_type_checks() {
     const deps = __makeTestDeps();
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -158,7 +161,8 @@ async function test_a_service_handler_s_agent_call_emits() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -188,7 +192,8 @@ async function test_a_service_handler_s_own_emit_is_observed() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -218,7 +223,8 @@ async function test_the_agent_s_emit_is_observed_at_the_integration_tier() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -247,7 +253,8 @@ async function test_a_faulting_handler_releases_nothing() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;

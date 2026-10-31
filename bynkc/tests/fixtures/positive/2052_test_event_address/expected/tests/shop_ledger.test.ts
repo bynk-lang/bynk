@@ -82,7 +82,8 @@ async function test_an_event_delivered_twice_is_counted_once() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -118,7 +119,8 @@ async function test_dedup_holds_at_integration_too() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -153,7 +155,8 @@ async function test_a_default_envelope_is_fresh_on_each_delivery() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -189,7 +192,8 @@ async function test_a_default_envelope_carries_the_current_schema_version() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -225,7 +229,8 @@ async function test_the_pattern_filter_is_honoured() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -260,7 +265,8 @@ async function test_the_schema_guard_is_honoured() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;

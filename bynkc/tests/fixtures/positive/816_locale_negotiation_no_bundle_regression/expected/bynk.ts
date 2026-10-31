@@ -2,6 +2,7 @@
 // adapter bynk
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
+import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "./__bynk_runtime/bytes.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "./__bynk_runtime/boundary.js";
 
@@ -44,25 +45,31 @@ export const Method = {
 };
 
 /**
- * Why an outbound `Fetch.send` failed: a network error, a timeout, or a
- * request whose headers `Fetch.send` refused to send (`InvalidHeader`). An
+ * Why an outbound `Fetch.send` failed: a network error, a timeout, a
+ * request whose headers `Fetch.send` refused to send (`InvalidHeader`), or
+ * one whose body it refused to send (`InvalidBody`). An
  * `InvalidHeader` request never reaches the network: its `headers` named
  * Content-Type or Authorization while the matching typed slot was `Some`,
  * named a header the platform owns (`host`, `content-length`, and the other
  * framing/hop-by-hop headers), named one header twice in different case, or
  * held a name or value that is not a legal HTTP header; or a typed slot
  * (`contentType`, `authorization`) held a value that is not a legal header
- * value — a secret with a stray newline, say. Retrying cannot fix it.
+ * value — a secret with a stray newline, say. An `InvalidBody` request never
+ * reaches the network either: a `Get` or `Head` carried a body, which HTTP
+ * forbids, or `Fetch.sendBytes` was given a `Bytes` body while `req.body`
+ * was also `Some`. Retrying cannot fix either.
  */
 export type FetchError =
     { readonly tag: "Network" }
   | { readonly tag: "Timeout" }
-  | { readonly tag: "InvalidHeader" };
+  | { readonly tag: "InvalidHeader" }
+  | { readonly tag: "InvalidBody" };
 
 export const FetchError = {
   Network: { tag: "Network" } as FetchError,
   Timeout: { tag: "Timeout" } as FetchError,
   InvalidHeader: { tag: "InvalidHeader" } as FetchError,
+  InvalidBody: { tag: "InvalidBody" } as FetchError,
 };
 
 /**
@@ -151,6 +158,21 @@ export const Response = {
 };
 
 /**
+ * An HTTP response whose body is raw bytes, as `Fetch.receiveBytes` and
+ * `Fetch.sendBytes` return it: every byte as the server sent it, where
+ * `Response.body` would have decoded it as UTF-8. `headers` are as
+ * `Response`'s. `b.decodeUtf8()` reads a body that is really text.
+ */
+export interface BytesResponse {
+  readonly status: number;
+  readonly headers: ReadonlyMap<string, string>;
+  readonly body: globalThis.Uint8Array;
+}
+
+export const BytesResponse = {
+};
+
+/**
  * Runtime metadata carried alongside an event payload (Events track, slice
  * 2; design/tracks/events.md, spine #936), available as an `on event`
  * handler's optional second parameter. `eventId` is minted once per
@@ -227,10 +249,16 @@ export const __LoggerToken: symbol = globalThis.Symbol("Logger");
 /**
  * Performs outbound HTTP requests. `send` follows redirects and waits as long
  * as the platform does; `sendWith` takes a timeout and a redirect policy.
+ * `receiveBytes` sends `req` as `sendWith` does and returns the response body
+ * as `Bytes`; `sendBytes` sends `body` as the request body (`req.body` must
+ * be `None`) and returns the response as `Bytes` too. A binary body gets no
+ * Content-Type of its own: set `req.contentType`. Bodies are buffered whole.
  */
 export interface Fetch {
   send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
   sendWith(req: Request, options: FetchOptions): globalThis.Promise<Result<Response, FetchError>>;
+  receiveBytes(req: Request, options: FetchOptions): globalThis.Promise<Result<BytesResponse, FetchError>>;
+  sendBytes(req: Request, body: globalThis.Uint8Array, options: FetchOptions): globalThis.Promise<Result<BytesResponse, FetchError>>;
 }
 
 export const __FetchToken: symbol = globalThis.Symbol("Fetch");
@@ -289,6 +317,40 @@ export interface Events {
 
 export const __EventsToken: symbol = globalThis.Symbol("Events");
 
+export function __serialise_BytesResponse(value: BytesResponse): __JsonValue {
+  return {
+    status: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.status),
+    headers: __serialise_Map_String_String(value.headers),
+    body: __bynkBytesToBase64(value.body) as __JsonValue,
+  };
+}
+
+export function __deserialise_BytesResponse(json: __JsonValue, path: string = "$"): Result<BytesResponse, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["status"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.status`, expected: "number", actual: typeof obj["status"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["status"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.status`, expected: "safe integer", actual: String(obj["status"]) });
+  }
+  const __status = obj["status"];
+  const __r_headers = __deserialise_Map_String_String(obj["headers"], `${path}.headers`);
+  if (__r_headers.tag === "Err") return __r_headers;
+  const __headers = __r_headers.value;
+  if (typeof obj["body"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "base64 string", actual: typeof obj["body"] });
+  }
+  const __b_body = __bynkBytesFromBase64(obj["body"]);
+  if (__b_body.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __body = __b_body.value;
+  return Ok({ status: __status, headers: __headers, body: __body } as BytesResponse);
+}
+
 export function __serialise_EventEnvelope(value: EventEnvelope): __JsonValue {
   return {
     eventId: value.eventId as __JsonValue,
@@ -336,6 +398,8 @@ export function __serialise_FetchError(value: FetchError): __JsonValue {
       return { kind: "Timeout" };
     case "InvalidHeader":
       return { kind: "InvalidHeader" };
+    case "InvalidBody":
+      return { kind: "InvalidBody" };
   }
 }
 
@@ -352,6 +416,8 @@ export function __deserialise_FetchError(json: __JsonValue, path: string = "$"):
       return Ok({ tag: "Timeout" } as FetchError);
     case "InvalidHeader":
       return Ok({ tag: "InvalidHeader" } as FetchError);
+    case "InvalidBody":
+      return Ok({ tag: "InvalidBody" } as FetchError);
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
@@ -567,6 +633,39 @@ export function __deserialise_Uuid(json: __JsonValue, path: string = "$"): Resul
 }
 
 
+export function __serialise_Map_String_String(value: ReadonlyMap<string, string>): __JsonValue {
+  const entries: __JsonValue[] = [];
+  for (const [k, v] of value) {
+    entries.push([k as __JsonValue, v as __JsonValue]);
+  }
+  return entries;
+}
+
+export function __deserialise_Map_String_String(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, string>, __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out = new globalThis.Map<string, string>();
+  for (let i = 0; i < json.length; i++) {
+  const entry = json[i];
+  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+  }
+  const entryK = entry[0];
+  const entryV = entry[1];
+  if (typeof entryK !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+  }
+  const __k = entryK;
+  if (typeof entryV !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "string", actual: typeof entryV });
+  }
+  const __v = entryV;
+  out.set(__k as string, __v as string);
+  }
+  return Ok(out);
+}
+
 export function __serialise_Option_Duration(value: Option<number>): __JsonValue {
   if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
   return { kind: "None" };
@@ -650,37 +749,4 @@ export function __deserialise_Option_String(json: __JsonValue, path: string = "$
     return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
   }
   return __b;
-}
-
-export function __serialise_Map_String_String(value: ReadonlyMap<string, string>): __JsonValue {
-  const entries: __JsonValue[] = [];
-  for (const [k, v] of value) {
-    entries.push([k as __JsonValue, v as __JsonValue]);
-  }
-  return entries;
-}
-
-export function __deserialise_Map_String_String(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, string>, __BoundaryError> {
-  if (!globalThis.Array.isArray(json)) {
-    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
-  }
-  const out = new globalThis.Map<string, string>();
-  for (let i = 0; i < json.length; i++) {
-  const entry = json[i];
-  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
-  }
-  const entryK = entry[0];
-  const entryV = entry[1];
-  if (typeof entryK !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
-  }
-  const __k = entryK;
-  if (typeof entryV !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "string", actual: typeof entryV });
-  }
-  const __v = entryV;
-  out.set(__k as string, __v as string);
-  }
-  return Ok(out);
 }

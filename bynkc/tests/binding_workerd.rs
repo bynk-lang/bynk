@@ -211,7 +211,7 @@ fn run_smoke(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.D1\", \"bynk.Fetch.sendWith\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.D1\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -234,7 +234,9 @@ fn run_smoke(
     );
 
     // Its own band, clear of the events smokes' (30_000 + 4·pid, 40_000 + 2·pid,
-    // 55_000 + 2·pid, each mod 4_000), so they can all run at once.
+    // 55_000 + 2·pid, each mod 4_000), so they can all run at once. Bands 5
+    // and 6 (40_000 to 48_000) share a port with the events smokes for half
+    // of all pids, so the Fetch smokes use 8 and 9 (#2604).
     let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
     let inspector_port = port + 1;
     let log_path = tmp.join("wrangler.log");
@@ -918,7 +920,7 @@ fn fetch_send_with_times_out_and_returns_a_manual_redirect_on_workerd() {
     // `302`, and an upstream that never answers is `Err(Timeout)`.
     let upstream = upstream();
     let source = fetch_source(upstream);
-    let Some((failures, log)) = run_smoke("f-smoke", "f", &source, "/ready", 6, &|port| {
+    let Some((failures, log)) = run_smoke("f-smoke", "f", &source, "/ready", 9, &|port| {
         check_steps(
             port,
             &[
@@ -933,6 +935,125 @@ fn fetch_send_with_times_out_and_returns_a_manual_redirect_on_workerd() {
     assert!(
         failures.is_empty(),
         "Fetch.sendWith on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+/// K5b (#2604): every byte value 0–255, base64 — 0x80 and up alone are not
+/// UTF-8, so a `String` body would have lost them.
+const ALL_BYTES_BASE64: &str = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/w==";
+
+/// K5b (#2604): an upstream on `127.0.0.1` for the byte-body smoke. `/bin`
+/// answers the bytes 0–255; `/echo` answers the request body it was sent,
+/// with the request's Content-Type as `x-seen-type`.
+fn bytes_upstream() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind the upstream");
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut stream = stream;
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+                // The head, then as much body as its content-length says.
+                let mut got = Vec::new();
+                let mut buf = [0u8; 4096];
+                let split = loop {
+                    if let Some(i) = got.windows(4).position(|w| w == b"\r\n\r\n") {
+                        break i + 4;
+                    }
+                    match stream.read(&mut buf) {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => got.extend_from_slice(&buf[..n]),
+                    }
+                };
+                let head = String::from_utf8_lossy(&got[..split]).to_string();
+                let header = |name: &str| {
+                    head.lines().find_map(|l| {
+                        let (k, v) = l.split_once(':')?;
+                        k.eq_ignore_ascii_case(name).then(|| v.trim().to_string())
+                    })
+                };
+                let length: usize = header("content-length")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0);
+                while got.len() < split + length {
+                    match stream.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => got.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let path = head.split_whitespace().nth(1).unwrap_or("/");
+                let (extra, body): (String, Vec<u8>) = match path {
+                    "/bin" => (String::new(), (0..=255u8).collect()),
+                    _ => (
+                        format!(
+                            "x-seen-type: {}\r\n",
+                            header("content-type").unwrap_or_else(|| "none".into())
+                        ),
+                        got[split..].to_vec(),
+                    ),
+                };
+                let mut reply = format!(
+                    "HTTP/1.1 200 OK\r\n{extra}content-length: {}\r\nconnection: close\r\n\r\n",
+                    body.len()
+                )
+                .into_bytes();
+                reply.extend_from_slice(&body);
+                let _ = stream.write_all(&reply);
+            });
+        }
+    });
+    port
+}
+
+fn fetch_bytes_source(upstream: u16) -> String {
+    format!(
+        "context fb.smoke
+
+consumes bynk {{ Fetch }}
+
+service api from http {{
+\ton GET(\"/round\") () -> Effect[HttpResult[String]] by Visitor given Fetch {{
+\t\tlet options = FetchOptions {{ timeout: Some(5.seconds), redirect: Follow }}
+\t\tlet down = Request {{ method: Get, url: \"http://127.0.0.1:{upstream}/bin\", contentType: None, authorization: None, headers: Map.empty(), body: None }}
+\t\tlet got <- Fetch.receiveBytes(down, options)
+\t\tmatch got {{
+\t\t\tOk(d) => {{
+\t\t\t\tlet up = Request {{ method: Post, url: \"http://127.0.0.1:{upstream}/echo\", contentType: Some(\"application/octet-stream\"), authorization: None, headers: Map.empty(), body: None }}
+\t\t\t\tlet echoed <- Fetch.sendBytes(up, d.body, options)
+\t\t\t\tmatch echoed {{
+\t\t\t\t\tOk(e) => Ok(\"\\(d.body.toBase64()) \\(e.body.toBase64()) \\(e.headers.get(\"x-seen-type\").getOrElse(\"\"))\")
+\t\t\t\t\tErr(_) => Ok(\"upload failed\")
+\t\t\t\t}}
+\t\t\t}}
+\t\t\tErr(_) => Ok(\"download failed\")
+\t\t}}
+\t}}
+
+\ton GET(\"/ready\") () -> Effect[HttpResult[String]] by Visitor {{
+\t\tOk(\"ready\")
+\t}}
+}}
+"
+    )
+}
+
+#[test]
+fn fetch_bytes_round_trip_every_byte_on_workerd() {
+    // K5b (#2604): `receiveBytes` and `sendBytes` against workerd's own
+    // `fetch`: bytes 0–255 come down and go back up unchanged, and the
+    // upload's Content-Type is the one the request set.
+    let upstream = bytes_upstream();
+    let source = fetch_bytes_source(upstream);
+    let expected = format!(r#""{ALL_BYTES_BASE64} {ALL_BYTES_BASE64} application/octet-stream""#);
+    let Some((failures, log)) = run_smoke("fb-smoke", "fb", &source, "/ready", 8, &|port| {
+        check_steps(port, &[("/round", 200, &expected)])
+    }) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "Fetch.receiveBytes/sendBytes on workerd disagree with the contract their fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

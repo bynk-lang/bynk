@@ -776,7 +776,7 @@ fresh for each case:
 | `Queue` | each instance accepts every send, checking each body is JSON and a delay is in range; nothing is delivered — at `integration` and `system` each Worker binds a recorder |
 | `Analytics` | each instance accepts every write within the platform's limits (20 blobs totalling 16 KB, 20 finite doubles, a 96-byte index) and faults on one over them — at `integration` and `system` each Worker binds a recorder |
 | `Service` | each instance's `send(_)` **faults** until stubbed: a test never reaches the Worker behind it |
-| `Fetch` | `send(_)` and `sendWith(_, _)` **fault**: a test never reaches the network |
+| `Fetch` | `send(_)`, `sendWith(_, _)`, `receiveBytes(_, _)` and `sendBytes(_, _, _)` **fault**: a test never reaches the network |
 
 Expiry is not modelled: a value written with a TTL stays readable for the whole
 case, so a test of TTL expiry on `Kv` or `Idempotency` stubs the read instead

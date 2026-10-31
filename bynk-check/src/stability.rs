@@ -343,7 +343,7 @@ mod tests {
             .collect()
     }
 
-    const FETCH_MATCH: &str = "context app.probe\n\nconsumes bynk { Fetch }\n\nservice probe {\n\ton call(url: String) -> Effect[String] given Fetch {\n\t\tlet res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })\n\t\tmatch res {\n\t\t\tOk(r) => Effect.pure(\"ok\")\n\t\t\tErr(Network) => Effect.pure(\"network\")\n\t\t\tErr(Timeout) => Effect.pure(\"timeout\")\n\t\t\tErr(InvalidHeader) => Effect.pure(\"header\")\nWILDCARD\t\t}\n\t}\n}\n";
+    const FETCH_MATCH: &str = "context app.probe\n\nconsumes bynk { Fetch }\n\nservice probe {\n\ton call(url: String) -> Effect[String] given Fetch {\n\t\tlet res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })\n\t\tmatch res {\n\t\t\tOk(r) => Effect.pure(\"ok\")\n\t\t\tErr(Network) => Effect.pure(\"network\")\n\t\t\tErr(Timeout) => Effect.pure(\"timeout\")\n\t\t\tErr(InvalidHeader) => Effect.pure(\"header\")\n\t\t\tErr(InvalidBody) => Effect.pure(\"body\")\nWILDCARD\t\t}\n\t}\n}\n";
 
     /// An extensible enum (S3, #1963): listing every variant it has today is
     /// not enough; a wildcard is, and it is then not reported unreachable (the
@@ -401,6 +401,8 @@ mod tests {
             p.experimental,
             [
                 "bynk.Fetch.sendWith",
+                "bynk.Fetch.receiveBytes",
+                "bynk.Fetch.sendBytes",
                 "bynk.Logger.log",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
@@ -422,6 +424,10 @@ mod tests {
         assert!(p.blocks("bynk.Fetch.sendWith"));
         assert!(!p.blocks("bynk.Fetch.send"));
         assert!(!p.blocks("bynk.FetchOptions"));
+        // K5b (#2604): the byte-body operations, alone.
+        assert!(p.blocks("bynk.Fetch.receiveBytes"));
+        assert!(p.blocks("bynk.Fetch.sendBytes"));
+        assert!(!p.blocks("bynk.BytesResponse"));
         assert!(p.blocks("bynk.Logger.log"));
         assert!(!p.blocks("bynk.Logger.warn"));
         // P1 (#2590): the new operations of the stable `Kv`, alone.

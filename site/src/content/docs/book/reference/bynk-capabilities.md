@@ -32,7 +32,7 @@ environment), so code that stays on this surface is portable.
 | **`Clock`** | `now() -> Effect[Instant]` — the current instant (an absolute point in time; epoch-millis under the hood). |
 | **`Random`** | `uuid() -> Effect[Uuid]` · `int(lo: Int, hi: Int) -> Effect[Int]` (lo-inclusive, hi-exclusive) · `bytes(n: Int) -> Effect[Bytes]` — `n` random bytes. `int` is **not** for secrets; use `bytes`. |
 | **`Logger`** | `info(msg: String) -> Effect[()]` · `error(msg: String) -> Effect[()]` · `warn(msg: String) -> Effect[()]` · `debug(msg: String) -> Effect[()]` · `log(level: LogLevel, msg: String, fields: Map[String, String]) -> Effect[()]` — a structured record (experimental). See [Log levels and structured fields](#log-levels-and-structured-fields). |
-| **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental). See [Timeouts and redirects](#timeouts-and-redirects). |
+| **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental) · `receiveBytes(req: Request, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req: Request, body: Bytes, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` — binary bodies (experimental). See [Timeouts and redirects](#timeouts-and-redirects) and [Binary bodies](#binary-bodies). |
 | **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
 | **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/guides/localisation/understand-localisation/). |
 | **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` — mechanical dedup for at-least-once delivery. See below. |
@@ -124,7 +124,7 @@ The `bynk` unit also exports the transparent types these operations use:
 ```bynk
 type Uuid       = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 type Method     = enum { Get, Post, Put, Delete, Patch, Head, Options }
-type FetchError = enum { Network, Timeout, InvalidHeader }
+type FetchError = enum { Network, Timeout, InvalidHeader, InvalidBody }
 type Redirect   = enum { Follow, Manual }
 type LogLevel   = enum { Debug, Info, Warn, Error }
 
@@ -194,6 +194,9 @@ A typed slot whose value is not a legal header value (a secret read with a
 stray newline) is `Err(InvalidHeader)` too, even with an empty `headers`.
 Retrying cannot fix any of these, which is why they are not `Network`.
 
+A `Get` or `Head` request with a `body` is `Err(InvalidBody)`, with nothing
+sent: HTTP gives those methods no body. Retrying cannot fix that either.
+
 `Response.headers` carries the response's headers with lowercased keys, so
 `res.headers.get("etag")` or `res.headers.get("retry-after")` reads one
 whatever case the server sent; a header the server repeated arrives as one
@@ -230,6 +233,46 @@ defaults. `sendWith` is experimental: list `"bynk.Fetch.sendWith"` under
 
 `Method` also has `Patch`, `Head` and `Options`. A `Head` response's `body` is
 `""`. `Method` is extensible, so a `match` on it needs a wildcard arm.
+
+### Binary bodies
+
+`send` and `sendWith` carry text: a `String` request body, and a response body
+decoded as UTF-8, where any byte that is not UTF-8 is lost. Two operations
+carry bytes instead, and both return a `BytesResponse`, whose `body` is every
+byte the server sent:
+
+```bynk
+type BytesResponse = {
+  status:  Int,
+  headers: Map[String, String],
+  body:    Bytes,
+}
+```
+
+- `receiveBytes(req, options)` sends `req` as `sendWith` does, its `String`
+  body included, and returns the response as bytes: a download, or a JSON
+  request that answers with a binary.
+- `sendBytes(req, body, options)` sends `body` as the request body and returns
+  the response as bytes too. `req.body` must be `None`: a request with both is
+  `Err(InvalidBody)`, with nothing sent, so neither silently wins. A `Get` or
+  `Head` with a `Bytes` body is `Err(InvalidBody)` too. An empty `Bytes` is an
+  empty body, not a missing one.
+
+```bynk,fragment
+let options = FetchOptions { timeout: Some(10.seconds), redirect: Follow }
+let got <- Fetch.receiveBytes(download, options)
+let sent <- Fetch.sendBytes(upload, image, options)
+```
+
+A binary body gets no `Content-Type` of its own: set `req.contentType` (to
+`Some("application/octet-stream")`, say). To read a response that is really
+text, call `res.body.decodeUtf8()`, which is `None` when it is not UTF-8.
+Bodies are buffered whole, so they suit what fits in a Worker's memory;
+streamed bodies are planned separately. Both operations are experimental: list
+`"bynk.Fetch.receiveBytes"` and `"bynk.Fetch.sendBytes"` under
+`[unstable] allow`. A test stubs them as it does `send`:
+`stub Fetch.sendBytes(_, _, _) returns Ok(BytesResponse { status: 201, headers: Map.empty(), body: Bytes.empty() })`.
+In the browser playground they throw, as `send` does.
 
 ### Log levels and structured fields
 

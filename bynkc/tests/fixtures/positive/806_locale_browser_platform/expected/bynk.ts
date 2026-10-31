@@ -43,25 +43,31 @@ export const Method = {
 };
 
 /**
- * Why an outbound `Fetch.send` failed: a network error, a timeout, or a
- * request whose headers `Fetch.send` refused to send (`InvalidHeader`). An
+ * Why an outbound `Fetch.send` failed: a network error, a timeout, a
+ * request whose headers `Fetch.send` refused to send (`InvalidHeader`), or
+ * one whose body it refused to send (`InvalidBody`). An
  * `InvalidHeader` request never reaches the network: its `headers` named
  * Content-Type or Authorization while the matching typed slot was `Some`,
  * named a header the platform owns (`host`, `content-length`, and the other
  * framing/hop-by-hop headers), named one header twice in different case, or
  * held a name or value that is not a legal HTTP header; or a typed slot
  * (`contentType`, `authorization`) held a value that is not a legal header
- * value — a secret with a stray newline, say. Retrying cannot fix it.
+ * value — a secret with a stray newline, say. An `InvalidBody` request never
+ * reaches the network either: a `Get` or `Head` carried a body, which HTTP
+ * forbids, or `Fetch.sendBytes` was given a `Bytes` body while `req.body`
+ * was also `Some`. Retrying cannot fix either.
  */
 export type FetchError =
     { readonly tag: "Network" }
   | { readonly tag: "Timeout" }
-  | { readonly tag: "InvalidHeader" };
+  | { readonly tag: "InvalidHeader" }
+  | { readonly tag: "InvalidBody" };
 
 export const FetchError = {
   Network: { tag: "Network" } as FetchError,
   Timeout: { tag: "Timeout" } as FetchError,
   InvalidHeader: { tag: "InvalidHeader" } as FetchError,
+  InvalidBody: { tag: "InvalidBody" } as FetchError,
 };
 
 /**
@@ -150,6 +156,21 @@ export const Response = {
 };
 
 /**
+ * An HTTP response whose body is raw bytes, as `Fetch.receiveBytes` and
+ * `Fetch.sendBytes` return it: every byte as the server sent it, where
+ * `Response.body` would have decoded it as UTF-8. `headers` are as
+ * `Response`'s. `b.decodeUtf8()` reads a body that is really text.
+ */
+export interface BytesResponse {
+  readonly status: number;
+  readonly headers: ReadonlyMap<string, string>;
+  readonly body: globalThis.Uint8Array;
+}
+
+export const BytesResponse = {
+};
+
+/**
  * Runtime metadata carried alongside an event payload (Events track, slice
  * 2; design/tracks/events.md, spine #936), available as an `on event`
  * handler's optional second parameter. `eventId` is minted once per
@@ -226,10 +247,16 @@ export const __LoggerToken: symbol = globalThis.Symbol("Logger");
 /**
  * Performs outbound HTTP requests. `send` follows redirects and waits as long
  * as the platform does; `sendWith` takes a timeout and a redirect policy.
+ * `receiveBytes` sends `req` as `sendWith` does and returns the response body
+ * as `Bytes`; `sendBytes` sends `body` as the request body (`req.body` must
+ * be `None`) and returns the response as `Bytes` too. A binary body gets no
+ * Content-Type of its own: set `req.contentType`. Bodies are buffered whole.
  */
 export interface Fetch {
   send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
   sendWith(req: Request, options: FetchOptions): globalThis.Promise<Result<Response, FetchError>>;
+  receiveBytes(req: Request, options: FetchOptions): globalThis.Promise<Result<BytesResponse, FetchError>>;
+  sendBytes(req: Request, body: globalThis.Uint8Array, options: FetchOptions): globalThis.Promise<Result<BytesResponse, FetchError>>;
 }
 
 export const __FetchToken: symbol = globalThis.Symbol("Fetch");
