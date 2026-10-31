@@ -316,8 +316,10 @@ match got {
   second read faults. A `StreamResponse` carries a stream, so it can't be a
   handler's result, an event field or stored; serve its body with
   `RawStreamed`, or `collect` it.
-- **Read or drop the body.** An unread body holds its connection until the
-  request ends. A read that stops early (a `take`, say) releases it.
+- **An unread body holds its connection** until the request ends, so a
+  proxy shouldn't leave one unread on a busy path. A read that stops early (a
+  `take`, say) releases it, as does a `HEAD` answered from a `RawStreamed`
+  `GET`.
 - **Handing a stream to `sendStream` consumes it,** whatever the outcome,
   `InvalidBody` included. A fault from the stream itself, while it is sent,
   faults `sendStream`; it isn't reported as `Err(Network)`.

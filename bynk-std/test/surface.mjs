@@ -84,6 +84,13 @@ async function withServer(handler, body) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** `promise`, or a rejection naming `what` after `ms`. */
+function within(promise, ms, what) {
+  let timer;
+  const late = new Promise((_, reject) => (timer = setTimeout(() => reject(new Error(what)), ms)));
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
 /** A `Stream[Bytes]` as emitted code builds one: an async generator. */
 async function* chunksOf(...parts) {
   for (const part of parts) {
@@ -530,7 +537,25 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
             assert.ok(chunk.length > 0);
             break;
           }
-          await upstreamClosed;
+          await within(upstreamClosed, 5000, "the upstream connection was never released");
+        },
+      );
+    });
+
+    t("FetchProvider.receiveStream: a body returned before its first read releases the connection too", async () => {
+      let closed;
+      const upstreamClosed = new Promise((resolve) => (closed = resolve));
+      await withServer(
+        (_req, res) => {
+          res.on("close", closed);
+          res.writeHead(200);
+          res.write("first");
+        },
+        async (url) => {
+          const res = await new b.FetchProvider().receiveStream(request({ url }), defaults);
+          // What `pullBody`'s `cancel` does when a `HEAD` drops its `GET`'s body.
+          await res.value.body[Symbol.asyncIterator]().return();
+          await within(upstreamClosed, 5000, "the upstream connection was never released");
         },
       );
     });
