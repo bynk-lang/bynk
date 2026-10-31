@@ -3450,6 +3450,12 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> String {
     let Ty::Named { name, .. } = &*tys.get(row) else {
         return String::new();
     };
+    // The checker resolved this row in the same table, so a miss is a
+    // compiler bug that would silently skip the pass.
+    debug_assert!(
+        cx.commons().types.contains_key(name.as_str()),
+        "Json.decodeSql row `{name}` is not in the module's type table"
+    );
     let fields = bynk_check::checker::row_bool_fields(name, &cx.commons().types);
     if fields.is_empty() {
         return String::new();

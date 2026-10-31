@@ -32,3 +32,16 @@ case "a batch built with map runs every statement" {
 		Flag { id: "b", active: false, seen: None },
 	])
 }
+
+case "a case body decodes a row with Json.decodeSql" {
+	let row = Json.decodeSql[Flag]("{\"id\":\"a\",\"active\":1,\"seen\":null}")
+	expect row == Ok(Flag { id: "a", active: true, seen: None })
+}
+
+case "a flag at integration reads back as Bool" as integration {
+	let ok <- setup.call()
+	expect ok
+	let _ <- save.call("a", true, Some(true))
+	let rows <- listing.call()
+	expect rows == Ok([Flag { id: "a", active: true, seen: Some(true) }])
+}
