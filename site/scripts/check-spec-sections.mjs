@@ -26,22 +26,36 @@ const seen = new Map();
 
 for (const file of fs.readdirSync(SPEC).filter((f) => f.endsWith(".md")).sort()) {
   const lines = fs.readFileSync(path.join(SPEC, file), "utf8").split("\n");
+  // The open fence's marker (e.g. "````"). Per CommonMark, a fence closes only
+  // on a line of the same character, at least as long, with no info string.
+  /** @type {string | null} */
   let fence = null;
   lines.forEach((line, i) => {
-    const marker = line.match(/^\s*(`{3,}|~{3,})/);
-    if (marker) {
-      if (fence === null) fence = marker[1][0];
-      else if (marker[1][0] === fence) fence = null;
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence === null) {
+      if (marker) fence = marker[1];
+      else {
+        const heading = line.match(/^#{1,6}\s+(§[^\s{]+)/);
+        if (heading) record(heading[1], `${file}:${i + 1}`);
+      }
       return;
     }
-    if (fence !== null) return;
-    const heading = line.match(/^#{1,6}\s+(§[^\s{]+)/);
-    if (!heading) return;
-    const where = `${file}:${i + 1}`;
-    const list = seen.get(heading[1]);
-    if (list) list.push(where);
-    else seen.set(heading[1], [where]);
+    if (
+      marker &&
+      marker[1][0] === fence[0] &&
+      marker[1].length >= fence.length &&
+      marker[2].trim() === ""
+    ) {
+      fence = null;
+    }
   });
+}
+
+/** @param {string} number @param {string} where */
+function record(number, where) {
+  const list = seen.get(number);
+  if (list) list.push(where);
+  else seen.set(number, [where]);
 }
 
 const repeats = [...seen].filter(([, where]) => where.length > 1);
