@@ -121,31 +121,42 @@ const readBytes = async (res: globalThis.Response): Promise<Uint8Array> => new U
 // K5c (#2627): the response body as a fresh single-pass stream. It isn't
 // claimed here: the first `collect`/`map`/`take`, or a `RawStreamed`, claims
 // it, so a second read faults as with `Stream.of`. The reader is taken on the
-// first pull, and cancelled when the read stops early (`take`, a throw, a
-// `HEAD` cancelling its `GET`'s body), releasing the connection. A `null`
-// body (`Head`, 204, 304) is an empty stream.
-const readStream = (res: globalThis.Response): AsyncIterable<Uint8Array> =>
-  (async function* (body: ReadableStream<Uint8Array> | null) {
-    if (body === null) {
-      return;
-    }
-    const reader = body.getReader();
-    let done = false;
-    try {
-      for (;;) {
+// first pull. Stopping early (`take`, a throw, a `HEAD` cancelling its `GET`'s
+// body) cancels the body, read or not, releasing the connection; an async
+// generator would skip its `finally` when returned before its first pull. A
+// `null` body (`Head`, 204, 304) is an empty stream.
+const readStream = (res: globalThis.Response): AsyncIterable<Uint8Array> => {
+  const body = res.body;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let finished = body === null;
+  const iterator: AsyncIterator<Uint8Array> = {
+    async next(): Promise<IteratorResult<Uint8Array>> {
+      if (finished || body === null) {
+        return { done: true, value: undefined };
+      }
+      reader ??= body.getReader();
+      try {
         const next = await reader.read();
         if (next.done) {
-          done = true;
-          return;
+          finished = true;
+          return { done: true, value: undefined };
         }
-        yield next.value;
+        return { done: false, value: next.value };
+      } catch (e) {
+        finished = true;
+        throw e;
       }
-    } finally {
-      if (!done) {
-        reader.cancel().catch(() => {});
+    },
+    async return(): Promise<IteratorResult<Uint8Array>> {
+      if (!finished && body !== null) {
+        finished = true;
+        (reader !== undefined ? reader.cancel() : body.cancel()).catch(() => {});
       }
-    }
-  })(res.body);
+      return { done: true, value: undefined };
+    },
+  };
+  return { [Symbol.asyncIterator]: () => iterator };
+};
 
 // K5c (#2627): `source`, noting a throw from it before passing it on, so
 // `sendStream` can fault with the caller's own error where `fetch` would
