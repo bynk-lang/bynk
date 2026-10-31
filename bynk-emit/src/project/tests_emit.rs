@@ -27,8 +27,8 @@ use crate::emitter::wrangler::{BindingSource, WorkerBinding};
 // #1759: every namespace a test module imports, from one definition.
 use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
-use bynk_check::test_suites::{self, ResolvedStub, StubScope};
 use bynk_check::d1_migrations::{D1Migrations, MigrationFile, d1_database_name};
+use bynk_check::test_suites::{self, ResolvedStub, StubScope};
 use bynk_check::wire_format;
 use bynk_syntax::ast::{
     ArgPattern, BaseType, BinOp, Block, CapabilityOp, Case, Commons, CommonsForm, CommonsItem,

@@ -937,7 +937,15 @@ fn d1_migrations_apply_to_the_emitted_config_on_workerd() {
     ];
     let apply = |dir: &std::path::Path| -> Option<String> {
         let out = tools::base_command("npx")
-            .args(["-y", wrangler::SPEC, "d1", "migrations", "apply", "D1_ITEMS", "--local"])
+            .args([
+                "-y",
+                wrangler::SPEC,
+                "d1",
+                "migrations",
+                "apply",
+                "D1_ITEMS",
+                "--local",
+            ])
             .current_dir(dir)
             .stdin(Stdio::null())
             .output()

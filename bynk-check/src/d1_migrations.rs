@@ -164,10 +164,9 @@ pub fn phase_d1_migrations(
             );
             continue;
         };
-        if let Some(first) = numbers.insert(
-            (database.to_string(), number.to_string()),
-            file.to_string(),
-        ) {
+        if let Some(first) =
+            numbers.insert((database.to_string(), number.to_string()), file.to_string())
+        {
             file_error(
                 errors,
                 key,
@@ -240,7 +239,10 @@ mod tests {
 
     #[test]
     fn the_database_name_is_the_worker_and_the_capability_in_kebab_case() {
-        assert_eq!(d1_database_name("shop-cart", "D1_ORDERS"), "shop-cart-orders");
+        assert_eq!(
+            d1_database_name("shop-cart", "D1_ORDERS"),
+            "shop-cart-orders"
+        );
         assert_eq!(
             d1_database_name("shop", "D1_ORDER_LINES"),
             "shop-order-lines"

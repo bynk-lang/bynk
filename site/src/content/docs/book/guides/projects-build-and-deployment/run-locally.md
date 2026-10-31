@@ -124,6 +124,15 @@ don't need real Cloudflare secrets to develop.
 > That's usually what you want; clear that directory (or point `--persist-to`
 > elsewhere) for a clean slate.
 
+A `D1` database runs locally too. Before a Worker serves, `bynk dev` applies
+its [migrations](/book/reference/bynk-capabilities/#schema-migrations) with
+`wrangler d1 migrations apply --local`, into the same place the server keeps
+its state, including a `--persist-to` you pass. A migration file you add while
+it serves is applied when you save it. One that fails is reported, and the
+session keeps serving. Editing a file that has already been applied changes
+nothing, because a migration runs once, by name, and `bynk dev` says so: add
+a new file instead. With `-- --remote` nothing is applied.
+
 ## Debugging the workers (`--inspect`)
 
 `bynk dev --inspect` serves with the V8 inspector enabled, so you can attach a

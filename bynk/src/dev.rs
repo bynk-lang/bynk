@@ -1189,14 +1189,17 @@ mod watch_tests {
     /// rebuilds and applies it.
     #[test]
     fn a_new_migration_changes_the_watch_fingerprint() {
-        let root =
-            std::env::temp_dir().join(format!("bynk-dev-watch-d1-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("bynk-dev-watch-d1-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::create_dir_all(root.join("migrations/shop-orders")).unwrap();
         std::fs::write(root.join("src/a.bynk"), "commons a\n").unwrap();
         let before = watch_fingerprint(&root);
-        std::fs::write(root.join("migrations/shop-orders/0001_create.sql"), "SELECT 1;").unwrap();
+        std::fs::write(
+            root.join("migrations/shop-orders/0001_create.sql"),
+            "SELECT 1;",
+        )
+        .unwrap();
         let after = watch_fingerprint(&root);
         let _ = std::fs::remove_dir_all(&root);
         assert_ne!(before, after, "a new migration must trigger a rebuild");
@@ -1207,7 +1210,10 @@ mod watch_tests {
         let config = "name = \"shop\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\"\nmigrations_dir = \"migrations/shop-orders\"\n\n[[d1_databases]]\nbinding = \"D1_PLAIN\"\ndatabase_name = \"shop-plain\"\ndatabase_id = \"<D1_PLAIN_ID>\"\n";
         assert_eq!(
             migrating_databases(config),
-            [("D1_ORDERS".to_string(), "migrations/shop-orders".to_string())]
+            [(
+                "D1_ORDERS".to_string(),
+                "migrations/shop-orders".to_string()
+            )]
         );
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert_eq!(
@@ -1347,7 +1353,11 @@ fn note_edited_migrations(dir: &Path, seen: &mut MigrationsSeen) {
         let mut hasher = std::hash::DefaultHasher::new();
         bytes.hash(&mut hasher);
         let hash = hasher.finish();
-        if seen.0.insert(path.clone(), hash).is_some_and(|before| before != hash) {
+        if seen
+            .0
+            .insert(path.clone(), hash)
+            .is_some_and(|before| before != hash)
+        {
             eprintln!(
                 "bynk dev: note: `{}` changed after it was applied; wrangler applies a migration once, by name, so add a new one to change the schema",
                 path.file_name().unwrap_or_default().to_string_lossy()

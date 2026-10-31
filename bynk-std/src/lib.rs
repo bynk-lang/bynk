@@ -583,7 +583,9 @@ pub const UNITS: &[Unit] = &[
         // P3b (#2582): Analytics too, until a first-party service writes to it.
         // P1 (#2590): the new operations of the stable `Kv`, until a service
         // has used them.
-        // P4a (#2602): D1, until its migrations (P4b) land.
+        // P4a (#2602): D1. Its migrations (P4b, #2608) have landed; it stays
+        // experimental until `Bool` from `0`/`1` and literal-only `sql` are
+        // decided, since both change what a call site looks like.
         experimental: &[
             "Service",
             "R2",

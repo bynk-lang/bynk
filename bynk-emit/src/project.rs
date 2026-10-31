@@ -3648,7 +3648,10 @@ fn build_output(
                 // P4b (#2608): each `D1` database's migrations, beside the
                 // `wrangler.toml` whose `migrations_dir` names them.
                 for binding in &bindings {
-                    if !matches!(binding.source, emitter::wrangler::BindingSource::D1Database { .. }) {
+                    if !matches!(
+                        binding.source,
+                        emitter::wrangler::BindingSource::D1Database { .. }
+                    ) {
                         continue;
                     }
                     let database = emitter::wrangler::d1_database_name(&dashes, &binding.name);

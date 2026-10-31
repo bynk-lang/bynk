@@ -329,7 +329,11 @@ pub(crate) fn deploy_one(
     // bound (and, for a named environment, once `[env.<name>]` binds it) and
     // before the push, so the new code never meets the old schema. Wrangler
     // records what it applied in the database itself, so the ledger doesn't.
-    for db in declared.d1_databases.iter().filter(|db| !db.migrations.is_empty()) {
+    for db in declared
+        .d1_databases
+        .iter()
+        .filter(|db| !db.migrations.is_empty())
+    {
         let physical = d1_database_name(environment, &db.name);
         apply_d1_migrations(provenance, &worker_dir, &db.binding, environment).map_err(|e| {
             DeployFailure::driver(format!(
@@ -1949,7 +1953,10 @@ mod tests {
         assert_eq!(pushed, Ok(Pushed::Ok));
         assert_eq!(
             d1_calls(&calls),
-            ["d1 create api-orders", "d1 migrations apply D1_ORDERS --remote"]
+            [
+                "d1 create api-orders",
+                "d1 migrations apply D1_ORDERS --remote"
+            ]
         );
         let at = |prefix: &str| calls.iter().position(|c| c.starts_with(prefix));
         assert!(

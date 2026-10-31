@@ -596,10 +596,27 @@ entry from `bynk.deploy.lock`. `bynk dev -- --remote` binds the recorded
 database and refuses one no deploy has created; plain `bynk dev` uses a local
 database of wrangler's.
 
-A new database is empty, and applying a schema at deploy time is a later
-increment: create the tables from the application for now (for example with
-`CREATE TABLE IF NOT EXISTS` before the first statement that needs them) or
-with `wrangler d1 execute`.
+A database's schema comes from its
+[migrations](/book/reference/bynk-capabilities/#schema-migrations),
+`migrations/<database>/NNNN_<name>.sql` in the project. The plan lists the
+files of each database that has any. It runs offline, so it can't say which
+of them the database has already applied:
+
+```
+d1 reuse shop-cart-orders (D1_ORDERS)
+d1 migrate shop-cart-orders (2 files; pending ones applied before the push)
+deploy shop-cart
+```
+
+Deploy runs `wrangler d1 migrations apply D1_ORDERS --remote`, with `--env`
+under one, after the database is bound and before the push, so new code never
+meets an old schema. Wrangler applies each file the database hasn't recorded,
+each in its own transaction, and records it in the database's
+`d1_migrations` table. The ledger records nothing about migrations. If a
+migration fails, wrangler rolls that file back, the earlier ones stay
+applied, and deploy stops with wrangler's message before anything is pushed,
+so the previous code keeps serving. Deploy's own confirmation covers the
+apply, so wrangler doesn't ask again.
 
 ### Workers outside the project
 
