@@ -32,7 +32,7 @@ environment), so code that stays on this surface is portable.
 | **`Clock`** | `now() -> Effect[Instant]` — the current instant (an absolute point in time; epoch-millis under the hood). |
 | **`Random`** | `uuid() -> Effect[Uuid]` · `int(lo: Int, hi: Int) -> Effect[Int]` (lo-inclusive, hi-exclusive) · `bytes(n: Int) -> Effect[Bytes]` — `n` random bytes. `int` is **not** for secrets; use `bytes`. |
 | **`Logger`** | `info(msg: String) -> Effect[()]` · `error(msg: String) -> Effect[()]` · `warn(msg: String) -> Effect[()]` · `debug(msg: String) -> Effect[()]` · `log(level: LogLevel, msg: String, fields: Map[String, String]) -> Effect[()]` — a structured record (experimental). See [Log levels and structured fields](#log-levels-and-structured-fields). |
-| **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental) · `receiveBytes(req: Request, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req: Request, body: Bytes, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` — binary bodies (experimental). See [Timeouts and redirects](#timeouts-and-redirects) and [Binary bodies](#binary-bodies). |
+| **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental) · `receiveBytes(req: Request, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req: Request, body: Bytes, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` — binary bodies (experimental) · `receiveStream(req: Request, options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` · `sendStream(req: Request, body: Stream[Bytes], options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` — streamed bodies (experimental). See [Timeouts and redirects](#timeouts-and-redirects), [Binary bodies](#binary-bodies) and [Streamed bodies](#streamed-bodies). |
 | **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
 | **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/guides/localisation/understand-localisation/). |
 | **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` — mechanical dedup for at-least-once delivery. See below. |
@@ -217,8 +217,9 @@ takes the same request with a `FetchOptions`:
 let res <- Fetch.sendWith(req, FetchOptions { timeout: Some(5.seconds), redirect: Manual })
 ```
 
-- `timeout` bounds the whole exchange, the response body included. When it
-  elapses the result is `Err(Timeout)`. A timeout of zero or less, or over
+- `timeout` bounds the whole exchange, the response body included, except for
+  the [streamed operations](#streamed-bodies), where it bounds the response
+  head only. When it elapses the result is `Err(Timeout)`. A timeout of zero or less, or over
   2,147,483,647 ms (about 24 days, the longest a platform timer takes),
   faults the call, with nothing sent. `None` waits as long as `send` does.
 - `redirect: Follow` follows redirects, as `send` does. `Manual` returns the
@@ -267,11 +268,71 @@ let sent <- Fetch.sendBytes(upload, image, options)
 A binary body gets no `Content-Type` of its own: set `req.contentType` (to
 `Some("application/octet-stream")`, say). To read a response that is really
 text, call `res.body.decodeUtf8()`, which is `None` when it is not UTF-8.
-Bodies are buffered whole, so they suit what fits in a Worker's memory;
-streamed bodies are planned separately. Both operations are experimental: list
+Bodies are buffered whole, so they suit what fits in a Worker's memory; for
+more, see [Streamed bodies](#streamed-bodies). Both operations are experimental: list
 `"bynk.Fetch.receiveBytes"` and `"bynk.Fetch.sendBytes"` under
 `[unstable] allow`. A test stubs them as it does `send`:
 `stub Fetch.sendBytes(_, _, _) returns Ok(BytesResponse { status: 201, headers: Map.empty(), body: Bytes.empty() })`.
+In the browser playground they throw, as `send` does.
+
+### Streamed bodies
+
+`receiveStream` and `sendStream` are `receiveBytes` and `sendBytes` without the
+buffering. Both return a `StreamResponse` as soon as the response head
+arrives, and its body arrives as it is read:
+
+```bynk
+type StreamResponse = {
+  status:  Int,
+  headers: Map[String, String],
+  body:    Stream[Bytes],
+}
+```
+
+- `receiveStream(req, options)` sends `req` as `receiveBytes` does, its
+  `String` body included.
+- `sendStream(req, body, options)` sends `body` chunk by chunk. `req.body`
+  must be `None`, and a `Get` or `Head` can't carry it: both are
+  `Err(InvalidBody)`, with nothing sent.
+
+A proxy re-serves an upstream without holding it, through `RawStreamed`:
+
+```bynk,fragment
+let got <- Fetch.receiveStream(upstream, FetchOptions { timeout: Some(10.seconds), redirect: Follow })
+match got {
+  Ok(r) => RawStreamed(r.body, r.headers.get("content-type").getOrElse("application/octet-stream"))
+  Err(_) => BadGateway("the upstream could not be reached")
+}
+```
+
+- **The timeout bounds the head only.** It runs until the response head
+  arrives (for `sendStream`, that normally includes sending the body), then
+  stops, so a long download isn't cut off. A head that doesn't arrive in time
+  is `Err(Timeout)`.
+- **A failure partway through the body faults the read.** The result is
+  already `Ok`, so a dropped connection surfaces in the `collect`, `map` or
+  `RawStreamed` that is reading it; a `RawStreamed` response is cut short.
+- **A body is read once.** `r.body` is single-pass, as every `Stream` is: a
+  second read faults. A `StreamResponse` carries a stream, so it can't be a
+  handler's result, an event field or stored; serve its body with
+  `RawStreamed`, or `collect` it.
+- **Read or drop the body.** An unread body holds its connection until the
+  request ends. A read that stops early (a `take`, say) releases it.
+- **Handing a stream to `sendStream` consumes it,** whatever the outcome,
+  `InvalidBody` included. A fault from the stream itself, while it is sent,
+  faults `sendStream`; it isn't reported as `Err(Network)`.
+- **A streamed upload has no `content-length`.** It is sent chunked, and some
+  endpoints refuse that (an S3 presigned `PUT`, for example). Use `sendBytes`
+  for those.
+- **`sendStream` doesn't follow redirects.** The body can't be sent twice, so a
+  `3xx` comes back as it is, `location` included, whatever `options.redirect`
+  says. `receiveStream` follows them as `receiveBytes` does.
+
+Both operations are experimental: list `"bynk.Fetch.receiveStream"` and
+`"bynk.Fetch.sendStream"` under `[unstable] allow`. A test stubs them as it
+does `send`, and a stub's value is built afresh for each call, so each call
+gets a stream of its own:
+`stub Fetch.receiveStream(_, _) returns Ok(StreamResponse { status: 200, headers: Map.empty(), body: Stream.of([Bytes.fromUtf8("x")]) })`.
 In the browser playground they throw, as `send` does.
 
 ### Log levels and structured fields
