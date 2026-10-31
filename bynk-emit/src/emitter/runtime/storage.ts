@@ -208,6 +208,7 @@ export interface R2ObjectMeta {
 }
 
 export interface R2ObjectBody extends R2ObjectMeta {
+  readonly body: ReadableStream<Uint8Array>;
   arrayBuffer(): Promise<ArrayBuffer>;
 }
 
@@ -217,10 +218,25 @@ export interface R2PutOptions {
   onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string };
 }
 
+/**
+ * P5b (#2626): the part of Cloudflare's `R2MultipartUpload` that `WorkersR2`
+ * uses. `resumeMultipartUpload` rebuilds one from its key and id without
+ * checking either; an unknown upload fails at its first operation.
+ */
+export interface R2MultipartUpload {
+  readonly key: string;
+  readonly uploadId: string;
+  uploadPart(partNumber: number, value: Uint8Array): Promise<{ partNumber: number; etag: string }>;
+  complete(parts: { partNumber: number; etag: string }[]): Promise<R2ObjectMeta>;
+  abort(): Promise<void>;
+}
+
 export interface R2Bucket {
   get(key: string): Promise<R2ObjectBody | null>;
   head(key: string): Promise<R2ObjectMeta | null>;
-  put(key: string, value: Uint8Array, options?: R2PutOptions): Promise<R2ObjectMeta | null>;
+  // P5b (#2626): a stream is written whole; on Workers it must have a known
+  // length (the readable half of a `FixedLengthStream`).
+  put(key: string, value: Uint8Array | ReadableStream<Uint8Array>, options?: R2PutOptions): Promise<R2ObjectMeta | null>;
   delete(key: string): Promise<void>;
   list(options?: {
     prefix?: string;
@@ -228,6 +244,11 @@ export interface R2Bucket {
     limit?: number;
     include?: ("httpMetadata" | "customMetadata")[];
   }): Promise<{ objects: R2ObjectMeta[]; truncated: boolean; cursor?: string }>;
+  createMultipartUpload(
+    key: string,
+    options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> },
+  ): Promise<R2MultipartUpload>;
+  resumeMultipartUpload(key: string, uploadId: string): R2MultipartUpload;
 }
 
 /**
@@ -236,27 +257,114 @@ export interface R2Bucket {
  * is. It honours the preconditions `WorkersR2` sends and pages `list` in key
  * order at R2's own page size (`limit`, default 1000), the cursor being the
  * last key returned.
+ *
+ * P5b (#2626): `get`'s `body` streams the object in 64 KiB chunks, `put`
+ * takes a stream as well as bytes, and multipart uploads complete as R2's do:
+ * every listed part uploaded with that etag, part numbers 1 to 10,000, and
+ * every part but the last the same size. R2's 5 MiB minimum part is not
+ * enforced, so a test needn't build 5 MiB of bytes.
  */
 export function makeIntegrationR2(): R2Bucket {
   type Stored = { meta: R2ObjectMeta; body: Uint8Array };
+  type Upload = {
+    options: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> } | undefined;
+    parts: Map<number, { etag: string; body: Uint8Array }>;
+  };
   const objects = new Map<string, Stored>();
+  const uploads = new Map<string, Upload>();
   let version = 0;
+  const store = (key: string, body: Uint8Array, options?: R2PutOptions): R2ObjectMeta => {
+    version += 1;
+    const contentType = options?.httpMetadata?.contentType;
+    const meta: R2ObjectMeta = {
+      key,
+      size: body.length,
+      etag: `etag-${version}`,
+      uploaded: new Date(),
+      httpMetadata: contentType === undefined ? {} : { contentType },
+      customMetadata: { ...(options?.customMetadata ?? {}) },
+    };
+    objects.set(key, { meta, body });
+    return meta;
+  };
+  const upload = (key: string, uploadId: string): R2MultipartUpload => {
+    const open = (): Upload => {
+      const u = uploads.get(`${key}\u0000${uploadId}`);
+      if (!u) throw new Error(`R2: no multipart upload ${uploadId} of ${key}`);
+      return u;
+    };
+    return {
+      key,
+      uploadId,
+      async uploadPart(partNumber, value) {
+        const u = open();
+        if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10_000) {
+          throw new Error(`R2: part number ${partNumber} is not between 1 and 10,000`);
+        }
+        version += 1;
+        const etag = `part-${version}`;
+        u.parts.set(partNumber, { etag, body: value.slice() });
+        return { partNumber, etag };
+      },
+      async complete(parts) {
+        const u = open();
+        const listed = [...parts].sort((a, b) => a.partNumber - b.partNumber);
+        const bodies = listed.map((p, i) => {
+          const part = u.parts.get(p.partNumber);
+          if (!part || part.etag !== p.etag) throw new Error(`R2: part ${p.partNumber} was not uploaded with etag ${p.etag}`);
+          if (i > 0 && listed[i - 1].partNumber === p.partNumber) throw new Error(`R2: part ${p.partNumber} is listed twice`);
+          return part.body;
+        });
+        if (bodies.length === 0) throw new Error("R2: a multipart upload needs at least one part");
+        if (bodies.slice(0, -1).some((b) => b.length !== bodies[0].length)) {
+          throw new Error("R2: every part but the last must be the same size");
+        }
+        if (bodies.length > 1 && bodies[bodies.length - 1].length > bodies[0].length) {
+          throw new Error("R2: the last part must be no larger than the others");
+        }
+        const body = new Uint8Array(bodies.reduce((n, b) => n + b.length, 0));
+        let at = 0;
+        for (const b of bodies) {
+          body.set(b, at);
+          at += b.length;
+        }
+        uploads.delete(`${key}\u0000${uploadId}`);
+        return store(key, body, u.options);
+      },
+      async abort() {
+        uploads.delete(`${key}\u0000${uploadId}`);
+      },
+    };
+  };
   return {
     async get(key: string): Promise<R2ObjectBody | null> {
       const s = objects.get(key);
       if (!s) return null;
-      const body = s.body;
+      const bytes = s.body;
+      let at = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (at >= bytes.length) {
+            controller.close();
+            return;
+          }
+          controller.enqueue(bytes.slice(at, at + 65_536));
+          at += 65_536;
+        },
+      });
       return {
         ...s.meta,
+        body,
         async arrayBuffer(): Promise<ArrayBuffer> {
-          return body.slice().buffer as ArrayBuffer;
+          return bytes.slice().buffer as ArrayBuffer;
         },
       };
     },
     async head(key: string): Promise<R2ObjectMeta | null> {
       return objects.get(key)?.meta ?? null;
     },
-    async put(key: string, value: Uint8Array, options?: R2PutOptions): Promise<R2ObjectMeta | null> {
+    async put(key: string, value: Uint8Array | ReadableStream<Uint8Array>, options?: R2PutOptions): Promise<R2ObjectMeta | null> {
+      const body = value instanceof Uint8Array ? value.slice() : new Uint8Array(await new Response(value).arrayBuffer());
       const current = objects.get(key);
       const cond = options?.onlyIf;
       if (cond?.etagMatches !== undefined && current?.meta.etag !== cond.etagMatches) return null;
@@ -264,19 +372,7 @@ export function makeIntegrationR2(): R2Bucket {
         const clash = cond.etagDoesNotMatch === "*" ? current !== undefined : current?.meta.etag === cond.etagDoesNotMatch;
         if (clash) return null;
       }
-      version += 1;
-      const body = value.slice();
-      const contentType = options?.httpMetadata?.contentType;
-      const meta: R2ObjectMeta = {
-        key,
-        size: body.length,
-        etag: `etag-${version}`,
-        uploaded: new Date(),
-        httpMetadata: contentType === undefined ? {} : { contentType },
-        customMetadata: { ...(options?.customMetadata ?? {}) },
-      };
-      objects.set(key, { meta, body });
-      return meta;
+      return store(key, body, options);
     },
     async delete(key: string): Promise<void> {
       objects.delete(key);
@@ -295,6 +391,15 @@ export function makeIntegrationR2(): R2Bucket {
         truncated,
         cursor: truncated ? page[page.length - 1] : undefined,
       };
+    },
+    async createMultipartUpload(key, options) {
+      version += 1;
+      const uploadId = `upload-${version}`;
+      uploads.set(`${key}\u0000${uploadId}`, { options, parts: new Map() });
+      return upload(key, uploadId);
+    },
+    resumeMultipartUpload(key, uploadId) {
+      return upload(key, uploadId);
     },
   };
 }

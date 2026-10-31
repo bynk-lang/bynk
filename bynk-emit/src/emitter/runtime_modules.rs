@@ -62,6 +62,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("QueueProducer", "storage"),
     ("QueueResult", "queue"),
     ("R2Bucket", "storage"),
+    ("R2MultipartUpload", "storage"),
     ("R2ObjectBody", "storage"),
     ("R2ObjectMeta", "storage"),
     ("R2PutOptions", "storage"),

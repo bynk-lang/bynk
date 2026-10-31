@@ -17,7 +17,10 @@
 //! P5 (#2323) adds `WorkersR2` the same way: every `R2` operation through
 //! compiled Bynk handlers against Miniflare's own R2, including both
 //! conditions of `putWith` failing as `None` and `list` paging past R2's 1000
-//! objects a page.
+//! objects a page. P5b (#2626) adds the streamed reads and writes (a wrong
+//! declared size faulting, nothing stored) and multipart uploads (completed
+//! from the handle in a later request; R2's minimum part size) to the same
+//! smoke, so it keeps band 1.
 //!
 //! The same toolchain skip and `BYNK_REQUIRE_WORKERD` gate as the events smokes;
 //! see `events_ordering_workerd.rs` for why each exists. Teardown is the shared
@@ -469,6 +472,81 @@ service api from http {
 \t\t\tNone => NotFound
 \t\t}
 \t}
+
+\ton GET(\"/stream/:key\") (key: String) -> Effect[HttpResult[()]] by Visitor given Archives {
+\t\tlet found <- Archives.getStream(key)
+\t\tmatch found {
+\t\t\tSome(o) => RawStreamed(o.body, o.object.contentType.getOrElse(\"application/octet-stream\"))
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/copy/:src/:dst\") (src: String, dst: String) -> Effect[HttpResult[Int]] by Visitor given Archives {
+\t\tlet found <- Archives.getStream(src)
+\t\tmatch found {
+\t\t\tSome(o) => {
+\t\t\t\tlet copied <- Archives.putStream(dst, o.body, o.object.size)
+\t\t\t\tOk(copied.size)
+\t\t\t}
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/sized/:key/:value/:fit\") (key: String, value: String, fit: String) -> Effect[HttpResult[Int]] by Visitor given Archives {
+\t\tlet held = 2 * Bytes.fromUtf8(value).length()
+\t\tlet size = if fit == \"long\" { held - 1 } else if fit == \"short\" { held + 1 } else { held }
+\t\tlet o <- Archives.putStream(key, Stream.of([Bytes.fromUtf8(value), Bytes.fromUtf8(\"\"), Bytes.fromUtf8(value)]), size)
+\t\tOk(o.size)
+\t}
+
+\ton GET(\"/screate/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet stored <- Archives.putStreamWith(key, Stream.of([Bytes.fromUtf8(value)]), Bytes.fromUtf8(value).length(), R2Put {
+\t\t\tcontentType: Some(\"text/plain\"),
+\t\t\tmetadata: Map.empty(),
+\t\t\tonlyIf: Absent,
+\t\t})
+\t\tmatch stored {
+\t\t\tSome(_) => Ok(\"created\")
+\t\t\tNone => Ok(\"exists\")
+\t\t}
+\t}
+
+\ton GET(\"/mp/begin/:key\") (key: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet u <- Archives.createUpload(key, R2UploadOptions { contentType: Some(\"text/plain\"), metadata: Map.empty().insert(\"by\", \"smoke\") })
+\t\tOk(u.uploadId)
+\t}
+
+\ton GET(\"/mp/finish/:key/:id\") (key: String, id: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet u = R2Upload { key: key, uploadId: id }
+\t\tlet tail <- Archives.uploadPart(u, 2, Bytes.fromUtf8(\"tail\"))
+\t\tlet head <- Archives.uploadPart(u, 1, grow(Bytes.fromUtf8(\"x\"), 23))
+\t\tlet o <- Archives.completeUpload(u, [tail, head])
+\t\tOk(\"\\(o.size) \\(o.contentType.getOrElse(\"-\")) \\(o.metadata.get(\"by\").getOrElse(\"-\"))\")
+\t}
+
+\ton GET(\"/mp/small/:key\") (key: String) -> Effect[HttpResult[Int]] by Visitor given Archives {
+\t\tlet u <- Archives.createUpload(key, R2UploadOptions { contentType: None, metadata: Map.empty() })
+\t\tlet a <- Archives.uploadPart(u, 1, Bytes.fromUtf8(\"a\"))
+\t\tlet b <- Archives.uploadPart(u, 2, Bytes.fromUtf8(\"b\"))
+\t\tlet o <- Archives.completeUpload(u, [a, b])
+\t\tOk(o.size)
+\t}
+
+\ton GET(\"/mp/abort/:key\") (key: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet u <- Archives.createUpload(key, R2UploadOptions { contentType: None, metadata: Map.empty() })
+\t\tlet _ <- Archives.uploadPart(u, 1, Bytes.fromUtf8(\"a\"))
+\t\tlet _ <- Archives.abortUpload(u)
+\t\tOk(\"aborted\")
+\t}
+}
+
+// 2^n copies of `b`: 8 MiB from one byte at n = 23, over R2's 5 MiB minimum part.
+fn grow(b: Bytes, n: Int) -> Bytes {
+\tif n == 0 {
+\t\tb
+\t} else {
+\t\tgrow(b.concat(b), n - 1)
+\t}
 }
 ";
 
@@ -508,6 +586,27 @@ fn workers_r2_round_trips_on_workerd() {
         ("/indexes/put/p~1/z", 200, r#""put""#),
         ("/indexes/get/p~1", 200, r#""7a""#),
         ("/indexes/get/c", 404, ""),
+        // P5b (#2626): a streamed write of its declared size, through
+        // `FixedLengthStream`; a size the stream doesn't hold faults, and
+        // nothing is stored
+        ("/sized/s/hi/exact", 200, "4"),
+        ("/get/s", 200, r#""68696869""#),
+        ("/sized/long/hi/long", 500, ""),
+        ("/get/long", 404, ""),
+        ("/sized/short/hi/short", 500, ""),
+        ("/get/short", 404, ""),
+        // a streamed read copied into a streamed write
+        ("/copy/s/s2", 200, "4"),
+        ("/get/s2", 200, r#""68696869""#),
+        ("/copy/absent/x", 404, ""),
+        ("/stream/absent", 404, ""),
+        // putStreamWith honours its condition
+        ("/screate/sc/hi", 200, r#""created""#),
+        ("/screate/sc/yo", 200, r#""exists""#),
+        ("/get/sc", 200, r#""6869""#),
+        // an aborted upload stores nothing
+        ("/mp/abort/ab", 200, r#""aborted""#),
+        ("/get/ab", 404, ""),
     ];
     let Some((failures, log)) = run_smoke("r2-smoke", "r2", R2_SOURCE, "/get/boot", 1, &|port| {
         let mut failures = check_steps(port, steps);
@@ -528,6 +627,28 @@ fn workers_r2_round_trips_on_workerd() {
             }
             other => failures.push(format!("/etag/c: {other:?}")),
         }
+        // P5b (#2626): a streamed body is served as the object's bytes.
+        match get(port, "/stream/sc") {
+            Ok((200, body)) if body.contains("hi") => {}
+            other => failures.push(format!("/stream/sc: {other:?}, expected 200 with hi")),
+        }
+        // A multipart upload begun in one request and completed in another,
+        // from its handle alone: an 8 MiB part and a short last one.
+        match get(port, "/mp/begin/big") {
+            Ok((200, body)) => {
+                let id = body.trim().trim_matches('"').to_string();
+                failures.extend(check_steps(
+                    port,
+                    &[
+                        (&format!("/mp/finish/big/{id}"), 200, r#""8388612 text/plain smoke""#),
+                        ("/size/big", 200, "8388612"),
+                    ],
+                ));
+            }
+            other => failures.push(format!("/mp/begin/big: {other:?}")),
+        }
+        // Parts under R2's 5 MiB minimum, but for the last, are refused.
+        failures.extend(check_steps(port, &[("/mp/small/sm", 500, ""), ("/get/sm", 404, "")]));
         // R2 lists at most 1000 objects a page (fewer, when asked for their
         // metadata, as `list` does), so 1001 span at least two: the cursor
         // `list` returns is the one the platform accepts, and the second page
