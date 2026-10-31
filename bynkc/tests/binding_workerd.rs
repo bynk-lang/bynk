@@ -195,6 +195,24 @@ fn run_smoke(
     band: u16,
     drive: &dyn Fn(u16) -> Vec<String>,
 ) -> Option<(Vec<String>, String)> {
+    run_smoke_with(project, ctx, source, &[], &|_| None, boot, band, drive)
+}
+
+/// [`run_smoke`] with `files` (project-relative path, content) written into
+/// the project beside the source, and `prepare` run on the compiled Worker's
+/// directory before `wrangler dev` starts; a `Some` from it is a failure that
+/// stops the smoke.
+#[allow(clippy::too_many_arguments)]
+fn run_smoke_with(
+    project: &str,
+    ctx: &str,
+    source: &str,
+    files: &[(&str, &str)],
+    prepare: &dyn Fn(&std::path::Path) -> Option<String>,
+    boot: &str,
+    band: u16,
+    drive: &dyn Fn(u16) -> Vec<String>,
+) -> Option<(Vec<String>, String)> {
     if !tools::tool_exists("npx") && skip("`npx` is not on PATH") {
         return None;
     }
@@ -216,6 +234,11 @@ fn run_smoke(
     )
     .unwrap();
     fs::write(tmp.join(format!("proj/src/{ctx}/smoke.bynk")), source).unwrap();
+    for (path, content) in files {
+        let path = tmp.join("proj").join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+    }
     let compiled = Command::new(env!("CARGO_BIN_EXE_bynkc"))
         .args(["compile", "--target", "workers", "--emit", "js", "-o"])
         .arg(tmp.join("out"))
@@ -233,10 +256,16 @@ fn run_smoke(
         "expected out/workers/{project} — context dasherisation changed?"
     );
 
+    if let Some(failure) = prepare(&dir) {
+        let _ = fs::remove_dir_all(&tmp);
+        return Some((vec![failure], String::new()));
+    }
+
     // Its own band, clear of the events smokes' (30_000 + 4·pid, 40_000 + 2·pid,
     // 55_000 + 2·pid, each mod 4_000), so they can all run at once. Bands 5
     // and 6 (40_000 to 48_000) share a port with the events smokes for half
-    // of all pids, so the Fetch smokes use 8 and 9 (#2604).
+    // of all pids, so the Fetch smokes use 8 and 9 (#2604), and the D1
+    // migrations smoke 10, the last band below port 65_536 (#2608).
     let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
     let inspector_port = port + 1;
     let log_path = tmp.join("wrangler.log");
@@ -851,6 +880,108 @@ fn workers_d1_round_trips_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersD1 on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+const D1_MIGRATIONS_SOURCE: &str = "context m.smoke
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Items = D1
+
+type Item = { id: String, label: String }
+
+service api from http {
+\ton GET(\"/items\") () -> Effect[HttpResult[String]] by Visitor given Items {
+\t\tlet rows <- Items.all(\"SELECT id, label FROM items ORDER BY id\", [])
+\t\tmatch rows {
+\t\t\tOk(text) => match Json.decode[List[Item]](text) {
+\t\t\t\tOk(items) => Ok(\"\\(items.length())\")
+\t\t\t\tErr(_) => ServerError(\"did not decode: \\(text)\")
+\t\t\t}
+\t\t\tErr(_) => ServerError(\"query failed\")
+\t\t}
+\t}
+
+\ton GET(\"/label/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Items {
+\t\tlet row <- Items.first(\"SELECT id, label FROM items WHERE id = ?1\", [Text(id)])
+\t\tmatch row {
+\t\t\tOk(Some(text)) => match Json.decode[Item](text) {
+\t\t\t\tOk(item) => Ok(item.label)
+\t\t\t\tErr(_) => ServerError(\"did not decode: \\(text)\")
+\t\t\t}
+\t\t\tOk(None) => NotFound
+\t\t\tErr(_) => ServerError(\"query failed\")
+\t\t}
+\t}
+}
+";
+
+#[test]
+fn d1_migrations_apply_to_the_emitted_config_on_workerd() {
+    // P4b (#2608): the copied migrations and the stanza's `migrations_dir`
+    // are what real wrangler applies: with stdin closed it takes its "yes"
+    // fallback rather than asking, and the Worker then reads the table the
+    // first migration made and the column the second added.
+    let files = [
+        (
+            "migrations/m-smoke-items/0001_create_items.sql",
+            "CREATE TABLE items (id TEXT PRIMARY KEY);\nINSERT INTO items (id) VALUES ('a');\n",
+        ),
+        (
+            "migrations/m-smoke-items/0002_add_label.sql",
+            "ALTER TABLE items ADD COLUMN label TEXT NOT NULL DEFAULT 'none';\nINSERT INTO items (id, label) VALUES ('b', 'bee');\n",
+        ),
+    ];
+    let apply = |dir: &std::path::Path| -> Option<String> {
+        let out = tools::base_command("npx")
+            .args([
+                "-y",
+                wrangler::SPEC,
+                "d1",
+                "migrations",
+                "apply",
+                "D1_ITEMS",
+                "--local",
+            ])
+            .current_dir(dir)
+            .stdin(Stdio::null())
+            .output()
+            .expect("run wrangler");
+        (!out.status.success()).then(|| {
+            format!(
+                "`wrangler d1 migrations apply` failed:\n{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            )
+        })
+    };
+    let Some((failures, log)) = run_smoke_with(
+        "m-smoke",
+        "m",
+        D1_MIGRATIONS_SOURCE,
+        &files,
+        &apply,
+        "/items",
+        10,
+        &|port| {
+            check_steps(
+                port,
+                &[
+                    ("/items", 200, r#""2""#),
+                    ("/label/a", 200, r#""none""#),
+                    ("/label/b", 200, r#""bee""#),
+                ],
+            )
+        },
+    ) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "D1 migrations on workerd disagree with the emitted config:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

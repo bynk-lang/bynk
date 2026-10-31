@@ -1,0 +1,1 @@
+bynk.types.stream_at_boundary `Wrap` cannot appear in an agent store field

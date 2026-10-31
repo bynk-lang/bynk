@@ -664,15 +664,64 @@ Three things about the JSON a row becomes:
 - An integer past ±2^53 cannot be represented exactly in JSON, so a field that
   reads one fails the decode rather than rounding.
 
-In tests each instance is a real, empty SQLite database in memory (Node's
-built-in `node:sqlite`, so Node 22.13 or later), so statements run as they do
-on D1. A case creates the tables it needs, for example with
-`Orders.run("CREATE TABLE IF NOT EXISTS …", [])` through a service of the
-context. `stub Orders.all(_, _)` and `expect Orders.run called` work as for any
+#### Schema migrations
+
+A database's schema lives in the project's `migrations/` folder, one directory
+per database, named by its database name, holding numbered SQL files:
+
+```text
+migrations/
+  shop-cart-orders/
+    0001_create_orders.sql
+    0002_add_note.sql
+```
+
+A file is `NNNN_<name>.sql`: four digits, an underscore, then letters, digits,
+`_` or `-`. They apply in number order, each once, in its own transaction.
+The database records which have run in its own `d1_migrations` table, so a
+file that has already been applied is never applied again, even if you edit it.
+To change the schema, add a new file. Neither D1 nor Bynk has down migrations.
+
+The build checks the folder. It skips hidden files and directories
+(`.DS_Store`, an editor's swap file, a `.archive/`) and editor backups ending
+in `~`, and copies only what it checked:
+
+- A file that isn't `NNNN_<name>.sql`, isn't directly in a database's
+  directory, or shares its number with another is
+  `bynk.d1.migration_name`.
+- A file that can't be read, or isn't UTF-8, is `bynk.d1.migration_unreadable`.
+  So is a symbolic link: links aren't followed, and a skipped migration would
+  be a schema change that never runs.
+- A directory that matches no `D1` instance is the warning
+  `bynk.d1.migrations_unused`. That usually means a capability was renamed,
+  and a renamed capability is a new, empty database.
+
+Where they run:
+
+- **Tests:** every case's database starts with its migrations applied, at
+  every tier, so a case sees the schema production has. A migration that
+  fails fails each case that uses the database, naming the file.
+- **`bynk dev`:** they're applied to the local database before the Worker
+  serves, and a new file is applied when you save it, without a restart. With
+  `-- --remote` nothing is applied: only `bynk deploy` changes a real
+  database.
+- **`bynk deploy`:** pending ones are applied after the database is bound and
+  before the new code is uploaded. If one fails, nothing is uploaded, and the
+  previous code keeps serving. See
+  [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#d1-databases).
+
+For a moment during a deploy the old code serves against the new schema, so
+keep each migration compatible with the code before it. Add a column with a
+default, deploy, and only drop what the old code read in a later migration
+(expand, then contract).
+
+#### Testing and stability
+
+In tests each instance is a real SQLite database in memory (Node's built-in
+`node:sqlite`, so Node 22.13 or later), so statements run as they do on D1.
+`stub Orders.all(_, _)` and `expect Orders.run called` work as for any
 capability. `D1` is experimental: list `"bynk.cloudflare.D1"` under
-`[unstable] allow`. `bynk deploy` creates each database and records its id; see
-[Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#d1-databases).
-Schema migrations are a later increment.
+`[unstable] allow`. `bynk deploy` creates each database and records its id.
 
 ### Edge caching: `EdgeCache`
 

@@ -435,8 +435,13 @@ interface SqliteDatabase {
  * on D1: foreign keys enforced, integral numbers bound as `INTEGER`, and a
  * failure reported as D1 words it (`D1_ERROR: …: SQLITE_CONSTRAINT`). A
  * `batch` is one transaction; its results carry `meta`, not rows.
+ *
+ * P4b (#2608): `migrations` are the database's `[name, sql]` files in order,
+ * each run in its own transaction before the database is handed out, as
+ * `wrangler d1 migrations apply` runs them. One that fails faults, naming the
+ * file, so every test using the database fails the same way.
  */
-export function makeIntegrationD1(): D1Database {
+export function makeIntegrationD1(migrations: readonly (readonly [string, string])[] = []): D1Database {
   const node = (globalThis as { process?: { getBuiltinModule?(id: string): unknown } }).process;
   const sqlite = node?.getBuiltinModule?.("node:sqlite") as
     | { DatabaseSync: new (path: string) => SqliteDatabase }
@@ -446,6 +451,16 @@ export function makeIntegrationD1(): D1Database {
   }
   const db = new sqlite.DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
+  for (const [name, sql] of migrations) {
+    db.exec("BEGIN");
+    try {
+      db.exec(sql);
+      db.exec("COMMIT");
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw new Error(`bynk: D1 migration \`${name}\` failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
   const d1Error = (e: unknown): Error => {
     const message = e instanceof Error ? e.message : String(e);
     const code = (e as { errcode?: number }).errcode;

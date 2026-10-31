@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "listing": "63cca9f03f84e20b",
+    "save": "e740b99bfc611306"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"note\",B(\"String\")),F(\"total\",B(\"Int\")))),B(\"String\"))))",
+    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"total\",B(\"Int\")),P(\"note\",B(\"String\")),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))"
+  }
+}

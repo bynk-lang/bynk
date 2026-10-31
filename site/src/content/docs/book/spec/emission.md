@@ -834,7 +834,16 @@ byte-identical: `Stream.of(xs)` becomes a generator over the list, `map`/`take`
 wrap it lazily, and the terminal `collect()` drains it into an array. A
 **streamed HTTP response** — `Streaming(stream)` — lowers to a `Response` whose
 body is the stream encoded as a Server-Sent-Events (SSE) byte stream consuming a
-`Stream[String]`.
+`Stream[String]`; `RawStreamed(body, contentType)` (#2623) to one whose body is
+the `Stream[Bytes]`'s chunks, as they are pulled.
+
+A stream is single-pass (#2623). Each inline op first *claims* its source: it
+marks the iterable under the registered symbol `Symbol.for("bynk.stream.read")`,
+throwing `bynk: a stream can be read only once` if the mark is already set. A
+builder claims when its generator is first pulled, `collect` when it runs, and a
+streamed response when it is built. The mark lives on the iterable, so it holds
+across modules. A stream-carrying record or sum has no `serialise_*` or
+`deserialise_*` helper, since the checker keeps it off every boundary.
 
 A **`Connection[F]`** lowers against the runtime `Connection<F>` interface
 ([§7.4.9](/book/spec/runtime-library/#749-streams-and-connections-v0100-v0102)): `send` JSON-encodes a

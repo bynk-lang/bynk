@@ -6,7 +6,8 @@
 //!   - a wrong method to a live path is `405` + the derived `Allow`;
 //!   - a bare `OPTIONS` is `204` + `Allow`;
 //!   - a `HEAD` returns the `GET` status and headers with an empty body, across
-//!     the `Ok` and `Streaming` variant families;
+//!     the `Ok`, `Streaming` and `RawStreamed` variant families (a
+//!     `RawStreamed` `GET` also writes each chunk, with no `ETag`);
 //!   - an unknown path is still `404`.
 //!
 //! Like the tsc-verification stage, this skips loudly when no TypeScript
@@ -120,6 +121,27 @@ async function main(): Promise<void> {
   assert(r.status === 200, "HEAD /logo is 200");
   assert(r.headers.get("content-type") === "image/svg+xml", "HEAD /logo keeps the Raw content-type");
   assert((await r.text()) === "", "HEAD /logo has an empty body");
+
+  // --- K-streams (#2623): a RawStreamed GET writes every chunk, with no ETag
+  // and no content-length; its HEAD keeps the content-type and an empty body. ---
+  r = await worker.fetch(req("GET", "/chunks"), env);
+  assert(r.status === 200, "GET /chunks is 200");
+  assert(r.headers.get("content-type") === "text/csv", "GET /chunks keeps the author content-type");
+  assert(r.headers.get("etag") === null, "a streamed body carries no ETag");
+  assert(r.headers.get("content-length") === null, "a streamed body has no content-length");
+  const reader = r.body!.getReader();
+  const seen: string[] = [];
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    seen.push(new TextDecoder().decode(value));
+  }
+  assert(seen.join("") === "one,two,three", "GET /chunks streams every chunk in order");
+  assert(seen.length === 3, `the empty chunk is skipped, the rest arrive apart (${seen.length})`);
+  r = await worker.fetch(req("HEAD", "/chunks"), env);
+  assert(r.status === 200, "HEAD /chunks is 200");
+  assert(r.headers.get("content-type") === "text/csv", "HEAD /chunks keeps the content-type");
+  assert((await r.text()) === "", "HEAD /chunks has an empty body");
 
   // --- 405 + Allow: a wrong method to a live path, Allow = the derived union. ---
   r = await worker.fetch(req("DELETE", "/notes"), env);

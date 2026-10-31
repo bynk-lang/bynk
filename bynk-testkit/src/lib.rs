@@ -84,10 +84,12 @@ pub fn compile_options_single(root: impl Into<PathBuf>) -> bynk_emit::project::C
     let sources = read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
     let assets = list_assets(&root);
     let embeds = list_embeds(&root);
+    let migrations = list_migrations(&root);
     bynk_emit::project::CompileOptions::single(root)
         .sources(sources)
         .asset_files(assets)
         .embed_files(embeds)
+        .migration_files(migrations)
 }
 
 /// `CompileOptions::split(project_root, paths)`, with every source pre-read.
@@ -107,10 +109,12 @@ pub fn compile_options_split(
     let sources = read_all(bynk_emit::project::discover_project_files(&roots));
     let assets = list_assets(&project_root);
     let embeds = list_embeds(&project_root);
+    let migrations = list_migrations(&project_root);
     bynk_emit::project::CompileOptions::split(project_root, paths)
         .sources(sources)
         .asset_files(assets)
         .embed_files(embeds)
+        .migration_files(migrations)
 }
 
 /// #1883, slice 1b: the project's `assets/` folder, as the driver lists it
@@ -118,6 +122,12 @@ pub fn compile_options_split(
 fn list_assets(project_root: &std::path::Path) -> bynk_emit::project::assets::AssetFolder {
     bynk_emit::project::assets::AssetFolder::on_disk(project_root)
         .unwrap_or_else(|e| panic!("list `{}/assets`: {e}", project_root.display()))
+}
+
+/// P4b (#2608): the project's `migrations/` folder, listed the same way.
+fn list_migrations(project_root: &std::path::Path) -> bynk_emit::project::assets::AssetFolder {
+    bynk_emit::project::assets::AssetFolder::migrations_on_disk(project_root)
+        .unwrap_or_else(|e| panic!("list `{}/migrations`: {e}", project_root.display()))
 }
 
 /// #2387, slice 2: the project's `embeds/` folder, listed the same way.

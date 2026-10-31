@@ -1,0 +1,2 @@
+bynk.d1.migration_name
+migration `migrations/demo-orders/0001_other.sql` has the same number as `0001_create.sql`

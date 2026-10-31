@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "reading": "5a4e5d30f969b3f5",
+    "twice": "9675c73e86d8d4f4",
+    "upload": "80dea0c93bf1a9db"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "reading": "Svc(\"reading\",P(\"key\",B(\"String\")),Ret(O(B(\"String\"))))",
+    "twice": "Svc(\"twice\",P(\"key\",B(\"String\")),Ret(B(\"Int\")))",
+    "upload": "Svc(\"upload\",P(\"key\",B(\"String\")),Ret(Rec(\"Receipt\",F(\"key\",B(\"String\")),F(\"parts\",B(\"Int\")))))"
+  }
+}

@@ -9,7 +9,9 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use bynk_emit::project::{Document, ProjectOutput, is_worker_asset_path, sibling_path};
+use bynk_emit::project::{
+    Document, ProjectOutput, is_worker_asset_path, is_worker_migration_path, sibling_path,
+};
 
 /// Write a [`ProjectOutput`]'s artefacts under `dir`, creating parent
 /// directories as needed. The shared writer behind both `bynkc`'s
@@ -158,7 +160,10 @@ pub fn write_document(
                 bynk_emit::emitter::toml_doc::print_toml_document(t),
             )?;
         }
-        Document::Json(s) | Document::SourceMap(s) | Document::DebugSidecar(s) => {
+        Document::Json(s)
+        | Document::SourceMap(s)
+        | Document::DebugSidecar(s)
+        | Document::Sql(s) => {
             std::fs::write(&target, s)?;
         }
         Document::Ts(_) | Document::Js(_) => unreachable!("handled above"),
@@ -241,7 +246,10 @@ fn prune_stale_output_dir(
             // Inside an assets directory the extension filter does not apply:
             // an asset keeps its source's extension (`.css`, `.png`, …) and
             // the platform's `_headers` file has none.
-            let prunable = is_prunable_output_extension(ext) || owned_asset;
+            // P4b (#2608): a `.sql` only where the build copies migrations.
+            let prunable = is_prunable_output_extension(ext)
+                || owned_asset
+                || (ext == "sql" && is_worker_migration_path(rel));
             if prunable && !expected.contains(rel) {
                 std::fs::remove_file(&path)?;
             }

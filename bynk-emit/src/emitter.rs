@@ -5690,7 +5690,7 @@ impl<'a> LowerCtx<'a> {
                 P::Message => &["message"],
                 P::Location => &["location"],
                 P::Streamed => &["stream"],
-                P::Raw => &["body", "contentType"],
+                P::Raw | P::RawStreamed => &["body", "contentType"],
                 P::RawTagged => &["body", "contentType", "etag"],
                 P::RawError => &["status", "body", "contentType"],
             };

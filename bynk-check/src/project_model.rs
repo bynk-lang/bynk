@@ -34,8 +34,8 @@ use std::sync::{Arc, OnceLock};
 
 use crate::checker::{self, Ty, TyId, Types};
 use crate::context_checks::{
-    build_capability_op_info, reject_fn_types, ts_type_ref_display, type_ref_is_held,
-    type_ref_to_display, validate_store_field_value_types,
+    CAPABILITY_SIGNATURE, RECORD_FIELD, SUM_PAYLOAD, build_capability_op_info, reject_fn_types,
+    ts_type_ref_display, type_ref_is_held, type_ref_to_display, validate_store_field_value_types,
 };
 use crate::firstparty::{self, Platform};
 use crate::icu;
@@ -1764,13 +1764,13 @@ pub fn check_function_type_boundary_items(
             CommonsItem::Type(t) => match &t.body {
                 TypeBody::Record(r) => {
                     for f in &r.fields {
-                        reject_fn_types(&f.type_ref, "a record field", types, errors);
+                        reject_fn_types(&f.type_ref, RECORD_FIELD, types, errors);
                     }
                 }
                 TypeBody::Sum(s) => {
                     for v in &s.variants {
                         for p in &v.payload {
-                            reject_fn_types(&p.type_ref, "a sum-variant payload", types, errors);
+                            reject_fn_types(&p.type_ref, SUM_PAYLOAD, types, errors);
                         }
                     }
                 }
@@ -1787,23 +1787,13 @@ pub fn check_function_type_boundary_items(
             CommonsItem::Capability(c) => {
                 for op in &c.ops {
                     for p in &op.params {
-                        reject_fn_types(
-                            &p.type_ref,
-                            "a capability operation signature",
-                            types,
-                            errors,
-                        );
+                        reject_fn_types(&p.type_ref, CAPABILITY_SIGNATURE, types, errors);
                     }
                     // v0.102 (§2.9.1): a capability operation may *produce* a
                     // held value — it is the canonical held source — so an
                     // `Effect[Connection[F]]` return is admitted.
                     if !type_ref_is_held(&op.return_type) {
-                        reject_fn_types(
-                            &op.return_type,
-                            "a capability operation signature",
-                            types,
-                            errors,
-                        );
+                        reject_fn_types(&op.return_type, CAPABILITY_SIGNATURE, types, errors);
                     }
                 }
             }

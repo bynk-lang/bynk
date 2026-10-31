@@ -158,6 +158,24 @@ neighbours it is **non-serialisable, non-storable, non-boundary, and not
 value-comparable**: a live source is built and consumed in place, never persisted,
 sent across a context boundary, or compared with `==`.
 
+Within a Worker a stream moves freely (#2623):
+
+- **Through a capability.** An operation may take or return a stream
+  (`fn read(key: String) -> Effect[Download]`), since a capability's provider runs
+  in the same isolate as its caller, so nothing is serialised.
+- **Inside a record or sum.** A field may be a stream
+  (`type Download = { contentType: String, body: Stream[Bytes] }`). The type is
+  then *stream-carrying*: non-boundary like the stream, with no JSON codec, and
+  refused wherever a stream is (a handler's parameter or result, a store field, an
+  event) with `bynk.types.stream_at_boundary`, whose note names the field the
+  stream is reached through.
+
+**A stream is read once.** Draining it with `collect`, or handing it to a
+response, consumes it, and reading it again faults with
+`bynk: a stream can be read only once`. A builder (`map`, `take`) consumes its
+source when it is first read, not when it is built. A stream from the platform
+can only be read once, so an in-memory one behaves the same.
+
 The v1 vocabulary is deliberately minimal:
 
 | Form | Type | Purpose |
@@ -170,8 +188,10 @@ The v1 vocabulary is deliberately minimal:
 Errors ride **in-band** as `Result` elements (`Stream[Result[T, E]]`); a fault in
 the producer aborts the stream as faults abort handlers.
 
-A stream's first end-to-end use is a [**streamed HTTP response**](/book/reference/http/#streamed-responses)
-— `Streaming(stream)` returns an SSE body consuming a `Stream[String]`. A richer
+A stream's end-to-end uses are [**streamed HTTP responses**](/book/reference/http/#streamed-responses):
+`Streaming(stream)` returns an SSE body consuming a `Stream[String]`, and
+[`RawStreamed(body, contentType)`](/book/reference/http/#streamed-raw-responses)
+a raw body from a `Stream[Bytes]`. A richer
 combinator vocabulary and live runtime sources are later increments of the
 real-time track.
 

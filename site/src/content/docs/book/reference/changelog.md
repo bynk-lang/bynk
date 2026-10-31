@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.449**.
+written against **v0.451**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.451.0** | "A `Stream` may now appear in a capability operation's signature and as a record or sum field (the type is then non-boundary like the stream, with no JSON codec). Streams are read once: reading one again faults. `RawStreamed(body: Stream[Bytes], contentType)` serves a 200 whose raw body is written chunk by chunk, with no `ETag`. A system-tier test reads a non-JSON 200 back as `Ok` with its text (standard-library K-streams, [#2623](https://github.com/bynk-lang/bynk/issues/2623))" |
+| **v0.450.0** | "`D1` databases get schema migrations: `migrations/<database>/NNNN_<name>.sql` in the project, copied beside each Worker's `wrangler.toml` and named by `migrations_dir`. `bynk deploy` applies pending ones before the push (a `d1 migrate` plan line), `bynk dev` applies them locally before serving and when one is added, and every test database starts with them applied. New diagnostics: `bynk.d1.migration_name`, `bynk.d1.migration_unreadable` and the warning `bynk.d1.migrations_unused` (standard-library P4b, [#2608](https://github.com/bynk-lang/bynk/issues/2608))" |
 | **v0.449.0** | "`bynk.Fetch` gains `receiveBytes(req, options)` and `sendBytes(req, body, options)`, which return a `BytesResponse` whose `body` is `Bytes`, so binary downloads and uploads keep every byte (both experimental). `FetchError` gains `InvalidBody`: two bodies, or a body on a `Get` or `Head`, is refused with nothing sent. That includes `send` and `sendWith`, where a `Get` or `Head` with a body used to come back as `Err(Network)` (standard-library K5b, [#2604](https://github.com/bynk-lang/bynk/issues/2604))" |
 | **v0.448.0** | "Bynk's minimum Node.js version is now 22.13. `bynk.cloudflare` gains `D1`, a D1 (SQLite) database as an instance-only derived capability (`capability Orders = D1`) with `all`, `first`, `run` and `batch` over SQL text and positional `SqlValue` parameters; rows come back as JSON text for `Json.decode`, blobs as base64, and every failure is a `SqlError` value (`Constraint` or `Failed`), never a fault; `bynk deploy` creates each database, records its minted id in the ledger and binds it, and tests run on in-memory SQLite (standard-library P4a, [#2602](https://github.com/bynk-lang/bynk/issues/2602))" |
 | **v0.447.0** | "`String` gains `matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex` and `splitRegex`, each over a string-literal pattern checked at compile time exactly as a `Matches` pattern is (syntax and ReDoS), with leading inline `(?i)`/`(?m)`/`(?s)` flags; a non-literal pattern is `bynk.types.regex_not_literal` (standard-library K6c, [#2600](https://github.com/bynk-lang/bynk/issues/2600))" |

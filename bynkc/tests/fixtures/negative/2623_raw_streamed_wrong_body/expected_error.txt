@@ -1,0 +1,1 @@
+bynk.types.argument_mismatch `HttpResult.RawStreamed` expects a `Stream[Bytes]` body, but got `Bytes`

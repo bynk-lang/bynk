@@ -1,5 +1,11 @@
 commons c {
+  // A record may carry a `Stream` (#2623), but is then non-boundary like the
+  // stream: an event can't carry it.
   type Bad = {
     s: Stream[Int],
+  }
+
+  event Sent = {
+    bad: Bad,
   }
 }

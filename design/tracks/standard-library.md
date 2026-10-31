@@ -16,6 +16,9 @@
   K5a done (#2586): more `Method`s, `Fetch.sendWith` with a timeout and a
   redirect policy, and `Logger` levels with a structured `log`.
   K5b done (#2604): `Fetch.receiveBytes` and `sendBytes` carry `Bytes` bodies.
+  P4b done (#2608): `D1` schema migrations, applied by deploy, dev and tests.
+  K-streams done (#2623): a `Stream` crosses capability signatures and rides
+  in records, streams are read once, and `RawStreamed` serves a byte stream.
   P1 done (#2590): `Kv` gains metadata, expiry, binary values and paging.
   K3 done (#2592): `Instant` reads and writes RFC 3339 text. K2 done (#2594):
   percent-encoding on `String`, and URLs in the `bynk.url` commons.
@@ -330,7 +333,7 @@ unit and is indicative only, not decided.
 | Web standards: URL, URLSearchParams, URLPattern, `structuredClone`, Intl, CompressionStream | A / P | L0/L1 (URL, compression); Intl → `Locale` | URLPattern is routing, so language-owned |
 | Console | P | L2 `Logger` | |
 | Performance and timers / Scheduler (`scheduler.wait`) | P (`Clock.now`) | L2 `Clock.sleep`? | Sleeping inside a DO handler interacts with input gates: decide before adding |
-| Streams | P (`Stream[T]` for responses) | L0 | Byte streams are a prerequisite for R2 and large bodies |
+| Streams | P (`Stream[T]` for responses; K-streams #2623: through capability signatures and in records, single-pass, a `RawStreamed` byte response) | L0 | Byte streams are a prerequisite for R2 and large bodies; the platform sources are K5c (Fetch) and P5b (R2) |
 | Cache API (`caches.default`) | A | L3 `bynk.cloudflare.Cache` | Cloudflare-specific semantics (per-colo, not global). Edge caching of a Worker's own responses, purgeable globally, is a different platform feature (Workers Cache) and shipped as `EdgeCache` (first-party registry L7, #2414) |
 | HTMLRewriter | A | L3 | Streaming, callback-based: may fail R14.4. Late |
 | TCP sockets (`connect()`) | A | L3 `Sockets` | Prerequisite for native DB drivers |
@@ -357,7 +360,7 @@ the resource-instance model (PR-2).
 | KV | P (`get`/`put`/`putTtl`/`delete`/`list` over text; several namespaces as derived capabilities, S4; P1 #2590, experimental: `getWith`/`putWith` with metadata, an expiry and `cacheTtl`, `getBytes`/`putBytes`, paged `listPage`) | L3 | **yes** | Bulk reads, streamed values (K-streams) |
 | Environment variables | A | L2 | | §6.1 Config |
 | Queues (producer) | P (shipped, experimental: `send`/`sendWith`/`sendBatch` over JSON text from `Json.encode`; instance-only `Queue @name("…")`; P2 #2578) | L3 `Queue` | yes | Consumer side shipped as protocol. A typed `send[T]`, and checking a producer's message against the consumer's, wait for a codec-carrying generic op |
-| D1 | P (shipped, experimental: `all`/`first`/`run`/`batch` over positional `SqlValue` parameters, rows as JSON text with blobs as base64, `SqlError` values; instance-only `D1`; ledger-provisioned; P4a #2602) | L3 `D1` | **yes** | Migrations (P4b); `Bool` from `0`/`1` (core codec); literal-only `sql` (checker) |
+| D1 | P (shipped, experimental: `all`/`first`/`run`/`batch` over positional `SqlValue` parameters, rows as JSON text with blobs as base64, `SqlError` values; instance-only `D1`; ledger-provisioned; P4a #2602; schema migrations from `migrations/<database>/`, P4b #2608) | L3 `D1` | **yes** | `Bool` from `0`/`1` (core codec); literal-only `sql` (checker); both before `D1` leaves experimental |
 | R2 | P (shipped, experimental: `get`/`head`/`put`/`putWith`/`delete`/`list` over whole `Bytes` objects; instance-only; P5 #2323) | L3 `R2` | **yes** | Byte streams (split out of P5, see P5b), multipart, further conditions |
 | Rate Limiting | P (shipped, experimental: `allow(key) -> Effect[Bool]`; instance-only `RateLimit @limit(n) @period(10.seconds \| 60.seconds)`; P3 #2342) | L3 `RateLimit` | **yes** | `namespace_id` allocated in the ledger, unique across its environments; a listing API to detect ids used outside Bynk |
 | Analytics Engine | P (shipped, experimental: `write(DataPoint)`, limits checked before the write; instance-only `Analytics`, no options; dataset name derived in snake case; P3b #2582) | L3 `Analytics` | yes | `Bytes` blobs, and a typed `write[T]` mapping a record onto blobs and doubles |
@@ -650,6 +653,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | K4 ✅ #2327 | `bynk.crypto`: digests, HMAC, sign/verify, key import, `Effect` over Web Crypto; `Random.bytes`; security review. One `Crypto` capability in a flat sibling unit (Tier 0, `id_block` 7, experimental until the registry signs with it in production), a binding per platform (`Binding::PerPlatformFiles`), opaque non-storable `SigningKey`/`VerifyKey` (`bynk.types.key_at_boundary`), the Node binding as the unit-tier test double | K1, D5, D6, S2 |
 | K5a | **Done** (#2586): `Method` gains `Patch`/`Head`/`Options`; `Fetch.sendWith(req, FetchOptions { timeout, redirect })` (experimental); `Logger.warn`/`debug`, and a structured `log` (experimental) | K1 |
 | K5b | **Done** (#2604): `Fetch.receiveBytes(req, options)` and `Fetch.sendBytes(req, body, options)` (experimental) return a `BytesResponse`; `FetchError.InvalidBody` refuses two bodies, or a body on `Get`/`Head` (on `send` too) | K5a |
+| K5c | Fetch streamed bodies: `receiveStream`/`sendStream` with a `StreamResponse { status, headers, body: Stream[Bytes] }`, on Cloudflare and Node (L2, the `bynk` adapter only) | K-streams, K5b |
 | K6a | **Done** (#2596): the `Set[T]` value type, its kernel and the `bynk.set` combinators | — |
 | K6b | **Done** (#2598): `Int` `div`/`rem`/`mod`/`pow` and the `Float` functions as value methods, `Float.pi()`/`Float.e()` | — |
 | K6c | **Done** (#2600): literal-pattern `matchesRegex`/`containsRegex`/`findRegex`/`findAllRegex`/`replaceRegex`/`splitRegex` on `String` | — |
@@ -663,9 +667,9 @@ increment** (ADR 0023), and the ordering follows §13.
 | P3 | **Done** (#2342), re-scoped: Rate Limiting (`@limit`, `@period`; ledger-allocated `namespace_id`, §11 Q7), with typed instance options. Analytics Engine split out (below) | S4 |
 | P3b | **Done** (#2582): Analytics Engine, `capability X = Analytics` with no options (A12: deploy derives the dataset, `<worker>_<capability>` in snake case since it is a SQL table name), one `write(DataPoint)` with the platform's limits checked first; deploy only qualifies the name per environment, with nothing to create or record | S4 |
 | P4a | **Done** (#2602): D1, `capability X = D1` with `all`/`first`/`run`/`batch`, `SqlValue` parameters, rows as JSON text (blobs as base64; `0`/`1` flags decoded as `Int`), `SqlError` values; deploy creates the database, records its id in the ledger and binds it; tests on `node:sqlite` | S4, K1, D4 |
-| P4b | D1 schema migrations: `migrations_dir`, applied at deploy time and in `bynk dev` | P4a |
+| P4b | **Done** (#2608): D1 schema migrations, `migrations/<database>/NNNN_<name>.sql` copied beside the config under `migrations_dir`; `bynk deploy` applies pending ones before the push (the ledger records nothing: the database does), `bynk dev` applies them locally, and every test database starts migrated; `D1` stays experimental | P4a |
 | P5 | **Done** (#2323), re-scoped: R2 with whole `Bytes` objects, metadata, conditional ops, paged `list`, ledger-provisioned buckets. Byte streams split out (below); the §11 Q3 scope is treated as account-wide, since R2's docs state naming rules but not the scope | S4, K1 |
-| K-streams | Byte streams: `Stream[Bytes]` across the boundary, a streamed `Raw` response. Language work (ADR 0023). Filed when a consumer needs objects too large to buffer | |
+| K-streams | **Done** (#2623), the language half only (ADR 0023): a `Stream` in a capability operation's signature, stream-carrying records and sums (non-boundary, no codec), single-pass streams, and `RawStreamed(body: Stream[Bytes], contentType)`. Settles ADR 0128 D5 for in-process streams | |
 | P5b | R2 streamed `get`/`put`, multipart uploads | K-streams, P5 |
 | L7 | **Done** (#2414), filed by the first-party registry track: `EdgeCache`, Workers Cache on per context (`[cache] enabled = true`), a prefix `purge`, and `no-store` on every `GET`/`HEAD` answer of an opted-in Worker but a `@cache` route's `2xx` | S4 |
 | later | Cache API, Vectorize, Workers AI, Hyperdrive, TCP sockets, HTMLRewriter | case by case |
@@ -1270,7 +1274,7 @@ Per kind, from Cloudflare's configuration reference (2026-10-14):
 | Kind | Table | Physical name | Minted id | Instances? | Notes |
 |---|---|---|---|---|---|
 | KV | `[[kv_namespaces]]` | title (not in the stanza) | `id` | yes | Shipped as the bare `KV` binding and derived instances (S4) |
-| D1 | `[[d1_databases]]` | `database_name` | `database_id` | yes | Created by `bynk deploy` and its id recorded in the ledger (P4a #2602); `migrations_dir` is P4b |
+| D1 | `[[d1_databases]]` | `database_name` | `database_id` | yes | Created by `bynk deploy` and its id recorded in the ledger (P4a #2602); `migrations_dir` names the copied migrations, applied before the push (P4b #2608) |
 | R2 | `[[r2_buckets]]` | `bucket_name` (is the identity) | none | yes | Bucket names are unique per account, as Worker names are, so the derived name inherits Worker-name uniqueness (§11 Q3); optional `jurisdiction` |
 | Queue producer | `[[queues.producers]]` | `queue` (is the identity, chosen in source) | none | yes | The only kind whose physical name the *source* picks |
 | Vectorize | `[[vectorize]]` | `index_name` | none | yes | Index creation needs dimensions and metric, i.e. declaration options |

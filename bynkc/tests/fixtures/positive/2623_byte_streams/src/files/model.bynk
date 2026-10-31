@@ -1,0 +1,20 @@
+commons files.model
+
+// #2623: a record may carry a `Stream`. It's then non-boundary like the
+// stream, and gets no codec, though this commons declares it.
+type Download = {
+	contentType: String,
+	body: Stream[Bytes],
+}
+
+// Carried at one remove, through `Download`.
+type Shelf = {
+	name: String,
+	latest: Download,
+}
+
+// An ordinary record beside them keeps its codec.
+type Receipt = {
+	key: String,
+	parts: Int,
+}

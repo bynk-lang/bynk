@@ -4,6 +4,7 @@ import {
   matchPath,
   httpResultToResponse,
   headResponse,
+  claimStream,
   applyCors,
   corsPreflightResponse,
   applySecurityHeaders,
@@ -105,6 +106,71 @@ test("httpResultToResponse: Streaming frames a Stream as SSE", async () => {
   // Each element is one SSE event; a multi-line element becomes multiple
   // `data:` lines, each event terminated by a blank line.
   assert.equal(await res.text(), "data: tick-1\n\ndata: multi\ndata: line\n\n");
+});
+
+// K-streams (#2623): a streamed raw body.
+test("httpResultToResponse: RawStreamed writes its chunks in order, with no ETag", async () => {
+  const enc = new TextEncoder();
+  async function* chunks() {
+    yield enc.encode("hello, ");
+    yield new Uint8Array(0);
+    yield enc.encode("world");
+  }
+  const res = httpResultToResponse(HttpResult.RawStreamed(chunks(), "text/plain"), id, {
+    weakEtag: true,
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "text/plain");
+  assert.equal(res.headers.get("etag"), null);
+  assert.equal(await res.text(), "hello, world");
+});
+
+test("httpResultToResponse: a RawStreamed source that throws errors the body", async () => {
+  async function* chunks() {
+    yield new Uint8Array([1]);
+    throw new Error("upstream went away");
+  }
+  const res = httpResultToResponse(HttpResult.RawStreamed(chunks(), "application/octet-stream"), id);
+  assert.equal(res.status, 200);
+  await assert.rejects(res.arrayBuffer(), /upstream went away/);
+});
+
+test("httpResultToResponse: a stream handed to a response can't be read again", async () => {
+  async function* chunks() {
+    yield new Uint8Array([1]);
+  }
+  const stream = chunks();
+  httpResultToResponse(HttpResult.RawStreamed(stream, "application/octet-stream"), id);
+  assert.throws(
+    () => httpResultToResponse(HttpResult.RawStreamed(stream, "application/octet-stream"), id),
+    /a stream can be read only once/,
+  );
+  assert.throws(() => claimStream(stream), /a stream can be read only once/);
+});
+
+test("headResponse: cancels a RawStreamed body, returning its source unread", async () => {
+  let pulled = false;
+  let returned = false;
+  const stream: AsyncIterable<Uint8Array> = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          pulled = true;
+          return { value: new Uint8Array([1]), done: false };
+        },
+        async return() {
+          returned = true;
+          return { value: undefined, done: true };
+        },
+      };
+    },
+  };
+  const res = headResponse(httpResultToResponse(HttpResult.RawStreamed(stream, "text/plain"), id));
+  assert.equal(res.status, 200);
+  assert.equal(res.body, null);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(pulled, false);
+  assert.equal(returned, true);
 });
 
 test("httpResultToResponse: redirects carry a Location header and no body", async () => {
@@ -547,6 +613,35 @@ test("responseToHttpResult: a 201 reads as Created, whether or not its body is J
     asString,
   );
   assert.deepEqual(text, { tag: "Created", value: "made, as text" });
+});
+
+// K-streams (#2623): a `Raw` or `RawStreamed` 200 need not be JSON either.
+test("responseToHttpResult: a 200 reads as Ok, whether or not its body is JSON", async () => {
+  const asString = (j: JsonValue) =>
+    typeof j === "string" ? ({ tag: "Ok", value: j } as const) : ({ tag: "Err", error: {} } as never);
+  const json = await responseToHttpResult(
+    new Response('"hi"', { status: 200, headers: { "content-type": "application/json" } }),
+    asString,
+  );
+  assert.deepEqual(json, { tag: "Ok", value: "hi" });
+  const streamed = httpResultToResponse(
+    HttpResult.RawStreamed(
+      (async function* () {
+        yield new TextEncoder().encode("hello, world");
+      })(),
+      "text/plain",
+    ),
+    id,
+  );
+  assert.deepEqual(await responseToHttpResult(streamed, asString), { tag: "Ok", value: "hello, world" });
+  // A 200 that says it is JSON but doesn't parse still fails.
+  await assert.rejects(
+    responseToHttpResult(
+      new Response("{broken", { status: 200, headers: { "content-type": "application/json; charset=utf-8" } }),
+      asString,
+    ),
+    SyntaxError,
+  );
 });
 
 // #2341 (decision C): a router rejection rendered through `on rejected`.

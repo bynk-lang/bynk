@@ -1,0 +1,7 @@
+// #2608: at `system`, each participant Worker's database starts migrated.
+suite shop.orders as system {
+	case "the seeded order already exists over the wire" {
+		let r <- api.POST("/orders/:id", "seed") by Visitor
+		expect r is Conflict(_)
+	}
+}

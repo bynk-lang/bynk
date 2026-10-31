@@ -854,6 +854,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["cron_handler"],
     ),
     d(
+        "bynk.d1.migration_name",
+        "A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database.",
+    ),
+    d(
+        "bynk.d1.migration_unreadable",
+        "A `D1` migration in the project's `migrations/` folder can't be read, or isn't UTF-8 text.",
+    ),
+    warn(d(
+        "bynk.d1.migrations_unused",
+        "A directory in the project's `migrations/` folder matches no `D1` instance's database name, so its migrations are never applied, usually because the capability was renamed (warning).",
+    )),
+    d(
         "bynk.dependency.path_outside_root",
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
@@ -2830,7 +2842,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.json_uncodable",
-        "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, error builtins).",
+        "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, error builtins).",
         &["method_call"],
     ),
     d(
@@ -3000,7 +3012,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.stream_at_boundary",
-        "A `Stream` type appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0).",
+        "A `Stream` type, or a record or sum carrying one in a field, appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0; #2623 admits it in capability signatures and record fields).",
     ),
     d(
         "bynk.types.stream_not_comparable",

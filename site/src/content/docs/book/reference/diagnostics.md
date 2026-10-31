@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **642** codes in total.
+There are **645** codes in total.
 
 ## Agents
 
@@ -319,6 +319,9 @@ There are **642** codes in total.
 | `bynk.adapter.provider_has_body` | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
 | `bynk.cell.self_reference` | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
+| `bynk.d1.migration_name` | A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database. |  | — |
+| `bynk.d1.migration_unreadable` | A `D1` migration in the project's `migrations/` folder can't be read, or isn't UTF-8 text. |  | — |
+| `bynk.d1.migrations_unused` | A directory in the project's `migrations/` folder matches no `D1` instance's database name, so its migrations are never applied, usually because the capability was renamed (warning). |  | Warning |
 | `bynk.dependency.path_outside_root` | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
@@ -752,7 +755,7 @@ There are **642** codes in total.
 | `bynk.types.is_non_sum` | `is` was applied to a value that is not a sum type. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.is_refined_pattern` | A refined (`where`) pattern was used on the right of `is`; refined patterns are `match`-only. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.is_unknown_variant` | `is` names a variant the type does not have. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
-| `bynk.types.json_uncodable` | A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, error builtins). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| `bynk.types.json_uncodable` | A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, error builtins). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.key_at_boundary` | A `bynk.crypto` `SigningKey` or `VerifyKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4). |  | — |
 | `bynk.types.key_not_orderable` | A `sortBy`/`min`/`max` key function does not return an orderable type (`Int`, `Float`, `String`, `Duration`, or `Instant`). |  | — |
 | `bynk.types.lambda_mismatch` | A lambda's parameter count, parameter annotations, or body type do not match the expected function type. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
@@ -787,7 +790,7 @@ There are **642** codes in total.
 | `bynk.types.rejection_at_boundary` | `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | `bynk.types.return_mismatch` | A returned value does not match the declared return type. |  | — |
 | `bynk.types.some_value_mismatch` | A `Some` payload has the wrong type. | [`some_expr`](/book/reference/grammar/#rule-some_expr) | — |
-| `bynk.types.stream_at_boundary` | A `Stream` type appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0). |  | — |
+| `bynk.types.stream_at_boundary` | A `Stream` type, or a record or sum carrying one in a field, appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0; #2623 admits it in capability signatures and record fields). |  | — |
 | `bynk.types.stream_not_comparable` | A `Stream` value is compared with `==`/`!=` — a stream is a live value-over-time source, not a comparable value (real-time track slice 0). |  | — |
 | `bynk.types.type_mismatch` | Two types that were required to match did not. |  | — |
 | `bynk.types.uninferable_element_type` | An empty `[]` (or `List.empty()` / `Map.empty()`) has no expected type to infer its element type from. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |

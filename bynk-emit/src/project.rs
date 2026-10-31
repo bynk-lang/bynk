@@ -277,6 +277,25 @@ pub fn is_worker_asset_path(rel: &Path) -> bool {
         && tail_len > 0
 }
 
+/// P4b (#2608): whether `rel` (output-root-relative) names a file in some
+/// Worker's copied D1 migrations, `workers/<dashes>/migrations/…`, where
+/// `bynk-driver::output`'s reconciliation prunes a `.sql` the build no longer
+/// produces. Every component must be a plain name, as for
+/// [`is_worker_asset_path`].
+pub fn is_worker_migration_path(rel: &Path) -> bool {
+    use std::path::Component;
+    let mut parts = rel.components();
+    let mut tail_len = 0usize;
+    matches!(parts.next(), Some(Component::Normal(w)) if w == "workers")
+        && matches!(parts.next(), Some(Component::Normal(_)))
+        && matches!(parts.next(), Some(Component::Normal(m)) if m == emitter::wrangler::D1_MIGRATIONS_DIR)
+        && parts.all(|c| {
+            tail_len += 1;
+            matches!(c, Component::Normal(_))
+        })
+        && tail_len > 0
+}
+
 /// One typed output document. No `String` at construction for TypeScript or
 /// TOML content (R7.8) — `Json`/`Js`/`SourceMap`/`DebugSidecar` stay opaque
 /// payloads because `bynk-emit` never re-parses them itself, not because
@@ -306,6 +325,9 @@ pub enum Document {
     /// The handler-label debug sidecar, split out the same way at
     /// `<file>.bynkdbg.json`.
     DebugSidecar(String),
+    /// P4b (#2608): a `D1` migration, copied verbatim from the project's
+    /// `migrations/` folder beside the Worker's `wrangler.toml`.
+    Sql(String),
 }
 
 impl Document {
@@ -323,7 +345,8 @@ impl Document {
             Document::Json(s)
             | Document::Js(s)
             | Document::SourceMap(s)
-            | Document::DebugSidecar(s) => s.clone(),
+            | Document::DebugSidecar(s)
+            | Document::Sql(s) => s.clone(),
         }
     }
 }
@@ -558,6 +581,12 @@ pub struct CompileOptions {
     /// `bynk.embed.missing_file` rather than text made up for a file nobody
     /// read.
     pub embed_files: Option<assets::EmbedFolder>,
+    /// P4b (#2608): the project's `migrations/` folder, listed by the caller
+    /// ([`assets::AssetFolder::migrations_on_disk`]). Every file in a declared
+    /// `D1` database's directory is read, checked, copied beside the Worker's
+    /// `wrangler.toml` and run on each test database. `None` means no
+    /// filesystem was consulted.
+    pub migration_files: Option<assets::AssetFolder>,
     /// #2138 (end-to-end testing track §3.5, §3.7): `Some` when `bynk test
     /// --against` runs the `system` suites against a real runtime. The build
     /// then emits only the `system` suites, routes their drivers to the
@@ -617,6 +646,7 @@ impl CompileOptions {
             workers_dev: None,
             asset_files: None,
             embed_files: None,
+            migration_files: None,
             remote_tests: None,
         }
     }
@@ -642,6 +672,7 @@ impl CompileOptions {
             workers_dev: None,
             asset_files: None,
             embed_files: None,
+            migration_files: None,
             remote_tests: None,
         }
     }
@@ -735,6 +766,12 @@ impl CompileOptions {
     /// #2387, slice 2: the listed `embeds/` folder. See the field's own doc.
     pub fn embed_files(mut self, folder: assets::EmbedFolder) -> Self {
         self.embed_files = Some(folder);
+        self
+    }
+
+    /// P4b (#2608): the listed `migrations/` folder. See the field's own doc.
+    pub fn migration_files(mut self, folder: assets::AssetFolder) -> Self {
+        self.migration_files = Some(folder);
         self
     }
 }
@@ -831,6 +868,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.roots.project_root(),
         options.asset_files.as_ref(),
         options.embed_files.as_ref(),
+        options.migration_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
         tys,
     );
@@ -927,6 +965,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         options.roots.project_root(),
         options.asset_files.as_ref(),
         options.embed_files.as_ref(),
+        options.migration_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
         tys,
     );
@@ -995,6 +1034,7 @@ pub fn compile_in_memory(
         &SchemaLock::Off,
         None,
         &root,
+        None,
         None,
         None,
         false,
@@ -1070,6 +1110,7 @@ pub(crate) fn compile_files_in_memory_locked(
         &root,
         asset_files,
         None,
+        None,
         false,
         tys,
     );
@@ -1142,6 +1183,7 @@ pub fn analyse_in_memory_with_types(
         &SchemaLock::Off,
         None,
         &root,
+        None,
         None,
         None,
         false,
@@ -1250,6 +1292,7 @@ pub fn analyse_in_memory_project(
         &SchemaLock::Off,
         None,
         &project_root,
+        None,
         None,
         None,
         false,
@@ -1499,6 +1542,7 @@ fn finish_build(
             schema_registry,
             asset_bytes,
             agent_versions,
+            d1_migrations,
             ..
         } => {
             let mut out = build_output(
@@ -1526,6 +1570,7 @@ fn finish_build(
                 asset_bytes.as_ref(),
                 &agent_versions,
                 &contracts_lock,
+                &d1_migrations,
             );
             // ADR 0117: surface non-failing warnings on the successful build
             // (errors is empty here — the guard arm above caught any).
@@ -2376,6 +2421,9 @@ enum RunChecks {
         // normalised path ([`bynk_check::assets::read_declared_files`]), for
         // the Workers' files. `None` when no folder was listed.
         asset_bytes: Option<BTreeMap<String, Vec<u8>>>,
+        // P4b (#2608): each `D1` database's migrations, copied beside its
+        // Worker's `wrangler.toml`.
+        d1_migrations: bynk_check::d1_migrations::D1Migrations,
         // State-migrations S4 (#2259): each agent class's reconciled versions
         // and valid steps, keyed `<unit>.<Agent>`, for `bynk migrate status`.
         // Empty when the build has no lock.
@@ -2427,6 +2475,10 @@ fn run_checks(
     // #2387, slice 2: the listed `embeds/` folder
     // (`CompileOptions::embed_files`), with the same `None` meaning.
     embed_files: Option<&assets::EmbedFolder>,
+    // P4b (#2608): the listed `migrations/` folder
+    // (`CompileOptions::migration_files`). `None` when no filesystem was
+    // consulted: nothing is checked, and no test database is migrated.
+    migration_files: Option<&assets::AssetFolder>,
     // #2223: resolve `project_root`'s path dependencies and fold them in
     // (`bynk_check::packages::apply_graph`). Only a manifest-backed project
     // has any; an in-memory build never does.
@@ -2683,6 +2735,13 @@ fn run_checks(
     let embed_text = embed_files
         .map(|folder| bynk_check::embeds::read_declared_embeds(&parsed, folder, &mut errors))
         .unwrap_or_default();
+    // -- 6a0''. P4b (#2608): each `D1` instance's migrations directory,
+    //           checked and read; a directory no instance owns is a warning.
+    let d1_migrations = bynk_check::d1_migrations::phase_d1_migrations(
+        migration_files,
+        &bynk_check::d1_migrations::declared_databases(&kinds, &unit_tables),
+        &mut errors,
+    );
     // #1883, slice 2: fixed asset paths against each Worker's routes.
     bynk_check::assets::phase_asset_routes(&parsed, &groups, &kinds, &unit_uses, &mut errors);
     // A deployable Bundle build (no tests: `bynkc compile` without
@@ -3111,6 +3170,7 @@ fn run_checks(
         contracts,
         &mut emitted_barrels,
         &test_asset_files,
+        &d1_migrations,
         &test_binding_modules,
         &schema_effective_versions.events,
         &unit_callees,
@@ -3165,6 +3225,7 @@ fn run_checks(
         &groups,
         &mut emitted_barrels,
         &test_asset_files,
+        &d1_migrations,
         context_bindings.as_ref(),
         &event_subscribers,
         remote_tests,
@@ -3239,6 +3300,7 @@ fn run_checks(
         schema_registry: schema_registry_doc,
         asset_bytes,
         agent_versions: schema_effective_versions.agents,
+        d1_migrations,
     }
 }
 
@@ -3291,6 +3353,8 @@ fn build_output(
     agent_versions: &HashMap<String, bynk_check::schema_registry::AgentVersions>,
     // #2554: the older contracts each callee accepts, from `bynk.contracts.lock`.
     contracts_lock: &bynk_project::contracts_lock::ContractsLock,
+    // P4b (#2608): each `D1` database's migrations.
+    d1_migrations: &bynk_check::d1_migrations::D1Migrations,
 ) -> ProjectOutput {
     // #2554: the lock's warnings, returned on `ProjectOutput::warnings` for
     // `finish_build` to merge with the checker's.
@@ -3598,7 +3662,31 @@ fn build_output(
                     compatibility_flags,
                     workers_dev,
                     &emitter::ClassTombstones::of(table),
+                    d1_migrations,
                 );
+                // P4b (#2608): each `D1` database's migrations, beside the
+                // `wrangler.toml` whose `migrations_dir` names them.
+                for binding in &bindings {
+                    if !matches!(
+                        binding.source,
+                        emitter::wrangler::BindingSource::D1Database { .. }
+                    ) {
+                        continue;
+                    }
+                    let database = emitter::wrangler::d1_database_name(&dashes, &binding.name);
+                    for file in d1_migrations.get(&database).into_iter().flatten() {
+                        compiled.push(StagedFile {
+                            output_path: PathBuf::from(format!(
+                                "workers/{dashes}/{}/{database}/{}",
+                                emitter::wrangler::D1_MIGRATIONS_DIR,
+                                file.name
+                            )),
+                            document: Document::Sql(file.sql.clone()),
+                            source_map: None,
+                            debug_metadata: None,
+                        });
+                    }
+                }
                 // #1883, slice 1b: the static files this Worker serves — its
                 // own and those of every commons its `uses` closure reaches —
                 // under its assets directory, with `_headers` and the
@@ -5439,6 +5527,23 @@ mod tests {
         }
     }
 
+    /// P4b (#2608): `.sql` files are pruned only inside a Worker's copied
+    /// migrations, never elsewhere in an output directory.
+    #[test]
+    fn is_worker_migration_path_matches_only_files_inside_a_worker_migrations_dir() {
+        assert!(is_worker_migration_path(Path::new(
+            "workers/shop/migrations/shop-orders/0001_create.sql"
+        )));
+        for p in [
+            "workers/shop/migrations",
+            "workers/shop/schema.sql",
+            "migrations/shop-orders/0001_create.sql",
+            "workers/shop/migrations/../../../x.sql",
+        ] {
+            assert!(!is_worker_migration_path(Path::new(p)), "{p}");
+        }
+    }
+
     /// #1883, slice 0: the ownership rule `write_output`'s reconciliation
     /// prunes by. Only files *inside* a Worker's assets directory qualify —
     /// not the directory itself, not a same-named directory at another depth,
@@ -5734,6 +5839,7 @@ mod tests {
             roots.project_root(),
             None,
             None,
+            None,
             false,
             &Arc::new(Types::new()),
         );
@@ -6010,6 +6116,7 @@ mod tests {
             &SchemaLock::Off,
             None,
             roots.project_root(),
+            None,
             None,
             None,
             false,

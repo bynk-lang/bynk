@@ -1,0 +1,32 @@
+suite shop.orders
+
+// #2608: each case's database starts with the migrations applied.
+
+case "a unit database starts migrated and seeded" {
+	let rows <- listing.call()
+	expect rows == Ok([Order { id: "seed", total: 1, note: "it's seeded" }])
+}
+
+case "a migration's constraint holds" {
+	let bad <- save.call("a", -1, "")
+	expect bad is Err(Constraint(_))
+	let ok <- save.call("a", 2, "two")
+	expect ok == Ok(SqlRun { changes: 1, lastRowId: 2 })
+}
+
+case "each case gets a fresh migrated database" {
+	let rows <- listing.call()
+	expect rows == Ok([Order { id: "seed", total: 1, note: "it's seeded" }])
+}
+
+case "an HTTP write lands in the migrated table" {
+	let r <- api.POST("/orders/:id", "x") by Visitor
+	expect r is Created("x")
+	let again <- api.POST("/orders/:id", "seed") by Visitor
+	expect again is Conflict(_)
+}
+
+case "an integration participant's database starts migrated" as integration {
+	let rows <- listing.call()
+	expect rows == Ok([Order { id: "seed", total: 1, note: "it's seeded" }])
+}

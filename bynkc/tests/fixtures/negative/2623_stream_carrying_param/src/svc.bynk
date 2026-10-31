@@ -1,0 +1,12 @@
+context svc
+
+// #2623: a stream-carrying record, reached through a list and another record,
+// can't be a handler's parameter.
+type Download = { contentType: String, body: Stream[Bytes] }
+type Shelf = { name: String, latest: Download }
+
+service s {
+	on call(shelves: List[Shelf]) -> Effect[Int] {
+		Effect.pure(shelves.length())
+	}
+}

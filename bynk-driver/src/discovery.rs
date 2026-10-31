@@ -109,6 +109,19 @@ pub fn list_embed_folder(
     })
 }
 
+/// P4b (#2608): the project's `migrations/` folder, listed as
+/// [`list_asset_folder`] lists `assets/`, for `CompileOptions::migration_files`.
+pub fn list_migration_folder(
+    project_root: &Path,
+) -> Result<bynk_emit::project::assets::AssetFolder, DiscoveryError> {
+    bynk_emit::project::assets::AssetFolder::migrations_on_disk(project_root).map_err(|source| {
+        DiscoveryError {
+            path: project_root.join(bynk_emit::project::assets::PROJECT_MIGRATIONS_DIR),
+            source,
+        }
+    })
+}
+
 /// Walk `root` for every `.bynk` file (skipping `excludes` and hidden
 /// directories, mirroring `bynk-emit`'s former `discover_bynk_files` exactly)
 /// and read each one's content. Keys are the same literal (non-canonicalised)

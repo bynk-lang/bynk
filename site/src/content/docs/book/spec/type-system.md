@@ -354,3 +354,14 @@ single exception to "never stored": it may be stored, but **only** in
 `Query`, and `Connection` are additionally **not value-comparable** with `==`/`!=`
 (`bynk.types.stream_not_comparable` / there is no query equality /
 `bynk.types.held_not_comparable`).
+
+A `Stream[T]` MAY appear in a **capability operation's** parameters and result,
+since every provider runs in the caller's isolate and nothing in the signature is
+serialised (#2623), as a `bynk.crypto` key may. A `Stream` MAY also be a
+**record field or sum payload**. The declaring type, and any type that reaches it
+through a field, payload, container or generic argument, is then
+**stream-carrying**: it is confined exactly as `Stream` is, rejected at each
+serialisable or boundary-crossing *use* with `bynk.types.stream_at_boundary`, and
+has no JSON codec (`bynk.types.json_uncodable`). A stream is **single-pass**:
+traversing it a second time faults. Other non-boundary types are still rejected
+in a record field where it is declared.
