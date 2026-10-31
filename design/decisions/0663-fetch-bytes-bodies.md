@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: "`bynk.Fetch` gains `receiveBytes(req, options)` and `sendBytes(req, body, options)`, which return a `BytesResponse` whose `body` is `Bytes`, so binary downloads and uploads keep every byte (both experimental). `FetchError` gains `InvalidBody`: two bodies, or a body on a `Get` or `Head`, is refused with nothing sent. That includes `send` and `sendWith`, where a `Get` or `Head` with a body used to come back as `Err(Network)` (standard-library K5b, [#2604](https://github.com/bynk-lang/bynk/issues/2604))"
----
+# 0663 — Fetch byte bodies as one operation per direction, and InvalidBody
 
-## ADR: fetch-bytes-bodies
-title: Fetch byte bodies as one operation per direction, and InvalidBody
-summary: `Fetch.receiveBytes` and `Fetch.sendBytes` carry `Bytes` bodies beside the text-only `send`, both returning a `BytesResponse`; `FetchError.InvalidBody` refuses two bodies or a body on `Get`/`Head` before anything is sent, on every Fetch operation
+- **Status:** Accepted (v0.449)
 
 **Context.** `bynk.Fetch` carried only text. `Request.body` is an
 `Option[String]`, and the bindings read every response with `res.text()`,

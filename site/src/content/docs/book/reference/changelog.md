@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.448**.
+written against **v0.449**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.449.0** | "`bynk.Fetch` gains `receiveBytes(req, options)` and `sendBytes(req, body, options)`, which return a `BytesResponse` whose `body` is `Bytes`, so binary downloads and uploads keep every byte (both experimental). `FetchError` gains `InvalidBody`: two bodies, or a body on a `Get` or `Head`, is refused with nothing sent. That includes `send` and `sendWith`, where a `Get` or `Head` with a body used to come back as `Err(Network)` (standard-library K5b, [#2604](https://github.com/bynk-lang/bynk/issues/2604))" |
 | **v0.448.0** | "Bynk's minimum Node.js version is now 22.13. `bynk.cloudflare` gains `D1`, a D1 (SQLite) database as an instance-only derived capability (`capability Orders = D1`) with `all`, `first`, `run` and `batch` over SQL text and positional `SqlValue` parameters; rows come back as JSON text for `Json.decode`, blobs as base64, and every failure is a `SqlError` value (`Constraint` or `Failed`), never a fault; `bynk deploy` creates each database, records its minted id in the ledger and binds it, and tests run on in-memory SQLite (standard-library P4a, [#2602](https://github.com/bynk-lang/bynk/issues/2602))" |
 | **v0.447.0** | "`String` gains `matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex` and `splitRegex`, each over a string-literal pattern checked at compile time exactly as a `Matches` pattern is (syntax and ReDoS), with leading inline `(?i)`/`(?m)`/`(?s)` flags; a non-literal pattern is `bynk.types.regex_not_literal` (standard-library K6c, [#2600](https://github.com/bynk-lang/bynk/issues/2600))" |
 | **v0.446.0** | "`Int` gains `div` (floor), `rem` (the remainder of `/`), `mod` (the remainder of `div`, taking the divisor's sign) and an exact `pow`, each faulting on a zero divisor or a result past the safe range; `Float` gains `sqrt`, `pow`, `exp`, `ln`, `log10`, `log2`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan` and `atan2`, and `Float.pi()`/`Float.e()` (standard-library K6b, [#2598](https://github.com/bynk-lang/bynk/issues/2598))" |
