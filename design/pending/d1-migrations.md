@@ -77,7 +77,11 @@ semantics, and doesn't touch SQL.
   - `bynk.d1.migration_name` (error): a misnamed or misplaced file, or a
     repeated number;
   - `bynk.d1.migration_unreadable` (error): a file that can't be read or isn't
-    UTF-8;
+    UTF-8, or a symbolic link, which isn't followed. Unlike `assets/`, where an
+    unlisted link is skipped quietly, a skipped migration would be a schema
+    change that never runs, so it is reported;
+
+  Hidden files and directories, and `~` backups, are ignored.
   - `bynk.d1.migrations_unused` (warning): a directory no instance owns,
     usually a renamed capability.
 

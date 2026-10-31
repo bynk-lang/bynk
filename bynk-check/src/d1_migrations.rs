@@ -27,12 +27,12 @@ pub struct MigrationFile {
     pub sql: String,
 }
 
-/// Whether the listed `key` is a hidden file (`.DS_Store`, an editor's
-/// `.0001_create.sql.swp`) or an editor backup (`0001_create.sql~`), which the
-/// folder holds without meaning to: it's neither checked nor copied.
+/// Whether the listed `key` is hidden (`.DS_Store`, an editor's
+/// `.0001_create.sql.swp`, anything under a `.archive/` directory) or an
+/// editor backup (`0001_create.sql~`), which the folder holds without meaning
+/// to: it's neither checked nor copied.
 pub fn is_ignored(key: &str) -> bool {
-    let name = key.rsplit('/').next().unwrap_or(key);
-    name.starts_with('.') || name.ends_with('~')
+    key.split('/').any(|part| part.starts_with('.')) || key.ends_with('~')
 }
 
 /// Every declared database's migrations, in order, keyed by database name.
@@ -255,11 +255,53 @@ mod tests {
             "migrations/shop-orders/.0001_create.sql.swp",
             "migrations/shop-orders/0001_create.sql~",
             "migrations/.DS_Store",
+            "migrations/shop-orders/.archive/0001_old.sql",
+            "migrations/.trash/0001_create.sql",
         ] {
             assert!(is_ignored(key), "{key}");
         }
         assert!(!is_ignored("migrations/shop-orders/0001_create.sql"));
         assert!(!is_ignored("migrations/README.md"));
+    }
+
+    /// Review of #2609: a listed entry whose read is refused (a symbolic
+    /// link, which `migrations_on_disk` lists unfollowed) is reported rather
+    /// than dropped, and nothing of that database's later files is lost.
+    #[test]
+    fn a_refused_read_is_reported_not_dropped() {
+        let files = [
+            "migrations/shop-orders/0001_init.sql",
+            "migrations/shop-orders/0002_linked.sql",
+            "migrations/shop-orders/.archive/0001_old.sql",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        let folder = bynk_project::assets::AssetFolder::new(
+            files,
+            std::sync::Arc::new(|key: &str| {
+                if key.ends_with("linked.sql") {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "not a regular file",
+                    ))
+                } else {
+                    Ok(b"CREATE TABLE t (id INTEGER);".to_vec())
+                }
+            }),
+        );
+        let mut errors = ErrorSink::new();
+        let out = phase_d1_migrations(Some(&folder), &["shop-orders".to_string()], &mut errors);
+        let names: Vec<&str> = out["shop-orders"].iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["0001_init.sql"]);
+        let all = errors.into_all();
+        let categories: Vec<&str> = all.iter().map(|e| e.error.category).collect();
+        assert_eq!(categories, ["bynk.d1.migration_unreadable"]);
+        assert!(
+            all[0].error.message.contains("0002_linked.sql"),
+            "{}",
+            all[0].error.message
+        );
     }
 
     #[test]

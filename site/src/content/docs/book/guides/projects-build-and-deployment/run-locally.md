@@ -130,8 +130,9 @@ its [migrations](/book/reference/bynk-capabilities/#schema-migrations) with
 its state, including a `--persist-to` you pass. A migration file you add while
 it serves is applied when you save it. One that fails is reported, and the
 session keeps serving. Editing a file that has already been applied changes
-nothing, because a migration runs once, by name, and `bynk dev` says so: add
-a new file instead. With `-- --remote` nothing is applied.
+nothing, because a migration runs once, by name: add a new file instead.
+`bynk dev` points out such an edit only for a file it applied in the same
+session; after a restart it can't tell. With `-- --remote` nothing is applied.
 
 ## Debugging the workers (`--inspect`)
 

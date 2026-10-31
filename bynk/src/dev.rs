@@ -654,6 +654,21 @@ pub fn run(
         }
     }
 
+    // P4b (#2608): each served Worker's local D1 databases get their
+    // migrations before it serves. Never with `--remote`: that database is a
+    // real one, and only `bynk deploy` changes it. Nothing is spawned yet, so
+    // a signal during a slow apply needs no reaping.
+    let mut applied = MigrationsSeen::default();
+    if !remote {
+        apply_local_migrations(
+            &probe.provenance,
+            &workers_dir,
+            &serving,
+            &opts.wrangler_args,
+            &mut applied,
+        );
+    }
+
     // Inherited stdio (the default) keeps every session interactive. The driver
     // and the wranglers share the terminal's foreground process group, so a
     // Ctrl-C SIGINT reaches them all — we must not bail before reaping; we reap
@@ -665,20 +680,6 @@ pub fn run(
     // Installed before the spawns, so there is no window in which a child is
     // up and the driver still dies of the default action; the children
     // themselves get the default back at `exec`.
-    // P4b (#2608): each served Worker's local D1 databases get their
-    // migrations before it serves. Never with `--remote`: that database is a
-    // real one, and only `bynk deploy` changes it.
-    let remote = opts.wrangler_args.iter().any(|arg| arg == "--remote");
-    let mut applied = MigrationsSeen::default();
-    if !remote {
-        apply_local_migrations(
-            &probe.provenance,
-            &workers_dir,
-            &serving,
-            &opts.wrangler_args,
-            &mut applied,
-        );
-    }
     crate::stop::install();
     let rewriter = std::sync::Arc::new(crate::logs::Rewriter::new(&build_dir));
     let mut children: Vec<(String, Served)> = Vec::new();

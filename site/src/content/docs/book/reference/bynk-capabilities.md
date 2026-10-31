@@ -682,13 +682,16 @@ The database records which have run in its own `d1_migrations` table, so a
 file that has already been applied is never applied again, even if you edit it.
 To change the schema, add a new file. Neither D1 nor Bynk has down migrations.
 
-The build checks the folder. It skips hidden files (`.DS_Store`, an editor's
-swap file) and editor backups ending in `~`, and copies only what it checked:
+The build checks the folder. It skips hidden files and directories
+(`.DS_Store`, an editor's swap file, a `.archive/`) and editor backups ending
+in `~`, and copies only what it checked:
 
 - A file that isn't `NNNN_<name>.sql`, isn't directly in a database's
   directory, or shares its number with another is
   `bynk.d1.migration_name`.
 - A file that can't be read, or isn't UTF-8, is `bynk.d1.migration_unreadable`.
+  So is a symbolic link: links aren't followed, and a skipped migration would
+  be a schema change that never runs.
 - A directory that matches no `D1` instance is the warning
   `bynk.d1.migrations_unused`. That usually means a capability was renamed,
   and a renamed capability is a new, empty database.
