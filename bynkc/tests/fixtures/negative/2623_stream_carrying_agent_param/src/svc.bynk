@@ -1,0 +1,14 @@
+context svc
+
+// #2623: a stream-carrying record can't cross an agent call.
+type Download = { contentType: String, body: Stream[Bytes] }
+
+agent Keeper {
+	key id: String
+
+	store count: Cell[Int]
+
+	on call(d: Download) -> Effect[Int] {
+		Effect.pure(1)
+	}
+}

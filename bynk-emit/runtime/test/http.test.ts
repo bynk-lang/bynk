@@ -634,6 +634,14 @@ test("responseToHttpResult: a 200 reads as Ok, whether or not its body is JSON",
     id,
   );
   assert.deepEqual(await responseToHttpResult(streamed, asString), { tag: "Ok", value: "hello, world" });
+  // A 200 that says it is JSON but doesn't parse still fails.
+  await assert.rejects(
+    responseToHttpResult(
+      new Response("{broken", { status: 200, headers: { "content-type": "application/json; charset=utf-8" } }),
+      asString,
+    ),
+    SyntaxError,
+  );
 });
 
 // #2341 (decision C): a router rejection rendered through `on rejected`.

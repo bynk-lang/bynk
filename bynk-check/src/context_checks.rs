@@ -4850,6 +4850,14 @@ pub fn validate_store_field_value_types(
     }
 }
 
+/// The `what` labels of the boundary positions whose rule differs by position
+/// (a `Stream` or a `bynk.crypto` key passes through some). [`reject_fn_types`]
+/// decides by them, so every caller names its position through these rather
+/// than a literal, and a reworded label can't silently change a check.
+pub const CAPABILITY_SIGNATURE: &str = "a capability operation signature";
+pub const RECORD_FIELD: &str = "a record field";
+pub const SUM_PAYLOAD: &str = "a sum-variant payload";
+
 pub fn reject_fn_types(
     r: &TypeRef,
     what: &str,
@@ -5054,8 +5062,7 @@ pub fn reject_fn_types(
         // A capability operation is where a key is meant to flow (`Crypto.sign`
         // takes one), in-process, so its signature is exempt.
         TypeRef::Named(id)
-            if what != "a capability operation signature"
-                && is_crypto_key_type(&id.name, types) =>
+            if what != CAPABILITY_SIGNATURE && is_crypto_key_type(&id.name, types) =>
         {
             errors.push(
                 CompileError::new(
@@ -5092,10 +5099,7 @@ pub fn reject_fn_types(
 /// signature is serialised; a record field or sum payload makes its type
 /// stream-carrying, which is then checked where the type is used.
 fn stream_passes(what: &str) -> bool {
-    matches!(
-        what,
-        "a capability operation signature" | "a record field" | "a sum-variant payload"
-    )
+    [CAPABILITY_SIGNATURE, RECORD_FIELD, SUM_PAYLOAD].contains(&what)
 }
 
 /// K-streams (#2623): `bynk.types.stream_at_boundary` for a type that carries

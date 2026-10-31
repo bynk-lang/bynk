@@ -86,7 +86,9 @@ function sseResponse(stream: AsyncIterable<string>): Response {
 // K-streams (#2623): mark `stream` as read, or throw if it already was. A
 // stream is single-pass; the compiler's inline stream ops set the same mark
 // (`STREAM_CLAIM` in `bynk-emit/src/emitter/lower.rs`), under a registered
-// symbol so it holds across modules.
+// symbol so it holds across modules. Emitted code never imports this: it is
+// exported for the platform bindings that will hand out streams (Fetch, K5c;
+// R2, P5b) and for the runtime's own tests.
 const STREAM_READ = Symbol.for("bynk.stream.read");
 export function claimStream(stream: object): void {
   const mark = stream as Record<symbol, boolean>;
@@ -326,15 +328,22 @@ export async function responseToHttpResult<T>(
     // A 201 may be a `RawCreated` (#2403, L6), and a 200 a `Raw` or a
     // `RawStreamed` (K-streams, #2623), whose body need not be JSON: it still
     // reads as `Created` or `Ok`, with the body's text as the value when it
-    // does not parse.
+    // does not parse. A 200 or 202 that says it is JSON must parse, so a
+    // handler whose JSON breaks still fails its case.
     case "Ok":
     case "Accepted":
     case "Created": {
       const text = await response.text();
+      const saysJson =
+        (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase() ===
+        "application/json";
       let json: JsonValue;
       try {
         json = JSON.parse(text) as JsonValue;
-      } catch {
+      } catch (e) {
+        if (tag !== "Created" && saysJson) {
+          throw e;
+        }
         return { tag, value: text as unknown as T };
       }
       const decoded = deserialiseValue(json);
