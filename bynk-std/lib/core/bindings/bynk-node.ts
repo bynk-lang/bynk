@@ -122,32 +122,33 @@ const readBytes = async (res: globalThis.Response): Promise<Uint8Array> => new U
 // `null` body (`Head`, 204, 304) is an empty stream.
 const readStream = (res: globalThis.Response): AsyncIterable<Uint8Array> => {
   const body = res.body;
-  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  // Structural, so the binding names only globals every target declares.
+  let reader: { read(): Promise<{ done: boolean; value?: Uint8Array }>; cancel(): Promise<void> } | undefined;
   let finished = body === null;
-  const iterator: AsyncIterator<Uint8Array> = {
-    async next(): Promise<IteratorResult<Uint8Array>> {
+  const iterator = {
+    async next() {
       if (finished || body === null) {
-        return { done: true, value: undefined };
+        return { done: true as const, value: undefined };
       }
       reader ??= body.getReader();
       try {
         const next = await reader.read();
         if (next.done) {
           finished = true;
-          return { done: true, value: undefined };
+          return { done: true as const, value: undefined };
         }
-        return { done: false, value: next.value };
+        return { done: false as const, value: next.value as Uint8Array };
       } catch (e) {
         finished = true;
         throw e;
       }
     },
-    async return(): Promise<IteratorResult<Uint8Array>> {
+    async return() {
       if (!finished && body !== null) {
         finished = true;
         (reader !== undefined ? reader.cancel() : body.cancel()).catch(() => {});
       }
-      return { done: true, value: undefined };
+      return { done: true as const, value: undefined };
     },
   };
   return { [Symbol.asyncIterator]: () => iterator };
