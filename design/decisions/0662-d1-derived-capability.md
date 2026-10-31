@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes
-changelog: "Bynk's minimum Node.js version is now 22.13. `bynk.cloudflare` gains `D1`, a D1 (SQLite) database as an instance-only derived capability (`capability Orders = D1`) with `all`, `first`, `run` and `batch` over SQL text and positional `SqlValue` parameters; rows come back as JSON text for `Json.decode`, blobs as base64, and every failure is a `SqlError` value (`Constraint` or `Failed`), never a fault; `bynk deploy` creates each database, records its minted id in the ledger and binds it, and tests run on in-memory SQLite (standard-library P4a, [#2602](https://github.com/bynk-lang/bynk/issues/2602))"
----
+# 0662 — D1 databases as derived capabilities with two-step rows and errors as values
 
-## ADR: d1-derived-capability
-title: D1 databases as derived capabilities with two-step rows and errors as values
-summary: Cloudflare's D1 binding as an instance-only `D1` whose four operations take SQL text and positional `SqlValue` parameters, return rows as JSON text for the caller's `Json.decode` (blobs as base64), and give a `SqlError` value for every failure; `bynk deploy` creates the database, records the id Cloudflare mints in the ledger, and never deletes one
+- **Status:** Accepted (v0.448)
 
 **Context.** A Bynk Worker had no relational store: agents hold per-key state,
 KV and R2 hold values by key. The standard-library track lists D1 as wanted
