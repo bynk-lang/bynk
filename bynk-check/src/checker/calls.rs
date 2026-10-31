@@ -1268,6 +1268,14 @@ pub(crate) fn check_static_call(
                 &format!("{}.{}", type_name.name, method.name),
             ),
         }
+        // P4c (#2628): a `D1` statement's SQL is a literal.
+        d1::check_sql_argument(
+            cap.derived_from.as_ref(),
+            &type_name.name,
+            &method.name,
+            args,
+            ctx,
+        );
         if op.params.len() != args.len() {
             ctx.errors.push(CompileError::new(
                 "bynk.capability.op_arity",

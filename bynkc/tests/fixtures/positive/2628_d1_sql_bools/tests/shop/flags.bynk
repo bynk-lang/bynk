@@ -1,0 +1,34 @@
+suite shop.flags
+
+// #2628: the unit double is real SQLite, so flags come back as `0`/`1`.
+
+case "flag columns decode as Bool" {
+	let ok <- setup.call()
+	expect ok
+	let _ <- save.call("a", true, Some(false))
+	let _ <- save.call("b", false, None)
+	let rows <- listing.call()
+	expect rows == Ok([
+		Flag { id: "a", active: true, seen: Some(false) },
+		Flag { id: "b", active: false, seen: None },
+	])
+	let a <- lookup.call("a")
+	expect a == Some(Flag { id: "a", active: true, seen: Some(false) })
+}
+
+case "a flag that is not 0 or 1 does not decode" {
+	let _ <- setup.call()
+	let decoded <- strange.call("x")
+	expect decoded == false
+}
+
+case "a batch built with map runs every statement" {
+	let _ <- setup.call()
+	let ran <- stock.call([Item { id: "a", qty: 1 }, Item { id: "b", qty: 2 }])
+	expect ran == Ok(2)
+	let rows <- listing.call()
+	expect rows == Ok([
+		Flag { id: "a", active: false, seen: None },
+		Flag { id: "b", active: false, seen: None },
+	])
+}

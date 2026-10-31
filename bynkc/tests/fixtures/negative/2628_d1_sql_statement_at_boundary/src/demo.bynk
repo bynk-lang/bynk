@@ -1,0 +1,30 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+// #2628: a `SqlStatement` from outside would carry SQL that was never a
+// literal, so it never crosses a boundary or is stored.
+type Job = { statement: SqlStatement }
+
+service exec {
+  on call(s: SqlStatement) -> Effect[Result[List[SqlRun], SqlError]] given Orders {
+    Orders.batch([s])
+  }
+}
+
+service fromText {
+  on call(text: String) -> Effect[Bool] given Orders {
+    match Json.decode[List[SqlStatement]](text) {
+      Ok(_) => true
+      Err(_) => false
+    }
+  }
+}
+
+service toText {
+  on call() -> Effect[String] {
+    Json.encode(SqlStatement { sql: "SELECT 1", params: [] })
+  }
+}

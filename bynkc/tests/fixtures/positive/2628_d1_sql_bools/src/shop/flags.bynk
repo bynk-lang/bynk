@@ -1,0 +1,88 @@
+context shop.flags
+
+// #2628: `Json.decodeSql` reads SQLite's `0`/`1` flag columns as `Bool`, and
+// every statement's SQL is a literal, its data bound as `SqlValue`s.
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Flags = D1
+
+type Item = { id: String, qty: Int }
+
+type Flag = { id: String, active: Bool, seen: Option[Bool] }
+
+service setup {
+	on call() -> Effect[Bool] given Flags {
+		let made <- Flags.run("CREATE TABLE IF NOT EXISTS flags (id TEXT PRIMARY KEY, active INTEGER NOT NULL, seen INTEGER, qty INTEGER NOT NULL DEFAULT 0)", [])
+		match made {
+			Ok(_) => true
+			Err(_) => false
+		}
+	}
+}
+
+service save {
+	on call(id: String, active: Bool, seen: Option[Bool]) -> Effect[Result[SqlRun, SqlError]] given Flags {
+		let s = match seen {
+			Some(b) => Boolean(b)
+			None => Null
+		}
+		Flags.run("INSERT INTO flags (id, active, seen) VALUES (?1, ?2, ?3)", [Text(id), Boolean(active), s])
+	}
+}
+
+service listing {
+	on call() -> Effect[Result[List[Flag], String]] given Flags {
+		let rows <- Flags.all("SELECT id, active, seen FROM flags ORDER BY id", [])
+		match rows {
+			Ok(text) => match Json.decodeSql[List[Flag]](text) {
+				Ok(flags) => Ok(flags)
+				Err(_) => Err("rows did not decode")
+			}
+			Err(_) => Err("query failed")
+		}
+	}
+}
+
+service lookup {
+	on call(id: String) -> Effect[Option[Flag]] given Flags {
+		let row <- Flags.first("SELECT id, active, seen FROM flags WHERE id = ?1", [Text(id)])
+		match row {
+			Ok(Some(text)) => match Json.decodeSql[Flag](text) {
+				Ok(flag) => Some(flag)
+				Err(_) => None
+			}
+			_ => None
+		}
+	}
+}
+
+// A flag column holding anything but `0`/`1` still fails the decode.
+service strange {
+	on call(id: String) -> Effect[Bool] given Flags {
+		let _ <- Flags.run("INSERT INTO flags (id, active) VALUES (?1, 2)", [Text(id)])
+		let row <- Flags.first("SELECT id, active, seen FROM flags WHERE id = ?1", [Text(id)])
+		match row {
+			Ok(Some(text)) => match Json.decodeSql[Flag](text) {
+				Ok(_) => true
+				Err(_) => false
+			}
+			_ => false
+		}
+	}
+}
+
+// A batch built with `map`: each statement's SQL is still a literal.
+service stock {
+	on call(items: List[Item]) -> Effect[Result[Int, SqlError]] given Flags {
+		let ran <- Flags.batch(items.map((i) => SqlStatement {
+			sql: "INSERT INTO flags (id, active, qty) VALUES (?1, 0, ?2)",
+			params: [Text(i.id), Integer(i.qty)]
+		}))
+		match ran {
+			Ok(runs) => Ok(runs.length())
+			Err(e) => Err(e)
+		}
+	}
+}

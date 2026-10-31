@@ -1,0 +1,7 @@
+# exact
+bynk.types.sql_not_literal the SQL of `Orders.all` must be a string literal
+bynk.types.sql_not_literal the SQL of `Orders.first` must be a string literal
+bynk.types.sql_not_literal the SQL of `Orders.run` must be a string literal
+bynk.types.sql_not_literal a `SqlStatement`'s `sql` must be a string literal
+bynk.types.sql_not_literal a `SqlStatement`'s `sql` must be a string literal
+bynk.types.sql_not_literal a `SqlStatement`'s `sql` must be a string literal

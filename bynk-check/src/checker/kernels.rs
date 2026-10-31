@@ -2610,6 +2610,13 @@ pub(crate) fn check_json_static(
                 ctx.errors.push(recursive_generic_error(&rec, args[0].span));
                 return None;
             }
+            if super::d1::carries_statement(t, &ctx.input.types, tys) {
+                ctx.errors.push(super::d1::statement_at_boundary(
+                    args[0].span,
+                    "a `Json` codec target",
+                ));
+                return None;
+            }
             if !json_codable(t, &ctx.input.types, tys) {
                 ctx.errors.push(
                     CompileError::new(
@@ -2626,14 +2633,17 @@ pub(crate) fn check_json_static(
             }
             Some(tys.intern(Ty::Base(BaseType::String)))
         }
-        "decode" => {
+        // P4c (#2628): `decodeSql` is `decode` over a SQLite row, whose
+        // `Bool` columns arrive as `0`/`1`.
+        "decode" | "decodeSql" => {
+            let op = method.name.as_str();
             if !arity1(ctx) {
                 return None;
             }
             check_arg(
                 &args[0],
                 tys.intern(Ty::Base(BaseType::String)),
-                "the `Json.decode` input",
+                &format!("the `Json.{op}` input"),
                 ctx,
             );
             let t = match type_args {
@@ -2647,7 +2657,7 @@ pub(crate) fn check_json_static(
                             CompileError::new(
                                 "bynk.generics.uninferable_type_arg",
                                 span,
-                                "cannot infer the target type of `Json.decode`",
+                                format!("cannot infer the target type of `Json.{op}`"),
                             )
                             .with_note(
                                 "give it explicitly (`Json.decode[Order](s)`) or use the \
@@ -2662,7 +2672,7 @@ pub(crate) fn check_json_static(
                         "bynk.generics.type_arg_mismatch",
                         span,
                         format!(
-                            "`Json.decode` takes exactly one type argument, got {}",
+                            "`Json.{op}` takes exactly one type argument, got {}",
                             type_args.len()
                         ),
                     ));
@@ -2671,6 +2681,30 @@ pub(crate) fn check_json_static(
             };
             if let Some(rec) = first_recursive_generic(t, &ctx.input.types, tys) {
                 ctx.errors.push(recursive_generic_error(&rec, span));
+                return None;
+            }
+            if super::d1::carries_statement(t, &ctx.input.types, tys) {
+                ctx.errors.push(super::d1::statement_at_boundary(
+                    span,
+                    "a `Json` codec target",
+                ));
+                return None;
+            }
+            if op == "decodeSql"
+                && let Err(why) = super::d1::check_row_shape(t, &ctx.input.types, tys)
+            {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.types.sql_row_shape",
+                        span,
+                        format!("`Json.decodeSql` decodes SQL rows, but {why}"),
+                    )
+                    .with_note(
+                        "the target is a record whose fields are `Int`, `Float`, `String`, \
+                         `Bool` or `Bytes` (or a refined or opaque type over one, or an \
+                         `Option` of either), or a `List` of such records",
+                    ),
+                );
                 return None;
             }
             if !json_codable(t, &ctx.input.types, tys) || t == tys.intern(Ty::Unit) {

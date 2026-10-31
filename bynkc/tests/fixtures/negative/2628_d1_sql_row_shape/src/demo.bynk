@@ -1,0 +1,22 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+// #2628: `Json.decodeSql` decodes flat SQL rows.
+type Money = { cents: Int }
+type Order = { id: String, total: Money }
+type Tags = { id: String, tags: List[String] }
+type Status = enum { Open, Closed }
+
+service probe {
+  on call(text: String) -> Effect[Bool] {
+    let a = Json.decodeSql[Order](text)
+    let b = Json.decodeSql[List[Tags]](text)
+    let c = Json.decodeSql[Status](text)
+    let d = Json.decodeSql[List[List[Money]]](text)
+    let e = Json.decodeSql[Money](text)
+    a is Ok(_) && b is Ok(_) && c is Ok(_) && d is Ok(_) && e is Ok(_)
+  }
+}

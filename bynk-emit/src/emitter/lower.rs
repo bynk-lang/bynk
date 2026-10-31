@@ -3366,7 +3366,7 @@ fn lower_json_codec_call(
                 bynk_ts::print_expr(&serialisation::serialise_expr(&tref, &v, cx.runtime_use()));
             return Some(pre.finish(format!("globalThis.JSON.stringify({ser})")));
         }
-        if method.name == "decode"
+        if matches!(method.name.as_str(), "decode" | "decodeSql")
             && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
             && let Some(tref) = ty_to_type_ref(t, tys)
         {
@@ -3410,13 +3410,18 @@ fn lower_json_codec_call(
                 "$",
                 cx.runtime_use(),
             ));
+            let sql_bools = if method.name == "decodeSql" {
+                sql_bool_pass(t, cx)
+            } else {
+                String::new()
+            };
             let arg = pre.lower(&args[0], cx);
             return Some(pre.finish(format!(
                 "((__s: string): Result<{ts}, JsonError> => {{ \
                  let __j: __JsonValue; \
                  try {{ __j = globalThis.JSON.parse(__s) as __JsonValue; }} \
                  catch (__e) {{ return Err({{ kind: \"Malformed\", path: \"$\", message: String(__e) }}); }} \
-                 const __r = {des}; \
+                 {sql_bools}const __r = {des}; \
                  if (__r.tag === \"Ok\") return Ok(__r.value as {ts}); \
                  const __be = __r.error; \
                  return Err({{ kind: __be.kind, \
@@ -3427,6 +3432,40 @@ fn lower_json_codec_call(
     }
     let text: Option<String> = None;
     text.map(|expr| pre.finish(expr))
+}
+
+/// P4c (#2628): `Json.decodeSql[T]`'s pass over the parsed rows before the
+/// ordinary codec runs. SQLite has no boolean, so a flag column arrives as
+/// `0`/`1`; at each `Bool` field of the row record (the checker has confined
+/// `T` to a row or a `List` of one) exactly those two numbers become
+/// `false`/`true`. Anything else is left for the codec to accept or refuse,
+/// so every generated codec stays the one `Json.decode` uses. Empty when the
+/// row has no `Bool` field.
+fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> String {
+    let tys = cx.commons().tys();
+    let row = match &*tys.get(t) {
+        Ty::List(r) => *r,
+        _ => t,
+    };
+    let Ty::Named { name, .. } = &*tys.get(row) else {
+        return String::new();
+    };
+    let fields = bynk_check::checker::row_bool_fields(name, &cx.commons().types);
+    if fields.is_empty() {
+        return String::new();
+    }
+    let keys = fields
+        .iter()
+        .map(|f| format!("\"{f}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "const __flags = (__o: __JsonValue): void => {{ \
+         if (__o === null || typeof __o !== \"object\" || globalThis.Array.isArray(__o)) return; \
+         const __row = __o as {{ [k: string]: __JsonValue }}; \
+         for (const __k of [{keys}]) {{ if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; }} }}; \
+         if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); "
+    )
 }
 
 /// v0.6 cross-context service call: receiver is an alias or the dotted name

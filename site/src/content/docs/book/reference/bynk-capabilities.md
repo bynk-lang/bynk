@@ -615,21 +615,33 @@ Statements are SQL text with positional parameters, `?1`, `?2` and so on. Each
 parameter is a `SqlValue`, named by SQLite storage class: `Null`,
 `Integer(Int)`, `Real(Float)`, `Text(String)`, `Blob(Bytes)` or
 `Boolean(Bool)`, which binds as `1` or `0`. A value is always bound, never
-spliced into the text, so write `?1` and pass `Text(id)` rather than building
-the SQL from request data.
+spliced into the text.
 
-Rows come back as JSON text, which you decode with
-[`Json.decode`](/book/reference/types/#the-json-codec) into a record of your
-own:
+The SQL must be a string literal: the first argument of `all`, `first` and
+`run`, and the `sql` of every `SqlStatement`. An interpolated string, a
+variable or any other expression is `bynk.types.sql_not_literal`, so request
+data can't reach the SQL text: write `?1` and pass `Text(id)`. A long
+statement is one long literal, since there's no multi-line string literal.
+A `SqlStatement` stays in the code that built it: it can't be a service
+parameter or result, a record or event field, an agent store field or a `Json`
+target (`bynk.types.sql_statement_at_boundary`), because one that came from
+outside would carry SQL that was never a literal. Send the values instead and
+build the statement where it runs.
+
+Rows come back as JSON text, which you decode with `Json.decodeSql` into a
+record of your own. It's
+[`Json.decode`](/book/reference/types/#the-json-codec) for SQL rows: SQLite has
+no boolean, so a flag column arrives as `0` or `1`, and `Json.decodeSql` reads
+those two numbers as `false` and `true` at a `Bool` field:
 
 ```bynk,fragment
-type Order = { id: String, total: Int, paid: Int }
+type Order = { id: String, total: Int, paid: Bool }
 
 service api from http {
 	on GET("/orders/:id") (id: String) -> Effect[HttpResult[Order]] by Visitor given Orders {
 		let row <- Orders.first("SELECT id, total, paid FROM orders WHERE id = ?1", [Text(id)])
 		match row {
-			Ok(Some(text)) => match Json.decode[Order](text) {
+			Ok(Some(text)) => match Json.decodeSql[Order](text) {
 				Ok(order) => Ok(order)
 				Err(_) => ServerError("the order did not decode")
 			}
@@ -641,7 +653,7 @@ service api from http {
 ```
 
 - `all(sql, params)` gives every row as a JSON array of objects keyed by
-  column name, for `Json.decode[List[Row]]`.
+  column name, for `Json.decodeSql[List[Row]]`.
 - `first(sql, params)` gives the first row as one object, or `None` when there
   is none.
 - `run(sql, params)` executes a write and gives a `SqlRun { changes, lastRowId
@@ -656,11 +668,18 @@ foreign-key violation, which a handler answers (a duplicate key is typically a
 `Conflict`), or `Failed(message)` for anything else, with the database's
 message. `SqlError` is extensible, so a `match` over it needs a wildcard.
 
+`Json.decodeSql[T]`'s `T` is a row: a record whose fields are `Int`, `Float`,
+`String`, `Bool` or `Bytes`, a refined or opaque type over one, or an `Option`
+of either (`NULL` is `None`), or a `List` of such records. Anything else is
+`bynk.types.sql_row_shape`. Only `0` and `1` become booleans: a `Bool` column
+holding `2` still fails the decode. `Json.decode` itself is unchanged and
+still refuses `0`/`1` for a `Bool`, at every boundary.
+
 Three things about the JSON a row becomes:
 
 - A `BLOB` column arrives as standard base64, so a `Bytes` field decodes it.
-- SQLite has no boolean. A flag column arrives as `0` or `1`, which a `Bool`
-  field refuses, so declare the field `Int` and compare it with `1`.
+- A flag column arrives as `0` or `1`, which `Json.decodeSql` reads at a `Bool`
+  field.
 - An integer past ±2^53 cannot be represented exactly in JSON, so a field that
   reads one fails the decode rather than rounding.
 
