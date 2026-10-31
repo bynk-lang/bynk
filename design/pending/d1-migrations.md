@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, ts_writes
+probes: emit_diagnostics, ts_writes, diagnostic_coverage
 changelog: "`D1` databases get schema migrations: `migrations/<database>/NNNN_<name>.sql` in the project, copied beside each Worker's `wrangler.toml` and named by `migrations_dir`. `bynk deploy` applies pending ones before the push (a `d1 migrate` plan line), `bynk dev` applies them locally before serving and when one is added, and every test database starts with them applied. New diagnostics: `bynk.d1.migration_name`, `bynk.d1.migration_unreadable` and the warning `bynk.d1.migrations_unused` (standard-library P4b, [#2608](https://github.com/bynk-lang/bynk/issues/2608))"
 ---
 

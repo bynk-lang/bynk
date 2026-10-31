@@ -1,0 +1,2 @@
+bynk.d1.migration_unreadable
+migration `migrations/demo-orders/0001_latin1.sql` isn't UTF-8 text
