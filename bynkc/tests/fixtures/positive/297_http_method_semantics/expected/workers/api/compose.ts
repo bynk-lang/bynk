@@ -25,5 +25,8 @@ export function compose(env: Env) {
     async http_GET_logo() {
       return handlers.routes.http_GET_logo(deps);
     },
+    async http_GET_chunks() {
+      return handlers.routes.http_GET_chunks(deps);
+    },
   };
 }

@@ -2201,6 +2201,45 @@ pub(crate) fn check_http_variant(
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
             Some(tys.intern(Ty::HttpResult(t_ty)))
         }
+        // K-streams (#2623): `RawStreamed(body, contentType)` — `Raw`'s shape
+        // with a `Stream[Bytes]` body, streamed into the response.
+        HttpVariantPayload::RawStreamed => {
+            if args.len() != 2 {
+                ctx.errors.push(CompileError::new(
+                    "bynk.types.variant_arity",
+                    span,
+                    format!(
+                        "`HttpResult.{}` expects 2 arguments (a `Stream[Bytes]` body and a `String` content-type), but {} were given",
+                        variant.name,
+                        args.len(),
+                    ),
+                ));
+                return None;
+            }
+            let bytes = tys.intern(Ty::Base(BaseType::Bytes));
+            let stream = tys.intern(Ty::Stream(bytes));
+            let string = tys.intern(Ty::Base(BaseType::String));
+            for (arg, (want, what)) in args.iter().zip([
+                (stream, "a `Stream[Bytes]` body"),
+                (string, "a `String` content-type"),
+            ]) {
+                let got = type_of(arg, Some(want), ctx)?;
+                if !compatible(got, want, tys) {
+                    ctx.errors.push(CompileError::new(
+                        "bynk.types.argument_mismatch",
+                        arg.span,
+                        format!(
+                            "`HttpResult.{}` expects {what}, but got `{}`",
+                            variant.name,
+                            got.display(tys),
+                        ),
+                    ));
+                    return None;
+                }
+            }
+            let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
+            Some(tys.intern(Ty::HttpResult(t_ty)))
+        }
         // #2341 (L4): `RawError(status, body, contentType)`. The status is an
         // `ErrorStatus` name — one of the vocabulary's own 4xx/5xx variant
         // names, bare or qualified — resolved here to its number, so it is read

@@ -20,7 +20,7 @@ export const api = {
     return HttpResult.Ok("edge");
   },
   async http_GET_ticks(deps: {}): globalThis.Promise<HttpResult<void>> {
-    return HttpResult.Streaming((async function* (__s) { const __n = 2; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* () { for (const __e of ["a", "b"]) { yield __e; } })()));
+    return HttpResult.Streaming((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __n = 2; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* () { for (const __e of ["a", "b"]) { yield __e; } })()));
   },
   async http_POST_items(body: string, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Created(body);

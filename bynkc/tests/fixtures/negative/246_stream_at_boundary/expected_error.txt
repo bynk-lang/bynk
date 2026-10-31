@@ -1,1 +1,1 @@
-bynk.types.stream_at_boundary
+bynk.types.stream_at_boundary `Bad` cannot appear in an event field

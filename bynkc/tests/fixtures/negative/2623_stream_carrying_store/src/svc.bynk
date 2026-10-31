@@ -1,0 +1,15 @@
+context svc
+
+// #2623: a generic record whose own field is a stream carries one at every
+// instantiation, so it can't be kept in agent state.
+type Wrap[T] = { s: Stream[T] }
+
+agent Keeper {
+	key id: String
+
+	store kept: Cell[Option[Wrap[Int]]]
+
+	on call() -> Effect[Int] {
+		Effect.pure(1)
+	}
+}

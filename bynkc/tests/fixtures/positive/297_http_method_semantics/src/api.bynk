@@ -25,4 +25,12 @@ service routes from http {
   on GET("/logo") () -> Effect[HttpResult[()]] by v: Visitor {
     Raw(Bytes.fromUtf8("<svg/>"), "image/svg+xml")
   }
+
+  // K-streams (#2623): a raw body streamed chunk by chunk.
+  on GET("/chunks") () -> Effect[HttpResult[()]] by v: Visitor {
+    RawStreamed(
+      Stream.of([Bytes.fromUtf8("one,"), Bytes.fromUtf8(""), Bytes.fromUtf8("two,"), Bytes.fromUtf8("three")]),
+      "text/csv"
+    )
+  }
 }

@@ -31,6 +31,7 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
   Streaming: 200,
   Raw: 200,
   RawTagged: 200,
+  RawStreamed: 200,
   RawCreated: 201,
   Created: 201,
   Accepted: 202,
@@ -72,26 +73,65 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
 // this is a Web standard that runs unchanged on Workers and Node.
 function sseResponse(stream: AsyncIterable<string>): Response {
   const encoder = new TextEncoder();
-  // v0.139 (ADR 0162): a `pull` source with `highWaterMark: 0` makes the body
-  // lazy — the source stream is advanced only when a reader pulls, never
-  // eagerly at construction. So a `Streaming` `GET` answered as `HEAD` (whose
-  // `Response` body is discarded unread) never advances the source at all, and a
-  // real `GET` streams under the consumer's backpressure rather than buffering
-  // the whole stream up front. `cancel` returns the iterator so an abandoned
-  // read releases the source promptly.
+  const body = pullBody(stream, (value) => [
+    ...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)),
+    encoder.encode("\n"),
+  ]);
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
+  });
+}
+
+// K-streams (#2623): mark `stream` as read, or throw if it already was. A
+// stream is single-pass; the compiler's inline stream ops set the same mark
+// (`STREAM_CLAIM` in `bynk-emit/src/emitter/lower.rs`), under a registered
+// symbol so it holds across modules.
+const STREAM_READ = Symbol.for("bynk.stream.read");
+export function claimStream(stream: object): void {
+  const mark = stream as Record<symbol, boolean>;
+  if (mark[STREAM_READ]) {
+    throw new Error("bynk: a stream can be read only once");
+  }
+  mark[STREAM_READ] = true;
+}
+
+// A lazy response body over `stream`, each element written as the chunks
+// `encode` makes of it. The stream is claimed now: handing it to a response
+// consumes it, whether or not the body is ever read.
+// v0.139 (ADR 0162): a `pull` source with `highWaterMark: 0` makes the body
+// lazy — the source stream is advanced only when a reader pulls, never
+// eagerly at construction. So a streamed `GET` answered as `HEAD` never
+// advances the source at all, and a real `GET` streams under the consumer's
+// backpressure rather than buffering the whole stream up front. `cancel`
+// returns the iterator so an abandoned read releases the source promptly. A
+// throw from the source errors the body, aborting a response whose status is
+// already sent.
+function pullBody<T>(
+  stream: AsyncIterable<T>,
+  encode: (value: T) => readonly Uint8Array[],
+): ReadableStream<Uint8Array> {
+  claimStream(stream);
   const iterator = stream[Symbol.asyncIterator]();
-  const body = new ReadableStream<Uint8Array>(
+  return new ReadableStream<Uint8Array>(
     {
+      // An element that encodes to nothing (an empty chunk) is skipped
+      // here: a `pull` that enqueues nothing isn't called again.
       async pull(controller) {
-        const { value, done } = await iterator.next();
-        if (done) {
-          controller.close();
-          return;
+        for (;;) {
+          const { value, done } = await iterator.next();
+          if (done) {
+            controller.close();
+            return;
+          }
+          const chunks = encode(value);
+          for (const chunk of chunks) {
+            controller.enqueue(chunk);
+          }
+          if (chunks.length > 0) {
+            return;
+          }
         }
-        for (const line of value.split("\n")) {
-          controller.enqueue(encoder.encode(`data: ${line}\n`));
-        }
-        controller.enqueue(encoder.encode("\n"));
       },
       async cancel(reason) {
         await iterator.return?.(reason);
@@ -99,10 +139,6 @@ function sseResponse(stream: AsyncIterable<string>): Response {
     },
     { highWaterMark: 0 },
   );
-  return new Response(body, {
-    status: 200,
-    headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
-  });
 }
 
 export function httpResultToResponse<T>(
@@ -171,6 +207,14 @@ export function httpResultToResponse<T>(
         status: 200,
         headers: { "content-type": result.contentType, etag: result.etag },
       });
+    // K-streams (#2623): 200 with a raw body streamed chunk by chunk. No
+    // validator, whatever `weakEtag` says: the bytes can't be hashed without
+    // buffering them. An empty chunk is skipped, since it writes nothing.
+    case "RawStreamed":
+      return new Response(
+        pullBody(result.body, (chunk) => (chunk.byteLength === 0 ? [] : [chunk])),
+        { status: 200, headers: { "content-type": result.contentType } },
+      );
     // 201 with a raw body — `Raw`'s writer at the creation status (#2403, L6).
     // It answers a write, so it carries no validator, whatever `weakEtag` says.
     case "RawCreated":
@@ -222,7 +266,12 @@ export function httpResultToResponse<T>(
 // `Streaming` (`SSE`) `GET` answered as `HEAD` returns the stream's headers while
 // its `ReadableStream` is never started or drained. `content-length` is omitted
 // (the body is never materialised — permitted, §9.3.2 "MAY").
+//
+// K-streams (#2623): the body is cancelled rather than dropped, so a streamed
+// body's source is returned (`pullBody`'s `cancel`), releasing a platform
+// stream underneath it.
 export function headResponse(response: Response): Response {
+  response.body?.cancel().catch(() => {});
   return new Response(null, { status: response.status, headers: response.headers });
 }
 
@@ -274,16 +323,12 @@ export async function responseToHttpResult<T>(
 ): Promise<HttpResult<T>> {
   const tag = STATUS_TO_TAG[response.status] ?? "ServerError";
   switch (tag) {
+    // A 201 may be a `RawCreated` (#2403, L6), and a 200 a `Raw` or a
+    // `RawStreamed` (K-streams, #2623), whose body need not be JSON: it still
+    // reads as `Created` or `Ok`, with the body's text as the value when it
+    // does not parse.
     case "Ok":
-    case "Accepted": {
-      const json = (await response.json()) as JsonValue;
-      const decoded = deserialiseValue(json);
-      const value = (decoded.tag === "Ok" ? decoded.value : (json as unknown)) as T;
-      return { tag, value };
-    }
-    // A 201 may be a `RawCreated` (#2403, L6), whose body need not be JSON: it
-    // still reads as `Created`, with the body's text as the value when it does
-    // not parse.
+    case "Accepted":
     case "Created": {
       const text = await response.text();
       let json: JsonValue;

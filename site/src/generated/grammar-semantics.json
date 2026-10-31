@@ -903,7 +903,7 @@
   "method_call": [
     {
       "code": "bynk.types.json_uncodable",
-      "summary": "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, error builtins)."
+      "summary": "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, error builtins)."
     },
     {
       "code": "bynk.types.method_arity",

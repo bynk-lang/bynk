@@ -1,0 +1,48 @@
+suite files.store {
+	case "a stream crosses a capability signature inside a record" {
+		let text <- reading.call("world")
+		expect text == Some("hello, world")
+	}
+
+	case "a stream reaches a capability as a parameter" {
+		let r <- upload.call("k")
+		expect r == Receipt { key: "k", parts: 3 }
+	}
+
+	case "a RawStreamed binds its body and content type" {
+		let r <- api.GET("/files/:key", "there") by Visitor
+		match r {
+			RawStreamed(body, contentType) => {
+				let parts <- body.collect()
+				expect parts.length() == 2 && contentType == "text/plain"
+			}
+			_ => expect false
+		}
+	}
+
+	case "a stream can be read only once" {
+		expect twice.call("x") faults
+	}
+
+	case "a streamed handler still answers an ordinary variant" {
+		let r <- api.GET("/shelves/:name", "empty") by Visitor
+		expect r is NotFound
+	}
+
+	case "the integration tier streams too" as integration {
+		let text <- reading.call("again")
+		expect text == Some("hello, again")
+	}
+}
+
+suite files.store as system {
+	case "a RawStreamed body arrives over HTTP, read back as Ok" {
+		let r <- api.GET("/files/:key", "wire") by Visitor
+		expect r is Ok(_)
+	}
+
+	case "a nested stream-carrying record streams too" {
+		let r <- api.GET("/shelves/:name", "kept") by Visitor
+		expect r is Ok(_)
+	}
+}

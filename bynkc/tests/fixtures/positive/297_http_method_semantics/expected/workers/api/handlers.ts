@@ -17,9 +17,12 @@ export const routes = {
     return HttpResult.Ok(id);
   },
   async http_GET_ticks(deps: {}): globalThis.Promise<HttpResult<void>> {
-    return HttpResult.Streaming((async function* (__s) { const __n = 2; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* () { for (const __e of ["tick-1", "tick-2"]) { yield __e; } })()));
+    return HttpResult.Streaming((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __n = 2; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* () { for (const __e of ["tick-1", "tick-2"]) { yield __e; } })()));
   },
   async http_GET_logo(deps: {}): globalThis.Promise<HttpResult<void>> {
     return HttpResult.Raw(new globalThis.TextEncoder().encode("<svg/>"), "image/svg+xml");
+  },
+  async http_GET_chunks(deps: {}): globalThis.Promise<HttpResult<void>> {
+    return HttpResult.RawStreamed((async function* () { for (const __e of [new globalThis.TextEncoder().encode("one,"), new globalThis.TextEncoder().encode(""), new globalThis.TextEncoder().encode("two,"), new globalThis.TextEncoder().encode("three")]) { yield __e; } })(), "text/csv");
   },
 };

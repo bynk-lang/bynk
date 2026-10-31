@@ -129,6 +129,12 @@ service Site from http {
 Like `Streaming`, `Raw` returns `Effect[HttpResult[()]]` and is **200-only** —
 it is for service-tier bodies, which are almost always `200`.
 
+A body too large to hold in memory streams instead: `RawStreamed(body,
+contentType)` takes a `Stream[Bytes]`, usually from a capability, and writes each
+chunk as the client reads it. It sends no `ETag`, and a fault partway through cuts
+the response off, since the status is already sent. See
+[Streamed raw responses](/book/reference/http/#streamed-raw-responses).
+
 **Why can't I just return HTML?** Because rendering is the frontend tier's job,
 not the service's. Bynk serves *bytes with a content-type*; it deliberately has
 no HTML template layer. A page — including a styled `404` — belongs in the

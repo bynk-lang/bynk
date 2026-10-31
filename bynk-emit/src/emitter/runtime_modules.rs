@@ -196,6 +196,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("callDurableObjectMethod", "agent"),
     ("callService", "boundary"),
     ("checkStoredSchemaVersion", "boundary"),
+    ("claimStream", "http"),
     ("connIdOf", "connection"),
     ("corsPreflightResponse", "http"),
     ("decodeAgentArgs", "agent"),

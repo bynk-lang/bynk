@@ -1,0 +1,6 @@
+[project]
+name = "2623-byte-streams"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

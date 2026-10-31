@@ -4184,22 +4184,34 @@ fn join_other_elem_ts(args: &[Expr], cx: &LowerCtx) -> String {
 /// Emitted inline, like the collection kernels, so non-stream files are
 /// untouched. Callbacks are wrapped in a single-arg arrow so no extra iterator
 /// argument reaches a one-param Bynk fn.
+///
+/// K-streams (#2623): a stream is single-pass. Each op claims its source when
+/// it first reads it ([`STREAM_CLAIM`]): a builder when its generator is first
+/// pulled, so building is free and draining claims; `collect` when it runs.
 fn lower_stream_method(source: String, method: &Ident, a: &[String]) -> Option<String> {
+    let claim = STREAM_CLAIM;
     match (method.name.as_str(), a) {
         // -- builders (return an AsyncIterable) --
         ("map", [f]) => Some(format!(
-            "(async function* (__s) {{ for await (const __e of __s) {{ yield ({f})(__e); }} }})({source})"
+            "(async function* (__s) {{ {claim} for await (const __e of __s) {{ yield ({f})(__e); }} }})({source})"
         )),
         ("take", [n]) => Some(format!(
-            "(async function* (__s) {{ const __n = {n}; if (__n <= 0) {{ return; }} let __i = 0; for await (const __e of __s) {{ yield __e; if (++__i >= __n) {{ return; }} }} }})({source})"
+            "(async function* (__s) {{ {claim} const __n = {n}; if (__n <= 0) {{ return; }} let __i = 0; for await (const __e of __s) {{ yield __e; if (++__i >= __n) {{ return; }} }} }})({source})"
         )),
         // -- terminal (drains to a list; Effect-typed) --
         ("collect", []) => Some(format!(
-            "(async (__s) => {{ const __r = []; for await (const __e of __s) {{ __r.push(__e); }} return __r; }})({source})"
+            "(async (__s) => {{ {claim} const __r = []; for await (const __e of __s) {{ __r.push(__e); }} return __r; }})({source})"
         )),
         _ => None,
     }
 }
+
+/// K-streams (#2623): mark the stream `__s` as read, or fault if it already
+/// was. The mark lives on the stream object under a registered symbol, so it
+/// holds across modules, and the runtime's response bodies set the same one
+/// (`claimStream` in `bynk-emit/runtime/src/http.ts`). Inline, so a file that
+/// uses streams still needs no runtime import (ADR 0128 D6).
+const STREAM_CLAIM: &str = "const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for(\"bynk.stream.read\"); if (__m[__k]) { throw new globalThis.Error(\"bynk: a stream can be read only once\"); } __m[__k] = true;";
 
 /// v0.91 (ADR 0119, query-algebra slice 2): lower a lazy storage-query op over a
 /// `source` array expression. **Builders** wrap the source in a deferred thunk

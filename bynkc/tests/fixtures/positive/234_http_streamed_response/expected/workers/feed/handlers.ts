@@ -8,9 +8,9 @@ import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 export const Feed = {
   async http_GET_ticks(deps: {}): globalThis.Promise<HttpResult<void>> {
-    return HttpResult.Streaming((async function* (__s) { const __n = 3; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* () { for (const __e of ["tick-1", "tick-2", "tick-3"]) { yield __e; } })()));
+    return HttpResult.Streaming((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __n = 3; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* () { for (const __e of ["tick-1", "tick-2", "tick-3"]) { yield __e; } })()));
   },
   async http_GET_feed_Param_mode(mode: string, deps: {}): globalThis.Promise<HttpResult<void>> {
-    return (mode === "live" ? HttpResult.Streaming((async function* (__s) { const __n = 2; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* (__s) { for await (const __e of __s) { yield ((s) => s)(__e); } })((async function* () { for (const __e of ["a", "b", "c"]) { yield __e; } })()))) : HttpResult.NotFound);
+    return (mode === "live" ? HttpResult.Streaming((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __n = 2; if (__n <= 0) { return; } let __i = 0; for await (const __e of __s) { yield __e; if (++__i >= __n) { return; } } })((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; for await (const __e of __s) { yield ((s) => s)(__e); } })((async function* () { for (const __e of ["a", "b", "c"]) { yield __e; } })()))) : HttpResult.NotFound);
   },
 };

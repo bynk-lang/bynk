@@ -5415,6 +5415,17 @@ pub fn variants_of(
                             ),
                             ("etag".to_string(), tys.intern(Ty::Base(BaseType::String))),
                         ],
+                        // K-streams (#2623): a test drains the bound body.
+                        HttpVariantPayload::RawStreamed => {
+                            let bytes = tys.intern(Ty::Base(BaseType::Bytes));
+                            vec![
+                                ("body".to_string(), tys.intern(Ty::Stream(bytes))),
+                                (
+                                    "contentType".to_string(),
+                                    tys.intern(Ty::Base(BaseType::String)),
+                                ),
+                            ]
+                        }
                         // #2341 (L4): the status matches as its number
                         // (`RawError(403, _, _)`); `ErrorStatus` names are a
                         // construction-site vocabulary, not a type.
