@@ -212,6 +212,7 @@ impl ClassTombstones {
 /// into pushing typed blocks. String-escaping moved with it: every value
 /// below is escaped unconditionally by the printer now, not selectively by
 /// this function (`emitter/toml_doc.rs`'s own module doc has the reasoning).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_wrangler_toml(
     context: &str,
     // #1944: every binding this Worker declares, [`worker_bindings`]' list —
