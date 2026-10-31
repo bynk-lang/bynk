@@ -413,6 +413,7 @@ mod tests {
                 "bynk.cloudflare.Kv.getBytes",
                 "bynk.cloudflare.Kv.putBytes",
                 "bynk.cloudflare.Kv.listPage",
+                "bynk.cloudflare.D1",
                 "bynk.crypto"
             ]
         );
@@ -439,6 +440,9 @@ mod tests {
         assert!(p.blocks("bynk.cloudflare.Analytics.write"));
         assert!(!p.blocks("bynk.cloudflare.DataPoint"));
         assert!(p.blocks("bynk.cloudflare.EdgeCache.purge"));
+        // P4a (#2602): D1 and its operations, not its types.
+        assert!(p.blocks("bynk.cloudflare.D1.batch"));
+        assert!(!p.blocks("bynk.cloudflare.SqlValue"));
         assert!(p.manifest_diagnostics().is_empty());
     }
 }

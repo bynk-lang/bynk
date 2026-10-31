@@ -11,6 +11,9 @@
 //! (`capability Sessions = Kv`, `capability PriceCache = Kv`): each is its own
 //! namespace, so a key written through one is absent through the others.
 //!
+//! P4a (#2602) adds `WorkersD1`: statements through compiled Bynk handlers
+//! against Miniflare's own D1, pinning the shape a blob column arrives in.
+//!
 //! P5 (#2323) adds `WorkersR2` the same way: every `R2` operation through
 //! compiled Bynk handlers against Miniflare's own R2, including both
 //! conditions of `putWith` failing as `None` and `list` paging past R2's 1000
@@ -208,7 +211,7 @@ fn run_smoke(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.Fetch.sendWith\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.D1\", \"bynk.Fetch.sendWith\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -737,6 +740,115 @@ fn workers_analytics_writes_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersAnalytics on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+const D1_SOURCE: &str = "context d.smoke
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Order = { id: String, total: Int, paid: Int, receipt: Bytes, note: Option[String], weight: Float }
+
+service api from http {
+\ton GET(\"/setup\") () -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet made <- Orders.run(\"CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, total INTEGER NOT NULL CHECK (total BETWEEN 0 AND 100), paid INTEGER NOT NULL, receipt BLOB NOT NULL, note TEXT, weight REAL)\", [])
+\t\tmatch made {
+\t\t\tOk(_) => Ok(\"ready\")
+\t\t\tErr(e) => ServerError(\"setup failed\")
+\t\t}
+\t}
+
+\ton GET(\"/put/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet total = if id == \"c\" { 5 } else { 95 }
+\t\tlet made <- Orders.run(\"INSERT INTO orders VALUES (?1, ?2, ?3, ?4, ?5, ?6)\", [Text(id), Integer(total), Boolean(true), Blob(Bytes.fromUtf8(id)), Null, Real(1.5)])
+\t\tmatch made {
+\t\t\tOk(run) => Ok(\"changed \\(run.changes)\")
+\t\t\tErr(Constraint(_)) => Conflict(\"exists\")
+\t\t\tErr(_) => ServerError(\"insert failed\")
+\t\t}
+\t}
+
+\ton GET(\"/get/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet row <- Orders.first(\"SELECT * FROM orders WHERE id = ?1\", [Text(id)])
+\t\tmatch row {
+\t\t\tOk(Some(text)) => match Json.decode[Order](text) {
+\t\t\t\tOk(o) => Ok(\"\\(o.id) \\(o.total) \\(o.paid) \\(o.receipt.toHex()) \\(o.weight)\")
+\t\t\t\tErr(_) => ServerError(\"did not decode: \\(text)\")
+\t\t\t}
+\t\t\tOk(None) => NotFound
+\t\t\tErr(_) => ServerError(\"query failed\")
+\t\t}
+\t}
+
+\ton GET(\"/count\") () -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet rows <- Orders.all(\"SELECT * FROM orders ORDER BY id\", [])
+\t\tmatch rows {
+\t\t\tOk(text) => match Json.decode[List[Order]](text) {
+\t\t\t\tOk(os) => Ok(\"\\(os.length())\")
+\t\t\t\tErr(_) => ServerError(\"did not decode: \\(text)\")
+\t\t\t}
+\t\t\tErr(_) => ServerError(\"query failed\")
+\t\t}
+\t}
+
+\ton GET(\"/move/:a/:b\") (a: String, b: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet ran <- Orders.batch([
+\t\t\tSqlStatement { sql: \"UPDATE orders SET total = total - 10 WHERE id = ?1\", params: [Text(a)] },
+\t\t\tSqlStatement { sql: \"UPDATE orders SET total = total + 10 WHERE id = ?1\", params: [Text(b)] }
+\t\t])
+\t\tmatch ran {
+\t\t\tOk(runs) => Ok(\"moved \\(runs.length())\")
+\t\t\tErr(Constraint(_)) => Conflict(\"refused\")
+\t\t\tErr(_) => ServerError(\"batch failed\")
+\t\t}
+\t}
+
+\ton GET(\"/bad\") () -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet r <- Orders.all(\"SELEC 1\", [])
+\t\tmatch r {
+\t\t\tErr(Failed(_)) => Ok(\"failed\")
+\t\t\t_ => ServerError(\"not a failure\")
+\t\t}
+\t}
+}
+";
+
+#[test]
+fn workers_d1_round_trips_on_workerd() {
+    // P4a (#2602): Miniflare's local D1 behind the generated `[[d1_databases]]`
+    // stanza (its placeholder id is a local name). Every `SqlValue` binds, a
+    // blob column decodes as `Bytes` (so the binding reads D1's blob shape), a
+    // UNIQUE or CHECK breach is `Constraint`, a batch that breaks one rolls
+    // back, and a syntax error is `Failed`.
+    let Some((failures, log)) = run_smoke("d-smoke", "d", D1_SOURCE, "/setup", 7, &|port| {
+        check_steps(
+            port,
+            &[
+                ("/put/a", 200, r#""changed 1""#),
+                ("/put/a", 409, ""),
+                ("/put/b", 200, r#""changed 1""#),
+                ("/put/c", 200, r#""changed 1""#),
+                ("/get/a", 200, r#""a 95 1 61 1.5""#),
+                ("/get/z", 404, ""),
+                ("/count", 200, r#""3""#),
+                ("/move/a/c", 200, r#""moved 2""#),
+                // `a` drops to 75, then `b` would pass 100: neither stays.
+                ("/move/a/b", 409, ""),
+                ("/get/a", 200, r#""a 85 1 61 1.5""#),
+                ("/get/b", 200, r#""b 95 1 62 1.5""#),
+                ("/bad", 200, r#""failed""#),
+            ],
+        )
+    }) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "WorkersD1 on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

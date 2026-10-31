@@ -90,6 +90,10 @@ struct ContextPlan<'a> {
     /// P5 (#2323): one line per R2 bucket the Worker binds, in binding order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     r2: Vec<PlanR2<'a>>,
+    /// P4a (#2602): one line per D1 database the Worker binds, in binding
+    /// order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    d1: Vec<PlanD1<'a>>,
     /// P3 (#2342): one line per rate limiter the Worker binds, in binding
     /// order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -188,6 +192,18 @@ struct PlanR2<'a> {
     bucket: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     jurisdiction: Option<&'a str>,
+}
+
+/// P4a (#2602): one D1 database.
+#[derive(Debug, Serialize)]
+struct PlanD1<'a> {
+    /// `D1_<SNAKE>`.
+    binding: &'a str,
+    /// `create` (a database, or adopting one of its name already on the
+    /// account) or `reuse` (the one the ledger recorded, by its id).
+    action: &'static str,
+    /// The database's account-facing name, [`d1_database_name`]d.
+    database: String,
 }
 
 /// P3b (#2582): one Analytics Engine dataset.
@@ -425,7 +441,7 @@ pub fn run(
     tb: &dyn Toolbox,
     compiler: &Compiler,
     project_root: &Path,
-    node_floor: u32,
+    node_floor: (u32, u32),
     opts: &DeployOptions,
 ) -> ExitCode {
     // Slice 4 (DECISION E), and the first check of all: once `--env` is a
@@ -791,6 +807,12 @@ pub fn run(
     }
     // P3b (#2582): two instances whose derived dataset names meet would write
     // into one table, silently and for the dataset's whole retention.
+    // P4a (#2602): likewise a database's, which deploy would otherwise adopt
+    // and share.
+    if let Some(message) = d1_database_problem(&resources, &lock, &opts.environment) {
+        eprintln!("bynk: {message}");
+        return ExitCode::FAILURE;
+    }
     if let Some(message) = analytics_dataset_problem(&resources, &lock, &opts.environment) {
         eprintln!("bynk: {message}");
         return ExitCode::FAILURE;
@@ -1847,6 +1869,12 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         .unwrap_or_default()
                 ));
             }
+            for d1 in &plan.shown_orphans.d1 {
+                out.push_str(&format!(
+                    "orphan d1 {} {} ({}; not deleted)\n",
+                    d1.worker, d1.binding, d1.database
+                ));
+            }
             for worker in &plan.shown_orphans.workers {
                 out.push_str(&format!("orphan worker {worker}\n"));
             }
@@ -1874,6 +1902,12 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         out.push_str(" — the old bucket and its objects stay where they are");
                     }
                     out.push('\n');
+                }
+                for d1 in &context.d1 {
+                    out.push_str(&format!(
+                        "d1 {} {} ({})\n",
+                        d1.action, d1.database, d1.binding
+                    ));
                 }
                 for limiter in &context.ratelimits {
                     match &limiter.namespace_id {
@@ -2045,6 +2079,23 @@ pub(crate) fn derive_plan<'a>(
                             action: r2_action(lock, worker, bucket, environment),
                             bucket: r2_bucket_name(environment, &bucket.name),
                             jurisdiction: bucket.jurisdiction.as_deref(),
+                        })
+                        .collect(),
+                    d1: declared
+                        .d1_databases
+                        .iter()
+                        .map(|db| {
+                            let database = d1_database_name(environment, &db.name);
+                            let recorded = recorded_d1(lock, worker, &db.binding, environment);
+                            PlanD1 {
+                                binding: &db.binding,
+                                action: if recorded.is_some_and(|r| r.name == database) {
+                                    "reuse"
+                                } else {
+                                    "create"
+                                },
+                                database,
+                            }
                         })
                         .collect(),
                     ratelimits: declared
@@ -2264,6 +2315,53 @@ pub(crate) fn r2_action(
         Some(recorded) if recorded.name == r2_bucket_name(environment, &bucket.name) => "recreate",
         Some(_) => "create",
     }
+}
+
+/// P4a (#2602): why the databases the build declares cannot all be made in
+/// `environment`, or `None`. Deploy adopts a database whose name is already on
+/// the account, so two instances sharing a derived name would silently share
+/// one database: `shop.cart`'s `Orders` and `shop`'s `CartOrders` are both
+/// `shop-cart-orders`, and `shop`'s `OrdersStaging` by default is `shop`'s
+/// `Orders` under `--env staging`. Checked within the build, and against
+/// every database the ledger records in any environment.
+pub(crate) fn d1_database_problem(
+    resources: &BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Option<String> {
+    let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
+    for (worker, declared) in resources {
+        for db in &declared.d1_databases {
+            let name = d1_database_name(environment, &db.name);
+            if let Some((other_worker, other_binding)) =
+                seen.insert(name.clone(), (worker, &db.binding))
+            {
+                return Some(format!(
+                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both be the D1 database `{name}`; database names are scoped to the account, so rename one capability",
+                    db.binding
+                ));
+            }
+            for (other_env, env) in &lock.environments {
+                let clash = env
+                    .d1_instances
+                    .iter()
+                    .flat_map(|(w, instances)| instances.iter().map(move |(b, r)| (w, b, r)))
+                    .find(|(w, b, r)| {
+                        r.name == name
+                            && (other_env != environment
+                                || w.as_str() != worker
+                                || **b != db.binding)
+                    });
+                if let Some((other_worker, other_binding, _)) = clash {
+                    return Some(format!(
+                        "`{}` of `{worker}` would be the D1 database `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; database names are scoped to the account, so rename one capability",
+                        db.binding
+                    ));
+                }
+            }
+        }
+    }
+    None
 }
 
 /// P5 (#2323): why the buckets the build declares cannot all be made in
@@ -2659,6 +2757,73 @@ pub(crate) mod tests {
             report.contains("r2 recreate shop-indexes (R2_INDEXES) in jurisdiction eu — the old bucket and its objects stay where they are"),
             "{report}"
         );
+    }
+
+    // ---- P4a (#2602): D1 databases ----
+
+    #[test]
+    fn the_plan_creates_each_database_then_reuses_it_and_reports_an_orphan() {
+        let declared = project(vec![(
+            "shop",
+            Resources::default().d1_databases(&[("D1_ORDERS", "shop-orders")]),
+        )]);
+        let order = names(&["shop"]);
+        let fresh = plan_of(&order, &declared, &DeployLock::default());
+        let report = plan_report(&fresh, DeployFormat::Short);
+        assert!(
+            report.contains("d1 create shop-orders (D1_ORDERS)\n"),
+            "{report}"
+        );
+        let mut lock = DeployLock::default();
+        lock.record_d1("default", "shop", "D1_ORDERS", "shop-orders", "id-1");
+        lock.record_d1("default", "shop", "D1_GONE", "shop-gone", "id-2");
+        let again = plan_of(&order, &declared, &lock);
+        assert_eq!(again.contexts[0].d1[0].action, "reuse");
+        let report = plan_report(&again, DeployFormat::Short);
+        assert!(
+            report.contains("d1 reuse shop-orders (D1_ORDERS)\n")
+                && report.contains("orphan d1 shop D1_GONE (shop-gone; not deleted)\n"),
+            "{report}"
+        );
+    }
+
+    #[test]
+    fn two_instances_that_would_share_a_database_are_refused() {
+        // In one build: `shop.cart`'s `Orders` and `shop`'s `CartOrders`.
+        let colliding = project(vec![
+            (
+                "shop-cart",
+                Resources::default().d1_databases(&[("D1_ORDERS", "shop-cart-orders")]),
+            ),
+            (
+                "shop",
+                Resources::default().d1_databases(&[("D1_CART_ORDERS", "shop-cart-orders")]),
+            ),
+        ]);
+        let message = d1_database_problem(&colliding, &DeployLock::default(), "default").unwrap();
+        assert!(message.contains("`shop-cart-orders`"), "{message}");
+        // Across environments: `OrdersStaging` by default is `Orders` under
+        // `--env staging`, which the ledger holds.
+        let suffixed = project(vec![(
+            "shop",
+            Resources::default().d1_databases(&[("D1_ORDERS_STAGING", "shop-orders-staging")]),
+        )]);
+        let mut lock = DeployLock::default();
+        lock.record_d1(
+            "staging",
+            "shop",
+            "D1_ORDERS",
+            "shop-orders-staging",
+            "id-1",
+        );
+        let message = d1_database_problem(&suffixed, &lock, "default").unwrap();
+        assert!(message.contains("environment `staging`"), "{message}");
+        // The database's own record is no clash.
+        let own = project(vec![(
+            "shop",
+            Resources::default().d1_databases(&[("D1_ORDERS", "shop-orders")]),
+        )]);
+        assert_eq!(d1_database_problem(&own, &lock, "staging"), None);
     }
 
     #[test]

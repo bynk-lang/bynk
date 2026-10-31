@@ -685,13 +685,17 @@ jobs:
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
-      # Single-sourced: raising NODE_MAJOR_FLOOR moves this job with it.
+      # Single-sourced: raising NODE_MAJOR_FLOOR or NODE_MINOR_FLOOR moves this
+      # job with it.
       - name: Read the Node floor
         id: floor
         run: |
-          floor="$(sed -n 's/^pub const NODE_MAJOR_FLOOR: u32 = \([0-9]*\);.*/\1/p' bynk-emit/src/lib.rs)"
-          [ -n "$floor" ] || { echo "::error::NODE_MAJOR_FLOOR not found in bynk-emit/src/lib.rs"; exit 1; }
-          echo "value=$floor" >> "$GITHUB_OUTPUT"
+          major="$(sed -n 's/^pub const NODE_MAJOR_FLOOR: u32 = \([0-9]*\);.*/\1/p' bynk-emit/src/lib.rs)"
+          minor="$(sed -n 's/^pub const NODE_MINOR_FLOOR: u32 = \([0-9]*\);.*/\1/p' bynk-emit/src/lib.rs)"
+          [ -n "$major" ] && [ -n "$minor" ] || { echo "::error::NODE_MAJOR_FLOOR or NODE_MINOR_FLOOR not found in bynk-emit/src/lib.rs"; exit 1; }
+          # The exact floor release, not the newest of its major, so the
+          # minor floor is what runs.
+          echo "value=$major.$minor.0" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: ${{ steps.floor.outputs.value }}
@@ -708,6 +712,10 @@ jobs:
           BYNK_REQUIRE_TSC: "1"
       - name: "@bynk/runtime tests under the floor"
         working-directory: bynk-emit/runtime
+        # The tests are `.ts`, which Node runs unflagged only from 22.18; the
+        # floor (22.13) has type-stripping behind this flag.
+        env:
+          NODE_OPTIONS: --experimental-strip-types
         run: |
           npm ci
           npm test

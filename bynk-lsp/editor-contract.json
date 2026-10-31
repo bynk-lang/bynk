@@ -22,7 +22,7 @@
           "optional": false,
           "rows": [
             {
-              "detail": "v22.0.0 (path)",
+              "detail": "v22.13.0 (path)",
               "label": "node",
               "level": "ok",
               "remedy": null
@@ -41,7 +41,7 @@
           "optional": false,
           "rows": [
             {
-              "detail": "v22.0.0 (path)",
+              "detail": "v22.13.0 (path)",
               "label": "node",
               "level": "ok",
               "remedy": null

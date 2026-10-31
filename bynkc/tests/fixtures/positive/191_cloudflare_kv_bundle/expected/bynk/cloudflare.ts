@@ -190,6 +190,65 @@ export const DataPoint = {
 };
 
 /**
+ * A value bound to a `?n` parameter of a `D1` statement, by SQLite storage
+ * class. `Boolean` binds as `1` or `0`, as SQLite has no boolean.
+ */
+export type SqlValue =
+    { readonly tag: "Null" }
+  | { readonly tag: "Integer"; readonly value: number }
+  | { readonly tag: "Real"; readonly value: number }
+  | { readonly tag: "Text"; readonly value: string }
+  | { readonly tag: "Blob"; readonly value: globalThis.Uint8Array }
+  | { readonly tag: "Boolean"; readonly value: boolean };
+
+export const SqlValue = {
+  Null: { tag: "Null" } as SqlValue,
+  Integer: (value: number): SqlValue => ({ tag: "Integer", value }),
+  Real: (value: number): SqlValue => ({ tag: "Real", value }),
+  Text: (value: string): SqlValue => ({ tag: "Text", value }),
+  Blob: (value: globalThis.Uint8Array): SqlValue => ({ tag: "Blob", value }),
+  Boolean: (value: boolean): SqlValue => ({ tag: "Boolean", value }),
+};
+
+/**
+ * One statement of a `D1.batch`: its SQL and its positional parameters.
+ */
+export interface SqlStatement {
+  readonly sql: string;
+  readonly params: readonly SqlValue[];
+}
+
+export const SqlStatement = {
+};
+
+/**
+ * What a `D1.run` (or one statement of a `D1.batch`) changed: the rows it
+ * wrote, and the rowid of the last row it inserted.
+ */
+export interface SqlRun {
+  readonly changes: number;
+  readonly lastRowId: number;
+}
+
+export const SqlRun = {
+};
+
+/**
+ * Why a `D1` statement failed. `Constraint` is a UNIQUE, CHECK, NOT NULL or
+ * foreign-key violation, an outcome a handler answers (with a `409`, say);
+ * `Failed` is anything else, with the database's message. D1 has further
+ * failure kinds, so a `match` over this type needs a wildcard.
+ */
+export type SqlError =
+    { readonly tag: "Constraint"; readonly message: string }
+  | { readonly tag: "Failed"; readonly message: string };
+
+export const SqlError = {
+  Constraint: (message: string): SqlError => ({ tag: "Constraint", message }),
+  Failed: (message: string): SqlError => ({ tag: "Failed", message }),
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -384,3 +443,32 @@ export interface EdgeCache {
 }
 
 export const __EdgeCacheToken: symbol = globalThis.Symbol("EdgeCache");
+
+/**
+ * A D1 database: SQLite, queried with SQL text and positional parameters
+ * (`?1`, `?2`, …) bound from `SqlValue`s, never spliced into the text. Used
+ * only through a named instance, `capability Orders = D1`, which binds as
+ * `D1_ORDERS`; a bare `given D1` names no database and is refused.
+ * `bynk deploy` creates the database, named `<worker>-<capability, kebab>`
+ * and environment-qualified, and records its id.
+ *
+ * Rows come back as JSON text for `Json.decode`: `all` gives every row as an
+ * array of objects keyed by column name (`Json.decode[List[Row]]`), `first`
+ * the first row as one object, or `None` when there is none. A blob column
+ * arrives as base64, so a `Bytes` field decodes it. SQLite has no boolean:
+ * a flag column arrives as `0` or `1`, so declare that field `Int`. An
+ * integer past ±2^53 cannot be represented and fails the decode.
+ *
+ * `run` executes a write and reports what it changed. `batch` runs its
+ * statements in order in one transaction: all apply, or none do and the
+ * result is the failing statement's error. Every operation gives a
+ * `SqlError` rather than faulting.
+ */
+export interface D1 {
+  all(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<string, SqlError>>;
+  first(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<Option<string>, SqlError>>;
+  run(sql: string, params: readonly SqlValue[]): globalThis.Promise<Result<SqlRun, SqlError>>;
+  batch(statements: readonly SqlStatement[]): globalThis.Promise<Result<readonly SqlRun[], SqlError>>;
+}
+
+export const __D1Token: symbol = globalThis.Symbol("D1");

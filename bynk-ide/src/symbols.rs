@@ -2186,6 +2186,10 @@ pub(crate) fn describe_derived_capability(
     if d.base.name == "Analytics" {
         out.push_str("\nEmits `[[analytics_engine_datasets]]`: the dataset is named for the context and the capability in snake case (`shop.cart`'s `Signups` writes to `shop_cart_signups`), environment-qualified by `bynk deploy`, and created on the first write.\n");
     }
+    // P4a (#2602): a D1 database, named by deploy and minted on first deploy.
+    if d.base.name == "D1" {
+        out.push_str("\nEmits `[[d1_databases]]`: the database is named for the context and the capability (`shop.cart`'s `Orders` is `shop-cart-orders`), environment-qualified, created by `bynk deploy`, which records its id.\n");
+    }
     if d.base.name == "EdgeCache" {
         out.push_str("\nEmits `[cache] enabled = true`: a `@cache` route's `2xx` is cached at Cloudflare's edge, and every other `GET` or `HEAD` answer is `no-store`.\n");
     }

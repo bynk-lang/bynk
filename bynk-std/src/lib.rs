@@ -481,6 +481,11 @@ pub const QUEUE_NAME_OPTION: &str = "name";
 /// options: `bynk deploy` derives the dataset's name (track A12).
 pub const ANALYTICS_BINDING_PREFIX: &str = "ANALYTICS";
 
+/// The Worker binding prefix of a `D1` instance (standard-library P4a,
+/// #2602): `capability Orders = D1` binds as `D1_ORDERS`, a
+/// `[[d1_databases]]` entry whose `database_id` `bynk deploy` mints.
+pub const D1_BINDING_PREFIX: &str = "D1";
+
 /// The prefix an `EdgeCache` instance's binding name would carry (first-party
 /// registry L7, #2414). Workers Cache is a Worker-wide `[cache]` setting with
 /// no `env` binding, so the name is never emitted: the instance is built from
@@ -560,6 +565,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersRateLimit",
             "WorkersQueue",
             "WorkersAnalytics",
+            "WorkersD1",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -572,6 +578,7 @@ pub const UNITS: &[Unit] = &[
         // P3b (#2582): Analytics too, until a first-party service writes to it.
         // P1 (#2590): the new operations of the stable `Kv`, until a service
         // has used them.
+        // P4a (#2602): D1, until its migrations (P4b) land.
         experimental: &[
             "Service",
             "R2",
@@ -584,8 +591,9 @@ pub const UNITS: &[Unit] = &[
             "Kv.getBytes",
             "Kv.putBytes",
             "Kv.listPage",
+            "D1",
         ],
-        extensible: &["R2Condition", "KvExpiration"],
+        extensible: &["R2Condition", "KvExpiration", "SqlError"],
         instantiable: &[
             Instantiable {
                 capability: "Kv",
@@ -628,6 +636,13 @@ pub const UNITS: &[Unit] = &[
             Instantiable {
                 capability: "Analytics",
                 binding_prefix: ANALYTICS_BINDING_PREFIX,
+                options: &[],
+                required: &[],
+                bare: false,
+            },
+            Instantiable {
+                capability: "D1",
+                binding_prefix: D1_BINDING_PREFIX,
                 options: &[],
                 required: &[],
                 bare: false,
@@ -1156,6 +1171,7 @@ mod tests {
                 ("bynk.cloudflare", "RateLimit", "RATELIMIT"),
                 ("bynk.cloudflare", "Queue", "QUEUE"),
                 ("bynk.cloudflare", "Analytics", "ANALYTICS"),
+                ("bynk.cloudflare", "D1", "D1"),
                 ("bynk.cloudflare", "EdgeCache", "EDGE_CACHE")
             ]
         );
@@ -1231,6 +1247,7 @@ mod tests {
                 "bynk.cloudflare.Kv.getBytes",
                 "bynk.cloudflare.Kv.putBytes",
                 "bynk.cloudflare.Kv.listPage",
+                "bynk.cloudflare.D1",
                 "bynk.crypto"
             ]
         );
@@ -1246,6 +1263,7 @@ mod tests {
                 ("bynk", "Redirect"),
                 ("bynk.cloudflare", "R2Condition"),
                 ("bynk.cloudflare", "KvExpiration"),
+                ("bynk.cloudflare", "SqlError"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
                 ("bynk.crypto", "CryptoError"),

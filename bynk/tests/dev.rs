@@ -117,12 +117,12 @@ fn golden_preflight_deploy_missing() {
     let fake = Fake::default().path_tool(
         "node",
         "/usr/bin/node",
-        v(bynk_emit::NODE_MAJOR_FLOOR, 0, 0),
+        v(bynk_emit::NODE_MAJOR_FLOOR, bynk_emit::NODE_MINOR_FLOOR, 0),
     );
     let ctx = Context {
         project_root: None,
         in_repo: false,
-        node_floor: bynk_emit::NODE_MAJOR_FLOOR,
+        node_floor: bynk_emit::NODE_FLOOR,
     };
     let opts = DoctorOptions {
         only: Some(Capability::Deploy),

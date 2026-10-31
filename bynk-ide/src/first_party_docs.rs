@@ -94,6 +94,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
     ),
     (
         "bynk.cloudflare",
+        "D1",
+        "sql-databases-d1",
+        &["all", "first", "run", "batch"],
+    ),
+    (
+        "bynk.cloudflare",
         "EdgeCache",
         "edge-caching-edgecache",
         &["purge"],

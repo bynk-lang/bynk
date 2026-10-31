@@ -1,0 +1,2 @@
+bynk.types.list_element_mismatch
+list element has type `String`, but the list's element type is `SqlValue`

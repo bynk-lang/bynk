@@ -809,7 +809,7 @@ fn run_doctor(input: PathBuf, opts: DoctorOptions, format: Format) -> ExitCode {
     let ctx = Context {
         in_repo: in_bynk_repo(&input),
         project_root,
-        node_floor: bynk_emit::NODE_MAJOR_FLOOR,
+        node_floor: bynk_emit::NODE_FLOOR,
     };
 
     let report = doctor::diagnose(&tb, &compiler, &ctx, &opts);
@@ -839,13 +839,7 @@ fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
     // #524: `dev` compiles and watches the whole `[paths]` layout from the
     // project root — the same shape as `bynkc compile` — so no per-include
     // root is selected here any more.
-    dev::run(
-        &tb,
-        &compiler,
-        &project_root,
-        bynk_emit::NODE_MAJOR_FLOOR,
-        &opts,
-    )
+    dev::run(&tb, &compiler, &project_root, bynk_emit::NODE_FLOOR, &opts)
 }
 
 fn run_tail(path: PathBuf, opts: bynk::tail::TailOptions) -> ExitCode {
@@ -877,13 +871,7 @@ fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
     if refuse_workspace_root("deploy", &project_root) {
         return ExitCode::FAILURE;
     }
-    deploy::run(
-        &tb,
-        &compiler,
-        &project_root,
-        bynk_emit::NODE_MAJOR_FLOOR,
-        &opts,
-    )
+    deploy::run(&tb, &compiler, &project_root, bynk_emit::NODE_FLOOR, &opts)
 }
 
 /// `bynk check` (#487): resolve `bynkc` (for the override escape hatch) and

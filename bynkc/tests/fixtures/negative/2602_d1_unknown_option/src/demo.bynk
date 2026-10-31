@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+// #2602: `bynk deploy` names the database, so the source cannot.
+capability Orders = D1 @name("orders")
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

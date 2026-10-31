@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeIntegrationAnalytics, makeIntegrationKv, makeIntegrationQueue, makeIntegrationRateLimit } from "../src/storage.ts";
+import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationRateLimit } from "../src/storage.ts";
 
 // Standard-library P3 (#2342): the integration tier's rate limiter.
 test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", async () => {
@@ -49,4 +49,42 @@ test("makeIntegrationKv keeps text and bytes as one, with metadata, and pages in
   const second = await kv.list({ limit: 2, cursor: first.cursor });
   assert.deepEqual(second.keys.map((k) => k.name), ["c"]);
   assert.equal(second.list_complete, true);
+});
+
+test("makeIntegrationD1 runs real SQL, binding integers as INTEGER", async () => {
+  const d = makeIntegrationD1();
+  await d.prepare("CREATE TABLE t (id INTEGER PRIMARY KEY, n INT, b BLOB)").run();
+  const w = await d.prepare("INSERT INTO t (n, b) VALUES (?1, ?2)").bind(5, new Uint8Array([1, 2])).run();
+  assert.deepEqual(w.meta, { changes: 1, last_row_id: 1 });
+  const row = await d.prepare("SELECT typeof(n) AS ty, n, b FROM t").first();
+  assert.equal(row?.ty, "integer");
+  assert.equal(row?.n, 5);
+  assert.deepEqual([...(row?.b as Uint8Array)], [1, 2]);
+  assert.equal(await d.prepare("SELECT * FROM t WHERE n = ?").bind(9).first(), null);
+});
+
+test("makeIntegrationD1 words a constraint failure as D1 does", async () => {
+  const d = makeIntegrationD1();
+  await d.prepare("CREATE TABLE t (k TEXT UNIQUE)").run();
+  await d.prepare("INSERT INTO t VALUES ('a')").run();
+  await assert.rejects(d.prepare("INSERT INTO t VALUES ('a')").run(), /^Error: D1_ERROR: UNIQUE.*SQLITE_CONSTRAINT$/);
+  await assert.rejects(d.prepare("SELEC 1").all(), (e: Error) => e.message.startsWith("D1_ERROR: ") && !e.message.includes("CONSTRAINT"));
+});
+
+test("makeIntegrationD1 runs a batch as one transaction", async () => {
+  const d = makeIntegrationD1();
+  await d.prepare("CREATE TABLE t (k TEXT UNIQUE)").run();
+  const ok = await d.batch([d.prepare("INSERT INTO t VALUES (?)").bind("a"), d.prepare("INSERT INTO t VALUES (?)").bind("b")]);
+  assert.deepEqual(ok.map((r) => r.meta.changes), [1, 1]);
+  await assert.rejects(d.batch([d.prepare("INSERT INTO t VALUES ('c')"), d.prepare("INSERT INTO t VALUES ('a')")]));
+  const all = await d.prepare("SELECT k FROM t ORDER BY k").all();
+  assert.deepEqual(all.results.map((r) => r.k), ["a", "b"]);
+});
+
+test("makeIntegrationD1 binds an integral Real as INTEGER, as D1 does", async () => {
+  // `Real(2.0)` is the number 2 by the time it is bound: D1 stores it as an
+  // integer, and so does the double. A change in D1 here should change this.
+  const d = makeIntegrationD1();
+  const row = await d.prepare("SELECT typeof(?1) AS whole, typeof(?2) AS part, ?1 AS v").bind(2.0, 2.5).first();
+  assert.deepEqual({ ...row }, { whole: "integer", part: "real", v: 2 });
 });

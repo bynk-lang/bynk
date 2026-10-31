@@ -395,6 +395,111 @@ export function makeIntegrationAnalytics(): AnalyticsDataset & {
   };
 }
 
+/**
+ * Standard-library P4a (#2602): the part of Cloudflare's D1 binding that
+ * `WorkersD1` uses. Parameters are positional; a statement's `meta` reports
+ * what a write changed.
+ */
+export interface D1Result {
+  results: Record<string, unknown>[];
+  meta: { changes?: number; last_row_id?: number };
+}
+
+export interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  all(): Promise<D1Result>;
+  first(): Promise<Record<string, unknown> | null>;
+  run(): Promise<D1Result>;
+}
+
+export interface D1Database {
+  prepare(sql: string): D1PreparedStatement;
+  batch(statements: D1PreparedStatement[]): Promise<D1Result[]>;
+}
+
+// The part of Node's built-in `node:sqlite` the D1 double uses.
+interface SqliteStatement {
+  all(...params: unknown[]): Record<string, unknown>[];
+  get(...params: unknown[]): Record<string, unknown> | undefined;
+  run(...params: unknown[]): { changes: number | bigint; lastInsertRowid: number | bigint };
+}
+interface SqliteDatabase {
+  prepare(sql: string): SqliteStatement;
+  exec(sql: string): void;
+}
+
+/**
+ * An in-memory D1 database for tests, bound as `env.D1_<NAME>` and fresh per
+ * test case, as `makeIntegrationKv` is. It is real SQLite, through Node's
+ * built-in `node:sqlite` (Node 22.13 or later), so statements run as they do
+ * on D1: foreign keys enforced, integral numbers bound as `INTEGER`, and a
+ * failure reported as D1 words it (`D1_ERROR: …: SQLITE_CONSTRAINT`). A
+ * `batch` is one transaction; its results carry `meta`, not rows.
+ */
+export function makeIntegrationD1(): D1Database {
+  const node = (globalThis as { process?: { getBuiltinModule?(id: string): unknown } }).process;
+  const sqlite = node?.getBuiltinModule?.("node:sqlite") as
+    | { DatabaseSync: new (path: string) => SqliteDatabase }
+    | undefined;
+  if (sqlite === undefined) {
+    throw new Error("bynk: the D1 test double needs Node's built-in `node:sqlite` (Node 22.13 or later)");
+  }
+  const db = new sqlite.DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  const d1Error = (e: unknown): Error => {
+    const message = e instanceof Error ? e.message : String(e);
+    const code = (e as { errcode?: number }).errcode;
+    return new Error(
+      code !== undefined && (code & 0xff) === 19
+        ? `D1_ERROR: ${message}: SQLITE_CONSTRAINT`
+        : `D1_ERROR: ${message}`,
+    );
+  };
+  const attempt = <T>(f: () => T): T => {
+    try {
+      return f();
+    } catch (e) {
+      throw d1Error(e);
+    }
+  };
+  const meta = (r: { changes: number | bigint; lastInsertRowid: number | bigint }) => ({
+    changes: Number(r.changes),
+    last_row_id: Number(r.lastInsertRowid),
+  });
+  const statement = (sql: string, params: unknown[]): D1PreparedStatement & { exec(): D1Result } => {
+    const values = params.map((v) => (typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v));
+    // Node before 22.18 refuses positional values for numbered parameters
+    // (`?1`), so those bind by name: `{ "?1": … }`, one key per number used.
+    const numbered = [...new Set(sql.match(/\?\d+/g) ?? [])];
+    const bound: unknown[] =
+      numbered.length === 0
+        ? values
+        : [Object.fromEntries(numbered.map((name) => [name, values[Number(name.slice(1)) - 1] ?? null]))];
+    const prepared = () => attempt(() => db.prepare(sql));
+    return {
+      bind: (...values: unknown[]) => statement(sql, values),
+      all: async () => ({ results: attempt(() => prepared().all(...bound)), meta: {} }),
+      first: async () => attempt(() => prepared().get(...bound)) ?? null,
+      run: async () => ({ results: [], meta: meta(attempt(() => prepared().run(...bound))) }),
+      exec: () => ({ results: [], meta: meta(attempt(() => prepared().run(...bound))) }),
+    };
+  };
+  return {
+    prepare: (sql: string) => statement(sql, []),
+    async batch(statements: D1PreparedStatement[]): Promise<D1Result[]> {
+      db.exec("BEGIN");
+      try {
+        const results = statements.map((s) => (s as D1PreparedStatement & { exec(): D1Result }).exec());
+        db.exec("COMMIT");
+        return results;
+      } catch (e) {
+        db.exec("ROLLBACK");
+        throw e;
+      }
+    },
+  };
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeTestState as __makeTestState };
-export type { AnalyticsDataset as __AnalyticsDataset, DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter };
+export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeTestState as __makeTestState };
+export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter };

@@ -104,6 +104,11 @@ pub enum BindingSource {
     /// one dataset per instance under a derived name. Never seen by handlers:
     /// they reach it through the instance's `WorkersAnalytics`.
     AnalyticsDataset { capability: String },
+    /// Standard-library P4a (#2602): the `[[d1_databases]]` binding of a `D1`
+    /// instance (`capability Orders = D1`), one database per instance under a
+    /// derived name, its id minted by `bynk deploy`. Never seen by handlers:
+    /// they reach it through the instance's `WorkersD1`.
+    D1Database { capability: String },
     /// A `[[durable_objects.bindings]]` entry for one of the context's agents.
     /// A handler that constructs an agent sees every local agent's binding.
     Agent { class_name: String },
@@ -139,6 +144,9 @@ impl BindingSource {
             ),
             Self::AnalyticsDataset { capability } => {
                 format!("the Analytics Engine binding of derived capability `{capability}`")
+            }
+            Self::D1Database { capability } => {
+                format!("the D1 database binding of derived capability `{capability}`")
             }
             Self::Agent { class_name } => {
                 format!("the Durable Object binding of agent `{class_name}`")
@@ -254,7 +262,8 @@ fn declared_at(
             | BindingSource::R2Instance { capability, .. }
             | BindingSource::RateLimitInstance { capability, .. }
             | BindingSource::QueueProducer { capability, .. }
-            | BindingSource::AnalyticsDataset { capability } => c.items.iter().find_map(|item| {
+            | BindingSource::AnalyticsDataset { capability }
+            | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;
                 };

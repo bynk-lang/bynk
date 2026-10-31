@@ -99,7 +99,7 @@ class __Stub_Fetch {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -113,6 +113,10 @@ class __Stub_Fetch {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     if (this.__case === "a stubbed fetch answers for the network") {
       return Ok({ status: 204, headers: new globalThis.Map<string, string>(), body: "" });
     }
@@ -143,7 +147,7 @@ class __Stub_Kv {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -157,6 +161,10 @@ class __Stub_Kv {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     if (this.__case === "a stubbed operation answers; the rest reach the double") {
       return Some("stubbed");
     }
@@ -381,7 +389,7 @@ async function test_the_clock_reads_the_epoch() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -395,6 +403,10 @@ async function test_the_clock_reads_the_epoch() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const t = await clock.call(deps);
     if (!(t === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:8:10", 238, 244, "expect t == 0\n  expected: t == 0\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((0))); }
     return { pass: true };
@@ -425,7 +437,7 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -439,6 +451,10 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const xs = await draws.call(deps);
     if (!(__bynkEq(xs, [156, 731]))) { throw __bynkExpectFailure("tests/demo/plat.bynk:13:10", 330, 346, "expect xs == [156, 731]\n  expected: xs == [156, 731]\n  actual:   " + __bynkShow((xs)) + " == " + __bynkShow(([156, 731]))); }
     return { pass: true };
@@ -469,7 +485,7 @@ async function test_random_uuids_count_up() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -483,6 +499,10 @@ async function test_random_uuids_count_up() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const xs = await ids.call(deps);
     if (!(__bynkEq(xs, ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]))) { throw __bynkExpectFailure("tests/demo/plat.bynk:18:10", 413, 499, "expect xs == [\"00000000-0000-4000-8000-000000000001\", \"00000000-0000-4000-8000-000000000002\"]\n  expected: xs == [\"00000000-0000-4000-8000-000000000001\", \"00000000-0000-4000-8000-000000000002\"]\n  actual:   " + __bynkShow((xs)) + " == " + __bynkShow((["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]))); }
     return { pass: true };
@@ -513,7 +533,7 @@ async function test_no_secret_is_set() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -527,6 +547,10 @@ async function test_no_secret_is_set() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const s = await secret.call("API_KEY", deps);
     if (!(s.tag === "None")) { throw __bynkExpectFailure("tests/demo/plat.bynk:23:10", 572, 581, "expect s is None"); }
     return { pass: true };
@@ -557,7 +581,7 @@ async function test_the_locale_is_en() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -571,6 +595,10 @@ async function test_the_locale_is_en() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const l = await locale.call(deps);
     if (!(l === "en")) { throw __bynkExpectFailure("tests/demo/plat.bynk:28:10", 645, 654, "expect l == \"en\"\n  expected: l == \"en\"\n  actual:   " + __bynkShow((l)) + " == " + __bynkShow(("en"))); }
     return { pass: true };
@@ -602,7 +630,7 @@ async function test_the_logger_records_without_printing() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -616,6 +644,10 @@ async function test_the_logger_records_without_printing() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const __r0 = await greet.call("ann", deps);
     if (!((((__obs.log["Logger.info"] ?? []).filter((__c: { args: unknown[] }) => { const { msg } = { msg: __c.args[0] } as __Logger_info_Call; return (msg === "hello ann"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:33:10", 741, 788, "expect Logger.info called once with msg == \"hello ann\""); }
     if (!(((__obs.log["Logger.error"] ?? []).length === 0))) { throw __bynkExpectFailure("tests/demo/plat.bynk:34:10", 798, 823, "expect Logger.error never called"); }
@@ -647,7 +679,7 @@ async function test_idempotency_remembers_within_a_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -661,6 +693,10 @@ async function test_idempotency_remembers_within_a_case() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const first = await once.call("k", deps);
     const second = await once.call("k", deps);
     if (!(first === true)) { throw __bynkExpectFailure("tests/demo/plat.bynk:40:10", 942, 955, "expect first == true\n  expected: first == true\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((true))); }
@@ -693,7 +729,7 @@ async function test_idempotency_is_fresh_per_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -707,6 +743,10 @@ async function test_idempotency_is_fresh_per_case() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const first = await once.call("k", deps);
     if (!(first === true)) { throw __bynkExpectFailure("tests/demo/plat.bynk:46:10", 1062, 1075, "expect first == true\n  expected: first == true\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((true))); }
     return { pass: true };
@@ -738,7 +778,7 @@ async function test_kv_is_in_memory() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -752,6 +792,10 @@ async function test_kv_is_in_memory() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("1")))) { throw __bynkExpectFailure("tests/demo/plat.bynk:51:10", 1145, 1159, "expect r == Some(\"1\")\n  expected: r == Some(\"1\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("1")))); }
     if (!((((__obs.log["Kv.put"] ?? []).filter((__c: { args: unknown[] }) => { const { key, value } = { key: __c.args[0], value: __c.args[1] } as __Kv_put_Call; return (key === "a"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:52:10", 1169, 1203, "expect Kv.put called once with key == \"a\""); }
@@ -783,7 +827,7 @@ async function test_kv_is_fresh_per_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -797,6 +841,10 @@ async function test_kv_is_fresh_per_case() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const r = await lookup.call("a", deps);
     if (!(r.tag === "None")) { throw __bynkExpectFailure("tests/demo/plat.bynk:57:10", 1274, 1283, "expect r is None"); }
     return { pass: true };
@@ -828,7 +876,7 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -842,6 +890,10 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("stubbed")))) { throw __bynkExpectFailure("tests/demo/plat.bynk:65:10", 1579, 1599, "expect r == Some(\"stubbed\")\n  expected: r == Some(\"stubbed\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("stubbed")))); }
     if (!(((__obs.log["Kv.put"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:66:10", 1609, 1627, "expect Kv.put called once"); }
@@ -874,7 +926,7 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -888,6 +940,10 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const s = await relay.call("https://example.test", deps);
     if (!(s === 204)) { throw __bynkExpectFailure("tests/demo/plat.bynk:72:10", 1825, 1833, "expect s == 204\n  expected: s == 204\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((204))); }
     if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => { const { req } = { req: __c.args[0] } as __Fetch_send_Call; return (req.url === "https://example.test"); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:73:10", 1843, 1904, "expect Fetch.send called once with req.url == \"https://example.test\""); }
@@ -920,7 +976,7 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -934,6 +990,10 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const s = await relay.call("https://example.test", deps);
     if (!(s === 200)) { throw __bynkExpectFailure("tests/demo/plat.bynk:80:10", 2184, 2192, "expect s == 200\n  expected: s == 200\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((200))); }
     if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => { const { req } = { req: __c.args[0] } as __Fetch_send_Call; return (__bynkEq(((__m: ReadonlyMap<string, string>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(req.headers, "user-agent"), Some("bynk-demo/1.0"))); }).length) === (1)))) { throw __bynkExpectFailure("tests/demo/plat.bynk:81:10", 2202, 2284, "expect Fetch.send called once with req.headers.get(\"user-agent\") == Some(\"bynk-demo/1.0\")"); }
@@ -965,7 +1025,7 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -979,6 +1039,10 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const s = await relay.call("https://example.test", deps);
     if (!(s === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:86:10", 2408, 2414, "expect s == 0\n  expected: s == 0\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((0))); }
     return { pass: true };
@@ -1009,7 +1073,7 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -1023,6 +1087,10 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const t = await clock.call(deps);
     const s = await secret.call("API_KEY", deps);
     if (!(t === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:92:10", 2550, 2556, "expect t == 0\n  expected: t == 0\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((0))); }

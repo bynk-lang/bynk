@@ -7,6 +7,6 @@ compiler: in-process
 ✓ compile [ok]
     compiler — in-process
 ✗ deploy [fail]
-    node — v22.0.0 (path)
+    node — v22.13.0 (path)
     wrangler — missing
       ↳ fix: npm install -g wrangler@4

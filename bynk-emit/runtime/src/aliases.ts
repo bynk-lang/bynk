@@ -11,7 +11,7 @@ import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocket
 import { invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, noStore, notModifiedIfMatch, renderRejection, requestHeaderPairs, requestHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
-import { makeIntegrationAnalytics, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeTestState, type AnalyticsDataset, type DurableObjectState, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter } from "./storage.ts";
+import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter } from "./storage.ts";
 
 export {
   AGENT_WIRE_PASS as __AGENT_WIRE_PASS,
@@ -43,6 +43,7 @@ export {
   makeAgent as __makeAgent,
   makeIntegrationDoNamespace as __makeIntegrationDoNamespace,
   makeIntegrationAnalytics as __makeIntegrationAnalytics,
+  makeIntegrationD1 as __makeIntegrationD1,
   makeIntegrationKv as __makeIntegrationKv,
   makeIntegrationQueue as __makeIntegrationQueue,
   makeIntegrationR2 as __makeIntegrationR2,
@@ -83,6 +84,7 @@ export type {
   CorsPolicy as __CorsPolicy,
   DurableObjectNamespace as __DurableObjectNamespace,
   AnalyticsDataset as __AnalyticsDataset,
+  D1Database as __D1Database,
   DurableObjectState as __DurableObjectState,
   JsonValue as __JsonValue,
   KVNamespace as __KVNamespace,

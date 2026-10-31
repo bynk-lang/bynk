@@ -549,6 +549,88 @@ experimental: list `"bynk.cloudflare.Analytics"` under `[unstable] allow`.
 first write; see
 [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#analytics-engine-datasets).
 
+### SQL databases: `D1`
+
+`D1` queries a D1 database, Cloudflare's SQLite. Each database is a named
+instance that takes no options, and a bare `given D1` is refused
+(`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+```
+
+`Orders` binds as `env.D1_ORDERS`, a `[[d1_databases]]` entry. The database's
+name is derived, never written: the context's Worker and the capability in
+kebab case, so `shop.cart`'s `Orders` is `shop-cart-orders`, and
+`shop-cart-orders-staging` under `--env staging`. An option is
+`bynk.capability.unknown_option`.
+
+Statements are SQL text with positional parameters, `?1`, `?2` and so on. Each
+parameter is a `SqlValue`, named by SQLite storage class: `Null`,
+`Integer(Int)`, `Real(Float)`, `Text(String)`, `Blob(Bytes)` or
+`Boolean(Bool)`, which binds as `1` or `0`. A value is always bound, never
+spliced into the text, so write `?1` and pass `Text(id)` rather than building
+the SQL from request data.
+
+Rows come back as JSON text, which you decode with
+[`Json.decode`](/book/reference/types/#the-json-codec) into a record of your
+own:
+
+```bynk,fragment
+type Order = { id: String, total: Int, paid: Int }
+
+service api from http {
+	on GET("/orders/:id") (id: String) -> Effect[HttpResult[Order]] by Visitor given Orders {
+		let row <- Orders.first("SELECT id, total, paid FROM orders WHERE id = ?1", [Text(id)])
+		match row {
+			Ok(Some(text)) => match Json.decode[Order](text) {
+				Ok(order) => Ok(order)
+				Err(_) => ServerError("the order did not decode")
+			}
+			Ok(None) => NotFound
+			Err(_) => ServerError("the query failed")
+		}
+	}
+}
+```
+
+- `all(sql, params)` gives every row as a JSON array of objects keyed by
+  column name, for `Json.decode[List[Row]]`.
+- `first(sql, params)` gives the first row as one object, or `None` when there
+  is none.
+- `run(sql, params)` executes a write and gives a `SqlRun { changes, lastRowId
+  }`: the rows it changed, and the rowid of the last row it inserted.
+- `batch(statements)` runs a `List[SqlStatement { sql, params }]` in order, in
+  one transaction: every statement applies, or none does and the result is the
+  failing one's error. It gives one `SqlRun` per statement.
+
+A failed statement is never a fault. Every operation gives a `Result` whose
+error is a `SqlError`: `Constraint(message)` for a UNIQUE, CHECK, NOT NULL or
+foreign-key violation, which a handler answers (a duplicate key is typically a
+`Conflict`), or `Failed(message)` for anything else, with the database's
+message. `SqlError` is extensible, so a `match` over it needs a wildcard.
+
+Three things about the JSON a row becomes:
+
+- A `BLOB` column arrives as standard base64, so a `Bytes` field decodes it.
+- SQLite has no boolean. A flag column arrives as `0` or `1`, which a `Bool`
+  field refuses, so declare the field `Int` and compare it with `1`.
+- An integer past ±2^53 cannot be represented exactly in JSON, so a field that
+  reads one fails the decode rather than rounding.
+
+In tests each instance is a real, empty SQLite database in memory (Node's
+built-in `node:sqlite`, so Node 22.13 or later), so statements run as they do
+on D1. A case creates the tables it needs, for example with
+`Orders.run("CREATE TABLE IF NOT EXISTS …", [])` through a service of the
+context. `stub Orders.all(_, _)` and `expect Orders.run called` work as for any
+capability. `D1` is experimental: list `"bynk.cloudflare.D1"` under
+`[unstable] allow`. `bynk deploy` creates each database and records its id; see
+[Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#d1-databases).
+Schema migrations are a later increment.
+
 ### Edge caching: `EdgeCache`
 
 `@cache` on its own only sets `Cache-Control`: Cloudflare doesn't store a
@@ -731,7 +813,7 @@ operation, is **stable** or **experimental**.
   [`[unstable] allow`](/docs/manifest/#unstable) in `bynk.toml`.
 
 The experimental items today are `bynk.cloudflare`'s `Service`, `R2`,
-`RateLimit` and `EdgeCache`, and the
+`RateLimit`, `EdgeCache` and `D1`, and the
 whole of `bynk.crypto`, which graduates once the first-party registry has signed
 with it in production. New platform capabilities may arrive experimental first.
 

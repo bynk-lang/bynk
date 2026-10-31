@@ -144,6 +144,7 @@ pub(super) fn context_bindings(
                 (firstparty::CLOUDFLARE_UNIT, "Analytics") => {
                     BindingSource::AnalyticsDataset { capability }
                 }
+                (firstparty::CLOUDFLARE_UNIT, "D1") => BindingSource::D1Database { capability },
                 (firstparty::CLOUDFLARE_UNIT, "Queue") => BindingSource::QueueProducer {
                     capability,
                     queue: d.queue().unwrap_or_default().to_string(),
