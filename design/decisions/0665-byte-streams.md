@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: "A `Stream` may now appear in a capability operation's signature and as a record or sum field (the type is then non-boundary like the stream, with no JSON codec). Streams are read once: reading one again faults. `RawStreamed(body: Stream[Bytes], contentType)` serves a 200 whose raw body is written chunk by chunk, with no `ETag`. A system-tier test reads a non-JSON 200 back as `Ok` with its text (standard-library K-streams, [#2623](https://github.com/bynk-lang/bynk/issues/2623))"
----
+# 0665 — Streams cross capability signatures and ride in records, are read once, and a `RawStreamed` response serves bytes
 
-## ADR: byte-streams
-title: Streams cross capability signatures and ride in records, are read once, and a `RawStreamed` response serves bytes
-summary: A `Stream` may appear in a capability operation's signature (its provider is in-process) and in a record or sum field, which makes the type stream-carrying and non-boundary; every stream is single-pass, a second traversal faulting; `RawStreamed(body: Stream[Bytes], contentType)` is a 200-only raw body written as it is pulled, with no validator; this settles ADR 0128 D5 for in-process streams
+- **Status:** Accepted (v0.451)
 
 **Context.** ADR 0128 made `Stream[T]` a value type that never crosses a
 boundary, and deferred its element semantics (D5) "to the first consumer that

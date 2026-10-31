@@ -15,4 +15,4 @@ is the quickest path; the pages here are the reference for each tool.
 | [`vscode-bynk`](/docs/tooling/vscode-bynk/) | VS Code extension | Editor integration built on `bynkc-lsp`. |
 
 All are built from the same repository as the compiler, so they track the
-language version for version (currently v0.450).
+language version for version (currently v0.451).
