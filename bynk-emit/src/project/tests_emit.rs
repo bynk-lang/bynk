@@ -5355,7 +5355,7 @@ const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>(
   };
   const uploads = new globalThis.Map<string, any>();
   const claim = (s: any) => {
-    const k = globalThis.Symbol.for("bynk.stream.read");
+    const k = globalThis.Symbol.for('bynk.stream.read');
     if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
     s[k] = true;
   };

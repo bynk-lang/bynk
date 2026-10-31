@@ -342,7 +342,12 @@ adapter bynk.cloudflare {
 		fn list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]
 		fn getStream(key: String) -> Effect[Option[R2Body]]
 		fn putStream(key: String, body: Stream[Bytes], size: Int) -> Effect[R2Object]
-		fn putStreamWith(key: String, body: Stream[Bytes], size: Int, options: R2Put) -> Effect[Option[R2Object]]
+		fn putStreamWith(
+			key: String,
+			body: Stream[Bytes],
+			size: Int,
+			options: R2Put
+		) -> Effect[Option[R2Object]]
 		fn createUpload(key: String, options: R2UploadOptions) -> Effect[R2Upload]
 		fn uploadPart(upload: R2Upload, partNumber: Int, body: Bytes) -> Effect[R2Part]
 		fn completeUpload(upload: R2Upload, parts: List[R2Part]) -> Effect[R2Object]

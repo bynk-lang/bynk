@@ -164,7 +164,7 @@ function __bynkTest_Archives(): __ns_bynk_cloudflare.R2 {
   };
   const uploads = new globalThis.Map<string, any>();
   const claim = (s: any) => {
-    const k = globalThis.Symbol.for("bynk.stream.read");
+    const k = globalThis.Symbol.for('bynk.stream.read');
     if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
     s[k] = true;
   };
@@ -303,7 +303,7 @@ function __bynkTest_Indexes(): __ns_bynk_cloudflare.R2 {
   };
   const uploads = new globalThis.Map<string, any>();
   const claim = (s: any) => {
-    const k = globalThis.Symbol.for("bynk.stream.read");
+    const k = globalThis.Symbol.for('bynk.stream.read');
     if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
     s[k] = true;
   };
@@ -442,7 +442,7 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
   };
   const uploads = new globalThis.Map<string, any>();
   const claim = (s: any) => {
-    const k = globalThis.Symbol.for("bynk.stream.read");
+    const k = globalThis.Symbol.for('bynk.stream.read');
     if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
     s[k] = true;
   };

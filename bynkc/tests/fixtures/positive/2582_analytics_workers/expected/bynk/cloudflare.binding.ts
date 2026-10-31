@@ -421,17 +421,20 @@ function r2Sized(body: AsyncIterable<Uint8Array>, size: number, op: string) {
   const iterator = body[Symbol.asyncIterator]();
   let seen = 0;
   let failure: Error | undefined;
-  const fail = (controller: ReadableStreamDefaultController<Uint8Array>, held: number) => {
+  const mismatch = (held: number): Error => {
     failure = new Error(`bynk.cloudflare.R2.${op}: the stream held ${held} bytes, not the declared size ${size}`);
-    controller.error(failure);
+    return failure;
   };
   const counted = new ReadableStream<Uint8Array>({
     async pull(controller) {
-      let next: IteratorResult<Uint8Array>;
-      try {
-        next = await iterator.next();
-      } catch (e) {
-        failure = e instanceof Error ? e : new Error(String(e));
+      const next = await iterator.next().then(
+        (r) => r,
+        (e: unknown) => {
+          failure = e instanceof Error ? e : new Error(String(e));
+          return undefined;
+        },
+      );
+      if (next === undefined) {
         controller.error(failure);
         return;
       }
@@ -439,13 +442,13 @@ function r2Sized(body: AsyncIterable<Uint8Array>, size: number, op: string) {
         if (seen === size) {
           controller.close();
         } else {
-          fail(controller, seen);
+          controller.error(mismatch(seen));
         }
         return;
       }
       seen += next.value.byteLength;
       if (seen > size) {
-        fail(controller, seen);
+        controller.error(mismatch(seen));
         await iterator.return?.();
         return;
       }
@@ -455,8 +458,8 @@ function r2Sized(body: AsyncIterable<Uint8Array>, size: number, op: string) {
       await iterator.return?.(reason);
     },
   });
-  const Fixed = (globalThis as { FixedLengthStream?: new (length: number) => TransformStream<Uint8Array, Uint8Array> })
-    .FixedLengthStream;
+  type FixedLength = new (length: number) => { readable: ReadableStream<Uint8Array>; writable: WritableStream<Uint8Array> };
+  const Fixed = (globalThis as { FixedLengthStream?: FixedLength }).FixedLengthStream;
   let value: ReadableStream<Uint8Array> = counted;
   if (Fixed !== undefined) {
     const fixed = new Fixed(size);
