@@ -542,11 +542,14 @@ pub const UNITS: &[Unit] = &[
         platform: None,
         env_providers: &["SecretsProvider"],
         stability: Stability::Stable,
-        // K5a (#2586): the new operations, until a service has used them.
+        // K5a (#2586), K5b (#2604), K5c (#2627): the new operations, until a
+        // service has used them.
         experimental: &[
             "Fetch.sendWith",
             "Fetch.receiveBytes",
             "Fetch.sendBytes",
+            "Fetch.receiveStream",
+            "Fetch.sendStream",
             "Logger.log",
         ],
         extensible: &["FetchError", "Method", "Redirect"],
@@ -1244,6 +1247,8 @@ mod tests {
                 "bynk.Fetch.sendWith",
                 "bynk.Fetch.receiveBytes",
                 "bynk.Fetch.sendBytes",
+                "bynk.Fetch.receiveStream",
+                "bynk.Fetch.sendStream",
                 "bynk.Logger.log",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",

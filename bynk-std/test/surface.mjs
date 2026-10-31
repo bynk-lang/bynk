@@ -14,6 +14,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
 
 /** The `Uuid` refinement, as `bynk.bynk` declares it. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -64,6 +65,43 @@ async function withFetch(stub, body) {
     globalThis.fetch = original;
   }
 }
+
+/**
+ * K5c (#2627): run `body(url)` against a real local HTTP server, so the
+ * platform's own `fetch` (undici) sends and receives the streamed bodies — a
+ * fake can't tell whether `duplex: "half"` was set, or a timer cleared.
+ */
+async function withServer(handler, body) {
+  const server = http.createServer(handler);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    await body(`http://127.0.0.1:${server.address().port}`);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A `Stream[Bytes]` as emitted code builds one: an async generator. */
+async function* chunksOf(...parts) {
+  for (const part of parts) {
+    yield part;
+  }
+}
+
+/** Every byte of a `Stream[Bytes]`, read to its end. */
+async function drain(stream) {
+  const out = [];
+  for await (const chunk of stream) {
+    out.push(...chunk);
+  }
+  return out;
+}
+
+/** Whether a stream carries the single-pass mark (`claimStream`). */
+const claimed = (stream) => stream[Symbol.for("bynk.stream.read")] === true;
 
 /** Set `process.env[name]` for the duration of `body`. */
 async function withProcessEnv(name, value, body) {
@@ -419,6 +457,213 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
       );
     });
 
+    // K5c (#2627): streamed bodies, against a real server where it matters.
+    t("FetchProvider.receiveStream: streams the body as it arrives; the timeout bounds the head only", async () => {
+      await withServer(
+        async (_req, res) => {
+          res.writeHead(200, { "content-type": "application/octet-stream" });
+          const bytes = allBytes();
+          for (let i = 0; i < 4; i++) {
+            res.write(bytes.subarray(i * 64, (i + 1) * 64));
+            await sleep(60);
+          }
+          res.end();
+        },
+        async (url) => {
+          // The body takes ~240 ms; a timeout of 100 ms bounds the head alone.
+          const res = await new b.FetchProvider().receiveStream(
+            request({ url }),
+            { timeout: Some(100), redirect: bynk.Redirect.Follow },
+          );
+          assert.equal(res.tag, "Ok");
+          assert.equal(res.value.status, 200);
+          assert.equal(res.value.headers.get("content-type"), "application/octet-stream");
+          // Handed out unclaimed: the first read claims it, not the binding.
+          assert.equal(claimed(res.value.body), false);
+          assert.deepEqual(await drain(res.value.body), [...allBytes()]);
+        },
+      );
+    });
+
+    t("FetchProvider.receiveStream: a head that never arrives is Err(Timeout)", async () => {
+      await withServer(
+        () => {},
+        async (url) => {
+          const res = await new b.FetchProvider().receiveStream(
+            request({ url }),
+            { timeout: Some(50), redirect: bynk.Redirect.Follow },
+          );
+          assert.equal(res.tag, "Err");
+          assert.equal(res.error.tag, "Timeout");
+        },
+      );
+    });
+
+    t("FetchProvider.receiveStream: a connection lost partway through the body faults the read", async () => {
+      await withServer(
+        (_req, res) => {
+          res.writeHead(200);
+          res.write("partial");
+          setTimeout(() => res.socket.destroy(), 20);
+        },
+        async (url) => {
+          const res = await new b.FetchProvider().receiveStream(request({ url }), defaults);
+          assert.equal(res.tag, "Ok");
+          await assert.rejects(drain(res.value.body));
+        },
+      );
+    });
+
+    t("FetchProvider.receiveStream: a read that stops early releases the connection", async () => {
+      let closed;
+      const upstreamClosed = new Promise((resolve) => (closed = resolve));
+      await withServer(
+        (_req, res) => {
+          res.on("close", closed);
+          res.writeHead(200);
+          res.write("first");
+          // Never ends on its own.
+        },
+        async (url) => {
+          const res = await new b.FetchProvider().receiveStream(request({ url }), defaults);
+          for await (const chunk of res.value.body) {
+            assert.ok(chunk.length > 0);
+            break;
+          }
+          await upstreamClosed;
+        },
+      );
+    });
+
+    t("FetchProvider.receiveStream: no body is an empty stream; a String body and the options apply", async () => {
+      await withFetch(
+        () => new Response(null, { status: 302, headers: { location: "https://elsewhere.test/" } }),
+        async (calls) => {
+          const res = await new b.FetchProvider().receiveStream(
+            request({ method: bynk.Method.Post, body: Some("{}") }),
+            { timeout: Some(1000), redirect: bynk.Redirect.Manual },
+          );
+          assert.equal(res.tag, "Ok");
+          assert.equal(res.value.status, 302);
+          assert.deepEqual(await drain(res.value.body), []);
+          assert.equal(calls[0].init.body, "{}");
+          assert.equal(calls[0].init.redirect, "manual");
+          assert.equal(calls[0].init.duplex, undefined);
+          await assert.rejects(
+            new b.FetchProvider().receiveStream(request(), { timeout: Some(0), redirect: bynk.Redirect.Follow }),
+            /Fetch.receiveStream: a timeout is more than zero/,
+          );
+          assert.equal(calls.length, 1);
+        },
+      );
+    });
+
+    t("FetchProvider.sendStream: sends the stream chunked, every byte intact, and streams the response", async () => {
+      let seen;
+      await withServer(
+        (req, res) => {
+          const got = [];
+          req.on("data", (c) => got.push(...c));
+          req.on("end", () => {
+            seen = { got, headers: req.headers };
+            res.writeHead(201, { "content-type": "application/octet-stream" });
+            res.end(Uint8Array.from(got));
+          });
+        },
+        async (url) => {
+          const bytes = allBytes();
+          const body = chunksOf(bytes.subarray(0, 100), new Uint8Array(), bytes.subarray(100));
+          const res = await new b.FetchProvider().sendStream(
+            request({ url, method: bynk.Method.Put, contentType: Some("application/octet-stream") }),
+            body,
+            { timeout: Some(5000), redirect: bynk.Redirect.Follow },
+          );
+          assert.equal(claimed(body), true);
+          assert.equal(res.tag, "Ok");
+          assert.equal(res.value.status, 201);
+          assert.deepEqual(await drain(res.value.body), [...bytes]);
+          assert.deepEqual(seen.got, [...bytes]);
+          assert.equal(seen.headers["content-length"], undefined);
+          assert.equal(seen.headers["transfer-encoding"], "chunked");
+          assert.equal(seen.headers["content-type"], "application/octet-stream");
+        },
+      );
+    });
+
+    t("FetchProvider.sendStream: a redirect is returned as it is, whatever the options say", async () => {
+      let requests = 0;
+      await withServer(
+        (req, res) => {
+          requests++;
+          req.resume();
+          req.on("end", () => {
+            const status = req.url === "/temp" ? 307 : 303;
+            res.writeHead(status, { location: "/elsewhere" });
+            res.end();
+          });
+        },
+        async (url) => {
+          for (const path of ["/temp", "/see-other"]) {
+            const res = await new b.FetchProvider().sendStream(
+              request({ url: url + path, method: bynk.Method.Post }),
+              chunksOf(new Uint8Array([1, 2, 3])),
+              defaults,
+            );
+            assert.equal(res.tag, "Ok", path);
+            assert.equal(res.value.status, path === "/temp" ? 307 : 303);
+            assert.equal(res.value.headers.get("location"), "/elsewhere");
+          }
+          assert.equal(requests, 2);
+        },
+      );
+    });
+
+    t("FetchProvider.sendStream: a throw from the caller's own stream faults the call with that error", async () => {
+      await withServer(
+        (req, res) => {
+          req.resume();
+          req.on("end", () => res.end("unexpected"));
+        },
+        async (url) => {
+          async function* failing() {
+            yield new Uint8Array([1]);
+            throw new Error("the source broke");
+          }
+          await assert.rejects(
+            new b.FetchProvider().sendStream(request({ url, method: bynk.Method.Post }), failing(), defaults),
+            /the source broke/,
+          );
+        },
+      );
+    });
+
+    t("FetchProvider.sendStream: two bodies, a body on Get or Head, or a bad header is refused, nothing is sent, and the stream is consumed", async () => {
+      await withFetch(
+        () => new Response("unexpected"),
+        async (calls) => {
+          const p = new b.FetchProvider();
+          const twoBodies = chunksOf();
+          const res = await p.sendStream(request({ method: bynk.Method.Post, body: Some("x") }), twoBodies, defaults);
+          assert.equal(res.tag, "Err");
+          assert.equal(res.error.tag, "InvalidBody");
+          assert.equal(claimed(twoBodies), true);
+          for (const m of ["Get", "Head"]) {
+            const r = await p.sendStream(request({ method: bynk.Method[m] }), chunksOf(), defaults);
+            assert.equal(r.error.tag, "InvalidBody", m);
+          }
+          const header = await p.sendStream(
+            request({ method: bynk.Method.Post, headers: new Map([["host", "x"]]) }),
+            chunksOf(),
+            defaults,
+          );
+          assert.equal(header.error.tag, "InvalidHeader");
+          // Handed over once, a stream can't be handed over again.
+          await assert.rejects(p.sendStream(request({ method: bynk.Method.Post }), twoBodies, defaults), /read only once/);
+          assert.equal(calls.length, 0);
+        },
+      );
+    });
+
     t("FetchProvider.send: a body on Get or Head is Err(InvalidBody), not Err(Network), and nothing is sent", async () => {
       await withFetch(
         () => new Response("unexpected"),
@@ -436,8 +681,8 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
       );
     });
   } else {
-    // K5b (#2604).
-    for (const op of ["receiveBytes", "sendBytes"]) {
+    // K5b (#2604), K5c (#2627).
+    for (const op of ["receiveBytes", "sendBytes", "receiveStream", "sendStream"]) {
       t(`FetchProvider.${op}: is withheld — it throws, and nothing is sent`, async () => {
         await withFetch(
           () => new Response("unexpected"),
@@ -445,7 +690,9 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
             const opts = { timeout: None, redirect: bynk.Redirect.Follow };
             const call = op === "sendBytes"
               ? new b.FetchProvider().sendBytes(request({ method: bynk.Method.Post }), new Uint8Array([1]), opts)
-              : new b.FetchProvider().receiveBytes(request(), opts);
+              : op === "sendStream"
+                ? new b.FetchProvider().sendStream(request({ method: bynk.Method.Post }), chunksOf(), opts)
+                : new b.FetchProvider()[op](request(), opts);
             await assert.rejects(call, /Fetch is unavailable/);
             assert.equal(calls.length, 0);
           },
