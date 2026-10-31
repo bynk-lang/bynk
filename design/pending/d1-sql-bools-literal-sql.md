@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, diagnostic_coverage
+probes: emit_diagnostics, ts_writes, diagnostic_coverage
 changelog: "`D1` call sites close their two gaps: `Json.decodeSql[T]` decodes a SQL row (or a `List` of rows) as `Json.decode` does, but also reads SQLite's `0`/`1` at a `Bool` field, and a `D1` statement's SQL must be a string literal (the first argument of `all`/`first`/`run`, and every `SqlStatement`'s `sql`), so data only reaches it as bound `SqlValue` parameters. `SqlStatement` is now non-storable and non-boundary. New diagnostics: `bynk.types.sql_not_literal`, `bynk.types.sql_statement_at_boundary` and `bynk.types.sql_row_shape` (standard-library P4c, [#2628](https://github.com/bynk-lang/bynk/issues/2628))"
 ---
 
