@@ -204,6 +204,11 @@ struct PlanD1<'a> {
     action: &'static str,
     /// The database's account-facing name, [`d1_database_name`]d.
     database: String,
+    /// P4b (#2608): its migration files. `bynk deploy` applies the ones the
+    /// database hasn't recorded before the push; the plan is offline, so it
+    /// can't say which those are.
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    migrations: &'a [String],
 }
 
 /// P3b (#2582): one Analytics Engine dataset.
@@ -1908,6 +1913,16 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         "d1 {} {} ({})\n",
                         d1.action, d1.database, d1.binding
                     ));
+                    // P4b (#2608): applied after the database is bound and
+                    // before the push.
+                    if !d1.migrations.is_empty() {
+                        let n = d1.migrations.len();
+                        out.push_str(&format!(
+                            "d1 migrate {} ({n} file{}; pending ones applied before the push)\n",
+                            d1.database,
+                            if n == 1 { "" } else { "s" }
+                        ));
+                    }
                 }
                 for limiter in &context.ratelimits {
                     match &limiter.namespace_id {
@@ -2095,6 +2110,7 @@ pub(crate) fn derive_plan<'a>(
                                     "create"
                                 },
                                 database,
+                                migrations: &db.migrations,
                             }
                         })
                         .collect(),
@@ -2785,6 +2801,32 @@ pub(crate) mod tests {
                 && report.contains("orphan d1 shop D1_GONE (shop-gone; not deleted)\n"),
             "{report}"
         );
+    }
+
+    #[test]
+    fn the_plan_says_which_databases_have_migrations_to_apply() {
+        // P4b (#2608): offline, so the files, not which of them are pending.
+        let mut resources = Resources::default()
+            .d1_databases(&[("D1_ORDERS", "shop-orders"), ("D1_PLAIN", "shop-plain")]);
+        resources.d1_databases[0].migrations =
+            vec!["0001_create.sql".into(), "0002_more.sql".into()];
+        let declared = project(vec![("shop", resources)]);
+        let order = names(&["shop"]);
+        let plan = plan_of(&order, &declared, &DeployLock::default());
+        let report = plan_report(&plan, DeployFormat::Short);
+        assert!(
+            report.contains(
+                "d1 create shop-orders (D1_ORDERS)\nd1 migrate shop-orders (2 files; pending ones applied before the push)\n"
+            ) && !report.contains("d1 migrate shop-plain"),
+            "{report}"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert_eq!(
+            json["contexts"][0]["d1"][0]["migrations"],
+            serde_json::json!(["0001_create.sql", "0002_more.sql"])
+        );
+        assert!(json["contexts"][0]["d1"][1].get("migrations").is_none());
     }
 
     #[test]
