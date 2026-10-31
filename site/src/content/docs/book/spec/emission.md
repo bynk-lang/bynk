@@ -534,26 +534,6 @@ checked when the record is decoded, failing as a `RefinementViolation` at the
 field's path, and a `Duration` or `Instant` must be a safe integer wherever it
 appears.
 
-### §7.3.4e The published wire format
-
-The request a `/_bynk/call/` dispatch accepts, the order of its checks with
-their statuses and error bodies, the JSON encoding of every boundary type and
-the contract hash's normal form are a published surface with **its own
-version**, apart from the emitted TypeScript: the
-[wire format reference](/book/reference/wire-format/), generated from the
-compiler and guarded against it. A caller states the version it speaks in
-`X-Bynk-Wire` (absent means `1`); the callee accepts a range and refuses any
-other version with `400 UnsupportedWireVersion`.
-
-The dispatch makes its checks in the published order: the method (`POST`, else
-`405` with `Allow: POST`), the call secret (§7.3.4d), the wire version, the
-service (`404`), the contract (§7.3.4c), the body's JSON (read as text and
-parsed, else `400 MalformedJson`), the caller (§7.3.4a, for a handler binding
-`Caller`), then the arguments (§7.3.4b). A record field's inline refinement is
-checked when the record is decoded, failing as a `RefinementViolation` at the
-field's path, and a `Duration` or `Instant` must be a safe integer wherever it
-appears.
-
 ### §7.3.5 Tests
 
 Each test unit emits a per-target test module; an aggregating runner
@@ -562,6 +542,17 @@ Each test unit emits a per-target test module; an aggregating runner
 that throws on failure, which the runner records as a failing case. `bynkc test`
 emits these modules, compiles them with `tsc`, and runs the aggregated runner on
 Node ([§8.4](/book/spec/compilation-model/#84-build-pipeline--conformance-to-typescript)).
+
+### §7.3.5a Functions as values (v0.20a)
+
+| Construct | Emits |
+|---|---|
+| function type `A -> B` | the TS function type `(a0: A) => B` (an `Effect` return is `Promise` via the ordinary lowering) |
+| lambda | a TS arrow — `async` exactly when its checked type is effectful; written annotations transcribe, omitted ones rely on TS contextual typing in argument position |
+| lambda block body | the same statement lowering as a function body |
+| named function as a value | the function's TS identifier, unchanged |
+| value application | a TS call |
+| generic function | an **erased** TS generic (`function name<A, B>(…)`) — no runtime type-argument dispatch |
 
 ### §7.3.5b Function contracts (v0.115)
 
@@ -633,17 +624,6 @@ enclosing one, yields `false` when the call returns, re-throws an `ExpectationEr
 yields `true` for any other thrown value
 ([§7.4.12a](/book/spec/runtime-library/#7412a-the-fault-claim)). The check reports
 `the call returned without faulting` when it fails.
-
-### §7.3.5a Functions as values (v0.20a)
-
-| Construct | Emits |
-|---|---|
-| function type `A -> B` | the TS function type `(a0: A) => B` (an `Effect` return is `Promise` via the ordinary lowering) |
-| lambda | a TS arrow — `async` exactly when its checked type is effectful; written annotations transcribe, omitted ones rely on TS contextual typing in argument position |
-| lambda block body | the same statement lowering as a function body |
-| named function as a value | the function's TS identifier, unchanged |
-| value application | a TS call |
-| generic function | an **erased** TS generic (`function name<A, B>(…)`) — no runtime type-argument dispatch |
 
 ### §7.3.6 Adapters
 
