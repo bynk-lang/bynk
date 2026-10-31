@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`D1` databases get schema migrations: `migrations/<database>/NNNN_<name>.sql` in the project, copied beside each Worker's `wrangler.toml` and named by `migrations_dir`. `bynk deploy` applies pending ones before the push (a `d1 migrate` plan line), `bynk dev` applies them locally before serving and when one is added, and every test database starts with them applied. New diagnostics: `bynk.d1.migration_name`, `bynk.d1.migration_unreadable` and the warning `bynk.d1.migrations_unused` (standard-library P4b, [#2608](https://github.com/bynk-lang/bynk/issues/2608))"
----
+# 0664 — D1 schema migrations by convention, applied by wrangler before the push
 
-## ADR: d1-migrations
-title: D1 schema migrations by convention, applied by wrangler before the push
-summary: Each `D1` instance's migrations live in `migrations/<database>/NNNN_<name>.sql`, are copied into the build and named by `migrations_dir`, and are applied by `wrangler d1 migrations apply` before the push, locally in `bynk dev`, and on every test database; the database records what ran, so the ledger doesn't; `D1` stays experimental, amending ADR 0662 H
+- **Status:** Accepted (v0.450)
 
 **Context.** ADR 0662 shipped `D1` with an empty database: an application
 created its tables with `CREATE TABLE IF NOT EXISTS` at runtime, or the
