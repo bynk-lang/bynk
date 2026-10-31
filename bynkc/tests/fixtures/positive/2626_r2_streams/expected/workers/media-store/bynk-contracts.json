@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "provides": {
+    "abandon": "efe4b6e6e899c8e5",
+    "begin": "96cca902411e0531",
+    "copy": "d901831974035c53",
+    "finish": "09ec5e727c8dc765",
+    "read": "46115351d8436217",
+    "save": "674d0f24c8383fae",
+    "saveExactly": "89195c5a158759c8",
+    "saveNew": "29be5d086abf438f"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "abandon": "Svc(\"abandon\",P(\"key\",B(\"String\")),P(\"id\",B(\"String\")),Ret(U()))",
+    "begin": "Svc(\"begin\",P(\"key\",B(\"String\")),Ret(B(\"String\")))",
+    "copy": "Svc(\"copy\",P(\"src\",B(\"String\")),P(\"dst\",B(\"String\")),Ret(O(B(\"Int\"))))",
+    "finish": "Svc(\"finish\",P(\"key\",B(\"String\")),P(\"id\",B(\"String\")),P(\"first\",B(\"String\")),P(\"last\",B(\"String\")),Ret(B(\"String\")))",
+    "read": "Svc(\"read\",P(\"key\",B(\"String\")),Ret(O(B(\"String\"))))",
+    "save": "Svc(\"save\",P(\"key\",B(\"String\")),P(\"data\",B(\"Bytes\")),Ret(B(\"Int\")))",
+    "saveExactly": "Svc(\"saveExactly\",P(\"key\",B(\"String\")),P(\"data\",B(\"Bytes\")),P(\"size\",B(\"Int\")),Ret(B(\"Int\")))",
+    "saveNew": "Svc(\"saveNew\",P(\"key\",B(\"String\")),P(\"data\",B(\"Bytes\")),Ret(B(\"Bool\")))"
+  }
+}
