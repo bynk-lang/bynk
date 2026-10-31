@@ -1,0 +1,79 @@
+context mirror
+
+// #2627: `Fetch.receiveStream` streams a response body as it arrives, and
+// `RawStreamed` re-serves it without buffering; `Fetch.sendStream` uploads a
+// `Stream[Bytes]` chunk by chunk.
+
+consumes bynk { Fetch }
+
+fn fetchFrom(url: String) -> Request {
+	Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None }
+}
+
+service api from http {
+	// The upstream body streams straight into the response.
+	on GET("/mirror/:key") (key: String) -> Effect[HttpResult[()]] by Visitor given Fetch {
+		let options = FetchOptions { timeout: Some(10.seconds), redirect: Follow }
+		let got <- Fetch.receiveStream(fetchFrom("https://upstream.test/files/\(key)"), options)
+		match got {
+			Ok(r) => {
+				if r.status == 200 {
+					RawStreamed(r.body, r.headers.get("content-type").getOrElse("application/octet-stream"))
+				} else {
+					NotFound
+				}
+			}
+			Err(Timeout) => GatewayTimeout("the upstream did not answer in time")
+			Err(_) => BadGateway("the upstream could not be reached")
+		}
+	}
+}
+
+service upload {
+	on call(target: String) -> Effect[Int] given Fetch {
+		let put = Request { method: Put, url: target, contentType: Some("text/plain"), authorization: None, headers: Map.empty(), body: None }
+		let parts = Stream.of([Bytes.fromUtf8("a"), Bytes.fromUtf8("b"), Bytes.fromUtf8("c")])
+		let sent <- Fetch.sendStream(put, parts, FetchOptions { timeout: None, redirect: Manual })
+		match sent {
+			Ok(r) => Effect.pure(r.status)
+			Err(_) => Effect.pure(-1)
+		}
+	}
+}
+
+// Each call's body is its own stream: reading both is two reads of two
+// streams, not two of one.
+service both {
+	on call(url: String) -> Effect[Int] given Fetch {
+		let options = FetchOptions { timeout: None, redirect: Follow }
+		let first <- Fetch.receiveStream(fetchFrom(url), options)
+		let second <- Fetch.receiveStream(fetchFrom(url), options)
+		match first {
+			Ok(a) => {
+				match second {
+					Ok(b) => {
+						let x <- a.body.collect()
+						let y <- b.body.collect()
+						Effect.pure(x.length() + y.length())
+					}
+					Err(_) => Effect.pure(-1)
+				}
+			}
+			Err(_) => Effect.pure(-1)
+		}
+	}
+}
+
+service twice {
+	on call(url: String) -> Effect[Int] given Fetch {
+		let got <- Fetch.receiveStream(fetchFrom(url), FetchOptions { timeout: None, redirect: Follow })
+		match got {
+			Ok(r) => {
+				let x <- r.body.collect()
+				let y <- r.body.collect()
+				Effect.pure(x.length() + y.length())
+			}
+			Err(_) => Effect.pure(-1)
+		}
+	}
+}

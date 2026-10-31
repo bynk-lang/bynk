@@ -7,10 +7,12 @@ import type {
   LogLevel,
   Request as FetchRequest,
   Response as FetchResponse,
+  StreamResponse,
 } from "./bynk.js";
 import { FetchError, Uuid } from "./bynk.js";
 import { LocaleTag } from "./bynk/locale/types.js";
 import { Err, None, Ok, Some, type Option, type Result } from "./__bynk_runtime/result.js";
+import { byteStreamBody, claimStream } from "./__bynk_runtime/http.js";
 
 export class ClockProvider implements Clock {
   async now(): Promise<number> {
@@ -112,6 +114,46 @@ function redirectOf(options: FetchOptions): "follow" | "manual" {
 
 const readText = (res: globalThis.Response): Promise<string> => res.text();
 const readBytes = async (res: globalThis.Response): Promise<Uint8Array> => new Uint8Array(await res.arrayBuffer());
+// K5c (#2627): the response body as a fresh single-pass stream. It isn't
+// claimed here: the first `collect`/`map`/`take`, or a `RawStreamed`, claims
+// it, so a second read faults as with `Stream.of`. The reader is taken on the
+// first pull, and cancelled when the read stops early (`take`, a throw, a
+// `HEAD` cancelling its `GET`'s body), releasing the connection. A `null`
+// body (`Head`, 204, 304) is an empty stream.
+const readStream = (res: globalThis.Response): AsyncIterable<Uint8Array> =>
+  (async function* (body: ReadableStream<Uint8Array> | null) {
+    if (body === null) {
+      return;
+    }
+    const reader = body.getReader();
+    let done = false;
+    try {
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) {
+          done = true;
+          return;
+        }
+        yield next.value;
+      }
+    } finally {
+      if (!done) {
+        reader.cancel().catch(() => {});
+      }
+    }
+  })(res.body);
+
+// K5c (#2627): `source`, noting a throw from it before passing it on, so
+// `sendStream` can fault with the caller's own error where `fetch` would
+// reject and it would read as `Err(Network)`.
+async function* watched(source: AsyncIterable<Uint8Array>, failed: (e: unknown) => void): AsyncIterable<Uint8Array> {
+  try {
+    yield* source;
+  } catch (e) {
+    failed(e);
+    throw e;
+  }
+}
 
 export class FetchProvider implements Fetch {
   async send(req: FetchRequest): Promise<Result<FetchResponse, FetchError>> {
@@ -132,18 +174,39 @@ export class FetchProvider implements Fetch {
     return this.exchange(req, body, timeoutOf("sendBytes", options), redirectOf(options), readBytes);
   }
 
+  // K5c (#2627): the response body streamed as it is read. The timeout bounds
+  // the response head only (`exchange`'s `headOnly`).
+  async receiveStream(req: FetchRequest, options: FetchOptions): Promise<Result<StreamResponse, FetchError>> {
+    return this.exchange(req, undefined, timeoutOf("receiveStream", options), redirectOf(options), readStream, true);
+  }
+
+  // K5c (#2627): handing a stream over consumes it, whatever the outcome —
+  // a refused body or header included — as handing one to `RawStreamed` does.
+  // A streamed body can't be sent twice, so a redirect is returned as it is,
+  // whatever `options.redirect` says.
+  async sendStream(
+    req: FetchRequest,
+    body: AsyncIterable<Uint8Array>,
+    options: FetchOptions,
+  ): Promise<Result<StreamResponse, FetchError>> {
+    claimStream(body);
+    return this.exchange(req, body, timeoutOf("sendStream", options), "manual", readStream, true);
+  }
+
   private async exchange<B>(
     req: FetchRequest,
-    bytes: Uint8Array | undefined,
+    bytes: Uint8Array | AsyncIterable<Uint8Array> | undefined,
     timeoutMs: number | undefined,
     redirect: "follow" | "manual",
-    read: (res: globalThis.Response) => Promise<B>,
+    read: (res: globalThis.Response) => B | Promise<B>,
+    headOnly = false,
   ): Promise<Result<{ status: number; headers: Map<string, string>; body: B }, FetchError>> {
     // K5b (#2604): a body is refused before anything is sent when HTTP forbids
     // it (`Get`, `Head`) — `fetch` would throw a TypeError, which would read as
     // `Err(Network)` — or when `sendBytes` was given one while `req.body` was
     // also `Some`, so neither silently wins. An empty `Bytes` is a body.
-    const body: string | Uint8Array | undefined = bytes ?? (req.body.tag === "Some" ? req.body.value : undefined);
+    const body: string | Uint8Array | AsyncIterable<Uint8Array> | undefined =
+      bytes ?? (req.body.tag === "Some" ? req.body.value : undefined);
     if (
       (bytes !== undefined && req.body.tag === "Some") ||
       (body !== undefined && (req.method.tag === "Get" || req.method.tag === "Head"))
@@ -182,14 +245,51 @@ export class FetchProvider implements Fetch {
     } catch {
       return Err(FetchError.InvalidHeader);
     }
+    // K5c (#2627): a streamed request body goes as a lazy `ReadableStream`,
+    // which Node's fetch takes only with `duplex: "half"` (workerd ignores it).
+    let sourceFailure: { error: unknown } | undefined;
+    const streamed = body !== undefined && typeof body !== "string" && !(body instanceof Uint8Array);
+    const sent = streamed
+      ? byteStreamBody(
+          watched(body as AsyncIterable<Uint8Array>, (error) => {
+            sourceFailure = { error };
+          }),
+        )
+      : body;
+    // K5c (#2627): a head-only timeout is cleared when the response head
+    // arrives; `AbortSignal.timeout` would stay armed and abort the body
+    // partway through a read.
+    const controller = headOnly && timeoutMs !== undefined ? new AbortController() : undefined;
+    const timer =
+      controller === undefined
+        ? undefined
+        : setTimeout(() => {
+            const reason = new Error("the response head did not arrive in time");
+            reason.name = "TimeoutError";
+            controller.abort(reason);
+          }, timeoutMs);
     try {
-      const res = await fetch(req.url, {
+      const init: RequestInit & { duplex?: "half" } = {
         method: req.method.tag.toUpperCase(),
         headers,
-        body: body as BodyInit | undefined,
+        body: sent as BodyInit | undefined,
         redirect,
-        signal: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs),
-      });
+        signal:
+          controller !== undefined
+            ? controller.signal
+            : timeoutMs === undefined
+              ? undefined
+              : AbortSignal.timeout(timeoutMs),
+      };
+      if (streamed) {
+        init.duplex = "half";
+      }
+      let res: globalThis.Response;
+      try {
+        res = await fetch(req.url, init);
+      } finally {
+        clearTimeout(timer);
+      }
       // `Headers` iteration yields lowercased names, and already joins a
       // repeated header's values with ", " — except `set-cookie`, which the
       // Fetch standard yields once per value (and an older runtime may join).
@@ -215,6 +315,11 @@ export class FetchProvider implements Fetch {
       }
       return Ok({ status: res.status, headers: resHeaders, body: await read(res) });
     } catch (e) {
+      // K5c (#2627): the caller's own stream threw while it was sent — a
+      // fault, not a network failure a retry could fix.
+      if (sourceFailure !== undefined) {
+        throw sourceFailure.error;
+      }
       const name = e instanceof Error ? e.name : "";
       return Err(name === "TimeoutError" || name === "AbortError" ? FetchError.Timeout : FetchError.Network);
     }

@@ -8,6 +8,7 @@ adapter bynk {
 		Request,
 		Response,
 		BytesResponse,
+		StreamResponse,
 		FetchOptions,
 		Redirect,
 		LogLevel,

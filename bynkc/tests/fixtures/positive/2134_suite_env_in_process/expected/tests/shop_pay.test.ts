@@ -55,7 +55,7 @@ async function test_integration__a_name_no_env_gives_is_none() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -65,6 +65,7 @@ async function test_integration__a_name_no_env_gives_is_none() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type StreamResponse = __ns_bynk.StreamResponse;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_GET_processor(deps);
     if (!(r.tag === "Ok" && r.value === "none")) { throw __bynkExpectFailure("tests/pay_integration.bynk:5:10", 219, 234, "expect r is Ok(\"none\")"); }
@@ -86,7 +87,7 @@ async function test_integration__a_case_env_is_what_the_Secrets_double_answers()
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -96,6 +97,7 @@ async function test_integration__a_case_env_is_what_the_Secrets_double_answers()
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type StreamResponse = __ns_bynk.StreamResponse;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_GET_processor(deps);
     if (!(r.tag === "Ok" && r.value === "fake")) { throw __bynkExpectFailure("tests/pay_integration.bynk:11:10", 399, 414, "expect r is Ok(\"fake\")"); }
@@ -117,7 +119,7 @@ async function test_unit__the_processor_comes_from_the_suite_env() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -127,6 +129,7 @@ async function test_unit__the_processor_comes_from_the_suite_env() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type StreamResponse = __ns_bynk.StreamResponse;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_GET_processor(deps);
     if (!(r.tag === "Ok" && r.value === "fake")) { throw __bynkExpectFailure("tests/pay_unit.bynk:9:10", 241, 256, "expect r is Ok(\"fake\")"); }
@@ -148,7 +151,7 @@ async function test_unit__a_case_env_overrides_the_suite_s() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -158,6 +161,7 @@ async function test_unit__a_case_env_overrides_the_suite_s() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type StreamResponse = __ns_bynk.StreamResponse;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_GET_processor(deps);
     if (!(r.tag === "Ok" && r.value === "live")) { throw __bynkExpectFailure("tests/pay_unit.bynk:15:10", 401, 416, "expect r is Ok(\"live\")"); }
@@ -179,7 +183,7 @@ async function test_unit__a_later_case_sees_the_suite_value_again() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -189,6 +193,7 @@ async function test_unit__a_later_case_sees_the_suite_value_again() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type StreamResponse = __ns_bynk.StreamResponse;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_GET_processor(deps);
     if (!(r.tag === "Ok" && r.value === "fake")) { throw __bynkExpectFailure("tests/pay_unit.bynk:22:10", 630, 645, "expect r is Ok(\"fake\")"); }
