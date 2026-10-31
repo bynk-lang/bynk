@@ -265,7 +265,7 @@ fn run_smoke_with(
     // 55_000 + 2·pid, each mod 4_000), so they can all run at once. Bands 5
     // and 6 (40_000 to 48_000) share a port with the events smokes for half
     // of all pids, so the Fetch smokes use 8 and 9 (#2604), and the D1
-    // migrations smoke the unused band 2 (#2608).
+    // migrations smoke 10, the last band below port 65_536 (#2608).
     let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
     let inspector_port = port + 1;
     let log_path = tmp.join("wrangler.log");
@@ -965,7 +965,7 @@ fn d1_migrations_apply_to_the_emitted_config_on_workerd() {
         &files,
         &apply,
         "/items",
-        2,
+        10,
         &|port| {
             check_steps(
                 port,
