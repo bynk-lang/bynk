@@ -234,7 +234,9 @@ fn run_smoke(
     );
 
     // Its own band, clear of the events smokes' (30_000 + 4·pid, 40_000 + 2·pid,
-    // 55_000 + 2·pid, each mod 4_000), so they can all run at once.
+    // 55_000 + 2·pid, each mod 4_000), so they can all run at once. Bands 5
+    // and 6 (40_000 to 48_000) share a port with the events smokes for half
+    // of all pids, so the Fetch smokes use 8 and 9 (#2604).
     let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
     let inspector_port = port + 1;
     let log_path = tmp.join("wrangler.log");
@@ -918,7 +920,7 @@ fn fetch_send_with_times_out_and_returns_a_manual_redirect_on_workerd() {
     // `302`, and an upstream that never answers is `Err(Timeout)`.
     let upstream = upstream();
     let source = fetch_source(upstream);
-    let Some((failures, log)) = run_smoke("f-smoke", "f", &source, "/ready", 6, &|port| {
+    let Some((failures, log)) = run_smoke("f-smoke", "f", &source, "/ready", 9, &|port| {
         check_steps(
             port,
             &[
@@ -1044,7 +1046,7 @@ fn fetch_bytes_round_trip_every_byte_on_workerd() {
     let upstream = bytes_upstream();
     let source = fetch_bytes_source(upstream);
     let expected = format!(r#""{ALL_BYTES_BASE64} {ALL_BYTES_BASE64} application/octet-stream""#);
-    let Some((failures, log)) = run_smoke("fb-smoke", "fb", &source, "/ready", 5, &|port| {
+    let Some((failures, log)) = run_smoke("fb-smoke", "fb", &source, "/ready", 8, &|port| {
         check_steps(port, &[("/round", 200, &expected)])
     }) else {
         return;
