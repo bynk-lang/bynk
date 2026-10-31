@@ -640,7 +640,11 @@ fn workers_r2_round_trips_on_workerd() {
                 failures.extend(check_steps(
                     port,
                     &[
-                        (&format!("/mp/finish/big/{id}"), 200, r#""8388612 text/plain smoke""#),
+                        (
+                            &format!("/mp/finish/big/{id}"),
+                            200,
+                            r#""8388612 text/plain smoke""#,
+                        ),
                         ("/size/big", 200, "8388612"),
                     ],
                 ));
@@ -648,7 +652,10 @@ fn workers_r2_round_trips_on_workerd() {
             other => failures.push(format!("/mp/begin/big: {other:?}")),
         }
         // Parts under R2's 5 MiB minimum, but for the last, are refused.
-        failures.extend(check_steps(port, &[("/mp/small/sm", 500, ""), ("/get/sm", 404, "")]));
+        failures.extend(check_steps(
+            port,
+            &[("/mp/small/sm", 500, ""), ("/get/sm", 404, "")],
+        ));
         // R2 lists at most 1000 objects a page (fewer, when asked for their
         // metadata, as `list` does), so 1001 span at least two: the cursor
         // `list` returns is the one the platform accepts, and the second page
