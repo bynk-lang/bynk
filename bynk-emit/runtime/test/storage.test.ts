@@ -88,3 +88,19 @@ test("makeIntegrationD1 binds an integral Real as INTEGER, as D1 does", async ()
   const row = await d.prepare("SELECT typeof(?1) AS whole, typeof(?2) AS part, ?1 AS v").bind(2.0, 2.5).first();
   assert.deepEqual({ ...row }, { whole: "integer", part: "real", v: 2 });
 });
+
+test("makeIntegrationD1 runs its migrations in order before it is used", async () => {
+  const d = makeIntegrationD1([
+    ["0001_create.sql", "CREATE TABLE t (k TEXT UNIQUE);\n-- a comment\n"],
+    ["0002_more.sql", "ALTER TABLE t ADD COLUMN n INT DEFAULT 7;\nINSERT INTO t (k) VALUES ('seed');"],
+  ]);
+  const row = await d.prepare("SELECT k, n FROM t").first();
+  assert.deepEqual({ ...row }, { k: "seed", n: 7 });
+});
+
+test("makeIntegrationD1 faults on a failing migration, naming it", () => {
+  assert.throws(
+    () => makeIntegrationD1([["0001_bad.sql", "CREATE TABLE t (k TEXT); CREATE TABL u (x)"]]),
+    /^Error: bynk: D1 migration `0001_bad\.sql` failed: /,
+  );
+});

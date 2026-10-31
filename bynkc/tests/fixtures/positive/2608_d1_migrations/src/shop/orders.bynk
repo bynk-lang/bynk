@@ -1,0 +1,41 @@
+context shop.orders
+
+// #2608: the `orders` table comes from `migrations/shop-orders-orders/`, which every
+// test tier runs on each fresh database, so no service creates it.
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Order = { id: String, total: Int, note: String }
+
+service save {
+	on call(id: String, total: Int, note: String) -> Effect[Result[SqlRun, SqlError]] given Orders {
+		Orders.run("INSERT INTO orders (id, total, note) VALUES (?1, ?2, ?3)", [Text(id), Integer(total), Text(note)])
+	}
+}
+
+service listing {
+	on call() -> Effect[Result[List[Order], String]] given Orders {
+		let rows <- Orders.all("SELECT id, total, note FROM orders ORDER BY id", [])
+		match rows {
+			Ok(text) => match Json.decode[List[Order]](text) {
+				Ok(orders) => Ok(orders)
+				Err(_) => Err("rows did not decode")
+			}
+			Err(_) => Err("query failed")
+		}
+	}
+}
+
+service api from http {
+	on POST("/orders/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+		let made <- Orders.run("INSERT INTO orders (id, total) VALUES (?1, 0)", [Text(id)])
+		match made {
+			Ok(_) => Created(id)
+			Err(Constraint(_)) => Conflict("order \(id) exists")
+			Err(_) => ServerError("could not store the order")
+		}
+	}
+}

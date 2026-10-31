@@ -161,6 +161,10 @@ struct D1DatabaseBinding {
     /// The unqualified derived name (`<worker>-<capability, kebab>`), which
     /// [`d1_database_name`] environment-qualifies.
     database_name: String,
+    /// P4b (#2608): the copy of its migrations beside the config, when it has
+    /// any (`migrations/<database>`).
+    #[serde(default)]
+    migrations_dir: Option<String>,
 }
 
 /// P4a (#2602): one `D1` instance's database, as the emitted config declares
@@ -171,6 +175,9 @@ pub(crate) struct D1Decl {
     pub(crate) binding: String,
     /// The derived name before any environment qualification.
     pub(crate) name: String,
+    /// P4b (#2608): its migration files, by name in the order wrangler
+    /// applies them; empty without a `migrations_dir`.
+    pub(crate) migrations: Vec<String>,
 }
 
 /// P5 (#2323): one `R2` instance's bucket, as the emitted config declares it.
@@ -386,6 +393,20 @@ fn read_secrets_manifest(worker_dir: &Path) -> Result<SecretsManifest, String> {
     Ok(manifest)
 }
 
+/// P4b (#2608): the `.sql` files in a database's copied migrations directory,
+/// in name order, as wrangler applies them.
+fn migration_files(dir: &Path) -> Result<Vec<String>, String> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| format!("could not list the D1 migrations in {}: {e}", dir.display()))?;
+    let mut files: Vec<String> = entries
+        .filter_map(Result::ok)
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| name.ends_with(".sql"))
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
 /// Read everything `deploy` acts on out of one worker's generated build output.
 fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources, String> {
     let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
@@ -477,14 +498,23 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     analytics_datasets.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let worker_dir = config
+        .parent()
+        .ok_or_else(|| "configuration has no directory".to_string())?;
     let mut d1_databases: Vec<D1Decl> = parsed
         .d1_databases
         .into_iter()
-        .map(|d| D1Decl {
-            binding: d.binding,
-            name: d.database_name,
+        .map(|d| {
+            Ok(D1Decl {
+                migrations: match &d.migrations_dir {
+                    Some(dir) => migration_files(&worker_dir.join(dir))?,
+                    None => Vec::new(),
+                },
+                binding: d.binding,
+                name: d.database_name,
+            })
         })
-        .collect();
+        .collect::<Result<_, String>>()?;
     d1_databases.sort_by(|a, b| a.binding.cmp(&b.binding));
     Ok(Resources {
         binds_to: binds_to.into_iter().map(|s| s.service).collect(),
@@ -1104,6 +1134,7 @@ pub(crate) mod tests {
                 .map(|(binding, name)| D1Decl {
                     binding: binding.to_string(),
                     name: name.to_string(),
+                    migrations: Vec::new(),
                 })
                 .collect();
             self
@@ -1741,6 +1772,36 @@ state = "deleted"
     }
 
     #[test]
+    fn a_databases_migrations_are_read_in_order_from_its_copied_directory() {
+        // P4b (#2608): the files beside the config, as wrangler will apply them.
+        let dir = std::env::temp_dir().join(format!(
+            "bynk-d1-migrations-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let migrations = dir.join("migrations/shop-orders");
+        std::fs::create_dir_all(&migrations).unwrap();
+        for file in ["0002_more.sql", "0001_create.sql"] {
+            std::fs::write(migrations.join(file), "SELECT 1;").unwrap();
+        }
+        let config = dir.join("wrangler.toml");
+        std::fs::write(
+            &config,
+            "name = \"shop\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\"\nmigrations_dir = \"migrations/shop-orders\"\n",
+        )
+        .unwrap();
+        let resources = read_resources(&config, &names(PROJECT_WORKERS));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            resources.unwrap().d1_databases[0].migrations,
+            ["0001_create.sql", "0002_more.sql"]
+        );
+    }
+
+    #[test]
     fn d1_databases_are_read_in_binding_order_and_copied_into_a_named_environment() {
         // P4a (#2602).
         let config = "name = \"shop-cart\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-cart-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\"\n\n[[d1_databases]]\nbinding = \"D1_AUDIT\"\ndatabase_name = \"shop-cart-audit\"\ndatabase_id = \"<D1_AUDIT_ID>\"\n";
@@ -1750,11 +1811,13 @@ state = "deleted"
             [
                 D1Decl {
                     binding: "D1_AUDIT".into(),
-                    name: "shop-cart-audit".into()
+                    name: "shop-cart-audit".into(),
+                    migrations: Vec::new(),
                 },
                 D1Decl {
                     binding: "D1_ORDERS".into(),
-                    name: "shop-cart-orders".into()
+                    name: "shop-cart-orders".into(),
+                    migrations: Vec::new(),
                 },
             ]
         );

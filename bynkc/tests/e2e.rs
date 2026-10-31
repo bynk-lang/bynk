@@ -82,7 +82,7 @@ fn collect_expected_ts(expected_root: &Path) -> Vec<PathBuf> {
                     // is why the JSON case is a bare extension check rather
                     // than the one-filename special case it started as.
                     let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-                    if matches!(ext, "ts" | "toml" | "json") {
+                    if matches!(ext, "ts" | "toml" | "json" | "sql") {
                         out.push(p);
                     }
                 }

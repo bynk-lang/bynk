@@ -57,6 +57,12 @@ pub fn is_in_embeds_dir(path: &str) -> bool {
     segs.next() == Some(PROJECT_EMBEDS_DIR) && segs.next().is_some()
 }
 
+/// Standard-library P4b (#2608): the project's D1 migrations folder,
+/// relative to the project root. Each `D1` instance's migrations are
+/// `migrations/<database>/NNNN_<name>.sql`; it is listed and read as an
+/// [`AssetFolder`].
+pub const PROJECT_MIGRATIONS_DIR: &str = "migrations";
+
 /// Reads one listed asset file's bytes, given its normalised key.
 pub type AssetReader = dyn Fn(&str) -> io::Result<Vec<u8>> + Send + Sync;
 
@@ -88,17 +94,25 @@ impl AssetFolder {
     /// — a directory swapped for a symbolic link after the listing — is
     /// refused rather than published.
     pub fn on_disk(project_root: &Path) -> io::Result<Self> {
-        Self::on_disk_in(project_root, PROJECT_ASSETS_DIR)
+        Self::on_disk_in(project_root, PROJECT_ASSETS_DIR, false)
     }
 
     /// [`AssetFolder::on_disk`] for the project's `embeds/` folder (#2387):
     /// the same listing and the same refusals, a different directory.
     pub fn embeds_on_disk(project_root: &Path) -> io::Result<Self> {
-        Self::on_disk_in(project_root, PROJECT_EMBEDS_DIR)
+        Self::on_disk_in(project_root, PROJECT_EMBEDS_DIR, false)
     }
 
-    fn on_disk_in(project_root: &Path, folder: &str) -> io::Result<Self> {
-        let files = list_files_in(project_root, folder)?;
+    /// [`AssetFolder::on_disk`] for the project's `migrations/` folder
+    /// (#2608): the same refusals, but the listing keeps a symbolic link or
+    /// other non-regular entry ([`list_migration_files`]), so reading it is
+    /// refused rather than the migration silently missing.
+    pub fn migrations_on_disk(project_root: &Path) -> io::Result<Self> {
+        Self::on_disk_in(project_root, PROJECT_MIGRATIONS_DIR, true)
+    }
+
+    fn on_disk_in(project_root: &Path, folder: &str, keep_links: bool) -> io::Result<Self> {
+        let files = list_files_in(project_root, folder, keep_links)?;
         if files.is_empty() {
             // Nothing listed, so `read` never reaches the reader.
             return Ok(Self::new(files, Arc::new(|_: &str| Err(not_listed()))));
@@ -166,42 +180,66 @@ fn read_listed_file(root: &Path, dir: &Path, key: &str) -> io::Result<Vec<u8>> {
 /// Symbolic links are not followed, so a link cannot pull a file in from
 /// outside the folder; a missing folder is an empty set.
 pub fn list_asset_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
-    list_files_in(project_root, PROJECT_ASSETS_DIR)
+    list_files_in(project_root, PROJECT_ASSETS_DIR, false)
 }
 
 /// [`list_asset_files`] for the project's `embeds/` folder (#2387).
 pub fn list_embed_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
-    list_files_in(project_root, PROJECT_EMBEDS_DIR)
+    list_files_in(project_root, PROJECT_EMBEDS_DIR, false)
 }
 
-fn list_files_in(project_root: &Path, folder: &str) -> io::Result<BTreeSet<String>> {
+/// [`list_asset_files`] for the project's `migrations/` folder (#2608), except
+/// that a symbolic link or other non-regular entry is listed too, unfollowed.
+/// An asset nothing declares can be skipped quietly, but a skipped migration
+/// is a schema change that never runs, so the listing keeps it and reading it
+/// is refused ([`AssetFolder::read`]), which the checker reports.
+pub fn list_migration_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
+    list_files_in(project_root, PROJECT_MIGRATIONS_DIR, true)
+}
+
+fn list_files_in(
+    project_root: &Path,
+    folder: &str,
+    keep_links: bool,
+) -> io::Result<BTreeSet<String>> {
     let mut out = BTreeSet::new();
-    walk(project_root, folder, &mut |rel| {
+    walk(project_root, folder, keep_links, &mut |rel| {
         out.insert(rel);
     })?;
     Ok(out)
 }
 
-fn walk(project_root: &Path, folder: &str, visit: &mut dyn FnMut(String)) -> io::Result<()> {
+fn walk(
+    project_root: &Path,
+    folder: &str,
+    keep_links: bool,
+    visit: &mut dyn FnMut(String),
+) -> io::Result<()> {
     let dir = project_root.join(folder);
     if !dir.is_dir() {
         return Ok(());
     }
-    walk_dir(&dir, folder, visit)
+    walk_dir(&dir, folder, keep_links, visit)
 }
 
-fn walk_dir(dir: &Path, rel: &str, visit: &mut dyn FnMut(String)) -> io::Result<()> {
+fn walk_dir(
+    dir: &Path,
+    rel: &str,
+    keep_links: bool,
+    visit: &mut dyn FnMut(String),
+) -> io::Result<()> {
     let mut entries = std::fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
     entries.sort_by_key(|e| e.file_name());
     for entry in entries {
         // `DirEntry::file_type` does not follow a symlink, so a link is
-        // neither a file nor a directory here and is skipped.
+        // neither a file nor a directory here: skipped, or with `keep_links`
+        // listed as it stands and never descended into.
         let ty = entry.file_type()?;
         let name = entry.file_name().to_string_lossy().into_owned();
         let child = format!("{rel}/{name}");
         if ty.is_dir() {
-            walk_dir(&entry.path(), &child, visit)?;
-        } else if ty.is_file() {
+            walk_dir(&entry.path(), &child, keep_links, visit)?;
+        } else if ty.is_file() || keep_links {
             visit(child);
         }
     }
@@ -307,6 +345,52 @@ mod tests {
                 .unwrap()
                 .files()
                 .is_empty()
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Review of #2609: a linked migration is listed, unfollowed, so reading
+    /// it is refused and the checker reports it, where a linked asset is
+    /// simply skipped.
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_migration_is_listed_and_its_read_refused() {
+        let root = std::env::temp_dir().join(format!(
+            "bynk-project-migrations-link-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("migrations/shop-orders")).unwrap();
+        std::fs::create_dir_all(root.join("shared")).unwrap();
+        std::fs::write(root.join("migrations/shop-orders/0001_init.sql"), b"x").unwrap();
+        std::fs::write(root.join("shared/0002.sql"), b"y").unwrap();
+        std::os::unix::fs::symlink(
+            root.join("shared/0002.sql"),
+            root.join("migrations/shop-orders/0002_add.sql"),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(root.join("shared"), root.join("migrations/shop-old")).unwrap();
+
+        let folder = AssetFolder::migrations_on_disk(&root).unwrap();
+        assert_eq!(
+            folder.files().iter().cloned().collect::<Vec<_>>(),
+            vec![
+                "migrations/shop-old",
+                "migrations/shop-orders/0001_init.sql",
+                "migrations/shop-orders/0002_add.sql",
+            ]
+        );
+        assert_eq!(list_migration_files(&root).unwrap(), *folder.files());
+        assert_eq!(
+            folder.read("migrations/shop-orders/0001_init.sql").unwrap(),
+            b"x"
+        );
+        assert_eq!(
+            folder
+                .read("migrations/shop-orders/0002_add.sql")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
         );
         let _ = std::fs::remove_dir_all(&root);
     }

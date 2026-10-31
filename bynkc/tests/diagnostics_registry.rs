@@ -63,7 +63,7 @@ const NON_DIAGNOSTIC_LOOKALIKES: &[&str] = &[
 /// missed (`bynk-fmt`, `bynk-wasm`, `bynk`), which `bynk explain` then
 /// denied existed.
 fn codes_used_in_source() -> BTreeSet<String> {
-    let re = regex::Regex::new(r#""(bynk\.[a-z_]+\.[a-z_]+)""#).unwrap();
+    let re = regex::Regex::new(r#""(bynk\.[a-z][a-z0-9_]*\.[a-z_]+)""#).unwrap();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
     let mut codes = BTreeSet::new();
     for member in workspace_members(&root) {

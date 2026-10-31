@@ -325,6 +325,23 @@ pub(crate) fn deploy_one(
             ))
         })?;
     }
+    // P4b (#2608): each database's pending migrations, applied once it is
+    // bound (and, for a named environment, once `[env.<name>]` binds it) and
+    // before the push, so the new code never meets the old schema. Wrangler
+    // records what it applied in the database itself, so the ledger doesn't.
+    for db in declared
+        .d1_databases
+        .iter()
+        .filter(|db| !db.migrations.is_empty())
+    {
+        let physical = d1_database_name(environment, &db.name);
+        apply_d1_migrations(provenance, &worker_dir, &db.binding, environment).map_err(|e| {
+            DeployFailure::driver(format!(
+                "could not apply the migrations of the D1 database `{physical}` for `{worker}`'s `{}`, so nothing was pushed: {e}",
+                db.binding
+            ))
+        })?;
+    }
     // Secrets straddle the push, and which side depends on whether the Worker
     // already exists (ADR 0195 D6).
     //
@@ -890,6 +907,37 @@ fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Res
         return Ok(false);
     }
     Err(said)
+}
+
+/// P4b (#2608): `wrangler d1 migrations apply <binding> --remote` from the
+/// Worker's directory, which applies the files of the entry's
+/// `migrations_dir` that the database hasn't recorded, each in its own
+/// transaction. The binding names the entry in every environment, where the
+/// database's name doesn't. Stdin is closed, so wrangler takes its "yes"
+/// fallback instead of asking: the deploy's own confirmation already covered
+/// this.
+fn apply_d1_migrations(
+    provenance: &Provenance,
+    worker_dir: &Path,
+    binding: &str,
+    environment: &str,
+) -> Result<(), String> {
+    let Some(mut command) = workers::wrangler_command(provenance, "d1") else {
+        return Err("wrangler not found".into());
+    };
+    command
+        .args(["migrations", "apply", binding, "--remote"])
+        .current_dir(worker_dir)
+        .stdin(std::process::Stdio::null());
+    if environment != "default" {
+        command.args(["--env", environment]);
+    }
+    let output = command.output().map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(wrangler_said(&output))
+    }
 }
 
 /// Create the D1 database `name` and return its `database_id`, or adopt the
@@ -1736,6 +1784,9 @@ mod tests {
                 db.name,
                 bynk_emit::emitter::wrangler::d1_database_id_placeholder(&db.binding)
             ));
+            if !db.migrations.is_empty() {
+                config.push_str(&format!("migrations_dir = \"migrations/{}\"\n", db.name));
+            }
         }
         for binding in &declared.ratelimits {
             config.push_str(&format!(
@@ -1749,7 +1800,8 @@ mod tests {
         write_stand_in(
             &fake,
             &format!(
-                "#!/bin/sh\necho \"$*\" >> '{}'\ncase \"$*\" in 'd1 create '*taken*) echo '✘ [ERROR] A database with that name already exists' >&2; exit 1;; 'd1 create '*) printf '[[d1_databases]]\\nbinding = \"DB\"\\ndatabase_name = \"%s\"\\ndatabase_id = \"0d1d0000-0000-4000-8000-00000000000%s\"\\n' \"$3\" \"${{#3}}\"; exit 0;; 'd1 list --json') printf '[{{\"uuid\": \"adadadad-0000-4000-8000-000000000000\", \"name\": \"api-taken\"}}]\\n'; exit 0;; esac\ncase \"$*\" in *--json*) echo '✘ [ERROR] Unknown argument: json' >&2; exit 1;; esac\nif [ \"$1\" = kv ]; then printf '[[kv_namespaces]]\\nbinding = \"t\"\\nid = \"minted-id\"\\n'; fi\nexit 0\n",
+                "#!/bin/sh\necho \"$*\" >> '{}'\ncase \"$*\" in 'd1 migrations apply D1_BROKEN'*) echo '✘ [ERROR] Migration 0001_bad.sql failed' >&2; exit 1;; 'd1 migrations apply '*) if read -r line; then echo stdin:open; else echo stdin:closed; fi >> '{}'; exit 0;; esac\ncase \"$*\" in 'd1 create '*taken*) echo '✘ [ERROR] A database with that name already exists' >&2; exit 1;; 'd1 create '*) printf '[[d1_databases]]\\nbinding = \"DB\"\\ndatabase_name = \"%s\"\\ndatabase_id = \"0d1d0000-0000-4000-8000-00000000000%s\"\\n' \"$3\" \"${{#3}}\"; exit 0;; 'd1 list --json') printf '[{{\"uuid\": \"adadadad-0000-4000-8000-000000000000\", \"name\": \"api-taken\"}}]\\n'; exit 0;; esac\ncase \"$*\" in *--json*) echo '✘ [ERROR] Unknown argument: json' >&2; exit 1;; esac\nif [ \"$1\" = kv ]; then printf '[[kv_namespaces]]\\nbinding = \"t\"\\nid = \"minted-id\"\\n'; fi\nexit 0\n",
+                log.display(),
                 log.display()
             ),
         );
@@ -1877,6 +1929,90 @@ mod tests {
             recorded_d1(&lock, "api", "D1_TAKEN", "default").unwrap().id,
             "adadadad-0000-4000-8000-000000000000"
         );
+    }
+
+    // ---- P4b (#2608): migrations are applied before the push ----
+
+    #[cfg(unix)]
+    fn with_migrations(mut resources: Resources) -> Resources {
+        for db in &mut resources.d1_databases {
+            db.migrations = vec!["0001_create.sql".into(), "0002_more.sql".into()];
+        }
+        resources
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn migrations_are_applied_remotely_after_binding_and_before_the_push() {
+        let (calls, _, pushed) = provision_api(
+            "default",
+            with_migrations(Resources::default().d1_databases(&[("D1_ORDERS", "api-orders")])),
+            DeployLock::default(),
+            None,
+        );
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        assert_eq!(
+            d1_calls(&calls),
+            [
+                "d1 create api-orders",
+                "d1 migrations apply D1_ORDERS --remote"
+            ]
+        );
+        let at = |prefix: &str| calls.iter().position(|c| c.starts_with(prefix));
+        assert!(
+            at("d1 migrations apply") < at("deploy"),
+            "applied before the push: {calls:?}"
+        );
+        // Stdin is closed, so wrangler takes its "yes" fallback.
+        assert!(calls.iter().any(|c| c == "stdin:closed"), "{calls:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_named_environment_applies_its_own_databases_migrations() {
+        let (calls, _, pushed, config) = provision_api_with_config(
+            "staging",
+            with_migrations(Resources::default().d1_databases(&[("D1_ORDERS", "api-orders")])),
+            DeployLock::default(),
+            None,
+        );
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        // Without the key there, wrangler would read its default
+        // `migrations/`, find no `.sql` directly in it, and apply nothing.
+        let doc: toml::Table = config.parse().unwrap();
+        assert_eq!(
+            doc["env"]["staging"]["d1_databases"][0]["migrations_dir"].as_str(),
+            Some("migrations/api-orders")
+        );
+        assert_eq!(
+            d1_calls(&calls),
+            [
+                "d1 create api-orders-staging",
+                "d1 migrations apply D1_ORDERS --remote --env staging"
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failing_migration_stops_the_deploy_before_the_push() {
+        let (calls, _, pushed) = provision_api(
+            "default",
+            with_migrations(Resources::default().d1_databases(&[("D1_BROKEN", "api-broken")])),
+            DeployLock::default(),
+            None,
+        );
+        let Err(failure) = pushed else {
+            panic!("a failed migration must fail the deploy: {calls:?}");
+        };
+        let message = format!("{failure:?}");
+        assert!(
+            message.contains("`api-broken`")
+                && message.contains("nothing was pushed")
+                && message.contains("0001_bad.sql failed"),
+            "{message}"
+        );
+        assert!(!calls.iter().any(|c| c.starts_with("deploy")), "{calls:?}");
     }
 
     #[test]

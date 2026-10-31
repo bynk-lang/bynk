@@ -165,6 +165,10 @@ pub fn strip_project_to_js(
             Document::Js(s) => {
                 docs.insert(path, Document::Js(s));
             }
+            // P4b (#2608): a migration is SQL, not code.
+            Document::Sql(s) => {
+                docs.insert(path, Document::Sql(s));
+            }
         }
     }
     // #1883, slice 0: static assets are served as-is by the platform; type
