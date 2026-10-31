@@ -1,0 +1,35 @@
+context mirror
+
+// #2604: `Fetch.receiveBytes` downloads a body as raw bytes and
+// `Fetch.sendBytes` uploads one; `decodeUtf8` reads a body that is text.
+
+consumes bynk { Fetch }
+
+service copy {
+	on call(source: String, target: String) -> Effect[Int] given Fetch {
+		let options = FetchOptions { timeout: Some(10.seconds), redirect: Follow }
+		let got <- Fetch.receiveBytes(Request { method: Get, url: source, contentType: None, authorization: None, headers: Map.empty(), body: None }, options)
+		match got {
+			Ok(d) => {
+				let put = Request { method: Put, url: target, contentType: Some("application/octet-stream"), authorization: None, headers: Map.empty(), body: None }
+				let sent <- Fetch.sendBytes(put, d.body, options)
+				match sent {
+					Ok(r) => Effect.pure(r.status)
+					Err(InvalidBody) => Effect.pure(-2)
+					Err(_) => Effect.pure(-1)
+				}
+			}
+			Err(_) => Effect.pure(-1)
+		}
+	}
+}
+
+service note {
+	on call(url: String) -> Effect[String] given Fetch {
+		let got <- Fetch.receiveBytes(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None }, FetchOptions { timeout: None, redirect: Follow })
+		match got {
+			Ok(r) => Effect.pure(r.body.decodeUtf8().getOrElse("<binary>"))
+			Err(_) => Effect.pure("<failed>")
+		}
+	}
+}

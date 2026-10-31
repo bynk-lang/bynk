@@ -333,7 +333,126 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
         },
       );
     });
+
+    // K5b (#2604): bytes both ways, every value 0–255 — 0x80 and up alone are
+    // not UTF-8, so a `String` body would have lost them.
+    const allBytes = () => Uint8Array.from({ length: 256 }, (_, i) => i);
+    const defaults = { timeout: None, redirect: bynk.Redirect.Follow };
+
+    t("FetchProvider.receiveBytes: returns the response body byte for byte, with status and headers", async () => {
+      await withFetch(
+        () => new Response(allBytes(), { status: 200, headers: { "content-type": "application/octet-stream" } }),
+        async (calls) => {
+          const res = await new b.FetchProvider().receiveBytes(request(), defaults);
+          assert.equal(res.tag, "Ok");
+          assert.ok(res.value.body instanceof Uint8Array);
+          assert.deepEqual([...res.value.body], [...allBytes()]);
+          assert.equal(res.value.headers.get("content-type"), "application/octet-stream");
+          assert.equal(calls[0].init.method, "GET");
+          assert.equal(calls[0].init.body, undefined);
+        },
+      );
+    });
+
+    t("FetchProvider.receiveBytes: sends a String body as send does, and applies the options", async () => {
+      await withFetch(
+        () => new Response(null, { status: 302, headers: { location: "https://elsewhere.test/" } }),
+        async (calls) => {
+          const res = await new b.FetchProvider().receiveBytes(
+            request({ method: bynk.Method.Post, body: Some("{}") }),
+            { timeout: Some(1000), redirect: bynk.Redirect.Manual },
+          );
+          assert.equal(res.tag, "Ok");
+          assert.equal(res.value.status, 302);
+          assert.equal(res.value.body.length, 0);
+          assert.equal(calls[0].init.body, "{}");
+          assert.equal(calls[0].init.redirect, "manual");
+          assert.ok(calls[0].init.signal instanceof AbortSignal);
+          await assert.rejects(
+            new b.FetchProvider().receiveBytes(request(), { timeout: Some(0), redirect: bynk.Redirect.Follow }),
+            /Fetch.receiveBytes: a timeout is more than zero/,
+          );
+          assert.equal(calls.length, 1);
+        },
+      );
+    });
+
+    t("FetchProvider.sendBytes: sends the bytes as the body and returns the response as bytes", async () => {
+      await withFetch(
+        (_url, init) => new Response(init.body, { status: 201 }),
+        async (calls) => {
+          const res = await new b.FetchProvider().sendBytes(
+            request({ method: bynk.Method.Put, contentType: Some("application/octet-stream") }),
+            allBytes(),
+            defaults,
+          );
+          assert.equal(res.tag, "Ok");
+          assert.equal(res.value.status, 201);
+          assert.deepEqual([...res.value.body], [...allBytes()]);
+          assert.equal(calls[0].init.method, "PUT");
+          assert.ok(calls[0].init.body instanceof Uint8Array);
+          assert.equal(calls[0].init.headers.get("content-type"), "application/octet-stream");
+          // No Content-Type is invented for a binary body.
+          await new b.FetchProvider().sendBytes(request({ method: bynk.Method.Post }), new Uint8Array(), defaults);
+          assert.equal(calls[1].init.headers.get("content-type"), null);
+          // An empty `Bytes` is an empty body, not no body.
+          assert.equal(calls[1].init.body.length, 0);
+        },
+      );
+    });
+
+    t("FetchProvider.sendBytes: two bodies, or a body on Get or Head, is Err(InvalidBody), and nothing is sent", async () => {
+      await withFetch(
+        () => new Response("unexpected"),
+        async (calls) => {
+          const p = new b.FetchProvider();
+          const twoBodies = await p.sendBytes(request({ method: bynk.Method.Post, body: Some("x") }), allBytes(), defaults);
+          assert.equal(twoBodies.tag, "Err");
+          assert.equal(twoBodies.error.tag, "InvalidBody");
+          for (const m of ["Get", "Head"]) {
+            const res = await p.sendBytes(request({ method: bynk.Method[m] }), new Uint8Array(), defaults);
+            assert.equal(res.tag, "Err", m);
+            assert.equal(res.error.tag, "InvalidBody", m);
+          }
+          assert.equal(calls.length, 0);
+        },
+      );
+    });
+
+    t("FetchProvider.send: a body on Get or Head is Err(InvalidBody), not Err(Network), and nothing is sent", async () => {
+      await withFetch(
+        () => new Response("unexpected"),
+        async (calls) => {
+          for (const m of ["Get", "Head"]) {
+            const res = await new b.FetchProvider().send(request({ method: bynk.Method[m], body: Some("") }));
+            assert.equal(res.tag, "Err", m);
+            assert.equal(res.error.tag, "InvalidBody", m);
+          }
+          const viaWith = await new b.FetchProvider().sendWith(request({ body: Some("x") }), defaults);
+          assert.equal(viaWith.tag, "Err");
+          assert.equal(viaWith.error.tag, "InvalidBody");
+          assert.equal(calls.length, 0);
+        },
+      );
+    });
   } else {
+    // K5b (#2604).
+    for (const op of ["receiveBytes", "sendBytes"]) {
+      t(`FetchProvider.${op}: is withheld — it throws, and nothing is sent`, async () => {
+        await withFetch(
+          () => new Response("unexpected"),
+          async (calls) => {
+            const opts = { timeout: None, redirect: bynk.Redirect.Follow };
+            const call = op === "sendBytes"
+              ? new b.FetchProvider().sendBytes(request({ method: bynk.Method.Post }), new Uint8Array([1]), opts)
+              : new b.FetchProvider().receiveBytes(request(), opts);
+            await assert.rejects(call, /Fetch is unavailable/);
+            assert.equal(calls.length, 0);
+          },
+        );
+      });
+    }
+
     t("FetchProvider.sendWith: is withheld — it throws, and nothing is sent", async () => {
       await withFetch(
         () => new Response("unexpected"),

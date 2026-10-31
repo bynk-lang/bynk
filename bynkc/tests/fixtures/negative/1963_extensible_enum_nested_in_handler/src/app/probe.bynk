@@ -12,6 +12,7 @@ service probe {
 			Err(Network) => Effect.pure("network")
 			Err(Timeout) => Effect.pure("timeout")
 			Err(InvalidHeader) => Effect.pure("header")
+			Err(InvalidBody) => Effect.pure("body")
 		}
 	}
 }

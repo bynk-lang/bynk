@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "copy": "c06e31ea24cd4877",
+    "note": "b2580e6490733d3e"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "copy": "Svc(\"copy\",P(\"source\",B(\"String\")),P(\"target\",B(\"String\")),Ret(B(\"Int\")))",
+    "note": "Svc(\"note\",P(\"url\",B(\"String\")),Ret(B(\"String\")))"
+  }
+}

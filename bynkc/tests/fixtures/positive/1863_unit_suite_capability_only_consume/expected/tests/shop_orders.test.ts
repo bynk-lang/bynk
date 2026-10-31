@@ -49,7 +49,8 @@ class __Stub_Fees {
     return true;
   }
   async fee(): globalThis.Promise<number> {
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -90,7 +91,8 @@ class __Stub_Rates {
     return true;
   }
   async rate(): globalThis.Promise<number> {
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -157,7 +159,8 @@ async function test_a_service_is_given_the_consumed_context_s_provider() {
     const deps = __makeTestDeps();
     const { Till, __makeTill, charge, clock, rate, stamp, till } = __ns_shop_orders;
     const Fees = (deps as any).surface?.Fees;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -186,7 +189,8 @@ async function test_a_local_provider_is_built_with_the_consumed_capability() {
     const deps = __makeTestDeps();
     const { Till, __makeTill, charge, clock, rate, stamp, till } = __ns_shop_orders;
     const Fees = (deps as any).surface?.Fees;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -215,7 +219,8 @@ async function test_an_agent_is_given_the_consumed_context_s_provider() {
     const deps = __makeTestDeps();
     const { Till, __makeTill, charge, clock, rate, stamp, till } = __ns_shop_orders;
     const Fees = (deps as any).surface?.Fees;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -244,7 +249,8 @@ async function test_a_stub_replaces_the_consumed_context_s_provider() {
     const deps = __makeTestDeps("a stub replaces the consumed context's provider");
     const { Till, __makeTill, charge, clock, rate, stamp, till } = __ns_shop_orders;
     const Fees = (deps as any).surface?.Fees;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -273,7 +279,8 @@ async function test_a_stub_reaches_a_provider_built_over_the_stubbed_capability(
     const deps = __makeTestDeps("a stub reaches a provider built over the stubbed capability");
     const { Till, __makeTill, charge, clock, rate, stamp, till } = __ns_shop_orders;
     const Fees = (deps as any).surface?.Fees;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -302,7 +309,8 @@ async function test_a_prefixed_platform_capability_is_its_test_double() {
     const deps = __makeTestDeps();
     const { Till, __makeTill, charge, clock, rate, stamp, till } = __ns_shop_orders;
     const Fees = (deps as any).surface?.Fees;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -331,7 +339,8 @@ async function test_a_stub_reaches_every_provider_built_over_it() {
     const deps = __makeTestDeps("a stub reaches every provider built over it");
     const { Till, __makeTill, charge, clock, rate, stamp, till } = __ns_shop_orders;
     const Fees = (deps as any).surface?.Fees;
-    const { EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;

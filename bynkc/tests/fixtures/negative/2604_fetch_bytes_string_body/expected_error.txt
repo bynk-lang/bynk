@@ -1,0 +1,2 @@
+bynk.types.argument_mismatch
+argument 2 to capability `Fetch.sendBytes` has type `String`, but parameter expects `Bytes`

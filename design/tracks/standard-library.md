@@ -15,6 +15,7 @@
   dataset through a named `Analytics`.
   K5a done (#2586): more `Method`s, `Fetch.sendWith` with a timeout and a
   redirect policy, and `Logger` levels with a structured `log`.
+  K5b done (#2604): `Fetch.receiveBytes` and `sendBytes` carry `Bytes` bodies.
   P1 done (#2590): `Kv` gains metadata, expiry, binary values and paging.
   K3 done (#2592): `Instant` reads and writes RFC 3339 text. K2 done (#2594):
   percent-encoding on `String`, and URLs in the `bynk.url` commons.
@@ -314,7 +315,7 @@ unit and is indicative only, not decided.
 | ISO-8601 parse/format for `Instant` (UTC) | S (K3 #2592: `Instant.fromIso`, `toIso`, RFC 3339 in UTC, offsets converted) | L0 | Pure. Time zones and calendar fields deferred (D7) |
 | String formatting (pad, repeat, `codePoints`) | P | L0/L1 | |
 | `Bytes` ops (concat, slice, compare, hex) | S (K1 #2016; octet access and orderability are follow-ons) | L0 | Prerequisite for R2, crypto, binary Fetch bodies |
-| Fetch: more methods (`Patch`/`Head`/`Options`), `Bytes`/stream bodies, redirect & timeout options, `AbortSignal` | P (K5a #2586: `Patch`/`Head`/`Options`; experimental `sendWith(req, FetchOptions { timeout, redirect })`. Still `String` bodies: `Bytes` bodies are K5b, streams K-streams) | L2 `Fetch` | ADR 0022/0453 shape. Options go in a record beside `send`, never in `Request`: a new `Request` field breaks every literal |
+| Fetch: more methods (`Patch`/`Head`/`Options`), `Bytes`/stream bodies, redirect & timeout options, `AbortSignal` | P (K5a #2586: `Patch`/`Head`/`Options`; experimental `sendWith(req, FetchOptions { timeout, redirect })`. K5b #2604: experimental `receiveBytes`/`sendBytes` with a `BytesResponse`, and `FetchError.InvalidBody`. Streams are K-streams) | L2 `Fetch` | ADR 0022/0453 shape. Options go in a record beside `send`, never in `Request`: a new `Request` field breaks every literal |
 | Logger levels (`warn`/`debug`) and structured fields | P (K5a #2586: `warn`/`debug`; experimental `log(level, msg, fields)` writing `{ message, level, fields }`) | L2 `Logger` | Workers Logs / Observability ingest JSON |
 | Config / non-secret env vars (`[vars]`) | A | Existing `Secrets.get` (reads `env[name]`) | No new capability (D6). The gap is `[vars]` emission and deploy, which is deploy work |
 | `Sagas`, `Tracer`, durable `Idempotency` | D | L2 | Design notes Tier 2. `Sagas` is post-1.0 language-adjacent (D8) |
@@ -648,7 +649,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | K3 | **Done** (#2592): `Instant.fromIso(s) -> Option[Instant]` (the RFC 3339 date-time profile, offsets converted, fractions truncated, calendar checked) and `toIso()` (`YYYY-MM-DDTHH:mm:ss.sssZ`), in the shared runtime | D7 |
 | K4 ✅ #2327 | `bynk.crypto`: digests, HMAC, sign/verify, key import, `Effect` over Web Crypto; `Random.bytes`; security review. One `Crypto` capability in a flat sibling unit (Tier 0, `id_block` 7, experimental until the registry signs with it in production), a binding per platform (`Binding::PerPlatformFiles`), opaque non-storable `SigningKey`/`VerifyKey` (`bynk.types.key_at_boundary`), the Node binding as the unit-tier test double | K1, D5, D6, S2 |
 | K5a | **Done** (#2586): `Method` gains `Patch`/`Head`/`Options`; `Fetch.sendWith(req, FetchOptions { timeout, redirect })` (experimental); `Logger.warn`/`debug`, and a structured `log` (experimental) | K1 |
-| K5b | Fetch `Bytes` request and response bodies: two operations beside `send`, since `Request` cannot grow a field without breaking every literal | K5a |
+| K5b | **Done** (#2604): `Fetch.receiveBytes(req, options)` and `Fetch.sendBytes(req, body, options)` (experimental) return a `BytesResponse`; `FetchError.InvalidBody` refuses two bodies, or a body on `Get`/`Head` (on `send` too) | K5a |
 | K6a | **Done** (#2596): the `Set[T]` value type, its kernel and the `bynk.set` combinators | — |
 | K6b | **Done** (#2598): `Int` `div`/`rem`/`mod`/`pow` and the `Float` functions as value methods, `Float.pi()`/`Float.e()` | — |
 | K6c | **Done** (#2600): literal-pattern `matchesRegex`/`containsRegex`/`findRegex`/`findAllRegex`/`replaceRegex`/`splitRegex` on `String` | — |
