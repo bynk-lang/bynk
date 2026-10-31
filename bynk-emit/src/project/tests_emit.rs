@@ -5353,18 +5353,23 @@ const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>(
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
-  const uploads = new globalThis.Map<string, any>();
-  const claim = (s: any) => {
+  type Upload = {
+    options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
+    parts: globalThis.Map<number, { etag: string; body: globalThis.Uint8Array }>;
+  };
+  const uploads = new globalThis.Map<string, Upload>();
+  const claim = (stream: object) => {
+    const s = stream as { [k: symbol]: boolean };
     const k = globalThis.Symbol.for('bynk.stream.read');
     if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
     s[k] = true;
   };
-  const collect = async (op: string, body: any, size: number) => {
+  const collect = async (op: string, body: AsyncIterable<globalThis.Uint8Array>, size: number) => {
     if (!globalThis.Number.isSafeInteger(size) || size < 0) {
       throw new globalThis.Error(`bynk.cloudflare.R2.${op}: size must be a whole number of bytes, not ${size}`);
     }
     claim(body);
-    const chunks: Uint8Array[] = [];
+    const chunks: globalThis.Uint8Array[] = [];
     let held = 0;
     for await (const c of body) {
       held += c.length;
@@ -5382,7 +5387,7 @@ const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>(
     }
     return out;
   };
-  const open = (u: any) => {
+  const open = (u: { key: string; uploadId: string }) => {
     const e = uploads.get(`${u.key}\u0000${u.uploadId}`);
     if (e === undefined) throw new globalThis.Error(`R2: no multipart upload ${u.uploadId} of ${u.key}`);
     return e;

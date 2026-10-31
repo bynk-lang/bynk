@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_abi_shapes
 changelog: "`bynk.cloudflare`'s `R2` gains streamed reads and writes: `getStream` gives an `R2Body` (the object's metadata and its body as a single-pass `Stream[Bytes]`, served with `RawStreamed`), and `putStream`/`putStreamWith` write a stream of a declared `size`, a mismatch faulting with nothing stored. Multipart uploads (`createUpload`, `uploadPart`, `completeUpload`, `abortUpload`) build one object from whole-`Bytes` parts across requests, through a plain `R2Upload` handle (standard-library P5b, [#2626](https://github.com/bynk-lang/bynk/issues/2626))"
 ---
 
