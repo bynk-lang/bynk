@@ -27,7 +27,7 @@
 A Bynk generic can move a value of type `T` around but can do almost nothing
 *with* it. Type parameters exist on functions, records, sums, instance methods
 and capability operations, but a bound is a parse error
-(`bynk.generics.no_bounds`, `bynk-syntax/src/parser/types.rs:14`). The one
+(`bynk.generics.no_bounds`, in `parse_optional_type_params`, `bynk-syntax/src/parser/types.rs`). The one
 exception is equality: ADR 0430 *infers* an "is compared" bound on a type
 parameter and checks it at every call site.
 
@@ -37,10 +37,10 @@ or special-cased in the compiler for a fixed list of types:
 | Need | What happens today |
 |---|---|
 | **Order** `T` | `sortBy`, `min`, `max` take a key function whose result must be `Int`, `Float`, `String`, `Duration` or `Instant` (`bynk.types.key_not_orderable`). There is no `sort()` on a `List[T]` and no `<` on a record, enum or `T`. |
-| **Key** a `Map` or `Set` by `T` | Keys and members must be `String`, `Int`, or a refined/opaque type over them (`bynk.types.unkeyable_map_key`, `bynk.types.unkeyable_set_element`, `bynk-check/src/resolver.rs:2260`). The diagnostic's own note says "value-equality keys need bounded generics". |
+| **Key** a `Map` or `Set` by `T` | Keys and members must be `String`, `Int`, or a refined/opaque type over them (`bynk.types.unkeyable_map_key`, `bynk.types.unkeyable_set_element`, `check_keyable` in `bynk-check/src/resolver.rs`). The diagnostic's own note says "value-equality keys need bounded generics". |
 | **Encode or decode** `T` | `Json.decode[T]` is a compiler-backed static. A generic function or capability operation cannot require "`T` is boundary-legal", so the stdlib cannot offer a typed `Queue.send[T]` or `Analytics.write[T]` (`design/tracks/standard-library.md` §6.3), and ADR 0281 D rules out any codec for a generic capability op's `T`. |
 | **Display** `T` | Interpolation accepts only scalars (`bynk.types.interpolation_non_scalar`). A user type cannot say how it renders. |
-| **Static methods on generic types** | Deferred (`bynk.generics.method_on_generic_type`, `bynk-check/src/resolver.rs:681`), because nothing supplies the type's parameters without a receiver. |
+| **Static methods on generic types** | Deferred (`bynk.generics.method_on_generic_type`, in `bynk-check/src/resolver.rs`), because nothing supplies the type's parameters without a receiver. |
 
 ### 1.1 What this track settles
 
@@ -80,7 +80,7 @@ or special-cased in the compiler for a fixed list of types:
 
 ## 3. What's already true
 
-- **Parameters.** `TypeParam { name, span }` (`bynk-syntax/src/ast.rs:2506`).
+- **Parameters.** `struct TypeParam { name, span }` (`bynk-syntax/src/ast.rs`).
   The parser reads `[A, B]` on `fn` and `type` declarations and rejects `[A: …]`
   at the colon with `bynk.generics.no_bounds`.
 - **Rigid variables.** Inside its body a type parameter is equal only to itself
@@ -91,7 +91,7 @@ or special-cased in the compiler for a fixed list of types:
   ADR 0197, 0237). So the emitter already knows how to specialise per concrete
   type at a *boundary site*, but not inside a generic function body.
 - **Equality.** `==` is structural (ADR 0421). A generic body's `==` on a `T`
-  emits `__bynkEq` (`bynk-emit/runtime/src/equality.ts:33`), a runtime walk over
+  emits `__bynkEq` (`bynk-emit/runtime/src/equality.ts`), a runtime walk over
   self-describing values. The file records why a type-directed `equals_T` was
   rejected: "Bynk generic functions are not monomorphised … so `==` on a type
   parameter has no concrete type to dispatch on. The in-memory representation
@@ -167,9 +167,13 @@ Reordering fields would silently change sort order.
 **Draft recommendation: (c).** `Eq`, `Key` and `Codable` have one obvious
 structural meaning and no ordering hazard, so they stay automatic, consistent
 with ADR 0421. `Ord` is opted into with `derives Ord`, which makes declaration
-order deliberate and visible exactly where it becomes meaningful. A refined or
-opaque type over an orderable base is `Ord` without declaration, as it already
-is for `sortBy` keys.
+order deliberate and visible exactly where it becomes meaningful. A refined
+type over an orderable base is `Ord` without declaration: its representation is
+its base, visible everywhere. An opaque type is not, because ordering it by its
+hidden representation would expose that representation's order outside the
+defining `commons`. Its defining `commons` opts in with `derives Ord`. The review
+should confirm this against how `sortBy` treats opaque keys today, and keep the
+two consistent.
 
 ### Q3 — Syntax, and what happens to inferred equality
 
@@ -221,11 +225,22 @@ Bynk generics directly; if they can, the witness argument becomes ABI.
 
 ### Q5 — What `Ord` means
 
-- The comparison is total and consistent with `==`. `Float` is the exception:
-  `NaN` makes IEEE ordering partial. Options are to exclude `Float` from `Ord`
-  (Rust's `PartialOrd` split), or define a total order (`NaN` last, `-0 == 0`).
-  **Draft:** keep `Float` orderable for compatibility with today's `sortBy`, and
-  specify the total order normatively.
+- The comparison is total and, for every type except `Float`, consistent with
+  `==`. `Float` cannot have both: IEEE `==` makes `NaN != NaN`, while a total
+  order must have `compare(NaN, NaN) == 0`. The options are:
+  - exclude `Float` from `Ord` (Rust's `PartialOrd` split), which breaks
+    today's `Float` `sortBy` keys;
+  - give `Float` a total order that agrees with `==` everywhere **except at
+    `NaN`**: `-0` and `0` compare equal, and `NaN` compares equal to itself and
+    greater than every other value;
+  - change `Float`'s `==` to match that total order, which contradicts the IEEE
+    semantics §5.2 specifies.
+
+  **Draft:** the second option. Keep `Float` orderable, and state the `NaN`
+  exception normatively. `sort` puts `NaN`s last, `max` returns `NaN` when one
+  is present, `min` returns `NaN` only when every element is `NaN`, and the
+  comparison operators keep their IEEE meaning (`NaN < x` is `false`). `==` is
+  unchanged. The review should weigh this against excluding `Float`.
 - Records order lexicographically by declared field order; sums by variant
   declaration order, then payload; `List` lexicographically; `Option` puts
   `None` first; `Bytes` unsigned lexicographically (matching its existing
@@ -241,8 +256,16 @@ canonical encoding, so that semantically equal values index identically.
 
 - **Draft:** `Key` holds for every equality-supporting, boundary-legal type
   except those containing `Float` (where `NaN != NaN` breaks lookup). The runtime
-  encodes non-primitive keys with the canonical serialisation `serialiseAgentKey`
-  already defines, which records and sums reuse.
+  encodes non-primitive keys with a canonical encoding **derived from**
+  `serialiseAgentKey` (`bynk-emit/runtime/src/agent.ts`), not that function as
+  it stands. It has two properties a general key encoding cannot keep:
+  - A top-level `String` is returned raw while other kinds are JSON, so `"1"`
+    and `1` encode alike. That is safe while one map has one key type, but not
+    if an encoding ever spans types, for example sum payloads of different kinds
+    behind one tag.
+  - `Bytes` falls into the generic-object branch and encodes as index→byte
+    pairs sorted as strings (`"10"` before `"2"`). That is deterministic but
+    large and slow; a dedicated `Bytes` form (hex or base64) is better.
 - Open: whether widening keys changes the **stored-state encoding** of
   `Map`-typed `store` fields. Primitive-keyed maps must keep their encoding
   exactly, and a non-primitive-keyed map is new, so this should be additive. The
@@ -315,8 +338,9 @@ obligations follow from Q6 and Q7:
   decode against the type parameter itself.
 - **Canonical key encoding must be collision-free.** Two values unequal under
   `==` must never encode to the same key, or one `Map` entry silently shadows
-  another. The encoding needs a fixture for each kind (record field-order
-  independence, nested sums, `Bytes`).
+  another. The encoding needs a fixture for each kind: record field-order
+  independence, nested sums, `Bytes`, and a `String` against a
+  numeric-looking string (`"1"` against `1` inside a sum payload).
 
 ## 9. Slice status
 
@@ -342,7 +366,7 @@ obligations follow from Q6 and Q7:
 - Every slice in §9 has shipped or been explicitly dropped with a recorded
   reason.
 - The spec states the constraint set, the satisfaction rules, the total order and
-  the key encoding normatively (§5, §6 and §7 chapters).
+  the key encoding normatively, in spec chapters 5 to 7.
 - Unbounded generic code emits byte-identically to before the track, proved by
   the existing goldens.
 - The retirement PR removes this doc, appends its closing summary to
