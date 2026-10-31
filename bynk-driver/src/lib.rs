@@ -58,13 +58,15 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
             .compatibility_flags(workers.compatibility_flags)
             .workers_dev(workers.workers_dev)
             .asset_files(discovery::list_asset_folder(input)?)
-            .embed_files(discovery::list_embed_folder(input)?))
+            .embed_files(discovery::list_embed_folder(input)?)
+            .migration_files(discovery::list_migration_folder(input)?))
     } else {
         let sources = discovery::read_bynk_tree_single(input)?;
         Ok(CompileOptions::single(input.to_path_buf())
             .sources(sources)
             .asset_files(discovery::list_asset_folder(input)?)
-            .embed_files(discovery::list_embed_folder(input)?))
+            .embed_files(discovery::list_embed_folder(input)?)
+            .migration_files(discovery::list_migration_folder(input)?))
     }
 }
 
@@ -84,6 +86,8 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
     let asset_files = discovery::list_asset_folder(input)?;
     // #2387, slice 2: the `embeds/` folder, listed the same way.
     let embed_files = discovery::list_embed_folder(input)?;
+    // P4b (#2608): the `migrations/` folder, listed the same way.
+    let migration_files = discovery::list_migration_folder(input)?;
     // #2554: the older contracts each callee still accepts. Read here, with
     // the manifest, so every CLI build (`bynkc compile`, `bynk dev`/`deploy`)
     // honours the lock without its own plumbing. An unreadable file is an
@@ -103,12 +107,14 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
                 .workers_dev(workers.workers_dev)
                 .asset_files(asset_files)
                 .embed_files(embed_files)
+                .migration_files(migration_files.clone())
                 .contracts_lock(contracts_lock)
         }
         (None, sources) => CompileOptions::single(input.to_path_buf())
             .sources(sources)
             .asset_files(asset_files)
             .embed_files(embed_files)
+            .migration_files(migration_files)
             .contracts_lock(contracts_lock),
     })
 }

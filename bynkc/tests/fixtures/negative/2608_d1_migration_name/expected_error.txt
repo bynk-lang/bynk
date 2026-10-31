@@ -1,0 +1,2 @@
+bynk.d1.migration_name
+migration `migrations/demo-orders/1_init.sql` isn't named `NNNN_<name>.sql`

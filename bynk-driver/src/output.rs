@@ -158,7 +158,10 @@ pub fn write_document(
                 bynk_emit::emitter::toml_doc::print_toml_document(t),
             )?;
         }
-        Document::Json(s) | Document::SourceMap(s) | Document::DebugSidecar(s) => {
+        Document::Json(s)
+        | Document::SourceMap(s)
+        | Document::DebugSidecar(s)
+        | Document::Sql(s) => {
             std::fs::write(&target, s)?;
         }
         Document::Ts(_) | Document::Js(_) => unreachable!("handled above"),
@@ -186,7 +189,7 @@ fn expected_output_paths(out: &ProjectOutput) -> std::collections::HashSet<PathB
 /// directory the caller points `write_output` at can still carry other files
 /// unrelated to a `.bynk` build without those being swept up.
 fn is_prunable_output_extension(ext: &str) -> bool {
-    matches!(ext, "ts" | "js" | "map" | "json" | "toml" | "wasm")
+    matches!(ext, "ts" | "js" | "map" | "json" | "toml" | "wasm" | "sql")
 }
 
 fn prune_stale_output(out: &ProjectOutput, dir: &Path) -> std::io::Result<()> {

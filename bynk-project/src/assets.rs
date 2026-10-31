@@ -57,6 +57,12 @@ pub fn is_in_embeds_dir(path: &str) -> bool {
     segs.next() == Some(PROJECT_EMBEDS_DIR) && segs.next().is_some()
 }
 
+/// Standard-library P4b (#2608): the project's D1 migrations folder,
+/// relative to the project root. Each `D1` instance's migrations are
+/// `migrations/<database>/NNNN_<name>.sql`; it is listed and read as an
+/// [`AssetFolder`].
+pub const PROJECT_MIGRATIONS_DIR: &str = "migrations";
+
 /// Reads one listed asset file's bytes, given its normalised key.
 pub type AssetReader = dyn Fn(&str) -> io::Result<Vec<u8>> + Send + Sync;
 
@@ -95,6 +101,12 @@ impl AssetFolder {
     /// the same listing and the same refusals, a different directory.
     pub fn embeds_on_disk(project_root: &Path) -> io::Result<Self> {
         Self::on_disk_in(project_root, PROJECT_EMBEDS_DIR)
+    }
+
+    /// [`AssetFolder::on_disk`] for the project's `migrations/` folder
+    /// (#2608): the same listing and the same refusals.
+    pub fn migrations_on_disk(project_root: &Path) -> io::Result<Self> {
+        Self::on_disk_in(project_root, PROJECT_MIGRATIONS_DIR)
     }
 
     fn on_disk_in(project_root: &Path, folder: &str) -> io::Result<Self> {
@@ -172,6 +184,11 @@ pub fn list_asset_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
 /// [`list_asset_files`] for the project's `embeds/` folder (#2387).
 pub fn list_embed_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
     list_files_in(project_root, PROJECT_EMBEDS_DIR)
+}
+
+/// [`list_asset_files`] for the project's `migrations/` folder (#2608).
+pub fn list_migration_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
+    list_files_in(project_root, PROJECT_MIGRATIONS_DIR)
 }
 
 fn list_files_in(project_root: &Path, folder: &str) -> io::Result<BTreeSet<String>> {

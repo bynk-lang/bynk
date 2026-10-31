@@ -28,6 +28,7 @@ use crate::emitter::wrangler::{BindingSource, WorkerBinding};
 use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::test_suites::{self, ResolvedStub, StubScope};
+use bynk_check::d1_migrations::{D1Migrations, MigrationFile, d1_database_name};
 use bynk_check::wire_format;
 use bynk_syntax::ast::{
     ArgPattern, BaseType, BinOp, Block, CapabilityOp, Case, Commons, CommonsForm, CommonsItem,
@@ -79,6 +80,8 @@ pub(crate) fn process_tests(
     emitted_barrels: &mut HashSet<PathBuf>,
     // #1883, slice 3: the declared assets, for `svc.GET(asset)` in a case.
     asset_files: &TestAssetFiles,
+    // P4b (#2608): each `D1` database's migrations, run on every test database.
+    d1_migrations: &D1Migrations,
     // #1975: each user adapter's binding module, as an extensionless path
     // from the output root, for a test that builds the binding for real.
     binding_modules: &HashMap<String, String>,
@@ -160,6 +163,7 @@ pub(crate) fn process_tests(
                 unit_flattened,
                 unit_callees,
             ),
+            d1_migrations,
             tys,
         );
         if let Some((path, program, source_map, runnable)) = emit_out {
@@ -229,6 +233,8 @@ pub(crate) fn process_integration_tests(
     emitted_barrels: &mut HashSet<PathBuf>,
     // #1883, slice 3: the declared assets, for `svc.GET(asset)` in a case.
     asset_files: &TestAssetFiles,
+    // P4b (#2608): each `D1` database's migrations, run on every test database.
+    d1_migrations: &D1Migrations,
     // #1959: each context's Worker bindings, bound on each participant's
     // `env`. `None` when earlier errors stop the build anyway.
     context_bindings: Option<&BTreeMap<String, Vec<WorkerBinding>>>,
@@ -378,6 +384,7 @@ pub(crate) fn process_integration_tests(
                 asset_harness(target, unit_uses, unit_consumes, unit_tables, asset_files)
             }),
             remote,
+            d1_migrations,
             errors,
             tys,
         ) {
@@ -464,6 +471,8 @@ fn emit_integration_module(
     // #2138: a remote test build — drivers reach the target's URLs, and a case
     // a remote run can't honour is refused (into `errors`) or skipped.
     remote: Option<&crate::project::RemoteTests>,
+    // P4b (#2608): each `D1` database's migrations.
+    d1_migrations: &D1Migrations,
     errors: &mut Vec<CompileError>,
     tys: &Arc<Types>,
 ) -> Option<(PathBuf, TsProgram, Option<String>, RunnableTest)> {
@@ -754,6 +763,7 @@ fn emit_integration_module(
             &foreign_secrets,
             &exposed,
             with_env,
+            d1_migrations,
         )
     };
     for (i, stmt) in harness.into_iter().enumerate() {
@@ -2449,6 +2459,9 @@ fn emit_integration_harness<'a>(
     // participant's `env`, first, so the harness's own keys and bindings
     // below are never replaced by one.
     with_env: bool,
+    // P4b (#2608): each `D1` database's migrations, run on each participant's
+    // fresh database.
+    d1_migrations: &D1Migrations,
 ) -> Vec<TsStmt> {
     let mut body = Vec::new();
     // Declare every participant env first so sibling references resolve.
@@ -2562,8 +2575,15 @@ fn emit_integration_harness<'a>(
                 BindingSource::AnalyticsDataset { .. } => {
                     call(ident("__makeIntegrationAnalytics"), vec![])
                 }
-                // P4a (#2602): each instance its own empty in-memory database.
-                BindingSource::D1Database { .. } => call(ident("__makeIntegrationD1"), vec![]),
+                // P4a (#2602): each instance its own in-memory database, and
+                // P4b (#2608) runs its migrations on it first.
+                BindingSource::D1Database { .. } => call(
+                    ident("__makeIntegrationD1"),
+                    d1_migrations_args(d1_migrations.get(&d1_database_name(
+                        &bynk_project::worker_dir_name(p),
+                        &binding.name,
+                    ))),
+                ),
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.
                 BindingSource::ForeignService { worker, .. } => {
@@ -3084,6 +3104,8 @@ fn emit_test_module(
     schema_versions: &HashMap<String, i64>,
     // #2050: whether the target's handlers emit ([`target_uses_emit`]).
     uses_emit: bool,
+    // P4b (#2608): each `D1` database's migrations.
+    d1_migrations: &D1Migrations,
     tys: &Arc<Types>,
 ) -> Option<(PathBuf, TsProgram, Option<String>, RunnableTest)> {
     // #914: the test-scaffold module's runtime import list is emitted below as a
@@ -3520,11 +3542,23 @@ fn emit_test_module(
         }
         // #2137: in a module whose cases `advance`, the `Clock` double reads
         // the harness clock.
+        // P4b (#2608): a `D1` double runs its database's migrations.
+        let migrations = unit_tables
+            .get(target_name)
+            .and_then(|t| t.derived.get(name))
+            .and_then(|d| {
+                d1_migrations.get(&d1_database_name(
+                    &bynk_project::worker_dir_name(target_name),
+                    &d.binding,
+                ))
+            })
+            .map(Vec::as_slice);
         let def = if with_env {
-            env_secrets_double(owner, cap, &test_ns(owner), name)
-                .or_else(|| platform_double(owner, cap, &test_ns(owner), name, uses_advance))
+            env_secrets_double(owner, cap, &test_ns(owner), name).or_else(|| {
+                platform_double(owner, cap, &test_ns(owner), name, uses_advance, migrations)
+            })
         } else {
-            platform_double(owner, cap, &test_ns(owner), name, uses_advance)
+            platform_double(owner, cap, &test_ns(owner), name, uses_advance, migrations)
         };
         if let Some(def) = def {
             stmts.push(TsStmt::raw(def, None));
@@ -5414,6 +5448,8 @@ fn platform_double(
     ns: &str,
     name: &str,
     harness_clock: bool,
+    // P4b (#2608): a `D1` instance's migrations, run on its fresh database.
+    d1_migrations: Option<&[MigrationFile]>,
 ) -> Option<String> {
     let body = match (owner, cap) {
         // K5a (#2586): every level a no-op, as `info` and `error` are.
@@ -5473,9 +5509,13 @@ fn platform_double(
         // call wrapper, as for every double) sees what was written.
         ("bynk.cloudflare", "Analytics") => ANALYTICS_DOUBLE_BODY.to_string(),
         // P4a (#2602): each `D1` instance is the real `WorkersD1` over its own
-        // empty in-memory SQLite database (`node:sqlite`), so a test runs its
-        // statements as D1 would; the case creates its tables.
-        ("bynk.cloudflare", "D1") => "  return new bynk_cloudflare__binding.WorkersD1({ D1: __makeIntegrationD1() }, \"D1\");\n".to_string(),
+        // in-memory SQLite database (`node:sqlite`), so a test runs its
+        // statements as D1 would. P4b (#2608): the database's migrations run
+        // on it first.
+        ("bynk.cloudflare", "D1") => format!(
+            "  return new bynk_cloudflare__binding.WorkersD1({{ D1: __makeIntegrationD1({}) }}, \"D1\");\n",
+            d1_migrations_text(d1_migrations.unwrap_or_default())
+        ),
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),
@@ -5541,7 +5581,7 @@ fn emit_test_deps(
         std::cell::RefCell::new(Vec::new());
     let given_double = |owner: &str, cap: &str| -> Option<TsExpr> {
         bindings?;
-        platform_double(owner, cap, &test_ns(owner), cap, false)?;
+        platform_double(owner, cap, &test_ns(owner), cap, false, None)?;
         given_doubles
             .borrow_mut()
             .push((owner.to_string(), cap.to_string(), cap.to_string()));
@@ -5881,7 +5921,7 @@ enum TopDep {
 /// A capability of `owner` with a platform test double is [`TopDep::Double`];
 /// any other, the placeholder, whatever provides it in production.
 fn platform_or_placeholder(owner: &str, cap: &str) -> TopDep {
-    if platform_double(owner, cap, &test_ns(owner), cap, false).is_some() {
+    if platform_double(owner, cap, &test_ns(owner), cap, false, None).is_some() {
         TopDep::Double
     } else {
         TopDep::Placeholder
@@ -8292,6 +8332,44 @@ fn ident(s: impl Into<String>) -> TsExpr {
 
 fn str_lit(s: impl Into<String>) -> TsExpr {
     TsExpr::Lit(TsLit::Str(s.into()))
+}
+
+/// P4b (#2608): `__makeIntegrationD1`'s argument for a database's
+/// migrations, `[[name, sql], …]` in order, or none for a database without.
+fn d1_migrations_args(files: Option<&Vec<MigrationFile>>) -> Vec<TsExpr> {
+    let Some(files) = files.filter(|f| !f.is_empty()) else {
+        return Vec::new();
+    };
+    vec![TsExpr::Array {
+        items: files
+            .iter()
+            .map(|f| TsExpr::Array {
+                items: vec![str_lit(f.name.clone()), str_lit(f.sql.clone())],
+                multiline: false,
+            })
+            .collect(),
+        multiline: true,
+    }]
+}
+
+/// [`d1_migrations_args`] as text, for a double whose body is written as
+/// text: empty for a database without migrations.
+fn d1_migrations_text(files: &[MigrationFile]) -> String {
+    let pairs: Vec<String> = files
+        .iter()
+        .map(|f| {
+            format!(
+                "[{}, {}]",
+                bynk_project::json_string(&f.name),
+                bynk_project::json_string(&f.sql)
+            )
+        })
+        .collect();
+    if pairs.is_empty() {
+        String::new()
+    } else {
+        format!("[{}]", pairs.join(", "))
+    }
 }
 
 fn num_lit(n: impl Into<String>) -> TsExpr {

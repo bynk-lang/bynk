@@ -234,6 +234,9 @@ pub(crate) fn emit_wrangler_toml(
     // State-migrations S3 (#2248): the context's declared class renames and
     // removals, each emitted as an `exports` tombstone.
     tombstones: &ClassTombstones,
+    // P4b (#2608): each `D1` database's migrations; one with any gets a
+    // `migrations_dir`.
+    d1_migrations: &bynk_check::d1_migrations::D1Migrations,
 ) -> TomlDocument {
     let name = worker_dir_name(context);
     let mut root = vec![
@@ -354,21 +357,28 @@ pub(crate) fn emit_wrangler_toml(
             // environment-qualifies, and an id placeholder it fills from the
             // ledger. Miniflare takes the placeholder as a local id, so
             // `bynk dev` runs with it.
-            BindingSource::D1Database { .. } => TomlBlock::array_table(
-                "d1_databases",
-                vec![
+            //
+            // P4b (#2608): a database with migrations names their copy beside
+            // this file, which `wrangler d1 migrations apply` reads.
+            BindingSource::D1Database { .. } => {
+                let database = d1_database_name(&worker_dir_name(context), &binding.name);
+                let mut entries = vec![
                     TomlEntry::kv("binding", name),
-                    TomlEntry::kv(
-                        "database_name",
-                        TomlValue::str(d1_database_name(&worker_dir_name(context), &binding.name)),
-                    ),
+                    TomlEntry::kv("database_name", TomlValue::str(database.clone())),
                     TomlEntry::with_comment(
                         "database_id",
                         TomlValue::str(d1_database_id_placeholder(&binding.name)),
                         "set at deploy time",
                     ),
-                ],
-            ),
+                ];
+                if d1_migrations.get(&database).is_some_and(|f| !f.is_empty()) {
+                    entries.push(TomlEntry::kv(
+                        "migrations_dir",
+                        TomlValue::str(format!("{D1_MIGRATIONS_DIR}/{database}")),
+                    ));
+                }
+                TomlBlock::array_table("d1_databases", entries)
+            }
             // Interop I5 (#1972): the Worker as the declaration names it,
             // not a project context's `worker_dir_name`.
             BindingSource::ForeignService { worker, .. } => TomlBlock::array_table(
@@ -788,15 +798,15 @@ pub fn analytics_dataset_name(worker: &str, binding: &str) -> String {
         .replace('-', "_")
 }
 
-/// P4a (#2602): the account-facing name of a `D1` instance's database,
-/// `<worker>-<capability, kebab>`: `shop-cart` and `D1_ORDERS` give
-/// `shop-cart-orders`. D1 database names are scoped to the account, as R2
-/// bucket names are. `bynk deploy` environment-qualifies it.
-pub fn d1_database_name(worker: &str, binding: &str) -> String {
-    let prefix = format!("{}_", bynk_check::firstparty::D1_BINDING_PREFIX);
-    let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
-    format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"))
-}
+/// P4b (#2608): the directory beside a Worker's `wrangler.toml` holding its
+/// `D1` databases' migrations, one subdirectory per database, as the
+/// project's own `migrations/` folder does.
+pub const D1_MIGRATIONS_DIR: &str = "migrations";
+
+/// P4a (#2602): the account-facing name of a `D1` instance's database. It
+/// moved to the checker with P4b (#2608), which names each instance's
+/// migrations directory by it.
+pub use bynk_check::d1_migrations::d1_database_name;
 
 /// P4a (#2602): the placeholder `database_id` of D1 binding `binding`, which
 /// `bynk deploy` replaces with the id it records in the ledger.

@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+// #2608: `Orders`'s migrations are `migrations/demo-orders/NNNN_<name>.sql`.
+capability Orders = D1
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}
