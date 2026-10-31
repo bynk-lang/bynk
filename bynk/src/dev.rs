@@ -665,6 +665,20 @@ pub fn run(
     // Installed before the spawns, so there is no window in which a child is
     // up and the driver still dies of the default action; the children
     // themselves get the default back at `exec`.
+    // P4b (#2608): each served Worker's local D1 databases get their
+    // migrations before it serves. Never with `--remote`: that database is a
+    // real one, and only `bynk deploy` changes it.
+    let remote = opts.wrangler_args.iter().any(|arg| arg == "--remote");
+    let mut applied = MigrationsSeen::default();
+    if !remote {
+        apply_local_migrations(
+            &probe.provenance,
+            &workers_dir,
+            &serving,
+            &opts.wrangler_args,
+            &mut applied,
+        );
+    }
     crate::stop::install();
     let rewriter = std::sync::Arc::new(crate::logs::Rewriter::new(&build_dir));
     let mut children: Vec<(String, Served)> = Vec::new();
@@ -786,6 +800,16 @@ pub fn run(
                 // stand-in until `bynk dev` restarts.
                 if let Err(e) = point_at_stand_ins(&workers_dir, &stand_in_plans) {
                     eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
+                }
+                // P4b (#2608): a new migration is applied without a restart.
+                if !remote {
+                    apply_local_migrations(
+                        &probe.provenance,
+                        &workers_dir,
+                        &serving,
+                        &opts.wrangler_args,
+                        &mut applied,
+                    );
                 }
                 eprintln!("bynk dev: rebuilt");
                 emit(opts.format, &DevEvent::RebuildOk);
@@ -1123,6 +1147,12 @@ fn watch_fingerprint(project_root: &Path) -> u64 {
             record(&project_root.join(rel), &mut entries);
         }
     }
+    // P4b (#2608): and every D1 migration, so a new one is applied.
+    if let Ok(migrations) = bynk_emit::project::assets::list_migration_files(project_root) {
+        for rel in migrations {
+            record(&project_root.join(rel), &mut entries);
+        }
+    }
     entries.sort();
     let mut hasher = std::hash::DefaultHasher::new();
     for (path, mtime, len) in &entries {
@@ -1155,6 +1185,42 @@ mod watch_tests {
         assert_ne!(before, after, "an embed edit must trigger a rebuild");
     }
 
+    /// P4b (#2608): a new migration changes the fingerprint, so `bynk dev`
+    /// rebuilds and applies it.
+    #[test]
+    fn a_new_migration_changes_the_watch_fingerprint() {
+        let root =
+            std::env::temp_dir().join(format!("bynk-dev-watch-d1-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::create_dir_all(root.join("migrations/shop-orders")).unwrap();
+        std::fs::write(root.join("src/a.bynk"), "commons a\n").unwrap();
+        let before = watch_fingerprint(&root);
+        std::fs::write(root.join("migrations/shop-orders/0001_create.sql"), "SELECT 1;").unwrap();
+        let after = watch_fingerprint(&root);
+        let _ = std::fs::remove_dir_all(&root);
+        assert_ne!(before, after, "a new migration must trigger a rebuild");
+    }
+
+    #[test]
+    fn only_databases_with_migrations_are_applied_into_the_served_state() {
+        let config = "name = \"shop\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\"\nmigrations_dir = \"migrations/shop-orders\"\n\n[[d1_databases]]\nbinding = \"D1_PLAIN\"\ndatabase_name = \"shop-plain\"\ndatabase_id = \"<D1_PLAIN_ID>\"\n";
+        assert_eq!(
+            migrating_databases(config),
+            [("D1_ORDERS".to_string(), "migrations/shop-orders".to_string())]
+        );
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            persist_to_args(&args(&["--port", "1", "--persist-to", ".state"])),
+            ["--persist-to", ".state"]
+        );
+        assert_eq!(
+            persist_to_args(&args(&["--persist-to=.state"])),
+            ["--persist-to", ".state"]
+        );
+        assert!(persist_to_args(&args(&["--port", "1"])).is_empty());
+    }
+
     /// #1883, slice 1b: an edit to a file in `assets/` changes the
     /// fingerprint, so `bynk dev` rebuilds and the `.url` hash moves with it.
     #[test]
@@ -1170,6 +1236,123 @@ mod watch_tests {
         let after = watch_fingerprint(&root);
         let _ = std::fs::remove_dir_all(&root);
         assert_ne!(before, after, "an asset edit must trigger a rebuild");
+    }
+}
+
+/// P4b (#2608): each served migration file's content hash as last applied,
+/// keyed by its path in the build, so an edit to one wrangler has already
+/// applied can be pointed out: wrangler applies a file once, by name.
+#[derive(Default)]
+struct MigrationsSeen(std::collections::BTreeMap<PathBuf, u64>);
+
+/// The bindings of `config`'s `[[d1_databases]]` that name a
+/// `migrations_dir`, with that directory.
+fn migrating_databases(config: &str) -> Vec<(String, String)> {
+    let Ok(doc) = config.parse::<toml::Table>() else {
+        return Vec::new();
+    };
+    doc.get("d1_databases")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|db| {
+            Some((
+                db.get("binding")?.as_str()?.to_string(),
+                db.get("migrations_dir")?.as_str()?.to_string(),
+            ))
+        })
+        .collect()
+}
+
+/// The `--persist-to` among `bynk dev`'s passthrough arguments, as
+/// `["--persist-to", dir]`, so migrations land in the database being served.
+fn persist_to_args(wrangler_args: &[String]) -> Vec<String> {
+    let mut args = wrangler_args.iter();
+    while let Some(arg) = args.next() {
+        if arg == "--persist-to" {
+            return args
+                .next()
+                .map(|dir| vec![arg.clone(), dir.clone()])
+                .unwrap_or_default();
+        }
+        if let Some(dir) = arg.strip_prefix("--persist-to=") {
+            return vec!["--persist-to".to_string(), dir.to_string()];
+        }
+    }
+    Vec::new()
+}
+
+/// P4b (#2608): `wrangler d1 migrations apply <binding> --local` for each
+/// served Worker's databases with migrations, from the Worker's directory
+/// (where `wrangler dev` keeps its local state). Stdin is closed, so wrangler
+/// doesn't ask. A failure is reported and the session keeps serving: the
+/// developer is mid-edit.
+fn apply_local_migrations(
+    provenance: &Provenance,
+    workers_dir: &Path,
+    serving: &[Serving],
+    wrangler_args: &[String],
+    seen: &mut MigrationsSeen,
+) {
+    for s in serving {
+        let worker_dir = workers_dir.join(&s.worker);
+        let Ok(config) = std::fs::read_to_string(worker_dir.join("wrangler.toml")) else {
+            continue;
+        };
+        for (binding, dir) in migrating_databases(&config) {
+            note_edited_migrations(&worker_dir.join(&dir), seen);
+            let Some(mut cmd) = wrangler_command(provenance, "d1") else {
+                eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
+                return;
+            };
+            cmd.args(["migrations", "apply", &binding, "--local"])
+                .args(persist_to_args(wrangler_args))
+                .current_dir(&worker_dir)
+                .stdin(std::process::Stdio::null());
+            match cmd.output() {
+                Ok(out) if out.status.success() => {}
+                Ok(out) => {
+                    let said = String::from_utf8_lossy(&out.stderr);
+                    let said = if said.trim().is_empty() {
+                        String::from_utf8_lossy(&out.stdout)
+                    } else {
+                        said
+                    };
+                    eprintln!(
+                        "bynk dev: warning: could not apply `{}`'s D1 migrations for `{binding}`: {}",
+                        s.worker,
+                        said.trim()
+                    );
+                }
+                Err(e) => eprintln!(
+                    "bynk dev: warning: could not run wrangler to apply `{}`'s D1 migrations: {e}",
+                    s.worker
+                ),
+            }
+        }
+    }
+}
+
+/// Note each file in `dir` whose content changed since it was last seen.
+fn note_edited_migrations(dir: &Path, seen: &mut MigrationsSeen) {
+    use std::hash::{Hash, Hasher};
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+        let mut hasher = std::hash::DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        let hash = hasher.finish();
+        if seen.0.insert(path.clone(), hash).is_some_and(|before| before != hash) {
+            eprintln!(
+                "bynk dev: note: `{}` changed after it was applied; wrangler applies a migration once, by name, so add a new one to change the schema",
+                path.file_name().unwrap_or_default().to_string_lossy()
+            );
+        }
     }
 }
 
