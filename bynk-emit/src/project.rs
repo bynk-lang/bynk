@@ -277,6 +277,25 @@ pub fn is_worker_asset_path(rel: &Path) -> bool {
         && tail_len > 0
 }
 
+/// P4b (#2608): whether `rel` (output-root-relative) names a file in some
+/// Worker's copied D1 migrations, `workers/<dashes>/migrations/…`, where
+/// `bynk-driver::output`'s reconciliation prunes a `.sql` the build no longer
+/// produces. Every component must be a plain name, as for
+/// [`is_worker_asset_path`].
+pub fn is_worker_migration_path(rel: &Path) -> bool {
+    use std::path::Component;
+    let mut parts = rel.components();
+    let mut tail_len = 0usize;
+    matches!(parts.next(), Some(Component::Normal(w)) if w == "workers")
+        && matches!(parts.next(), Some(Component::Normal(_)))
+        && matches!(parts.next(), Some(Component::Normal(m)) if m == emitter::wrangler::D1_MIGRATIONS_DIR)
+        && parts.all(|c| {
+            tail_len += 1;
+            matches!(c, Component::Normal(_))
+        })
+        && tail_len > 0
+}
+
 /// One typed output document. No `String` at construction for TypeScript or
 /// TOML content (R7.8) — `Json`/`Js`/`SourceMap`/`DebugSidecar` stay opaque
 /// payloads because `bynk-emit` never re-parses them itself, not because
@@ -5505,6 +5524,23 @@ mod tests {
                 "{} is owned",
                 staged.display()
             );
+        }
+    }
+
+    /// P4b (#2608): `.sql` files are pruned only inside a Worker's copied
+    /// migrations, never elsewhere in an output directory.
+    #[test]
+    fn is_worker_migration_path_matches_only_files_inside_a_worker_migrations_dir() {
+        assert!(is_worker_migration_path(Path::new(
+            "workers/shop/migrations/shop-orders/0001_create.sql"
+        )));
+        for p in [
+            "workers/shop/migrations",
+            "workers/shop/schema.sql",
+            "migrations/shop-orders/0001_create.sql",
+            "workers/shop/migrations/../../../x.sql",
+        ] {
+            assert!(!is_worker_migration_path(Path::new(p)), "{p}");
         }
     }
 

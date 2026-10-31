@@ -682,7 +682,8 @@ The database records which have run in its own `d1_migrations` table, so a
 file that has already been applied is never applied again, even if you edit it.
 To change the schema, add a new file. Neither D1 nor Bynk has down migrations.
 
-The build checks the folder:
+The build checks the folder. It skips hidden files (`.DS_Store`, an editor's
+swap file) and editor backups ending in `~`, and copies only what it checked:
 
 - A file that isn't `NNNN_<name>.sql`, isn't directly in a database's
   directory, or shares its number with another is

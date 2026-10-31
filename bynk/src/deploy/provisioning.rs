@@ -1970,13 +1970,20 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_named_environment_applies_its_own_databases_migrations() {
-        let (calls, _, pushed) = provision_api(
+        let (calls, _, pushed, config) = provision_api_with_config(
             "staging",
             with_migrations(Resources::default().d1_databases(&[("D1_ORDERS", "api-orders")])),
             DeployLock::default(),
             None,
         );
         assert_eq!(pushed, Ok(Pushed::Ok));
+        // Without the key there, wrangler would read its default
+        // `migrations/`, find no `.sql` directly in it, and apply nothing.
+        let doc: toml::Table = config.parse().unwrap();
+        assert_eq!(
+            doc["env"]["staging"]["d1_databases"][0]["migrations_dir"].as_str(),
+            Some("migrations/api-orders")
+        );
         assert_eq!(
             d1_calls(&calls),
             [

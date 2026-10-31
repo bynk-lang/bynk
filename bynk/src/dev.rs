@@ -1227,6 +1227,26 @@ mod watch_tests {
         assert!(persist_to_args(&args(&["--port", "1"])).is_empty());
     }
 
+    /// P4b (#2608): only a file that was applied, then edited, is pointed
+    /// out. One fixed after a failed apply was never remembered (the caller
+    /// remembers only after an apply succeeds), so it gets no note.
+    #[test]
+    fn an_applied_migration_edited_afterwards_is_pointed_out() {
+        let dir = std::env::temp_dir().join(format!("bynk-dev-edited-d1-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut seen = MigrationsSeen::default();
+        std::fs::write(dir.join("0001_create.sql"), "CREATE TABLE t (id TEXT);").unwrap();
+        assert!(edited_migrations(&dir, &mut seen).is_empty(), "first apply");
+        // A new file, fixed after a failed apply: never remembered, so new.
+        std::fs::write(dir.join("0002_more.sql"), "ALTER TABLE t ADD COLUMN n INT;").unwrap();
+        assert!(edited_migrations(&dir, &mut seen).is_empty(), "a new file");
+        std::fs::write(dir.join("0001_create.sql"), "CREATE TABLE t (id INT);").unwrap();
+        let edited = edited_migrations(&dir, &mut seen);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(edited, ["0001_create.sql"]);
+    }
+
     /// #1883, slice 1b: an edit to a file in `assets/` changes the
     /// fingerprint, so `bynk dev` rebuilds and the `.url` hash moves with it.
     #[test]
@@ -1306,7 +1326,6 @@ fn apply_local_migrations(
             continue;
         };
         for (binding, dir) in migrating_databases(&config) {
-            note_edited_migrations(&worker_dir.join(&dir), seen);
             let Some(mut cmd) = wrangler_command(provenance, "d1") else {
                 eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
                 return;
@@ -1316,7 +1335,15 @@ fn apply_local_migrations(
                 .current_dir(&worker_dir)
                 .stdin(std::process::Stdio::null());
             match cmd.output() {
-                Ok(out) if out.status.success() => {}
+                // Only an applied file is remembered: one fixed after a
+                // failed apply was never applied, so it gets no note.
+                Ok(out) if out.status.success() => {
+                    for file in edited_migrations(&worker_dir.join(&dir), seen) {
+                        eprintln!(
+                            "bynk dev: note: `{file}` changed after it was applied; wrangler applies a migration once, by name, so add a new one to change the schema"
+                        );
+                    }
+                }
                 Ok(out) => {
                     let said = String::from_utf8_lossy(&out.stderr);
                     let said = if said.trim().is_empty() {
@@ -1339,12 +1366,14 @@ fn apply_local_migrations(
     }
 }
 
-/// Note each file in `dir` whose content changed since it was last seen.
-fn note_edited_migrations(dir: &Path, seen: &mut MigrationsSeen) {
+/// The files in `dir` whose content changed since they were last applied,
+/// by name, sorted; every file's content is remembered as applied.
+fn edited_migrations(dir: &Path, seen: &mut MigrationsSeen) -> Vec<String> {
     use std::hash::{Hash, Hasher};
     let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+        return Vec::new();
     };
+    let mut edited = Vec::new();
     for entry in entries.filter_map(Result::ok) {
         let path = entry.path();
         let Ok(bytes) = std::fs::read(&path) else {
@@ -1358,12 +1387,16 @@ fn note_edited_migrations(dir: &Path, seen: &mut MigrationsSeen) {
             .insert(path.clone(), hash)
             .is_some_and(|before| before != hash)
         {
-            eprintln!(
-                "bynk dev: note: `{}` changed after it was applied; wrangler applies a migration once, by name, so add a new one to change the schema",
-                path.file_name().unwrap_or_default().to_string_lossy()
+            edited.push(
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
             );
         }
     }
+    edited.sort();
+    edited
 }
 
 /// Walk `dir` recursively, calling `visit` for each `.bynk` file. Skips the

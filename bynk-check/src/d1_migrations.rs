@@ -27,6 +27,14 @@ pub struct MigrationFile {
     pub sql: String,
 }
 
+/// Whether the listed `key` is a hidden file (`.DS_Store`, an editor's
+/// `.0001_create.sql.swp`) or an editor backup (`0001_create.sql~`), which the
+/// folder holds without meaning to: it's neither checked nor copied.
+pub fn is_ignored(key: &str) -> bool {
+    let name = key.rsplit('/').next().unwrap_or(key);
+    name.starts_with('.') || name.ends_with('~')
+}
+
 /// Every declared database's migrations, in order, keyed by database name.
 /// A database without a directory has no entry.
 pub type D1Migrations = BTreeMap<String, Vec<MigrationFile>>;
@@ -113,6 +121,9 @@ pub fn phase_d1_migrations(
     let mut warned: Vec<&str> = Vec::new();
     let mut numbers: BTreeMap<(String, String), String> = BTreeMap::new();
     for key in folder.files() {
+        if is_ignored(key) {
+            continue;
+        }
         let parts: Vec<&str> = key.split('/').collect();
         let [dir, database, file] = parts.as_slice() else {
             file_error(
@@ -235,6 +246,20 @@ mod tests {
         ] {
             assert_eq!(migration_number(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn hidden_files_and_editor_backups_are_ignored() {
+        for key in [
+            "migrations/shop-orders/.DS_Store",
+            "migrations/shop-orders/.0001_create.sql.swp",
+            "migrations/shop-orders/0001_create.sql~",
+            "migrations/.DS_Store",
+        ] {
+            assert!(is_ignored(key), "{key}");
+        }
+        assert!(!is_ignored("migrations/shop-orders/0001_create.sql"));
+        assert!(!is_ignored("migrations/README.md"));
     }
 
     #[test]
