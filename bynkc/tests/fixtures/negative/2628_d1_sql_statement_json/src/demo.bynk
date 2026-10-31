@@ -1,0 +1,21 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+// #2628: a `SqlStatement` is no `Json` codec target, in either direction.
+service fromText {
+  on call(text: String) -> Effect[Bool] given Orders {
+    match Json.decode[List[SqlStatement]](text) {
+      Ok(_) => true
+      Err(_) => false
+    }
+  }
+}
+
+service toText {
+  on call() -> Effect[String] {
+    Json.encode(SqlStatement { sql: "SELECT 1", params: [] })
+  }
+}

@@ -1,5 +1,3 @@
 # exact
 bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in a record field
 bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in a service handler signature
-bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in a `Json` codec target
-bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in a `Json` codec target
