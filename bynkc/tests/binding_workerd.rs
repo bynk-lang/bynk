@@ -1180,7 +1180,10 @@ fn streams_upstream() -> u16 {
                 let te = header("transfer-encoding");
                 let length = header("content-length");
                 let mut body = Vec::new();
-                if te.as_deref().is_some_and(|t| t.eq_ignore_ascii_case("chunked")) {
+                if te
+                    .as_deref()
+                    .is_some_and(|t| t.eq_ignore_ascii_case("chunked"))
+                {
                     // `<hex size>\r\n<data>\r\n`, until a size of zero.
                     let mut at = split;
                     loop {
@@ -1234,7 +1237,11 @@ fn streams_upstream() -> u16 {
                 match path {
                     "/chunks" => {
                         let all: Vec<u8> = (0..=255u8).collect();
-                        chunked(&mut stream, all.chunks(64).map(<[u8]>::to_vec).collect(), 150);
+                        chunked(
+                            &mut stream,
+                            all.chunks(64).map(<[u8]>::to_vec).collect(),
+                            150,
+                        );
                     }
                     "/text" => chunked(
                         &mut stream,
@@ -1381,7 +1388,9 @@ fn fetch_bytes_round_trip_every_byte_on_workerd() {
         // A `RawStreamed` body has no content-length, so it arrives chunked.
         match get(port, "/proxy") {
             Ok((200, b)) if dechunk(&b) == "alpha beta gamma" => {}
-            Ok((s, b)) => failures.push(format!("/proxy: {s} {b:?}, expected 200 alpha beta gamma")),
+            Ok((s, b)) => {
+                failures.push(format!("/proxy: {s} {b:?}, expected 200 alpha beta gamma"))
+            }
             Err(e) => failures.push(format!("/proxy: {e}")),
         }
         failures
