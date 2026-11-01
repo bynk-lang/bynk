@@ -53,10 +53,14 @@ carries the decisions slice 0 (#2640) fixed.
   catchable separately. A fast failure therefore waits for a slow sibling, the
   price of determinism and of keeping every awaited effect inside the handler's
   lifetime; it is the trade `parTraverseAll` makes. Lowered to
-  `const [a, b] = await __bynkSettleAll([e1, e2]);`, with fresh identifiers
-  through the existing re-binding mechanism; a `do` takes a hole in the pattern.
-  Should a binding hoist statements, each effect is started into a temporary in
-  turn so issue order is kept. Every expression is still awaited, so ADR 0426's
+  `const [a, b] = await __bynkSettleAll([() => e1, () => e2]);`, with fresh
+  identifiers through the existing re-binding mechanism; a `do` takes a hole in
+  the pattern. Each binding is a thunk, called in source order by the join, with
+  its hoisted statements inside it; a thunk that throws synchronously becomes a
+  rejected entry, so an earlier effect is never left unawaited (the join still
+  calls every later thunk). A typed binding types its thunk
+  (`(): Promise<T> => …`) so the name has the type `const x: T = await e` gives
+  it. Every effect is still awaited, so ADR 0426's
   guarantee holds. `__bynkSettleAll` lives in a new `settle` runtime module,
   imported only by a module with a `par` block, so sequential code emits
   byte-identically. It is codegen, **not** part of ADR 0310's published ABI.

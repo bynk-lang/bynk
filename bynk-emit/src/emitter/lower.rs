@@ -877,49 +877,39 @@ fn lower_effect_let_value(
 }
 
 /// #2640: `par { let a <- e1  let b <- e2 }` →
-/// `const [a, b] = await __bynkSettleAll([e1, e2]);`.
+/// `const [a, b] = await __bynkSettleAll([() => e1, () => e2]);`.
 ///
-/// The array literal evaluates `e1` then `e2`, so each effect is issued, in
-/// source order, before either is awaited; the join waits for all of them and
-/// raises the first rejection in source order (see `settle.ts`). A `do e`
-/// binding takes a hole in the pattern. Should a binding's value hoist
-/// statements, those run before the array and so ahead of the earlier bindings'
-/// effects; to keep issue order, every effect is then started into a temporary
-/// in turn and the temporaries are joined. Every effect is still awaited, so
+/// Each binding is a thunk and the join calls them in source order, so each
+/// effect is issued before the next binding is evaluated and before any is
+/// awaited. A thunk that throws synchronously (a refinement or bounds check, a
+/// provider that throws before it returns a promise) becomes a rejected entry
+/// rather than escaping with an earlier effect left unawaited (ADR 0426), and the
+/// first rejection in source order still wins (see `settle.ts`). A binding's
+/// hoisted statements sit inside its thunk, so they run at its turn. A `do`
+/// binding takes a hole in the pattern. A binding with a type annotation types
+/// its thunk's result (`(): Promise<T> => …`), so the destructured name has the
+/// type `const x: T = await e` gives it. Every effect is still awaited, so
 /// ADR 0426's guarantee holds.
 fn emit_par(out: &mut String, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx, indent: usize) {
-    let mut values: Vec<(Pre, String)> = Vec::new();
     // `None` for a `do`, which binds nothing; the name (or `_`) for a `let`.
     let mut names: Vec<Option<&bynk_syntax::ast::Ident>> = Vec::new();
+    // Each binding's hoisted statements, its value, and its annotation.
+    let mut parts: Vec<(Pre, String, Option<String>)> = Vec::new();
     for st in &p.statements {
         let mut pre = Pre::new();
         match st {
             Statement::EffectLet(l) => {
                 let value = lower_effect_let_value(l, &mut pre, cx);
                 names.push(Some(&l.name));
-                values.push((pre, value));
+                parts.push((pre, value, l.type_annot.as_ref().map(ts_type_ref)));
             }
             Statement::Do(d) => {
                 let value = pre.lower(&d.value, cx);
                 names.push(None);
-                values.push((pre, value));
+                parts.push((pre, value, None));
             }
             // The checker refuses every other statement in a `par` block.
             _ => {}
-        }
-    }
-    let hoisted = values.iter().any(|(pre, _)| !pre.stmts().is_empty());
-    let mut items: Vec<String> = Vec::new();
-    for (pre, value) in values {
-        for s in pre.stmts() {
-            write_line(out, indent, s);
-        }
-        if hoisted {
-            let started = cx.fresh();
-            write_line(out, indent, &format!("const {started} = {value};"));
-            items.push(started);
-        } else {
-            items.push(value);
         }
     }
     // The names are bound only after every value is lowered, so a binding that
@@ -934,16 +924,57 @@ fn emit_par(out: &mut String, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx, 
     cx.note_settle_all();
     // T2.2 (R6.4): see the matching note at `EffectLet`.
     cx.emitted_await = true;
-    let join = format!("await __bynkSettleAll([{}]);", items.join(", "));
-    if pattern.is_empty() {
-        write_line(out, indent, &join);
+    let hoisted = parts.iter().any(|(pre, ..)| !pre.stmts().is_empty());
+    let thunk = |pre: &Pre, value: &str, annot: &Option<String>| -> (String, Vec<String>) {
+        let hoists = pre.stmts();
+        let asynchronous = hoists.iter().any(|s| s.contains("await "));
+        let head = format!(
+            "{}(){} =>",
+            if asynchronous { "async " } else { "" },
+            annot
+                .as_ref()
+                .map(|t| format!(": globalThis.Promise<{t}>"))
+                .unwrap_or_default()
+        );
+        if hoists.is_empty() {
+            (format!("{head} {value}"), Vec::new())
+        } else {
+            let mut body = hoists.to_vec();
+            body.push(format!("return {value};"));
+            (format!("{head} {{"), body)
+        }
+    };
+    let open = if pattern.is_empty() {
+        String::new()
     } else {
+        format!("const [{}] = ", pattern.join(", "))
+    };
+    if !hoisted {
+        let items: Vec<String> = parts
+            .iter()
+            .map(|(pre, value, annot)| thunk(pre, value, annot).0)
+            .collect();
         write_line(
             out,
             indent,
-            &format!("const [{}] = {join}", pattern.join(", ")),
+            &format!("{open}await __bynkSettleAll([{}]);", items.join(", ")),
         );
+        return;
     }
+    write_line(out, indent, &format!("{open}await __bynkSettleAll(["));
+    for (pre, value, annot) in &parts {
+        let (head, body) = thunk(pre, value, annot);
+        if body.is_empty() {
+            write_line(out, indent + 1, &format!("{head},"));
+        } else {
+            write_line(out, indent + 1, &head);
+            for line in body {
+                write_line(out, indent + 2, &line);
+            }
+            write_line(out, indent + 1, "},");
+        }
+    }
+    write_line(out, indent, "]);");
 }
 
 fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent: usize) {

@@ -56,7 +56,7 @@ export class Room {
     const __result = await (async () => {
       const seen = __state.hits;
       const req = { method: Method.Get, url: url, contentType: None, authorization: None, headers: new globalThis.Map<string, string>(), body: None };
-      const [first, second] = await __bynkSettleAll([deps.Fetch.send(req), deps.Fetch.send(req)]);
+      const [first, second] = await __bynkSettleAll([() => deps.Fetch.send(req), () => deps.Fetch.send(req)]);
       __state.hits = seen + 1;
       return seen;
     })();

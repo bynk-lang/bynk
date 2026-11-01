@@ -51,6 +51,16 @@ service dash {
   }
 }
 
+service hoist {
+  on call(id: Int) -> Effect[Int] given Orders {
+    par {
+      let a <- Orders.forUser(id)
+      let b <- Orders.forUser(match id { 0 => 1, _ => id })
+    }
+    Effect.pure(a + b)
+  }
+}
+
 service rebind {
   on call(id: Int) -> Effect[Int] given Orders {
     let orders <- Orders.forUser(id)
@@ -64,7 +74,7 @@ service rebind {
 "#;
 
 const SCRIPT: &str = r#"import assert from "node:assert/strict";
-import { dash, rebind } from "./demo.js";
+import { dash, hoist, rebind } from "./demo.js";
 
 function deferred() {
   let resolve, reject;
@@ -161,6 +171,34 @@ function doubles() {
   pending["Orders.forUser"][1].resolve(1);
   pending["Orders.forUser"][2].resolve(2);
   assert.equal(await result, 1 * 100 + 2);
+}
+
+// 5. A synchronous throw in a later binding is a rejected entry: the earlier
+//    effect has been issued and is awaited, and the raised fault waits for it.
+{
+  const { issued, pending, deps } = doubles();
+  const sync = new Error("sync throw");
+  deps.Orders.forUser = () => { issued.push("Orders.forUser(throws)"); throw sync; };
+  let outcome;
+  const result = dash.call(1, deps).then(() => { outcome = "ok"; }, (e) => { outcome = e; });
+  await tick();
+  assert.deepEqual(issued, ["Users.get(1)", "Orders.forUser(throws)", "Audit.touch(1)"], "every binding is still issued, in order");
+  assert.equal(outcome, undefined, "the join waits for the earlier effect");
+  pending["Users.get"][0].resolve("ada");
+  pending["Audit.touch"][0].resolve(undefined);
+  await result;
+  assert.equal(outcome, sync);
+}
+
+// 6. A binding that hoists statements is evaluated at its turn, inside its thunk.
+{
+  const { issued, pending, deps } = doubles();
+  const result = hoist.call(0, deps);
+  await tick();
+  assert.deepEqual(issued, ["Orders.forUser(0)", "Orders.forUser(1)"]);
+  pending["Orders.forUser"][0].resolve(4);
+  pending["Orders.forUser"][1].resolve(5);
+  assert.equal(await result, 9);
 }
 
 console.log("par behaviour ok");

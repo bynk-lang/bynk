@@ -159,21 +159,24 @@ that no Bynk name can collide with it. The emitted code MUST compile under
 | `?` | a check-and-early-return: on a `Result`, `if (r.tag === "Err") return r;` (or, when a declared embedding converts the error (v0.154), `return Err(F.V(r.error));`); on an `Option` in an HttpResult handler (v0.153), `if (o.tag === "None") return HttpResult.NotFound;` — then the expression is the `Ok`/`Some` payload |
 | `<-` | `await` |
 | `~>` | `ctx.__exec.waitUntil(<effect>)` — dispatched, not awaited |
-| `par { let a <- e1  let b <- e2 }` | `const [a, b] = await __bynkSettleAll([e1, e2]);` — the array evaluates `e1` then `e2`, issuing each effect before either is awaited; a `do` binding takes a hole in the pattern (§7.4.13) |
+| `par { let a <- e1  let b <- e2 }` | `const [a, b] = await __bynkSettleAll([() => e1, () => e2]);` — the join calls the thunks in source order, issuing each effect before either is awaited; a `do` binding takes a hole in the pattern (§7.4.13) |
 
 An `Effect[T]` is realised as a `Promise<T>`; it has no runtime constructor.
 `Effect.pure(x)` lowers to `x` directly where an `async` context absorbs it, and
 to `Promise.resolve(x)` in a synchronous or tail position. The `<-` bind is
 therefore `await` and needs no runtime support.
 
-A **`par` block** (§4.8.7b) lowers to one `await` of the join over the effects it
-holds. Should a binding's expression hoist statements, those run before the array
-and so ahead of the earlier bindings' effects; to keep source order of issue, every
-effect is then started into a temporary in turn and the temporaries are joined. A
-re-bound name takes a fresh identifier as for `<-`, and the names are bound only
-after every expression is lowered. A type annotation on a binding is not repeated
-on the destructured constant. The join is imported only by a module that has a
-`par` block, so every other module emits byte-for-byte as before.
+A **`par` block** (§4.8.7b) lowers to one `await` of the join over a **thunk** per
+binding. The join calls the thunks in source order, so each effect is issued before
+the next binding is evaluated and before any is awaited; a binding's hoisted
+statements sit inside its thunk, so they run at its turn. A thunk that throws
+synchronously (a check that fails before a promise exists) becomes a rejected
+entry, so an earlier effect is never left unawaited. A binding with a type
+annotation types its thunk's result (`(): Promise<T> => …`), so the destructured
+name has the type `const x: T = await e` gives it. A re-bound name takes a fresh
+identifier as for `<-`, and the names are bound only after every expression is
+lowered. The join is imported only by a module that has a `par` block, so every
+other module emits byte-for-byte as before.
 
 An **asynchronous send** (`~>`, §4.8.5) lowers on the Workers target to
 `deps.__exec.waitUntil(<effect>)`: the effect's `Promise` is handed to the

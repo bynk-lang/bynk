@@ -78,3 +78,14 @@ service shadow {
     Effect.pure(user.length() + n + m)
   }
 }
+
+// A binding whose value hoists statements keeps them inside its own thunk.
+service hoist {
+  on call(id: Int) -> Effect[Int] given Orders {
+    par {
+      let a <- Orders.forUser(id)
+      let b: Int <- Orders.forUser(match id { 0 => 1, _ => id })
+    }
+    Effect.pure(a + b)
+  }
+}

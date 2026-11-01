@@ -71,7 +71,7 @@ class __Stub_Orders {
     this.__case = c;
   }
   __applies(op: string): boolean {
-    if (op === "forUser") return this.__case === "a block in a branch binds for the rest of that branch" || this.__case === "a block in a case drives addressed services together" || this.__case === "a lambda parameter or match arm named like a sibling is its own binding" || this.__case === "a re-binding reads the value from before the block" || this.__case === "both names are bound after the block" || this.__case === "the effects are issued in source order";
+    if (op === "forUser") return this.__case === "a binding that hoists statements still joins" || this.__case === "a block in a branch binds for the rest of that branch" || this.__case === "a block in a case drives addressed services together" || this.__case === "a lambda parameter or match arm named like a sibling is its own binding" || this.__case === "a re-binding reads the value from before the block" || this.__case === "both names are bound after the block" || this.__case === "the effects are issued in source order";
     return true;
   }
   async forUser(id: number): globalThis.Promise<number> {
@@ -117,6 +117,9 @@ class __Stub_Orders {
     if (this.__case === "a lambda parameter or match arm named like a sibling is its own binding") {
       return 2;
     }
+    if (this.__case === "a binding that hoists statements still joins") {
+      return 4;
+    }
     throw new globalThis.Error("bynk: no stub clause matched for Orders.forUser");
   }
 }
@@ -158,7 +161,7 @@ function __makeTestDeps(__case?: string) {
 async function test_both_names_are_bound_after_the_block() {
   try {
     const deps = __makeTestDeps("both names are bound after the block");
-    const { board, branch, rebind, shadow } = __ns_shop_board;
+    const { board, branch, hoist, rebind, shadow } = __ns_shop_board;
     const r = await board.call(1, deps);
     if (!(r === "ada:3")) { throw __bynkExpectFailure("tests/board.bynk:11:12", 352, 364, "expect r == \"ada:3\"\n  expected: r == \"ada:3\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("ada:3"))); }
     return { pass: true };
@@ -175,7 +178,7 @@ async function test_the_effects_are_issued_in_source_order() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("the effects are issued in source order"), { Audit: ["touch"], Orders: ["forUser"], Users: ["get"] }, __obs);
-    const { board, branch, rebind, shadow } = __ns_shop_board;
+    const { board, branch, hoist, rebind, shadow } = __ns_shop_board;
     const r = await board.call(1, deps);
     if (!(r === "ada:3")) { throw __bynkExpectFailure("tests/board.bynk:17:12", 495, 507, "expect r == \"ada:3\"\n  expected: r == \"ada:3\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("ada:3"))); }
     if (!(((__obs.log["Users.get"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/board.bynk:18:12", 519, 540, "expect Users.get called once"); }
@@ -197,7 +200,7 @@ async function test_a_re_binding_reads_the_value_from_before_the_block() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a re-binding reads the value from before the block"), { Audit: ["touch"], Orders: ["forUser"], Users: ["get"] }, __obs);
-    const { board, branch, rebind, shadow } = __ns_shop_board;
+    const { board, branch, hoist, rebind, shadow } = __ns_shop_board;
     const r = await rebind.call(0, deps);
     if (!(r === 5)) { throw __bynkExpectFailure("tests/board.bynk:28:12", 858, 864, "expect r == 5\n  expected: r == 5\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((5))); }
     if (!(((__obs.log["Orders.forUser"] ?? []).length === (3)))) { throw __bynkExpectFailure("tests/board.bynk:29:12", 876, 905, "expect Orders.forUser called 3 times"); }
@@ -214,7 +217,7 @@ async function test_a_re_binding_reads_the_value_from_before_the_block() {
 async function test_a_block_in_a_branch_binds_for_the_rest_of_that_branch() {
   try {
     const deps = __makeTestDeps("a block in a branch binds for the rest of that branch");
-    const { board, branch, rebind, shadow } = __ns_shop_board;
+    const { board, branch, hoist, rebind, shadow } = __ns_shop_board;
     const r = await branch.call(2, deps);
     if (!(r === 7)) { throw __bynkExpectFailure("tests/board.bynk:35:12", 1052, 1058, "expect r == 7\n  expected: r == 7\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((7))); }
     const none = await branch.call(0, deps);
@@ -233,8 +236,8 @@ async function test_a_block_in_a_case_drives_addressed_services_together() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a block in a case drives addressed services together"), { Audit: ["touch"], Orders: ["forUser"], Users: ["get"] }, __obs);
-    const { board, branch, rebind, shadow } = __ns_shop_board;
-    const [first, second] = await __bynkSettleAll([board.call(1, deps), rebind.call(0, deps)]);
+    const { board, branch, hoist, rebind, shadow } = __ns_shop_board;
+    const [first, second] = await __bynkSettleAll([() => board.call(1, deps), () => rebind.call(0, deps)]);
     if (!(first === "ada:3")) { throw __bynkExpectFailure("tests/board.bynk:46:12", 1325, 1341, "expect first == \"ada:3\"\n  expected: first == \"ada:3\"\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow(("ada:3"))); }
     if (!(second === 8)) { throw __bynkExpectFailure("tests/board.bynk:47:12", 1353, 1364, "expect second == 8\n  expected: second == 8\n  actual:   " + __bynkShow((second)) + " == " + __bynkShow((8))); }
     if (!(((__obs.log["Users.get"] ?? []).length > 0 && (__obs.log["Orders.forUser"] ?? []).length > 0 && (__obs.log["Users.get"] ?? [])[0].order < (__obs.log["Orders.forUser"] ?? [])[0].order))) { throw __bynkExpectFailure("tests/board.bynk:48:12", 1376, 1407, "expect Users.get before Orders.forUser"); }
@@ -251,9 +254,25 @@ async function test_a_block_in_a_case_drives_addressed_services_together() {
 async function test_a_lambda_parameter_or_match_arm_named_like_a_sibling_is_its_own_binding() {
   try {
     const deps = __makeTestDeps("a lambda parameter or match arm named like a sibling is its own binding");
-    const { board, branch, rebind, shadow } = __ns_shop_board;
+    const { board, branch, hoist, rebind, shadow } = __ns_shop_board;
     const r = await shadow.call(1, deps);
     if (!(r === 3 + 2 + 2)) { throw __bynkExpectFailure("tests/board.bynk:54:12", 1572, 1586, "expect r == 3 + 2 + 2\n  expected: r == 3 + 2 + 2\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((3 + 2 + 2))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_binding_that_hoists_statements_still_joins() {
+  try {
+    const deps = __makeTestDeps("a binding that hoists statements still joins");
+    const { board, branch, hoist, rebind, shadow } = __ns_shop_board;
+    const r = await hoist.call(0, deps);
+    if (!(r === 8)) { throw __bynkExpectFailure("tests/board.bynk:60:12", 1723, 1729, "expect r == 8\n  expected: r == 8\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((8))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -277,7 +296,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["both names are bound after the block", "the effects are issued in source order", "a re-binding reads the value from before the block", "a block in a branch binds for the rest of that branch", "a block in a case drives addressed services together", "a lambda parameter or match arm named like a sibling is its own binding"];
+export const __bynkCases: readonly string[] = ["both names are bound after the block", "the effects are issued in source order", "a re-binding reads the value from before the block", "a block in a branch binds for the rest of that branch", "a block in a case drives addressed services together", "a lambda parameter or match arm named like a sibling is its own binding", "a binding that hoists statements still joins"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -315,6 +334,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a lambda parameter or match arm named like a sibling is its own binding")) {
     const started = __bynkCaseNow();
     const r = { name: "a lambda parameter or match arm named like a sibling is its own binding", ...(await test_a_lambda_parameter_or_match_arm_named_like_a_sibling_is_its_own_binding()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a binding that hoists statements still joins")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a binding that hoists statements still joins", ...(await test_a_binding_that_hoists_statements_still_joins()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

@@ -53,4 +53,10 @@ suite shop.board {
     let r <- shadow.call(1)
     expect r == 3 + 2 + 2
   }
+
+  case "a binding that hoists statements still joins" {
+    stub Orders.forUser(_) returns 4
+    let r <- hoist.call(0)
+    expect r == 8
+  }
 }

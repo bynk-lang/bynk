@@ -49,7 +49,7 @@ export const __NoAuditProvider = { token: __AuditToken, factory: () => new NoAud
 
 export const board = {
   async call(id: number, deps: { Users: Users; Orders: Orders; Audit: Audit }): globalThis.Promise<string> {
-    const [user, orders] = await __bynkSettleAll([deps.Users.get(id), deps.Orders.forUser(id), deps.Audit.touch(id)]);
+    const [user, orders] = await __bynkSettleAll([() => deps.Users.get(id), (): globalThis.Promise<number> => deps.Orders.forUser(id), () => deps.Audit.touch(id)]);
     return `${String(user)}:${String(orders)}`;
   },
 };
@@ -57,7 +57,7 @@ export const board = {
 export const rebind = {
   async call(id: number, deps: { Orders: Orders }): globalThis.Promise<number> {
     const orders = await deps.Orders.forUser(id);
-    const [__r0, __r1] = await __bynkSettleAll([deps.Orders.forUser(orders + 1), deps.Orders.forUser(id)]);
+    const [__r0, __r1] = await __bynkSettleAll([() => deps.Orders.forUser(orders + 1), () => deps.Orders.forUser(id)]);
     return __r0;
   },
 };
@@ -65,7 +65,7 @@ export const rebind = {
 export const branch = {
   async call(id: number, deps: { Users: Users; Orders: Orders }): globalThis.Promise<number> {
     if (id > 0) {
-      const [user, orders] = await __bynkSettleAll([deps.Users.get(id), deps.Orders.forUser(id)]);
+      const [user, orders] = await __bynkSettleAll([() => deps.Users.get(id), () => deps.Orders.forUser(id)]);
       return (user).length + orders;
     } else {
       return 0;
@@ -75,7 +75,7 @@ export const branch = {
 
 export const shadow = {
   async call(id: number, deps: { Users: Users; Orders: Orders }): globalThis.Promise<number> {
-    const [user, n, m] = await __bynkSettleAll([deps.Users.get(id), deps.Orders.forUser((([1, 2]).map((__x: number) => ((user) => user + 1)(__x))).length), deps.Orders.forUser(((__d) => {
+    const [user, n, m] = await __bynkSettleAll([() => deps.Users.get(id), () => deps.Orders.forUser((([1, 2]).map((__x: number) => ((user) => user + 1)(__x))).length), () => deps.Orders.forUser(((__d) => {
     switch (__d.tag) {
       case "Some": {
         const user = __d.value;
@@ -88,6 +88,23 @@ export const shadow = {
     throw new globalThis.Error("non-exhaustive match");
   })(Some(id)))]);
     return (user).length + n + m;
+  },
+};
+
+export const hoist = {
+  async call(id: number, deps: { Orders: Orders }): globalThis.Promise<number> {
+    const [a, b] = await __bynkSettleAll([() => deps.Orders.forUser(id), (): globalThis.Promise<number> => deps.Orders.forUser(((__d) => {
+    switch (__d) {
+      case 0: {
+        return 1;
+      }
+      default: {
+        return id;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  })(id))]);
+    return a + b;
   },
 };
 
@@ -110,6 +127,9 @@ export function __makeSurface(deps: __ShopBoardDeps) {
     },
     async shadow(id: number): globalThis.Promise<number> {
       return shadow.call(id, deps);
+    },
+    async hoist(id: number): globalThis.Promise<number> {
+      return hoist.call(id, deps);
     },
   };
 }

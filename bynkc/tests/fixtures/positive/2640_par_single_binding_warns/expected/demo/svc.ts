@@ -21,7 +21,7 @@ export const __FixedUsersProvider = { token: __UsersToken, factory: () => new Fi
 
 export const lookup = {
   async call(id: number, deps: { Users: Users }): globalThis.Promise<string> {
-    const [user] = await __bynkSettleAll([deps.Users.get(id)]);
+    const [user] = await __bynkSettleAll([() => deps.Users.get(id)]);
     return user;
   },
 };
