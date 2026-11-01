@@ -117,7 +117,9 @@ struct FixSite {
 #[derive(Default, Clone)]
 pub(crate) struct EqScope {
     declared: HashSet<String>,
-    reported: HashSet<String>,
+    /// Shared by every clone (a function's contract clauses and its body check
+    /// in separate contexts), so a parameter is reported once per function.
+    reported: Rc<RefCell<HashSet<String>>>,
     fix: FixSite,
 }
 
@@ -166,7 +168,7 @@ impl EqScope {
         }
         EqScope {
             declared,
-            reported: HashSet::new(),
+            reported: Rc::default(),
             fix,
         }
     }
@@ -205,7 +207,7 @@ pub(crate) fn require_eq(ctx: &mut Ctx, ty: TyId, span: Span, site: &str) -> boo
     }
     missing.sort();
     for param in missing {
-        if !ctx.eq.reported.insert(param.clone()) {
+        if !ctx.eq.reported.borrow_mut().insert(param.clone()) {
             continue;
         }
         let mut err = CompileError::new(

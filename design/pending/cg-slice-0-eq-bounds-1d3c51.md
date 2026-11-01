@@ -88,7 +88,7 @@ site stands, but the bound is declared instead of inferred.
   tokens (appended to the frozen legend); the formatter preserves bounds.
 
 Proved by:
-- positive `2629_eq_bounds_declared`; negatives `2630`–`2636` (missing bound in
+- positive `2629_eq_bounds_declared`; negatives `2630`–`2638` (missing bound in
   a body, at a call, on a receiver; unknown constraint; bound on a capability
   op; a type-declaration bound at instantiation; an unknown `where` parameter);
 - the migrated ADR 0430 fixtures (`1688_*`, `1652_structural_equality`), and

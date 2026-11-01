@@ -3134,8 +3134,15 @@ fn check_generic_method_call(
         }
         _ => Default::default(),
     };
+    let recv_decl = ctx.input.types.get(type_name);
     let declared_eq = |name: &str| {
-        method_decl
+        // A bound the receiver type declares (`type Set2[T: Eq]`) holds in its
+        // methods, with no `where` clause.
+        recv_decl.is_some_and(|d| {
+            d.type_params
+                .iter()
+                .any(|tp| tp.name.name == name && super::equality::has_eq(&tp.bounds))
+        }) || method_decl
             .type_params
             .iter()
             .any(|tp| tp.name.name == name && super::equality::has_eq(&tp.bounds))
