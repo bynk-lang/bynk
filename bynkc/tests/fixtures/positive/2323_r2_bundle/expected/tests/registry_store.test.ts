@@ -57,18 +57,39 @@ type __Archives_put_Call = { key: string; body: globalThis.Uint8Array };
 type __Archives_putWith_Call = { key: string; body: globalThis.Uint8Array; options: __ns_bynk_cloudflare.R2Put };
 type __Archives_delete_Call = { key: string };
 type __Archives_list_Call = { prefix: Option<string>; cursor: Option<string> };
+type __Archives_getStream_Call = { key: string };
+type __Archives_putStream_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number };
+type __Archives_putStreamWith_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number; options: __ns_bynk_cloudflare.R2Put };
+type __Archives_createUpload_Call = { key: string; options: __ns_bynk_cloudflare.R2UploadOptions };
+type __Archives_uploadPart_Call = { upload: __ns_bynk_cloudflare.R2Upload; partNumber: number; body: globalThis.Uint8Array };
+type __Archives_completeUpload_Call = { upload: __ns_bynk_cloudflare.R2Upload; parts: readonly __ns_bynk_cloudflare.R2Part[] };
+type __Archives_abortUpload_Call = { upload: __ns_bynk_cloudflare.R2Upload };
 type __Indexes_get_Call = { key: string };
 type __Indexes_head_Call = { key: string };
 type __Indexes_put_Call = { key: string; body: globalThis.Uint8Array };
 type __Indexes_putWith_Call = { key: string; body: globalThis.Uint8Array; options: __ns_bynk_cloudflare.R2Put };
 type __Indexes_delete_Call = { key: string };
 type __Indexes_list_Call = { prefix: Option<string>; cursor: Option<string> };
+type __Indexes_getStream_Call = { key: string };
+type __Indexes_putStream_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number };
+type __Indexes_putStreamWith_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number; options: __ns_bynk_cloudflare.R2Put };
+type __Indexes_createUpload_Call = { key: string; options: __ns_bynk_cloudflare.R2UploadOptions };
+type __Indexes_uploadPart_Call = { upload: __ns_bynk_cloudflare.R2Upload; partNumber: number; body: globalThis.Uint8Array };
+type __Indexes_completeUpload_Call = { upload: __ns_bynk_cloudflare.R2Upload; parts: readonly __ns_bynk_cloudflare.R2Part[] };
+type __Indexes_abortUpload_Call = { upload: __ns_bynk_cloudflare.R2Upload };
 type __R2_get_Call = { key: string };
 type __R2_head_Call = { key: string };
 type __R2_put_Call = { key: string; body: globalThis.Uint8Array };
 type __R2_putWith_Call = { key: string; body: globalThis.Uint8Array; options: __ns_bynk_cloudflare.R2Put };
 type __R2_delete_Call = { key: string };
 type __R2_list_Call = { prefix: Option<string>; cursor: Option<string> };
+type __R2_getStream_Call = { key: string };
+type __R2_putStream_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number };
+type __R2_putStreamWith_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number; options: __ns_bynk_cloudflare.R2Put };
+type __R2_createUpload_Call = { key: string; options: __ns_bynk_cloudflare.R2UploadOptions };
+type __R2_uploadPart_Call = { upload: __ns_bynk_cloudflare.R2Upload; partNumber: number; body: globalThis.Uint8Array };
+type __R2_completeUpload_Call = { upload: __ns_bynk_cloudflare.R2Upload; parts: readonly __ns_bynk_cloudflare.R2Part[] };
+type __R2_abortUpload_Call = { upload: __ns_bynk_cloudflare.R2Upload };
 
 class __Stub_Archives {
   __case: string | undefined;
@@ -80,7 +101,7 @@ class __Stub_Archives {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<globalThis.Uint8Array>> {
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -90,10 +111,14 @@ class __Stub_Archives {
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
@@ -137,6 +162,45 @@ function __bynkTest_Archives(): __ns_bynk_cloudflare.R2 {
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
+  type Upload = {
+    options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
+    parts: globalThis.Map<number, { etag: string; body: globalThis.Uint8Array }>;
+  };
+  const uploads = new globalThis.Map<string, Upload>();
+  const claim = (stream: object) => {
+    const s = stream as { [k: symbol]: boolean };
+    const k = globalThis.Symbol.for('bynk.stream.read');
+    if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
+    s[k] = true;
+  };
+  const collect = async (op: string, body: AsyncIterable<globalThis.Uint8Array>, size: number) => {
+    if (!globalThis.Number.isSafeInteger(size) || size < 0) {
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: size must be a whole number of bytes, not ${size}`);
+    }
+    claim(body);
+    const chunks: globalThis.Uint8Array[] = [];
+    let held = 0;
+    for await (const c of body) {
+      held += c.length;
+      if (held > size) break;
+      chunks.push(c);
+    }
+    if (held !== size) {
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held > size ? `at least ${held}` : held} bytes, not the declared size ${size}`);
+    }
+    const out = new globalThis.Uint8Array(size);
+    let at = 0;
+    for (const c of chunks) {
+      out.set(c, at);
+      at += c.length;
+    }
+    return out;
+  };
+  const open = (u: { key: string; uploadId: string }) => {
+    const e = uploads.get(`${u.key}\u0000${u.uploadId}`);
+    if (e === undefined) throw new globalThis.Error(`R2: no multipart upload ${u.uploadId} of ${u.key}`);
+    return e;
+  };
   return {
     async get(key) {
       const e = store.get(key);
@@ -163,6 +227,69 @@ function __bynkTest_Archives(): __ns_bynk_cloudflare.R2 {
         .sort();
       const page = keys.slice(0, 1000);
       return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
+    },
+    async getStream(key) {
+      const e = store.get(key);
+      if (e === undefined) return None;
+      const bytes = e.body.slice();
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return Some({ object: meta(key), body: chunks() });
+    },
+    async putStream(key, body, size) {
+      return write(key, await collect("putStream", body, size), None, new globalThis.Map());
+    },
+    async putStreamWith(key, body, size, options) {
+      const bytes = await collect("putStreamWith", body, size);
+      const c = options.onlyIf;
+      if (c.tag === "Absent" && store.has(key)) return None;
+      if (c.tag === "EtagMatches" && store.get(key)?.etag !== c.etag) return None;
+      return Some(write(key, bytes, options.contentType, options.metadata));
+    },
+    async createUpload(key, options) {
+      version += 1;
+      const uploadId = `upload-${version}`;
+      uploads.set(`${key}\u0000${uploadId}`, { options, parts: new globalThis.Map() });
+      return { key, uploadId };
+    },
+    async uploadPart(upload, partNumber, body) {
+      const e = open(upload);
+      if (!globalThis.Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+        throw new globalThis.Error(`R2: part number ${partNumber} is not between 1 and 10,000`);
+      }
+      version += 1;
+      const etag = `part-${version}`;
+      e.parts.set(partNumber, { etag, body: body.slice() });
+      return { partNumber, etag };
+    },
+    async completeUpload(upload, parts) {
+      const e = open(upload);
+      const listed = [...parts].sort((a, b) => a.partNumber - b.partNumber);
+      const bodies = listed.map((p, i) => {
+        const part = e.parts.get(p.partNumber);
+        if (part === undefined || part.etag !== p.etag) throw new globalThis.Error(`R2: part ${p.partNumber} was not uploaded with etag ${p.etag}`);
+        if (i > 0 && listed[i - 1].partNumber === p.partNumber) throw new globalThis.Error(`R2: part ${p.partNumber} is listed twice`);
+        return part.body;
+      });
+      if (bodies.length === 0) throw new globalThis.Error("R2: a multipart upload needs at least one part");
+      if (bodies.slice(0, -1).some((b) => b.length !== bodies[0].length)) {
+        throw new globalThis.Error("R2: every part but the last must be the same size");
+      }
+      if (bodies.length > 1 && bodies[bodies.length - 1].length > bodies[0].length) {
+        throw new globalThis.Error("R2: the last part must be no larger than the others");
+      }
+      const out = new globalThis.Uint8Array(bodies.reduce((n, b) => n + b.length, 0));
+      let at = 0;
+      for (const b of bodies) {
+        out.set(b, at);
+        at += b.length;
+      }
+      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
+      return write(upload.key, out, e.options.contentType, e.options.metadata);
+    },
+    async abortUpload(upload) {
+      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
     },
   };
 }
@@ -179,6 +306,45 @@ function __bynkTest_Indexes(): __ns_bynk_cloudflare.R2 {
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
+  type Upload = {
+    options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
+    parts: globalThis.Map<number, { etag: string; body: globalThis.Uint8Array }>;
+  };
+  const uploads = new globalThis.Map<string, Upload>();
+  const claim = (stream: object) => {
+    const s = stream as { [k: symbol]: boolean };
+    const k = globalThis.Symbol.for('bynk.stream.read');
+    if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
+    s[k] = true;
+  };
+  const collect = async (op: string, body: AsyncIterable<globalThis.Uint8Array>, size: number) => {
+    if (!globalThis.Number.isSafeInteger(size) || size < 0) {
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: size must be a whole number of bytes, not ${size}`);
+    }
+    claim(body);
+    const chunks: globalThis.Uint8Array[] = [];
+    let held = 0;
+    for await (const c of body) {
+      held += c.length;
+      if (held > size) break;
+      chunks.push(c);
+    }
+    if (held !== size) {
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held > size ? `at least ${held}` : held} bytes, not the declared size ${size}`);
+    }
+    const out = new globalThis.Uint8Array(size);
+    let at = 0;
+    for (const c of chunks) {
+      out.set(c, at);
+      at += c.length;
+    }
+    return out;
+  };
+  const open = (u: { key: string; uploadId: string }) => {
+    const e = uploads.get(`${u.key}\u0000${u.uploadId}`);
+    if (e === undefined) throw new globalThis.Error(`R2: no multipart upload ${u.uploadId} of ${u.key}`);
+    return e;
+  };
   return {
     async get(key) {
       const e = store.get(key);
@@ -205,6 +371,69 @@ function __bynkTest_Indexes(): __ns_bynk_cloudflare.R2 {
         .sort();
       const page = keys.slice(0, 1000);
       return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
+    },
+    async getStream(key) {
+      const e = store.get(key);
+      if (e === undefined) return None;
+      const bytes = e.body.slice();
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return Some({ object: meta(key), body: chunks() });
+    },
+    async putStream(key, body, size) {
+      return write(key, await collect("putStream", body, size), None, new globalThis.Map());
+    },
+    async putStreamWith(key, body, size, options) {
+      const bytes = await collect("putStreamWith", body, size);
+      const c = options.onlyIf;
+      if (c.tag === "Absent" && store.has(key)) return None;
+      if (c.tag === "EtagMatches" && store.get(key)?.etag !== c.etag) return None;
+      return Some(write(key, bytes, options.contentType, options.metadata));
+    },
+    async createUpload(key, options) {
+      version += 1;
+      const uploadId = `upload-${version}`;
+      uploads.set(`${key}\u0000${uploadId}`, { options, parts: new globalThis.Map() });
+      return { key, uploadId };
+    },
+    async uploadPart(upload, partNumber, body) {
+      const e = open(upload);
+      if (!globalThis.Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+        throw new globalThis.Error(`R2: part number ${partNumber} is not between 1 and 10,000`);
+      }
+      version += 1;
+      const etag = `part-${version}`;
+      e.parts.set(partNumber, { etag, body: body.slice() });
+      return { partNumber, etag };
+    },
+    async completeUpload(upload, parts) {
+      const e = open(upload);
+      const listed = [...parts].sort((a, b) => a.partNumber - b.partNumber);
+      const bodies = listed.map((p, i) => {
+        const part = e.parts.get(p.partNumber);
+        if (part === undefined || part.etag !== p.etag) throw new globalThis.Error(`R2: part ${p.partNumber} was not uploaded with etag ${p.etag}`);
+        if (i > 0 && listed[i - 1].partNumber === p.partNumber) throw new globalThis.Error(`R2: part ${p.partNumber} is listed twice`);
+        return part.body;
+      });
+      if (bodies.length === 0) throw new globalThis.Error("R2: a multipart upload needs at least one part");
+      if (bodies.slice(0, -1).some((b) => b.length !== bodies[0].length)) {
+        throw new globalThis.Error("R2: every part but the last must be the same size");
+      }
+      if (bodies.length > 1 && bodies[bodies.length - 1].length > bodies[0].length) {
+        throw new globalThis.Error("R2: the last part must be no larger than the others");
+      }
+      const out = new globalThis.Uint8Array(bodies.reduce((n, b) => n + b.length, 0));
+      let at = 0;
+      for (const b of bodies) {
+        out.set(b, at);
+        at += b.length;
+      }
+      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
+      return write(upload.key, out, e.options.contentType, e.options.metadata);
+    },
+    async abortUpload(upload) {
+      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
     },
   };
 }
@@ -221,6 +450,45 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
+  type Upload = {
+    options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
+    parts: globalThis.Map<number, { etag: string; body: globalThis.Uint8Array }>;
+  };
+  const uploads = new globalThis.Map<string, Upload>();
+  const claim = (stream: object) => {
+    const s = stream as { [k: symbol]: boolean };
+    const k = globalThis.Symbol.for('bynk.stream.read');
+    if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
+    s[k] = true;
+  };
+  const collect = async (op: string, body: AsyncIterable<globalThis.Uint8Array>, size: number) => {
+    if (!globalThis.Number.isSafeInteger(size) || size < 0) {
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: size must be a whole number of bytes, not ${size}`);
+    }
+    claim(body);
+    const chunks: globalThis.Uint8Array[] = [];
+    let held = 0;
+    for await (const c of body) {
+      held += c.length;
+      if (held > size) break;
+      chunks.push(c);
+    }
+    if (held !== size) {
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held > size ? `at least ${held}` : held} bytes, not the declared size ${size}`);
+    }
+    const out = new globalThis.Uint8Array(size);
+    let at = 0;
+    for (const c of chunks) {
+      out.set(c, at);
+      at += c.length;
+    }
+    return out;
+  };
+  const open = (u: { key: string; uploadId: string }) => {
+    const e = uploads.get(`${u.key}\u0000${u.uploadId}`);
+    if (e === undefined) throw new globalThis.Error(`R2: no multipart upload ${u.uploadId} of ${u.key}`);
+    return e;
+  };
   return {
     async get(key) {
       const e = store.get(key);
@@ -248,6 +516,69 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
       const page = keys.slice(0, 1000);
       return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
     },
+    async getStream(key) {
+      const e = store.get(key);
+      if (e === undefined) return None;
+      const bytes = e.body.slice();
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return Some({ object: meta(key), body: chunks() });
+    },
+    async putStream(key, body, size) {
+      return write(key, await collect("putStream", body, size), None, new globalThis.Map());
+    },
+    async putStreamWith(key, body, size, options) {
+      const bytes = await collect("putStreamWith", body, size);
+      const c = options.onlyIf;
+      if (c.tag === "Absent" && store.has(key)) return None;
+      if (c.tag === "EtagMatches" && store.get(key)?.etag !== c.etag) return None;
+      return Some(write(key, bytes, options.contentType, options.metadata));
+    },
+    async createUpload(key, options) {
+      version += 1;
+      const uploadId = `upload-${version}`;
+      uploads.set(`${key}\u0000${uploadId}`, { options, parts: new globalThis.Map() });
+      return { key, uploadId };
+    },
+    async uploadPart(upload, partNumber, body) {
+      const e = open(upload);
+      if (!globalThis.Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+        throw new globalThis.Error(`R2: part number ${partNumber} is not between 1 and 10,000`);
+      }
+      version += 1;
+      const etag = `part-${version}`;
+      e.parts.set(partNumber, { etag, body: body.slice() });
+      return { partNumber, etag };
+    },
+    async completeUpload(upload, parts) {
+      const e = open(upload);
+      const listed = [...parts].sort((a, b) => a.partNumber - b.partNumber);
+      const bodies = listed.map((p, i) => {
+        const part = e.parts.get(p.partNumber);
+        if (part === undefined || part.etag !== p.etag) throw new globalThis.Error(`R2: part ${p.partNumber} was not uploaded with etag ${p.etag}`);
+        if (i > 0 && listed[i - 1].partNumber === p.partNumber) throw new globalThis.Error(`R2: part ${p.partNumber} is listed twice`);
+        return part.body;
+      });
+      if (bodies.length === 0) throw new globalThis.Error("R2: a multipart upload needs at least one part");
+      if (bodies.slice(0, -1).some((b) => b.length !== bodies[0].length)) {
+        throw new globalThis.Error("R2: every part but the last must be the same size");
+      }
+      if (bodies.length > 1 && bodies[bodies.length - 1].length > bodies[0].length) {
+        throw new globalThis.Error("R2: the last part must be no larger than the others");
+      }
+      const out = new globalThis.Uint8Array(bodies.reduce((n, b) => n + b.length, 0));
+      let at = 0;
+      for (const b of bodies) {
+        out.set(b, at);
+        at += b.length;
+      }
+      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
+      return write(upload.key, out, e.options.contentType, e.options.metadata);
+    },
+    async abortUpload(upload) {
+      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
+    },
   };
 }
 
@@ -260,7 +591,7 @@ async function test_an_object_round_trips() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -270,10 +601,14 @@ async function test_an_object_round_trips() {
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
@@ -298,7 +633,7 @@ async function test_an_absent_only_write_refuses_an_existing_key() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -308,10 +643,14 @@ async function test_an_absent_only_write_refuses_an_existing_key() {
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
@@ -336,7 +675,7 @@ async function test_an_etag_match_write_swaps_only_the_current_version() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -346,10 +685,14 @@ async function test_an_etag_match_write_swaps_only_the_current_version() {
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
@@ -373,7 +716,7 @@ async function test_delete_is_idempotent_and_list_pages_by_prefix() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -383,10 +726,14 @@ async function test_delete_is_idempotent_and_list_pages_by_prefix() {
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
@@ -412,7 +759,7 @@ async function test_instances_are_separate() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -422,10 +769,14 @@ async function test_instances_are_separate() {
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
@@ -446,9 +797,9 @@ async function test_instances_are_separate() {
 async function test_a_stubbed_instance_answers() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed instance answers"), { Archives: ["delete", "get", "head", "list", "put", "putWith"], Indexes: ["delete", "get", "head", "list", "put", "putWith"], R2: ["delete", "get", "head", "list", "put", "putWith"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed instance answers"), { Archives: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getStream", "head", "list", "put", "putStream", "putStreamWith", "putWith", "uploadPart"], Indexes: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getStream", "head", "list", "put", "putStream", "putStreamWith", "putWith", "uploadPart"], R2: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getStream", "head", "list", "put", "putStream", "putStreamWith", "putWith", "uploadPart"] }, __obs);
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -458,10 +809,14 @@ async function test_a_stubbed_instance_answers() {
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
@@ -483,7 +838,7 @@ async function test_instances_are_separate_at_integration() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Condition, R2Listing, R2Object, R2Put, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -493,10 +848,14 @@ async function test_instances_are_separate_at_integration() {
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;

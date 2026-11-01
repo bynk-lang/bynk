@@ -5339,7 +5339,9 @@ const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; metadata: gl
 "#;
 
 /// P5 (#2323): the body of `bynk.cloudflare`'s `R2` unit-tier double
-/// ([`platform_double`]).
+/// ([`platform_double`]). P5b (#2626) adds the streamed reads and writes and
+/// multipart uploads, which check sizes and parts as the integration tier's
+/// `makeIntegrationR2` does (the 5 MiB minimum part aside).
 const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>();
   let version = 0;
   const meta = (key: string) => {
@@ -5350,6 +5352,45 @@ const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>(
     version += 1;
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
+  };
+  type Upload = {
+    options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
+    parts: globalThis.Map<number, { etag: string; body: globalThis.Uint8Array }>;
+  };
+  const uploads = new globalThis.Map<string, Upload>();
+  const claim = (stream: object) => {
+    const s = stream as { [k: symbol]: boolean };
+    const k = globalThis.Symbol.for('bynk.stream.read');
+    if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
+    s[k] = true;
+  };
+  const collect = async (op: string, body: AsyncIterable<globalThis.Uint8Array>, size: number) => {
+    if (!globalThis.Number.isSafeInteger(size) || size < 0) {
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: size must be a whole number of bytes, not ${size}`);
+    }
+    claim(body);
+    const chunks: globalThis.Uint8Array[] = [];
+    let held = 0;
+    for await (const c of body) {
+      held += c.length;
+      if (held > size) break;
+      chunks.push(c);
+    }
+    if (held !== size) {
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held > size ? `at least ${held}` : held} bytes, not the declared size ${size}`);
+    }
+    const out = new globalThis.Uint8Array(size);
+    let at = 0;
+    for (const c of chunks) {
+      out.set(c, at);
+      at += c.length;
+    }
+    return out;
+  };
+  const open = (u: { key: string; uploadId: string }) => {
+    const e = uploads.get(`${u.key}\u0000${u.uploadId}`);
+    if (e === undefined) throw new globalThis.Error(`R2: no multipart upload ${u.uploadId} of ${u.key}`);
+    return e;
   };
   return {
     async get(key) {
@@ -5377,6 +5418,69 @@ const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>(
         .sort();
       const page = keys.slice(0, 1000);
       return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
+    },
+    async getStream(key) {
+      const e = store.get(key);
+      if (e === undefined) return None;
+      const bytes = e.body.slice();
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return Some({ object: meta(key), body: chunks() });
+    },
+    async putStream(key, body, size) {
+      return write(key, await collect("putStream", body, size), None, new globalThis.Map());
+    },
+    async putStreamWith(key, body, size, options) {
+      const bytes = await collect("putStreamWith", body, size);
+      const c = options.onlyIf;
+      if (c.tag === "Absent" && store.has(key)) return None;
+      if (c.tag === "EtagMatches" && store.get(key)?.etag !== c.etag) return None;
+      return Some(write(key, bytes, options.contentType, options.metadata));
+    },
+    async createUpload(key, options) {
+      version += 1;
+      const uploadId = `upload-${version}`;
+      uploads.set(`${key}\u0000${uploadId}`, { options, parts: new globalThis.Map() });
+      return { key, uploadId };
+    },
+    async uploadPart(upload, partNumber, body) {
+      const e = open(upload);
+      if (!globalThis.Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+        throw new globalThis.Error(`R2: part number ${partNumber} is not between 1 and 10,000`);
+      }
+      version += 1;
+      const etag = `part-${version}`;
+      e.parts.set(partNumber, { etag, body: body.slice() });
+      return { partNumber, etag };
+    },
+    async completeUpload(upload, parts) {
+      const e = open(upload);
+      const listed = [...parts].sort((a, b) => a.partNumber - b.partNumber);
+      const bodies = listed.map((p, i) => {
+        const part = e.parts.get(p.partNumber);
+        if (part === undefined || part.etag !== p.etag) throw new globalThis.Error(`R2: part ${p.partNumber} was not uploaded with etag ${p.etag}`);
+        if (i > 0 && listed[i - 1].partNumber === p.partNumber) throw new globalThis.Error(`R2: part ${p.partNumber} is listed twice`);
+        return part.body;
+      });
+      if (bodies.length === 0) throw new globalThis.Error("R2: a multipart upload needs at least one part");
+      if (bodies.slice(0, -1).some((b) => b.length !== bodies[0].length)) {
+        throw new globalThis.Error("R2: every part but the last must be the same size");
+      }
+      if (bodies.length > 1 && bodies[bodies.length - 1].length > bodies[0].length) {
+        throw new globalThis.Error("R2: the last part must be no larger than the others");
+      }
+      const out = new globalThis.Uint8Array(bodies.reduce((n, b) => n + b.length, 0));
+      let at = 0;
+      for (const b of bodies) {
+        out.set(b, at);
+        at += b.length;
+      }
+      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
+      return write(upload.key, out, e.options.contentType, e.options.metadata);
+    },
+    async abortUpload(upload) {
+      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
     },
   };
 "#;

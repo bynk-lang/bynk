@@ -13,6 +13,10 @@ adapter bynk.cloudflare {
 		R2Put,
 		R2Condition,
 		R2Listing,
+		R2Body,
+		R2Upload,
+		R2UploadOptions,
+		R2Part,
 		QueueSend,
 		DataPoint,
 		SqlValue,
@@ -199,6 +203,46 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	An object read by `R2.getStream`: its metadata, and its body as a stream
+	of chunks, read from R2 as they are pulled. The body can be read once
+	(`collect`, `map`, or handed to `RawStreamed`); a second read faults. A
+	record carrying a stream is not data: it can't be stored, sent or encoded.
+	---
+	type R2Body = {
+		object: R2Object,
+		body: Stream[Bytes],
+	}
+
+	---
+	A multipart upload in progress, as `R2.createUpload` begins it. It is
+	plain data, so it can be kept (in an agent, say) or handed to a client
+	between the requests that upload its parts. R2 aborts an upload left
+	incomplete for 7 days.
+	---
+	type R2Upload = {
+		key: String,
+		uploadId: String,
+	}
+
+	---
+	The options of an `R2.createUpload`: the content type and custom metadata
+	of the object the upload completes.
+	---
+	type R2UploadOptions = {
+		contentType: Option[String],
+		metadata: Map[String, String],
+	}
+
+	---
+	One uploaded part of a multipart upload, as `R2.uploadPart` reports it.
+	`R2.completeUpload` takes every part, in any order.
+	---
+	type R2Part = {
+		partNumber: Int,
+		etag: String,
+	}
+
+	---
 	The options of a `Queue.sendWith`. `delay` holds the message back before
 	it can be delivered: whole seconds (a part second rounds up), at most 12
 	hours; `None` delivers as soon as the queue can.
@@ -263,20 +307,31 @@ adapter bynk.cloudflare {
 		| Failed(message: String)
 
 	---
-	An R2 bucket: objects stored and read whole, as `Bytes`, with metadata
-	and conditional writes. Used only through a named instance,
+	An R2 bucket: objects stored and read as `Bytes` or streamed, with
+	metadata, conditional writes and multipart uploads. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
 	`given R2` names no bucket and is refused. `@jurisdiction("eu")` (or
 	`"fedramp"`) pins the bucket's jurisdiction at creation.
 
-	Objects are buffered in the Worker's memory, so each should stay well
-	under its 128 MB limit; streamed reads and writes are a later increment.
-	`get` and `head` give `None` for a missing key; `delete` is idempotent.
-	`put` writes unconditionally. `putWith` honours its `onlyIf` and gives
-	`None` when the condition failed (nothing written). `list` returns one
-	page of up to 1000 objects (fewer is possible: the cursor decides whether
-	more remain) in key order, optionally under a prefix;
-	pass the previous page's `cursor` for the next.
+	`get`, `put` and `putWith` buffer the object in the Worker's memory, so
+	each should stay well under its 128 MB limit. `get` and `head` give `None`
+	for a missing key; `delete` is idempotent. `put` writes unconditionally.
+	`putWith` honours its `onlyIf` and gives `None` when the condition failed
+	(nothing written). `list` returns one page of up to 1000 objects (fewer
+	is possible: the cursor decides whether more remain) in key order,
+	optionally under a prefix; pass the previous page's `cursor` for the next.
+
+	Larger objects stream. `getStream` gives the object's metadata and its
+	body as a `Stream[Bytes]` (serve it with `RawStreamed`). `putStream` and
+	`putStreamWith` write a stream of exactly `size` bytes, which R2 needs to
+	know up front: a stream that holds more or fewer faults the write, and
+	nothing is stored.
+
+	A multipart upload builds one object from parts uploaded separately, in
+	any order and across requests: `createUpload`, an `uploadPart` per part
+	(numbered from 1, at most 10,000), then `completeUpload` with every part,
+	or `abortUpload`. Every part but the last must be the same size, and R2
+	needs at least 5 MiB; a completion R2 refuses faults.
 
 	Bucket names are scoped to the Cloudflare account, so `bynk deploy` names
 	each `<worker>-<capability, kebab>`, environment-qualified.
@@ -288,6 +343,18 @@ adapter bynk.cloudflare {
 		fn putWith(key: String, body: Bytes, options: R2Put) -> Effect[Option[R2Object]]
 		fn delete(key: String) -> Effect[()]
 		fn list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]
+		fn getStream(key: String) -> Effect[Option[R2Body]]
+		fn putStream(key: String, body: Stream[Bytes], size: Int) -> Effect[R2Object]
+		fn putStreamWith(
+			key: String,
+			body: Stream[Bytes],
+			size: Int,
+			options: R2Put
+		) -> Effect[Option[R2Object]]
+		fn createUpload(key: String, options: R2UploadOptions) -> Effect[R2Upload]
+		fn uploadPart(upload: R2Upload, partNumber: Int, body: Bytes) -> Effect[R2Part]
+		fn completeUpload(upload: R2Upload, parts: List[R2Part]) -> Effect[R2Object]
+		fn abortUpload(upload: R2Upload) -> Effect[()]
 	}
 
 	---
