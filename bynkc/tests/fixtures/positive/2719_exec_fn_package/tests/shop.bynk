@@ -1,0 +1,7 @@
+suite shop {
+  case "a send through a package function" {
+    let r <- api.call(4)
+    expect r == 4
+    expect Audit.note called once
+  }
+}

@@ -1,0 +1,9 @@
+[project]
+name = "exec-fn-package"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[dependencies]
+lib = { package = "acme/lib", path = "pkg/lib" }

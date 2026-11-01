@@ -363,6 +363,11 @@ fn symbol_modifiers(unit: &str, type_decl: Option<&TypeDecl>) -> crate::index::S
 /// Combined symbol tables for a single logical commons or context.
 #[derive(Clone, Default)]
 pub struct UnitTable {
+    /// #2719: the build's needs-context set, stamped on once every unit is
+    /// checked (empty before). Emission reads it to decide which handlers' `deps`
+    /// carry the execution context; a table is the one value every such gate
+    /// already holds.
+    pub exec_plan: Arc<crate::exec_plan::ExecPlan>,
     pub kind: Option<UnitKind>,
     pub types: HashMap<String, Arc<TypeDecl>>,
     pub fns: HashMap<String, Arc<FnDecl>>,

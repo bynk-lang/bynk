@@ -1,0 +1,18 @@
+context r
+
+consumes bynk
+
+fn tick(n: Int) -> Effect[()] {
+	let _ <- Effect.pure(n).within(1.seconds)
+	Effect.pure(())
+}
+
+fn twice(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
+	~> f(n)
+	Effect.pure(n)
+}
+
+// #2719: a lambda in a pure function closes over no context either.
+fn mk(f: (Int) -> Effect[()]) -> (Int) -> Effect[Int] {
+	(k) => twice(f, k)
+}

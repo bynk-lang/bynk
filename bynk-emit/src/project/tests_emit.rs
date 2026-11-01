@@ -864,6 +864,9 @@ fn emit_integration_module(
 
     // One async function per case.
     let mut typed = integration_typed_commons(view, tys);
+    if let Some(t) = unit_tables.values().next() {
+        typed.exec_plan = Arc::clone(&t.exec_plan);
+    }
     let mut case_runners: Vec<String> = Vec::new();
     let mut discovered: Vec<DiscoveredCase> = Vec::new();
     for input in cases.iter().copied() {
@@ -2756,6 +2759,7 @@ fn integration_typed_commons(
         shadowed_imports: HashMap::new(),
         extensible_enums: Default::default(),
         stability: Default::default(),
+        exec_plan: Default::default(),
     }
 }
 
@@ -4511,40 +4515,44 @@ fn block_uses_advance(b: &Block) -> bool {
     found
 }
 
-/// #1994: whether a context target has a handler that sends with `~>`, so its
-/// handlers' `deps` require `__exec` — the same gate the Worker entry and
+/// #1994: whether a context target has a handler that hands work to the
+/// execution context (`~>`, `within` or `race`, directly or through a function it
+/// calls, #2719), so its handlers' `deps` require `__exec` — the same gate the Worker entry and
 /// `compose` thread the request's execution context on.
 fn target_uses_send(
     target_name: &str,
     target_kind: UnitKind,
     unit_tables: &HashMap<String, UnitTable>,
 ) -> bool {
-    target_kind == UnitKind::Context
-        && unit_tables.get(target_name).is_some_and(|t| {
-            t.services.values().any(|s| {
-                s.handlers
-                    .iter()
-                    .any(|h| crate::emitter::block_uses_send(&h.body))
-            })
-        })
+    // A case body may call a function that takes the context directly (#2719),
+    // which a handler need not; the case is lowered after this gate is read, so
+    // a build with any such function gives every module's deps the context.
+    unit_tables.values().any(|t| t.exec_plan.any_fn())
+        || (target_kind == UnitKind::Context
+            && unit_tables.get(target_name).is_some_and(|t| {
+                t.services
+                    .values()
+                    .any(|s| s.handlers.iter().any(|h| t.exec_plan.handler_needs(h)))
+            }))
 }
 
-/// #2683: whether a context target has a service handler that calls
-/// `e.within(d)`, so its `deps` carry an execution context whose timers the
-/// harness supplies.
+/// #2683: whether a context target has a service handler that reaches
+/// `e.within(d)` or `a.race(b)`, directly or through a function it calls
+/// (#2719), so its `deps` carry an execution context whose timers the harness
+/// supplies. A case body that calls such a function directly is read as the
+/// same (see [`target_uses_send`]).
 fn target_uses_within(
     target_name: &str,
     target_kind: UnitKind,
     unit_tables: &HashMap<String, UnitTable>,
 ) -> bool {
-    target_kind == UnitKind::Context
-        && unit_tables.get(target_name).is_some_and(|t| {
-            t.services.values().any(|s| {
-                s.handlers
-                    .iter()
-                    .any(|h| crate::emitter::block_uses_within(&h.body))
-            })
-        })
+    unit_tables.values().any(|t| t.exec_plan.any_timed_fn())
+        || (target_kind == UnitKind::Context
+            && unit_tables.get(target_name).is_some_and(|t| {
+                t.services
+                    .values()
+                    .any(|s| s.handlers.iter().any(|h| t.exec_plan.handler_timed(h)))
+            }))
 }
 
 /// #2683: whether a `stub` takes virtual time: `returns <v> after <d>`, or
@@ -5096,6 +5104,7 @@ fn synthetic_typed_commons_for_target(
     tys: &Arc<checker::Types>,
 ) -> checker::TypedCommons {
     let table = unit_tables.get(target_name).cloned().unwrap_or_default();
+    let table_plan = Arc::clone(&table.exec_plan);
     let mut types = table.types;
     let mut fns = table.fns;
     let mut methods = table.methods;
@@ -5211,6 +5220,7 @@ fn synthetic_typed_commons_for_target(
         shadowed_imports: HashMap::new(),
         extensible_enums: Default::default(),
         stability: Default::default(),
+        exec_plan: table_plan,
     }
 }
 

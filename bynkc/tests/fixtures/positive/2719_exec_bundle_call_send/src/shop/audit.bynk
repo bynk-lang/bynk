@@ -1,0 +1,31 @@
+context shop.audit
+
+// #2719 DECISION C: a Bundle `on call` handler receives the execution context for
+// a direct `~>`, as it already did for `within` and `race`, so the send behaves the
+// same written in the handler or reached through a function.
+
+capability Ledger {
+	fn book(id: Int) -> Effect[()]
+}
+
+provides Ledger = NoLedger {
+	fn book(id: Int) -> Effect[()] { () }
+}
+
+fn logIt(id: Int, f: (Int) -> Effect[()]) -> Effect[Int] {
+	~> f(id)
+	Effect.pure(id)
+}
+
+service audit {
+	on call(id: Int) -> Effect[Int] given Ledger {
+		~> Ledger.book(id)
+		Effect.pure(id)
+	}
+}
+
+service relay {
+	on call(id: Int) -> Effect[Int] given Ledger {
+		logIt(id, (n) => Ledger.book(n))
+	}
+}

@@ -1109,10 +1109,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             write_line(
                 out,
                 indent,
-                &format!(
-                    "{deps}.__exec.waitUntil({value});",
-                    deps = cx.cap_deps_expr()
-                ),
+                &format!("{}.waitUntil({value});", cx.exec_expr()),
             );
         }
         Statement::Do(d) => {
@@ -2816,13 +2813,21 @@ fn lower_method_call(
             )
         )
     {
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        return pre.finish(format!(
-            "{}.{}({})",
-            id.name,
-            method.name,
-            args_lowered.join(", ")
-        ));
+        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        // #2719: a static method in the needs-context set takes the context last.
+        let mut needs_exec = false;
+        if let Some(Callee::Static(decl)) = cx.commons().callees.get(&e.id)
+            && cx.commons().exec_plan.fn_needs(decl)
+        {
+            args_lowered.push(cx.exec_expr());
+            needs_exec = true;
+        }
+        let call = format!("{}.{}({})", id.name, method.name, args_lowered.join(", "));
+        return pre.finish(if needs_exec {
+            settle_exec_call(call, cx)
+        } else {
+            call
+        });
     }
     // v0.7 / v0.182: local service call inside a test case body. `svc.call(args)`
     // lowers to `svc.call(args, deps)`. An http address `svc.<VERB>("/path", …)`
@@ -3394,10 +3399,8 @@ fn lower_method_call(
                     cx.note_within();
                     let recv = pre.lower(receiver, cx);
                     let after = pre.lower(&args[0], cx);
-                    return pre.finish(format!(
-                        "__bynkWithin({recv}, {after}, {deps}.__exec)",
-                        deps = cx.cap_deps_expr()
-                    ));
+                    return pre
+                        .finish(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
                 }
                 // #2711: `a.race(b)` takes the first side to succeed and hands
                 // the rest to the same execution context, uncancelled.
@@ -3430,9 +3433,9 @@ fn lower_method_call(
                     let lowered: Vec<String> =
                         operands.into_iter().map(|o| pre.lower(o, cx)).collect();
                     return pre.finish(format!(
-                        "__bynkRace([{}], {deps}.__exec)",
+                        "__bynkRace([{}], {})",
                         lowered.join(", "),
-                        deps = cx.cap_deps_expr()
+                        cx.exec_expr()
                     ));
                 }
                 if let Ty::Result(ok, err) = &*tys.get(*inner)
@@ -3504,10 +3507,21 @@ fn lower_method_call(
     }
     // Constrained generics slice 1: the call's comparator witnesses follow the
     // ordinary arguments.
-    if let Some(Callee::Method(_, witnesses)) = cx.commons().callees.get(&e.id) {
+    let mut needs_exec = false;
+    if let Some(Callee::Method(decl, witnesses)) = cx.commons().callees.get(&e.id) {
         all.extend(witnesses.iter().map(|w| cx.comparator(*w)));
+        // #2719: a method in the needs-context set takes the context last.
+        if cx.commons().exec_plan.fn_needs(decl) {
+            all.push(cx.exec_expr());
+            needs_exec = true;
+        }
     }
-    pre.finish(format!("{ns}.{}({})", method.name, all.join(", ")))
+    let call = format!("{ns}.{}({})", method.name, all.join(", "));
+    pre.finish(if needs_exec {
+        settle_exec_call(call, cx)
+    } else {
+        call
+    })
 }
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
@@ -5961,7 +5975,9 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     // Constrained generics slice 1 (DECISION E): a generic function with `Ord`
     // bounds used as a value is instantiated at the reference, as a closure that
     // captures the comparator witnesses.
-    if let Some(Callee::FnValue(decl, witnesses)) = cx.commons().callee(e.id) {
+    if let Some(Callee::FnValue(decl, witnesses)) = cx.commons().callee(e.id)
+        && (!witnesses.is_empty() || cx.commons().exec_plan.fn_needs(decl))
+    {
         let tys = cx.commons().tys();
         let params: Vec<String> = match cx
             .commons()
@@ -5981,6 +5997,11 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
         let mut args = names.clone();
         args.extend(witnesses.iter().map(|w| cx.comparator(*w)));
+        // #2719: a function in the needs-context set closes over the context in
+        // scope where it is named.
+        if cx.commons().exec_plan.fn_needs(decl) {
+            args.push(cx.exec_expr());
+        }
         return format!(
             "(({}) => {}({}))",
             params.join(", "),
@@ -6163,6 +6184,23 @@ fn lower_http_variant_args(
         .collect()
 }
 
+/// #2719 (G): a test `case` that calls a function in the needs-context set
+/// directly settles the call the way an addressed service call is settled: on
+/// virtual time it is driven (auto-advance) and then settled, otherwise the
+/// sends it handed the harness's execution context are awaited, so the case's
+/// `expect`s see their effects.
+fn settle_exec_call(call: String, cx: &LowerCtx) -> String {
+    if !cx.in_test_case() {
+        call
+    } else if cx.runtime_use().virtual_time() {
+        format!("__bynkSettleVirtual(deps, {call})")
+    } else if cx.test_settles_sends() {
+        format!("__bynkSettle(deps, {call})")
+    } else {
+        call
+    }
+}
+
 fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
     // Bare variant constructor with payload → qualify.
@@ -6238,14 +6276,21 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     // Constrained generics slice 1: the call's comparator witnesses follow the
     // ordinary arguments (an `Ord`-bounded callee's hidden trailing parameters).
     let mut args_lowered = args_lowered;
-    if let Some(Callee::Fn(_, witnesses)) = cx.commons().callee(e.id) {
+    let mut needs_exec = false;
+    if let Some(Callee::Fn(decl, witnesses)) = cx.commons().callee(e.id) {
         args_lowered.extend(witnesses.iter().map(|w| cx.comparator(*w)));
+        // #2719: a function in the needs-context set takes the context last.
+        if cx.commons().exec_plan.fn_needs(decl) {
+            args_lowered.push(cx.exec_expr());
+            needs_exec = true;
+        }
     }
-    pre.finish(format!(
-        "{}({})",
-        ts_ident(&name.name),
-        args_lowered.join(", ")
-    ))
+    let call = format!("{}({})", ts_ident(&name.name), args_lowered.join(", "));
+    pre.finish(if needs_exec {
+        settle_exec_call(call, cx)
+    } else {
+        call
+    })
 }
 
 fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered {

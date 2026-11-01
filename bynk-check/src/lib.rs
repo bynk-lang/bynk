@@ -41,6 +41,7 @@ pub mod contract_compat;
 pub mod d1_migrations;
 pub mod embeds;
 pub mod emitted_names;
+pub mod exec_plan;
 pub mod exports;
 pub mod expr_types;
 pub mod firstparty;
