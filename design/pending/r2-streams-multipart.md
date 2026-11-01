@@ -38,8 +38,10 @@ Three platform facts shaped it:
     stream-carrying, so it is non-boundary.
   - **The body.** The binding wraps R2's `ReadableStream` in an async generator
     over its reader. It's an `AsyncIterable` on every platform and under
-    `tsc --strict`. Its `return()` cancels the reader, so a cancelled response
-    or a `take` releases R2's stream.
+    `tsc --strict`. Once reading has begun, its `return()` cancels the reader,
+    so a cancelled response or a `take` releases R2's stream. A body that is
+    never read is never started, so the generator can't cancel it. On Workers
+    R2 releases it when the request ends.
   - **Claiming.** The binding doesn't claim the stream it hands out: its reader
     does (`collect`, `map`, or `RawStreamed`'s body), so a second read faults.
     Claiming it in the binding would make the first `RawStreamed` throw.
@@ -50,12 +52,18 @@ Three platform facts shaped it:
   - Where the platform has `FixedLengthStream` (Workers, Miniflare), the bytes
     go through one of `size`. Elsewhere (Node: the binding tests and the
     integration tier), the counted stream goes as it is.
-  - **Mismatches.** Too many bytes, too few, or a size that isn't a whole
-    number faults with one message on every tier:
-    `bynk.cloudflare.R2.putStream: the stream held N bytes, not the declared
-    size M`. R2 stores nothing.
+  - **Mismatches.** A stream with too many bytes or too few faults with one
+    message on every tier: `bynk.cloudflare.R2.putStream: the stream held N
+    bytes, not the declared size M`. Too many reads `at least N`, since the
+    write stops at the first byte past the size. A size that isn't a whole
+    number faults first with its own message, `size must be a whole number of
+    bytes, not M`. In every case R2 stores nothing.
   - **Source failures.** A source stream that throws fails the write with its
     own error.
+  - **Release.** A put that ends without reading its source through, such as
+    a failed condition R2 answers before reading or a put refused outright,
+    cancels the source. This matters for a copy, whose source holds another
+    object's body open.
   - `putStreamWith` mirrors `putWith`: `None` when its condition fails.
 - **C. A streamed write consumes its stream inside the effect.** Its value is
   the stored `R2Object`.

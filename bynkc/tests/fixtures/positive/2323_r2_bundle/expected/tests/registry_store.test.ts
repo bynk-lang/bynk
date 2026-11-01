@@ -186,7 +186,7 @@ function __bynkTest_Archives(): __ns_bynk_cloudflare.R2 {
       chunks.push(c);
     }
     if (held !== size) {
-      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held} bytes, not the declared size ${size}`);
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held > size ? `at least ${held}` : held} bytes, not the declared size ${size}`);
     }
     const out = new globalThis.Uint8Array(size);
     let at = 0;
@@ -330,7 +330,7 @@ function __bynkTest_Indexes(): __ns_bynk_cloudflare.R2 {
       chunks.push(c);
     }
     if (held !== size) {
-      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held} bytes, not the declared size ${size}`);
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held > size ? `at least ${held}` : held} bytes, not the declared size ${size}`);
     }
     const out = new globalThis.Uint8Array(size);
     let at = 0;
@@ -474,7 +474,7 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
       chunks.push(c);
     }
     if (held !== size) {
-      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held} bytes, not the declared size ${size}`);
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held > size ? `at least ${held}` : held} bytes, not the declared size ${size}`);
     }
     const out = new globalThis.Uint8Array(size);
     let at = 0;

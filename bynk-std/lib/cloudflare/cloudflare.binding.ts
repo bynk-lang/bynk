@@ -410,7 +410,10 @@ async function* r2Chunks(body: ReadableStream<Uint8Array>): AsyncGenerator<Uint8
 // the integration tier) the counted stream goes as it is. Either way the count
 // is checked here, so a mismatch faults with the same message everywhere, and
 // R2 stores nothing. `write` runs the put, surfacing that message rather than
-// whatever the platform made of the stream erroring under it.
+// whatever the platform made of the stream erroring under it, and releases the
+// source when the put ends without reading it through (a failed condition, or
+// a put refused before it read), so a source holding another object's body is
+// not left open.
 function r2Sized(body: AsyncIterable<Uint8Array>, size: number, op: string) {
   if (!Number.isSafeInteger(size) || size < 0) {
     throw new Error(`bynk.cloudflare.R2.${op}: size must be a whole number of bytes, not ${size}`);
@@ -418,9 +421,11 @@ function r2Sized(body: AsyncIterable<Uint8Array>, size: number, op: string) {
   claimStream(body);
   const iterator = body[Symbol.asyncIterator]();
   let seen = 0;
+  let finished = false;
   let failure: Error | undefined;
-  const mismatch = (held: number): Error => {
-    failure = new Error(`bynk.cloudflare.R2.${op}: the stream held ${held} bytes, not the declared size ${size}`);
+  const mismatch = (held: number, over: boolean): Error => {
+    const count = over ? `at least ${held}` : `${held}`;
+    failure = new Error(`bynk.cloudflare.R2.${op}: the stream held ${count} bytes, not the declared size ${size}`);
     return failure;
   };
   const counted = new ReadableStream<Uint8Array>({
@@ -433,26 +438,30 @@ function r2Sized(body: AsyncIterable<Uint8Array>, size: number, op: string) {
         },
       );
       if (next === undefined) {
+        finished = true;
         controller.error(failure);
         return;
       }
       if (next.done) {
+        finished = true;
         if (seen === size) {
           controller.close();
         } else {
-          controller.error(mismatch(seen));
+          controller.error(mismatch(seen, false));
         }
         return;
       }
       seen += next.value.byteLength;
       if (seen > size) {
-        controller.error(mismatch(seen));
+        finished = true;
+        controller.error(mismatch(seen, true));
         await iterator.return?.();
         return;
       }
       controller.enqueue(next.value);
     },
     async cancel(reason) {
+      finished = true;
       await iterator.return?.(reason);
     },
   });
@@ -470,6 +479,13 @@ function r2Sized(body: AsyncIterable<Uint8Array>, size: number, op: string) {
         return await put(value);
       } catch (e) {
         throw failure ?? e;
+      } finally {
+        if (!finished) {
+          // Not awaited: a read still in flight would hold the put's result.
+          finished = true;
+          value.cancel().catch(() => {});
+          Promise.resolve(iterator.return?.()).catch(() => {});
+        }
       }
     },
   };

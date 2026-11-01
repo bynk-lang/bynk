@@ -576,7 +576,7 @@ t("WorkersR2.putStream: writes a stream of the declared size, as a stream, and r
 t("WorkersR2.putStream: a stream longer or shorter than its size faults, and nothing is stored", async () => {
   const r2 = fakeR2();
   const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
-  await assert.rejects(store.putStream("long", chunks([1, 2], [3]), 2), /the stream held 3 bytes, not the declared size 2/);
+  await assert.rejects(store.putStream("long", chunks([1, 2], [3]), 2), /the stream held at least 3 bytes, not the declared size 2/);
   await assert.rejects(store.putStream("short", chunks([1]), 2), /the stream held 1 bytes, not the declared size 2/);
   await assert.rejects(store.putStream("neg", chunks(), -1), /size must be a whole number of bytes, not -1/);
   assert.equal(r2.objects.size, 0);
@@ -629,7 +629,27 @@ t("WorkersR2.putStreamWith: content type, metadata and conditions, as putWith", 
   assert.deepEqual([...r2.objects.get("k").body], [1]);
   const swapped = await store.putStreamWith("k", chunks([3]), 1, putOptions({ onlyIf: { tag: "EtagMatches", etag: made.value.etag } }));
   assert.equal(swapped.tag, "Some");
-  await assert.rejects(store.putStreamWith("k", chunks([1, 2]), 1, putOptions()), /putStreamWith: the stream held 2 bytes/);
+  await assert.rejects(store.putStreamWith("k", chunks([1, 2]), 1, putOptions()), /putStreamWith: the stream held at least 2 bytes/);
+});
+
+t("WorkersR2.putStreamWith: a put that answers without reading the stream releases its source", async () => {
+  // Real R2 may refuse a failed condition, or a put, before reading the body.
+  for (const answer of [async () => null, async () => { throw new Error("binding down"); }]) {
+    let released = false;
+    // Two chunks: the stream reads ahead one, leaving the source open.
+    async function* source() {
+      try {
+        yield new Uint8Array([1]);
+        yield new Uint8Array([2]);
+      } finally {
+        released = true;
+      }
+    }
+    const store = new WorkersR2({ R2_ARCHIVES: { put: answer } }, "R2_ARCHIVES");
+    await store.putStreamWith("k", source(), 2, putOptions({ onlyIf: { tag: "Absent" } })).catch(() => {});
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(released, true);
+  }
 });
 
 t("WorkersR2.createUpload: begins an upload of the key, with the object's content type and metadata", async () => {

@@ -5377,7 +5377,7 @@ const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>(
       chunks.push(c);
     }
     if (held !== size) {
-      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held} bytes, not the declared size ${size}`);
+      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held > size ? `at least ${held}` : held} bytes, not the declared size ${size}`);
     }
     const out = new globalThis.Uint8Array(size);
     let at = 0;
