@@ -1,0 +1,6 @@
+suite timed {
+	case "the timed target" {
+		let r <- ticks.call(3)
+		expect r == 3
+	}
+}

@@ -161,6 +161,26 @@ impl ExecPlan {
                             kind: NodeKind::Fn,
                         });
                     }
+                    // A function that is not effectful has no context to give,
+                    // however its result is used: a lambda it returns, or a
+                    // function value it names, would reach for one (DECISION C).
+                    CommonsItem::Fn(f) => {
+                        let mut facts = scan(&f.body, &callees, tys);
+                        for c in f.requires.iter().chain(&f.ensures) {
+                            let more = scan_expr(&c.predicate, &callees, tys);
+                            facts.edges.extend(more.edges);
+                        }
+                        nodes.push(Node {
+                            key: f.span,
+                            facts,
+                            kind: NodeKind::NoContext("a function that is not effectful"),
+                        });
+                    }
+                    CommonsItem::Const(c) => nodes.push(Node {
+                        key: c.span,
+                        facts: scan_expr(&c.init, &callees, tys),
+                        kind: NodeKind::NoContext("a `const` initialiser"),
+                    }),
                     CommonsItem::Service(s) => {
                         let ws = matches!(s.protocol, ServiceProtocol::WebSocket { .. });
                         for h in &s.handlers {
@@ -182,6 +202,25 @@ impl ExecPlan {
                         }
                     }
                     CommonsItem::Agent(a) => {
+                        for init in a.store_fields.iter().filter_map(|sf| sf.init.as_ref()) {
+                            nodes.push(Node {
+                                key: init.span,
+                                facts: scan_expr(init, &callees, tys),
+                                kind: NodeKind::NoContext("a `store` initialiser"),
+                            });
+                        }
+                        let predicates = a
+                            .invariants
+                            .iter()
+                            .map(|i| &i.predicate)
+                            .chain(a.transitions.iter().map(|t| &t.predicate));
+                        for pred in predicates {
+                            nodes.push(Node {
+                                key: pred.span,
+                                facts: scan_expr(pred, &callees, tys),
+                                kind: NodeKind::NoContext("a predicate"),
+                            });
+                        }
                         for h in &a.handlers {
                             nodes.push(Node {
                                 key: h.span,
@@ -321,8 +360,21 @@ struct Edge {
 }
 
 fn scan(body: &Block, callees: &HashMap<ExprId, &Callee>, tys: &Types) -> Facts {
+    scan_with(callees, tys, |f| visit_block(body, f))
+}
+
+/// [`scan`] for a lone expression: a `const` or `store` initialiser, a predicate.
+fn scan_expr(e: &bynk_syntax::ast::Expr, callees: &HashMap<ExprId, &Callee>, tys: &Types) -> Facts {
+    scan_with(callees, tys, |f| visit_expr(e, f))
+}
+
+fn scan_with<'a>(
+    callees: &HashMap<ExprId, &Callee>,
+    tys: &Types,
+    walk: impl FnOnce(&mut dyn FnMut(Hit<'a>)),
+) -> Facts {
     let mut facts = Facts::default();
-    visit_block(body, &mut |hit| match hit {
+    walk(&mut |hit| match hit {
         Hit::Send(span) => {
             facts.direct.get_or_insert(("~>", span));
         }
@@ -356,14 +408,14 @@ enum Hit<'a> {
 /// Every send statement and expression of `b`, lambdas included. A block
 /// reached through [`expr_children`] would lose its statements' kind, so
 /// `Block`, `If` and `Match` are descended by hand, as `block_needs_exec` does.
-fn visit_block<'a>(b: &'a Block, f: &mut impl FnMut(Hit<'a>)) {
+fn visit_block<'a>(b: &'a Block, f: &mut dyn FnMut(Hit<'a>)) {
     for s in &b.statements {
         visit_stmt(s, f);
     }
     visit_expr(&b.tail, f);
 }
 
-fn visit_stmt<'a>(s: &'a Statement, f: &mut impl FnMut(Hit<'a>)) {
+fn visit_stmt<'a>(s: &'a Statement, f: &mut dyn FnMut(Hit<'a>)) {
     match s {
         Statement::Send(send) => {
             f(Hit::Send(send.span));
@@ -382,7 +434,7 @@ fn visit_stmt<'a>(s: &'a Statement, f: &mut impl FnMut(Hit<'a>)) {
     }
 }
 
-fn visit_expr<'a>(e: &'a bynk_syntax::ast::Expr, f: &mut impl FnMut(Hit<'a>)) {
+fn visit_expr<'a>(e: &'a bynk_syntax::ast::Expr, f: &mut dyn FnMut(Hit<'a>)) {
     f(Hit::Expr(e));
     match &e.kind {
         ExprKind::Block(b) => visit_block(b, f),

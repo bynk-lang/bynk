@@ -1,0 +1,21 @@
+context plain
+
+// An unrelated unit: no function in it, and no handler of it, touches the execution
+// context. Its test target still gets `__exec` in its deps (the harness gate reads
+// the whole build), which must be harmless.
+capability Clockish {
+	fn stamp() -> Effect[Int]
+}
+
+provides Clockish = FixedClock {
+	fn stamp() -> Effect[Int] { 7 }
+}
+
+fn double(n: Int) -> Int { n * 2 }
+
+service plain {
+	on call(n: Int) -> Effect[Int] given Clockish {
+		let t <- Clockish.stamp()
+		Effect.pure(double(n) + t)
+	}
+}
