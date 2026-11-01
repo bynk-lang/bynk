@@ -1,7 +1,7 @@
 ---
 level: minor
 probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "List patterns: `[]`, `[p, …]`, `[p, …, ..]` and `[p, …, ..rest]` match a `List` by its length and elements in a `match`, an or-pattern, after `is` and in `let … else`. Exhaustiveness is by length, so `[]` and `[x, ..rest]` need no `_`, and a missing length is reported as a pattern (`[_, _, ..]`). Binding `..rest` copies the remaining elements. A `..` followed by a literal is reserved for range patterns (patterns track slice 4, [#2680](https://github.com/bynk-lang/bynk/issues/2680)). New diagnostics: `bynk.parse.list_rest_not_last`, `bynk.parse.range_pattern_unsupported` and `bynk.types.list_pattern_on_non_list`"
+changelog: "List patterns: `[]`, `[p, …]`, `[p, …, ..]` and `[p, …, ..rest]` match a `List` by its length and elements in a `match`, an or-pattern, after `is` and in `let … else`. Exhaustiveness is by length, so `[]` and `[x, ..rest]` need no `_`, and a missing length is reported as a pattern (`[_, _, ..]`). `..rest` binds the remaining elements (a copy, unless the rest is the whole list). A `..` followed by a literal is reserved for range patterns (patterns track slice 4, [#2680](https://github.com/bynk-lang/bynk/issues/2680)). New diagnostics: `bynk.parse.list_rest_not_last`, `bynk.parse.range_pattern_unsupported` and `bynk.types.list_pattern_on_non_list`"
 ---
 
 ## ADR: list-patterns

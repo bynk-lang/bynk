@@ -151,6 +151,20 @@ export function secondOf(xs: readonly number[]): number {
   }
 }
 
+export function pick(xs: readonly number[]): number {
+  if ((xs.length === 1 || xs.length === 2)) {
+    let x;
+    if (xs.length === 1) {
+      x = xs[0];
+    } else {
+      x = xs[1];
+    }
+    return x;
+  } else {
+    return 0;
+  }
+}
+
 export function big(xs: readonly number[]): string {
   if (xs.length >= 1) {
     const x = xs[0];
@@ -168,19 +182,19 @@ export function big(xs: readonly number[]): string {
 }
 
 export function headOrZero(jobs: readonly number[]): number {
-  const __letElse2253 = jobs;
-  if (__letElse2253.length >= 1) {
-    const head = __letElse2253[0];
+  const __letElse2431 = jobs;
+  if (__letElse2431.length >= 1) {
+    const head = __letElse2431[0];
     return head;
   }
   return 0;
 }
 
 export function pairSum(xs: readonly number[]): number {
-  const __letElse2341 = xs;
-  if (__letElse2341.length === 2) {
-    const a = __letElse2341[0];
-    const b = __letElse2341[1];
+  const __letElse2519 = xs;
+  if (__letElse2519.length === 2) {
+    const a = __letElse2519[0];
+    const b = __letElse2519[1];
     return a + b;
   }
   return -1;

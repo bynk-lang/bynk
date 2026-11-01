@@ -98,6 +98,15 @@ commons shop.lists {
     }
   }
 
+  // An `is` or-pattern of lists binds the same name from each alternative.
+  fn pick(xs: List[Int]) -> Int {
+    if xs is [x] | [_, x] {
+      x
+    } else {
+      0
+    }
+  }
+
   // A guard falls through to the next arm.
   fn big(xs: List[Int]) -> String {
     match xs {

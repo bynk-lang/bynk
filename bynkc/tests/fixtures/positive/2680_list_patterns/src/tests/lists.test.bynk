@@ -57,6 +57,10 @@ suite shop.lists {
     expect tailLength([]) == -1
     expect secondOf([1, 2, 3]) == 2
     expect secondOf([1]) == 0
+    expect pick([7]) == 7
+    expect pick([1, 8]) == 8
+    expect pick([1, 2, 3]) == 0
+    expect pick([]) == 0
   }
 
   case "let else" {

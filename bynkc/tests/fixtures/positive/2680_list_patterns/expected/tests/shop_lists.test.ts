@@ -40,7 +40,7 @@ function __makeTestDeps() {
 async function test_an_empty_list__one_element_and_many() {
   try {
     const deps = {};
-    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
+    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, pick, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
     type Item = __ns_shop_lists.Item;
     type Segment = __ns_shop_lists.Segment;
     if (!(sum([]) === 0)) { throw __bynkExpectFailure("tests/lists.test.bynk:3:12", 77, 89, "expect sum([]) == 0\n  expected: sum([]) == 0\n  actual:   " + __bynkShow((sum([]))) + " == " + __bynkShow((0))); }
@@ -61,7 +61,7 @@ async function test_an_empty_list__one_element_and_many() {
 async function test_exact_lengths_and_an_open_tail() {
   try {
     const deps = {};
-    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
+    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, pick, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
     type Item = __ns_shop_lists.Item;
     type Segment = __ns_shop_lists.Segment;
     if (!(count([]) === 0)) { throw __bynkExpectFailure("tests/lists.test.bynk:11:12", 357, 371, "expect count([]) == 0\n  expected: count([]) == 0\n  actual:   " + __bynkShow((count([]))) + " == " + __bynkShow((0))); }
@@ -82,7 +82,7 @@ async function test_exact_lengths_and_an_open_tail() {
 async function test_a_rest_alone_binds_the_whole_list() {
   try {
     const deps = {};
-    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
+    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, pick, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
     type Item = __ns_shop_lists.Item;
     type Segment = __ns_shop_lists.Segment;
     if (!(whole([]) === 0)) { throw __bynkExpectFailure("tests/lists.test.bynk:19:12", 562, 576, "expect whole([]) == 0\n  expected: whole([]) == 0\n  actual:   " + __bynkShow((whole([]))) + " == " + __bynkShow((0))); }
@@ -100,7 +100,7 @@ async function test_a_rest_alone_binds_the_whole_list() {
 async function test_nested_element_patterns() {
   try {
     const deps = {};
-    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
+    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, pick, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
     type Item = __ns_shop_lists.Item;
     type Segment = __ns_shop_lists.Segment;
     if (!(firstSome([Some(4), None]) === 4)) { throw __bynkExpectFailure("tests/lists.test.bynk:24:12", 661, 692, "expect firstSome([Some(4), None]) == 4\n  expected: firstSome([Some(4), None]) == 4\n  actual:   " + __bynkShow((firstSome([Some(4), None]))) + " == " + __bynkShow((4))); }
@@ -125,7 +125,7 @@ async function test_nested_element_patterns() {
 async function test_a_record_or_a_literal_inside_a_list() {
   try {
     const deps = {};
-    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
+    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, pick, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
     type Item = __ns_shop_lists.Item;
     type Segment = __ns_shop_lists.Segment;
     if (!(isApi([{ name: "api" }, { name: "v1" }]))) { throw __bynkExpectFailure("tests/lists.test.bynk:36:12", 1056, 1112, "expect isApi([Segment { name: \"api\" }, Segment { name: \"v1\" }])"); }
@@ -147,7 +147,7 @@ async function test_a_record_or_a_literal_inside_a_list() {
 async function test_or_patterns_and_guards() {
   try {
     const deps = {};
-    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
+    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, pick, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
     type Item = __ns_shop_lists.Item;
     type Segment = __ns_shop_lists.Segment;
     if (!(headOr([4]) === 4)) { throw __bynkExpectFailure("tests/lists.test.bynk:45:12", 1330, 1346, "expect headOr([4]) == 4\n  expected: headOr([4]) == 4\n  actual:   " + __bynkShow((headOr([4]))) + " == " + __bynkShow((4))); }
@@ -170,7 +170,7 @@ async function test_or_patterns_and_guards() {
 async function test_is_binds_names() {
   try {
     const deps = {};
-    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
+    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, pick, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
     type Item = __ns_shop_lists.Item;
     type Segment = __ns_shop_lists.Segment;
     if (!(tailLength([1, 2, 3]) === 2)) { throw __bynkExpectFailure("tests/lists.test.bynk:55:12", 1577, 1603, "expect tailLength([1, 2, 3]) == 2\n  expected: tailLength([1, 2, 3]) == 2\n  actual:   " + __bynkShow((tailLength([1, 2, 3]))) + " == " + __bynkShow((2))); }
@@ -178,6 +178,10 @@ async function test_is_binds_names() {
     if (!(tailLength([]) === -1)) { throw __bynkExpectFailure("tests/lists.test.bynk:57:12", 1647, 1667, "expect tailLength([]) == -1\n  expected: tailLength([]) == -1\n  actual:   " + __bynkShow((tailLength([]))) + " == " + __bynkShow((-1))); }
     if (!(secondOf([1, 2, 3]) === 2)) { throw __bynkExpectFailure("tests/lists.test.bynk:58:12", 1679, 1703, "expect secondOf([1, 2, 3]) == 2\n  expected: secondOf([1, 2, 3]) == 2\n  actual:   " + __bynkShow((secondOf([1, 2, 3]))) + " == " + __bynkShow((2))); }
     if (!(secondOf([1]) === 0)) { throw __bynkExpectFailure("tests/lists.test.bynk:59:12", 1715, 1733, "expect secondOf([1]) == 0\n  expected: secondOf([1]) == 0\n  actual:   " + __bynkShow((secondOf([1]))) + " == " + __bynkShow((0))); }
+    if (!(pick([7]) === 7)) { throw __bynkExpectFailure("tests/lists.test.bynk:60:12", 1745, 1759, "expect pick([7]) == 7\n  expected: pick([7]) == 7\n  actual:   " + __bynkShow((pick([7]))) + " == " + __bynkShow((7))); }
+    if (!(pick([1, 8]) === 8)) { throw __bynkExpectFailure("tests/lists.test.bynk:61:12", 1771, 1788, "expect pick([1, 8]) == 8\n  expected: pick([1, 8]) == 8\n  actual:   " + __bynkShow((pick([1, 8]))) + " == " + __bynkShow((8))); }
+    if (!(pick([1, 2, 3]) === 0)) { throw __bynkExpectFailure("tests/lists.test.bynk:62:12", 1800, 1820, "expect pick([1, 2, 3]) == 0\n  expected: pick([1, 2, 3]) == 0\n  actual:   " + __bynkShow((pick([1, 2, 3]))) + " == " + __bynkShow((0))); }
+    if (!(pick([]) === 0)) { throw __bynkExpectFailure("tests/lists.test.bynk:63:12", 1832, 1845, "expect pick([]) == 0\n  expected: pick([]) == 0\n  actual:   " + __bynkShow((pick([]))) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -191,14 +195,14 @@ async function test_is_binds_names() {
 async function test_let_else() {
   try {
     const deps = {};
-    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
+    const { Item, Segment, big, count, describe, firstSome, headOfHeads, headOr, headOrZero, isApi, pairSum, pick, secondOf, startsWithZero, sum, tailLength, viaOption, whole } = __ns_shop_lists;
     type Item = __ns_shop_lists.Item;
     type Segment = __ns_shop_lists.Segment;
-    if (!(headOrZero([8, 9]) === 8)) { throw __bynkExpectFailure("tests/lists.test.bynk:63:12", 1770, 1793, "expect headOrZero([8, 9]) == 8\n  expected: headOrZero([8, 9]) == 8\n  actual:   " + __bynkShow((headOrZero([8, 9]))) + " == " + __bynkShow((8))); }
-    if (!(headOrZero([]) === 0)) { throw __bynkExpectFailure("tests/lists.test.bynk:64:12", 1805, 1824, "expect headOrZero([]) == 0\n  expected: headOrZero([]) == 0\n  actual:   " + __bynkShow((headOrZero([]))) + " == " + __bynkShow((0))); }
-    if (!(pairSum([3, 4]) === 7)) { throw __bynkExpectFailure("tests/lists.test.bynk:65:12", 1836, 1856, "expect pairSum([3, 4]) == 7\n  expected: pairSum([3, 4]) == 7\n  actual:   " + __bynkShow((pairSum([3, 4]))) + " == " + __bynkShow((7))); }
-    if (!(pairSum([3]) === -1)) { throw __bynkExpectFailure("tests/lists.test.bynk:66:12", 1868, 1886, "expect pairSum([3]) == -1\n  expected: pairSum([3]) == -1\n  actual:   " + __bynkShow((pairSum([3]))) + " == " + __bynkShow((-1))); }
-    if (!(pairSum([3, 4, 5]) === -1)) { throw __bynkExpectFailure("tests/lists.test.bynk:67:12", 1898, 1922, "expect pairSum([3, 4, 5]) == -1\n  expected: pairSum([3, 4, 5]) == -1\n  actual:   " + __bynkShow((pairSum([3, 4, 5]))) + " == " + __bynkShow((-1))); }
+    if (!(headOrZero([8, 9]) === 8)) { throw __bynkExpectFailure("tests/lists.test.bynk:67:12", 1882, 1905, "expect headOrZero([8, 9]) == 8\n  expected: headOrZero([8, 9]) == 8\n  actual:   " + __bynkShow((headOrZero([8, 9]))) + " == " + __bynkShow((8))); }
+    if (!(headOrZero([]) === 0)) { throw __bynkExpectFailure("tests/lists.test.bynk:68:12", 1917, 1936, "expect headOrZero([]) == 0\n  expected: headOrZero([]) == 0\n  actual:   " + __bynkShow((headOrZero([]))) + " == " + __bynkShow((0))); }
+    if (!(pairSum([3, 4]) === 7)) { throw __bynkExpectFailure("tests/lists.test.bynk:69:12", 1948, 1968, "expect pairSum([3, 4]) == 7\n  expected: pairSum([3, 4]) == 7\n  actual:   " + __bynkShow((pairSum([3, 4]))) + " == " + __bynkShow((7))); }
+    if (!(pairSum([3]) === -1)) { throw __bynkExpectFailure("tests/lists.test.bynk:70:12", 1980, 1998, "expect pairSum([3]) == -1\n  expected: pairSum([3]) == -1\n  actual:   " + __bynkShow((pairSum([3]))) + " == " + __bynkShow((-1))); }
+    if (!(pairSum([3, 4, 5]) === -1)) { throw __bynkExpectFailure("tests/lists.test.bynk:71:12", 2010, 2034, "expect pairSum([3, 4, 5]) == -1\n  expected: pairSum([3, 4, 5]) == -1\n  actual:   " + __bynkShow((pairSum([3, 4, 5]))) + " == " + __bynkShow((-1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
