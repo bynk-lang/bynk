@@ -1,0 +1,11 @@
+context demo
+
+// #2640: a `par` needs an effectful body, like any `<-`.
+
+fn load() -> Int {
+  par {
+    let a <- Effect.pure(1)
+    let b <- Effect.pure(2)
+  }
+  0
+}

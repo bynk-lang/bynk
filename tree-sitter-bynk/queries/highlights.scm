@@ -112,6 +112,10 @@
 ; token exists only inside a `faults_expr`.
 "faults" @keyword.operator
 
+; #2640: `par` is contextual (an identifier elsewhere), so it is a keyword only
+; as the head of a `par_stmt`.
+(par_stmt "par" @keyword)
+
 ; v0.117: the `trace(Cap.op)` escape hatch — a test-only builtin.
 "trace" @keyword
 

@@ -2505,66 +2505,88 @@ struct RefCheckCtx<'a, 'b> {
 fn check_block_references(block: &Block, cx: &mut RefCheckCtx) {
     cx.scopes.push(HashMap::new());
     for stmt in &block.statements {
-        match stmt {
-            Statement::Let(l) | Statement::EffectLet(l) => {
-                check_expr_references(&l.value, cx);
-                if let Some(annot) = &l.type_annot {
-                    check_type_ref_resolves_in(annot, cx.types, cx.type_params, cx.errors);
-                }
-                if let Some(prev) = cx.types.get(&l.name.name) {
-                    cx.errors.push(
-                        CompileError::new(
-                            "bynk.resolve.let_shadows_type",
-                            l.name.span,
-                            format!(
-                                "`let {}` shadows the declared type `{}`",
-                                l.name.name, l.name.name
-                            ),
-                        )
-                        .with_label(prev.name.span, "type declared here")
-                        .with_note("choose a different name for the let binding"),
-                    );
-                } else if let Some(prev) = cx.fns.get(&l.name.name) {
-                    cx.errors.push(
-                        CompileError::new(
-                            "bynk.resolve.let_shadows_fn",
-                            l.name.span,
-                            format!(
-                                "`let {}` shadows the declared function `{}`",
-                                l.name.name, l.name.name
-                            ),
-                        )
-                        .with_label(prev.name.ident().span, "function declared here")
-                        .with_note("choose a different name for the let binding"),
-                    );
-                } else if l.name.name != "_" {
+        check_statement_references(stmt, cx);
+    }
+    check_expr_references(&block.tail, cx);
+    cx.scopes.pop();
+}
+
+fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
+    match stmt {
+        Statement::Let(l) | Statement::EffectLet(l) => {
+            check_expr_references(&l.value, cx);
+            if let Some(annot) = &l.type_annot {
+                check_type_ref_resolves_in(annot, cx.types, cx.type_params, cx.errors);
+            }
+            if let Some(prev) = cx.types.get(&l.name.name) {
+                cx.errors.push(
+                    CompileError::new(
+                        "bynk.resolve.let_shadows_type",
+                        l.name.span,
+                        format!(
+                            "`let {}` shadows the declared type `{}`",
+                            l.name.name, l.name.name
+                        ),
+                    )
+                    .with_label(prev.name.span, "type declared here")
+                    .with_note("choose a different name for the let binding"),
+                );
+            } else if let Some(prev) = cx.fns.get(&l.name.name) {
+                cx.errors.push(
+                    CompileError::new(
+                        "bynk.resolve.let_shadows_fn",
+                        l.name.span,
+                        format!(
+                            "`let {}` shadows the declared function `{}`",
+                            l.name.name, l.name.name
+                        ),
+                    )
+                    .with_label(prev.name.ident().span, "function declared here")
+                    .with_note("choose a different name for the let binding"),
+                );
+            } else if l.name.name != "_" {
+                cx.scopes
+                    .last_mut()
+                    .unwrap()
+                    .insert(l.name.name.clone(), ());
+            }
+        }
+        Statement::Expect(a) => {
+            check_expr_references(&a.value, cx);
+        }
+        Statement::Send(s) => {
+            check_expr_references(&s.value, cx);
+        }
+        Statement::Do(d) => {
+            check_expr_references(&d.value, cx);
+        }
+        Statement::Assign(a) => {
+            // v0.81: walk the RHS for references; the target resolves to a
+            // `store` field, handled in the storage-track checker slice.
+            check_expr_references(&a.value, cx);
+        }
+        Statement::Advance(a) => {
+            check_expr_references(&a.amount, cx);
+        }
+        // #2640: the bindings of a `par` block are checked against the scope
+        // outside it. Every name is declared up front so a sibling mention reads
+        // as the checker's `bynk.par.sibling_name`, not as an unresolved name too.
+        Statement::Par(p) => {
+            for inner in &p.statements {
+                if let Statement::EffectLet(l) = inner
+                    && l.name.name != "_"
+                {
                     cx.scopes
                         .last_mut()
                         .unwrap()
                         .insert(l.name.name.clone(), ());
                 }
             }
-            Statement::Expect(a) => {
-                check_expr_references(&a.value, cx);
-            }
-            Statement::Send(s) => {
-                check_expr_references(&s.value, cx);
-            }
-            Statement::Do(d) => {
-                check_expr_references(&d.value, cx);
-            }
-            Statement::Assign(a) => {
-                // v0.81: walk the RHS for references; the target resolves to a
-                // `store` field, handled in the storage-track checker slice.
-                check_expr_references(&a.value, cx);
-            }
-            Statement::Advance(a) => {
-                check_expr_references(&a.amount, cx);
+            for inner in &p.statements {
+                check_statement_references(inner, cx);
             }
         }
     }
-    check_expr_references(&block.tail, cx);
-    cx.scopes.pop();
 }
 
 #[allow(clippy::too_many_lines)]

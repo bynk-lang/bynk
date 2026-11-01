@@ -98,6 +98,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   [approves them](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
   Next: the hosted first-party registry
   ([#843](https://github.com/bynk-lang/bynk/issues/843)).
+- **Concurrent effects.** In progress: a
+  [`par` block](/book/reference/capabilities/#par) issues independent effects
+  together and waits for all of them, raising the first fault in source order.
+  Next: making `parTraverse` wait for every element before it raises
+  ([#2615](https://github.com/bynk-lang/bynk/issues/2615)), then `?` inside a block.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 

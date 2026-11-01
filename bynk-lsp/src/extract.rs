@@ -1265,7 +1265,7 @@ fn stmts_contain_effect_stmt(stmts: &[Statement]) -> bool {
     stmts_match(stmts, &|s| {
         matches!(
             s,
-            Statement::EffectLet(_) | Statement::Send(_) | Statement::Do(_)
+            Statement::EffectLet(_) | Statement::Send(_) | Statement::Do(_) | Statement::Par(_)
         )
     })
 }
