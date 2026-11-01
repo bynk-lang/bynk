@@ -1,0 +1,2 @@
+bynk.types.stream_at_boundary
+`StreamResponse` cannot appear in a service handler signature

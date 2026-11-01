@@ -1,0 +1,26 @@
+suite shop.orders {
+  case "a literal field, a shorthand binding and a guard" {
+    expect describe(Order { id: "a", status: Paid, total: 500, note: "" }) == "large paid order"
+    expect describe(Order { id: "a", status: Paid, total: 5, note: "" }) == "paid"
+    expect describe(Order { id: "vip", status: Pending, total: 5, note: "" }) == "vip"
+    expect describe(Order { id: "b", status: Pending, total: 5, note: "" }) == "other"
+  }
+
+  case "a record nested in a variant payload" {
+    expect firstTotal(Some(Order { id: "a", status: Pending, total: 7, note: "" })) == 7
+    expect firstTotal(None) == 0
+    expect paidTotal(Some(Order { id: "a", status: Paid, total: 9, note: "" })) == 9
+    expect paidTotal(Some(Order { id: "a", status: Pending, total: 9, note: "" })) == 0
+  }
+
+  case "a record pattern after is" {
+    expect cancelled(Order { id: "a", status: Cancelled, total: 1, note: "" })
+    expect !cancelled(Order { id: "a", status: Paid, total: 1, note: "" })
+    expect billed(Order { id: "a", status: Paid, total: 12, note: "" }) == 12
+    expect billed(Order { id: "a", status: Pending, total: 12, note: "" }) == 0
+  }
+
+  case "a generic record takes its type arguments from the scrutinee" {
+    expect count(Page { items: [1, 2], count: 2 }) == 2
+  }
+}

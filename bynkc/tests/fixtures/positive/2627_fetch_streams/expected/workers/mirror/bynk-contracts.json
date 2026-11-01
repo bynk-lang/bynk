@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "both": "b6272d77b1c86d13",
+    "twice": "d4bfb35bc4ba206a",
+    "upload": "2ed823e0ad294f2d"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "both": "Svc(\"both\",P(\"url\",B(\"String\")),Ret(B(\"Int\")))",
+    "twice": "Svc(\"twice\",P(\"url\",B(\"String\")),Ret(B(\"Int\")))",
+    "upload": "Svc(\"upload\",P(\"target\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}

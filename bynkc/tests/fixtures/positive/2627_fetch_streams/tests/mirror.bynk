@@ -1,0 +1,50 @@
+suite mirror
+
+// #2627: `receiveStream` and `sendStream` stub as `send` does; a stub's
+// `returns` is built afresh on each call, so each call gets its own stream.
+
+case "an upstream body is re-served as a streamed response" {
+	stub Fetch.receiveStream(_, _) returns Ok(StreamResponse {
+		status: 200,
+		headers: Map.empty().insert("content-type", "image/png"),
+		body: Stream.of([Bytes.fromUtf8("p"), Bytes.fromUtf8("ng")]),
+	})
+	let r <- api.GET("/mirror/:key", "logo") by Visitor
+	expect Fetch.receiveStream called once with req.url == "https://upstream.test/files/logo"
+	match r {
+		RawStreamed(body, contentType) => {
+			let parts <- body.collect()
+			expect parts.length() == 2 && contentType == "image/png"
+		}
+		_ => expect false
+	}
+}
+
+case "a missing upstream is NotFound, a slow one GatewayTimeout" {
+	stub Fetch.receiveStream(_, _) returns each [
+		Ok(StreamResponse { status: 404, headers: Map.empty(), body: Stream.of([Bytes.empty()]) }),
+		Err(Timeout),
+	]
+	let missing <- api.GET("/mirror/:key", "gone") by Visitor
+	expect missing is NotFound
+	let slow <- api.GET("/mirror/:key", "slow") by Visitor
+	expect slow is GatewayTimeout(_)
+}
+
+case "an upload streams its parts" {
+	stub Fetch.sendStream(_, _, _) returns Ok(StreamResponse { status: 201, headers: Map.empty(), body: Stream.of([Bytes.empty()]) })
+	let n <- upload.call("https://b.test/x")
+	expect n == 201
+	expect Fetch.sendStream called once with req.method == Put
+}
+
+case "each call to a stub hands out its own stream" {
+	stub Fetch.receiveStream(_, _) returns Ok(StreamResponse { status: 200, headers: Map.empty(), body: Stream.of([Bytes.fromUtf8("x")]) })
+	let n <- both.call("https://a.test/n")
+	expect n == 2
+}
+
+case "a response body can be read only once" {
+	stub Fetch.receiveStream(_, _) returns Ok(StreamResponse { status: 200, headers: Map.empty(), body: Stream.of([Bytes.fromUtf8("x")]) })
+	expect twice.call("https://a.test/n") faults
+}

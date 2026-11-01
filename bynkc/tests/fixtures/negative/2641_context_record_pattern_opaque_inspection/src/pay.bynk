@@ -1,0 +1,11 @@
+context pay
+
+exports opaque { Account }
+
+type Account = { id: String, balance: Int }
+
+service open {
+  on call() -> Effect[Account] {
+    Effect.pure(Account { id: "a", balance: 0 })
+  }
+}

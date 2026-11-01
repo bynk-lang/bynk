@@ -1,0 +1,9 @@
+[project]
+name = "2626-r2-streams"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = ["bynk.cloudflare.R2"]

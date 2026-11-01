@@ -41,6 +41,7 @@ pub fn pattern_summary(pattern: &Pattern) -> String {
             Some(t) => format!("{}.{}", t.name, variant.name),
             None => variant.name.clone(),
         },
+        Pattern::Record { type_name, .. } => format!("{} {{ .. }}", type_name.name),
         Pattern::Refined { inner, .. } => pattern_summary(inner),
         Pattern::Or(patterns, _) => patterns
             .iter()

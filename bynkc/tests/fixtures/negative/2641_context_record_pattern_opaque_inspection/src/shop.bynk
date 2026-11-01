@@ -1,0 +1,23 @@
+context shop
+
+// #2641: a record pattern reads the fields `.field` would, so an opaque export
+// refuses it too — at the pattern, nested or after `is`.
+consumes pay
+
+fn balance(a: Option[Account]) -> Int {
+  match a {
+    Some(Account { balance, .. }) => balance
+    None => 0
+  }
+}
+
+fn rich(a: Account) -> Bool {
+  a is (Account { balance: 100, .. })
+}
+
+service checkout {
+  on call() -> Effect[Int] {
+    let a <- pay.open()
+    Effect.pure(balance(Some(a)))
+  }
+}

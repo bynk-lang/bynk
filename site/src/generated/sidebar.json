@@ -104,6 +104,10 @@
             "link": "/book/guides/type-system/match/"
           },
           {
+            "label": "Match on a record's fields",
+            "link": "/book/guides/type-system/match-on-a-records-fields/"
+          },
+          {
             "label": "Narrow and bind with is",
             "link": "/book/guides/type-system/narrow-with-is/"
           },

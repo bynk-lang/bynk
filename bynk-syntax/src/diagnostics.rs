@@ -1821,6 +1821,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["service_decl"],
     ),
     dg(
+        "bynk.parse.record_pattern_in_is_unparenthesised",
+        "A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`.",
+        &["record_pattern"],
+    ),
+    dg(
+        "bynk.parse.record_pattern_without_rest",
+        "A record pattern does not end with `..`; every record pattern is open.",
+        &["record_pattern"],
+    ),
+    dg(
         "bynk.parse.refined_pattern_inner",
         "A refined pattern's inner form is something other than `_`.",
         &["refined_pattern"],
@@ -2734,6 +2744,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["match_arm"],
     ),
     dg(
+        "bynk.types.duplicate_pattern_field",
+        "A record pattern lists the same field twice.",
+        &["record_pattern"],
+    ),
+    dg(
         "bynk.types.duplicate_variant_arm",
         "A `match` has two arms for the same variant.",
         &["match_arm"],
@@ -3006,6 +3021,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.question_outside_result",
         "`?` used in a function that does not return a `Result`.",
         &["question_expr"],
+    ),
+    dg(
+        "bynk.types.record_pattern_on_non_record",
+        "A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in).",
+        &["record_pattern"],
     ),
     dg(
         "bynk.types.regex_not_literal",

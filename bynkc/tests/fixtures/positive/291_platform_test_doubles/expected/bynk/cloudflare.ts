@@ -162,6 +162,58 @@ export const R2Listing = {
 };
 
 /**
+ * An object read by `R2.getStream`: its metadata, and its body as a stream
+ * of chunks, read from R2 as they are pulled. The body can be read once
+ * (`collect`, `map`, or handed to `RawStreamed`); a second read faults. A
+ * record carrying a stream is not data: it can't be stored, sent or encoded.
+ */
+export interface R2Body {
+  readonly object: R2Object;
+  readonly body: AsyncIterable<globalThis.Uint8Array>;
+}
+
+export const R2Body = {
+};
+
+/**
+ * A multipart upload in progress, as `R2.createUpload` begins it. It is
+ * plain data, so it can be kept (in an agent, say) or handed to a client
+ * between the requests that upload its parts. R2 aborts an upload left
+ * incomplete for 7 days.
+ */
+export interface R2Upload {
+  readonly key: string;
+  readonly uploadId: string;
+}
+
+export const R2Upload = {
+};
+
+/**
+ * The options of an `R2.createUpload`: the content type and custom metadata
+ * of the object the upload completes.
+ */
+export interface R2UploadOptions {
+  readonly contentType: Option<string>;
+  readonly metadata: ReadonlyMap<string, string>;
+}
+
+export const R2UploadOptions = {
+};
+
+/**
+ * One uploaded part of a multipart upload, as `R2.uploadPart` reports it.
+ * `R2.completeUpload` takes every part, in any order.
+ */
+export interface R2Part {
+  readonly partNumber: number;
+  readonly etag: string;
+}
+
+export const R2Part = {
+};
+
+/**
  * The options of a `Queue.sendWith`. `delay` holds the message back before
  * it can be delivered: whole seconds (a part second rounds up), at most 12
  * hours; `None` delivers as soon as the queue can.
@@ -317,20 +369,31 @@ export interface Service {
 export const __ServiceToken: symbol = globalThis.Symbol("Service");
 
 /**
- * An R2 bucket: objects stored and read whole, as `Bytes`, with metadata
- * and conditional writes. Used only through a named instance,
+ * An R2 bucket: objects stored and read as `Bytes` or streamed, with
+ * metadata, conditional writes and multipart uploads. Used only through a named instance,
  * `capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
  * `given R2` names no bucket and is refused. `@jurisdiction("eu")` (or
  * `"fedramp"`) pins the bucket's jurisdiction at creation.
  *
- * Objects are buffered in the Worker's memory, so each should stay well
- * under its 128 MB limit; streamed reads and writes are a later increment.
- * `get` and `head` give `None` for a missing key; `delete` is idempotent.
- * `put` writes unconditionally. `putWith` honours its `onlyIf` and gives
- * `None` when the condition failed (nothing written). `list` returns one
- * page of up to 1000 objects (fewer is possible: the cursor decides whether
- * more remain) in key order, optionally under a prefix;
- * pass the previous page's `cursor` for the next.
+ * `get`, `put` and `putWith` buffer the object in the Worker's memory, so
+ * each should stay well under its 128 MB limit. `get` and `head` give `None`
+ * for a missing key; `delete` is idempotent. `put` writes unconditionally.
+ * `putWith` honours its `onlyIf` and gives `None` when the condition failed
+ * (nothing written). `list` returns one page of up to 1000 objects (fewer
+ * is possible: the cursor decides whether more remain) in key order,
+ * optionally under a prefix; pass the previous page's `cursor` for the next.
+ *
+ * Larger objects stream. `getStream` gives the object's metadata and its
+ * body as a `Stream[Bytes]` (serve it with `RawStreamed`). `putStream` and
+ * `putStreamWith` write a stream of exactly `size` bytes, which R2 needs to
+ * know up front: a stream that holds more or fewer faults the write, and
+ * nothing is stored.
+ *
+ * A multipart upload builds one object from parts uploaded separately, in
+ * any order and across requests: `createUpload`, an `uploadPart` per part
+ * (numbered from 1, at most 10,000), then `completeUpload` with every part,
+ * or `abortUpload`. Every part but the last must be the same size, and R2
+ * needs at least 5 MiB; a completion R2 refuses faults.
  *
  * Bucket names are scoped to the Cloudflare account, so `bynk deploy` names
  * each `<worker>-<capability, kebab>`, environment-qualified.
@@ -342,6 +405,13 @@ export interface R2 {
   putWith(key: string, body: globalThis.Uint8Array, options: R2Put): globalThis.Promise<Option<R2Object>>;
   delete(key: string): globalThis.Promise<void>;
   list(prefix: Option<string>, cursor: Option<string>): globalThis.Promise<R2Listing>;
+  getStream(key: string): globalThis.Promise<Option<R2Body>>;
+  putStream(key: string, body: AsyncIterable<globalThis.Uint8Array>, size: number): globalThis.Promise<R2Object>;
+  putStreamWith(key: string, body: AsyncIterable<globalThis.Uint8Array>, size: number, options: R2Put): globalThis.Promise<Option<R2Object>>;
+  createUpload(key: string, options: R2UploadOptions): globalThis.Promise<R2Upload>;
+  uploadPart(upload: R2Upload, partNumber: number, body: globalThis.Uint8Array): globalThis.Promise<R2Part>;
+  completeUpload(upload: R2Upload, parts: readonly R2Part[]): globalThis.Promise<R2Object>;
+  abortUpload(upload: R2Upload): globalThis.Promise<void>;
 }
 
 export const __R2Token: symbol = globalThis.Symbol("R2");
