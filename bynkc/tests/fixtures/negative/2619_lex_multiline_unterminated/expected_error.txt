@@ -1,0 +1,1 @@
+bynk.lex.unterminated_string unterminated string literal

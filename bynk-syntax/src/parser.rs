@@ -1574,38 +1574,10 @@ fn strip_code_fences(content: &str) -> String {
     out
 }
 
-/// Parse the body of a lexed double-quoted string literal (the lexeme,
-/// including surrounding quotes), applying the v0 escape rules.
+/// The value of a lexed, hole-free string literal (the lexeme, including its
+/// delimiters), in any form: plain, raw, or multi-line (#2619).
 fn parse_string_literal(lexeme: &str, span: Span) -> Result<String, CompileError> {
-    let bytes = lexeme.as_bytes();
-    debug_assert!(bytes.first() == Some(&b'"') && bytes.last() == Some(&b'"'));
-    let inner = &lexeme[1..lexeme.len() - 1];
-    let mut out = String::with_capacity(inner.len());
-    let mut chars = inner.chars();
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            match chars.next() {
-                Some('n') => out.push('\n'),
-                Some('t') => out.push('\t'),
-                Some('"') => out.push('"'),
-                Some('\\') => out.push('\\'),
-                other => {
-                    return Err(CompileError::new(
-                        "bynk.lex.bad_escape",
-                        span,
-                        format!(
-                            "invalid escape sequence `\\{}` in string literal",
-                            other.map(|c| c.to_string()).unwrap_or_default()
-                        ),
-                    )
-                    .with_note("supported escapes: \\n \\t \\\" \\\\"));
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    Ok(out)
+    crate::lexer::decode_string_literal(lexeme, span)
 }
 
 fn is_reserved_keyword(kind: TokenKind) -> bool {

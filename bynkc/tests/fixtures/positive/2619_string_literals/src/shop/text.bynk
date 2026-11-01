@@ -1,0 +1,45 @@
+commons shop.text {
+  // `\r` and `\u{…}` escapes (#2619): protocol text and arbitrary Unicode.
+  fn statusLine() -> String { "HTTP/1.1 200 OK\r\n" }
+  fn nbsp() -> String { "a\u{00A0}b" }
+  fn grin() -> String { "\u{1F600}" }
+  fn nul() -> String { "x\0y" }
+  fn lineSeparator() -> String { "a\u{2028}b" }
+
+  // A raw string takes no escapes and no interpolation: regex patterns and
+  // Windows paths read as written.
+  fn digits() -> String { r"\d+\.\d+" }
+  fn windowsPath() -> String { r"C:\Users\bynk" }
+  fn hashed() -> String { r#"she said "hi" \n"# }
+  fn noHole() -> String { r"\(name)" }
+
+  // A multi-line string strips the closing delimiter's indentation.
+  fn query() -> String {
+    """
+        SELECT id, total
+          FROM orders
+         WHERE customer = ?
+        """
+  }
+
+  // Escapes and interpolation work as in an ordinary string.
+  fn greeting(name: String) -> String {
+    """
+      Hello, \(name)!
+      Tab:\tdone
+      """
+  }
+
+  // A raw multi-line string keeps its backslashes.
+  fn pattern() -> String {
+    r"""
+      ^\d{3}-\d{4}$
+      """
+  }
+
+  // A regex pattern may be a raw string: it checks and runs like the
+  // doubled-backslash form.
+  fn isVersion(text: String) -> Bool { text.matchesRegex(r"\d+\.\d+") }
+  fn isVersionEscaped(text: String) -> Bool { text.matchesRegex("\\d+\\.\\d+") }
+  fn splitLines(text: String) -> List[String] { text.splitRegex(r"\r?\n") }
+}

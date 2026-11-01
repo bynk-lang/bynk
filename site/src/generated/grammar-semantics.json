@@ -1398,8 +1398,28 @@
       "summary": "An invalid escape sequence in a string literal."
     },
     {
+      "code": "bynk.lex.bad_unicode_escape",
+      "summary": "A `\\u{…}` escape names a surrogate or a value above U+10FFFF."
+    },
+    {
       "code": "bynk.lex.interpolation_too_deep",
       "summary": "A string interpolation `\\(…)` nests deeper than the lexer's fixed limit."
+    },
+    {
+      "code": "bynk.lex.multiline_close_not_own_line",
+      "summary": "A `\"\"\"` inside a multi-line string literal is not on a line of its own."
+    },
+    {
+      "code": "bynk.lex.multiline_in_hole",
+      "summary": "A multi-line string literal appears inside an interpolation hole, which must close on its own line."
+    },
+    {
+      "code": "bynk.lex.multiline_indent",
+      "summary": "A line of a multi-line string literal is indented less than its closing `\"\"\"`."
+    },
+    {
+      "code": "bynk.lex.multiline_open",
+      "summary": "The opening `\"\"\"` of a multi-line string literal is not followed by a newline."
     },
     {
       "code": "bynk.lex.unterminated_interpolation",

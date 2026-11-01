@@ -323,16 +323,44 @@
       ]
     },
     "strings": {
-      "name": "string.quoted.double.bynk",
-      "begin": "\"",
-      "end": "\"",
+      "comment": "String literals (#2619): raw multi-line, multi-line, raw (any number of `#`), and ordinary. A raw literal has no escapes and no interpolation. Order matters: `r\"\"\"` and `\"\"\"` before `\"`.",
       "patterns": [
-        { "name": "constant.character.escape.bynk", "match": "\\\\[nt\"\\\\]" },
-        { "include": "#interpolation" }
+        {
+          "name": "string.quoted.triple.raw.bynk",
+          "begin": "\\br\"\"\"",
+          "end": "\"\"\""
+        },
+        {
+          "name": "string.quoted.triple.bynk",
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "patterns": [
+            { "include": "#string-escape" },
+            { "include": "#interpolation" }
+          ]
+        },
+        {
+          "name": "string.quoted.double.raw.bynk",
+          "begin": "\\br(#*)\"",
+          "end": "\"\\1"
+        },
+        {
+          "name": "string.quoted.double.bynk",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#string-escape" },
+            { "include": "#interpolation" }
+          ]
+        }
       ]
     },
+    "string-escape": {
+      "name": "constant.character.escape.bynk",
+      "match": "\\\\(?:[ntr0\"\\\\]|u\\{[0-9A-Fa-f]{1,6}\\})"
+    },
     "interpolation": {
-      "comment": "A `\\(expr)` interpolation hole (v0.43). The escape `\\\\[nt\"\\\\]` precedes this in #strings, so `\\\\(` (escaped backslash + paren) is a literal, not a hole.",
+      "comment": "A `\\(expr)` interpolation hole (v0.43). The escape `#string-escape` precedes this in #strings, so `\\\\(` (escaped backslash + paren) is a literal, not a hole.",
       "name": "meta.embedded.interpolation.bynk",
       "begin": "\\\\\\(",
       "end": "\\)",

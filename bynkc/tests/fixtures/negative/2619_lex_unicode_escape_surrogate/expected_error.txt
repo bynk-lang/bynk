@@ -1,0 +1,1 @@
+bynk.lex.bad_unicode_escape `\u{D800}` is not a Unicode scalar value

@@ -227,6 +227,8 @@
 ; -- Literals --
 
 (string_literal) @string
+; #2619: an escape inside a string; a raw string has none.
+(escape_sequence) @string.escape
 (number_literal) @number
 (float_literal) @number
 (unit_literal) @constant.builtin

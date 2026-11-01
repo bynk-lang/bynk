@@ -1,0 +1,1 @@
+bynk.lex.multiline_in_hole a multi-line string cannot appear inside an interpolation hole

@@ -1,0 +1,44 @@
+suite shop.text {
+  case "backslash r and n produce a real CR LF" {
+    expect statusLine() == "HTTP/1.1 200 OK\u{D}\u{A}"
+    expect statusLine().matchesRegex(r"HTTP/1\.1 200 OK\r\n")
+    expect splitLines("a\r\nb\nc") == ["a", "b", "c"]
+  }
+
+  case "unicode escapes name the scalar value" {
+    expect nbsp() == "a b"
+    expect nbsp().matchesRegex(r"a\u00A0b")
+    expect grin() == "😀"
+    expect lineSeparator().matchesRegex(r"a\u2028b")
+  }
+
+  case "nul survives to the runtime" {
+    expect nul().matchesRegex(r"x\x00y")
+  }
+
+  case "a raw string is taken as written" {
+    expect digits() == "\\d+\\.\\d+"
+    expect windowsPath() == "C:\\Users\\bynk"
+    expect hashed() == "she said \"hi\" \\n"
+    expect noHole() == "\\(name)"
+  }
+
+  case "a multi-line string strips the closing indentation" {
+    expect query() == "SELECT id, total\n  FROM orders\n WHERE customer = ?"
+  }
+
+  case "a multi-line string interpolates and escapes" {
+    expect greeting("Ada") == "Hello, Ada!\nTab:\tdone"
+  }
+
+  case "a raw multi-line string keeps its backslashes" {
+    expect pattern() == "^\\d{3}-\\d{4}$"
+  }
+
+  case "a raw regex pattern checks and runs like the doubled form" {
+    expect isVersion("3.14")
+    expect !isVersion("3x14")
+    expect isVersion("10.0") == isVersionEscaped("10.0")
+    expect isVersion("v") == isVersionEscaped("v")
+  }
+}

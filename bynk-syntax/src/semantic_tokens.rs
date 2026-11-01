@@ -61,6 +61,13 @@ pub const TOKEN_TYPES: &[&str] = &[
     // identifier by spelling alone: `private` in modifier position.
     // Appended at index 17 (never reordered); standard LSP type.
     "keyword",
+    // #2619: an escape sequence inside a string literal (`\n`, `\u{1F600}`).
+    // Appended at index 18 (never reordered); a custom type the VS Code
+    // extension declares, as a `string` subtype.
+    "escape",
+    // #2619: a raw string's delimiters (`r#"`, `"#`). Appended at index 19;
+    // standard LSP type.
+    "string",
 ];
 
 /// The token modifiers, in wire order (bit 0 first).
@@ -90,6 +97,8 @@ pub const STANDARD_TYPES: &[&str] = &[
     "comment",
     // #2618: contextual keywords in keyword position (`private`).
     "keyword",
+    // #2619: a raw string's delimiters.
+    "string",
 ];
 
 /// The LSP-standard token modifiers, likewise.
