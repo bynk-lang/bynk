@@ -452,7 +452,9 @@ mod tests {
         // Constrained generics slice 0 added: type_param, where_clause,
         // where_bound (`constraint` is a trivial wrapper over `identifier`,
         // so the display layer collapses it). Net +3.
-        assert_eq!(rules.len(), 177);
+        // #2654 (`let` destructuring) added: _let_paren_record_pattern (the
+        // parenthesised record pattern of an `else`-less `let`). Net +1.
+        assert_eq!(rules.len(), 178);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

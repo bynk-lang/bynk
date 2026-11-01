@@ -40,7 +40,7 @@ function __makeTestDeps() {
 async function test_a_literal_field__a_shorthand_binding_and_a_guard() {
   try {
     const deps = {};
-    const { Order, Page, Status, billed, cancelled, count, describe, firstTotal, paidTotal } = __ns_shop_orders;
+    const { Order, Page, Status, billed, cancelled, count, describe, firstTotal, paidTotal, summary } = __ns_shop_orders;
     type Order = __ns_shop_orders.Order;
     type Page<T> = __ns_shop_orders.Page<T>;
     type Status = __ns_shop_orders.Status;
@@ -61,7 +61,7 @@ async function test_a_literal_field__a_shorthand_binding_and_a_guard() {
 async function test_a_record_nested_in_a_variant_payload() {
   try {
     const deps = {};
-    const { Order, Page, Status, billed, cancelled, count, describe, firstTotal, paidTotal } = __ns_shop_orders;
+    const { Order, Page, Status, billed, cancelled, count, describe, firstTotal, paidTotal, summary } = __ns_shop_orders;
     type Order = __ns_shop_orders.Order;
     type Page<T> = __ns_shop_orders.Page<T>;
     type Status = __ns_shop_orders.Status;
@@ -82,7 +82,7 @@ async function test_a_record_nested_in_a_variant_payload() {
 async function test_a_record_pattern_after_is() {
   try {
     const deps = {};
-    const { Order, Page, Status, billed, cancelled, count, describe, firstTotal, paidTotal } = __ns_shop_orders;
+    const { Order, Page, Status, billed, cancelled, count, describe, firstTotal, paidTotal, summary } = __ns_shop_orders;
     type Order = __ns_shop_orders.Order;
     type Page<T> = __ns_shop_orders.Page<T>;
     type Status = __ns_shop_orders.Status;
@@ -103,11 +103,29 @@ async function test_a_record_pattern_after_is() {
 async function test_a_generic_record_takes_its_type_arguments_from_the_scrutinee() {
   try {
     const deps = {};
-    const { Order, Page, Status, billed, cancelled, count, describe, firstTotal, paidTotal } = __ns_shop_orders;
+    const { Order, Page, Status, billed, cancelled, count, describe, firstTotal, paidTotal, summary } = __ns_shop_orders;
     type Order = __ns_shop_orders.Order;
     type Page<T> = __ns_shop_orders.Page<T>;
     type Status = __ns_shop_orders.Status;
     if (!(count({ items: [1, 2], count: 2 }) === 2)) { throw __bynkExpectFailure("tests/orders.test.bynk:24:12", 1224, 1268, "expect count(Page { items: [1, 2], count: 2 }) == 2\n  expected: count(Page { items: [1, 2], count: 2 }) == 2\n  actual:   " + __bynkShow((count({ items: [1, 2], count: 2 }))) + " == " + __bynkShow((2))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_destructuring_let_survives_an_added_field() {
+  try {
+    const deps = {};
+    const { Order, Page, Status, billed, cancelled, count, describe, firstTotal, paidTotal, summary } = __ns_shop_orders;
+    type Order = __ns_shop_orders.Order;
+    type Page<T> = __ns_shop_orders.Page<T>;
+    type Status = __ns_shop_orders.Status;
+    if (!(summary({ id: "a", status: Status.Paid, total: 3, note: "" }) === "a: 3")) { throw __bynkExpectFailure("tests/orders.test.bynk:28:12", 1340, 1410, "expect summary(Order { id: \"a\", status: Paid, total: 3, note: \"\" }) == \"a: 3\"\n  expected: summary(Order { id: \"a\", status: Paid, total: 3, note: \"\" }) == \"a: 3\"\n  actual:   " + __bynkShow((summary({ id: "a", status: Status.Paid, total: 3, note: "" }))) + " == " + __bynkShow(("a: 3"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -131,7 +149,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a literal field, a shorthand binding and a guard", "a record nested in a variant payload", "a record pattern after is", "a generic record takes its type arguments from the scrutinee"];
+export const __bynkCases: readonly string[] = ["a literal field, a shorthand binding and a guard", "a record nested in a variant payload", "a record pattern after is", "a generic record takes its type arguments from the scrutinee", "a destructuring let survives an added field"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -157,6 +175,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a generic record takes its type arguments from the scrutinee")) {
     const started = __bynkCaseNow();
     const r = { name: "a generic record takes its type arguments from the scrutinee", ...(await test_a_generic_record_takes_its_type_arguments_from_the_scrutinee()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a destructuring let survives an added field")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a destructuring let survives an added field", ...(await test_a_destructuring_let_survives_an_added_field()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

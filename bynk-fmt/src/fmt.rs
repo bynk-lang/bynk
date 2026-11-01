@@ -2526,10 +2526,19 @@ impl<'a> Formatter<'a> {
             .principal
             .as_ref()
             .map(|p| format!(" {}", call_site_actor_src(p)));
-        let reserve = principal.as_deref().map_or(0, |p| p.chars().count()) + " else {".len();
+        let else_width = if le.form == LetElseForm::Plain {
+            0
+        } else {
+            " else {".len()
+        };
+        let reserve = principal.as_deref().map_or(0, |p| p.chars().count()) + else_width;
         self.format_expr_at(&l.value, 0, reserve);
         if let Some(principal) = principal {
             self.push(&principal);
+        }
+        // #2654: the `else`-less form of an irrefutable record pattern.
+        if le.form == LetElseForm::Plain {
+            return;
         }
         self.push(" else ");
         match (le.form, arms.get(1).map(|a| &a.body)) {
@@ -3883,7 +3892,7 @@ fn let_else_binding(s: &Statement) -> Option<(&LetStmt, bool, &LetElse)> {
 /// #2010: a `let … else` pattern as source. After `let`, a bare name is a
 /// binding, not a pattern (`let Missing | Late = p` would re-parse as a
 /// binding named `Missing`), so a pattern whose text opens with a name not
-/// followed by `(` or `.` keeps the parentheses its author had to write.
+/// followed by `(`, `.` or `{` keeps the parentheses its author had to write.
 /// `None`, `true` and `false` are keywords, not names, so they need none.
 fn let_pattern_src(p: &Pattern) -> String {
     let src = pattern_to_string(p);
@@ -3893,7 +3902,9 @@ fn let_pattern_src(p: &Pattern) -> String {
     let opens_with_name = src.starts_with(|c: char| c.is_ascii_alphabetic())
         && !matches!(&src[..name_len], "None" | "true" | "false");
     let then = src[name_len..].chars().next();
-    if opens_with_name && !matches!(then, Some('(' | '.')) {
+    // #2654: `Name {` opens a record pattern, so it needs no parentheses.
+    let opens_record = src[name_len..].trim_start().starts_with('{');
+    if opens_with_name && !opens_record && !matches!(then, Some('(' | '.')) {
         format!("({src})")
     } else {
         src
@@ -3913,6 +3924,7 @@ fn let_else_to_string(l: &LetStmt, effectful: bool, le: &LetElse, arms: &[MatchA
         out.push_str(&format!(" {}", call_site_actor_src(p)));
     }
     match (le.form, arms.get(1).map(|a| &a.body)) {
+        (LetElseForm::Plain, _) => {}
         (LetElseForm::Block, Some(MatchBody::Block(otherwise))) => {
             out.push_str(&format!(" else {}", format_block_oneline(otherwise)));
         }

@@ -1,0 +1,75 @@
+context shop.orders {
+  exports transparent { Item, Order, Customer }
+
+  type Status = enum { Pending, Paid }
+
+  type Item = { sku: String, qty: Int, note: String }
+
+  type Customer = { name: String, email: String }
+
+  type Order = { id: String, status: Status, total: Int, customer: Customer }
+
+  agent Basket {
+    key id: String
+
+    store line: Cell[Item] = Item { sku: "widget", qty: 3, note: "gift" }
+
+    on call current() -> Effect[Item] { line }
+  }
+
+  ---
+  A shorthand binding per field: the names are in scope for the rest of the block.
+  ---
+  fn label(item: Item) -> String {
+    let Item { sku, qty, .. } = item
+    "\(sku) x\(qty)"
+  }
+
+  ---
+  A renamed field and a wildcard field.
+  ---
+  fn renamed(item: Item) -> Int {
+    let Item { qty: n, note: _, .. } = item
+    n * 2
+  }
+
+  ---
+  A nested record pattern is still irrefutable.
+  ---
+  fn contact(o: Order) -> String {
+    let Order { total, customer: Customer { email, .. }, .. } = o
+    "\(email): \(total)"
+  }
+
+  ---
+  The pattern is parenthesised; the parentheses are redundant.
+  ---
+  fn parenthesised(item: Item) -> String {
+    let (Item { sku, .. }) = item
+    sku
+  }
+
+  ---
+  A refutable record pattern still needs an `else`.
+  ---
+  fn paidTotal(o: Order) -> Int {
+    let Order { status: Paid, total, .. } = o else { 0 }
+    total
+  }
+
+  ---
+  A destructuring `let` shadows an outer name, and a later statement still sees it.
+  ---
+  fn shadow(item: Item) -> Int {
+    let qty = 100
+    let Item { qty, .. } = item
+    qty + 1
+  }
+
+  service basket {
+    on call(id: String) -> Effect[String] {
+      let Item { sku, qty, .. } <- Basket(id).current()
+      "\(sku):\(qty)"
+    }
+  }
+}

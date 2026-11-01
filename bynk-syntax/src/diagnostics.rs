@@ -1817,7 +1817,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.parse.let_pattern_without_else",
-        "A `let` binds a pattern but has no `else` saying what the block produces when the value does not match.",
+        "A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it.",
         &["let_else_stmt"],
     ),
     dg(

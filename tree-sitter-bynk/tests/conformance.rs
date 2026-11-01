@@ -424,6 +424,60 @@ const CASES: &[Case] = &[
         body: "type S = enum { A, B }\nfn f(s: S) -> Bool { if s is A { true } else { false } }",
         accept: true,
     },
+    // -- #2654 record destructuring in `let` (patterns track, slice 2): an
+    //    `else`-less `let` for a record pattern; the compiler alone judges it
+    //    irrefutable (capitalisation is invisible to the grammar), so no case
+    //    here pins a refutable one. --
+    Case {
+        what: "irrefutable record let with no else",
+        body: "type I = { a: Int, b: Int }\nfn f(i: I) -> Int { let I { a, b: n, .. } = i\n a + n }",
+        accept: true,
+    },
+    Case {
+        what: "nested record let with no else",
+        body: "type J = { x: Int }\ntype I = { j: J }\nfn f(i: I) -> Int { let I { j: J { x, .. }, .. } = i\n x }",
+        accept: true,
+    },
+    Case {
+        what: "effectful record let with no else",
+        body: "type I = { a: Int }\nfn f(i: I) -> Effect[Int] { let I { a, .. } <- g(i)\n a }",
+        accept: true,
+    },
+    Case {
+        what: "parenthesised record let with no else",
+        body: "type I = { a: Int }\nfn f(i: I) -> Int { let (I { a, .. }) = i\n a }",
+        accept: true,
+    },
+    Case {
+        what: "record let with an else block",
+        body: "type I = { a: Int }\nfn f(i: I) -> Int { let I { a: 1, .. } = i else { 0 }\n 1 }",
+        accept: true,
+    },
+    Case {
+        what: "record let without the trailing ..",
+        body: "type I = { a: Int }\nfn f(i: I) -> Int { let I { a } = i\n a }",
+        accept: false,
+    },
+    Case {
+        what: "record let with a type annotation",
+        body: "type I = { a: Int }\nfn f(i: I) -> Int { let I { a, .. }: I = i\n a }",
+        accept: false,
+    },
+    Case {
+        what: "variant let with no else is still rejected",
+        body: "fn f(r: Result[Int, String]) -> Int { let Ok(n) = r\n n }",
+        accept: false,
+    },
+    Case {
+        what: "parenthesised variant let with no else is still rejected",
+        body: "fn f(r: Result[Int, String]) -> Int { let (Ok(n)) = r\n n }",
+        accept: false,
+    },
+    Case {
+        what: "a plain let of a capitalised name is still a binding",
+        body: "fn f(i: Int) -> Int { let Total = i\n Total }",
+        accept: true,
+    },
 ];
 
 #[test]
@@ -672,6 +726,17 @@ const EXCLUDED_PARSE_TIME_CATEGORIES: &[(&str, &str)] = &[
     ),
 ];
 
+/// Negative fixtures whose parse-time rejection depends on something a
+/// context-free grammar cannot see, named by directory so the rest of their
+/// category stays checked. Dropping an entry is a visible, deliberate act.
+const EXCLUDED_PARSE_TIME_FIXTURES: &[(&str, &str)] = &[(
+    "2654_parse_let_record_pattern_without_else",
+    "inexpressible: whether a record pattern's field is a binding (irrefutable) \
+     or a variant (refutable) is a matter of capitalisation, which the \
+     tree-sitter grammar's single `identifier` token cannot see; the \
+     `else`-less `let` is accepted for any record pattern there (#2654)",
+)];
+
 #[test]
 fn totality_parse_error_negative_fixtures_rejected_by_both_parsers() {
     let root = workspace_root();
@@ -703,6 +768,12 @@ fn totality_parse_error_negative_fixtures_rejected_by_both_parsers() {
         }
         if let Some(entry) = excluded_counts.iter_mut().find(|(cat, _)| *cat == category) {
             entry.1 += 1;
+            continue;
+        }
+        if EXCLUDED_PARSE_TIME_FIXTURES
+            .iter()
+            .any(|(name, _)| dir.file_name().is_some_and(|n| n == *name))
+        {
             continue;
         }
 

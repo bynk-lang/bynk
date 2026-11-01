@@ -1349,6 +1349,7 @@ pub fn check_handler_body(
         is_binding_cache: HashMap::new(),
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
+        let_else_removals: HashMap::new(),
         return_ty,
         return_ty_span,
         effectful,
@@ -1503,6 +1504,7 @@ pub fn check_body(
         is_binding_cache: HashMap::new(),
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
+        let_else_removals: HashMap::new(),
         return_ty,
         return_ty_span,
         effectful: return_ty.is_effect(tys),
@@ -1656,6 +1658,7 @@ pub fn check_invariants(
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
+            let_else_removals: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: inv.predicate.span,
             // A predicate is a pure expression — effectful operations (capability
@@ -1806,6 +1809,7 @@ pub(crate) fn check_contracts(
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
+            let_else_removals: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: c.predicate.span,
             effectful: false,
@@ -2034,6 +2038,7 @@ pub fn check_transitions(
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
+            let_else_removals: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: tr.predicate.span,
             effectful: false,
@@ -2218,6 +2223,7 @@ pub fn check_migrations(
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
+            let_else_removals: HashMap::new(),
             return_ty: tys.intern(Ty::Unit),
             return_ty_span: step.span,
             // A step is pure: no capability calls, no `<-` (track §3.3).
@@ -2567,6 +2573,10 @@ pub(crate) struct Ctx<'a> {
     /// reference draws as a *separate* identity from `ExprId` (Part 2) —
     /// out of this slice's scope on purpose, not overlooked.
     pub pattern_binding_types: HashMap<Span, TyId>,
+    /// #2654: for each hidden `let … else` binder seen so far (by name), the
+    /// source ranges to delete to drop its `else` — what the
+    /// "remove the `else`" fix of an `else` that can never run applies.
+    pub let_else_removals: HashMap<String, Vec<Span>>,
     pub return_ty: TyId,
     pub return_ty_span: Span,
     /// True if the enclosing function/handler returns `Effect[T]` (v0.5).
@@ -3709,6 +3719,13 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
     let tys = ctx.tys;
     ctx.push_scope();
     for stmt in &block.statements {
+        if let Statement::Let(l) | Statement::EffectLet(l) = stmt
+            && let Some(le) = &l.let_else
+            && !le.remove_else.is_empty()
+        {
+            ctx.let_else_removals
+                .insert(l.name.name.clone(), le.remove_else.clone());
+        }
         match stmt {
             Statement::Let(l) => {
                 let annot_ty = l.type_annot.as_ref().and_then(|a| {

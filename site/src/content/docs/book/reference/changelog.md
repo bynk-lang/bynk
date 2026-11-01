@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.459**.
+written against **v0.460**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.460.0** | "Record destructuring in `let`: `let Item { sku, qty, .. } = item` binds a record's fields for the rest of the block, with `=` or `<-`, and needs no `else` when every field is matched by a name, `_` or a nested pattern of the same kind; a refutable record pattern still takes its `else` (patterns track slice 2, [#2654](https://github.com/bynk-lang/bynk/issues/2654)). A record `let … else` that cannot fail now offers a one-click fix that removes its `else`" |
 | **v0.459.0** | "**Breaking:** a generic that compares a type parameter now declares it, `fn same[T: Eq](a: T, b: T)`, or `where A: Eq` for a method's receiver type parameter, in place of ADR 0430's inferred bound (constrained-generics slice 0); `bynk.generics.missing_eq_bound` carries a machine-applicable fix, and `bynk.generics.no_bounds` is retired; apply the fixes with `source.fixAll.bynk` or `bynk check --fix` (#2642), see [the migration note](/book/troubleshooting/generics-missing-eq-bound/)" |
 | **v0.458.0** | "`bynk.cloudflare.D1` is stable: it no longer needs an `[unstable] allow` entry, and a leftover `\"bynk.cloudflare.D1\"` entry is a `bynk.project.unstable_not_experimental` warning (standard-library P4d, [#2652](https://github.com/bynk-lang/bynk/issues/2652))" |
 | **v0.457.0** | "`par { let a <- e1  let b <- e2 }`: a concurrent binding block that issues every effect, in source order, before awaiting any of them, and completes when all have settled; the first fault in source order is raised after the rest have settled (concurrent effects, slice 0, [#2640](https://github.com/bynk-lang/bynk/issues/2640))" |

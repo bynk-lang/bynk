@@ -861,3 +861,18 @@ if o is (Order { status: Cancelled, .. }) { "cancelled" } else { "live" }
   is partial, so end the `match` with a `_` arm. Precise coverage across several
   arms is a later increment.
 
+A record pattern also destructures in a `let` (#2654):
+
+```bynk,fragment
+let Item { sku, qty, .. } = item
+let Order { total, customer: Customer { email, .. }, .. } <- load(id)
+let Order { status: Paid, total, .. } = order else { 0 }
+```
+
+The `else` may be left out when the pattern cannot fail (every field a name, `_`
+or a nested pattern of the same kind); a pattern with a literal or variant field
+needs it (`bynk.parse.let_pattern_without_else`, which names the field). The
+names are in scope for the rest of the block. An `else` on a pattern that cannot
+fail is `bynk.types.unreachable_arm`, and the editor offers to remove it. See
+[Destructure a record with `let`](/book/guides/type-system/destructure-a-record-with-let/).
+
