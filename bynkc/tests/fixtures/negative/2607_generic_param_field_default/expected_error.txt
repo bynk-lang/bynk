@@ -1,1 +1,2 @@
 bynk.types.bad_field_default
+has the type parameter `T`, so it cannot have a default

@@ -43,6 +43,8 @@ case "a body with no key for a defaulted field decodes to the default" {
   expect o.retry == Times(2)
   expect o.note == Some("default note")
   expect o.inner == Inner { a: 7, label: "inner" }
+  expect o.meta.length() == 0
+  expect o.seen.length() == 0
 }
 
 case "a present key decodes as sent, null included" {

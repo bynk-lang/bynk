@@ -986,10 +986,8 @@ fn check_record_field_defaults(
         {
             // A default that reaches a type parameter (`Option[T] = Some(1)`)
             // holds for one instantiation at most.
-            if let Some(p) = t
-                .type_params
-                .iter()
-                .find(|p| reason == format!("cannot resolve type `{}`", p.name.name))
+            if let crate::wire_default::DefaultReason::UnresolvedType(name) = &reason
+                && let Some(p) = t.type_params.iter().find(|p| &p.name.name == name)
             {
                 errors.push(
                     CompileError::new(

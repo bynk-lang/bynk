@@ -150,6 +150,8 @@ async function test_a_body_with_no_key_for_a_defaulted_field_decodes_to_the_defa
     if (!(__bynkEq(o.retry, Retry.Times(2)))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:43:10", 1158, 1177, "expect o.retry == Times(2)\n  expected: o.retry == Times(2)\n  actual:   " + __bynkShow((o.retry)) + " == " + __bynkShow((Retry.Times(2)))); }
     if (!(__bynkEq(o.note, Some("default note")))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:44:10", 1187, 1217, "expect o.note == Some(\"default note\")\n  expected: o.note == Some(\"default note\")\n  actual:   " + __bynkShow((o.note)) + " == " + __bynkShow((Some("default note")))); }
     if (!(__bynkEq(o.inner, { a: 7, label: "inner" }))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:45:10", 1227, 1268, "expect o.inner == Inner { a: 7, label: \"inner\" }\n  expected: o.inner == Inner { a: 7, label: \"inner\" }\n  actual:   " + __bynkShow((o.inner)) + " == " + __bynkShow(({ a: 7, label: "inner" }))); }
+    if (!((o.meta).size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:46:10", 1278, 1298, "expect o.meta.length() == 0\n  expected: o.meta.length() == 0\n  actual:   " + __bynkShow(((o.meta).size)) + " == " + __bynkShow((0))); }
+    if (!((o.seen).size === 0)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:47:10", 1308, 1328, "expect o.seen.length() == 0\n  expected: o.seen.length() == 0\n  actual:   " + __bynkShow(((o.seen).size)) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -170,8 +172,8 @@ async function test_a_present_key_decodes_as_sent__null_included() {
     type Page<T> = __ns_demo_defaults.Page<T>;
     type Retry = __ns_demo_defaults.Retry;
     const o = decoded("{\"name\":\"j\",\"count\":4,\"note\":null}");
-    if (!(o.count === 4)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:50:10", 1399, 1411, "expect o.count == 4\n  expected: o.count == 4\n  actual:   " + __bynkShow((o.count)) + " == " + __bynkShow((4))); }
-    if (!(__bynkEq(o.note, None))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:51:10", 1421, 1435, "expect o.note == None\n  expected: o.note == None\n  actual:   " + __bynkShow((o.note)) + " == " + __bynkShow((None))); }
+    if (!(o.count === 4)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:52:10", 1459, 1471, "expect o.count == 4\n  expected: o.count == 4\n  actual:   " + __bynkShow((o.count)) + " == " + __bynkShow((4))); }
+    if (!(__bynkEq(o.note, None))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:53:10", 1481, 1495, "expect o.note == None\n  expected: o.note == None\n  actual:   " + __bynkShow((o.note)) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -191,7 +193,7 @@ async function test_a_body_missing_a_field_with_no_default_is_still_rejected() {
     type Options = __ns_demo_defaults.Options;
     type Page<T> = __ns_demo_defaults.Page<T>;
     type Retry = __ns_demo_defaults.Retry;
-    if (!(decoded("{\"count\":1}").count === -1)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:55:10", 1514, 1550, "expect decoded(\"{\\\"count\\\":1}\").count == -1\n  expected: decoded(\"{\\\"count\\\":1}\").count == -1\n  actual:   " + __bynkShow((decoded("{\"count\":1}").count)) + " == " + __bynkShow((-1))); }
+    if (!(decoded("{\"count\":1}").count === -1)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:57:10", 1574, 1610, "expect decoded(\"{\\\"count\\\":1}\").count == -1\n  expected: decoded(\"{\\\"count\\\":1}\").count == -1\n  actual:   " + __bynkShow((decoded("{\"count\":1}").count)) + " == " + __bynkShow((-1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -212,12 +214,12 @@ async function test_a_generic_record_s_defaults_hold_at_an_instantiation() {
     type Page<T> = __ns_demo_defaults.Page<T>;
     type Retry = __ns_demo_defaults.Retry;
     const built: Page<number> = { note: "p", items: [], next: { tag: "None" } };
-    if (!(__bynkEq(built.items, []))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:60:10", 1669, 1686, "expect built.items == []\n  expected: built.items == []\n  actual:   " + __bynkShow((built.items)) + " == " + __bynkShow(([]))); }
-    if (!(__bynkEq(built.next, None))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:61:10", 1696, 1714, "expect built.next == None\n  expected: built.next == None\n  actual:   " + __bynkShow((built.next)) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(built.items, []))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:62:10", 1729, 1746, "expect built.items == []\n  expected: built.items == []\n  actual:   " + __bynkShow((built.items)) + " == " + __bynkShow(([]))); }
+    if (!(__bynkEq(built.next, None))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:63:10", 1756, 1774, "expect built.next == None\n  expected: built.next == None\n  actual:   " + __bynkShow((built.next)) + " == " + __bynkShow((None))); }
     const p = decodedPage("{\"items\":[1,2]}");
-    if (!(__bynkEq(p.items, [1, 2]))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:63:10", 1767, 1784, "expect p.items == [1, 2]\n  expected: p.items == [1, 2]\n  actual:   " + __bynkShow((p.items)) + " == " + __bynkShow(([1, 2]))); }
-    if (!(p.note === "")) { throw __bynkExpectFailure("tests/demo/defaults.bynk:64:10", 1794, 1806, "expect p.note == \"\"\n  expected: p.note == \"\"\n  actual:   " + __bynkShow((p.note)) + " == " + __bynkShow((""))); }
-    if (!(__bynkEq(p.next, None))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:65:10", 1816, 1830, "expect p.next == None\n  expected: p.next == None\n  actual:   " + __bynkShow((p.next)) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(p.items, [1, 2]))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:65:10", 1827, 1844, "expect p.items == [1, 2]\n  expected: p.items == [1, 2]\n  actual:   " + __bynkShow((p.items)) + " == " + __bynkShow(([1, 2]))); }
+    if (!(p.note === "")) { throw __bynkExpectFailure("tests/demo/defaults.bynk:66:10", 1854, 1866, "expect p.note == \"\"\n  expected: p.note == \"\"\n  actual:   " + __bynkShow((p.note)) + " == " + __bynkShow((""))); }
+    if (!(__bynkEq(p.next, None))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:67:10", 1876, 1890, "expect p.next == None\n  expected: p.next == None\n  actual:   " + __bynkShow((p.next)) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
