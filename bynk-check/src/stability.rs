@@ -403,6 +403,8 @@ mod tests {
                 "bynk.Fetch.sendWith",
                 "bynk.Fetch.receiveBytes",
                 "bynk.Fetch.sendBytes",
+                "bynk.Fetch.receiveStream",
+                "bynk.Fetch.sendStream",
                 "bynk.Logger.log",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
@@ -428,6 +430,10 @@ mod tests {
         assert!(p.blocks("bynk.Fetch.receiveBytes"));
         assert!(p.blocks("bynk.Fetch.sendBytes"));
         assert!(!p.blocks("bynk.BytesResponse"));
+        // K5c (#2627): the streamed-body operations, alone.
+        assert!(p.blocks("bynk.Fetch.receiveStream"));
+        assert!(p.blocks("bynk.Fetch.sendStream"));
+        assert!(!p.blocks("bynk.StreamResponse"));
         assert!(p.blocks("bynk.Logger.log"));
         assert!(!p.blocks("bynk.Logger.warn"));
         // P1 (#2590): the new operations of the stable `Kv`, alone.

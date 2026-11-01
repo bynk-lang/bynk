@@ -37,7 +37,7 @@ function __bynkShow(v: unknown): string {
 
 class __Stub_Locale {
   async current(): globalThis.Promise<__ns_bynk_locale_types.LocaleTag> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -47,6 +47,7 @@ class __Stub_Locale {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type StreamResponse = __ns_bynk.StreamResponse;
     type Uuid = __ns_bynk.Uuid;
     if (true) {
       return ("fr" as any);
@@ -97,7 +98,7 @@ async function test_a_stubbed_locale_is_what_the_capability_reports() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -107,6 +108,7 @@ async function test_a_stubbed_locale_is_what_the_capability_reports() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type StreamResponse = __ns_bynk.StreamResponse;
     type Uuid = __ns_bynk.Uuid;
     const tag = await currentTag.call(deps);
     if (!(tag === "fr")) { throw __bynkExpectFailure("tests/greet.test.bynk:11:12", 357, 368, "expect tag == \"fr\"\n  expected: tag == \"fr\"\n  actual:   " + __bynkShow((tag)) + " == " + __bynkShow(("fr"))); }
@@ -129,7 +131,7 @@ async function test_render_is_unaffected_by_the_stub_in_slice_1__tag_is_unused_(
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -139,6 +141,7 @@ async function test_render_is_unaffected_by_the_stub_in_slice_1__tag_is_unused_(
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type StreamResponse = __ns_bynk.StreamResponse;
     type Uuid = __ns_bynk.Uuid;
     const g = await greeting.call(deps);
     if (!(g === "hello")) { throw __bynkExpectFailure("tests/greet.test.bynk:16:12", 485, 497, "expect g == \"hello\"\n  expected: g == \"hello\"\n  actual:   " + __bynkShow((g)) + " == " + __bynkShow(("hello"))); }

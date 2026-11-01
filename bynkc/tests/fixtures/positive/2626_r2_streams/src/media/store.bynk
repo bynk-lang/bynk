@@ -1,0 +1,110 @@
+context media.store
+
+// #2626: `R2`'s streamed reads and writes and its multipart uploads. An object
+// is served with `RawStreamed` straight from `getStream`, copied stream to
+// stream with its own size, and built from parts across calls.
+
+consumes bynk.cloudflare
+consumes bynk.cloudflare { R2 }
+
+capability Videos = R2
+
+service api from http {
+	on GET("/videos/:key") (key: String) -> Effect[HttpResult[()]] by Visitor given Videos {
+		let found <- Videos.getStream(key)
+		match found {
+			Some(o) => RawStreamed(o.body, o.object.contentType.getOrElse("application/octet-stream"))
+			None => NotFound
+		}
+	}
+
+	// Written and read back streamed, in one request: what the system tier
+	// drives over HTTP.
+	on GET("/echo/:text") (text: String) -> Effect[HttpResult[()]] by Visitor given Videos {
+		let body = Bytes.fromUtf8(text)
+		let _ <- Videos.putStream("echo", Stream.of([body]), body.length())
+		let found <- Videos.getStream("echo")
+		match found {
+			Some(o) => RawStreamed(o.body, "text/plain")
+			None => NotFound
+		}
+	}
+}
+
+service save {
+	on call(key: String, data: Bytes) -> Effect[Int] given Videos {
+		let o <- Videos.putStream(key, Stream.of([data.slice(0, 2), data.slice(2, data.length())]), data.length())
+		o.size
+	}
+}
+
+service saveExactly {
+	on call(key: String, data: Bytes, size: Int) -> Effect[Int] given Videos {
+		let o <- Videos.putStream(key, Stream.of([data]), size)
+		o.size
+	}
+}
+
+service saveNew {
+	on call(key: String, data: Bytes) -> Effect[Bool] given Videos {
+		let stored <- Videos.putStreamWith(key, Stream.of([data]), data.length(), R2Put {
+			contentType: Some("video/mp4"),
+			metadata: Map.empty(),
+			onlyIf: Absent,
+		})
+		stored.isSome()
+	}
+}
+
+service copy {
+	on call(src: String, dst: String) -> Effect[Option[Int]] given Videos {
+		let found <- Videos.getStream(src)
+		match found {
+			Some(o) => {
+				let copied <- Videos.putStream(dst, o.body, o.object.size)
+				Some(copied.size)
+			}
+			None => None
+		}
+	}
+}
+
+service read {
+	on call(key: String) -> Effect[Option[String]] given Videos {
+		let found <- Videos.getStream(key)
+		match found {
+			Some(o) => {
+				let parts <- o.body.collect()
+				parts.fold(Bytes.fromUtf8(""), (acc, b) => acc.concat(b)).decodeUtf8()
+			}
+			None => None
+		}
+	}
+}
+
+// An upload's handle is plain data: here its id goes back to the caller and
+// returns with the parts, as it would between requests.
+service begin {
+	on call(key: String) -> Effect[String] given Videos {
+		let u <- Videos.createUpload(key, R2UploadOptions { contentType: Some("video/mp4"), metadata: Map.empty().insert("by", "test") })
+		u.uploadId
+	}
+}
+
+service finish {
+	on call(key: String, id: String, first: String, last: String) -> Effect[String] given Videos {
+		let u = R2Upload { key: key, uploadId: id }
+		let b <- Videos.uploadPart(u, 2, Bytes.fromUtf8(last))
+		let a <- Videos.uploadPart(u, 1, Bytes.fromUtf8(first))
+		let o <- Videos.completeUpload(u, [b, a])
+		"\(o.size) \(o.contentType.getOrElse("-")) \(o.metadata.get("by").getOrElse("-"))"
+	}
+}
+
+service abandon {
+	on call(key: String, id: String) -> Effect[()] given Videos {
+		let u = R2Upload { key: key, uploadId: id }
+		let _ <- Videos.uploadPart(u, 1, Bytes.fromUtf8("x"))
+		Videos.abortUpload(u)
+	}
+}

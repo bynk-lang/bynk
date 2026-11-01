@@ -1,0 +1,2 @@
+bynk.stability.experimental
+`bynk.Fetch.sendStream` is experimental

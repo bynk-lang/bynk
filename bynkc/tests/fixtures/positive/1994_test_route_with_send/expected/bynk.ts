@@ -110,7 +110,10 @@ export const Redirect = {
 
 /**
  * The options of a `Fetch.sendWith`. `timeout` bounds the whole exchange,
- * response body included; when it elapses the result is `Err(Timeout)`. A
+ * response body included, for `sendWith`, `receiveBytes` and `sendBytes`; for
+ * `receiveStream` and `sendStream` it bounds the response head only, so a
+ * streamed body may take as long as the platform allows. When it elapses the
+ * result is `Err(Timeout)`. A
  * timeout of zero or less, or over 2,147,483,647 ms (about 24 days, the
  * longest a platform timer takes), faults the call, with nothing sent. `None` waits as
  * long as the platform does. Each field defaults to what `send` does, so
@@ -169,6 +172,22 @@ export interface BytesResponse {
 }
 
 export const BytesResponse = {
+};
+
+/**
+ * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
+ * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
+ * single-pass: a second read faults. A network failure partway through the
+ * body faults the read, since the result is already `Ok`. An unread body
+ * holds its connection until the request ends.
+ */
+export interface StreamResponse {
+  readonly status: number;
+  readonly headers: ReadonlyMap<string, string>;
+  readonly body: AsyncIterable<globalThis.Uint8Array>;
+}
+
+export const StreamResponse = {
 };
 
 /**
@@ -251,13 +270,20 @@ export const __LoggerToken: symbol = globalThis.Symbol("Logger");
  * `receiveBytes` sends `req` as `sendWith` does and returns the response body
  * as `Bytes`; `sendBytes` sends `body` as the request body (`req.body` must
  * be `None`) and returns the response as `Bytes` too. A binary body gets no
- * Content-Type of its own: set `req.contentType`. Bodies are buffered whole.
+ * Content-Type of its own: set `req.contentType`. Their bodies are buffered
+ * whole. `receiveStream` and `sendStream` stream them instead: the result
+ * arrives with the response head, and the body as it is read. `sendStream`
+ * sends its stream chunked, with no `content-length`, and returns a redirect
+ * as it is, whatever `options.redirect` says: a streamed body can't be sent
+ * twice.
  */
 export interface Fetch {
   send(req: Request): globalThis.Promise<Result<Response, FetchError>>;
   sendWith(req: Request, options: FetchOptions): globalThis.Promise<Result<Response, FetchError>>;
   receiveBytes(req: Request, options: FetchOptions): globalThis.Promise<Result<BytesResponse, FetchError>>;
   sendBytes(req: Request, body: globalThis.Uint8Array, options: FetchOptions): globalThis.Promise<Result<BytesResponse, FetchError>>;
+  receiveStream(req: Request, options: FetchOptions): globalThis.Promise<Result<StreamResponse, FetchError>>;
+  sendStream(req: Request, body: AsyncIterable<globalThis.Uint8Array>, options: FetchOptions): globalThis.Promise<Result<StreamResponse, FetchError>>;
 }
 
 export const __FetchToken: symbol = globalThis.Symbol("Fetch");
