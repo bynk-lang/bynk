@@ -40,10 +40,12 @@ pub use bynk_syntax::ast::ExprId;
 
 mod calls;
 mod d1;
-mod equality;
+pub(crate) mod equality;
+use equality::EqScope;
 mod expressions;
 mod kernels;
 mod linearity;
+mod par;
 mod refinements;
 pub use refinements::split_regex_flags;
 mod regex_ambiguity;
@@ -920,6 +922,110 @@ pub fn certify(
 
 // ==== Entry points ====
 
+/// #2607 (Decisions B and I): validate each default a record type's fields
+/// declare (`field: T = expr`). It must be a static value of the field's type,
+/// the rule an event field's default follows, and it must have a wire form,
+/// since a body that lacks the key decodes to it. In a generic record, a
+/// default must hold for every instantiation: a field whose type is a bare
+/// type parameter has none.
+#[allow(clippy::too_many_arguments)]
+fn check_record_field_defaults(
+    t: &TypeDecl,
+    input: &ResolvedCommons,
+    tys: &Types,
+    expr_types: &mut HashMap<ExprId, TypedExpr>,
+    callees: &mut HashMap<ExprId, Callee>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+) {
+    let TypeBody::Record(r) = &t.body else {
+        return;
+    };
+    for field in &r.fields {
+        let Some(init) = &field.init else {
+            continue;
+        };
+        if let TypeRef::Named(id) = &field.type_ref
+            && t.type_params.iter().any(|p| p.name.name == id.name)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.bad_field_default",
+                    init.span,
+                    format!(
+                        "field `{}` has the type parameter `{}`, so it cannot have a default",
+                        field.name.name, id.name
+                    ),
+                )
+                .with_note(
+                    "no single value has every type; a default must hold for every \
+                     instantiation of the record, as `None`, `[]` or `Map.empty()` do",
+                ),
+            );
+            continue;
+        }
+        let before = errors.len();
+        check_event_field_default(
+            init,
+            &field.type_ref,
+            "record field default",
+            input,
+            tys,
+            expr_types,
+            callees,
+            errors,
+            refs,
+            hints,
+            locals,
+        );
+        if errors.len() > before {
+            continue;
+        }
+        if let Err(reason) =
+            crate::wire_default::lower_field_default_wire(init, &field.type_ref, &input.types)
+        {
+            // A default that reaches a type parameter (`Option[T] = Some(1)`)
+            // holds for one instantiation at most.
+            if let crate::wire_default::DefaultReason::UnresolvedType(name) = &reason
+                && let Some(p) = t.type_params.iter().find(|p| &p.name.name == name)
+            {
+                errors.push(
+                    CompileError::new(
+                        "bynk.types.bad_field_default",
+                        init.span,
+                        format!(
+                            "field `{}`'s default does not hold for every `{}`",
+                            field.name.name, p.name.name
+                        ),
+                    )
+                    .with_note(
+                        "a generic record's default must hold for every instantiation, as \
+                         `None`, `[]` or `Map.empty()` do",
+                    ),
+                );
+                continue;
+            }
+            errors.push(
+                CompileError::new(
+                    "bynk.types.bad_field_default",
+                    init.span,
+                    format!(
+                        "field `{}`'s default cannot be represented on the wire: {reason}",
+                        field.name.name
+                    ),
+                )
+                .with_note(
+                    "a body without this field decodes to its default, so the default needs a \
+                     wire form: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, a \
+                     list literal, or `Map.empty()`/`Set.empty()`",
+                ),
+            );
+        }
+    }
+}
+
 /// #1688: clear the cache of generic functions' compared type parameters.
 /// A project check calls this once before its per-unit loop; a single-file
 /// [`check`] calls it itself.
@@ -999,13 +1105,23 @@ pub fn check_record_in(
         .collect();
     for item in &input.commons.items {
         if let CommonsItem::Type(t) = item {
-            check_type_decl(
-                t,
-                &input.types,
-                &ty_intern,
-                migrate_old_types.contains(t.name.name.as_str()),
-                &mut errors,
-            );
+            check_type_decl(t, &input.types, &ty_intern, &mut errors);
+            // #2607: a record field's default. A `migrate` step's old shape
+            // is validated by its agent's own check, against the types the
+            // agent sees, so it is skipped here rather than reported twice.
+            if !migrate_old_types.contains(t.name.name.as_str()) {
+                check_record_field_defaults(
+                    t,
+                    &input,
+                    &ty_intern,
+                    &mut expr_types,
+                    &mut callees,
+                    &mut errors,
+                    refs,
+                    hints,
+                    locals,
+                );
+            }
         }
     }
 
@@ -1339,6 +1455,7 @@ pub fn check_handler_body(
         is_binding_cache: HashMap::new(),
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
+        let_else_removals: HashMap::new(),
         return_ty,
         return_ty_span,
         effectful,
@@ -1357,6 +1474,7 @@ pub fn check_handler_body(
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: HashSet::new(),
+        eq: EqScope::default(),
         store_fields,
         in_agent_handler: agent_state_ty.is_some(),
     };
@@ -1491,6 +1609,7 @@ pub fn check_body(
         is_binding_cache: HashMap::new(),
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
+        let_else_removals: HashMap::new(),
         return_ty,
         return_ty_span,
         effectful: return_ty.is_effect(tys),
@@ -1502,6 +1621,7 @@ pub fn check_body(
         test_services,
         test_actors,
         type_vars: HashSet::new(),
+        eq: EqScope::default(),
         store_fields: HashMap::new(),
         in_agent_handler: false,
     };
@@ -1642,6 +1762,7 @@ pub fn check_invariants(
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
+            let_else_removals: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: inv.predicate.span,
             // A predicate is a pure expression — effectful operations (capability
@@ -1662,6 +1783,7 @@ pub fn check_invariants(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
+            eq: EqScope::default(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -1702,7 +1824,7 @@ pub fn check_invariants(
 ///
 /// Distinct from ADR 0127's capability `@requires` annotation.
 #[allow(clippy::too_many_arguments)]
-pub fn check_contracts(
+pub(crate) fn check_contracts(
     requires: &[Contract],
     ensures: &[Contract],
     // The function's parameters in scope by bare name (plus `self` for a
@@ -1724,6 +1846,7 @@ pub fn check_contracts(
     requirements: &mut RequirementSink,
     callees: &mut HashMap<ExprId, Callee>,
     type_vars: &HashSet<String>,
+    eq: &EqScope,
     tys: &Types,
 ) {
     // Duplicate-name check across *all* clauses — the name is the dedup key for
@@ -1789,6 +1912,7 @@ pub fn check_contracts(
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
+            let_else_removals: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: c.predicate.span,
             effectful: false,
@@ -1807,6 +1931,7 @@ pub fn check_contracts(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: type_vars.clone(),
+            eq: eq.clone(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -2015,6 +2140,7 @@ pub fn check_transitions(
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
+            let_else_removals: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: tr.predicate.span,
             effectful: false,
@@ -2033,6 +2159,7 @@ pub fn check_transitions(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
+            eq: EqScope::default(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -2197,6 +2324,7 @@ pub fn check_migrations(
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
+            let_else_removals: HashMap::new(),
             return_ty: tys.intern(Ty::Unit),
             return_ty_span: step.span,
             // A step is pure: no capability calls, no `<-` (track §3.3).
@@ -2216,6 +2344,7 @@ pub fn check_migrations(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
+            eq: EqScope::default(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -2544,6 +2673,10 @@ pub(crate) struct Ctx<'a> {
     /// reference draws as a *separate* identity from `ExprId` (Part 2) —
     /// out of this slice's scope on purpose, not overlooked.
     pub pattern_binding_types: HashMap<Span, TyId>,
+    /// #2654: for each hidden `let … else` binder seen so far (by name), the
+    /// source ranges to delete to drop its `else` — what the
+    /// "remove the `else`" fix of an `else` that can never run applies.
+    pub let_else_removals: HashMap<String, Vec<Span>>,
     pub return_ty: TyId,
     pub return_ty_span: Span,
     /// True if the enclosing function/handler returns `Effect[T]` (v0.5).
@@ -2582,6 +2715,8 @@ pub(crate) struct Ctx<'a> {
     /// nested explicit type arguments (`identity[A](x)` inside a generic
     /// body) resolve. Empty outside generic fn bodies.
     pub type_vars: HashSet<String>,
+    /// Constrained generics slice 0: the `Eq` bounds declared in scope.
+    pub eq: EqScope,
     /// The agent's `store` fields, by name (finding #36: collapses the five
     /// former per-kind maps — `store_cells`/`store_maps`/`store_sets`/
     /// `store_caches`/`store_logs` — into one, since a field name can only
@@ -3468,10 +3603,225 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
     }
 }
 
+/// Check a `do e` statement: the effect-context requirement (when
+/// `check_context`) and that the operand is an `Effect[()]`.
+pub(super) fn check_do(d: &DoStmt, check_context: bool, ctx: &mut Ctx) {
+    let tys = ctx.tys;
+    // v0.146 (ADR 0170): `do e` — perform a unit effect as a
+    // statement. Effectful context only, like `<-`; nothing is bound,
+    // so the operand MUST be `Effect[()]`. A valued reply is rejected
+    // (`bynk.effect.do_requires_unit`): throwing away a real result
+    // stays explicit with `let _ <- e`.
+    if check_context && !ctx.effectful {
+        ctx.errors.push(
+                        CompileError::new(
+                            "bynk.effect.do_in_pure_context",
+                            d.span,
+                            "the `do` statement can only be used inside an effectful body (one returning `Effect[T]`)",
+                        )
+                        .with_label(
+                            ctx.return_ty_span,
+                            format!("enclosing return type is `{}`", ctx.return_ty.display(tys)),
+                        )
+                        .with_note(
+                            "change the enclosing function/handler's return type to `Effect[...]`",
+                        ),
+                    );
+    }
+    let unit = tys.intern(Ty::Unit);
+    let expected = tys.intern(Ty::Effect(unit));
+    let rhs_ty = type_of(&d.value, Some(expected), ctx);
+    check_unbound_effects(&d.value, true, ctx);
+    match rhs_ty.map(|t| tys.get(t)).as_deref() {
+        Some(Ty::Effect(inner)) if *inner == unit => {}
+        Some(Ty::Effect(inner)) => {
+            ctx.errors.push(
+                            CompileError::new(
+                                "bynk.effect.do_requires_unit",
+                                d.value.span,
+                                format!(
+                                    "a `do` statement requires an `Effect[()]`, but this is `Effect[{}]` — its result would be silently dropped",
+                                    inner.display(tys)
+                                ),
+                            )
+                            .with_note(
+                                "`do e` performs a unit effect; to await and discard a real result, write `let _ <- e` instead",
+                            ),
+                        );
+        }
+        Some(other) => {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.effect.do_on_non_effect",
+                    d.value.span,
+                    format!(
+                        "a `do` statement requires an `Effect[()]` value, but got `{}`",
+                        other.display(tys)
+                    ),
+                )
+                .with_note(
+                    "`do` performs an effect; its operand must be a call returning `Effect[()]`",
+                ),
+            );
+        }
+        None => {}
+    }
+}
+
+/// Check one `let x <- e` binding: the effect-context requirement (when
+/// `check_context`), the annotation, the `Effect[T]` payload and the call-site
+/// principal. Returns the bound type, or `None` when the value failed to type
+/// (already reported). Binding the name is the caller's job, so a `par` block can
+/// bind its names only after every binding is checked.
+pub(super) fn check_effect_let(l: &LetStmt, check_context: bool, ctx: &mut Ctx) -> Option<TyId> {
+    let tys = ctx.tys;
+    if check_context && !ctx.effectful {
+        ctx.errors.push(
+                CompileError::new(
+                    "bynk.effect.bind_in_pure_context",
+                    l.span,
+                    "the `<-` operator can only be used inside an effectful body (one returning `Effect[T]`)",
+                )
+                .with_label(
+                    ctx.return_ty_span,
+                    format!("enclosing return type is `{}`", ctx.return_ty.display(tys)),
+                )
+                .with_note(
+                    "change the enclosing function/handler's return type to `Effect[...]`, or use `let ... =` for a pure binding",
+                ),
+            );
+    }
+    // Determine the inner Effect[T] payload type for the binding.
+    let annot_ty = l.type_annot.as_ref().and_then(|a| {
+        // v0.20b: the enclosing fn's type parameters are legal
+        // in body annotations (`let init: List[B] = …`).
+        let r = resolve_type_ref_in(a, &ctx.input.types, &ctx.type_vars, tys);
+        if r.is_none() {
+            ctx.errors.push(CompileError::new(
+                "bynk.resolve.unknown_type",
+                a.span(),
+                "type in `let` annotation does not resolve",
+            ));
+        } else {
+            record_type_refs(a, &ctx.input.types, &ctx.type_vars, ctx.refs);
+        }
+        r
+    });
+    // The expected type for the RHS is `Effect[annot]` if annot present.
+    let rhs_expected = annot_ty.map(|t| tys.intern(Ty::Effect(t)));
+    let mut rhs_ty = type_of(&l.value, rhs_expected, ctx);
+    // #1934: a test-service address driven `by Nobody` observes the
+    // auth seam, so it yields an `HttpOutcome`. The principal is on
+    // the statement, so the call alone cannot say so.
+    if l.principal.as_ref().is_some_and(|p| {
+        p.actor.name == "Nobody" || calls::is_bad_signature_principal(&p.actor.name)
+    }) && let Some(t) = rhs_ty
+    {
+        let t = calls::nobody_outcome(&l.value, t, ctx);
+        if let Some(te) = ctx.expr_types.get_mut(&l.value.id) {
+            te.ty = t;
+        }
+        rhs_ty = Some(t);
+    }
+    check_unbound_effects(&l.value, true, ctx);
+    // v0.182 (#664): validate the call-site principal against the
+    // addressed handler — including the *absent* case, where an
+    // identity-carrying handler driven with no `by` would silently
+    // drop the identity.
+    calls::check_effect_let_principal(&l.value, l.principal.as_ref(), ctx);
+    let inner_ty = match rhs_ty.map(|t| tys.get(t)).as_deref() {
+        Some(Ty::Effect(t)) => Some(*t),
+        Some(_) => {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.effect.bind_on_non_effect",
+                    l.value.span,
+                    format!(
+                        "the `<-` operator requires an `Effect[T]` value, but got `{}`",
+                        rhs_ty.expect("matched Some").display(tys)
+                    ),
+                )
+                .with_note(
+                    "use `let ... =` for a pure binding, or wrap the value with `Effect.pure(...)`",
+                ),
+            );
+            None
+        }
+        None => None,
+    };
+    let final_ty = match (annot_ty, inner_ty) {
+        (Some(annot), Some(rhs)) => {
+            if !compatible(rhs, annot, tys) {
+                ctx.errors.push(CompileError::new(
+                        "bynk.types.let_annotation_mismatch",
+                        l.value.span,
+                        format!(
+                            "let-binding's value has type `Effect[{}]`, but the annotation declares `Effect[{}]`",
+                            rhs.display(tys),
+                            annot.display(tys)
+                        ),
+                    ));
+            }
+            annot
+        }
+        (Some(annot), None) => annot,
+        (None, Some(rhs)) => rhs,
+        // #1663: the value failed to type (already reported).
+        // Bind the name to the error type anyway, so its uses
+        // absorb instead of echoing as unknown names.
+        (None, None) => return None,
+    };
+    Some(final_ty)
+}
+
+/// Bind a checked `let x <- e`'s name in the innermost scope and record its inlay
+/// hint and local, visible from `scope_start` to `scope_end`.
+pub(super) fn bind_effect_let(
+    l: &LetStmt,
+    final_ty: TyId,
+    scope_start: usize,
+    scope_end: usize,
+    ctx: &mut Ctx,
+) {
+    let tys = ctx.tys;
+    if l.name.name != "_" {
+        // v0.27 (ADR 0056): as for `let =`, but `final_ty` here
+        // is the peeled `Effect[T]` payload — the binding's
+        // actual type, which is what the hint must show.
+        // #2010: a `let … else`'s hidden binder is not the author's
+        // name, so it gets no inlay hint and no entry in the locals.
+        if !is_generated_binding(&l.name.name) {
+            if l.type_annot.is_none() {
+                ctx.hints
+                    .record(l.name.span, format!(": {}", final_ty.display(tys)));
+            }
+            ctx.locals.record(
+                l.name.name.clone(),
+                l.name.span,
+                crate::locals::LocalKind::Let,
+                final_ty.display(tys),
+                Span {
+                    file: l.span.file,
+                    start: scope_start,
+                    end: scope_end,
+                },
+            );
+        }
+        ctx.bind(l.name.name.clone(), final_ty);
+    }
+}
+
 pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     ctx.push_scope();
     for stmt in &block.statements {
+        if let Statement::Let(l) | Statement::EffectLet(l) = stmt
+            && let Some(le) = &l.let_else
+            && !le.remove_else.is_empty()
+        {
+            ctx.let_else_removals
+                .insert(l.name.name.clone(), le.remove_else.clone());
+        }
         match stmt {
             Statement::Let(l) => {
                 let annot_ty = l.type_annot.as_ref().and_then(|a| {
@@ -3551,132 +3901,16 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                 }
             }
             Statement::EffectLet(l) => {
-                if !ctx.effectful {
-                    ctx.errors.push(
-                        CompileError::new(
-                            "bynk.effect.bind_in_pure_context",
-                            l.span,
-                            "the `<-` operator can only be used inside an effectful body (one returning `Effect[T]`)",
-                        )
-                        .with_label(
-                            ctx.return_ty_span,
-                            format!("enclosing return type is `{}`", ctx.return_ty.display(tys)),
-                        )
-                        .with_note(
-                            "change the enclosing function/handler's return type to `Effect[...]`, or use `let ... =` for a pure binding",
-                        ),
-                    );
-                }
-                // Determine the inner Effect[T] payload type for the binding.
-                let annot_ty = l.type_annot.as_ref().and_then(|a| {
-                    // v0.20b: the enclosing fn's type parameters are legal
-                    // in body annotations (`let init: List[B] = …`).
-                    let r = resolve_type_ref_in(a, &ctx.input.types, &ctx.type_vars, tys);
-                    if r.is_none() {
-                        ctx.errors.push(CompileError::new(
-                            "bynk.resolve.unknown_type",
-                            a.span(),
-                            "type in `let` annotation does not resolve",
-                        ));
-                    } else {
-                        record_type_refs(a, &ctx.input.types, &ctx.type_vars, ctx.refs);
-                    }
-                    r
-                });
-                // The expected type for the RHS is `Effect[annot]` if annot present.
-                let rhs_expected = annot_ty.map(|t| tys.intern(Ty::Effect(t)));
-                let mut rhs_ty = type_of(&l.value, rhs_expected, ctx);
-                // #1934: a test-service address driven `by Nobody` observes the
-                // auth seam, so it yields an `HttpOutcome`. The principal is on
-                // the statement, so the call alone cannot say so.
-                if l.principal.as_ref().is_some_and(|p| {
-                    p.actor.name == "Nobody" || calls::is_bad_signature_principal(&p.actor.name)
-                }) && let Some(t) = rhs_ty
-                {
-                    let t = calls::nobody_outcome(&l.value, t, ctx);
-                    if let Some(te) = ctx.expr_types.get_mut(&l.value.id) {
-                        te.ty = t;
-                    }
-                    rhs_ty = Some(t);
-                }
-                check_unbound_effects(&l.value, true, ctx);
-                // v0.182 (#664): validate the call-site principal against the
-                // addressed handler — including the *absent* case, where an
-                // identity-carrying handler driven with no `by` would silently
-                // drop the identity.
-                calls::check_effect_let_principal(&l.value, l.principal.as_ref(), ctx);
-                let inner_ty = match rhs_ty.map(|t| tys.get(t)).as_deref() {
-                    Some(Ty::Effect(t)) => Some(*t),
-                    Some(_) => {
-                        ctx.errors.push(
-                            CompileError::new(
-                                "bynk.effect.bind_on_non_effect",
-                                l.value.span,
-                                format!(
-                                    "the `<-` operator requires an `Effect[T]` value, but got `{}`",
-                                    rhs_ty.expect("matched Some").display(tys)
-                                ),
-                            )
-                            .with_note(
-                                "use `let ... =` for a pure binding, or wrap the value with `Effect.pure(...)`",
-                            ),
-                        );
-                        None
-                    }
-                    None => None,
-                };
-                let final_ty = match (annot_ty, inner_ty) {
-                    (Some(annot), Some(rhs)) => {
-                        if !compatible(rhs, annot, tys) {
-                            ctx.errors.push(CompileError::new(
-                                "bynk.types.let_annotation_mismatch",
-                                l.value.span,
-                                format!(
-                                    "let-binding's value has type `Effect[{}]`, but the annotation declares `Effect[{}]`",
-                                    rhs.display(tys),
-                                    annot.display(tys)
-                                ),
-                            ));
-                        }
-                        annot
-                    }
-                    (Some(annot), None) => annot,
-                    (None, Some(rhs)) => rhs,
+                let Some(final_ty) = check_effect_let(l, true, ctx) else {
                     // #1663: the value failed to type (already reported).
                     // Bind the name to the error type anyway, so its uses
                     // absorb instead of echoing as unknown names.
-                    (None, None) => {
-                        if l.name.name != "_" {
-                            ctx.bind(l.name.name.clone(), tys.intern(Ty::Error));
-                        }
-                        continue;
+                    if l.name.name != "_" {
+                        ctx.bind(l.name.name.clone(), tys.intern(Ty::Error));
                     }
+                    continue;
                 };
-                if l.name.name != "_" {
-                    // v0.27 (ADR 0056): as for `let =`, but `final_ty` here
-                    // is the peeled `Effect[T]` payload — the binding's
-                    // actual type, which is what the hint must show.
-                    // #2010: a `let … else`'s hidden binder is not the author's
-                    // name, so it gets no inlay hint and no entry in the locals.
-                    if !is_generated_binding(&l.name.name) {
-                        if l.type_annot.is_none() {
-                            ctx.hints
-                                .record(l.name.span, format!(": {}", final_ty.display(tys)));
-                        }
-                        ctx.locals.record(
-                            l.name.name.clone(),
-                            l.name.span,
-                            crate::locals::LocalKind::Let,
-                            final_ty.display(tys),
-                            Span {
-                                file: l.span.file,
-                                start: l.span.end,
-                                end: block.span.end,
-                            },
-                        );
-                    }
-                    ctx.bind(l.name.name.clone(), final_ty);
-                }
+                bind_effect_let(l, final_ty, l.span.end, block.span.end, ctx);
             }
             Statement::Expect(a) => {
                 if !ctx.in_test_body {
@@ -3706,6 +3940,7 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                 }
             }
             Statement::Advance(a) => check_advance(a, ctx),
+            Statement::Par(p) => par::check_par(p, block.span.end, ctx),
             Statement::Send(s) => {
                 // v0.79: `~> e` — fire-and-forget. Effectful context only, like
                 // `<-`; the reply is never awaited, so nothing is bound.
@@ -3802,65 +4037,7 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                     None => {}
                 }
             }
-            Statement::Do(d) => {
-                // v0.146 (ADR 0170): `do e` — perform a unit effect as a
-                // statement. Effectful context only, like `<-`; nothing is bound,
-                // so the operand MUST be `Effect[()]`. A valued reply is rejected
-                // (`bynk.effect.do_requires_unit`): throwing away a real result
-                // stays explicit with `let _ <- e`.
-                if !ctx.effectful {
-                    ctx.errors.push(
-                        CompileError::new(
-                            "bynk.effect.do_in_pure_context",
-                            d.span,
-                            "the `do` statement can only be used inside an effectful body (one returning `Effect[T]`)",
-                        )
-                        .with_label(
-                            ctx.return_ty_span,
-                            format!("enclosing return type is `{}`", ctx.return_ty.display(tys)),
-                        )
-                        .with_note(
-                            "change the enclosing function/handler's return type to `Effect[...]`",
-                        ),
-                    );
-                }
-                let unit = tys.intern(Ty::Unit);
-                let expected = tys.intern(Ty::Effect(unit));
-                let rhs_ty = type_of(&d.value, Some(expected), ctx);
-                check_unbound_effects(&d.value, true, ctx);
-                match rhs_ty.map(|t| tys.get(t)).as_deref() {
-                    Some(Ty::Effect(inner)) if *inner == unit => {}
-                    Some(Ty::Effect(inner)) => {
-                        ctx.errors.push(
-                            CompileError::new(
-                                "bynk.effect.do_requires_unit",
-                                d.value.span,
-                                format!(
-                                    "a `do` statement requires an `Effect[()]`, but this is `Effect[{}]` — its result would be silently dropped",
-                                    inner.display(tys)
-                                ),
-                            )
-                            .with_note(
-                                "`do e` performs a unit effect; to await and discard a real result, write `let _ <- e` instead",
-                            ),
-                        );
-                    }
-                    Some(other) => {
-                        ctx.errors.push(
-                            CompileError::new(
-                                "bynk.effect.do_on_non_effect",
-                                d.value.span,
-                                format!(
-                                    "a `do` statement requires an `Effect[()]` value, but got `{}`",
-                                    other.display(tys)
-                                ),
-                            )
-                            .with_note("`do` performs an effect; its operand must be a call returning `Effect[()]`"),
-                        );
-                    }
-                    None => {}
-                }
-            }
+            Statement::Do(d) => check_do(d, true, ctx),
             Statement::Assign(a) => {
                 // v0.81 (storage track): `cell := expr` — the unconditional `Cell`
                 // write. The target must be a `store Cell` field; the value must

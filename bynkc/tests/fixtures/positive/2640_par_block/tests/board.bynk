@@ -1,0 +1,62 @@
+// #2640: the stubs resolve at once, so these cases pin the shape of a join:
+// the names it binds and the order its effects were issued in.
+
+suite shop.board {
+  stub Users.get(_) returns "ada"
+  stub Audit.touch(_) returns ()
+
+  case "both names are bound after the block" {
+    stub Orders.forUser(_) returns 3
+    let r <- board.call(1)
+    expect r == "ada:3"
+  }
+
+  case "the effects are issued in source order" {
+    stub Orders.forUser(_) returns 3
+    let r <- board.call(1)
+    expect r == "ada:3"
+    expect Users.get called once
+    expect Orders.forUser called once
+    expect Audit.touch called once
+    expect Users.get before Orders.forUser
+    expect Orders.forUser before Audit.touch
+  }
+
+  case "a re-binding reads the value from before the block" {
+    stub Orders.forUser(_) returns each [3, 5, 8]
+    let r <- rebind.call(0)
+    expect r == 5
+    expect Orders.forUser called 3 times
+  }
+
+  case "a block in a branch binds for the rest of that branch" {
+    stub Orders.forUser(_) returns 4
+    let r <- branch.call(2)
+    expect r == 7
+    let none <- branch.call(0)
+    expect none == 0
+  }
+
+  case "a block in a case drives addressed services together" {
+    stub Orders.forUser(_) returns each [3, 5, 8]
+    par {
+      let first <- board.call(1)
+      let second <- rebind.call(0)
+    }
+    expect first == "ada:3"
+    expect second == 8
+    expect Users.get before Orders.forUser
+  }
+
+  case "a lambda parameter or match arm named like a sibling is its own binding" {
+    stub Orders.forUser(_) returns 2
+    let r <- shadow.call(1)
+    expect r == 3 + 2 + 2
+  }
+
+  case "a binding that hoists statements still joins" {
+    stub Orders.forUser(_) returns 4
+    let r <- hoist.call(0)
+    expect r == 8
+  }
+}

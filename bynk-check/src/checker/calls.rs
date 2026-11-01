@@ -106,6 +106,7 @@ pub(crate) fn check_fn(
             param_scope.insert(p.name.name.clone(), ty);
         }
     }
+    let eq = EqScope::for_fn(f, input);
     // v0.115: check the function's contract clauses (`requires`/`ensures`) in
     // the parameter scope before the body — a contract is the invariant
     // predicate attached to a function (ADR 0144). `result` in an `ensures` is
@@ -133,6 +134,7 @@ pub(crate) fn check_fn(
             requirements,
             callees,
             &vars,
+            &eq,
             tys,
         );
     }
@@ -151,6 +153,7 @@ pub(crate) fn check_fn(
         is_binding_cache: HashMap::new(),
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
+        let_else_removals: HashMap::new(),
         return_ty,
         return_ty_span: f.return_type.span(),
         effectful,
@@ -162,6 +165,7 @@ pub(crate) fn check_fn(
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: vars.clone(),
+        eq: eq.clone(),
         store_fields: HashMap::new(),
         in_agent_handler: false,
     };
@@ -256,6 +260,7 @@ fn check_static_initialiser(
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
+            let_else_removals: HashMap::new(),
             return_ty: field_ty,
             return_ty_span: init.span,
             effectful: false,
@@ -267,6 +272,7 @@ fn check_static_initialiser(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
+            eq: EqScope::default(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -329,7 +335,7 @@ pub fn check_state_initialiser(
 
 /// Events slice 3a (#972): type-check an event field's default expression
 /// (`field: T = init`), reusing `check_static_initialiser`'s empty-pure-scope
-/// discipline. Pushes `bynk.event.bad_field_default`.
+/// discipline. Pushes `bynk.types.bad_field_default`.
 ///
 /// One admission `check_static_initialiser` doesn't cover on its own: an
 /// opaque type's `T.unsafe(lit)` is, by design (ADR 0182), a bypass of its
@@ -343,11 +349,14 @@ pub fn check_state_initialiser(
 /// actually triggers it — a deferred, surprising failure this check closes
 /// statically instead. Only `T.unsafe(lit)` on a *literal* argument is
 /// checked here (anything else already fails the static-value requirement
-/// above); a violated refinement pushes the same `bynk.event.bad_field_default`.
+/// above); a violated refinement pushes the same `bynk.types.bad_field_default`.
 #[allow(clippy::too_many_arguments)]
 pub fn check_event_field_default(
     init: &Expr,
     field_type: &TypeRef,
+    // #2607: what the default belongs to, for the message ("event field
+    // default", "record field default").
+    subject: &str,
     input: &ResolvedCommons,
     tys: &Types,
     expr_types: &mut HashMap<ExprId, TypedExpr>,
@@ -367,8 +376,8 @@ pub fn check_event_field_default(
         refs,
         hints,
         locals,
-        "bynk.event.bad_field_default",
-        "event field default",
+        "bynk.types.bad_field_default",
+        subject,
         tys,
     );
     // `T.unsafe(lit)` parses as `ExprKind::MethodCall { receiver: Ident(T),
@@ -392,10 +401,10 @@ pub fn check_event_field_default(
     {
         errors.push(
             CompileError::new(
-                "bynk.event.bad_field_default",
+                "bynk.types.bad_field_default",
                 lit_expr.span,
                 format!(
-                    "`{}.unsafe(...)` bypasses its own refinement, but an event field default \
+                    "`{}.unsafe(...)` bypasses its own refinement, but a {subject} \
                      must be a value the wire could actually carry — this literal fails `{}`",
                     type_name.name,
                     failed.name(),
@@ -945,22 +954,24 @@ fn check_generic_call(
     if !ok {
         return None;
     }
-    // #1688: a type parameter the callee compares (`==` on it, directly or
-    // through another generic call) must be instantiated with an
-    // equality-supporting type.
+    // Constrained generics slice 0: each `Eq`-bounded type parameter of the
+    // callee must be instantiated with an equality-supporting type. A callee
+    // that compares a parameter it has not yet declared (reported in its own
+    // body) is held to it too, so one pass reports a whole chain of generics
+    // that need the bound and a single fix-all applies them.
     let compared = match ctx.input.fns.get(&name.name) {
         Some(decl) if std::ptr::eq(decl.as_ref(), fn_decl) => {
             super::equality::compared_type_params(decl, ctx)
         }
         _ => Default::default(),
     };
-    let params: Vec<(String, Option<Span>)> = fn_decl
+    let eq_params: Vec<(String, Option<Span>)> = fn_decl
         .type_params
         .iter()
+        .filter(|tp| super::equality::has_eq(&tp.bounds) || compared.contains(&tp.name.name))
         .map(|tp| (tp.name.name.clone(), Some(tp.span)))
         .collect();
-    if !super::equality::check_compared_args(&name.name, name.span, &params, &compared, &subst, ctx)
-    {
+    if !super::equality::check_declared_eq_args(&name.name, name.span, &eq_params, &subst, ctx) {
         return None;
     }
     // v0.39 (ADR 0072): when the user omitted the type arguments, show the
@@ -3113,8 +3124,9 @@ fn check_generic_method_call(
     if !ok {
         return None;
     }
-    // #1702 review: the same call-site bound as a generic function's, over the
-    // receiver type's parameters and the method's own.
+    // The same call-site bound as a generic function's, over the method's own
+    // parameters and the receiver parameters its `where` clause bounds (or that
+    // it compares without yet saying so).
     let decl = ctx.input.methods.get(type_name).and_then(|t| {
         t.instance
             .get(&method.name)
@@ -3127,15 +3139,32 @@ fn check_generic_method_call(
         }
         _ => Default::default(),
     };
-    let mut params: Vec<(String, Option<Span>)> = method_decl
+    let recv_decl = ctx.input.types.get(type_name);
+    let declared_eq = |name: &str| {
+        // A bound the receiver type declares (`type Set2[T: Eq]`) holds in its
+        // methods, with no `where` clause.
+        recv_decl.is_some_and(|d| {
+            d.type_params
+                .iter()
+                .any(|tp| tp.name.name == name && super::equality::has_eq(&tp.bounds))
+        }) || method_decl
+            .type_params
+            .iter()
+            .any(|tp| tp.name.name == name && super::equality::has_eq(&tp.bounds))
+            || method_decl
+                .where_bounds
+                .iter()
+                .any(|wb| wb.param.name == name && super::equality::has_eq(&wb.bounds))
+    };
+    let mut eq_params: Vec<(String, Option<Span>)> = method_decl
         .type_params
         .iter()
         .map(|tp| (tp.name.name.clone(), Some(tp.span)))
         .collect();
-    params.extend(recv_type_params.iter().map(|p| (p.clone(), None)));
+    eq_params.extend(recv_type_params.iter().map(|p| (p.clone(), None)));
+    eq_params.retain(|(p, _)| declared_eq(p) || compared.contains(p));
     let callee = format!("{type_name}.{}", method.name);
-    if !super::equality::check_compared_args(&callee, method.span, &params, &compared, &subst, ctx)
-    {
+    if !super::equality::check_declared_eq_args(&callee, method.span, &eq_params, &subst, ctx) {
         return None;
     }
     // v0.39 (ADR 0072)-style hint: show the inferred method type arguments after

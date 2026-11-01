@@ -129,8 +129,8 @@ type Redirect   = enum { Follow, Manual }
 type LogLevel   = enum { Debug, Info, Warn, Error }
 
 type FetchOptions = {
-  timeout:  Option[Duration],
-  redirect: Redirect,
+  timeout:  Option[Duration] = None,
+  redirect: Redirect = Redirect.Follow,
 }
 
 type Request = {
@@ -217,6 +217,11 @@ takes the same request with a `FetchOptions`:
 let res <- Fetch.sendWith(req, FetchOptions { timeout: Some(5.seconds), redirect: Manual })
 ```
 
+Each field defaults to what `send` does, so a caller writes only the options it
+changes: `FetchOptions { timeout: Some(5.seconds) }` bounds the call and still
+follows redirects, and `FetchOptions {}` is `send`. The same holds for `KvGet`,
+`KvPut`, `R2Put` and `QueueSend` (see [Field defaults](/book/reference/types/#field-defaults)).
+
 - `timeout` bounds the whole exchange, the response body included, except for
   the [streamed operations](#streamed-bodies), where it bounds the response
   head only. When it elapses the result is `Err(Timeout)`. A timeout of zero or less, or over
@@ -226,9 +231,9 @@ let res <- Fetch.sendWith(req, FetchOptions { timeout: Some(5.seconds), redirect
   `3xx` itself, with its `location` header, so the service decides whether to
   follow it (to refuse a redirect to an internal host, say).
 
-The options are a record of their own, not fields of `Request`, because adding a
-field to `Request` would break every request literal: record fields have no
-defaults. `sendWith` is experimental: list `"bynk.Fetch.sendWith"` under
+The options are a record of their own, not fields of `Request`, so `send` keeps
+its one-argument form and every request literal stays as it is. A later option
+is a new `FetchOptions` field with a default, which no caller has to write. `sendWith` is experimental: list `"bynk.Fetch.sendWith"` under
 `[unstable] allow`. A test stubs it as it does `send`:
 `stub Fetch.sendWith(_, _) returns Ok(Response { … })`.
 
@@ -394,8 +399,8 @@ unchanged.
 
 ```bynk
 type KvExpiration = | Never | After(ttl: Duration) | At(instant: Instant)
-type KvPut      = { expiration: KvExpiration, metadata: Map[String, String] }
-type KvGet      = { cacheTtl: Option[Duration] }
+type KvPut      = { expiration: KvExpiration = KvExpiration.Never, metadata: Map[String, String] = Map.empty() }
+type KvGet      = { cacheTtl: Option[Duration] = None }
 type KvEntry    = { value: String, metadata: Map[String, String] }
 type KvKey      = { name: String, expiration: Option[Instant], metadata: Map[String, String] }
 type KvList     = { prefix: Option[String], cursor: Option[String], limit: Option[Int] }
@@ -825,8 +830,8 @@ default, deploy, and only drop what the old code read in a later migration
 In tests each instance is a real SQLite database in memory (Node's built-in
 `node:sqlite`, so Node 22.13 or later), so statements run as they do on D1.
 `stub Orders.all(_, _)` and `expect Orders.run called` work as for any
-capability. `D1` is experimental: list `"bynk.cloudflare.D1"` under
-`[unstable] allow`. `bynk deploy` creates each database and records its id.
+capability. `D1` is stable, so it needs no `[unstable] allow`. `bynk deploy`
+creates each database and records its id.
 
 ### Edge caching: `EdgeCache`
 
@@ -1010,9 +1015,12 @@ operation, is **stable** or **experimental**.
   [`[unstable] allow`](/docs/manifest/#unstable) in `bynk.toml`.
 
 The experimental items today are `bynk.cloudflare`'s `Service`, `R2`,
-`RateLimit`, `EdgeCache` and `D1`, and the
-whole of `bynk.crypto`, which graduates once the first-party registry has signed
-with it in production. New platform capabilities may arrive experimental first.
+`RateLimit`, `EdgeCache`, `Queue` and `Analytics`, and `Kv`'s `getWith`,
+`putWith`, `getBytes`, `putBytes` and `listPage`; `bynk`'s `Fetch.sendWith`,
+`receiveBytes`, `sendBytes`, `receiveStream` and `sendStream`, and
+`Logger.log`; and the whole of `bynk.crypto`, which graduates once the
+first-party registry has signed with it in production. New platform
+capabilities may arrive experimental first, as `D1` did.
 
 ### Extensible enums
 

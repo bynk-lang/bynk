@@ -1,0 +1,46 @@
+---
+#2607: a record type's field may declare a default. A literal that leaves the
+field out takes it, a spread takes the field from its base, and a body with no
+key for the field decodes to it. A generic record's defaults hold for every
+instantiation.
+---
+commons demo.defaults
+
+type Mode = enum { Fast, Careful }
+
+type Retry =
+  | Never
+  | Times(n: Int)
+
+type Inner = { a: Int, label: String = "inner" }
+
+type Options = {
+  name: String,
+  count: Int = 3,
+  mode: Mode = Mode.Careful,
+  retry: Retry = Times(2),
+  timeout: Option[Duration] = None,
+  note: Option[String] = Some("default note"),
+  tags: List[String] = ["a"],
+  meta: Map[String, String] = Map.empty(),
+  seen: Set[Int] = Set.empty(),
+  inner: Inner = Inner { a: 7 },
+}
+
+type Page[T] = { items: List[T] = [], note: String = "", next: Option[T] = None }
+
+fn minimal() -> Options { Options { name: "m" } }
+
+fn decoded(json: String) -> Options {
+  match Json.decode[Options](json) {
+    Ok(o) => o
+    Err(_) => Options { name: "failed", count: -1 }
+  }
+}
+
+fn decodedPage(json: String) -> Page[Int] {
+  match Json.decode[Page[Int]](json) {
+    Ok(p) => p
+    Err(_) => Page { items: [-1] }
+  }
+}

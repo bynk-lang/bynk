@@ -1,1 +1,1 @@
-bynk.generics.no_bounds
+bynk.generics.unknown_constraint

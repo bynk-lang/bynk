@@ -305,8 +305,8 @@ context.
 
 ## 9. Slice status
 
-- [ ] Slice 1 — record patterns in `match` and `is`
-- [ ] Slice 2 — `let` destructuring
+- [x] Slice 1 — record patterns in `match` and `is` (#2641, #2644)
+- [ ] Slice 2 — `let` destructuring (#2654, in review)
 - [ ] Slice 3 — precise exhaustiveness
 - [ ] Slice 4 — list patterns
 - [ ] Slice 5 — range patterns (with #990)

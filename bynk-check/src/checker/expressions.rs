@@ -1003,11 +1003,22 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
             // the operand's type makes it non-comparable. Before #1652 only the
             // top-level type was checked, so `Option[Connection[F]]` and
             // `List[(Int) -> Int]` slipped through to a reference `===`.
-            // #1688: inside a generic body, note which type variables are
-            // compared, so a call site can check what they are instantiated
-            // with.
+            // Constrained generics slice 0: inside a generic body a type
+            // parameter is comparable only when declared `Eq`. The type
+            // variables compared are also noted, for the scan that computes
+            // the bound a fix declares (ADR 0430's inference, kept for that).
             super::equality::record_compared(lt, tys);
             super::equality::record_compared(rt, tys);
+            for operand in [lt, rt] {
+                if !super::equality::require_eq(
+                    ctx,
+                    operand,
+                    span,
+                    "`==` compares values of this type",
+                ) {
+                    return None;
+                }
+            }
             for operand in [lt, rt] {
                 let Some(blocker) = super::equality::not_comparable(operand, ctx) else {
                     continue;
@@ -1380,6 +1391,7 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
                 }
                 // #2137: moving the harness clock is an effect on the case.
                 Statement::Advance(_) => return true,
+                Statement::Par(_) => return true,
             }
         }
         body_performs_effects(&b.tail, ctx)
@@ -3344,6 +3356,22 @@ pub(crate) fn check_match(
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let disc_ty = type_of(discriminant, None, ctx)?;
+    // #2010: a `match` the parser built from `let P <- e else …` scrutinises
+    // its hidden binder. Its arms are the pattern's (the rest of the block)
+    // and the `else`'s, so its diagnostics are worded in those terms.
+    let let_else = matches!(
+        &discriminant.kind,
+        ExprKind::Ident(i) if i.name.starts_with(LET_ELSE_BINDER_PREFIX)
+    );
+    // #2654: the `else`-less `let T { .. } = e` is a one-arm `match` with no
+    // `else` to word anything in terms of. Its pattern is irrefutable, so the
+    // only way it can fail is a type error, which the pattern check reports.
+    let plain_let = let_else && arms.len() == 1;
+    let removal = match &discriminant.kind {
+        ExprKind::Ident(i) => ctx.let_else_removals.get(&i.name).cloned(),
+        _ => None,
+    };
+    let removal = removal.as_ref();
     // v0.130 (DECISION D): a match is *either* variant-kind (sum/`Result`/
     // `Option`) *or* literal-kind (a primitive `Int`/`String`/`Bool` scrutinee,
     // including a refined type over one of those bases). Anything else — a
@@ -3364,6 +3392,9 @@ pub(crate) fn check_match(
             .any(|p| matches!(p, Pattern::Record { .. }))
     }) {
         MatchKind::Record
+    } else if plain_let {
+        check_pattern(&arms[0].pattern, disc_ty, ctx);
+        return None;
     } else {
         ctx.errors.push(CompileError::new(
             "bynk.types.match_non_sum_discriminant",
@@ -3375,13 +3406,6 @@ pub(crate) fn check_match(
         ));
         return None;
     };
-    // #2010: a `match` the parser built from `let P <- e else …` scrutinises
-    // its hidden binder. Its arms are the pattern's (the rest of the block)
-    // and the `else`'s, so its diagnostics are worded in those terms.
-    let let_else = matches!(
-        &discriminant.kind,
-        ExprKind::Ident(i) if i.name.starts_with(LET_ELSE_BINDER_PREFIX)
-    );
     let mut arm_types: Vec<(TyId, Span)> = Vec::new();
     let mut saw_wildcard = false;
     // Unguarded, refutable patterns already seen — structural duplicate
@@ -3443,7 +3467,7 @@ pub(crate) fn check_match(
             && pattern_covered(&covering, &arm.pattern, disc_ty, ctx)
         {
             ctx.errors.push(if let_else {
-                let_else_unreachable(arms, index, disc_ty, ctx)
+                let_else_unreachable(arms, index, disc_ty, removal, ctx)
             } else if saw_wildcard {
                 CompileError::new(
                     "bynk.types.unreachable_arm",
@@ -3523,7 +3547,7 @@ pub(crate) fn check_match(
     };
     // Exhaustiveness (ADR 0169: bounded structural coverage; guarded arms are
     // excluded because a guard may fail at runtime).
-    if !saw_wildcard {
+    if !saw_wildcard && !plain_let {
         let unguarded: Vec<&Pattern> = arms
             .iter()
             .filter(|a| a.guard.is_none())
@@ -3682,21 +3706,40 @@ pub(crate) fn check_match(
 
 /// #2010: the unreachable-arm report for a `match` desugared from
 /// `let P <- e else …`. Arm 0 is the pattern's; a later arm is the `else`'s.
-fn let_else_unreachable(arms: &[MatchArm], index: usize, disc_ty: TyId, ctx: &Ctx) -> CompileError {
+fn let_else_unreachable(
+    arms: &[MatchArm],
+    index: usize,
+    disc_ty: TyId,
+    removal: Option<&Vec<Span>>,
+    ctx: &Ctx,
+) -> CompileError {
     let pattern = describe_pattern(&arms[0].pattern);
     let arm = &arms[index];
     if arms.len() == 2 && matches!(arm.pattern, Pattern::Wildcard(_)) {
-        CompileError::new(
+        let err = CompileError::new(
             "bynk.types.unreachable_arm",
             arm.span,
             format!(
                 "this `else` can never run — `{pattern}` matches every `{}`",
                 disc_ty.display(ctx.tys)
             ),
-        )
-        .with_note(
-            "bind the value with a plain `let` instead, or check the pattern is the one you meant",
-        )
+        );
+        if matches!(arms[0].pattern, Pattern::Record { .. }) {
+            // #2654: an irrefutable record pattern has a `let` form with no
+            // `else`, so the fix is to delete it (and any parentheses).
+            let edits = removal
+                .cloned()
+                .unwrap_or_else(|| vec![arm.span])
+                .into_iter()
+                .map(|span| (span, String::new()))
+                .collect();
+            err.with_note("a record pattern that cannot fail needs no `else`: drop it")
+                .with_suggestion("remove the `else`", edits, Applicability::MachineApplicable)
+        } else {
+            err.with_note(
+                "bind the value with a plain `let` instead, or check the pattern is the one you meant",
+            )
+        }
     } else {
         CompileError::new(
             "bynk.types.unreachable_arm",

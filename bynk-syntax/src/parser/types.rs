@@ -10,30 +10,28 @@ impl<'a> Parser<'a> {
     // -- type declarations --
 
     /// v0.20a: parse an optional `[A, B]` type-parameter list. Returns an empty
-    /// vector when no `[` follows. A bound (`[A: …]`) is rejected with
-    /// `bynk.generics.no_bounds`. Shared by `fn` and (v0.157) `type`
-    /// declarations so both spell type parameters identically.
+    /// vector when no `[` follows. A parameter may carry bounds, `[A: Eq]` or
+    /// `[A: C1 + C2]` (constrained-generics slice 0); the constraint names are
+    /// validated by the checker. Shared by `fn`, `type` and capability-op
+    /// declarations so all spell type parameters identically.
     pub(crate) fn parse_optional_type_params(&mut self) -> Result<Vec<TypeParam>, CompileError> {
         let mut type_params = Vec::new();
         if self.peek_kind() == Some(TokenKind::LBracket) {
             self.bump();
             loop {
                 let p = self.expect_ident("as a type parameter name")?;
-                if self.peek_kind() == Some(TokenKind::Colon) {
-                    let colon = self.bump().unwrap();
-                    return Err(CompileError::new(
-                        "bynk.generics.no_bounds",
-                        colon.span,
-                        format!(
-                            "type parameter `{}` carries a bound — bounded generics are not in v0.20a",
-                            p.name
-                        ),
-                    )
-                    .with_note("type parameters are unconstrained; remove the `: …` bound"));
+                let mut span = p.span;
+                let mut bounds = Vec::new();
+                if self.eat(TokenKind::Colon).is_some() {
+                    bounds = self.parse_bound_list()?;
+                    if let Some(last) = bounds.last() {
+                        span = span.merge(last.span);
+                    }
                 }
                 type_params.push(TypeParam {
-                    span: p.span,
+                    span,
                     name: p,
+                    bounds,
                 });
                 if self.eat(TokenKind::Comma).is_none() {
                     break;
@@ -42,6 +40,43 @@ impl<'a> Parser<'a> {
             self.expect(TokenKind::RBracket, "to close the type-parameter list")?;
         }
         Ok(type_params)
+    }
+
+    /// `C1 + C2 + …`: the constraint names after a `:` in a bound.
+    fn parse_bound_list(&mut self) -> Result<Vec<Ident>, CompileError> {
+        let mut bounds = vec![self.expect_ident("as a constraint name after `:`")?];
+        while self.eat(TokenKind::Plus).is_some() {
+            bounds.push(self.expect_ident("as a constraint name after `+`")?);
+        }
+        Ok(bounds)
+    }
+
+    /// An optional method `where A: C, B: C1 + C2` clause (after the return type).
+    pub(crate) fn parse_optional_where_bounds(&mut self) -> Result<Vec<WhereBound>, CompileError> {
+        let mut out = Vec::new();
+        if self.eat(TokenKind::Where).is_none() {
+            return Ok(out);
+        }
+        loop {
+            let param = self.expect_ident("as a type parameter name after `where`")?;
+            self.expect(
+                TokenKind::Colon,
+                "after the type parameter in a `where` clause",
+            )?;
+            let bounds = self.parse_bound_list()?;
+            let span = param
+                .span
+                .merge(bounds.last().map_or(param.span, |b| b.span));
+            out.push(WhereBound {
+                param,
+                bounds,
+                span,
+            });
+            if self.eat(TokenKind::Comma).is_none() {
+                break;
+            }
+        }
+        Ok(out)
     }
 
     pub(crate) fn parse_type_decl(&mut self) -> Result<TypeDecl, CompileError> {
@@ -460,6 +495,23 @@ impl<'a> Parser<'a> {
         let name = self.expect_ident("as a variant payload field name")?;
         self.expect(TokenKind::Colon, "after the variant payload field name")?;
         let type_ref = self.parse_type_ref("as the variant payload field type")?;
+        // #2607 (Decision A): a default belongs to a record's field only. A
+        // variant is built like a call, every payload field given, so a default
+        // here would be an optional argument by another name.
+        if let Some(eq) = self.peek().filter(|t| t.kind == TokenKind::Eq) {
+            return Err(CompileError::new(
+                "bynk.types.field_default_on_variant",
+                eq.span,
+                format!(
+                    "variant payload field `{}` cannot have a default",
+                    name.name
+                ),
+            )
+            .with_note(
+                "only a record's fields take defaults; build the variant with every payload \
+                 field, or hold the optional values in a record with defaults",
+            ));
+        }
         let span = name.span.merge(type_ref.span());
         Ok(VariantField {
             name,

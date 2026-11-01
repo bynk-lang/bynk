@@ -110,6 +110,8 @@ mod duration;
 mod e2e;
 #[path = "embed_check_behaviour.rs"]
 mod embed_check_behaviour;
+#[path = "eq_bound_migration.rs"]
+mod eq_bound_migration;
 #[path = "events_behaviour.rs"]
 mod events_behaviour;
 #[path = "events_boundary_workerd.rs"]
@@ -216,6 +218,10 @@ mod oidc_auth;
 mod package_dependencies;
 #[path = "package_exports.rs"]
 mod package_exports;
+#[path = "par_behaviour.rs"]
+mod par_behaviour;
+#[path = "par_gate_workerd.rs"]
+mod par_gate_workerd;
 #[path = "property_behaviour.rs"]
 mod property_behaviour;
 #[path = "provider_agent_cross_context_target.rs"]

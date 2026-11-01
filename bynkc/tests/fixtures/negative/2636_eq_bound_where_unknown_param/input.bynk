@@ -1,0 +1,4 @@
+// A `where` entry must bound a type parameter in scope.
+commons c
+
+fn id[T](a: T) -> T where U: Eq { a }

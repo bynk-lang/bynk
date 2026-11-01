@@ -191,6 +191,18 @@ pub fn lower_integration_case_body(
             emit_statement(&mut out, stmt, &mut cx, 0);
             bounds.push((start, out.len()));
             binds.push(match stmt {
+                // #2640: a `par` block binds each of its `let` names.
+                bynk_syntax::ast::Statement::Par(p) => p
+                    .statements
+                    .iter()
+                    .filter_map(|s| match s {
+                        bynk_syntax::ast::Statement::EffectLet(l) if l.name.name != "_" => Some(
+                            cx.resolved_local_name(&l.name.name)
+                                .unwrap_or_else(|| crate::emitter::ts_ident(&l.name.name)),
+                        ),
+                        _ => None,
+                    })
+                    .collect(),
                 bynk_syntax::ast::Statement::Let(l) | bynk_syntax::ast::Statement::EffectLet(l)
                     if l.name.name != "_" =>
                 {
@@ -821,6 +833,150 @@ fn tail_lowers_as_expression(e: &Expr, cx: &LowerCtx) -> bool {
     }
 }
 
+/// Lower the awaited expression of a `let x <- e`, with the call-site
+/// `by <Actor>(<identity>)` clause it carries folded into the addressed call.
+fn lower_effect_let_value(
+    l: &bynk_syntax::ast::LetStmt,
+    pre: &mut Pre,
+    cx: &mut LowerCtx,
+) -> String {
+    // v0.182 (#664): a call-site `by <Actor>(<identity>)` supplies the
+    // identity the addressed handler reads as `deps.identity`. Lower it
+    // (a test-only brand cast, like an agent key) and stash it for the
+    // address-call lowering to fold into that call's deps.
+    let saved_identity = cx.call_site_identity.take();
+    let saved_claims = cx.call_site_claims.take();
+    let saved_actor = cx.call_site_actor.take();
+    let saved_no_credential = cx.call_site_no_credential;
+    cx.call_site_no_credential = false;
+    let saved_bad_signature = cx.call_site_bad_signature.take();
+    if let Some(principal) = &l.principal {
+        // #706: `by Nobody` drives the route with no credential (the 401
+        // path); it names no identity. Any other principal supplies its
+        // identity — the *raw* lowered value (`"bob"`), which unit deps
+        // folds with an `as any` brand cast and the system driver passes
+        // as the JWT `sub` verbatim.
+        if principal.actor.name == "Nobody" {
+            cx.call_site_no_credential = true;
+        } else if let Some(variant) = bad_signature_driver(&principal.actor.name) {
+            // #2135: `by Forged` / `by Stale` name no identity either.
+            cx.call_site_bad_signature = Some(variant);
+        } else {
+            cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower(id, cx));
+            cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower(c, cx));
+            cx.call_site_actor = Some(principal.actor.name.clone());
+        }
+    }
+    let value = pre.lower(&l.value, cx);
+    cx.call_site_identity = saved_identity;
+    cx.call_site_claims = saved_claims;
+    cx.call_site_actor = saved_actor;
+    cx.call_site_no_credential = saved_no_credential;
+    cx.call_site_bad_signature = saved_bad_signature;
+    value
+}
+
+/// #2640: `par { let a <- e1  let b <- e2 }` →
+/// `const [a, b] = await __bynkSettleAll([() => e1, () => e2]);`.
+///
+/// Each binding is a thunk and the join calls them in source order, so each
+/// effect is issued before the next binding is evaluated and before any is
+/// awaited. A thunk that throws synchronously (a refinement or bounds check, a
+/// provider that throws before it returns a promise) becomes a rejected entry
+/// rather than escaping with an earlier effect left unawaited (ADR 0426), and the
+/// first rejection in source order still wins (see `settle.ts`). A binding's
+/// hoisted statements sit inside its thunk, so they run at its turn. A `do`
+/// binding takes a hole in the pattern. A binding with a type annotation types
+/// its thunk's result (`(): Promise<T> => …`), so the destructured name has the
+/// type `const x: T = await e` gives it. Every effect is still awaited, so
+/// ADR 0426's guarantee holds.
+fn emit_par(out: &mut String, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx, indent: usize) {
+    // `None` for a `do`, which binds nothing; the name (or `_`) for a `let`.
+    let mut names: Vec<Option<&bynk_syntax::ast::Ident>> = Vec::new();
+    // Each binding's hoisted statements, its value, and its annotation.
+    let mut parts: Vec<(Pre, String, Option<String>)> = Vec::new();
+    for st in &p.statements {
+        let mut pre = Pre::new();
+        match st {
+            Statement::EffectLet(l) => {
+                let value = lower_effect_let_value(l, &mut pre, cx);
+                names.push(Some(&l.name));
+                parts.push((pre, value, l.type_annot.as_ref().map(ts_type_ref)));
+            }
+            Statement::Do(d) => {
+                let value = pre.lower(&d.value, cx);
+                names.push(None);
+                parts.push((pre, value, None));
+            }
+            // The checker refuses every other statement in a `par` block.
+            _ => {}
+        }
+    }
+    // The names are bound only after every value is lowered, so a binding that
+    // reads an outer name its own `let` re-binds still sees the outer one.
+    let mut pattern: Vec<String> = names
+        .iter()
+        .map(|n| n.map(|id| cx.bind_local_name(&id.name)).unwrap_or_default())
+        .collect();
+    while pattern.last().is_some_and(String::is_empty) {
+        pattern.pop();
+    }
+    cx.note_settle_all();
+    // T2.2 (R6.4): see the matching note at `EffectLet`.
+    cx.emitted_await = true;
+    let hoisted = parts.iter().any(|(pre, ..)| !pre.stmts().is_empty());
+    let thunk = |pre: &Pre, value: &str, annot: &Option<String>| -> (String, Vec<String>) {
+        let hoists = pre.stmts();
+        let asynchronous = hoists.iter().any(|s| s.contains("await "));
+        let head = format!(
+            "{}(){} =>",
+            if asynchronous { "async " } else { "" },
+            annot
+                .as_ref()
+                .map(|t| format!(": globalThis.Promise<{t}>"))
+                .unwrap_or_default()
+        );
+        if hoists.is_empty() {
+            (format!("{head} {value}"), Vec::new())
+        } else {
+            let mut body = hoists.to_vec();
+            body.push(format!("return {value};"));
+            (format!("{head} {{"), body)
+        }
+    };
+    let open = if pattern.is_empty() {
+        String::new()
+    } else {
+        format!("const [{}] = ", pattern.join(", "))
+    };
+    if !hoisted {
+        let items: Vec<String> = parts
+            .iter()
+            .map(|(pre, value, annot)| thunk(pre, value, annot).0)
+            .collect();
+        write_line(
+            out,
+            indent,
+            &format!("{open}await __bynkSettleAll([{}]);", items.join(", ")),
+        );
+        return;
+    }
+    write_line(out, indent, &format!("{open}await __bynkSettleAll(["));
+    for (pre, value, annot) in &parts {
+        let (head, body) = thunk(pre, value, annot);
+        if body.is_empty() {
+            write_line(out, indent + 1, &format!("{head},"));
+        } else {
+            write_line(out, indent + 1, &head);
+            for line in body {
+                write_line(out, indent + 2, &line);
+            }
+            write_line(out, indent + 1, "},");
+        }
+    }
+    write_line(out, indent, "]);");
+}
+
 fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent: usize) {
     // Slice 1 (ADR 0103 D2): every generated line this statement emits — including
     // the multi-line `?` expansion (temp / Err-guard / unwrap) — anchors to the
@@ -869,39 +1025,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
         Statement::EffectLet(l) => {
             // `let x <- expr` → `const x = await expr;`
             let mut pre = Pre::new();
-            // v0.182 (#664): a call-site `by <Actor>(<identity>)` supplies the
-            // identity the addressed handler reads as `deps.identity`. Lower it
-            // (a test-only brand cast, like an agent key) and stash it for the
-            // address-call lowering to fold into that call's deps.
-            let saved_identity = cx.call_site_identity.take();
-            let saved_claims = cx.call_site_claims.take();
-            let saved_actor = cx.call_site_actor.take();
-            let saved_no_credential = cx.call_site_no_credential;
-            cx.call_site_no_credential = false;
-            let saved_bad_signature = cx.call_site_bad_signature.take();
-            if let Some(principal) = &l.principal {
-                // #706: `by Nobody` drives the route with no credential (the 401
-                // path); it names no identity. Any other principal supplies its
-                // identity — the *raw* lowered value (`"bob"`), which unit deps
-                // folds with an `as any` brand cast and the system driver passes
-                // as the JWT `sub` verbatim.
-                if principal.actor.name == "Nobody" {
-                    cx.call_site_no_credential = true;
-                } else if let Some(variant) = bad_signature_driver(&principal.actor.name) {
-                    // #2135: `by Forged` / `by Stale` name no identity either.
-                    cx.call_site_bad_signature = Some(variant);
-                } else {
-                    cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower(id, cx));
-                    cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower(c, cx));
-                    cx.call_site_actor = Some(principal.actor.name.clone());
-                }
-            }
-            let value = pre.lower(&l.value, cx);
-            cx.call_site_identity = saved_identity;
-            cx.call_site_claims = saved_claims;
-            cx.call_site_actor = saved_actor;
-            cx.call_site_no_credential = saved_no_credential;
-            cx.call_site_bad_signature = saved_bad_signature;
+            let value = lower_effect_let_value(l, &mut pre, cx);
             for s in pre.stmts() {
                 write_line(out, indent, s);
             }
@@ -1004,6 +1128,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             cx.emitted_await = true;
             write_line(out, indent, &format!("await {value};"));
         }
+        Statement::Par(p) => emit_par(out, p, cx, indent),
         Statement::Assign(a) => {
             // v0.81 (storage track, ADR 0109): `cell := expr` writes the mutable
             // working state in place (`__state.cell = <expr>`). It is staged in
@@ -6205,27 +6330,61 @@ fn lower_record_construction(
     cx: &mut LowerCtx,
 ) -> Lowered {
     let mut pre = Pre::new();
-    let mut parts = Vec::new();
+    // Each entry is `(key, value)`; a `None` value is a shorthand `{ x }` whose
+    // binding kept its name, written as the bare key.
+    let mut entries: Vec<(String, Option<String>)> = Vec::new();
     for f in fields {
         match &f.value {
             Some(v) => {
                 let val = pre.lower(v, cx);
-                parts.push(format!("{}: {}", f.name.name, val));
+                entries.push((f.name.name.clone(), Some(val)));
             }
             None => {
                 // Shorthand `{ x }` references the binding `x`; if the binding
                 // was renamed (a reserved word), expand to `x: __id_x` — the
                 // key is wire format and must keep the source spelling.
                 let v = ts_ident(&f.name.name);
-                if v == f.name.name {
-                    parts.push(f.name.name.clone());
-                } else {
-                    parts.push(format!("{}: {v}", f.name.name));
-                }
+                let renamed = (v != f.name.name).then_some(v);
+                entries.push((f.name.name.clone(), renamed));
             }
         }
     }
-    let _ = type_name;
+    // #2607 (Decision C): each declared field the literal leaves out takes its
+    // default, written as a self-contained value (`lower_field_default_value`)
+    // so it needs nothing imported into this module. The checker has already
+    // required every field without a default, and rejected any default that
+    // has no such value.
+    let types = &cx.commons().types;
+    if let Some(decl) = types.get(&type_name.name)
+        && let TypeBody::Record(r) = &decl.body
+    {
+        for declared in &r.fields {
+            let Some(init) = &declared.init else {
+                continue;
+            };
+            if fields.iter().any(|f| f.name.name == declared.name.name) {
+                continue;
+            }
+            match bynk_check::wire_default::lower_field_default_value(
+                init,
+                &declared.type_ref,
+                types,
+            ) {
+                Ok(v) => entries.push((declared.name.name.clone(), Some(v))),
+                Err(reason) => unreachable!(
+                    "field `{}`'s default passed the checker but has no value: {reason}",
+                    declared.name.name
+                ),
+            }
+        }
+    }
+    let parts: Vec<String> = entries
+        .into_iter()
+        .map(|(key, value)| match value {
+            Some(v) => format!("{key}: {v}"),
+            None => key,
+        })
+        .collect();
     pre.finish(format!("{{ {} }}", parts.join(", ")))
 }
 

@@ -272,8 +272,8 @@ types are admissible only in non-boundary positions** — fn/lambda parameters,
 returns, and locals; everywhere a value would serialise, persist, or cross a
 boundary they are rejected ([§5.8](/book/spec/static-semantics/#58-boundaries--cross-context),
 `bynk.types.function_at_boundary`). A generic function's type parameters are
-unconstrained type variables, instantiated per call site and erased at
-emission; they never appear in a checked program's expression types outside
+type variables, instantiated per call site and erased at emission — unconstrained
+unless they declare an `Eq` bound (§5.2); they never appear in a checked program's expression types outside
 the generic function's own body.
 
 ## §6.5 Type compatibility & boundaries

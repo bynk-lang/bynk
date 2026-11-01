@@ -325,6 +325,10 @@ navigation, folding & selection ranges.
    Each action re-checks its edited text before it is offered.
    - [x] Organise `uses`/`consumes` (`source.organizeImports`).
    - [x] Fix all (`source.fixAll.bynk`).
+   - [x] The CLI form of it, `bynk check --fix` / `bynkc check --fix`
+     ([#2642](https://github.com/bynk-lang/bynk/issues/2642)): the same
+     selection rule (shared in `bynk-syntax`), repeated to a fixpoint, written
+     only when the whole run is sound. This is the CLI ADR 0054 anticipated.
    - [x] Fill match arms.
    - [x] Inline variable (`refactor.inline`).
    - [x] Generate provider stub.

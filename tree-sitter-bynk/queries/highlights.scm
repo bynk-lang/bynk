@@ -112,6 +112,10 @@
 ; token exists only inside a `faults_expr`.
 "faults" @keyword.operator
 
+; #2640: `par` is contextual (an identifier elsewhere), so it is a keyword only
+; as the head of a `par_stmt`.
+(par_stmt "par" @keyword)
+
 ; v0.117: the `trace(Cap.op)` escape hatch — a test-only builtin.
 "trace" @keyword
 
@@ -134,6 +138,8 @@
 (service_protocol event_type: (identifier) @type)
 (event_pattern_value type: (identifier) @type)
 (opaque_type) @type
+; Constrained generics slice 0: a constraint name in a bound (`T: Eq`).
+(constraint) @type
 (generic_type_ref arg: (identifier) @type)
 ; v0.157 (ADR 0183): a user generic-type application — the head name and each
 ; argument are types.

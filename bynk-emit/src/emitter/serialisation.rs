@@ -1375,10 +1375,10 @@ fn emit_record(
 /// and its default as a raw `(Expr, TypeRef)`, lowered to its wire-JSON
 /// literal right here via `lower_field_default_wire` — the same point it was
 /// always called from, per Part 1's seam (`bynk-check` carries the boundary
-/// fact, `bynk-emit` renders it). Events slice 3a (#972): a generic-record
-/// instantiation's fields never carry a default (events are never generic),
-/// so `default` is always `None` on that path; only `deserialise_<fn_suffix>`
-/// consults it, `serialise_<fn_suffix>` is untouched (Decision B, #972).
+/// fact, `bynk-emit` renders it). Only `deserialise_<fn_suffix>` consults
+/// a default; `serialise_<fn_suffix>` is untouched (Decision B, #972). A
+/// generic-record instantiation's default arrives typed at the
+/// instantiation (#2607, Decision I).
 ///
 /// #1443 (Arc E slice 5): returns the `[serialise, deserialise]` pair as
 /// real `bynk_ts::TsDecl` nodes — the same `Vec<TsDecl>` shape
@@ -3421,10 +3421,12 @@ pub(crate) fn emit_generic_helpers_qualified(
                 let fields = record_inst_fields(name, args, types).unwrap_or_else(|| {
                     unreachable!("RecordInst `{name}` is not a resolved generic record")
                 });
-                // Events slice 3a (#972): a generic record instantiation
-                // never carries a field default — events are never generic
-                // (`parse_event_decl` always builds zero type params), so
-                // this path can never reach one. #855 (Phase 2 step 9): a
+                // #2607 (Decision I): a field's default rides along, paired
+                // with the field's *substituted* type, so it renders at the
+                // instantiation exactly as it would in a non-generic record —
+                // the checker only admits a default whose value holds for
+                // every instantiation (`None`, `[]`, a concrete field's
+                // literal). #855 (Phase 2 step 9): a
                 // `WireField` for a substituted instantiation type is built
                 // straight from `record_inst_fields`' resolved `TypeRef`s via
                 // `wire_ref_of`, mirroring what `wire_type`/`wire_fields`
@@ -3435,25 +3437,40 @@ pub(crate) fn emit_generic_helpers_qualified(
                 // a field the two lists disagree on panics rather than
                 // silently losing its check (the contract hash would still
                 // include it).
-                let declared: std::collections::HashMap<&str, Vec<bynk_syntax::ast::PredKind>> =
-                    match types.get(name.as_str()).map(|d| &d.body) {
-                        Some(bynk_syntax::ast::TypeBody::Record(r)) => r
-                            .fields
-                            .iter()
-                            .map(|f| (f.name.name.as_str(), bynk_check::wire::field_predicates(f)))
-                            .collect(),
-                        _ => unreachable!("RecordInst `{name}` is not a resolved generic record"),
-                    };
+                #[allow(clippy::type_complexity)]
+                let declared: std::collections::HashMap<
+                    &str,
+                    (
+                        Vec<bynk_syntax::ast::PredKind>,
+                        Option<&bynk_syntax::ast::Expr>,
+                    ),
+                > = match types.get(name.as_str()).map(|d| &d.body) {
+                    Some(bynk_syntax::ast::TypeBody::Record(r)) => r
+                        .fields
+                        .iter()
+                        .map(|f| {
+                            (
+                                f.name.name.as_str(),
+                                (bynk_check::wire::field_predicates(f), f.init.as_ref()),
+                            )
+                        })
+                        .collect(),
+                    _ => unreachable!("RecordInst `{name}` is not a resolved generic record"),
+                };
                 let fields: Vec<WireField> = fields
                     .into_iter()
-                    .map(|(n, t)| WireField {
-                        shape: wire_ref_of(&t),
-                        predicates: declared.get(n.as_str()).cloned().unwrap_or_else(|| {
-                            unreachable!("`{name}` has no declared field `{n}`")
-                        }),
-                        path_segment: n.clone(),
-                        name: n,
-                        default: None,
+                    .map(|(n, t)| {
+                        let (predicates, init) =
+                            declared.get(n.as_str()).cloned().unwrap_or_else(|| {
+                                unreachable!("`{name}` has no declared field `{n}`")
+                            });
+                        WireField {
+                            shape: wire_ref_of(&t),
+                            predicates,
+                            path_segment: n.clone(),
+                            default: init.map(|e| (e.clone(), t.clone())),
+                            name: n,
+                        }
                     })
                     .collect();
                 // #1443 (Arc E slice 5): `emit_record_codec` itself now

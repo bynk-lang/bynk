@@ -1,7 +1,7 @@
 ---
 title: The Bynk Book
 ---
-> ⚠️ **Bynk is pre-1.0 (currently v0.455) and under active development.**
+> ⚠️ **Bynk is pre-1.0 (currently v0.460) and under active development.**
 > The language changes in small, spec-first increments. This book documents
 > **what compiles today**; planned features are marked as planned rather than
 > described as if they exist. See [Versioning & roadmap](/book/about/versioning-and-roadmap/).

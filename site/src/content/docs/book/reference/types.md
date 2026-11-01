@@ -459,13 +459,59 @@ type Order = {
 }
 ```
 
-- **Construct** by naming every field: `Order { id: "1", item: "book" }`.
+- **Construct** by naming every field that has no default:
+  `Order { id: "1", item: "book" }`.
 - **Access** with dot notation: `o.id`.
 - **Update** with the spread form, which copies and overrides:
   `Order { ...o, item: "pen" }`.
 
 Records emit a TypeScript `interface` with `readonly` fields. A record field may
 not directly be of the record's own type (`bynk.resolve.recursive_record_field`).
+
+### Field defaults {#field-defaults}
+
+A field may declare a default, `field: T = expr`. A literal may leave that field
+out, and a body decoded without its key takes the default too:
+
+```bynk,fragment
+type Mode = enum { Fast, Careful }
+
+type Options = {
+  name: String,
+  retries: Int = 3,
+  mode: Mode = Mode.Careful,
+  timeout: Option[Duration] = None,
+  tags: Map[String, String] = Map.empty(),
+}
+```
+
+`Options { name: "nightly" }` is `Options { name: "nightly", retries: 3, mode:
+Careful, timeout: None, tags: Map.empty() }`, and `Options { name: "x", retries:
+5 }` keeps its own `retries`. A field without a default is still required.
+
+- **What a default may be.** A static value of the field's type: a literal, a
+  variant, `Some`/`None`/`Ok`/`Err`, a record or list literal, `Map.empty()`,
+  `Set.empty()`, or `T.unsafe(lit)` for an opaque type. It can't call a function
+  or read a binding (`bynk.types.bad_field_default`).
+- **`Option` fields are not optional by default.** Write `= None` to make one
+  so. On the wire an absent key already decodes as `None`; in a literal the
+  field is required unless it says otherwise.
+- **A spread wins.** `Options { ...o, name: "y" }` takes every other field from
+  `o`, never from a default.
+- **On the wire.** A body without a defaulted field's key decodes to the
+  default; a key that is present, `null` included, decodes as sent. The
+  [OpenAPI document](/docs/bynk-cli/#bynk-openapi) lists a defaulted field as not required.
+- **Generic records.** A default must hold for every instantiation: `items:
+  List[T] = []` and `next: Option[T] = None` do, a field of type `T` can't have
+  one.
+- **Variants don't take defaults** (`bynk.types.field_default_on_variant`). A
+  variant is built like a call; hold optional values in a record instead.
+
+Adding a field *with* a default doesn't break existing literals, which is why
+the first-party options records (`FetchOptions`, `QueueSend`, `KvGet`, `KvPut`,
+`R2Put`) give every field one. Changing a default changes every literal and
+every decode that relies on it, so treat it as a behaviour change. See
+[Add an option without breaking callers](/book/guides/program-structure/add-an-option/).
 
 ### Documenting fields and variants
 
@@ -476,8 +522,9 @@ Hover, completion and the documentation page show it. See
 
 ## Generic record types
 
-A record type may take **type parameters** — an unconstrained, bound-free name
-scoped to the declaration — so one shape serves many element types. The common
+A record type may take **type parameters** — a name scoped to the declaration,
+optionally bounded (see [Generics and bounds](/book/reference/generics/)) — so one
+shape serves many element types. The common
 case is an API envelope:
 
 ```bynk
@@ -790,4 +837,19 @@ if o is (Order { status: Cancelled, .. }) { "cancelled" } else { "live" }
   every field is matched by a name or `_`; one with a literal or variant field
   is partial, so end the `match` with a `_` arm. Precise coverage across several
   arms is a later increment.
+
+A record pattern also destructures in a `let` (#2654):
+
+```bynk,fragment
+let Item { sku, qty, .. } = item
+let Order { total, customer: Customer { email, .. }, .. } <- load(id)
+let Order { status: Paid, total, .. } = order else { 0 }
+```
+
+The `else` may be left out when the pattern cannot fail (every field a name, `_`
+or a nested pattern of the same kind); a pattern with a literal or variant field
+needs it (`bynk.parse.let_pattern_without_else`, which names the field). The
+names are in scope for the rest of the block. An `else` on a pattern that cannot
+fail is `bynk.types.unreachable_arm`, and the editor offers to remove it. See
+[Destructure a record with `let`](/book/guides/type-system/destructure-a-record-with-let/).
 

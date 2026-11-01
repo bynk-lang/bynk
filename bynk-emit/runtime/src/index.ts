@@ -4,6 +4,7 @@
 export * from "./result.ts";
 export * from "./bytes.ts";
 export * from "./time.ts";
+export * from "./settle.ts";
 export * from "./url.ts";
 export * from "./equality.ts";
 export * from "./int.ts";

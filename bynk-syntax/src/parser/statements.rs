@@ -22,9 +22,8 @@ impl<'a> Parser<'a> {
         } else {
             FnName::Free(first)
         };
-        // v0.20a: optional `[A, B]` type parameters (free functions only —
-        // generic methods are checked semantically; bounds are rejected here
-        // with `bynk.generics.no_bounds`).
+        // v0.20a: optional `[A, B]` type parameters, each optionally bounded
+        // (`[A: Eq]`); the checker validates the constraint names.
         let type_params = self.parse_optional_type_params()?;
         self.expect(TokenKind::LParen, "after the function name")?;
         // For methods, the first parameter may be the special `self` keyword.
@@ -63,6 +62,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RParen, "to close the parameter list")?;
         self.expect(TokenKind::Arrow, "before the return type")?;
         let return_type = self.parse_type_ref("as the return type")?;
+        let where_bounds = self.parse_optional_where_bounds()?;
         // v0.115: contract clauses ride between the return type and the body —
         // any number of `requires <name>: <pred>` then `ensures <name>: <pred>`.
         // The two-list split is by keyword, not order; the checker enforces the
@@ -83,6 +83,7 @@ impl<'a> Parser<'a> {
             name,
             params,
             return_type,
+            where_bounds,
             requires,
             ensures,
             body,
@@ -162,7 +163,8 @@ impl<'a> Parser<'a> {
                     | Some(TokenKind::TildeArrow)
                     | Some(TokenKind::Do)
             ) || self.assign_ahead()
-                || self.advance_ahead();
+                || self.advance_ahead()
+                || self.par_ahead();
             if self.peek_kind() == Some(TokenKind::Let) && self.let_pattern_ahead() {
                 self.enter_recursion("this chain of `let … else` steps")?;
                 *let_else_depth += 1;
@@ -175,32 +177,7 @@ impl<'a> Parser<'a> {
             if is_statement {
                 let mut stmt = self.parse_statement()?;
                 let trailing = self.take_trailing_trivia();
-                match &mut stmt {
-                    Statement::Let(l) | Statement::EffectLet(l) => {
-                        l.trivia.leading = leading;
-                        l.trivia.trailing = trailing;
-                    }
-                    Statement::Expect(a) => {
-                        a.trivia.leading = leading;
-                        a.trivia.trailing = trailing;
-                    }
-                    Statement::Send(s) => {
-                        s.trivia.leading = leading;
-                        s.trivia.trailing = trailing;
-                    }
-                    Statement::Do(d) => {
-                        d.trivia.leading = leading;
-                        d.trivia.trailing = trailing;
-                    }
-                    Statement::Assign(a) => {
-                        a.trivia.leading = leading;
-                        a.trivia.trailing = trailing;
-                    }
-                    Statement::Advance(a) => {
-                        a.trivia.leading = leading;
-                        a.trivia.trailing = trailing;
-                    }
-                }
+                attach_trivia(&mut stmt, leading, trailing);
                 statements.push(stmt);
             } else {
                 tail_leading = leading;
@@ -262,7 +239,8 @@ impl<'a> Parser<'a> {
 
     /// #2010: whether the `let` at the cursor starts a pattern rather than a
     /// binding name. A pattern starts with `Ok`/`Err`/`Some`/`None`, a literal,
-    /// `(`, or a name followed by `(` or `.` (`Shipped(at)`, `Status.Pending`).
+    /// `(`, a name followed by `(` or `.` (`Shipped(at)`, `Status.Pending`), or a
+    /// capitalised name followed by `{` (`Item { sku, .. }`, #2654).
     /// A bare name stays a binding (`let None = …` is not a binding today
     /// either, since `None` is a keyword), so no existing program changes.
     fn let_pattern_ahead(&self) -> bool {
@@ -280,7 +258,17 @@ impl<'a> Parser<'a> {
                 | TokenKind::LParen,
             ) => true,
             Some(TokenKind::Minus) => at(2) == Some(TokenKind::IntLit),
-            Some(TokenKind::Ident) => matches!(at(2), Some(TokenKind::LParen | TokenKind::Dot)),
+            Some(TokenKind::Ident) => match at(2) {
+                Some(TokenKind::LParen | TokenKind::Dot) => true,
+                // #2654: a capitalised name directly followed by `{` opens a
+                // record pattern. A binding name is never followed by `{`, so
+                // no `let` that parses today changes.
+                Some(TokenKind::LBrace) => self.tokens.get(self.pos + 1).is_some_and(|t| {
+                    self.slice(t.span)
+                        .starts_with(|c: char| c.is_ascii_uppercase())
+                }),
+                _ => false,
+            },
             _ => false,
         }
     }
@@ -288,7 +276,9 @@ impl<'a> Parser<'a> {
     /// #2010: `let <pattern> (= | <-) <expr> else (<block> | match { <arms> })`.
     fn parse_let_else(&mut self) -> Result<LetElseParts, CompileError> {
         let kw = self.expect(TokenKind::Let, "to start a let statement")?;
+        let pattern_first = self.pos;
         let pattern = self.parse_pattern_top()?;
+        let pattern_after = self.pos;
         if self.peek_kind() == Some(TokenKind::Colon) {
             let colon = self.peek().unwrap().span;
             return Err(CompileError::new(
@@ -317,15 +307,45 @@ impl<'a> Parser<'a> {
             None
         };
         if self.peek_kind() != Some(TokenKind::Else) {
-            return Err(CompileError::new(
+            // #2654: an irrefutable record pattern has no values to fall back
+            // on, so its `let` may omit the `else`. Parentheses around the
+            // pattern are transparent, so they are already gone here.
+            if matches!(pattern, Pattern::Record { .. }) && pattern.is_irrefutable() {
+                let end = principal.as_ref().map_or(value.span, |p| p.span);
+                return Ok(LetElseParts {
+                    kw: kw.span,
+                    pattern,
+                    value,
+                    effectful,
+                    principal,
+                    else_span: Span {
+                        file: end.file,
+                        start: end.end,
+                        end: end.end,
+                    },
+                    remove_else: Vec::new(),
+                    otherwise: None,
+                    span: kw.span.merge(end),
+                    leading: Vec::new(),
+                    trailing: None,
+                });
+            }
+            let mut err = CompileError::new(
                 "bynk.parse.let_pattern_without_else",
                 kw.span.merge(value.span),
                 "a `let` with a pattern needs an `else` for the values the pattern does not match",
-            )
-            .with_note(
+            );
+            if let Some(field) = first_refutable_field(&pattern) {
+                err = err.with_note(format!(
+                    "`{}` can fail to match, so the pattern does not cover every value",
+                    self.slice(field)
+                ));
+            }
+            return Err(err.with_note(
                 "add `else { … }` after the value to say what this block produces when it does not match, or write a `match`",
             ));
         }
+        let after_value = principal.as_ref().map_or(value.span, |p| p.span);
         let else_span = self.bump().unwrap().span;
         let (otherwise, end) = if self.peek_kind() == Some(TokenKind::Match) {
             let match_kw = self.bump().unwrap().span;
@@ -349,6 +369,8 @@ impl<'a> Parser<'a> {
             let end = block.span;
             (LetElseOtherwise::Block(block), end)
         };
+        let remove_else =
+            self.else_removal(&pattern, pattern_first..pattern_after, after_value, end);
         Ok(LetElseParts {
             kw: kw.span,
             pattern,
@@ -356,11 +378,48 @@ impl<'a> Parser<'a> {
             effectful,
             principal,
             else_span,
-            otherwise,
+            remove_else,
+            otherwise: Some(otherwise),
             span: kw.span.merge(end),
             leading: Vec::new(),
             trailing: None,
         })
+    }
+
+    /// #2654: the ranges to delete to turn `let (T { … }) = e else …` into
+    /// `let T { … } = e` — the parentheses around the pattern (any number: they
+    /// are transparent) and everything from the end of the value to the end of
+    /// the `else`. Empty unless the pattern is a record pattern, the only one
+    /// that has an `else`-less form. `tokens` is the pattern's token range.
+    fn else_removal(
+        &self,
+        pattern: &Pattern,
+        tokens: std::ops::Range<usize>,
+        after_value: Span,
+        end: Span,
+    ) -> Vec<Span> {
+        if !matches!(pattern, Pattern::Record { .. }) {
+            return Vec::new();
+        }
+        let kind = |i: usize| self.tokens.get(i).map(|t| t.kind);
+        let opens = tokens
+            .clone()
+            .take_while(|&i| kind(i) == Some(TokenKind::LParen))
+            .count();
+        let closes = tokens
+            .clone()
+            .rev()
+            .take_while(|&i| kind(i) == Some(TokenKind::RParen))
+            .count();
+        let mut out = Vec::new();
+        if opens > 0 && opens == closes {
+            let open = self.tokens[tokens.start].span;
+            let close = self.tokens[tokens.end - 1].span;
+            out.push(Span::new_in(open.file, open.start, pattern.span().start));
+            out.push(Span::new_in(close.file, pattern.span().end, close.end));
+        }
+        out.push(Span::new_in(end.file, after_value.end, end.end));
+        out
     }
 
     /// #2010: the hidden binding and the `match` a `let … else` stands for —
@@ -376,6 +435,7 @@ impl<'a> Parser<'a> {
             effectful,
             principal,
             else_span,
+            remove_else,
             otherwise,
             span,
             leading,
@@ -390,16 +450,21 @@ impl<'a> Parser<'a> {
             name: format!("{LET_ELSE_BINDER_PREFIX}{}", kw.start),
             span: at,
         };
-        let form = match otherwise {
-            LetElseOtherwise::Block(_) => LetElseForm::Block,
-            LetElseOtherwise::Arms(_) => LetElseForm::Match,
+        let form = match &otherwise {
+            Some(LetElseOtherwise::Block(_)) => LetElseForm::Block,
+            Some(LetElseOtherwise::Arms(_)) => LetElseForm::Match,
+            None => LetElseForm::Plain,
         };
         let let_stmt = LetStmt {
             name: binder.clone(),
             type_annot: None,
             value,
             principal,
-            let_else: Some(LetElse { form, else_span }),
+            let_else: Some(LetElse {
+                form,
+                else_span,
+                remove_else,
+            }),
             span,
             trivia: Trivia { leading, trailing },
         };
@@ -416,13 +481,14 @@ impl<'a> Parser<'a> {
             body: MatchBody::Block(rest),
         }];
         match otherwise {
-            LetElseOtherwise::Block(block) => arms.push(MatchArm {
+            None => {}
+            Some(LetElseOtherwise::Block(block)) => arms.push(MatchArm {
                 span: else_span.merge(block.span),
                 pattern: Pattern::Wildcard(else_span),
                 guard: None,
                 body: MatchBody::Block(block),
             }),
-            LetElseOtherwise::Arms(more) => arms.extend(more),
+            Some(LetElseOtherwise::Arms(more)) => arms.extend(more),
         }
         let discriminant = Expr {
             id: self.alloc_expr_id(),
@@ -454,6 +520,80 @@ impl<'a> Parser<'a> {
                 .is_some_and(|t| self.slice(t.span) == "advance")
             && kind(1) == Some(TokenKind::Ident)
             && kind(2) == Some(TokenKind::By)
+    }
+
+    /// #2640: `par {` opens a concurrent binding block. `par` is contextual, and
+    /// `<Ident> {` is no other statement or expression start, so the lookahead
+    /// is unambiguous.
+    fn par_ahead(&self) -> bool {
+        self.peek_kind() == Some(TokenKind::Ident)
+            && self
+                .tokens
+                .get(self.pos)
+                .is_some_and(|t| self.slice(t.span) == "par")
+            && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::LBrace)
+    }
+
+    /// #2640: `par { <statement>* }`. Any statement parses here; the checker
+    /// admits only `let x <- e` and `do e`. A `let` with a refutable pattern
+    /// would desugar into a `match` over the rest of the block, which a `par`
+    /// has no room for, so it is refused here rather than mis-parsed.
+    fn parse_par_stmt(&mut self) -> Result<Statement, CompileError> {
+        let keyword = self.expect_ident("to start a `par` block")?.span;
+        self.expect(TokenKind::LBrace, "to open the `par` block")?;
+        let mut statements = Vec::new();
+        let closing_comments = loop {
+            let leading = self.take_leading_trivia();
+            if self.peek_kind() == Some(TokenKind::RBrace) {
+                break leading;
+            }
+            let is_statement = matches!(
+                self.peek_kind(),
+                Some(TokenKind::Let)
+                    | Some(TokenKind::Expect)
+                    | Some(TokenKind::TildeArrow)
+                    | Some(TokenKind::Do)
+            ) || self.assign_ahead()
+                || self.advance_ahead()
+                || self.par_ahead();
+            if !is_statement {
+                let (span, found) = match self.peek() {
+                    Some(t) => (t.span, t.kind.describe().to_string()),
+                    None => (self.eof_span(), "end of file".to_string()),
+                };
+                return Err(CompileError::new(
+                    "bynk.par.invalid_statement",
+                    span,
+                    format!("a `par` block holds only `let x <- e` and `do e`, found {found}"),
+                )
+                .with_note("a `par` block has no value; bind each result with `let x <- e`"));
+            }
+            if self.peek_kind() == Some(TokenKind::Let) && self.let_pattern_ahead() {
+                return Err(CompileError::new(
+                    "bynk.par.invalid_statement",
+                    self.peek().unwrap().span,
+                    "a `let` with a pattern and an `else` cannot appear in a `par` block",
+                )
+                .with_note(
+                    "bind the effect with a plain `let x <- e` in the block, then match on `x` after it",
+                ));
+            }
+            self.enter_recursion("this nesting of `par` blocks")?;
+            let parsed = self.parse_statement();
+            self.depth -= 1;
+            let mut stmt = parsed?;
+            let trailing = self.take_trailing_trivia();
+            attach_trivia(&mut stmt, leading, trailing);
+            statements.push(stmt);
+        };
+        let close = self.expect(TokenKind::RBrace, "to close the `par` block")?;
+        Ok(Statement::Par(ParStmt {
+            keyword,
+            statements,
+            closing_comments,
+            span: keyword.merge(close.span),
+            trivia: Trivia::default(),
+        }))
     }
 
     pub(crate) fn assign_ahead(&self) -> bool {
@@ -508,6 +648,9 @@ impl<'a> Parser<'a> {
                 span,
                 trivia: Trivia::default(),
             }));
+        }
+        if self.par_ahead() {
+            return self.parse_par_stmt();
         }
         if self.advance_ahead() {
             let keyword = self.expect_ident("to start an advance statement")?.span;
@@ -745,13 +888,48 @@ struct LetElseParts {
     effectful: bool,
     principal: Option<CallSiteActor>,
     else_span: Span,
-    otherwise: LetElseOtherwise,
+    remove_else: Vec<Span>,
+    /// `None` for the `else`-less form of an irrefutable record pattern (#2654).
+    otherwise: Option<LetElseOtherwise>,
     span: Span,
     leading: Vec<Comment>,
     trailing: Option<String>,
 }
 
+/// #2654: the span of the first field of a record pattern that can fail to
+/// match, descending into nested record patterns to the field that does.
+fn first_refutable_field(p: &Pattern) -> Option<Span> {
+    let Pattern::Record { fields, .. } = p else {
+        return None;
+    };
+    for (name, sub) in fields {
+        let Some(sub) = sub else { continue };
+        if let Some(inner) = first_refutable_field(sub) {
+            return Some(inner);
+        }
+        if !sub.is_irrefutable() {
+            return Some(name.span.merge(sub.span()));
+        }
+    }
+    None
+}
+
 enum LetElseOtherwise {
     Block(Block),
     Arms(Vec<MatchArm>),
+}
+
+/// Set a statement's own leading and trailing comments.
+fn attach_trivia(stmt: &mut Statement, leading: Vec<Comment>, trailing: Option<String>) {
+    let trivia = match stmt {
+        Statement::Let(l) | Statement::EffectLet(l) => &mut l.trivia,
+        Statement::Expect(a) => &mut a.trivia,
+        Statement::Send(s) => &mut s.trivia,
+        Statement::Do(d) => &mut d.trivia,
+        Statement::Assign(a) => &mut a.trivia,
+        Statement::Advance(a) => &mut a.trivia,
+        Statement::Par(p) => &mut p.trivia,
+    };
+    trivia.leading = leading;
+    trivia.trailing = trailing;
 }

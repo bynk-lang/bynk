@@ -18,13 +18,14 @@ A diagnostic's **severity** decides whether it fails a build (v0.89). An **`Erro
 Type-check a `.bynk` file or project without writing output
 
 ```text
-bynkc check <INPUT> [--format <FORMAT>]
+bynkc check <INPUT> [--format <FORMAT>] [--fix]
 ```
 
 | Argument | Required | Default | Description |
 |---|---|---|---|
 | `INPUT` | yes | — | Input `.bynk` file or project root. A workspace root checks every member in turn |
 | `--format` | no | `rich` | Diagnostic output format. `rich` (default) is the ariadne source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for tooling (the VS Code problem-matcher, CI, scripts). In both, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports (one of: rich, short) |
+| `--fix` | no | — | Apply the machine-applicable fix suggestions to the sources, in place, before checking (#2642): the same fixes the editor's "fix all" applies, repeated until none remain. Writes only files that change, does not format, and writes nothing if applying the fixes would leave a problem that needs a human. What remains is reported as usual |
 
 ## `bynkc compile`
 
