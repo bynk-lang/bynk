@@ -106,6 +106,7 @@ pub(crate) fn check_fn(
             param_scope.insert(p.name.name.clone(), ty);
         }
     }
+    let eq = EqScope::for_fn(f, input);
     // v0.115: check the function's contract clauses (`requires`/`ensures`) in
     // the parameter scope before the body — a contract is the invariant
     // predicate attached to a function (ADR 0144). `result` in an `ensures` is
@@ -133,6 +134,7 @@ pub(crate) fn check_fn(
             requirements,
             callees,
             &vars,
+            &eq,
             tys,
         );
     }
@@ -162,6 +164,7 @@ pub(crate) fn check_fn(
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: vars.clone(),
+        eq: eq.clone(),
         store_fields: HashMap::new(),
         in_agent_handler: false,
     };
@@ -267,6 +270,7 @@ fn check_static_initialiser(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
+            eq: EqScope::default(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -945,22 +949,15 @@ fn check_generic_call(
     if !ok {
         return None;
     }
-    // #1688: a type parameter the callee compares (`==` on it, directly or
-    // through another generic call) must be instantiated with an
-    // equality-supporting type.
-    let compared = match ctx.input.fns.get(&name.name) {
-        Some(decl) if std::ptr::eq(decl.as_ref(), fn_decl) => {
-            super::equality::compared_type_params(decl, ctx)
-        }
-        _ => Default::default(),
-    };
-    let params: Vec<(String, Option<Span>)> = fn_decl
+    // Constrained generics slice 0: each `Eq`-bounded type parameter of the
+    // callee must be instantiated with an equality-supporting type.
+    let eq_params: Vec<(String, Option<Span>)> = fn_decl
         .type_params
         .iter()
+        .filter(|tp| super::equality::has_eq(&tp.bounds))
         .map(|tp| (tp.name.name.clone(), Some(tp.span)))
         .collect();
-    if !super::equality::check_compared_args(&name.name, name.span, &params, &compared, &subst, ctx)
-    {
+    if !super::equality::check_declared_eq_args(&name.name, name.span, &eq_params, &subst, ctx) {
         return None;
     }
     // v0.39 (ADR 0072): when the user omitted the type arguments, show the
@@ -3113,29 +3110,24 @@ fn check_generic_method_call(
     if !ok {
         return None;
     }
-    // #1702 review: the same call-site bound as a generic function's, over the
-    // receiver type's parameters and the method's own.
-    let decl = ctx.input.methods.get(type_name).and_then(|t| {
-        t.instance
-            .get(&method.name)
-            .or_else(|| t.statics.get(&method.name))
-            .cloned()
-    });
-    let compared = match &decl {
-        Some(decl) if std::ptr::eq(decl.as_ref(), method_decl) => {
-            super::equality::compared_type_params(decl, ctx)
-        }
-        _ => Default::default(),
-    };
-    let mut params: Vec<(String, Option<Span>)> = method_decl
+    // The same call-site bound as a generic function's, over the method's own
+    // `Eq`-bounded parameters and the receiver parameters its `where` clause
+    // bounds.
+    let mut eq_params: Vec<(String, Option<Span>)> = method_decl
         .type_params
         .iter()
+        .filter(|tp| super::equality::has_eq(&tp.bounds))
         .map(|tp| (tp.name.name.clone(), Some(tp.span)))
         .collect();
-    params.extend(recv_type_params.iter().map(|p| (p.clone(), None)));
+    eq_params.extend(
+        method_decl
+            .where_bounds
+            .iter()
+            .filter(|wb| super::equality::has_eq(&wb.bounds))
+            .map(|wb| (wb.param.name.clone(), Some(wb.param.span))),
+    );
     let callee = format!("{type_name}.{}", method.name);
-    if !super::equality::check_compared_args(&callee, method.span, &params, &compared, &subst, ctx)
-    {
+    if !super::equality::check_declared_eq_args(&callee, method.span, &eq_params, &subst, ctx) {
         return None;
     }
     // v0.39 (ADR 0072)-style hint: show the inferred method type arguments after

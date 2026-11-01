@@ -16,6 +16,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Work with `Result` and optional values](/book/guides/type-system/result-and-optionals/)
 - [Pattern-match with `match`](/book/guides/type-system/match/)
 - [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/)
+- [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/)
 
 **See also:** [Reference — Type system](/book/reference/types/),
 [Refined-type API](/book/reference/refined-types/),

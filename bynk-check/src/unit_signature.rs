@@ -116,11 +116,24 @@ fn param_signatures(params: &[Param]) -> Vec<ParamSignature> {
 /// functions ([`UnitSignature::fns`]) and methods ([`UnitSignature::methods`]).
 #[derive(Debug, Clone)]
 pub struct FnSignature {
+    /// Each type parameter as written, bounds included (`T`, `T: Eq`): a bound
+    /// is part of what a caller must satisfy, so it is part of the signature.
     pub type_params: Vec<String>,
+    /// The method's `where` entries, as written (`A: Eq`).
+    pub where_bounds: Vec<String>,
     pub name: String,
     pub params: Vec<ParamSignature>,
     pub return_type: TypeRef,
     pub has_self: bool,
+}
+
+/// `T` or `T: Eq + C`.
+fn bound_text(name: &str, bounds: &[bynk_syntax::ast::Ident]) -> String {
+    if bounds.is_empty() {
+        return name.to_string();
+    }
+    let names: Vec<&str> = bounds.iter().map(|b| b.name.as_str()).collect();
+    format!("{name}: {}", names.join(" + "))
 }
 
 fn fn_signature(name: &str, decl: &bynk_syntax::ast::FnDecl) -> FnSignature {
@@ -128,7 +141,12 @@ fn fn_signature(name: &str, decl: &bynk_syntax::ast::FnDecl) -> FnSignature {
         type_params: decl
             .type_params
             .iter()
-            .map(|tp| tp.name.name.clone())
+            .map(|tp| bound_text(&tp.name.name, &tp.bounds))
+            .collect(),
+        where_bounds: decl
+            .where_bounds
+            .iter()
+            .map(|wb| bound_text(&wb.param.name, &wb.bounds))
             .collect(),
         name: name.to_string(),
         params: param_signatures(&decl.params),

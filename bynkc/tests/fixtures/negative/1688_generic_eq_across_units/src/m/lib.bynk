@@ -1,4 +1,4 @@
 commons m.lib
 
 // #1688: a comparing generic in another commons.
-fn same[T](a: T, b: T) -> Bool { a == b }
+fn same[T: Eq](a: T, b: T) -> Bool { a == b }

@@ -2941,9 +2941,6 @@ fn run_checks(
         .map(|files| bynk_check::assets::declared_served_paths(&parsed, files))
         .unwrap_or_default();
 
-    // #1702 review: `uses` targets first, so a generic callee's compared type
-    // parameters are known before an importer's calls are checked.
-    bynk_check::checker::reset_compared_cache();
     // #2137: the contexts a `system` harness stands up as Workers; their
     // test-build `Clock` reads the harness clock. Empty in a deployable build,
     // which carries no suites.

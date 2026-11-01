@@ -169,6 +169,27 @@ mod tests {
     const M: Applicability = Applicability::MachineApplicable;
     const P: Applicability = Applicability::HasPlaceholders;
 
+    /// Constrained generics slice 0: fix-all migrates a file that compares an
+    /// unbounded type parameter in one action — `missing_eq_bound`'s suggestion
+    /// is machine-applicable and the result compiles.
+    #[test]
+    fn migrates_missing_eq_bounds_in_one_action() {
+        let text = "commons m\n\ntype Box[A] = { value: A }\n\nfn same[T](a: T, b: T) -> Bool { a == b }\n\nfn Box.has(self, x: A) -> Bool { self.value == x }\n";
+        let diagnostics = bynk_ide::diagnose(text);
+        let taken = edits(text, &diagnostics);
+        assert_eq!(taken.len(), 2, "{taken:?}");
+        let mut out = text.to_string();
+        for (span, replacement) in taken.iter().rev() {
+            out.replace_range(span.start..span.end, replacement);
+        }
+        assert!(out.contains("fn same[T: Eq](a: T, b: T)"), "{out}");
+        assert!(
+            out.contains("fn Box.has(self, x: A) -> Bool where A: Eq {"),
+            "{out}"
+        );
+        assert!(bynk_ide::diagnose(&out).is_empty());
+    }
+
     #[test]
     fn takes_every_lone_machine_applicable_suggestion_in_position_order() {
         let ds = [

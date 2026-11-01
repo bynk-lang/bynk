@@ -1082,6 +1082,21 @@ fn check_signature_refs(
         }
         CommonsItem::Capability(c) => {
             for op in &c.ops {
+                // A generic operation has no body for a bound to serve, so
+                // slice 0 rejects one (Codable is where op bounds will earn it).
+                for tp in op.type_params.iter().filter(|tp| !tp.bounds.is_empty()) {
+                    sinks.push(
+                        CompileError::new(
+                            "bynk.generics.bound_on_capability_op",
+                            tp.bounds[0].span,
+                            format!(
+                                "type parameter `{}` of capability operation `{}` carries a bound",
+                                tp.name.name, op.name.name
+                            ),
+                        )
+                        .with_note("capability operations take no bounds yet; remove the `: …`"),
+                    );
+                }
                 let type_params: HashSet<String> = op
                     .type_params
                     .iter()
@@ -1166,6 +1181,16 @@ fn check_duplicate_type_params(params: &[TypeParam], owner: &str, errors: &mut S
     }
 }
 
+/// Constrained generics slice 0: every bound on `params` names a known
+/// constraint (`bynk.generics.unknown_constraint`).
+fn check_type_param_bounds(params: &[TypeParam], errors: &mut Sinks) {
+    for tp in params {
+        for e in crate::checker::equality::unknown_constraints(&tp.bounds, &tp.name.name) {
+            errors.push(e);
+        }
+    }
+}
+
 /// #1653: the generated TypeScript reaches host globals as `globalThis.<name>`,
 /// so a module-scope declaration of that name (a type, function, agent,
 /// provider, …) would hide every one of them in its module. Parameters and
@@ -1219,6 +1244,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
     let type_params: HashSet<String> = t.type_params.iter().map(|p| p.name.name.clone()).collect();
     if !t.type_params.is_empty() {
         check_duplicate_type_params(&t.type_params, &format!("type `{}`", t.name.name), errors);
+        check_type_param_bounds(&t.type_params, errors);
         if !matches!(t.body, TypeBody::Record(_) | TypeBody::Sum(_)) {
             errors.push(
                 CompileError::new(
@@ -1420,6 +1446,7 @@ fn check_fn_refs(
         &format!("function `{}`", f.name.display()),
         errors,
     );
+    check_type_param_bounds(&f.type_params, errors);
     // #594: an instance method on a generic type inherits the receiver type's
     // parameters into scope, so `fn Box.map[U](self, f: A -> U) -> Box[U]` may
     // name the type's own parameter `A` alongside the method's `U`. A method
@@ -1446,6 +1473,27 @@ fn check_fn_refs(
                 );
             }
             type_params.insert(tp.name.name.clone());
+        }
+    }
+    // A `where` entry bounds a type parameter in scope — the method's own or
+    // its receiver type's.
+    for wb in &f.where_bounds {
+        if !type_params.contains(&wb.param.name) {
+            errors.push(
+                CompileError::new(
+                    "bynk.generics.unknown_where_param",
+                    wb.param.span,
+                    format!(
+                        "`where` bounds `{}`, which is not a type parameter of `{}`",
+                        wb.param.name,
+                        f.name.display()
+                    ),
+                )
+                .with_note("a `where` clause bounds a type parameter of the function or of its receiver type"),
+            );
+        }
+        for e in crate::checker::equality::unknown_constraints(&wb.bounds, &wb.param.name) {
+            errors.push(e);
         }
     }
     let mut seen_params: HashMap<&str, &Ident> = HashMap::new();
@@ -2171,6 +2219,46 @@ fn check_type_ref_resolves_in(
                             )
                             .with_note("type declared here"),
                         );
+                    } else {
+                        // A bound the type declares (`type Set2[T: Eq]`) is checked
+                        // against each argument written here. A bare type
+                        // parameter argument is not checked (slice 0: no body
+                        // requires a type's bound).
+                        let scope: Vec<&str> = type_params.iter().map(String::as_str).collect();
+                        for (tp, arg) in decl.type_params.iter().zip(args) {
+                            if !crate::checker::equality::has_eq(&tp.bounds) {
+                                continue;
+                            }
+                            let mut visited = HashSet::new();
+                            let Some(blocker) = crate::checker::equality::walk_ref(
+                                arg,
+                                &scope,
+                                types,
+                                &mut visited,
+                            ) else {
+                                continue;
+                            };
+                            let top = matches!(
+                                arg,
+                                TypeRef::Stream(..)
+                                    | TypeRef::Connection(..)
+                                    | TypeRef::Fn(..)
+                                    | TypeRef::Effect(..)
+                                    | TypeRef::Query(..)
+                            );
+                            let (code, why) = crate::checker::equality::explain(blocker, top);
+                            errors.push(CompileError::new(
+                                code,
+                                arg.span(),
+                                format!(
+                                    "`{}` requires `{}: Eq`, but this makes `{}` `{}` — {why}",
+                                    name.name,
+                                    tp.name.name,
+                                    tp.name.name,
+                                    crate::checker::equality::render(arg),
+                                ),
+                            ));
+                        }
                     }
                 }
             }

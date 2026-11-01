@@ -2334,7 +2334,17 @@ impl Backend {
         // v0.140 (ADR 0163): handler-annotation spans (`@cache` name + argument
         // labels), classified as `decorator`. Parsed from the snapshot here, off
         // the index-read path (mirroring how locals are precomputed).
-        let dt = crate::symbols::handler_annotation_token_spans(text);
+        let mut dt: Vec<(bynk_syntax::span::Span, u32)> =
+            crate::symbols::handler_annotation_token_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_DECORATOR))
+                .collect();
+        // Constraint names in a bound (`T: Eq`, `where A: Eq`), as `interface`.
+        dt.extend(
+            crate::symbols::constraint_token_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_INTERFACE)),
+        );
         crate::index_queries::semantic_tokens(&analysis.index, &lt, &dt, &rel, text, span)
     }
 
@@ -5685,6 +5695,7 @@ fn to_completion_item(c: completion::Completion) -> CompletionItem {
             completion::CompletionKind::Constructor => CompletionItemKind::CONSTRUCTOR,
             completion::CompletionKind::Function => CompletionItemKind::FUNCTION,
             completion::CompletionKind::Constant => CompletionItemKind::CONSTANT,
+            completion::CompletionKind::Constraint => CompletionItemKind::INTERFACE,
         }),
         // Snippet items carry `${n:…}` tab stops; everything else inserts its
         // label verbatim (the default).

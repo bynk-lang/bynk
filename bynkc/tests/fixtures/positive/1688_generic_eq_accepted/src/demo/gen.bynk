@@ -4,9 +4,9 @@ a generic that never compares its parameter still takes a function.
 ---
 commons demo.gen
 
-fn same[T](a: T, b: T) -> Bool { a == b }
+fn same[T: Eq](a: T, b: T) -> Bool { a == b }
 
-fn twice[U](a: U, b: U) -> Bool { same(a, b) }
+fn twice[U: Eq](a: U, b: U) -> Bool { same(a, b) }
 
 fn apply[A, B](f: (A) -> B, x: A) -> B { f(x) }
 
@@ -14,7 +14,7 @@ fn pick[T](a: T, b: T, first: Bool) -> T {
   if first { a } else { b }
 }
 
-fn countdown[T](a: T, n: Int) -> Bool {
+fn countdown[T: Eq](a: T, n: Int) -> Bool {
   if n == 0 { same(a, a) } else { countdown(a, n - 1) }
 }
 

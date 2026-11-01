@@ -344,7 +344,7 @@ obligations follow from Q6 and Q7:
 
 ## 9. Slice status
 
-- [ ] Slice 0 — bounds and `Eq`
+- [x] Slice 0 — bounds and `Eq` (#2639)
 - [ ] Slice 1 — `Ord`
 - [ ] Slice 2 — `Key`
 - [ ] Slice 3 — `Codable`

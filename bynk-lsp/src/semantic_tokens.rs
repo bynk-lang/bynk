@@ -63,7 +63,10 @@ fn token_type_index(kind: SymbolKind) -> u32 {
 const TOK_LOCAL: u32 = 6;
 
 /// Legend index of the `decorator` token type (handler annotations; ADR 0163).
-const TOK_DECORATOR: u32 = 10;
+pub const TOK_DECORATOR: u32 = 10;
+
+/// Legend index of the `interface` token type (constraint names in a bound).
+pub const TOK_INTERFACE: u32 = 15;
 
 const MOD_DECLARATION: u32 = 1 << 0;
 const MOD_REFINED: u32 = 1 << 1;
@@ -89,7 +92,7 @@ fn modifier_bits(m: bynk_check::index::SymbolModifiers) -> u32 {
 pub fn semantic_tokens(
     index: &ProjectIndex,
     local_tokens: &[(Span, bool)],
-    decorator_tokens: &[Span],
+    syntax_tokens: &[(Span, u32)],
     path: &Path,
     text: &str,
     range: Option<Span>,
@@ -135,9 +138,11 @@ pub fn semantic_tokens(
     // by the caller from the parsed unit, keeping this a parse-free index read).
     // Disjoint from the index/local tokens — annotations are neither symbols nor
     // locals — so they merge into the same sorted stream.
-    for &span in decorator_tokens {
+    // Constrained generics slice 0: constraint names ride the same list, as
+    // `interface` (the caller classifies each span).
+    for &(span, ty) in syntax_tokens {
         if in_scope(span) {
-            raw.push((span, TOK_DECORATOR, 0));
+            raw.push((span, ty, 0));
         }
     }
     // Name segments never overlap (the index invariant), so a position
@@ -235,6 +240,7 @@ mod tests {
                 "comment",   // #1888: `--|` doc lines — appended
                 "asset",     // #1883: static asset names — appended
                 "embed",     // #2387: embedded-text names — appended
+                "interface", // constrained generics slice 0: constraint names — appended
             ]
         );
         let modifiers: Vec<&str> = legend.token_modifiers.iter().map(|m| m.as_str()).collect();

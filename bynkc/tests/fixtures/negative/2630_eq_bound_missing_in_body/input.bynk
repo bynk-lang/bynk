@@ -1,0 +1,4 @@
+// Constrained generics slice 0: `==` on a type parameter needs a declared `Eq` bound.
+commons c
+
+fn same[T](a: T, b: T) -> Bool { a == b }
