@@ -224,6 +224,35 @@ pub struct StoreShape {
     #[serde(rename = "type")]
     pub ty: String,
     pub refinement: String,
+    /// #2676 (Decision B): one node per position in the stored value, so the
+    /// reconcile can tell a record field added with a default (additive) from
+    /// any other structural change. Optional (Decision D): a lock written
+    /// before it reads with none, and an unchanged build fills them in
+    /// (Decision C).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<PathShape>,
+}
+
+/// #2676: one position in a stored value. `path` starts at the `store` field's
+/// name and appends `.field` for a record field, `|Variant` for a sum variant,
+/// `[]` for a `List`/`Set` element, `?` for an `Option`'s value, `{}` for a
+/// `Map`'s value and `|Ok`/`|Err` for a `Result`'s arms. `ty` is the node's own
+/// shallow structure (`{}` a record, `|` a sum, `variant`, `List`, `Map[String]`,
+/// a base type, `@N` a recursion back-reference), so two values have the same
+/// structure exactly when their path sets agree. `default` is set on a record
+/// field that declares one.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PathShape {
+    pub path: String,
+    #[serde(rename = "type")]
+    pub ty: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub default: bool,
+    /// The node with its predicates kept (a refined or opaque base's, or a
+    /// field's inline refinement), when that differs from `ty`. A change here
+    /// alone leaves stored data readable, as for [`StoreShape::refinement`].
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub refinement: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -416,6 +445,7 @@ mod tests {
                             kind: "Cell".to_string(),
                             ty: "String".to_string(),
                             refinement: "String".to_string(),
+                            paths: Vec::new(),
                         }],
                     },
                     AgentShape {
