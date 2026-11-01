@@ -586,9 +586,9 @@ pub const UNITS: &[Unit] = &[
         // P3b (#2582): Analytics too, until a first-party service writes to it.
         // P1 (#2590): the new operations of the stable `Kv`, until a service
         // has used them.
-        // P4a (#2602): D1. Its migrations (P4b, #2608) have landed; it stays
-        // experimental until `Bool` from `0`/`1` and literal-only `sql` are
-        // decided, since both change what a call site looks like.
+        // D1 shipped experimental (P4a, #2602) and graduated in P4d (#2652)
+        // once its migrations and call-site shape were settled (P4b, P4c),
+        // by its own gate rather than the registry's.
         experimental: &[
             "Service",
             "R2",
@@ -601,7 +601,6 @@ pub const UNITS: &[Unit] = &[
             "Kv.getBytes",
             "Kv.putBytes",
             "Kv.listPage",
-            "D1",
         ],
         extensible: &["R2Condition", "KvExpiration", "SqlError"],
         instantiable: &[
@@ -1261,7 +1260,6 @@ mod tests {
                 "bynk.cloudflare.Kv.getBytes",
                 "bynk.cloudflare.Kv.putBytes",
                 "bynk.cloudflare.Kv.listPage",
-                "bynk.cloudflare.D1",
                 "bynk.crypto"
             ]
         );

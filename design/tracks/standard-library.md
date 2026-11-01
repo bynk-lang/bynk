@@ -19,6 +19,10 @@
   P4b done (#2608): `D1` schema migrations, applied by deploy, dev and tests.
   K-streams done (#2623): a `Stream` crosses capability signatures and rides
   in records, streams are read once, and `RawStreamed` serves a byte stream.
+  K5c done (#2627): `Fetch.receiveStream` and `sendStream` stream bodies.
+  P5b done (#2626): R2 streamed `getStream`/`putStream` and multipart uploads.
+  P4c done (#2628): `Json.decodeSql` reads `0`/`1` as `Bool`, and `D1`'s SQL
+  is a literal. P4d done (#2652): `D1` is stable.
   P1 done (#2590): `Kv` gains metadata, expiry, binary values and paging.
   K3 done (#2592): `Instant` reads and writes RFC 3339 text. K2 done (#2594):
   percent-encoding on `String`, and URLs in the `bynk.url` commons.
@@ -279,7 +283,7 @@ Every stdlib addition, in any layer, must meet these.
 
 - **R-17 Stability is marked per item.** Each exported item is *stable* or
   *experimental*. Using an experimental item requires an explicit opt-in in
-  `bynk.toml`, e.g. `[unstable] allow = ["bynk.cloudflare.D1"]` (§11 Q6).
+  `bynk.toml`, e.g. `[unstable] allow = ["bynk.cloudflare.R2"]` (§11 Q6).
   Using an unlisted experimental item is an error whose suggestion adds the
   line, so the edge of the 1.0 promise is visible in the manifest. A warning
   per use was rejected because warnings cannot be silenced today, so it would
@@ -360,7 +364,7 @@ the resource-instance model (PR-2).
 | KV | P (`get`/`put`/`putTtl`/`delete`/`list` over text; several namespaces as derived capabilities, S4; P1 #2590, experimental: `getWith`/`putWith` with metadata, an expiry and `cacheTtl`, `getBytes`/`putBytes`, paged `listPage`) | L3 | **yes** | Bulk reads, streamed values (K-streams) |
 | Environment variables | A | L2 | | §6.1 Config |
 | Queues (producer) | P (shipped, experimental: `send`/`sendWith`/`sendBatch` over JSON text from `Json.encode`; instance-only `Queue @name("…")`; P2 #2578) | L3 `Queue` | yes | Consumer side shipped as protocol. A typed `send[T]`, and checking a producer's message against the consumer's, wait for a codec-carrying generic op |
-| D1 | P (shipped, experimental: `all`/`first`/`run`/`batch` over positional `SqlValue` parameters, rows as JSON text with blobs as base64, `SqlError` values; instance-only `D1`; ledger-provisioned; P4a #2602; schema migrations from `migrations/<database>/`, P4b #2608; `Json.decodeSql` reads `0`/`1` flags as `Bool`, SQL literal-only and `SqlStatement` non-boundary, P4c #2628) | L3 `D1` | **yes** | Graduation to stable (P4d) |
+| D1 | S (stable since P4d #2652: `all`/`first`/`run`/`batch` over positional `SqlValue` parameters, rows as JSON text with blobs as base64, `SqlError` values; instance-only `D1`; ledger-provisioned; P4a #2602; schema migrations from `migrations/<database>/`, P4b #2608; `Json.decodeSql` reads `0`/`1` flags as `Bool`, SQL literal-only and `SqlStatement` non-boundary, P4c #2628) | L3 `D1` | **yes** | Shipped experimental in P4a; graduated by its own gate (ADR 0664 G, met by P4c), not the registry bar |
 | R2 | P (shipped, experimental: `get`/`head`/`put`/`putWith`/`delete`/`list` over whole `Bytes` objects; instance-only; P5 #2323. Streamed `getStream`/`putStream`/`putStreamWith` with a declared size, and multipart uploads with a plain `R2Upload` handle, P5b #2626) | L3 `R2` | **yes** | Ranged and conditional reads, streamed parts, further conditions, typed multipart errors |
 | Rate Limiting | P (shipped, experimental: `allow(key) -> Effect[Bool]`; instance-only `RateLimit @limit(n) @period(10.seconds \| 60.seconds)`; P3 #2342) | L3 `RateLimit` | **yes** | `namespace_id` allocated in the ledger, unique across its environments; a listing API to detect ids used outside Bynk |
 | Analytics Engine | P (shipped, experimental: `write(DataPoint)`, limits checked before the write; instance-only `Analytics`, no options; dataset name derived in snake case; P3b #2582) | L3 `Analytics` | yes | `Bytes` blobs, and a typed `write[T]` mapping a record onto blobs and doubles |
@@ -669,7 +673,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | P4a | **Done** (#2602): D1, `capability X = D1` with `all`/`first`/`run`/`batch`, `SqlValue` parameters, rows as JSON text (blobs as base64; `0`/`1` flags decoded as `Int`), `SqlError` values; deploy creates the database, records its id in the ledger and binds it; tests on `node:sqlite` | S4, K1, D4 |
 | P4b | **Done** (#2608): D1 schema migrations, `migrations/<database>/NNNN_<name>.sql` copied beside the config under `migrations_dir`; `bynk deploy` applies pending ones before the push (the ledger records nothing: the database does), `bynk dev` applies them locally, and every test database starts migrated; `D1` stays experimental | P4a |
 | P4c | **Done** (#2628): `Json.decodeSql[T]`, `Json.decode` for a flat row or list of rows that also reads SQLite's `0`/`1` at a `Bool` field (the shared codec stays strict); `all`/`first`/`run`'s SQL and every `SqlStatement`'s `sql` literal-only (`bynk.types.sql_not_literal`), and `SqlStatement` non-storable and non-boundary | P4b |
-| P4d | Graduate `D1` to stable: drop it from `bynk.cloudflare`'s `experimental` list and the fixtures' `[unstable] allow` | P4c |
+| P4d | **Done** (#2652): `D1` graduates to stable, dropped from `bynk.cloudflare`'s `experimental` list and the fixtures' `[unstable] allow`; the first platform capability to graduate, on its own ADR gate rather than first-party use | P4c |
 | P5 | **Done** (#2323), re-scoped: R2 with whole `Bytes` objects, metadata, conditional ops, paged `list`, ledger-provisioned buckets. Byte streams split out (below); the §11 Q3 scope is treated as account-wide, since R2's docs state naming rules but not the scope | S4, K1 |
 | K-streams | **Done** (#2623), the language half only (ADR 0023): a `Stream` in a capability operation's signature, stream-carrying records and sums (non-boundary, no codec), single-pass streams, and `RawStreamed(body: Stream[Bytes], contentType)`. Settles ADR 0128 D5 for in-process streams | |
 | P5b | **Done** (#2626): `getStream` (an `R2Body`, metadata plus a single-pass `Stream[Bytes]`), `putStream`/`putStreamWith` with a declared `size` (through `FixedLengthStream` on Workers, which refuses a stream of unknown length), and multipart uploads (`createUpload`/`uploadPart`/`completeUpload`/`abortUpload`) over whole-`Bytes` parts and a codable handle. A client upload still can't stream in (request bodies are read whole) | K-streams, P5 |
