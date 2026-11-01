@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "Precise exhaustiveness and reachability: a Maranget usefulness engine replaces the conservative coverage rules, so a multi-field variant payload or a record is exhaustive when its arms cover every case between them (no `_` needed), every uncovered case is reported as a pattern you can paste as an arm (`Pair(false, false)`, `Order { status: Cancelled, .. }`), and redundancy spread across several earlier arms is now `bynk.types.unreachable_arm` (patterns track slice 3, [#2665](https://github.com/bynk-lang/bynk/issues/2665))"
----
+# 0680 — Coverage is decided by one usefulness algorithm, superseding ADR 0169 D
 
-## ADR: usefulness-based-exhaustiveness
-title: Coverage is decided by one usefulness algorithm, superseding ADR 0169 D
-summary: Exhaustiveness, reachability and their witnesses come from one Maranget usefulness engine over a constructor space (variants, records, `Bool`, unbounded literals) with a step budget and a sound fallback; supersedes ADR 0169 D's conservative multi-field rule and slice 1's record rule; realises patterns-track slice 3
+- **Status:** Accepted (v0.464)
 
 **Context.** ADR 0169 D bounded coverage by hand: a single-field payload
 recursed, but a multi-field payload with a refutable field counted as covered

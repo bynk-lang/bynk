@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.463**.
+written against **v0.464**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.464.0** | "Precise exhaustiveness and reachability: a Maranget usefulness engine replaces the conservative coverage rules, so a multi-field variant payload or a record is exhaustive when its arms cover every case between them (no `_` needed), every uncovered case is reported as a pattern you can paste as an arm (`Pair(false, false)`, `Order { status: Cancelled, .. }`), and redundancy spread across several earlier arms is now `bynk.types.unreachable_arm` (patterns track slice 3, [#2665](https://github.com/bynk-lang/bynk/issues/2665))" |
 | **v0.463.0** | "`parTraverse`, `parTraverseAll` and `parTraverseTry` (on lists and on query/broadcast receivers) now settle all: when an element faults the call waits for every element to settle, then raises the first fault in input order, instead of the first fault to arrive with its siblings left running; no source change (concurrent effects, slice 0b, [#2662](https://github.com/bynk-lang/bynk/issues/2662))" |
 | **v0.462.0** | "A commons or context declares a named constant with `const Name: Type = <static expression>`, usable wherever an expression of its type is and imported through `uses` like a function. The type is required, the name is upper-camel, and the initialiser is a literal, a constructor over static values, `T.unsafe(lit)`, an empty collection, a `Duration` literal or another constant, with no cycles; it is emitted as an exported TypeScript `const` ([#2617](https://github.com/bynk-lang/bynk/issues/2617))" |
 | **v0.461.1** | "`bynk test --smoke` smoke-tests every `from http` route without a test written for it: each route is called with arguments `Val` fabricates and must not answer a 5xx or a body that doesn't decode as its declared type, a route with a JSON body must reject a malformed one, and a route behind an actor must refuse a call with no credential. It runs in process, against `dev`, or against a named target (`GET` routes only unless `--smoke-unsafe`); a route `Val` can't fill is skipped and named, and `--print` prints the synthesised suites. Also fixed: bare `Val[T]` of a record now honours an inline `where` on a field, so `qty: Int where Positive` is `1`, not `0`, and a field `where Matches(…)` needs a pin (`bynk.val.needs_pin`) as a `Matches` type does ([#2658](https://github.com/bynk-lang/bynk/issues/2658))" |
