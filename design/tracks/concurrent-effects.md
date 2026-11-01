@@ -8,8 +8,8 @@
   slice 1 was dropped (Q2); slice 3, the timeout, shipped in #2693
   ([#2683](https://github.com/bynk-lang/bynk/issues/2683), ADR 0687); slice 4,
   the race `a.race(b)`, shipped in #2713
-  ([#2711](https://github.com/bynk-lang/bynk/issues/2711), ADR 0691) and
-  reopened Q7 (see its **[Amended]** answer). Every slice has shipped. Spine
+  ([#2711](https://github.com/bynk-lang/bynk/issues/2711), ADR 0691) and reopened
+  Q7 (see its **[Amended]** answer). Every planned slice has shipped. Spine
   [#2615](https://github.com/bynk-lang/bynk/issues/2615).
 - **Realises:** the effect model of `design/bynk-design-notes.md` (an `Effect` is
   the only way a program reaches the outside world), extending the
