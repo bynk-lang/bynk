@@ -21,7 +21,7 @@ fn export(rows: List[String]) -> String {
 }
 
 fn exportWith(rows: List[String], options: ExportOptions) -> String {
-  let body = rows.join(options.separator)
+  let body = rows.fold("", (acc, r) => if acc == "" { r } else { "\(acc)\(options.separator)\(r)" })
   match options.format {
     Csv => body
     Json => "[\(body)]"
