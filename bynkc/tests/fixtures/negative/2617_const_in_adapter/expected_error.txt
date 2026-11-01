@@ -1,0 +1,1 @@
+bynk.resolve.const_outside_context_or_commons `const` declarations are only allowed inside a context or a commons

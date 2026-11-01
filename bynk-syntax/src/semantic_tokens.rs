@@ -54,6 +54,9 @@ pub const TOKEN_TYPES: &[&str] = &[
     // `where A: Eq`). Appended at index 15 (never reordered); standard LSP
     // type.
     "interface",
+    // #2617: `const` names (named constants). Appended at index 16 (never
+    // reordered); a custom type the VS Code extension declares.
+    "constant",
 ];
 
 /// The token modifiers, in wire order (bit 0 first).

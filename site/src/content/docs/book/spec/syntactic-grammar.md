@@ -136,6 +136,18 @@ project root (an interpolated string is a parse error here). The grammar admits
 an `embed` in any body. Placement (contexts and commons only), the path rules,
 and the declared name's type are well-formedness: §5.12a.
 
+### §4.1.12c const_decl {#4112c-const_decl}
+
+{{#grammar const_decl}}
+
+`const`, a name, `:`, a type, `=`, and an expression: a named constant. The
+type annotation is required; a declaration without one is a parse error
+(`bynk.parse.const_missing_type`). The grammar admits a `const` in any body and
+any expression as its initialiser. Placement (contexts and commons only), the
+name's case, the closed set of initialisers and the cycle rule are
+well-formedness: §5.12b. `const` is a contextual keyword, so it remains usable
+as an ordinary identifier elsewhere.
+
 ### §4.1.13 messages_decl (v0.228) {#4113-messages_decl}
 
 {{#grammar messages_decl}}

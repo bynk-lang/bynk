@@ -970,10 +970,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `embed` path is empty, absolute, or contains a `..` segment.",
     ),
     d(
-        "bynk.event.bad_field_default",
-        "An event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement.",
-    ),
-    d(
         "bynk.event.bad_params",
         "An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope.",
     ),
@@ -984,10 +980,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.event.bad_schema_version",
         "An event's `@schema(N)` annotation is malformed — `N` must be a single, positive, positional `Int` literal, and `@schema` may appear at most once on an event.",
-    ),
-    d(
-        "bynk.event.default_outside_event",
-        "A field default (`field: T = expr`) was written on a record field outside an `event` declaration — a default is only meaningful on an event's own field, since it exists to let an older wire event missing this key still deserialise.",
     ),
     dg(
         "bynk.event.duplicate_handler",
@@ -1680,6 +1672,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["par_stmt"],
     )),
     dg(
+        "bynk.parse.const_missing_type",
+        "A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`).",
+        &["const_decl"],
+    ),
+    dg(
         "bynk.parse.consumes_after_decls",
         "`consumes` appears after other declarations.",
         &["consumes_decl"],
@@ -2163,6 +2160,31 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A function was called with the wrong number of arguments.",
         &["call"],
     ),
+    dg(
+        "bynk.resolve.bad_const_initialiser",
+        "A `const` initialiser is not a static value of the declared type: only literals, constructors over static values, `T.unsafe(lit)`, `List.empty()`/`Map.empty()`/`Set.empty()`, `Duration` literals and references to other constants are allowed.",
+        &["const_decl"],
+    ),
+    dg(
+        "bynk.resolve.const_cycle",
+        "Constants refer to each other in a cycle, so none of them has a value.",
+        &["const_decl"],
+    ),
+    dg(
+        "bynk.resolve.const_file_cycle",
+        "Constants in different files of one unit refer to each other in a cycle of files, so the files' modules would import each other and one would read a constant before it is defined.",
+        &["const_decl"],
+    ),
+    dg(
+        "bynk.resolve.const_name_case",
+        "A constant's name is not upper-camel case (`MaxRetries`, not `maxRetries`).",
+        &["const_decl"],
+    ),
+    dg(
+        "bynk.resolve.const_outside_context_or_commons",
+        "A `const` declaration appears outside a context or commons.",
+        &["const_decl"],
+    ),
     d("bynk.resolve.duplicate_actor", "Two actors share a name."),
     dg(
         "bynk.resolve.duplicate_agent",
@@ -2173,6 +2195,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.resolve.duplicate_capability",
         "Two capabilities share a name.",
         &["capability_decl"],
+    ),
+    dg(
+        "bynk.resolve.duplicate_const",
+        "Two constants share a name.",
+        &["const_decl"],
     ),
     dg(
         "bynk.resolve.duplicate_field",
@@ -2737,6 +2764,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.asset_at_boundary",
         "An `Asset` type appears in a record field, boundary or store position; pass its `.url` instead.",
     ),
+    d(
+        "bynk.types.bad_field_default",
+        "A record or event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant, `Some`/`None`/`Ok`/`Err`, a record, a list literal, `Map.empty()`/`Set.empty()`, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. A field whose type is a generic record's type parameter, or applies a user generic, has no default. (Earlier versions reported this as `bynk.event.bad_field_default`.)",
+    ),
     dg(
         "bynk.types.call_arity",
         "A function value was applied with the wrong number of arguments.",
@@ -2828,6 +2859,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.field_access_on_non_record",
         "Field access on a value that is not a record.",
         &["field_access"],
+    ),
+    d(
+        "bynk.types.field_default_on_variant",
+        "A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given.",
     ),
     dg(
         "bynk.types.field_refinement_not_base",

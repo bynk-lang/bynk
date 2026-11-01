@@ -55,6 +55,9 @@ pub struct DevRunArgs {
     pub run_id: String,
     /// The `bynk` binary that starts `bynk dev`.
     pub bynk: PathBuf,
+    /// `--smoke` (#2658): run the synthesised smoke suites, forwarded to each
+    /// group's run.
+    pub smoke: bool,
 }
 
 /// Run every `system` suite against a local `bynk dev`, one per distinct
@@ -68,7 +71,7 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
         }
         ExitCode::FAILURE
     };
-    let plan = match plan(args) {
+    let plan = match plan(program, args) {
         Ok(plan) => plan,
         Err(Planned::Failed(code)) => return code,
         Err(Planned::Message(m)) => return fail(m),
@@ -162,7 +165,7 @@ enum Planned {
 /// Compile the project as a `--against dev` build once: refuse what a real
 /// runtime can't honour (as the group runs would), and read the distinct
 /// `env` maps of its `system` cases and the secrets its Workers declare.
-fn plan(args: &DevRunArgs) -> Result<Plan, Planned> {
+fn plan(program: &str, args: &DevRunArgs) -> Result<Plan, Planned> {
     let options = crate::try_project_options(&args.input)
         .map_err(|e| Planned::Message(e.to_string()))?
         .contracts(true)
@@ -172,6 +175,21 @@ fn plan(args: &DevRunArgs) -> Result<Plan, Planned> {
             ..RemoteTests::default()
         }))
         .target(BuildTarget::Workers);
+    // #2658: plan the smoke suites' run; this is where its skips are reported.
+    let options = if args.smoke {
+        crate::smoke::prepare(
+            program,
+            options,
+            crate::smoke::Methods::All,
+            args.json,
+            args.stream,
+            true,
+        )
+        .map_err(Planned::Failed)?
+        .options
+    } else {
+        options
+    };
     let out = match bynk_emit::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => {
@@ -268,6 +286,9 @@ fn run_group(
     }
     if args.skip_unsupported {
         cmd.arg("--skip-unsupported");
+    }
+    if args.smoke {
+        cmd.arg("--smoke");
     }
     if let Some(settle) = &args.settle {
         cmd.args(["--settle", settle]);

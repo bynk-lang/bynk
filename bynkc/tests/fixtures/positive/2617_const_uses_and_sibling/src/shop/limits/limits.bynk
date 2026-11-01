@@ -1,0 +1,14 @@
+---
+#2617: constants in a commons split across two files. A unit that `uses` the
+commons imports them like functions.
+---
+commons shop.limits
+
+const MaxItems: Int = 20
+const DefaultPage: Page = Page { size: 10, offset: 0 }
+const SmallBatch: Quantity = 5
+const Preferred: Tier = Tier.Gold
+
+type Page = { size: Int, offset: Int }
+type Quantity = Int where InRange(1, 100)
+type Tier = enum { Gold, Silver }

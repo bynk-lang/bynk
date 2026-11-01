@@ -1,0 +1,12 @@
+commons c
+
+// #2617: `c`'s own `Pt` shadows `a`'s, so the constant's value cannot
+// cross into `c`'s code.
+uses a
+uses b
+
+type Pt = { x: Int }
+
+fn mine() -> Pt {
+  Origin
+}

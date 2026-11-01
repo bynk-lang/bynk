@@ -296,6 +296,16 @@ where
                     &vars,
                 )
             }
+            // #2617: an imported constant, typed by its annotation in the
+            // declaring unit's scope.
+            ExprKind::Ident(id) => {
+                let c = self.typed.consts.get(&id.name)?;
+                let unit = self.scope.imported_from.get(&id.name)?;
+                if unit == self.scope.unit {
+                    return None;
+                }
+                self.position(format!("constant `{}`", id.name), unit, &c.ty, &[])
+            }
             _ => None,
         }
     }

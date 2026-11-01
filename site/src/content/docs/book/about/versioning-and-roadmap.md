@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.460) rather than in large releases.
+steps (the book is written against v0.462) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -42,7 +42,12 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   one-line `--- text` docs ([#1888](https://github.com/bynk-lang/bynk/issues/1888),
   [#2203](https://github.com/bynk-lang/bynk/issues/2203)) is an end-of-line doc
   for a member, if the doc-above form proves too tall for short records; today a
-  `---` after code is three `-` operators.
+  `---` after code is three `-` operators. Record field defaults
+  ([#2607](https://github.com/bynk-lang/bynk/issues/2607)) name three possible
+  follow-ups: the agent schema lock counting a defaulted nested field as an
+  additive change, as the event registry does; a service contract hash that
+  ignores an added defaulted field; and defaults on a field whose type applies a
+  user generic.
 - **Events.** Slices 0–2, 3a–3c, and 4 have shipped — `event` declarations,
   `given Events` emission with owner-only enforcement, `from Events(E)`
   subscription across contexts on every platform, structural pattern
@@ -108,8 +113,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
 - **Concurrent effects.** In progress: a
   [`par` block](/book/reference/capabilities/#par) issues independent effects
   together and waits for all of them, raising the first fault in source order.
-  Next: making `parTraverse` wait for every element before it raises
-  ([#2615](https://github.com/bynk-lang/bynk/issues/2615)), then `?` inside a block.
+  `parTraverse`, `parTraverseAll` and `parTraverseTry` now wait for every
+  element before they raise, the same way
+  ([#2662](https://github.com/bynk-lang/bynk/issues/2662)). Next: `?` inside a block
+  ([#2615](https://github.com/bynk-lang/bynk/issues/2615)).
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 

@@ -40,11 +40,12 @@ with each occurrence free to change type. The emitter gives a re-bound name
 its own emitted identifier so each `let` still lowers to a distinct binding.
 
 A unit's top-level declarations share one namespace, except capabilities and
-actors, which each keep their own. A function, an asset, a type or event, a
-service, an agent and a provider with a body (by its implementation name,
-`provides Cap = Name`) MUST NOT share a name, across all of the unit's files
-(`bynk.resolve.name_conflict`; two types, or a type and an event, are
-`bynk.resolve.duplicate_type`). They are all one scope of the emitted module.
+actors, which each keep their own. A function, an asset, an embed, a constant,
+a type or event, a service, an agent and a provider with a body (by its
+implementation name, `provides Cap = Name`) MUST NOT share a name, across all
+of the unit's files (`bynk.resolve.name_conflict`; two types, or a type and an
+event, are `bynk.resolve.duplicate_type`; two constants are
+`bynk.resolve.duplicate_const`). They are all one scope of the emitted module.
 
 A bare reference to a **named function** is a value only where a function
 type is expected (v0.20a); elsewhere it MUST be called
@@ -88,8 +89,8 @@ types is not a crossing. If `t.app` declares `type Repo = Int` beside `uses
 t.core` and `uses t.model`, then `Run { repo: first(r) }` is legal in `t.app`,
 and `Run { repo: 42 }` and `r.repo + 1` are not.
 
-A unit's own declaration also shadows a function or asset of the same name
-from a commons it `uses`, whatever the local declaration's kind, as in the
+A unit's own declaration also shadows a function, asset, embed or constant of
+the same name from a commons it `uses`, whatever the local declaration's kind, as in the
 emitted module: the import is not in scope. Where the local declaration cannot
 answer a reference (a call to a type or service, a bare event name, an asset
 used as a function), the reference is `bynk.uses.name_conflict`, naming both
@@ -152,8 +153,8 @@ call MUST supply the right number of arguments (`bynk.resolve.arity_mismatch`,
 `bynk.types.method_arity`). A returned value MUST match the declared return type
 (`bynk.types.return_mismatch`); a `let` value MUST match any annotation
 (`bynk.types.let_annotation_mismatch`); a record field MUST be given a value of
-its type (`bynk.types.field_value_mismatch`), and every required field MUST be
-supplied (`bynk.resolve.missing_field`).
+its type (`bynk.types.field_value_mismatch`), and every field without a default
+([§5.2b](#field-defaults)) MUST be supplied (`bynk.resolve.missing_field`).
 
 An `if` condition MUST be a `Bool` and both branches MUST **join** to a common
 type — their least upper bound, so a refined type and its base (or two refined
@@ -625,6 +626,44 @@ stripped before the value is parsed, so `1_000` and `1000` denote the same value
 As with `Float` literals, the **as-written lexeme is preserved**, so `bynkc fmt`
 keeps the author's grouping verbatim.
 
+### §5.2b Record field defaults {#field-defaults}
+
+A field of a record type (`type R = { … }`) or of an `event` MAY declare a
+**default**, `field: T = expr`. A sum variant's payload field MUST NOT
+(`bynk.types.field_default_on_variant`): a variant is built like a call, with
+every payload field given.
+
+**What a default may be.** `expr` MUST be a static, wire-representable value of
+`T` (`bynk.types.bad_field_default`): a literal admitted to `T`, a sum variant,
+`Some`/`None`/`Ok`/`Err`, a record literal, a list literal, `Map.empty()` or
+`Set.empty()`, or `T.unsafe(lit)` for an opaque `T` whose literal satisfies its
+refinement. It is evaluated in an empty scope, so it MUST NOT name `self`, a
+parameter, a binding, a capability or a function (ADR 0004's static set). A field
+whose type has no wire form (a function, a held resource) has no default.
+
+**Generic records.** A default MUST hold for every instantiation of the record. A
+field whose type is a bare type parameter has none, and neither does a default
+that reaches one (`Option[T] = Some(1)`); `Option[T] = None`, `List[T] = []`,
+`Map.empty()`, `Set.empty()` and a concrete field's default do. A field whose type
+applies a user generic record or sum (`Page[T]`, `Page[Int]`) has no default.
+
+**Where a default applies.** In exactly two places:
+- **A record literal** that leaves a defaulted field out takes the field's
+  default, as if it were written. A literal that writes the field keeps its own
+  value. A spread (`R { ...base, f: v }`) takes every unwritten field from `base`,
+  never from a default. A record literal written *as* a default may itself leave
+  out a defaulted field of its own type.
+- **A decode** (an HTTP body, a queue message, a service call, an event,
+  `Json.decode`, agent-state rehydration) of a body with no key for a defaulted
+  field takes the default. A present key decodes as sent: `null` or an explicit
+  `None` at an `Option` field is `None`, not the default.
+
+Everywhere else a value is complete: field access, equality and encoding never
+see a missing field. A default is part of a type's source contract, not its wire
+contract hash ([wire format](/book/reference/wire-format/)): adding a field changes
+the hash whether or not it has a default, and changing only a default's value does
+not.
+
 ## §5.3 Refinement & admission
 
 A refinement's predicates MUST apply to the type's base — a string predicate on
@@ -855,7 +894,9 @@ by-convention (no coercion, no silent drop).
 **Additive evolution is automatic:** a `store` field absent from the stored record
 (added in a later deploy) takes its zero/initialiser
 ([§5.4](/book/spec/static-semantics/#54-agents--state)) instead of reading as absent,
-and is not decoded. A stored key the current definition does not declare (a renamed
+and is not decoded. Inside a stored value, a record field with a default
+([§5.2b](#field-defaults)) that the stored record lacks decodes to its default.
+A stored key the current definition does not declare (a renamed
 or removed field) is carried through unchanged and written back, never silently
 dropped. A value that has no wire form, such as a non-finite `Float`, cannot be
 stored: the commit faults and nothing persists.
@@ -1615,13 +1656,10 @@ whether, or how, a subscriber ran.
 **Declaration.** An `event` ([§4.1.12](/book/spec/syntactic-grammar/#4112-event_decl))
 MUST be declared in a context (`bynk.event.outside_context`). Its one admitted
 annotation is `@schema(N)` (`bynk.event.unknown_annotation`), at most once, with
-`N` a single positive `Int` literal (`bynk.event.bad_schema_version`). A field
-default (`field: T = expr`) is admitted only on an event's own fields
-(`bynk.event.default_outside_event`), and `expr` MUST be a static,
-wire-representable value of `T`: a literal admitted to `T`, a sum variant,
-`Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque `T`
-(`bynk.event.bad_field_default`). A default is used when a received payload has
-no key for the field; a present key, `None` included, decodes as sent.
+`N` a single positive `Int` literal (`bynk.event.bad_schema_version`). An event's
+fields MAY declare defaults under the record rule ([§5.2b](#field-defaults)): a
+received payload with no key for a defaulted field takes the default, and the
+schema registry counts a field added with a default as an additive change.
 
 **Emission.** `Events` is a first-party capability of the `bynk` adapter,
 `emit[E](event: E) -> Effect[()]`, consumed with `consumes bynk { Events }` and
@@ -2151,7 +2189,16 @@ slow element does not head-of-line-block the rest; the order in which side
 effects interleave is unspecified. Unlike the sequential `forEach` (which
 short-circuits on the first failure and never issues the rest), a rejecting
 element does **not** cancel siblings already issued — every element's effect is
-in flight before the first failure surfaces, and each runs to completion.
+issued, in input order, before any is awaited. The fan-out has **settle-all**
+fault semantics, as a `par` block does (§4.8.7b): when any element faults it waits
+for **every** element to settle, then raises the **first fault in input order**
+(not the first in time), so no element's work outlives the call and the fault a
+program sees does not depend on timing. Later faults ride on the raised one as
+`suppressed` and are not catchable separately. A fast fault therefore waits for a
+slow sibling. A synchronous throw from `f` is a fault of that element only: the
+elements before and after it are still issued and awaited. The same holds for
+`parTraverseAll` and `parTraverseTry` and for the `Query`/`Map` broadcast forms
+([#2662](https://github.com/bynk-lang/bynk/issues/2662)).
 
 The **collect-all** pair `traverseAll` / `parTraverseAll` (v0.148,
 [ADR 0172](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0172-list-collect-all-iterators.md))
@@ -2177,8 +2224,9 @@ take the same `f: T -> Effect[Result[U, E]]` but **stop at the first `Err`**,
 returning `Effect[Result[List[U], E]]` — `Ok` of the collected values, or the
 first `Err` encountered. `traverseTry` awaits each element in order and bails on
 the first `Err` (later elements never run); `parTraverseTry` issues all at once,
-awaits them, then returns the first `Err` in input order (in-flight calls are not
-cancelled). They are the fault-**propagating** counterpart to the fault-gathering
+awaits them all, then returns the first `Err` in input order — unless an element
+faulted, in which case the fault (first in input order) is raised instead, whatever
+the `Err` positions. They are the fault-**propagating** counterpart to the fault-gathering
 `traverseAll`/`parTraverseAll`, and likewise apply over the `Query`/`Map`
 broadcast.
 
@@ -2499,3 +2547,68 @@ drops one that nothing references. A unit-tier `suite` case names the embeds of
 its target and of the commons the target `uses`. A single file has no project
 root to find `embeds/` under, so building one that declares an embed is
 `bynk.embed.needs_project`; checking it is unaffected.
+
+## §5.12b Named constants {#constants}
+
+A **constant** declaration, `const Name: T = e`
+([§4.1.12c](/book/spec/syntactic-grammar/#4112c-const_decl)), names a value of
+type `T`. In an expression, `Name` has type `T` and its value is `e`'s.
+
+- A `const` MUST be declared in a context or a commons
+  (`bynk.resolve.const_outside_context_or_commons`).
+- Its name MUST be upper-camel, a
+  [`constant_name`](/book/spec/lexical-grammar/#312-constant_name)
+  (`/[A-Z][A-Za-z0-9_]*/`; `bynk.resolve.const_name_case`).
+- Its name MUST NOT be declared twice in one unit
+  (`bynk.resolve.duplicate_const`), and MUST NOT equal the name of another
+  declaration in the unit's namespace ([§5.1](#51-name-resolution--visibility)):
+  a function, an asset, an embed, a type, an event, a service, an agent or a
+  provider (`bynk.resolve.name_conflict`). Nor may it equal a built-in type name
+  (`List`, `Map`) or the name of a variant of a sum type in scope, including a
+  predeclared `HttpResult` variant, since a bare reference would then read as
+  either (`bynk.resolve.name_conflict`).
+- A unit sees its own constants and those of each commons it `uses`, one level,
+  as with functions; a local declaration wins. Two used commons that declare
+  the same name are `bynk.uses.name_conflict`. A `let` binding or parameter
+  shadows a constant of the same name.
+
+The initialiser `e` MUST be a **static expression** (ADR 0004) or a reference
+to another constant (`bynk.resolve.bad_const_initialiser`). The closed set is:
+
+- an `Int`, `Float`, `Bool` or unit literal, a negative numeric literal, or a
+  plain string literal with no interpolation hole;
+- a `Duration` literal (`30.seconds`);
+- a parenthesised static expression;
+- a list literal, a record construction with every field given (no spread, no
+  shorthand), a sum-variant construction (a bare or qualified nullary variant,
+  or a variant call), or `Some`/`None`/`Ok`/`Err`, each over static values;
+- `T.unsafe(lit)` for an opaque type `T`, `lit` a literal (confined to the
+  defining commons as anywhere else, [§6.4](/book/spec/type-system/#64-admission--construction));
+- `List.empty()`, `Map.empty()` or `Set.empty()`;
+- the name of another constant in scope.
+
+Anything else is refused: a function or method call, an operator, a field
+access, `self`, a capability, a bind, an interpolated string, a lambda or a
+control-flow expression. `e` is then checked against `T` in an empty, pure
+scope, as an agent state initialiser is ([§5.4](#54-agents--state)): a literal
+is admitted to a refined `T` only when it satisfies the refinement
+(`bynk.refine.literal_violates`), and a value of another type is
+`bynk.resolve.bad_const_initialiser`.
+
+Constants MAY refer to one another, across the files of a unit and to the
+constants of a commons the unit `uses`, but MUST NOT do so in a cycle
+(`bynk.resolve.const_cycle`, reported once per cycle, naming its members in
+order). Nor may the *files* of a unit form a cycle through their constants:
+where a constant initialiser in one file names a constant declared in another,
+the first file depends on the second, and a cycle of such dependencies among a
+unit's files is `bynk.resolve.const_file_cycle`, naming the files and the
+constants on it, even when no constant depends on itself. Each file emits as a
+module that imports the constants it names, so the modules would import each
+other and one would read a constant before it is defined. A function that reads
+a constant of another file adds no dependency. A constant MAY NOT yet appear in a compile-time position, such as a
+refinement bound (`InRange(1, MaxQty)`) or an annotation argument.
+
+A constant is emitted as an exported `const` of the declaring module
+([§7.3.1a](/book/spec/emission/#731a-named-constants)), imported like a function by a
+sibling file or a unit that `uses` it. A unit-tier `suite` case names the
+constants of its target and of the commons the target `uses`.

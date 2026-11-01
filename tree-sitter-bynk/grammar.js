@@ -212,6 +212,7 @@ module.exports = grammar({
         $.event_decl,
         $.asset_decl,
         $.embed_decl,
+        $.const_decl,
       ),
 
     _context_body_item: ($) =>
@@ -230,6 +231,7 @@ module.exports = grammar({
         $.event_decl,
         $.asset_decl,
         $.embed_decl,
+        $.const_decl,
         $.removed_agent_decl,
       ),
 
@@ -255,6 +257,7 @@ module.exports = grammar({
         $.event_decl,
         $.asset_decl,
         $.embed_decl,
+        $.const_decl,
       ),
 
     _test_body_item: ($) =>
@@ -450,6 +453,22 @@ module.exports = grammar({
         field("name", $.identifier),
         "=",
         field("path", $.string_literal),
+      ),
+
+    // #2617 (named constants): `const Name: Type = <static expression>` — a
+    // named value. Admitted in every body like `embed`; placement
+    // (`bynk.resolve.const_outside_context_or_commons`), the name's case
+    // (`bynk.resolve.const_name_case`, upper-camel like `constant_name`) and
+    // the initialiser's static-ness are checker concerns. The name is an
+    // `identifier` because `word` unifies every word-shaped lexeme to it.
+    const_decl: ($) =>
+      seq(
+        "const",
+        field("name", $.identifier),
+        ":",
+        field("type", $._type_ref),
+        "=",
+        field("value", $._expression),
       ),
 
     // v0.154 (ADR 0178): a sum body may carry a trailing `embeds E as V, …`

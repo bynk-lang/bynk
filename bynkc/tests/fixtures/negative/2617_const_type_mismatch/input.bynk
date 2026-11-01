@@ -1,0 +1,4 @@
+commons limits
+
+// #2617: the initialiser is checked against the annotation.
+const Greeting: Int = "hello"

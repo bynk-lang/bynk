@@ -282,8 +282,9 @@ agent Cart {
   `MigrationFailed`. A step whose output breaks a refinement faults at the
   rehydration gate.
 - **Keep old types dedicated.** Declare a type like `CartV1` only for its step.
-  Because it may declare field defaults, using it anywhere else (a request body,
-  say) would apply those defaults at that boundary too.
+  Its field defaults describe what an old record lacked; a type's defaults apply
+  wherever the type is built or decoded, so reusing it elsewhere (a request body,
+  say) would bring those defaults along.
 - **A map field.** A field of type `Map[K, V]` in `T` reads whatever version `N`
   recorded under that name: a `store Map`, or a `Cell` holding a map.
 

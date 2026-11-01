@@ -1,0 +1,7 @@
+// #2617 review: `b` declares its own `Y` and uses `a`, whose `X` names `a`'s
+// `Y`. There is no cycle (`b.Y = a.X = a.Y = 1`): the cycle check follows only
+// the unit's own constants, so it must not resolve `a.X`'s `Y` to `b.Y`.
+commons a
+
+const X: Int = Y
+const Y: Int = 1

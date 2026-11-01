@@ -39,20 +39,21 @@ adapter bynk.cloudflare {
 	---
 	The options of a `Kv.putWith` or `Kv.putBytes` write: when the entry
 	expires, and the metadata stored beside it (at most 1024 bytes once
-	serialised as JSON).
+	serialised as JSON). Leave a field out for `Kv.put`'s behaviour: no expiry,
+	no metadata.
 	---
 	type KvPut = {
-		expiration: KvExpiration,
-		metadata: Map[String, String],
+		expiration: KvExpiration = KvExpiration.Never,
+		metadata: Map[String, String] = Map.empty(),
 	}
 
 	---
 	The options of a `Kv.getWith` read. `cacheTtl` is how long the read may be
 	served from Cloudflare's edge cache, at least 30 seconds; `None` keeps the
-	platform's default of 60.
+	platform's default of 60, and is the default.
 	---
 	type KvGet = {
-		cacheTtl: Option[Duration],
+		cacheTtl: Option[Duration] = None,
 	}
 
 	---
@@ -185,12 +186,14 @@ adapter bynk.cloudflare {
 
 	---
 	The options of an `R2.putWith` write: the content type and custom
-	metadata to store, and the precondition (`onlyIf`) the write needs.
+	metadata to store, and the precondition (`onlyIf`) the write needs. Leave a
+	field out for `R2.put`'s behaviour: no content type, no metadata, always
+	written.
 	---
 	type R2Put = {
-		contentType: Option[String],
-		metadata: Map[String, String],
-		onlyIf: R2Condition,
+		contentType: Option[String] = None,
+		metadata: Map[String, String] = Map.empty(),
+		onlyIf: R2Condition = R2Condition.Always,
 	}
 
 	---
@@ -245,10 +248,10 @@ adapter bynk.cloudflare {
 	---
 	The options of a `Queue.sendWith`. `delay` holds the message back before
 	it can be delivered: whole seconds (a part second rounds up), at most 12
-	hours; `None` delivers as soon as the queue can.
+	hours; `None`, the default, delivers as soon as the queue can.
 	---
 	type QueueSend = {
-		delay: Option[Duration],
+		delay: Option[Duration] = None,
 	}
 
 	---

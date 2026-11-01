@@ -36,3 +36,16 @@ export const markPaid = {
     return __result;
   },
 };
+
+export const markPaidDomestic = {
+  async call(orderId: string, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+    const __result = await (async () => {
+    return (async () => { __events.push({ type: "PaymentConfirmed", payload: { orderId: orderId, region: { tag: "Domestic" } }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "commerce.order", emittedAt: globalThis.Date.now(), schemaVersion: 1 } }); })();
+    })();
+    if (__events.length > 0) {
+      await deps.__eventsDispatch(__events);
+    }
+    return __result;
+  },
+};

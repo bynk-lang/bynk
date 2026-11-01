@@ -1261,6 +1261,68 @@ fn store_rehydration_gate_runtime_semantics() {
     verify("rehydration", REHYDRATE_SOURCE, REHYDRATE_DRIVER_TS);
 }
 
+// #2607 (Decision F): rehydration decodes a stored record through the same
+// codec a wire body passes, so a record held in a `Cell` that has since gained
+// a defaulted field loads an instance stored before the field existed, and the
+// field reads as its default.
+const REHYDRATE_DEFAULT_SOURCE: &str = "context shop\n\
+\n\
+type Prefs = { theme: String, size: Int = 12 }\n\
+\n\
+agent Profile {\n\
+\x20 key id: String\n\
+\n\
+\x20 store prefs: Cell[Prefs] = Prefs { theme: \"light\" }\n\
+\n\
+\x20 on call size() -> Effect[Int] {\n\
+\x20   prefs.size\n\
+\x20 }\n\
+}\n";
+
+const REHYDRATE_DEFAULT_DRIVER_TS: &str = r#"
+import { Profile } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function fakeState() {
+  const m = new Map<string, unknown>();
+  return {
+    storage: {
+      async get(key: string): Promise<unknown> { return m.get(key); },
+      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+    },
+  };
+}
+
+// 1) Stored before `size` existed: it reads as its default.
+const st1 = fakeState();
+await st1.storage.put("state", { prefs: { theme: "dark" } });
+assert((await new Profile(st1 as never).size({})) === 12, "an absent defaulted field reads as its default");
+
+// 2) A stored value is kept.
+const st2 = fakeState();
+await st2.storage.put("state", { prefs: { theme: "dark", size: 9 } });
+assert((await new Profile(st2 as never).size({})) === 9, "a stored value is kept");
+
+// 3) A fresh instance's initialiser takes the default too.
+assert((await new Profile(fakeState() as never).size({})) === 12, "a fresh instance takes the default");
+
+console.log("ALL OK");
+"#;
+
+#[test]
+fn rehydration_fills_a_defaulted_record_field() {
+    verify(
+        "rehydration_default",
+        REHYDRATE_DEFAULT_SOURCE,
+        REHYDRATE_DEFAULT_DRIVER_TS,
+    );
+}
+
 #[test]
 fn refused_commit_does_not_leak_an_in_place_store_write() {
     verify("refused_leak", REFUSED_LEAK_SOURCE, REFUSED_LEAK_DRIVER_TS);

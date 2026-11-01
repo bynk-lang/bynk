@@ -461,13 +461,59 @@ type Order = {
 }
 ```
 
-- **Construct** by naming every field: `Order { id: "1", item: "book" }`.
+- **Construct** by naming every field that has no default:
+  `Order { id: "1", item: "book" }`.
 - **Access** with dot notation: `o.id`.
 - **Update** with the spread form, which copies and overrides:
   `Order { ...o, item: "pen" }`.
 
 Records emit a TypeScript `interface` with `readonly` fields. A record field may
 not directly be of the record's own type (`bynk.resolve.recursive_record_field`).
+
+### Field defaults {#field-defaults}
+
+A field may declare a default, `field: T = expr`. A literal may leave that field
+out, and a body decoded without its key takes the default too:
+
+```bynk,fragment
+type Mode = enum { Fast, Careful }
+
+type Options = {
+  name: String,
+  retries: Int = 3,
+  mode: Mode = Mode.Careful,
+  timeout: Option[Duration] = None,
+  tags: Map[String, String] = Map.empty(),
+}
+```
+
+`Options { name: "nightly" }` is `Options { name: "nightly", retries: 3, mode:
+Careful, timeout: None, tags: Map.empty() }`, and `Options { name: "x", retries:
+5 }` keeps its own `retries`. A field without a default is still required.
+
+- **What a default may be.** A static value of the field's type: a literal, a
+  variant, `Some`/`None`/`Ok`/`Err`, a record or list literal, `Map.empty()`,
+  `Set.empty()`, or `T.unsafe(lit)` for an opaque type. It can't call a function
+  or read a binding (`bynk.types.bad_field_default`).
+- **`Option` fields are not optional by default.** Write `= None` to make one
+  so. On the wire an absent key already decodes as `None`; in a literal the
+  field is required unless it says otherwise.
+- **A spread wins.** `Options { ...o, name: "y" }` takes every other field from
+  `o`, never from a default.
+- **On the wire.** A body without a defaulted field's key decodes to the
+  default; a key that is present, `null` included, decodes as sent. The
+  [OpenAPI document](/docs/bynk-cli/#bynk-openapi) lists a defaulted field as not required.
+- **Generic records.** A default must hold for every instantiation: `items:
+  List[T] = []` and `next: Option[T] = None` do, a field of type `T` can't have
+  one.
+- **Variants don't take defaults** (`bynk.types.field_default_on_variant`). A
+  variant is built like a call; hold optional values in a record instead.
+
+Adding a field *with* a default doesn't break existing literals, which is why
+the first-party options records (`FetchOptions`, `QueueSend`, `KvGet`, `KvPut`,
+`R2Put`) give every field one. Changing a default changes every literal and
+every decode that relies on it, so treat it as a behaviour change. See
+[Add an option without breaking callers](/book/guides/program-structure/add-an-option/).
 
 ### Documenting fields and variants
 

@@ -1,0 +1,9 @@
+commons limits
+
+// #2617 (decision A): a constant's initialiser is a static expression, so
+// a function call is refused even when the function is pure.
+fn base() -> Int {
+  10
+}
+
+const Limit: Int = base()

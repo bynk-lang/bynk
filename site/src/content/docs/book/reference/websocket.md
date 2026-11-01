@@ -72,8 +72,12 @@ agent Room {
 ```
 
 - **`forEach`** broadcasts **sequentially**; **`parTraverse`** broadcasts in
-  **parallel** (lowering to `Promise.all`), so one slow or half-dead connection
+  **parallel**, so one slow or half-dead connection
   does not head-of-line-block the room — the production-correct form (v0.107).
+  Every send is issued, then the call waits for all of them to settle; if sends
+  fault it raises the **first fault in connection order**, after the rest have
+  settled, as a `par` block does. A dead connection still raises (use
+  `parTraverseAll` to gather per-connection `Result`s instead).
 - The closure parameter `c` is a **borrowed** held binding: `send` is allowed, but
   a consuming op (`close` or transfer) on it is `bynk.held.consume_on_borrow`.
 - **Exclude-self** filters on the sender's key (`u != sender`), **not** on the

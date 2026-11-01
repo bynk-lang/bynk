@@ -222,6 +222,8 @@ mod package_exports;
 mod par_behaviour;
 #[path = "par_gate_workerd.rs"]
 mod par_gate_workerd;
+#[path = "par_traverse_behaviour.rs"]
+mod par_traverse_behaviour;
 #[path = "property_behaviour.rs"]
 mod property_behaviour;
 #[path = "provider_agent_cross_context_target.rs"]

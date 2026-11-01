@@ -1,0 +1,9 @@
+---
+#2607 (Decision A): only a record's fields take defaults. A variant is built
+like a call, with every payload field given.
+---
+context demo.retry
+
+type Retry =
+  | Never
+  | Times(n: Int = 3)

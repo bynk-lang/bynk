@@ -1,0 +1,9 @@
+commons shop.limits
+
+// A sibling file of the same commons names `limits.bynk`'s constants: the
+// module imports them from `./limits.js`.
+const Window: Int = MaxItems
+
+fn pages() -> Int {
+  Window / DefaultPage.size
+}
