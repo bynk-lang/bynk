@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, span_keyed_maps, emit_diagnostics, ts_writes
-changelog: "The execution context reaches effectful functions: `~>`, `e.within(d)` and `a.race(b)` are legal in an effectful `fn` or method, which takes the context as a hidden trailing parameter the compiler infers (a fixed point over the build) and every call passes on; a call from an agent handler, a WebSocket handler or a provider operation to a function that needs it is `bynk.exec.unavailable`, with the chain to the construct; fixes the `~>` in a `fn` that checked clean and failed `tsc` ([#2719](https://github.com/bynk-lang/bynk/issues/2719), [#2682](https://github.com/bynk-lang/bynk/issues/2682))"
----
+# 0693 — The execution context reaches effectful functions as a hidden trailing parameter, inferred by the compiler
 
-## ADR: exec-context-in-functions
-title: The execution context reaches effectful functions as a hidden trailing parameter, inferred by the compiler
-summary: Amends ADR 0687 E and ADR 0691 E: `within`, `race` and `~>` are legal in a `fn`; a function in the needs-context set takes `__exec` last, every call and every function value passes it on, and `bynk.exec.unavailable` refuses a call from a place with no context
+- **Status:** Accepted (v0.475)
 
 **Context.** `~>`, `e.within(d)` and `a.race(b)` hand work to the execution context's
 `waitUntil`, which a service handler reaches as `deps.__exec`. A function has no `deps`:
