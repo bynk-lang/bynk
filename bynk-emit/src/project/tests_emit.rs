@@ -1124,6 +1124,7 @@ fn emit_integration_module(
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }
+    append_missing_bindings(&mut runtime_names, &runtime_use.cmp_imports());
     stmts.splice(
         import_idx..import_idx,
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
@@ -3957,6 +3958,7 @@ fn emit_test_module(
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }
+    append_missing_bindings(&mut runtime_names, &runtime_use.cmp_imports());
     stmts.splice(
         import_idx..import_idx,
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),

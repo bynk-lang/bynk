@@ -44,6 +44,106 @@ pub(crate) fn given_insertion_edit(
 
 // -- type-declaration validation --
 
+/// [`check_ident`] for the identifier expression `expr_id`: a generic function
+/// with `Ord` bounds used as a value is instantiated at the reference, and the
+/// comparator witnesses it resolved are recorded on the expression.
+pub(crate) fn check_ident_at(
+    expr_id: ExprId,
+    id: &Ident,
+    expected: Option<TyId>,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let ty = check_ident(id, expected, ctx);
+    if let Some(witnesses) = ctx.last_witness.take()
+        && let Some(decl) = ctx.input.fns.get(&id.name)
+    {
+        ctx.callees
+            .insert(expr_id, Callee::FnValue(Arc::clone(decl), witnesses));
+    }
+    ty
+}
+
+/// Constrained generics slice 1 (DECISION E): a generic function with `Ord`
+/// bounds named where a function type is expected is instantiated at the
+/// reference. Its type arguments come from unifying its parameter types with the
+/// expected function's; any left unresolved is
+/// `bynk.generics.ambiguous_instantiation`. The returned function type is the
+/// instantiation, and `ctx.last_witness` carries the comparator witnesses.
+fn instantiate_bounded_value(
+    id: &Ident,
+    fn_decl: &FnDecl,
+    expected: TyId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let vars: HashSet<String> = fn_decl
+        .type_params
+        .iter()
+        .map(|tp| tp.name.name.clone())
+        .collect();
+    let Ty::Fn {
+        params: want_params,
+        ret: want_ret,
+    } = (*tys.get(expected)).clone()
+    else {
+        return None;
+    };
+    let patterns: Option<Vec<TyId>> = fn_decl
+        .params
+        .iter()
+        .map(|p| resolve_type_ref_in(&p.type_ref, &ctx.input.types, &vars, tys))
+        .collect();
+    let patterns = patterns?;
+    let ret_pattern = resolve_type_ref_in(&fn_decl.return_type, &ctx.input.types, &vars, tys)?;
+    let mut subst: HashMap<String, TyId> = HashMap::new();
+    if patterns.len() == want_params.len() {
+        for (pat, want) in patterns.iter().zip(&want_params) {
+            if !contains_var(*want, tys) {
+                unify(*pat, *want, &mut subst, tys);
+            }
+        }
+        if !contains_var(want_ret, tys) {
+            unify(ret_pattern, want_ret, &mut subst, tys);
+        }
+    }
+    if let Some(unresolved) = fn_decl
+        .type_params
+        .iter()
+        .find(|tp| !subst.contains_key(&tp.name.name))
+    {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.generics.ambiguous_instantiation",
+                id.span,
+                format!(
+                    "cannot determine type parameter `{}` of `{}` from where it is used",
+                    unresolved.name.name, id.name
+                ),
+            )
+            .with_note(format!(
+                "annotate the expected function type, or wrap it in a lambda: `(x) => {}(x)`",
+                id.name
+            )),
+        );
+        return None;
+    }
+    let ord_names = super::ordering::witness_params(fn_decl, &ctx.input.types);
+    let witnesses = super::ordering::check_declared_ord_args(
+        &id.name,
+        id.span,
+        &ord_names,
+        &subst,
+        ctx,
+    )?;
+    ctx.last_witness = Some(witnesses);
+    let params: Vec<TyId> = patterns
+        .iter()
+        .map(|p| substitute(*p, &subst, tys))
+        .collect();
+    let ret = substitute(ret_pattern, &subst, tys);
+    Some(tys.intern(Ty::Fn { params, ret }))
+}
+
 pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     if let Some(ty) = ctx.lookup(id.name.as_str()) {
@@ -83,6 +183,12 @@ pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> 
             ctx.refs.record(id.span, SymbolKind::Fn, &id.name);
             // S3 (#1963): a function passed as a value is a use too.
             super::calls::refuse_experimental_import(id, ctx);
+            if !fn_decl.type_params.is_empty()
+                && !super::ordering::witness_params(&fn_decl, &ctx.input.types).is_empty()
+                && let Some(e) = expected
+            {
+                return instantiate_bounded_value(id, &fn_decl, e, ctx);
+            }
             if !fn_decl.type_params.is_empty() {
                 ctx.errors.push(
                     CompileError::new(

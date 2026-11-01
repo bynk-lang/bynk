@@ -3425,6 +3425,11 @@ fn lower_method_call(
     for a in args {
         all.push(pre.lower(a, cx));
     }
+    // Constrained generics slice 1: the call's comparator witnesses follow the
+    // ordinary arguments.
+    if let Some(Callee::Method(_, witnesses)) = cx.commons().callees.get(&e.id) {
+        all.extend(witnesses.iter().map(|w| cx.comparator(*w)));
+    }
     pre.finish(format!("{ns}.{}({})", method.name, all.join(", ")))
 }
 
@@ -4262,11 +4267,22 @@ fn lower_list_kernel(
         // `<`/`>` works for the numeric- and string-erased orderable keys
         // alike, so no key-type branch is needed (except average's rounding).
         ("sortBy", [key]) => {
+            let cmp = kernel_key_comparator(&args[0], cx);
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
-            Some(format!(
-                "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
-            ))
+            Some(match cmp {
+                // A plain base key: the bare operators, as before.
+                None => format!(
+                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
+                ),
+                // Constrained generics slice 1 (DECISION H): `Float` (total
+                // order, DECISION G), `Bytes`, and every other `Ord` key.
+                Some(cmp) => with_comparator(&cmp, |c| {
+                    format!(
+                        "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {c}(({key})(__a), ({key})(__b)))"
+                    )
+                }),
+            })
         }
         ("distinct", []) => {
             let recv = pre.lower(receiver, cx);
@@ -4288,11 +4304,19 @@ fn lower_list_kernel(
         }
         ("min" | "max", [key]) => {
             let cmp = if method.name == "min" { "<" } else { ">" };
+            let key_cmp = kernel_key_comparator(&args[0], cx);
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
-            Some(format!(
-                "((__xs: readonly {elem_el}[]) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if (__k {cmp} __m) __m = __k; }} return Some(__m); }})({recv})"
-            ))
+            Some(match key_cmp {
+                None => format!(
+                    "((__xs: readonly {elem_el}[]) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if (__k {cmp} __m) __m = __k; }} return Some(__m); }})({recv})"
+                ),
+                Some(key_cmp) => with_comparator(&key_cmp, |c| {
+                    format!(
+                        "((__xs: readonly {elem_el}[]) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if ({c}(__k, __m) {cmp} 0) __m = __k; }} return Some(__m); }})({recv})"
+                    )
+                }),
+            })
         }
         ("average", [key]) => {
             // D3: Duration averages round to integer millis; Int/Float -> Float.
@@ -5726,6 +5750,34 @@ fn emit_if_tail(
 }
 
 fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
+    // Constrained generics slice 1 (DECISION E): a generic function with `Ord`
+    // bounds used as a value is instantiated at the reference, as a closure that
+    // captures the comparator witnesses.
+    if let Some(Callee::FnValue(decl, witnesses)) = cx.commons().callee(e.id) {
+        let tys = cx.commons().tys();
+        let params: Vec<String> = match cx
+            .commons()
+            .expr_types
+            .get(&e.id)
+            .map(|te| (*tys.get(te.ty)).clone())
+        {
+            Some(Ty::Fn { params, .. }) => params
+                .iter()
+                .enumerate()
+                .map(|(i, p)| format!("__a{i}: {}", ts_ty(*p, &tys)))
+                .collect(),
+            _ => (0..decl.params.len()).map(|i| format!("__a{i}: any")).collect(),
+        };
+        let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
+        let mut args = names.clone();
+        args.extend(witnesses.iter().map(|w| cx.comparator(*w)));
+        return format!(
+            "(({}) => {}({}))",
+            params.join(", "),
+            ts_ident(&id.name),
+            args.join(", ")
+        );
+    }
     // v0.116: inside a `transition` predicate, the contextual `old`/`new` idents
     // are the pre-/post-commit state records, lowered to their JS names (`new` is
     // reserved, so both are renamed). Field access `old.<f>` reads off the record.
@@ -5972,6 +6024,12 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             tag,
             args_lowered.join(", ")
         ));
+    }
+    // Constrained generics slice 1: the call's comparator witnesses follow the
+    // ordinary arguments (an `Ord`-bounded callee's hidden trailing parameters).
+    let mut args_lowered = args_lowered;
+    if let Some(Callee::Fn(_, witnesses)) = cx.commons().callee(e.id) {
+        args_lowered.extend(witnesses.iter().map(|w| cx.comparator(*w)));
     }
     pre.finish(format!(
         "{}({})",
@@ -6237,10 +6295,64 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         } else {
             format!("!{call}")
         }
+    } else if let Some(operand) = matches!(
+        op,
+        BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq
+    )
+    .then(|| cx.commons().expr_types.get(&lhs.id).map(|te| te.ty))
+    .flatten()
+    .filter(|t| !is_bare_ordered(*t, tys))
+    {
+        // Constrained generics slice 1 (DECISION F): an `Ord` type that is not
+        // a plain base compares through its comparator. A base type keeps the
+        // bare JS operator (and so `Float` keeps its IEEE meaning, `NaN < x` is
+        // `false`).
+        let cmp = cx.comparator(operand);
+        format!("{cmp}({l}, {r}) {} 0", ts_binop(op))
     } else {
         format!("{l} {} {r}", ts_binop(op))
     };
     pre.finish(text)
+}
+
+/// The comparator an ordering kernel (`sortBy`/`min`/`max`) needs for its key
+/// function's result type, or `None` when the key is a plain base type that keeps
+/// the bare `<`/`>` (constrained-generics slice 1, DECISION H). `Float` is not
+/// plain: the kernels use its total order (DECISION G), so `NaN` sorts last
+/// instead of making the sort inconsistent. A key type the checker did not record
+/// keeps the bare operators.
+fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<String> {
+    let tys = cx.commons().tys();
+    let fn_ty = cx.commons().expr_types.get(&key.id)?.ty;
+    let Ty::Fn { ret, .. } = &*tys.get(fn_ty) else {
+        return None;
+    };
+    let plain = matches!(
+        ret.base(tys),
+        Some(BaseType::Int | BaseType::String | BaseType::Duration | BaseType::Instant)
+    );
+    (!plain).then(|| cx.comparator(*ret))
+}
+
+/// Bind comparator expression `cmp` as `__c` around `body`. A bare identifier (a
+/// runtime comparator or an in-scope witness) is substituted directly; a built
+/// comparator is evaluated once, outside the loop that calls it.
+fn with_comparator(cmp: &str, body: impl FnOnce(&str) -> String) -> String {
+    if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        body(cmp)
+    } else {
+        format!("((__c) => {})({cmp})", body("__c"))
+    }
+}
+
+/// Whether a key or operand of this type orders with the bare JS `<`/`>`: a base
+/// type other than `Bytes` (a `Uint8Array`), or a refined type over one. Every
+/// other `Ord` type goes through a comparator.
+fn is_bare_ordered(ty: TyId, tys: &Types) -> bool {
+    matches!(
+        ty.base(tys),
+        Some(BaseType::Int | BaseType::Float | BaseType::String | BaseType::Duration | BaseType::Instant)
+    )
 }
 
 /// How `==`/`!=` lowers for an operand of a given type. #1652 (runtime-semantics

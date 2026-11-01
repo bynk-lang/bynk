@@ -4191,7 +4191,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     );
                     check_http_variant(id.span, v, &[], expected, ctx)
                 } else {
-                    check_ident(id, expected, ctx)
+                    check_ident_at(expr.id, id, expected, ctx)
                 }
             } else if ctx.lookup(id.name.as_str()).is_none()
                 && let Some(qv) = queue_variant(&id.name)
@@ -4208,7 +4208,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 );
                 check_queue_variant(id.span, qv, &[], ctx)
             } else {
-                check_ident(id, expected, ctx)
+                check_ident_at(expr.id, id, expected, ctx)
             }
         }
         ExprKind::Paren(inner) => type_of(inner, expected, ctx),
