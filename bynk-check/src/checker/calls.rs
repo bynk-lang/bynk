@@ -759,6 +759,11 @@ pub(crate) fn check_call(
             }
         };
     }
+    // #2620: the ambient fault built-ins. After every declaration and local
+    // above, so a user `fn`/binding of the same name shadows them.
+    if let Some(kind) = crate::builtin_names::faults::kind_of(&name.name) {
+        return check_fault_call(name, kind, type_args, args, span, expr_id, ctx);
+    }
     // Nothing owns the call. The resolver's reference walk reports these in
     // `fn`/method bodies, but handler/service/agent bodies and test bodies
     // never pass through that walk — the checker is their only backstop, and
@@ -805,6 +810,73 @@ pub(crate) fn check_call(
         .with_note("only functions declared in this commons are callable"),
     );
     None
+}
+
+/// #2620 (DECISIONS A–F): `unreachable(message)` and `todo(message)` take one
+/// `String` and have the bottom type, so they fit any position. `todo` also
+/// raises the non-failing `bynk.fault.todo` warning so `--deny-warnings` can
+/// refuse unfinished code.
+fn check_fault_call(
+    name: &Ident,
+    kind: &'static str,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    ctx.callees.insert(expr_id, Callee::Fault { kind });
+    if !type_args.is_empty() {
+        ctx.errors.push(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            span,
+            format!(
+                "`{}` is not a generic function — it takes no type arguments",
+                name.name
+            ),
+        ));
+    }
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.call_arity",
+            span,
+            format!(
+                "`{}` takes 1 argument (a message), but {} were given",
+                name.name,
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+    } else {
+        let string = tys.intern(Ty::Base(BaseType::String));
+        if let Some(a) = type_of(&args[0], Some(string), ctx)
+            && !compatible(a, string, tys)
+        {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.argument_mismatch",
+                args[0].span,
+                format!(
+                    "argument has type `{}`, but `{}` expects `String`",
+                    a.display(tys),
+                    name.name
+                ),
+            ));
+        }
+    }
+    if kind == "Todo" {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.fault.todo",
+                span,
+                "`todo` marks unfinished code and faults when it runs",
+            )
+            .with_note("replace it with the implementation, or use `unreachable` for a case that cannot happen"),
+        );
+    }
+    Some(tys.intern(Ty::Never))
 }
 
 fn check_value_application(

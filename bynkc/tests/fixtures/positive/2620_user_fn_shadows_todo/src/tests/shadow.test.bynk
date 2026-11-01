@@ -1,0 +1,5 @@
+suite demo.shadow {
+  case "a user todo shadows the built-in" {
+    expect count() == 4
+  }
+}

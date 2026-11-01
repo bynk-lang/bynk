@@ -110,6 +110,7 @@ match found {                 // found : Option[Item]
 - `match` is exhaustive. `is` tests a value against a variant pattern, yielding a
   `Bool` (e.g. `if (mo is None) { 1 } else { 0 }`).
 - `let Ok(x) = r else { … }` binds on a match and runs the `else` block otherwise.
+- `unreachable(message: String)` and `todo(message: String)` fault when evaluated and have a bottom type that fits any position (a `match` arm, a function body); `todo` also warns (`bynk.fault.todo`). Shadowable, not keywords; there is no general `panic`.
 - `Json.decode[T](s) -> Result[T, JsonError]` and `Json.encode(v) -> String`.
 
 ### Effects and capabilities

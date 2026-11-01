@@ -1,0 +1,5 @@
+commons demo
+
+fn pick(n: Int) -> String {
+  if n > 0 { "positive" } else { unreachable(404) }
+}

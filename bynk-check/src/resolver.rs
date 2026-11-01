@@ -3330,6 +3330,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                                 name.name, name.name, name.name
                             ),
                         ));
+                    } else if crate::builtin_names::faults::kind_of(&name.name).is_some() {
+                        // #2620: the ambient `unreachable`/`todo` built-ins; the
+                        // checker validates the call.
                     } else if name_in_scope(&name.name, cx.params, &cx.scopes) {
                         // v0.20a: an in-scope value being called may be a
                         // legal value application if its type is a function

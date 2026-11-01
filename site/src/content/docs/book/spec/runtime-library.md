@@ -553,3 +553,32 @@ rejection **in source order**, with the rest attached as an array `suppressed`, 
 chain `a.race(b).race(c)` lowers to one call over `[a, b, c]`, so a nested race cannot
 settle a microtask late and lose a tie. Like `__bynkSettleAll`, it is codegen, not part
 of the published emit ABI (ADR 0310), and lives in the `settle` runtime module.
+
+## §7.4.16 The deliberate fault (#2620)
+
+`unreachable(message)` and `todo(message)` ([§5.2](/book/spec/static-semantics/#52-well-typedness))
+lower to a call of `__fault`, the runtime half that raises them. It lives in the `errors`
+runtime module beside `invariantViolation`.
+
+```typescript
+export interface Fault {
+  readonly kind: "Unreachable" | "Todo";
+  readonly message: string;
+  readonly location: string;
+}
+
+export function fault(
+  kind: "Unreachable" | "Todo",
+  message: string,
+  location: string,
+): never;
+```
+
+The contract: it **throws** an `Error` whose message reads `<kind>: <message> (<location>)`
+and which carries the `Fault` record as its `fault` property. `location` is the call's
+project-relative `path:line:col` (the form an `expect` failure uses). Because it returns
+`never`, a call is an expression of any type, and inside an `async` body it rejects the
+effect. It rides the same uncaught-fault channel as an invariant violation: the handler
+faults, the agent's commit does not happen, and the caller observes a fault, not an outcome;
+a fault claim (§7.4.12a) holds for it. Like the other runtime helpers it is codegen, not
+part of the published emit ABI (ADR 0310).

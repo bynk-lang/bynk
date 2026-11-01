@@ -293,6 +293,10 @@ impl TyId {
 pub enum Ty {
     /// R4.3 measurement probe (not shipped): a real Error variant.
     Error,
+    /// #2620 (DECISION A): the bottom type of `unreachable(…)` / `todo(…)` —
+    /// an expression that never produces a value. Assignable to every type
+    /// and absorbed by every join; never nameable in source.
+    Never,
     /// A base type (`Int`, `String`, `Bool`).
     Base(BaseType),
     /// A user-declared named type. `kind` records the declaration's shape
@@ -422,6 +426,7 @@ impl Ty {
             // diagnostic that happens to mention the type (e.g. a mismatch one
             // level up) reads as "type error" rather than a blank or `unknown`.
             Ty::Error => "<type error>".to_string(),
+            Ty::Never => "never returns".to_string(),
             Ty::Base(b) => b.name().to_string(),
             // #2087: a qualified key reads as the declaration's own name.
             Ty::Named { name, args, .. } if args.is_empty() => {
@@ -581,6 +586,10 @@ pub enum Callee {
     /// `Instant.fromEpochMillis`, `Bytes.fromUtf8`/`fromBase64`/`empty`,
     /// `Json.decode`/`encode`, `Stream.of`.
     Intrinsic { ns: &'static str, op: String },
+    /// #2620: `unreachable(msg)` / `todo(msg)` — the ambient built-ins that
+    /// fault when evaluated. `kind` is the runtime fault kind (`Unreachable` /
+    /// `Todo`); the call's type is [`Ty::Never`].
+    Fault { kind: &'static str },
     /// A same-context capability operation call (`Cap.op(...)`).
     Capability { cap: String, op: String },
     /// A cross-context capability operation call (`B.Cap.op(...)` /
@@ -3108,6 +3117,7 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         // `Var` to ground. T3.6b: a leaf substitutes to itself, and its `TyId`
         // is already that value — return it rather than re-interning.
         Ty::Error
+        | Ty::Never
         | Ty::Base(_)
         | Ty::QueueResult
         | Ty::BoundaryRejection
@@ -3128,7 +3138,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
     match &*tys.get(t) {
         Ty::Var(_) => true,
         // R4.3: `Ty::Error` is a leaf; it never carries a `Var`.
-        Ty::Error => false,
+        Ty::Error | Ty::Never => false,
         Ty::Result(a, b) | Ty::Map(a, b) => contains_var(*a, tys) || contains_var(*b, tys),
         Ty::Option(a)
         | Ty::Effect(a)
@@ -3166,7 +3176,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
     match &*tys.get(t) {
         Ty::Var(n) => !rigid.contains(n),
         // R4.3: `Ty::Error` is a leaf; it never carries a `Var`.
-        Ty::Error => false,
+        Ty::Error | Ty::Never => false,
         Ty::Result(a, b) | Ty::Map(a, b) => {
             contains_flexible_var(*a, rigid, tys) || contains_flexible_var(*b, rigid, tys)
         }
@@ -3299,7 +3309,8 @@ pub(crate) fn unify(
             // R4.3: an already-diagnosed subtree unifies with anything —
             // the failure was reported once, at the site that produced
             // `Ty::Error`; unification is not where a second one belongs.
-            | Ty::Error,
+            | Ty::Error
+            | Ty::Never,
             _,
         ) => true,
     }
@@ -3576,6 +3587,11 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         // report of the same failure, not a new one. Ordered first so it
         // takes priority over the more specific arms below.
         (Ty::Error, _) | (_, Ty::Error) => true,
+        // #2620: the bottom type is usable wherever any type is expected, and
+        // nothing but `Never` itself (or the error type, above) is usable
+        // where `Never` is expected.
+        (Ty::Never, _) => true,
+        (_, Ty::Never) => false,
         (Ty::Base(a), Ty::Base(b)) => a == b,
         // v0.157 (ADR 0183): two named types are compatible when they share a
         // name and kind and their applied type arguments are pairwise
@@ -3819,6 +3835,9 @@ pub(super) fn check_effect_let(l: &LetStmt, check_context: bool, ctx: &mut Ctx) 
     calls::check_effect_let_principal(&l.value, l.principal.as_ref(), ctx);
     let inner_ty = match rhs_ty.map(|t| tys.get(t)).as_deref() {
         Some(Ty::Effect(t)) => Some(*t),
+        // #2620 (DECISION F): `x <- todo(…)` — the bottom type is usable where an
+        // `Effect[T]` is, and the bind faults when it runs; `x` is `Never` too.
+        Some(Ty::Never) => rhs_ty,
         Some(_) => {
             ctx.errors.push(
                 CompileError::new(
@@ -5051,6 +5070,7 @@ fn rebrand_return_type(
         )),
         // R4.3: `Ty::Error` carries no name to rebrand — pass it through.
         Ty::Error
+        | Ty::Never
         | Ty::Base(_)
         | Ty::QueueResult
         | Ty::BoundaryRejection
@@ -5257,6 +5277,7 @@ fn structurally_compatible_inner(
         // with anything, so a cross-context signature check doesn't report
         // the same failure a second time as a signature mismatch.
         (Ty::Error, _) | (_, Ty::Error) => true,
+        (Ty::Never, _) => true,
         (Ty::Base(a), Ty::Base(b)) => a == b,
         (Ty::ValidationError, Ty::ValidationError) => true,
         (Ty::JsonError, Ty::JsonError) => true,

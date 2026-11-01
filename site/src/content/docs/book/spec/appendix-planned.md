@@ -28,6 +28,9 @@ Two named follow-ons extend [agent invariants](/book/spec/static-semantics/#541-
   every other uncaught agent fault, such as a non-exhaustive match) a
   caller-distinguishable fault envelope, rather than the present bare 500. The
   surface stays a *fault*, never a `Result` variant.
+  A deliberate `unreachable(…)` / `todo(…)` fault
+  ([§5.2](/book/spec/static-semantics/#52-well-typedness), #2620) is one more
+  source for the channel, carrying its kind, message and source location.
 
 These are sketches of intent, not specifications: this appendix deliberately
 states no syntax or behaviour for them. For the design rationale and the current

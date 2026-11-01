@@ -1,0 +1,89 @@
+context demo.orders {
+  type Status = enum { Open, Closed, Archived }
+
+  ---
+  An arm the author knows cannot happen takes the type of the others: no made-up default.
+  ---
+  fn label(s: Status) -> String {
+    match s {
+      Open => "open",
+      Closed => "closed",
+      Archived => unreachable("archived orders are filtered upstream"),
+    }
+  }
+
+  ---
+  A guard on a branch the caller promises is impossible.
+  ---
+  fn half(n: Int) -> Int {
+    if n >= 0 { n / 2 } else { unreachable("callers pass a non-negative count") }
+  }
+
+  ---
+  Unfinished code type-checks as the declared return type; running it faults.
+  ---
+  fn refund(s: Status) -> Effect[Result[Int, String]] {
+    todo("refunds")
+  }
+
+  service labels {
+    on call(s: Status) -> Effect[String] {
+      label(s)
+    }
+  }
+
+  service halves {
+    on call(n: Int) -> Effect[Int] {
+      half(n)
+    }
+  }
+
+  service refunds {
+    on call(s: Status) -> Effect[Result[Int, String]] {
+      refund(s)
+    }
+  }
+
+  ---
+  A fault in a handler aborts it: the write below never commits.
+  ---
+  agent Ledger {
+    key id: String
+    store total: Cell[Int]
+
+    on call bump(fail: Bool) -> Effect[Int] {
+      let _ <- total.update((n) => n + 1)
+      if fail { unreachable("the ledger was told to fail") } else { total }
+    }
+
+    on call read() -> Effect[Int] {
+      total
+    }
+  }
+
+  service bumps {
+    on call(fail: Bool) -> Effect[Int] {
+      let ledger = Ledger("main")
+      let n <- ledger.bump(fail)
+      n
+    }
+  }
+
+  service reads {
+    on call() -> Effect[Int] {
+      let ledger = Ledger("main")
+      let n <- ledger.read()
+      n
+    }
+  }
+
+  ---
+  `<-` on a fault call: the effect position faults when it runs.
+  ---
+  service awaits {
+    on call() -> Effect[Int] {
+      let n <- todo("awaiting")
+      n
+    }
+  }
+}

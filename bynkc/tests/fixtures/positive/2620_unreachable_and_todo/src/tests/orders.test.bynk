@@ -1,0 +1,35 @@
+suite demo.orders {
+  case "a reachable arm returns its value" {
+    let l <- labels.call(Open)
+    expect l == "open"
+  }
+
+  case "an unreachable arm faults when evaluated" {
+    expect labels.call(Archived) faults
+  }
+
+  case "an unreachable branch is not taken for a valid input" {
+    let h <- halves.call(8)
+    expect h == 4
+  }
+
+  case "an unreachable branch faults on an invalid input" {
+    expect halves.call(0 - 1) faults
+  }
+
+  case "todo faults when it runs" {
+    expect refunds.call(Open) faults
+  }
+
+  case "a handler that faults does not commit agent state" {
+    let a <- bumps.call(false)
+    expect a == 1
+    expect bumps.call(true) faults
+    let after <- reads.call()
+    expect after == 1
+  }
+
+  case "bind on a fault call faults" {
+    expect awaits.call() faults
+  }
+}

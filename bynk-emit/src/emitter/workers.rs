@@ -852,6 +852,9 @@ pub(crate) fn emit_worker_compose(
     if runtime_use.race() {
         append_missing_bindings(&mut runtime_imports, crate::emitter::RACE_RUNTIME_IMPORTS);
     }
+    if runtime_use.fault() {
+        append_missing_bindings(&mut runtime_imports, crate::emitter::FAULT_RUNTIME_IMPORTS);
+    }
     if runtime_use.url_ops() {
         append_missing_bindings(
             &mut runtime_imports,

@@ -2724,7 +2724,7 @@ fn json_codable(
         // R4.3: an already-diagnosed type doesn't also earn a
         // `bynk.types.json_uncodable` diagnostic — the resolution failure was
         // reported once, at its own site.
-        Ty::Error => true,
+        Ty::Error | Ty::Never => true,
         // v0.174 (#592): a generic record instantiation is boundary-serialisable
         // through its monomorphised codec (`serialise_Paginated_User`) exactly
         // when its type arguments are — a non-serialisable argument (a function,

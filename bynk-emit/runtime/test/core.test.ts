@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { Ok, Err, Some, None } from "../src/result.ts";
 import { QueueResult } from "../src/queue.ts";
 import { InMemoryStorage, makeTestState } from "../src/storage.ts";
+import { fault } from "../src/errors.ts";
 
 test("Result/Option constructors carry the tag discriminant", () => {
   assert.deepEqual(Ok(1), { tag: "Ok", value: 1 });
@@ -95,4 +96,20 @@ test("makeTestState: names the state and gives it fresh storage", async () => {
   assert.equal(st.id.name, "agent-7");
   await st.storage.put("k", 1);
   assert.equal(await st.storage.get("k"), 1);
+});
+
+test("fault: throws an error carrying its kind, message and location", () => {
+  let caught: unknown;
+  try {
+    fault("Unreachable", "filtered upstream", "a.bynk:3:5");
+  } catch (e) {
+    caught = e;
+  }
+  assert.ok(caught instanceof Error);
+  assert.equal(caught.message, "Unreachable: filtered upstream (a.bynk:3:5)");
+  assert.deepEqual((caught as { fault?: unknown }).fault, {
+    kind: "Unreachable",
+    message: "filtered upstream",
+    location: "a.bynk:3:5",
+  });
 });

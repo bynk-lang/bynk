@@ -476,6 +476,7 @@ pub(crate) fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
         }
         Ty::Base(_)
         | Ty::Error
+        | Ty::Never
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
@@ -662,6 +663,7 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
         // values: base types by `===`, everything else by the structural
         // runtime walker.
         Ty::Error
+        | Ty::Never
         | Ty::Base(_)
         | Ty::QueueResult
         | Ty::BoundaryRejection

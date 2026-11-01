@@ -197,6 +197,7 @@ A module that declares no constant emits exactly as before.
 | `Float / Float` | `a / b` — true division (v0.21, operand-typed) |
 | numeric kernel | `i.toFloat()` → the receiver (erased identity); `f.round()`/`floor`/`ceil`/`truncate` → `Math.round(f)` / `Math.floor(f)` / `Math.ceil(f)` / `Math.trunc(f)`; `x.toString()` → `String(x)` (host number→string, ADR 0074) |
 | `?` | a check-and-early-return: on a `Result`, `if (r.tag === "Err") return r;` (or, when a declared embedding converts the error (v0.154), `return Err(F.V(r.error));`); on an `Option` in an HttpResult handler (v0.153), `if (o.tag === "None") return HttpResult.NotFound;` — then the expression is the `Ok`/`Some` payload |
+| `unreachable(m)` / `todo(m)` (#2620) | a call of the runtime's `never`-returning `__fault("Unreachable" \| "Todo", m, "path:line:col")` ([§7.4](/book/spec/runtime-library/)): it throws, so it is an expression of any type, and inside an async body it rejects the effect |
 | `<-` | `await` |
 | `~>` | `ctx.__exec.waitUntil(<effect>)` — dispatched, not awaited |
 | `e.within(d)` | `__bynkWithin(<e>, <ms>, deps.__exec)` — races the effect against a timer and yields `Ok(value)` or `Err({ after })`; the handler receives `__exec` when its body calls `within`, as it does for `~>` (§7.4.14) |
