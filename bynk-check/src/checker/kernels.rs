@@ -1513,9 +1513,7 @@ pub(crate) fn check_numeric_kernel_method(
         (
             BaseType::Int,
             "div" | "rem" | "mod" | "pow" | "and" | "or" | "xor" | "andNot" | "shl" | "shr",
-        ) => {
-            Some((vec![tys.intern(b.clone())], b.clone()))
-        }
+        ) => Some((vec![tys.intern(b.clone())], b.clone())),
         // K6b (#2598): the `Float` functions over JS `Math`, host-defined
         // outside their domains as `Float` arithmetic is (ADR 0042).
         (
