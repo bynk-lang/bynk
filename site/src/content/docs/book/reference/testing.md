@@ -900,7 +900,7 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | `String where MinLength(k)` / `Length(k)` | strings at and above length `k` |
 | `String where Matches(…)` | **must pin** (`bynk.val.needs_pin`) — no generator |
 | sum | each variant |
-| record | each field generated |
+| record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
 | opaque | over the base type |
 
 A type must be **refinement-generable** to appear in `for all` (or `Val`): a
