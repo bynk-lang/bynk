@@ -5,6 +5,10 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkSettleAll } from "../__bynk_runtime/settle.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
+export function positive(x: number): Result<number, string> {
+  return (x > 0 ? Ok(x) : Err("not positive"));
+}
+
 export interface Users {
   get(id: number): globalThis.Promise<string>;
 }
@@ -22,6 +26,12 @@ export interface Audit {
 }
 
 export const __AuditToken: symbol = globalThis.Symbol("Audit");
+
+export interface Lookup {
+  find(id: number): globalThis.Promise<Result<number, string>>;
+}
+
+export const __LookupToken: symbol = globalThis.Symbol("Lookup");
 
 export class FixedUsers implements Users {
   async get(id: number): globalThis.Promise<string> {
@@ -46,6 +56,14 @@ export class NoAudit implements Audit {
 }
 
 export const __NoAuditProvider = { token: __AuditToken, factory: () => new NoAudit() };
+
+export class FixedLookup implements Lookup {
+  async find(id: number): globalThis.Promise<Result<number, string>> {
+    return Ok(id);
+  }
+}
+
+export const __FixedLookupProvider = { token: __LookupToken, factory: () => new FixedLookup() };
 
 export const board = {
   async call(id: number, deps: { Users: Users; Orders: Orders; Audit: Audit }): globalThis.Promise<string> {
@@ -108,10 +126,34 @@ export const hoist = {
   },
 };
 
+export const unwrap = {
+  async call(id: number, deps: { Lookup: Lookup }): globalThis.Promise<Result<number, string>> {
+    const [aR, bR] = await __bynkSettleAll([() => deps.Lookup.find(id), () => deps.Lookup.find(id + 1)]);
+    const __r0 = aR;
+    if (__r0.tag === "Err") return __r0;
+    const a = __r0.value;
+    const __r1 = bR;
+    if (__r1.tag === "Err") return __r1;
+    const b = __r1.value;
+    return Ok(a + b);
+  },
+};
+
+export const hoisted = {
+  async call(id: number, deps: { Orders: Orders }): globalThis.Promise<Result<number, string>> {
+    const __r0 = positive(id);
+    if (__r0.tag === "Err") return __r0;
+    const key = __r0.value;
+    const [a, b] = await __bynkSettleAll([() => deps.Orders.forUser(key), () => deps.Orders.forUser(key + 1)]);
+    return Ok(a + b);
+  },
+};
+
 export interface __ShopBoardDeps {
   readonly Users: Users;
   readonly Orders: Orders;
   readonly Audit: Audit;
+  readonly Lookup: Lookup;
 }
 
 export function __makeSurface(deps: __ShopBoardDeps) {
@@ -130,6 +172,12 @@ export function __makeSurface(deps: __ShopBoardDeps) {
     },
     async hoist(id: number): globalThis.Promise<number> {
       return hoist.call(id, deps);
+    },
+    async unwrap(id: number): globalThis.Promise<Result<number, string>> {
+      return unwrap.call(id, deps);
+    },
+    async hoisted(id: number): globalThis.Promise<Result<number, string>> {
+      return hoisted.call(id, deps);
     },
   };
 }

@@ -11696,6 +11696,16 @@
           }
         ]
       },
+      "derive": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "constraint",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -12911,6 +12921,10 @@
   },
   {
     "type": "cron",
+    "named": false
+  },
+  {
+    "type": "derives",
     "named": false
   },
   {

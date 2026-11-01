@@ -1,0 +1,18 @@
+suite demo.refs
+
+case "a bounded generic passed to map" {
+  let xss: List[List[Int]] = [[1, 5, 2], [], [7]]
+  expect tops(xss) == [Some(5), None, Some(7)]
+}
+
+case "the instantiation is made at each reference" {
+  let ls: List[List[Level]] = [[Lo, Hi], [Mid]]
+  expect levelTops(ls) == [Some(Hi), Some(Mid)]
+  let ss: List[List[String]] = [["b", "a"], ["z", "y"]]
+  expect sortAll(ss) == [["a", "b"], ["y", "z"]]
+}
+
+case "a bounded generic passed as an argument" {
+  let xs: List[Int] = [4, 2, 9]
+  expect viaParam(xs) == Some(9)
+}

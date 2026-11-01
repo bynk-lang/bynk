@@ -1,6 +1,0 @@
-commons frames
-
-// #2016: `Bytes` is not a `sortBy` key; `compare` is a method, not an order.
-fn sorted(xs: List[Bytes]) -> List[Bytes] {
-  xs.sortBy((b) => b)
-}

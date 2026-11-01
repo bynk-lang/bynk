@@ -45,6 +45,101 @@ pub(crate) fn given_insertion_edit(
 
 // -- type-declaration validation --
 
+/// [`check_ident`] for the identifier expression `expr_id`: a generic function
+/// with `Ord` bounds used as a value is instantiated at the reference, and the
+/// comparator witnesses it resolved are recorded on the expression.
+pub(crate) fn check_ident_at(
+    expr_id: ExprId,
+    id: &Ident,
+    expected: Option<TyId>,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let ty = check_ident(id, expected, ctx);
+    if let Some(witnesses) = ctx.last_witness.take()
+        && let Some(decl) = ctx.input.fns.get(&id.name)
+    {
+        ctx.callees
+            .insert(expr_id, Callee::FnValue(Arc::clone(decl), witnesses));
+    }
+    ty
+}
+
+/// Constrained generics slice 1 (DECISION E): a generic function with `Ord`
+/// bounds named where a function type is expected is instantiated at the
+/// reference. Its type arguments come from unifying its parameter types with the
+/// expected function's; any left unresolved is
+/// `bynk.generics.ambiguous_instantiation`. The returned function type is the
+/// instantiation, and `ctx.last_witness` carries the comparator witnesses.
+fn instantiate_bounded_value(
+    id: &Ident,
+    fn_decl: &FnDecl,
+    expected: TyId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let vars: HashSet<String> = fn_decl
+        .type_params
+        .iter()
+        .map(|tp| tp.name.name.clone())
+        .collect();
+    let Ty::Fn {
+        params: want_params,
+        ret: want_ret,
+    } = (*tys.get(expected)).clone()
+    else {
+        return None;
+    };
+    let patterns: Option<Vec<TyId>> = fn_decl
+        .params
+        .iter()
+        .map(|p| resolve_type_ref_in(&p.type_ref, &ctx.input.types, &vars, tys))
+        .collect();
+    let patterns = patterns?;
+    let ret_pattern = resolve_type_ref_in(&fn_decl.return_type, &ctx.input.types, &vars, tys)?;
+    let mut subst: HashMap<String, TyId> = HashMap::new();
+    if patterns.len() == want_params.len() {
+        for (pat, want) in patterns.iter().zip(&want_params) {
+            if !contains_var(*want, tys) {
+                unify(*pat, *want, &mut subst, tys);
+            }
+        }
+        if !contains_var(want_ret, tys) {
+            unify(ret_pattern, want_ret, &mut subst, tys);
+        }
+    }
+    if let Some(unresolved) = fn_decl
+        .type_params
+        .iter()
+        .find(|tp| !subst.contains_key(&tp.name.name))
+    {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.generics.ambiguous_instantiation",
+                id.span,
+                format!(
+                    "cannot determine type parameter `{}` of `{}` from where it is used",
+                    unresolved.name.name, id.name
+                ),
+            )
+            .with_note(format!(
+                "annotate the expected function type, or wrap it in a lambda: `(x) => {}(x)`",
+                id.name
+            )),
+        );
+        return None;
+    }
+    let ord_names = super::ordering::witness_params(fn_decl, &ctx.input.types);
+    let witnesses =
+        super::ordering::check_declared_ord_args(&id.name, id.span, &ord_names, &subst, ctx)?;
+    ctx.last_witness = Some(witnesses);
+    let params: Vec<TyId> = patterns
+        .iter()
+        .map(|p| substitute(*p, &subst, tys))
+        .collect();
+    let ret = substitute(ret_pattern, &subst, tys);
+    Some(tys.intern(Ty::Fn { params, ret }))
+}
+
 pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     if let Some(ty) = ctx.lookup(id.name.as_str()) {
@@ -112,6 +207,12 @@ pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> 
             ctx.refs.record(id.span, SymbolKind::Fn, &id.name);
             // S3 (#1963): a function passed as a value is a use too.
             super::calls::refuse_experimental_import(id, ctx);
+            if !fn_decl.type_params.is_empty()
+                && !super::ordering::witness_params(&fn_decl, &ctx.input.types).is_empty()
+                && let Some(e) = expected
+            {
+                return instantiate_bounded_value(id, &fn_decl, e, ctx);
+            }
             if !fn_decl.type_params.is_empty() {
                 ctx.errors.push(
                     CompileError::new(
@@ -890,7 +991,10 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
     // (`q == 0` against `Int where Positive` would become a
     // `literal_violates` error), a new rejection this does not intend (review
     // of #1696).
-    let eq = matches!(op, BinOp::Eq | BinOp::NotEq);
+    let eq = matches!(
+        op,
+        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq
+    );
     let (lt, rt) = if eq && needs_expected_type(lhs) && !needs_expected_type(rhs) {
         let rt = type_of(rhs, None, ctx);
         let lt = type_of(lhs, rt, ctx);
@@ -989,41 +1093,57 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
             }
         }
         BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
-            if lt_base != rt_base || lt_base.is_none() {
+            // Constrained generics slice 1: the operators order any `Ord` type
+            // (both operands the same). A base-typed pair keeps the original
+            // rule and its diagnostics; `Bytes`, `Bool` and every non-base
+            // operand take the `Ord` path below.
+            let plain_pair = lt_base.is_some()
+                && lt_base == rt_base
+                && lt_base != Some(BaseType::Bytes)
+                && lt_base != Some(BaseType::Bool);
+            if !plain_pair {
                 if numeric_mix(lt_base, rt_base) {
                     push_no_numeric_coercion(op, span, lt, rt, ctx);
                     return None;
                 }
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.type_mismatch",
+                if lt_base == Some(BaseType::Bool) && rt_base == Some(BaseType::Bool) {
+                    ctx.errors.push(CompileError::new(
+                        "bynk.types.type_mismatch",
+                        span,
+                        format!(
+                            "operator `{}` is only defined on `Ord` types, not `{}`",
+                            op.name(),
+                            lt.display(tys)
+                        ),
+                    ));
+                    return None;
+                }
+                if !compatible(lt, rt, tys) && !compatible(rt, lt, tys) {
+                    let same = if lt_base.is_some() && rt_base.is_some() {
+                        "base type"
+                    } else {
+                        "type"
+                    };
+                    ctx.errors.push(CompileError::new(
+                        "bynk.types.type_mismatch",
+                        span,
+                        format!(
+                            "operator `{}` requires both operands to have the same {same}; got `{}` and `{}`",
+                            op.name(),
+                            lt.display(tys),
+                            rt.display(tys)
+                        ),
+                    ));
+                    return None;
+                }
+                if !super::ordering::check_ord(
+                    ctx,
+                    lt,
                     span,
-                    format!(
-                        "operator `{}` requires both operands to have the same base type; got `{}` and `{}`",
-                        op.name(),
-                        lt.display(tys),
-                        rt.display(tys)
-                    ),
-                ));
-                return None;
-            }
-            if !matches!(
-                lt_base,
-                Some(BaseType::Int)
-                    | Some(BaseType::String)
-                    | Some(BaseType::Float)
-                    | Some(BaseType::Duration)
-                    | Some(BaseType::Instant)
-            ) {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.type_mismatch",
-                    span,
-                    format!(
-                        "operator `{}` is only defined on `Int`, `Float`, `Duration`, `Instant`, and `String`, not `{}`",
-                        op.name(),
-                        lt.display(tys)
-                    ),
-                ));
-                return None;
+                    &super::ordering::OrdSite::Operator(op.name()),
+                ) {
+                    return None;
+                }
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }

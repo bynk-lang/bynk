@@ -59,4 +59,32 @@ suite shop.board {
     let r <- hoist.call(0)
     expect r == 8
   }
+
+  case "a Result bound in the block is unwrapped after it" {
+    stub Lookup.find(_) returns each [Ok(2), Ok(3)]
+    let r <- unwrap.call(2)
+    expect r == Ok(5)
+  }
+
+  case "after the block, the first Err in source order propagates" {
+    stub Lookup.find(_) returns each [Err("first"), Err("second")]
+    let r <- unwrap.call(1)
+    expect r == Err("first")
+    expect Lookup.find called 2 times
+  }
+
+  case "an Err in a later binding propagates when the earlier is Ok" {
+    stub Lookup.find(_) returns each [Ok(1), Err("second")]
+    let r <- unwrap.call(1)
+    expect r == Err("second")
+  }
+
+  case "a ? on an argument is hoisted above the block" {
+    stub Orders.forUser(_) returns 4
+    let r <- hoisted.call(1)
+    expect r == Ok(8)
+    let bad <- hoisted.call(0)
+    expect bad == Err("not positive")
+    expect Orders.forUser called 2 times
+  }
 }

@@ -30,7 +30,7 @@ exports_decl ::= "exports" ("opaque" | "transparent" | "capability") "{" (identi
 type_param ::= identifier (":" identifier ("+" identifier)*)?
 where_clause ::= "where" where_bound ("," where_bound)*
 where_bound ::= identifier ":" identifier ("+" identifier)*
-type_decl ::= "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body
+type_decl ::= "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body ("derives" identifier ("+" identifier)*)?
 type_body ::= opaque_type | refined_type | record_type | sum_type | enum_type
 opaque_type ::= "opaque" base_type ("where" refinement)?
 refined_type ::= base_type ("where" refinement)?

@@ -2061,6 +2061,12 @@ pub struct TypeDecl {
     /// opaque / sum bodies. Mirrors [`FnDecl::type_params`].
     pub type_params: Vec<TypeParam>,
     pub body: TypeBody,
+    /// `derives Ord` (constrained-generics slice 1): the constraints the type
+    /// opts into, in source order. Empty when there is no clause. `Eq`, `Key` and
+    /// `Codable` are automatic, so `Ord` is the only name the checker admits.
+    pub derives: Vec<Ident>,
+    /// The span of the `derives` keyword, when there is a clause.
+    pub derives_kw: Option<Span>,
     /// Documentation block attached to this declaration (v0.3).
     pub documentation: Option<Doc>,
     pub span: Span,
@@ -2113,6 +2119,8 @@ impl EventDecl {
     /// directly off the real declaration instead.
     pub fn as_type_decl(&self) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: self.name.clone(),
             type_params: Vec::new(),
             body: TypeBody::Record(self.body.clone()),

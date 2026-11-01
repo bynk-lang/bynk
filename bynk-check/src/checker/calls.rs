@@ -166,6 +166,7 @@ pub(crate) fn check_fn(
         test_actors: HashMap::new(),
         type_vars: vars.clone(),
         eq: eq.clone(),
+        last_witness: None,
         store_fields: HashMap::new(),
         in_agent_handler: false,
     };
@@ -317,6 +318,7 @@ fn type_static_initialiser(
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
             eq: EqScope::default(),
+            last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -597,10 +599,18 @@ pub(crate) fn check_call(
     let tys = ctx.tys;
     if let Some(fn_decl) = ctx.input.fns.get(&name.name) {
         ctx.refs.record(name.span, SymbolKind::Fn, &name.name);
-        ctx.callees.insert(expr_id, Callee::Fn(Arc::clone(fn_decl)));
+        let fn_decl = Arc::clone(fn_decl);
+        ctx.callees
+            .insert(expr_id, Callee::Fn(Arc::clone(&fn_decl), Vec::new()));
         warn_bynk_list_deprecation(name, args, span, ctx);
         refuse_experimental_import(name, ctx);
-        return check_call_against_fn(name, fn_decl, type_args, args, ctx);
+        let ret = check_call_against_fn(name, &fn_decl, type_args, args, ctx);
+        // Slice 1: the comparator witnesses the generic-call path resolved.
+        if let Some(witnesses) = ctx.last_witness.take() {
+            ctx.callees
+                .insert(expr_id, Callee::Fn(Arc::clone(&fn_decl), witnesses));
+        }
+        return ret;
     }
     // v0.20a: explicit type arguments only apply to (generic) functions.
     if !type_args.is_empty() {
@@ -1043,15 +1053,22 @@ fn check_generic_call(
         }
         _ => Default::default(),
     };
+    let ord_names = super::ordering::witness_params(fn_decl, &ctx.input.types);
     let eq_params: Vec<(String, Option<Span>)> = fn_decl
         .type_params
         .iter()
         .filter(|tp| super::equality::has_eq(&tp.bounds) || compared.contains(&tp.name.name))
+        // An `Ord`-bounded parameter is checked as `Ord` below, which covers `Eq`.
+        .filter(|tp| !ord_names.contains(&tp.name.name))
         .map(|tp| (tp.name.name.clone(), Some(tp.span)))
         .collect();
     if !super::equality::check_declared_eq_args(&name.name, name.span, &eq_params, &subst, ctx) {
         return None;
     }
+    // Slice 1: each `Ord`-bounded type parameter takes an orderable type, and
+    // the call carries a comparator witness for it.
+    let witnesses =
+        super::ordering::check_declared_ord_args(&name.name, name.span, &ord_names, &subst, ctx)?;
     // v0.39 (ADR 0072): when the user omitted the type arguments, show the
     // inferred ones as a `Type`-kind hint after the function name —
     // `identity` ⟨`[Int]`⟩ `(5)`. Declaration order; skipped if any var stayed
@@ -1066,6 +1083,9 @@ fn check_generic_call(
             ctx.hints
                 .record(name.span, format!("[{}]", parts.join(", ")));
         }
+    }
+    if !witnesses.is_empty() {
+        ctx.last_witness = Some(witnesses);
     }
     let ret = substitute(ret_pattern, &subst, tys);
     // v0.20b: the return is ground *up to the caller's rigid type
@@ -2935,8 +2955,10 @@ pub(crate) fn check_method_call(
         SymbolKind::Method,
         &format!("{type_name}.{}", method.name),
     );
-    ctx.callees
-        .insert(expr_id, Callee::Method(Arc::clone(&method_decl)));
+    ctx.callees.insert(
+        expr_id,
+        Callee::Method(Arc::clone(&method_decl), Vec::new()),
+    );
     // #594: a generic instance method — one on a generic receiver, or one
     // carrying its own type parameters — resolves its parameter and return
     // types against a substitution seeded from the receiver's type arguments,
@@ -2951,7 +2973,7 @@ pub(crate) fn check_method_call(
         .map(|d| d.type_params.iter().map(|p| p.name.name.clone()).collect())
         .unwrap_or_default();
     if !recv_type_params.is_empty() || !method_decl.type_params.is_empty() {
-        return check_generic_method_call(
+        let ret = check_generic_method_call(
             &type_name,
             &recv_type_params,
             recv_ty,
@@ -2960,6 +2982,12 @@ pub(crate) fn check_method_call(
             args,
             ctx,
         );
+        // Slice 1: the comparator witnesses the generic-call path resolved.
+        if let Some(witnesses) = ctx.last_witness.take() {
+            ctx.callees
+                .insert(expr_id, Callee::Method(Arc::clone(&method_decl), witnesses));
+        }
+        return ret;
     }
     // Param count excludes the implicit `self`.
     if method_decl.params.len() != args.len() {
@@ -3240,10 +3268,23 @@ fn check_generic_method_call(
         .map(|tp| (tp.name.name.clone(), Some(tp.span)))
         .collect();
     eq_params.extend(recv_type_params.iter().map(|p| (p.clone(), None)));
-    eq_params.retain(|(p, _)| declared_eq(p) || compared.contains(p));
+    let ord_params = super::ordering::witness_params(method_decl, &ctx.input.types);
+    eq_params.retain(|(p, _)| {
+        (declared_eq(p) || compared.contains(p)) && !ord_params.iter().any(|o| o == p)
+    });
     let callee = format!("{type_name}.{}", method.name);
     if !super::equality::check_declared_eq_args(&callee, method.span, &eq_params, &subst, ctx) {
         return None;
+    }
+    let witnesses = super::ordering::check_declared_ord_args(
+        &callee,
+        method.span,
+        &super::ordering::witness_params(method_decl, &ctx.input.types),
+        &subst,
+        ctx,
+    )?;
+    if !witnesses.is_empty() {
+        ctx.last_witness = Some(witnesses);
     }
     // v0.39 (ADR 0072)-style hint: show the inferred method type arguments after
     // the method name (`box.map` [Int] `(f)`). Only the method's own

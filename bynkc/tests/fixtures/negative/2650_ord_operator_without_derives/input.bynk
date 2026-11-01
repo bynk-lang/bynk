@@ -1,0 +1,6 @@
+commons demo
+
+type Plain = { a: Int }
+
+// #2660: a record is not `Ord` until it says so with `derives Ord`.
+fn before(x: Plain, y: Plain) -> Bool { x < y }

@@ -1079,6 +1079,31 @@ in with `uses` (not `consumes`) — `bynk.list`, `bynk.map` and `bynk.set`
 These are ordinary functions with no effects; see the
 [type system reference](/book/reference/types/).
 
+`bynk.list` also has three `Ord`-bounded free functions, called unqualified after
+`uses bynk.list` (they do not collide with the `xs.min(key)` kernel methods):
+
+| Function | Returns | Notes |
+|---|---|---|
+| `sort[T: Ord](xs: List[T])` | `List[T]` | ascending and stable, in the type's own [order](/book/reference/types/#ordering-your-own-types) |
+| `min[T: Ord](xs: List[T])` | `Option[T]` | the smallest element; `None` for an empty list |
+| `max[T: Ord](xs: List[T])` | `Option[T]` | the largest element; `None` for an empty list |
+
+```bynk,fragment
+commons demo.sorting
+
+uses bynk.list
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+type Task = { priority: Priority, title: String } derives Ord
+
+fn ranked(ts: List[Task]) -> List[Task] { sort(ts) }
+
+fn hottest(ts: List[Task]) -> Option[Task] { max(ts) }
+```
+
+On `Float` they use the total order (`NaN` last).
+
 ### URLs and query strings: `bynk.url`
 
 `uses bynk.url` brings in a `Url` record and functions over it, written in Bynk

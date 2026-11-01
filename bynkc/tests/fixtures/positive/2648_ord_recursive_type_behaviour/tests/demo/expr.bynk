@@ -1,0 +1,23 @@
+suite demo.expr
+
+case "variants order by declaration, payloads recursively" {
+  let one = Num(1)
+  let two = Num(2)
+  let xs: List[Expr] = [Add(one, two), Neg(two), two, Add(one, one), Neg(one), one]
+  expect ordered(xs) == [one, two, Neg(one), Neg(two), Add(one, one), Add(one, two)]
+}
+
+case "deep values compare through the recursion" {
+  let deep: Expr = Add(Add(Num(1), Num(2)), Num(3))
+  let deeper: Expr = Add(Add(Num(1), Num(2)), Neg(Num(0)))
+  let xs: List[Expr] = [deeper, deep]
+  expect ordered(xs) == [deep, deeper]
+}
+
+case "a recursive record through Option" {
+  let a: Chain = Chain { head: 1, rest: None }
+  let b: Chain = Chain { head: 1, rest: Some(a) }
+  let c: Chain = Chain { head: 0, rest: Some(b) }
+  let xs: List[Chain] = [c, a, b]
+  expect chains(xs) == Some(b)
+}

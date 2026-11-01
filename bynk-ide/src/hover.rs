@@ -281,6 +281,14 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     if let Some(content) = crate::symbols::describe_advance_at(text, span.start) {
         return Some(content);
     }
+    // 5a. Constrained generics slice 1: the contextual `derives` of a type's
+    //    `derives Ord` clause, and a constraint name in a bound or that clause.
+    if let Some(content) = crate::symbols::describe_derives_at(text, span.start) {
+        return Some(content);
+    }
+    if let Some(content) = crate::symbols::describe_constraint_at(text, span.start) {
+        return Some(content);
+    }
     // 5a. #2640: the contextual `par` of a `par { … }` binding block.
     if let Some(content) = crate::symbols::describe_par_at(text, span.start) {
         return Some(content);
@@ -726,4 +734,42 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
     Some(format!(
         "Unresolved doc link `{name}` — searched: {searched}"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hover_at(src: &str, needle: &str, nth: usize) -> Option<String> {
+        let offset = src.match_indices(needle).nth(nth).unwrap().0;
+        hover_content(&HoverInput {
+            analysis: None,
+            doc: Some((src, offset)),
+            path: None,
+            files: None,
+        })
+    }
+
+    /// Constrained generics slice 1: `derives` and the constraint names it and
+    /// a bound carry each hover; an `Ord` lookalike elsewhere does not.
+    #[test]
+    fn derives_and_constraint_names_hover() {
+        let src = "commons demo.m\n\ntype P = Int derives Ord\n\nfn top[T: Ord](xs: List[T]) -> Option[T] { None }\n\nfn same[T: Eq](a: T) -> T { a }\n";
+        let kw = hover_at(src, "derives", 0).expect("`derives` hovers");
+        assert!(kw.contains("declaration order"), "{kw}");
+        // `Ord` in the clause and in the bound; `Eq` in a bound.
+        for nth in 0..2 {
+            let ord = hover_at(src, "Ord", nth).expect("`Ord` hovers");
+            assert!(ord.contains("constraint Ord"), "{ord}");
+        }
+        assert!(hover_at(src, "Eq", 0).unwrap().contains("constraint Eq"));
+        // The type's own hover shows the clause.
+        assert!(hover_at(src, "P =", 0).unwrap().contains("derives Ord"));
+        // A generic's hover shows its bound.
+        assert!(
+            hover_at(src, "top", 0)
+                .unwrap()
+                .contains("fn top[T: Ord](xs: List[T])")
+        );
+    }
 }

@@ -56,6 +56,7 @@
   "migrate"
   "drop"
   "replaces"
+  "derives"
   "removed"
   "requires"
   "ensures"

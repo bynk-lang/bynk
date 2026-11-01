@@ -7,6 +7,7 @@ export * from "./time.ts";
 export * from "./settle.ts";
 export * from "./url.ts";
 export * from "./equality.ts";
+export * from "./compare.ts";
 export * from "./int.ts";
 export * from "./errors.ts";
 export * from "./storage.ts";

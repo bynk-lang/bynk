@@ -1,0 +1,3 @@
+# #2660: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# constrained generics slice 1: derives Ord, the operators, sort/min/max over every orderable kind.
+passed=8 failed=0

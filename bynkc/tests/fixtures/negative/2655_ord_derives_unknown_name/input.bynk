@@ -1,0 +1,3 @@
+commons demo
+
+type Pt = { x: Int } derives Hash

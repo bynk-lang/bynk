@@ -1,0 +1,7 @@
+commons demo
+
+type Plain = { a: Int }
+
+fn biggest[T: Ord](xs: List[T]) -> Option[T] { xs.max((x) => x) }
+
+fn use(xs: List[Plain]) -> Option[Plain] { biggest(xs) }

@@ -35,7 +35,7 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
-version = "0.464.1"
+version = "0.466.1"
 # Minimum supported Rust version. Edition 2024 floors it at 1.85, but `oxc`
 # (the TS→JS stripper behind `bynk-strip`, in-browser track slice 1) requires
 # rustc 1.94, so the effective floor rose to match it — set to 1.95 (the pinned
@@ -68,22 +68,22 @@ wildcard_enum_match_arm = "warn"
 # version is required alongside path so the published crates carry a crates.io
 # dependency requirement; path is used for in-workspace builds. The one
 # exception is bynk-testkit at the bottom of this table — see its own entry.
-bynk-syntax = { path = "bynk-syntax", version = "0.464.1" }
-bynk-std = { path = "bynk-std", version = "0.464.1" }
-bynk-ts = { path = "bynk-ts", version = "0.464.1" }
-bynk-render = { path = "bynk-render", version = "0.464.1" }
-bynk-check = { path = "bynk-check", version = "0.464.1" }
-bynk-ir = { path = "bynk-ir", version = "0.464.1" }
-bynk-lower = { path = "bynk-lower", version = "0.464.1" }
-bynk-project = { path = "bynk-project", version = "0.464.1" }
-bynk-registry-core = { path = "bynk-registry-core", version = "0.464.1" }
-bynk-emit = { path = "bynk-emit", version = "0.464.1" }
-bynk-driver = { path = "bynk-driver", version = "0.464.1" }
-bynk-strip = { path = "bynk-strip", version = "0.464.1" }
-bynk-ide = { path = "bynk-ide", version = "0.464.1" }
-bynkc = { path = "bynkc", version = "0.464.1" }
-bynk-fmt = { path = "bynk-fmt", version = "0.464.1" }
-bynk-grammar = { path = "bynk-grammar", version = "0.464.1" }
+bynk-syntax = { path = "bynk-syntax", version = "0.466.1" }
+bynk-std = { path = "bynk-std", version = "0.466.1" }
+bynk-ts = { path = "bynk-ts", version = "0.466.1" }
+bynk-render = { path = "bynk-render", version = "0.466.1" }
+bynk-check = { path = "bynk-check", version = "0.466.1" }
+bynk-ir = { path = "bynk-ir", version = "0.466.1" }
+bynk-lower = { path = "bynk-lower", version = "0.466.1" }
+bynk-project = { path = "bynk-project", version = "0.466.1" }
+bynk-registry-core = { path = "bynk-registry-core", version = "0.466.1" }
+bynk-emit = { path = "bynk-emit", version = "0.466.1" }
+bynk-driver = { path = "bynk-driver", version = "0.466.1" }
+bynk-strip = { path = "bynk-strip", version = "0.466.1" }
+bynk-ide = { path = "bynk-ide", version = "0.466.1" }
+bynkc = { path = "bynkc", version = "0.466.1" }
+bynk-fmt = { path = "bynk-fmt", version = "0.466.1" }
+bynk-grammar = { path = "bynk-grammar", version = "0.466.1" }
 # #1560: no `version` here, unlike every entry above — `bynk-testkit` is
 # `publish = false` (never on crates.io) and only ever a dev-dependency of
 # `bynk`/`bynkc`/`bynk-lsp`. A `version` alongside `path` makes `cargo publish`

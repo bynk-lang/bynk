@@ -1,0 +1,4 @@
+commons demo
+
+// #2660: `<` on a type parameter needs `T: Ord`, declared.
+fn lower[T](a: T, b: T) -> Bool { a < b }

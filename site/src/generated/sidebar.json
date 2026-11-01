@@ -122,6 +122,10 @@
           {
             "label": "Declare Eq on a generic that compares",
             "link": "/book/guides/type-system/declare-eq-bounds/"
+          },
+          {
+            "label": "Understand ordering your own types",
+            "link": "/book/guides/type-system/ordering-your-own-types/"
           }
         ]
       },
@@ -631,6 +635,10 @@
       {
         "label": "bynk.generics.missing_eq_bound",
         "link": "/book/troubleshooting/generics-missing-eq-bound/"
+      },
+      {
+        "label": "bynk.generics.missing_ord_bound",
+        "link": "/book/troubleshooting/generics-missing-ord-bound/"
       },
       {
         "label": "bynk.refine.literal_violates",

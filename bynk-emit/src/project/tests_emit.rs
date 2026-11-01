@@ -1124,6 +1124,7 @@ fn emit_integration_module(
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }
+    append_missing_bindings(&mut runtime_names, &runtime_use.cmp_imports());
     stmts.splice(
         import_idx..import_idx,
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
@@ -3958,6 +3959,7 @@ fn emit_test_module(
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }
+    append_missing_bindings(&mut runtime_names, &runtime_use.cmp_imports());
     stmts.splice(
         import_idx..import_idx,
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
@@ -10335,6 +10337,8 @@ mod tests {
 
     fn refined_int_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: name.to_string(),
                 span: Span::default(),
@@ -10353,6 +10357,8 @@ mod tests {
 
     fn opaque_int_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: name.to_string(),
                 span: Span::default(),
@@ -10456,6 +10462,8 @@ mod tests {
 
     fn sum_decl(name: &str, variants: Vec<(&str, Vec<(&str, TypeRef)>)>) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: name.to_string(),
                 span: Span::default(),

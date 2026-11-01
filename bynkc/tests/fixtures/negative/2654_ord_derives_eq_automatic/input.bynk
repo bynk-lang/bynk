@@ -1,0 +1,4 @@
+commons demo
+
+// #2660: `Eq` is automatic; only `Ord` is derived.
+type Pt = { x: Int } derives Eq

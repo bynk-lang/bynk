@@ -220,9 +220,52 @@ defined on `Int` operands (yielding `Int`) and on `Float` operands
 (yielding `Float`). They MUST NOT mix the two: an `Int` and a `Float`
 operand in the same operation is `bynk.types.no_numeric_coercion` — there
 is **no implicit numeric coercion** in either direction. The same rule
-applies to the comparison operators `< <= > >=` (defined on `Int`,
-`Float`, and `String`, same-typed) and to `==`/`!=`. Refined numeric
-types widen to their base in operator positions, as before.
+applies to the comparison operators `< <= > >=` and to `==`/`!=`. Refined
+numeric types widen to their base in operator positions, as before.
+
+**Ordering** (constrained generics, slice 1). `< <= > >=` accept two operands
+of the **same `Ord` type**; a type that is not `Ord` is
+`bynk.types.not_orderable`. A type is `Ord` when it is one of:
+
+- `Int`, `Float`, `String`, `Duration`, `Instant` or `Bytes`, or a refined type
+  over one of them;
+- `Option[T]` or `List[T]` where `T` is `Ord`;
+- a record, sum, enum or opaque type that declares `derives Ord` (§4.2.1),
+  provided every field and payload type is `Ord`
+  (`bynk.types.derives_field_not_orderable` otherwise). A generic one is `Ord`
+  at an instantiation whose type arguments are;
+- a type parameter declared `T: Ord`.
+
+`Bool`, `Result`, `Map`, `Set`, function types and held resources are not `Ord`,
+and an opaque type is `Ord` outside its defining unit only if it declares
+`derives Ord`. A type with no `derives Ord` is never ordered implicitly, because
+opting in makes declaration order significant.
+
+Every `Ord` type has a **total order**, and an implementation MUST compute it as
+follows:
+
+- `Int`, `Duration` and `Instant` order numerically; a refined type orders as
+  its base.
+- `String` orders by **UTF-16 code unit**, element by element, a proper prefix
+  first. This is not Unicode code-point or locale order.
+- `Bytes` orders **lexicographically over unsigned octets**, a proper prefix
+  first.
+- `Float` orders as a **total order**: `NaN` sorts after every other value and
+  equals itself, and `-0.0` equals `0.0`. This applies wherever the order is
+  used as an order, that is the ordering kernels (`sortBy`, `min`, `max`),
+  `bynk.list.sort`/`min`/`max`, and every `T: Ord` witness. The operators
+  `< <= > >=` on `Float` keep the IEEE meaning (`NaN < x` is `false`), and
+  `==` is unchanged.
+- `Option` orders `None` before every `Some`, and `Some` by payload.
+- `List` orders lexicographically by element, a proper prefix first.
+- A record orders by its fields in **declaration order**, the first differing
+  field deciding.
+- A sum or enum orders by **variant declaration order**, then by payload (fields
+  in declaration order) between two values of the same variant.
+
+Reordering the fields or variants of a `derives Ord` declaration therefore
+changes how its values sort. The contract hash ignores field and variant
+order, so the change is not a contract change.
 
 **Equality is structural** (#1652). `==`/`!=` compare **values**, not
 references. Two records are equal when every field is equal; two sum values when
@@ -236,7 +279,7 @@ container element, or a generic argument written in the type, such as
 (`bynk.types.not_comparable`, `bynk.types.stream_not_comparable`,
 `bynk.types.held_not_comparable`). Inside a generic function or method, `==` on
 a type that mentions a type parameter is accepted only when that parameter is
-**declared `Eq`**: by a `T: Eq` bound on the function, a `where A: Eq` entry on
+**declared `Eq`** (or `Ord`, which implies it): by a `T: Eq` bound on the function, a `where A: Eq` entry on
 a method (for its receiver type's parameter), or a bound its receiver type
 declares; otherwise it is `bynk.generics.missing_eq_bound`. Passing a type
 parameter to an `Eq`-bounded parameter of another generic is the same rule,
@@ -540,14 +583,31 @@ no constraint on expression checking.
 
 **Bounds** (constrained generics, slice 0). A type parameter MAY carry bounds,
 `T: Eq` or `T: C1 + C2`, on a `fn`, a `type` declaration or — as a `where`
-clause — a method (§4.3.1b). `Eq` is the only constraint; any other name is
-`bynk.generics.unknown_constraint`. A bound on a generic capability operation's
+clause — a method (§4.3.1b). The constraints are `Eq` and, from slice 1, `Ord`;
+any other name is `bynk.generics.unknown_constraint`. **`Ord` implies `Eq`**: a
+`T: Ord` parameter may be compared with `==`, and `T: Eq + Ord` is the warning
+`bynk.generics.redundant_eq_bound`, whose fix removes `Eq`.
+
+A parameter that a body orders must be declared `Ord`: `<`, `<=`, `>`, `>=`,
+an ordering kernel key, or passing it to an `Ord`-bounded parameter of another
+generic, on a `T` without the bound is `bynk.generics.missing_ord_bound`, with a
+machine-applicable fix that declares `: Ord` (replacing an existing `Eq`). Each
+call MUST instantiate an `Ord`-bounded parameter with an `Ord` type
+(`bynk.types.not_orderable`). A bounded generic named as a value, such as
+`xs.map(top)`, is instantiated at the reference from its expected function type;
+if the type arguments cannot be resolved there it is
+`bynk.generics.ambiguous_instantiation`.
+
+A bound on a generic capability operation's
 type parameter is `bynk.generics.bound_on_capability_op`, and a `where` entry
 that names no type parameter of the method or its receiver type is
 `bynk.generics.unknown_where_param`. A bound on a type declaration is checked
 where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
-`Set2[(Int) -> Int]` with the equality diagnostics below. Bounds are erased; they
-add nothing to emission.
+`Set2[(Int) -> Int]` with the equality diagnostics below. An `Eq` bound adds nothing to emission. An
+`Ord` bound adds one hidden trailing comparator parameter to the emitted
+function (the receiver type's parameters first, then the method's own, in
+declaration order), which the caller builds from the concrete type; it is
+internal and not part of the published ABI.
 
 {{#grammar-semantics if_expr}}
 
@@ -845,12 +905,31 @@ stored: the commit faults and nothing persists.
 against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
 shape is its storage kind and its value types, expanded structurally (record
 fields, sum variants and variant payload fields by name; type names do not
-appear, since stored bytes carry none), with and without refinements. A new class is recorded at version 1.
-An unchanged shape keeps its version. Adding a field, or changing only a
-refinement, increments it; the latter also warns (`bynk.agent.refinement_changed`),
-since a narrowing faults on load as above. Removing a field, changing its value
-types, or changing its storage kind is `bynk.agent.non_additive_state_change`,
-and so is renaming one, which is a removal plus an addition. A recorded class no
+appear, since stored bytes carry none), with and without refinements, and as the
+list of positions in the stored value (each record field, variant and container
+element by path, with whether a record field declares a default). A new class is
+recorded at version 1. An unchanged shape keeps its version. These changes
+increment it:
+- adding a `store` field;
+- adding a record field **with a default** anywhere inside a stored value, together
+  with whatever lies beneath it, since every record stored before decodes it as its
+  default ([§5.2b](#field-defaults));
+- a record field gaining a default;
+- changing only a refinement, which also warns (`bynk.agent.refinement_changed`),
+  since a narrowing faults on load as above.
+
+Any other change is `bynk.agent.non_additive_state_change`, and the diagnostic
+names each position that broke:
+- removing a `store` field, or a record field inside a stored value;
+- changing a position's type, or a field's storage kind;
+- adding a record field without a default;
+- a record field losing its default;
+- adding a sum variant.
+
+Renaming a field is a removal plus an addition. A shape recorded before positions
+were (an older lock) has none: an unchanged build fills them in without changing
+the version, and until then a change inside a stored value is judged as a change of
+the field's value types. A recorded class no
 longer declared is `bynk.agent.class_removed`. As for events, `bynkc check` and
 `bynkc test` reconcile without writing the lock, and only a build records a new
 version.
@@ -972,8 +1051,10 @@ pattern and an `else`, a plain `let` (it has no effect to overlap), `~>` (a
 fire-and-forget send has nothing to join), `:=` or a mutating `store` operation
 (`store` writes stay sequential), `expect`, `advance`, a nested `par`, and an
 empty block. A `?` in a binding is `bynk.par.question_in_join` (a `?` inside a
-lambda belongs to the lambda); propagating the first `Err` in source order across a
-join is a later increment. The bindings run together, so **no binding may mention
+lambda belongs to the lambda). This is permanent: `?` takes a `Result` value, not
+an effect, so a binding's `Result` is bound in the block and unwrapped after it
+(`let user = userR?`). The block has waited for every binding, so those `?` lines
+propagate the first `Err` in source order. The bindings run together, so **no binding may mention
 a name another binding of the block binds, and no two bind one name**
 (`bynk.par.sibling_name`) — even where the name would also resolve to a binding from
 before the block, so a stale value is never picked up silently. A binding's own name
@@ -2236,9 +2317,11 @@ broadcast.
 The builder/terminal rows above are the **eager in-memory half** of the query
 algebra ([design notes §11](https://github.com/bynk-lang/bynk/blob/main/design/bynk-design-notes.md)) —
 the same combinator names a lazy storage `Query[T]` will carry. **Ordering keys**
-(`sortBy`/`min`/`max`) are drawn from the closed orderable base set — `Int`,
-`Float`, `String`, `Duration`, `Instant` (refined types widening; an opaque key
-is **not** orderable) — else `bynk.types.key_not_orderable`. **Numeric keys**
+(`sortBy`/`min`/`max`) on a `List` are any `Ord` type (§5.2) — else
+`bynk.types.key_not_orderable`. On a storage `Query` the key is still drawn from
+the closed base set — `Int`, `Float`, `String`, `Duration`, `Instant` (refined
+types widening; an opaque key is **not** orderable) — because a user-type
+comparator has no storage lowering; the same code is reported. **Numeric keys**
 (`sum`/`average`) are `Int`/`Float`/`Duration` (not `Instant` — instants are not
 summable), else `bynk.query.sum_needs_numeric`;
 `average` of a `Duration` is a `Duration` (integer-rounded millis), otherwise a

@@ -234,6 +234,38 @@ Two consequences follow:
 See the normative rule in
 [§5.4.3 of the specification](/book/spec/static-semantics/#543-rehydration-validation-v097).
 
+### Changes that need no migration
+
+`bynk.schema.lock` records each class's stored shape, and a build accepts a change
+on its own when every record already stored still reads. That covers adding a
+`store` field, changing only a refinement (which warns), and adding a record field
+**with a default** anywhere inside a stored value:
+
+```bynk
+context shop
+
+type Prefs = { theme: String, size: Int = 12 }   // `size` added since the last deploy
+
+agent Profile {
+  key id: String
+  store prefs: Cell[Prefs] = Prefs { theme: "light" }
+
+  on call size() -> Effect[Int] {
+    prefs.size
+  }
+}
+```
+
+A `Profile` stored before `size` existed loads with `size == 12`. The same holds
+for a record that is a `Map`'s value, a `List`'s element or a `Log`'s entry.
+
+Anything else changes what is on disk, and the build refuses it with
+`bynk.agent.non_additive_state_change`, naming the position:
+`one (one.dark added without a default)`, `prefs.theme removed`,
+`prefs.size lost its default`. A lock written before the build recorded positions
+judges a change inside a value as a retype until one build with the unchanged
+definition fills them in. A refused change needs a migration step.
+
 ## Migrations
 
 A `migrate from N (old: T) { … }` step carries a stored record from schema version
