@@ -149,9 +149,27 @@ spelling of the same pattern, and inconsistent with events.
   given `..`.
 - **Generic records:** type arguments are not written in patterns
   (`Page { items, .. }`), as they are not written in construction.
-- **Draft:** as above. The settling review should confirm there is no parse
-  conflict in a `match` arm position, where `Order {` currently cannot start an
-  arm at all.
+- **Positions followed by a block.** The type name settles the `match` arm
+  position, where `Order {` cannot start an arm today. It does not settle the
+  positions where a pattern is followed by a block: `if o is Order { … } { … }`
+  and, from slice 2, `let Order { … } = e else { … }`. In `if o is Item { sku }`
+  the parser cannot tell, at the first `{`, whether it opens the pattern or the
+  then-block. Rust has the same problem with struct literals in an `if`
+  condition and bans them there. The options are:
+  - require parentheses around a record pattern after `is`
+    (`if o is (Item { sku, .. }) { … }`), using the parenthesised pattern that
+    already exists (`paren_pattern`, ADR 0252 E);
+  - rely on Q1's mandatory `..` and a lookahead rule (a `{` after a type name in
+    a pattern position opens a pattern if its contents parse as fields ending
+    in `..`);
+  - keep record patterns out of `is` altogether.
+
+  **Draft:** require the parentheses after `is`, and nowhere else. It is one
+  simple, local rule; it needs no unbounded lookahead; and it leaves `match`
+  arms and `let` patterns unparenthesised. The `let … else` opener is
+  unambiguous without them, because the pattern ends at `=`, not at a block.
+- **Draft:** as above. The settling review should confirm both positions against
+  the tree-sitter grammar and the hand-written parser.
 
 ### Q3 — Visibility
 
@@ -219,9 +237,18 @@ arms.
 - **Types:** `Int` (including refined `Int`) only in the first slice. `Duration`
   and `Instant` have no literal form; `Float` ranges invite `NaN` and
   representation questions; `String` ranges are rarely meant.
-- **`..` is reused.** In a record or list pattern `..` is a rest marker; with a
-  literal on either side it is a range. The two never occur in the same
-  position.
+- **`..` is reused, and the two uses can meet in a list.** In a record or list
+  pattern `..` is a rest marker; with a literal bound it is a range. Q6 allows
+  `..rest` in a list element, and an open-ended range `..hi` is itself a pattern,
+  so `[..rest]` and `[..9]` differ only in what follows the `..`. The rule:
+  after `..`, an **identifier or nothing** makes a rest marker, and a
+  **literal** (including a negative one, `..-1`) makes the upper bound of a
+  range. That keeps one range production and one rest production with no
+  overlap, and it should be written into the grammar and the Q7 ADR.
+- **Bad and overlapping ranges.** A range whose lower bound exceeds its upper
+  bound (`9..0`) is a compile error, not an empty pattern, since it can only be
+  a mistake. A range arm wholly covered by earlier arms is `unreachable_arm`, as
+  for any other pattern; a partly covered one is legal. Both need Q4 (b).
 - **Relation to refined patterns.** `_ where InRange(0, 9)` matches the same
   values without binding. Ranges compose with or-patterns (`0..9 | 90..99`) and
   nest inside variant and record patterns (`Some(0..9)`). Binding the matched
@@ -260,7 +287,10 @@ To land with, or just before, slice 1:
 - **Open record patterns with a required `..`** (Q1). It fixes whether adding a
   field can ever be source-breaking, and binds #2607's reasoning.
 - **Range syntax shared with events** (Q7). Decided before either slice 5 or
-  #990 lands, so the language gets one range production.
+  #990 lands, so the language gets one range production, including the rule
+  that separates it from the list rest marker.
+- **Parentheses for record patterns after `is`** (Q2). It fixes how slice 1
+  parses its trickiest position.
 
 ## 8. Threat model
 
