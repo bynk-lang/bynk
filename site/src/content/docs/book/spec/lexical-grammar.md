@@ -122,6 +122,12 @@ delimiter has a line of its own (`bynk.lex.multiline_close_not_own_line` when a
   are found, and never inside a hole; the newline right after the opening
   delimiter is not part of the value; a lone `\r` is not a line break.
 
+A multi-line string cannot appear inside an interpolation hole
+(`bynk.lex.multiline_in_hole`): a hole closes on the line it opens on. A line
+whose text starts with `"""` closes the literal unless a letter, digit, `_` or
+`"` follows it, in which case the `"""` is a stray delimiter
+(`bynk.lex.multiline_close_not_own_line`).
+
 Design choices (#2619): the closing delimiter has a line to itself, a
 single-line raw literal cannot span lines, and `#` delimiters belong to the
 single-line raw form only (there is no `r#"""`).

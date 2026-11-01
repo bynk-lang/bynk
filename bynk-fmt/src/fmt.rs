@@ -314,9 +314,15 @@ impl Drop for WrittenForms {
 /// `value`, so a synthesised or mis-spanned literal falls back to the canonical
 /// rendering. Formatting must not turn `r"\d+"` into `"\\d+"`.
 fn written_string_form(e: &Expr, value: Option<&str>) -> Option<String> {
+    written_literal(e.span, value)
+}
+
+/// [`written_string_form`] for a literal at `span` anywhere (an expression, a
+/// `Matches` argument, a message template).
+fn written_literal(span: Span, value: Option<&str>) -> Option<String> {
     WRITTEN_SOURCE.with(|cell| {
         let source = cell.borrow();
-        let text = source.as_deref()?.get(e.span.range())?;
+        let text = source.as_deref()?.get(span.range())?;
         let special = text.starts_with("r\"")
             || text.starts_with("r#")
             || text.starts_with("\"\"\"")
@@ -336,12 +342,12 @@ fn written_string_form(e: &Expr, value: Option<&str>) -> Option<String> {
         };
         match value {
             Some(value) => {
-                let decoded = bynk_syntax::lexer::decode_string_literal(&text, e.span).ok()?;
+                let decoded = bynk_syntax::lexer::decode_string_literal(&text, span).ok()?;
                 (decoded == value).then_some(text)
             }
             // An interpolated multi-line string is kept whole only when it is
             // multi-line (its holes would otherwise be reformatted).
-            None => text.starts_with("\"\"\"").then_some(text),
+            None => (text.starts_with("\"\"\"") || text.contains("\\u{")).then_some(text),
         }
     })
 }
@@ -1597,9 +1603,9 @@ impl<'a> Formatter<'a> {
                     f.emit_doc(doc);
                 }
                 f.push(&format!(
-                    "\"{}\" => \"{}\"",
-                    escape_string(&entry.code),
-                    escape_string(&entry.template)
+                    "{} => {}",
+                    literal_text(entry.code_span, &entry.code),
+                    literal_text(entry.template_span, &entry.template)
                 ));
                 f.newline();
             }
@@ -1683,7 +1689,10 @@ impl<'a> Formatter<'a> {
 
     fn format_pred(&mut self, p: &RefinementPred) {
         match &p.kind {
-            PredKind::Matches(re) => self.push(&format!("Matches(\"{}\")", escape_string(re))),
+            PredKind::Matches(re) => self.push(&format!(
+                "Matches({})",
+                literal_text(matches_argument_span(p), re)
+            )),
             PredKind::InRange(a, b) => self.push(&format!("InRange({}, {})", a.value, b.value)),
             PredKind::InRangeF(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
             PredKind::MinLength(n) => self.push(&format!("MinLength({n})")),
@@ -3545,9 +3554,31 @@ pub fn refinement_to_string(r: &Refinement) -> String {
     s
 }
 
+/// A literal as written if it has a special form, else canonically escaped.
+fn literal_text(span: Span, value: &str) -> String {
+    written_literal(span, Some(value)).unwrap_or_else(|| format!("\"{}\"", escape_string(value)))
+}
+
+/// The span of a `Matches(…)` predicate's string argument.
+fn matches_argument_span(p: &RefinementPred) -> Span {
+    WRITTEN_SOURCE.with(|cell| {
+        let source = cell.borrow();
+        let Some(text) = source.as_deref().and_then(|s| s.get(p.span.range())) else {
+            return p.span;
+        };
+        let (Some(open), Some(close)) = (text.find('('), text.rfind(')')) else {
+            return p.span;
+        };
+        let inner = &text[open + 1..close];
+        let lead = inner.len() - inner.trim_start().len();
+        let start = p.span.start + open + 1 + lead;
+        Span::new_in(p.span.file, start, start + inner.trim().len())
+    })
+}
+
 fn pred_to_string(p: &RefinementPred) -> String {
     match &p.kind {
-        PredKind::Matches(re) => format!("Matches(\"{}\")", escape_string(re)),
+        PredKind::Matches(re) => format!("Matches({})", literal_text(matches_argument_span(p), re)),
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::MinLength(n) => format!("MinLength({n})"),
@@ -3567,17 +3598,12 @@ pub fn escape_string(s: &str) -> String {
             '"' => out.push_str("\\\""),
             '\n' => out.push_str("\\n"),
             '\t' => out.push_str("\\t"),
-            // #2619: a CR or NUL cannot sit raw in a literal; other control and
-            // invisible characters print as `\u{…}` so they stay visible.
+            // #2619: a CR or NUL cannot sit raw in a literal, nor can other control
+            // characters; they print as `\u{…}`. Anything else (a ZWJ, an
+            // RLM, a no-break space) is written as it was.
             '\r' => out.push_str("\\r"),
             '\0' => out.push_str("\\0"),
-            c if c.is_control()
-                || matches!(
-                    c,
-                    '\u{A0}' | '\u{2028}' | '\u{2029}' | '\u{200B}'..='\u{200F}'
-                        | '\u{202A}'..='\u{202E}' | '\u{2060}' | '\u{FEFF}'
-                ) =>
-            {
+            c if c.is_control() => {
                 out.push_str(&format!("\\u{{{:X}}}", c as u32));
             }
             c => out.push(c),

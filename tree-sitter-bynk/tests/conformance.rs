@@ -917,6 +917,12 @@ const EXCLUDED_PARSE_TIME_CATEGORIES: &[(&str, &str)] = &[
          the grammar admits any 1 to 6 hex digits",
     ),
     (
+        "bynk.lex.multiline_in_hole",
+        "declined: the grammar's hole holds any expression, a multi-line string \
+         included; the compiler's rule that a hole closes on its own line is a \
+         line-position check (#2619)",
+    ),
+    (
         "bynk.lex.multiline_indent",
         "inexpressible: a body line's indentation is compared with the closing \
          `\"\"\"`'s, which is relative state a context-free production cannot carry \

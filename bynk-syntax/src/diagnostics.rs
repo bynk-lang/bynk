@@ -1513,6 +1513,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["string_literal"],
     ),
     dg(
+        "bynk.lex.multiline_in_hole",
+        "A multi-line string literal appears inside an interpolation hole, which must close on its own line.",
+        &["string_literal"],
+    ),
+    dg(
         "bynk.lex.multiline_indent",
         "A line of a multi-line string literal is indented less than its closing `\"\"\"`.",
         &["string_literal"],

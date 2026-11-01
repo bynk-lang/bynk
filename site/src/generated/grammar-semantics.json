@@ -1410,6 +1410,10 @@
       "summary": "A `\"\"\"` inside a multi-line string literal is not on a line of its own."
     },
     {
+      "code": "bynk.lex.multiline_in_hole",
+      "summary": "A multi-line string literal appears inside an interpolation hole, which must close on its own line."
+    },
+    {
       "code": "bynk.lex.multiline_indent",
       "summary": "A line of a multi-line string literal is indented less than its closing `\"\"\"`."
     },

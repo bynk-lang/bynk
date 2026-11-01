@@ -1,0 +1,7 @@
+commons demo
+
+fn f(x: String) -> String {
+  "a \(x.trim()) \(x.replace("""
+    q
+    """, "")) b"
+}

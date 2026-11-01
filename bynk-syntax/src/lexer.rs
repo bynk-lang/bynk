@@ -1184,7 +1184,13 @@ fn lex_multiline(
         while ws < line_end && matches!(bytes[ws], b' ' | b'\t') {
             ws += 1;
         }
-        if bytes[ws..line_end].starts_with(b"\"\"\"") {
+        // A closing delimiter ends its line's text: `"""quoted"""` is body text
+        // holding a stray `"""`, which `decode_run` reports.
+        if bytes[ws..line_end].starts_with(b"\"\"\"")
+            && !bytes
+                .get(ws + 3)
+                .is_some_and(|&b| is_ident_byte(b) || b == b'"')
+        {
             break (ws - pos, ws + 3);
         }
         let trimmed_end = if line_end > pos && bytes[line_end - 1] == b'\r' {
@@ -1289,16 +1295,38 @@ fn scan_hole(
                     return Ok(i);
                 }
             }
-            b'"' => i = lex_string(source, i, nesting + 1, file)?.0,
+            b'"' => i = nested_string(source, i, nesting, file)?,
             // A nested raw string: `r"…"` (not the tail of an identifier).
             b'r' if (i == start || !is_ident_byte(bytes[i - 1]))
                 && string_open(bytes, i).is_some() =>
             {
-                i = lex_string(source, i, nesting + 1, file)?.0
+                i = nested_string(source, i, nesting, file)?
             }
             _ => i += 1,
         }
     }
+}
+
+/// Skip a string literal nested in an interpolation hole. A hole closes on the
+/// line it opens on, so a multi-line string cannot sit inside one (#2619).
+fn nested_string(
+    source: &str,
+    at: usize,
+    nesting: usize,
+    file: FileId,
+) -> Result<usize, CompileError> {
+    if string_open(source.as_bytes(), at).is_some_and(|o| o.multi) {
+        return Err(CompileError::new(
+            "bynk.lex.multiline_in_hole",
+            Span::new_in(file, at, at + 3),
+            "a multi-line string cannot appear inside an interpolation hole",
+        )
+        .with_note(
+            "an interpolation hole `\\(…)` closes on the line it opens on; \
+             bind the multi-line text to a name and interpolate that",
+        ));
+    }
+    Ok(lex_string(source, at, nesting + 1, file)?.0)
 }
 
 /// The bounded-depth diagnostic for interpolation that nests past
@@ -2430,6 +2458,29 @@ mod tests {
         // Empty `\u{}` and an eight-digit escape.
         assert!(tokenize(r#""\u{}""#).is_err());
         assert!(tokenize(r#""\u{00000041}""#).is_err());
+    }
+
+    /// Review of #2619: a multi-line string cannot nest in a hole, and a
+    /// `"""` followed by text is not a closing delimiter.
+    #[test]
+    fn multiline_in_hole_and_stray_delimiters() {
+        let cat = |src: &str| tokenize(src).unwrap_err().category;
+        assert_eq!(
+            cat("\"a \\(f(\"\"\"\n  x\n  \"\"\")) b\""),
+            "bynk.lex.multiline_in_hole"
+        );
+        assert_eq!(
+            cat("\"\"\"\n  \\(g(\"\"\"\n  x\n  \"\"\"))\n  \"\"\""),
+            "bynk.lex.multiline_in_hole"
+        );
+        // `"""quoted"""` on a body line is a stray delimiter, not a close.
+        assert_eq!(
+            cat("\"\"\"\n  \"\"\"quoted\"\"\"\n  \"\"\""),
+            "bynk.lex.multiline_close_not_own_line"
+        );
+        // A closing delimiter may be followed by punctuation.
+        let toks = tokenize("\"\"\"\n  a\n  \"\"\", x)").unwrap();
+        assert_eq!(toks.len(), 4);
     }
 
     #[test]

@@ -16,3 +16,13 @@ fn pattern() -> String {
     """
 }
 fn check(s: String) -> Bool { s.matchesRegex(r"\w+") }
+type Sku = String where Matches(r"\d+") && MaxLength(9)
+fn family() -> String { "👨‍👩‍👧 a‏b" }
+fn interp(n: String) -> String { "\u{41}\(n)" }
+messages "en" @reference {
+  "short" => "Hi"
+  "long" => """
+      Dear {name},
+        thanks.
+      """
+}
