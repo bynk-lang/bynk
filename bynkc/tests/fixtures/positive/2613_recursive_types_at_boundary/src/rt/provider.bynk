@@ -1,0 +1,52 @@
+context rt.provider
+
+uses rt.shapes
+consumes bynk { Events }
+
+event Planted = { tree: Tree }
+
+service trees {
+  on call(t: Tree) -> Effect[Tree] {
+    Effect.pure(t)
+  }
+}
+
+// Publishing `Planted` checks that a recursive type is accepted as an event
+// payload field and published. (The subscriber-side payload decoder is not
+// pinned here.)
+service gardener {
+  on call(t: Tree) -> Effect[()] given Events {
+    let _ <- Events.emit[Planted](Planted { tree: t })
+  }
+}
+
+service exprs {
+  on call(e: Expr) -> Effect[Expr] {
+    Effect.pure(e)
+  }
+}
+
+service indexes {
+  on call(i: Index) -> Effect[Index] {
+    Effect.pure(i)
+  }
+}
+
+service dirs {
+  on call(d: Dir) -> Effect[Dir] {
+    Effect.pure(d)
+  }
+}
+
+agent Keeper {
+  key id: String
+  store tree: Cell[Option[Tree]]
+
+  on call put(t: Tree) -> Effect[()] {
+    tree := Some(t)
+  }
+}
+
+fn roundTrip(t: Tree) -> Result[Tree, JsonError] {
+  Json.decode[Tree](Json.encode(t))
+}

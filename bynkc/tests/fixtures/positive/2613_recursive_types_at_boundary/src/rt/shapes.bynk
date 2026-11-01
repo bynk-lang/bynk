@@ -1,0 +1,23 @@
+// #2613: non-generic recursive types are ordinary boundary-legal types. A
+// recursive sum, and a record that recurses through a `List`, cross a context
+// boundary, sit in agent storage and round-trip through JSON, each through a
+// recursive codec, and a recursive type is accepted in a published event
+// payload.
+commons rt.shapes
+
+type Tree =
+  | Leaf
+  | Node(left: Tree, value: Int, right: Tree)
+
+type Dir = { name: String, children: List[Dir] }
+
+// A record recursing through a `Map`.
+type Index = { entries: Map[String, Index] }
+
+// Two sums recursing through each other.
+type Expr =
+  | Lit(value: Int)
+  | Block(stmts: List[Stmt])
+
+type Stmt =
+  | Eval(expr: Expr)

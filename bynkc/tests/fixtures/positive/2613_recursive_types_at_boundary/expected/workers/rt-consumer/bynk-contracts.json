@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "provides": {
+    "relay": "d090262c6ed926ea"
+  },
+  "expects": {
+    "rt.provider": {
+      "trees": "d8dd08313c20865a"
+    }
+  },
+  "provides_shapes": {
+    "relay": "Svc(\"relay\",P(\"t\",Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))),Ret(Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))))"
+  },
+  "expects_shapes": {
+    "rt.provider": {
+      "trees": "Svc(\"trees\",P(\"t\",Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))),Ret(Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))))"
+    }
+  }
+}
