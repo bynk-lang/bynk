@@ -57,10 +57,12 @@ Use `FetchOptions.timeout` when work must actually stop. For more, read
 
 ## Where it is allowed
 
-The same places as `within`: a **service handler's body**, lambdas included, and event,
-cron and queue handlers. It is refused in an agent handler
-(`bynk.race.in_agent_handler`), and in a function, a provider operation or a WebSocket
+The same places as `within`: a **service handler's body**, lambdas included, event,
+cron and queue handlers, and a **function** that one of them calls. It is refused in an
+agent handler (`bynk.race.in_agent_handler`), and in a provider operation or a WebSocket
 handler (`bynk.race.outside_handler`): none has an execution context to hand the loser to.
+Calling a function that uses `race` from one of those is refused as well
+(`bynk.exec.unavailable`).
 
 ## Test the race
 

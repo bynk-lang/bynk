@@ -121,7 +121,8 @@ actually stop. An effect that already returns a `Result` gains a second layer.
 | Where | Code | Why |
 |---|---|---|
 | an agent handler, a lambda in one included | `bynk.within.in_agent_handler` | no execution context to hand the abandoned effect to |
-| an effectful `fn`, a provider operation or a WebSocket handler | `bynk.within.outside_handler` | none of them has an execution context (#2682; a WebSocket handler runs in the connection's Durable Object) |
+| a provider operation, a WebSocket handler or a test `case` body | `bynk.within.outside_handler` | none of them has an execution context (a WebSocket handler runs in the connection's Durable Object). An effectful `fn` or method is allowed: it takes the context from its caller (#2719) |
+| a call to, or a reference to, a function that uses `within`, `race` or `~>`, from an agent handler, a WebSocket handler or a provider operation | `bynk.exec.unavailable` | the note names the chain of calls down to the construct |
 | a pure body | `bynk.within.in_pure_context` | it needs an effectful body |
 | a unit that does not consume `bynk` | `bynk.within.timed_out_not_in_scope` | `TimedOut` is `bynk`'s |
 
@@ -153,7 +154,7 @@ It is legal exactly where [`within`](#within) is, and refused in the same places
 | Where | Code | Why |
 |---|---|---|
 | an agent handler, a lambda in one included | `bynk.race.in_agent_handler` | no execution context to hand the loser to |
-| an effectful `fn`, a provider operation or a WebSocket handler | `bynk.race.outside_handler` | none of them has an execution context (#2682) |
+| a provider operation, a WebSocket handler or a test `case` body | `bynk.race.outside_handler` | none of them has an execution context. An effectful `fn` or method is allowed (#2719), as for `within` |
 | a pure body | `bynk.race.in_pure_context` | it needs an effectful body |
 
 See [ask two sources and take the first answer](/book/guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer/).

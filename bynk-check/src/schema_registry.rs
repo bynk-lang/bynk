@@ -1928,6 +1928,7 @@ mod tests {
 
     fn table_with(events: Vec<(&str, EventDecl)>) -> UnitTable {
         UnitTable {
+            exec_plan: Default::default(),
             kind: None,
             removed_agents: Vec::new(),
             types: StdHashMap::new(),

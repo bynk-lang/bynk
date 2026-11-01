@@ -991,7 +991,7 @@
     },
     {
       "code": "bynk.race.outside_handler",
-      "summary": "`a.race(b)` was used outside a service handler's body (in a function, a provider or a WebSocket handler), where no execution context exists."
+      "summary": "`a.race(b)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists."
     },
     {
       "code": "bynk.types.json_uncodable",
@@ -1031,7 +1031,7 @@
     },
     {
       "code": "bynk.within.outside_handler",
-      "summary": "`e.within(d)` was used outside a service handler's body (in a function or provider), where no execution context exists."
+      "summary": "`e.within(d)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists."
     },
     {
       "code": "bynk.within.timed_out_not_in_scope",

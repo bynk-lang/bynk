@@ -679,6 +679,8 @@ pub fn analyse_project_with_policy(
     // #1702 review: `uses` targets first, so a generic callee's compared type
     // parameters are known before an importer's calls are checked.
     crate::checker::reset_compared_cache();
+    // #2719: the needs-context set, extended unit by unit in dependency order.
+    let mut exec_plan = crate::exec_plan::ExecPlan::default();
     for name in project_model::uses_first_order(unit_info.keys(), &unit_uses) {
         let info = &unit_info[name];
         let kind = info.kind;
@@ -733,6 +735,7 @@ pub fn analyse_project_with_policy(
             &policy,
         );
 
+        let mut checked: Vec<crate::checker::TypedCommons> = Vec::new();
         for &i in indices {
             let pf = &parsed[i];
             if let Some(crate::check_pipeline::FileCheckResult { typed, .. }) = check_file_core(
@@ -766,8 +769,13 @@ pub fn analyse_project_with_policy(
                     pf.is_synthetic(),
                     &typed.expr_types,
                 );
+                checked.push(typed);
             }
         }
+        // #2719: the unit's needs-context set, and the calls that would carry
+        // the execution context where none exists.
+        let plan_errors = exec_plan.extend(&checked.iter().collect::<Vec<_>>());
+        errors.extend_attributed_by_span(&parsed, plan_errors);
     }
 
     // P5.4 (`design/tracks/semantics-in-the-checker.md` §6): test/

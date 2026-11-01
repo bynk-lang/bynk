@@ -54,10 +54,21 @@ let rs <- ids.parTraverseAll((id) => Pricing.quote(id).within(1.seconds))
 
 ## Where it is allowed
 
-Only in a **service handler's body**, lambdas included. An agent handler is refused
-(`bynk.within.in_agent_handler`), and so is a function or a provider operation
-(`bynk.within.outside_handler`), and so is a WebSocket handler: they have no
-execution context to hand a late effect to. Call `within` in the handler, and pass the function the bounded effect.
+In a **service handler's body**, lambdas included, and in a **function** that a handler
+calls: the helper that knows a call is slow can bound it itself. The compiler passes the
+handler's execution context down to the function, so nothing changes at the call site.
+
+```bynk,fragment
+fn bounded(quote: Effect[Int]) -> Effect[Result[Int, TimedOut]] {
+  quote.within(2.seconds)
+}
+```
+
+An agent handler is refused (`bynk.within.in_agent_handler`), and so are a provider
+operation and a WebSocket handler (`bynk.within.outside_handler`): they have no execution
+context to hand a late effect to. Calling a function that uses `within` from one of those
+is refused too (`bynk.exec.unavailable`), with a note that names the chain of calls down to
+the `within`.
 
 ## Test the timeout
 

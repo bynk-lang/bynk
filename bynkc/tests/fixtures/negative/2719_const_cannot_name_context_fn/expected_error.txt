@@ -1,0 +1,1 @@
+bynk.resolve.bad_const_initialiser the initialiser of constant `Ticker` must be a static value

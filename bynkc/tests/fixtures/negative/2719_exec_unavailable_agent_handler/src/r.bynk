@@ -1,0 +1,23 @@
+context r
+
+consumes bynk
+
+// #2719: an agent handler has no execution context, so it cannot call a function
+// that hands work to one. The note names the chain down to the construct.
+fn bounded(e: Effect[Int]) -> Effect[Bool] {
+	let r <- e.within(2.seconds)
+	Effect.pure(r.isOk())
+}
+
+fn wrapper(e: Effect[Int]) -> Effect[Bool] {
+	bounded(e)
+}
+
+agent Counter {
+	key id: String
+	store n: Cell[Int] = 0
+
+	on call check() -> Effect[Bool] {
+		wrapper(Effect.pure(1))
+	}
+}
