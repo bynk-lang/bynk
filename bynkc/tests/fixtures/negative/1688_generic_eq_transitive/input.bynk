@@ -2,8 +2,8 @@ commons m
 
 // #1688: `twice` never uses `==` itself, but passes its `U` to `same`, which
 // compares it, so `twice` compares `U` too.
-fn same[T](a: T, b: T) -> Bool { a == b }
+fn same[T: Eq](a: T, b: T) -> Bool { a == b }
 
-fn twice[U](a: U, b: U) -> Bool { same(a, b) }
+fn twice[U: Eq](a: U, b: U) -> Bool { same(a, b) }
 
 fn k(xs: List[(Int) -> Int]) -> Bool { twice(xs, xs) }

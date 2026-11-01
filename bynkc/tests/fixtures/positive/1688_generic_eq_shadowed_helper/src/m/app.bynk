@@ -6,6 +6,6 @@ commons m.app
 
 uses m.lib
 
-fn helper[T](a: T, b: T) -> Bool { a == b }
+fn helper[T: Eq](a: T, b: T) -> Bool { a == b }
 
 fn g(f: (Int) -> Int) -> Bool { same(f, f) }

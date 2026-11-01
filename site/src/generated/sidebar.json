@@ -110,6 +110,10 @@
           {
             "label": "Narrow and bind with is",
             "link": "/book/guides/type-system/narrow-with-is/"
+          },
+          {
+            "label": "Declare Eq on a generic that compares",
+            "link": "/book/guides/type-system/declare-eq-bounds/"
           }
         ]
       },
@@ -433,6 +437,10 @@
         "link": "/book/reference/types/"
       },
       {
+        "label": "Generics and bounds",
+        "link": "/book/reference/generics/"
+      },
+      {
         "label": "Refined-type API",
         "link": "/book/reference/refined-types/"
       },
@@ -607,6 +615,10 @@
       {
         "label": "Overview",
         "link": "/book/troubleshooting/"
+      },
+      {
+        "label": "bynk.generics.missing_eq_bound",
+        "link": "/book/troubleshooting/generics-missing-eq-bound/"
       },
       {
         "label": "bynk.refine.literal_violates",

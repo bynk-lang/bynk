@@ -414,6 +414,7 @@ fn to_candidate(c: completion::Completion) -> CompletionCandidate {
         Constructor => "constructor",
         Function => "function",
         Constant => "constant",
+        Constraint => "constraint",
     };
     CompletionCandidate {
         label: c.label,

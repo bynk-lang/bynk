@@ -1516,11 +1516,7 @@ impl<'a> Formatter<'a> {
         let params = if t.type_params.is_empty() {
             String::new()
         } else {
-            let names: Vec<&str> = t
-                .type_params
-                .iter()
-                .map(|tp| tp.name.name.as_str())
-                .collect();
+            let names: Vec<String> = t.type_params.iter().map(type_param_text).collect();
             format!("[{}]", names.join(", "))
         };
         self.push(&format!("type {}{} = ", t.name.name, params));
@@ -1762,17 +1758,24 @@ impl<'a> Formatter<'a> {
         self.push(&f.name.display());
         // v0.20a: `[A, B]` type parameters.
         if !f.type_params.is_empty() {
-            let names: Vec<&str> = f
-                .type_params
-                .iter()
-                .map(|tp| tp.name.name.as_str())
-                .collect();
+            let names: Vec<String> = f.type_params.iter().map(type_param_text).collect();
             self.push(&format!("[{}]", names.join(", ")));
         }
+        // A method's `where A: Eq` clause rides after the return type.
+        let where_text = if f.where_bounds.is_empty() {
+            String::new()
+        } else {
+            let entries: Vec<String> = f
+                .where_bounds
+                .iter()
+                .map(|wb| format!("{}: {}", wb.param.name, bounds_text(&wb.bounds)))
+                .collect();
+            format!(" where {}", entries.join(", "))
+        };
         // The signature tail that shares the parameter list's line: ` -> Ret`
         // plus the body's ` {` (a contract clause moves the body to its own
         // line, so only the return type counts then).
-        let tail = format!(" -> {}", type_ref_to_string(&f.return_type));
+        let tail = format!(" -> {}{where_text}", type_ref_to_string(&f.return_type));
         let reserve = if f.requires.is_empty() && f.ensures.is_empty() {
             tail.chars().count() + " {".len()
         } else {
@@ -1781,6 +1784,7 @@ impl<'a> Formatter<'a> {
         self.format_params(&f.params, f.has_self, reserve);
         self.push(" -> ");
         self.format_type_ref(&f.return_type);
+        self.push(&where_text);
         // v0.115: contract clauses on their own indented lines between the
         // return type and the body (`requires`/`ensures <name>: <pred>`).
         if f.requires.is_empty() && f.ensures.is_empty() {
@@ -1891,11 +1895,7 @@ impl<'a> Formatter<'a> {
                 f.push(&op.name.name);
                 // #926: `[T, …]` type parameters on the op itself.
                 if !op.type_params.is_empty() {
-                    let names: Vec<&str> = op
-                        .type_params
-                        .iter()
-                        .map(|tp| tp.name.name.as_str())
-                        .collect();
+                    let names: Vec<String> = op.type_params.iter().map(type_param_text).collect();
                     f.push(&format!("[{}]", names.join(", ")));
                 }
                 let reserve = 4 + type_ref_to_string(&op.return_type).chars().count();
@@ -3978,9 +3978,35 @@ fn stmt_to_string(s: &Statement) -> String {
     }
 }
 
+/// `T` or `T: Eq + C`: a type parameter as written, bounds included.
+fn type_param_text(tp: &TypeParam) -> String {
+    if tp.bounds.is_empty() {
+        tp.name.name.clone()
+    } else {
+        format!("{}: {}", tp.name.name, bounds_text(&tp.bounds))
+    }
+}
+
+fn bounds_text(bounds: &[Ident]) -> String {
+    bounds
+        .iter()
+        .map(|b| b.name.as_str())
+        .collect::<Vec<_>>()
+        .join(" + ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Constrained generics slice 0: bounds and a method's `where` clause print as
+    /// written, and the output is a fixed point.
+    #[test]
+    fn bounds_and_where_clauses_round_trip() {
+        let src = "commons m\n\ntype Pair[T: Eq] = {\n\tleft: T,\n}\n\nfn same[T: Eq + Ord, U](a: T, b: T, u: U) -> Bool {\n\ta == b\n}\n\nfn Pair.has(self, x: T) -> Bool where T: Eq, T: Ord {\n\tself.left == x\n}\n\nfn Pair.has2(self, x: T) -> Bool where T: Eq\n\trequires p: true\n{\n\tself.left == x\n}\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(out, src);
+    }
 
     /// #2640: a `par` block prints one binding per line, indented, and the
     /// output is a fixed point; comments around and inside it stay put.

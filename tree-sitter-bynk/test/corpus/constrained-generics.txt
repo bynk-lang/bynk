@@ -1,0 +1,153 @@
+================================================================================
+bounds on type parameters (constrained generics, slice 0)
+================================================================================
+
+commons c
+
+type Pair[T: Eq] = { left: T, right: T }
+
+fn same[T: Eq](a: T, b: T) -> Bool {
+  a == b
+}
+
+fn pick[T: Eq + Ord, U](a: T, b: U) -> T {
+  a
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (type_decl
+      (identifier)
+      (type_param
+        (identifier)
+        (constraint
+          (identifier)))
+      (record_type
+        (record_field
+          (identifier)
+          (identifier))
+        (record_field
+          (identifier)
+          (identifier))))
+    (fn_decl
+      (identifier)
+      (type_param
+        (identifier)
+        (constraint
+          (identifier)))
+      (param
+        (identifier)
+        (identifier))
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (block
+        (binary_expr
+          (identifier)
+          (identifier))))
+    (fn_decl
+      (identifier)
+      (type_param
+        (identifier)
+        (constraint
+          (identifier))
+        (constraint
+          (identifier)))
+      (type_param
+        (identifier))
+      (param
+        (identifier)
+        (identifier))
+      (param
+        (identifier)
+        (identifier))
+      (identifier)
+      (block
+        (identifier)))))
+
+================================================================================
+method where clause (constrained generics, slice 0)
+================================================================================
+
+commons c
+
+type Box[A] = { value: A }
+
+fn Box.has(self, x: A) -> Bool where A: Eq {
+  self.value == x
+}
+
+fn Box.both(self, x: A) -> Bool where A: Eq + Ord, A: Eq
+  requires nonNeg: true
+{
+  self.value == x
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (type_decl
+      (identifier)
+      (type_param
+        (identifier))
+      (record_type
+        (record_field
+          (identifier)
+          (identifier))))
+    (fn_decl
+      (method_name
+        (identifier)
+        (identifier))
+      (self_param)
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (where_clause
+        (where_bound
+          (identifier)
+          (constraint
+            (identifier))))
+      (block
+        (binary_expr
+          (field_access
+            (self_expr)
+            (identifier))
+          (identifier))))
+    (fn_decl
+      (method_name
+        (identifier)
+        (identifier))
+      (self_param)
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (where_clause
+        (where_bound
+          (identifier)
+          (constraint
+            (identifier))
+          (constraint
+            (identifier)))
+        (where_bound
+          (identifier)
+          (constraint
+            (identifier))))
+      (requires_clause
+        (identifier)
+        (boolean_literal))
+      (block
+        (binary_expr
+          (field_access
+            (self_expr)
+            (identifier))
+          (identifier))))))

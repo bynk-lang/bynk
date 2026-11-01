@@ -1,0 +1,2 @@
+bynk.generics.missing_eq_bound
+type parameter `A` has no `Eq` bound

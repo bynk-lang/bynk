@@ -1234,6 +1234,7 @@ fn synthetic_render_fn() -> FnDecl {
             },
         ],
         return_type: TypeRef::Base(BaseType::String, span),
+        where_bounds: Vec::new(),
         requires: Vec::new(),
         ensures: Vec::new(),
         body: Block {

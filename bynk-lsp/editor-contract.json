@@ -219,6 +219,7 @@
       "comment",
       "asset",
       "embed",
+      "interface",
       "keyword"
     ]
   }

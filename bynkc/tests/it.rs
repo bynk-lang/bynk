@@ -110,6 +110,8 @@ mod duration;
 mod e2e;
 #[path = "embed_check_behaviour.rs"]
 mod embed_check_behaviour;
+#[path = "eq_bound_migration.rs"]
+mod eq_bound_migration;
 #[path = "events_behaviour.rs"]
 mod events_behaviour;
 #[path = "events_boundary_workerd.rs"]

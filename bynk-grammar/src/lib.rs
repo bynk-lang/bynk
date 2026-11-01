@@ -449,8 +449,11 @@ mod tests {
         // #2640 (concurrent effects, slice 0) added: par_stmt (the `par { … }`
         // binding block) and _par_statement (what it may hold: every statement
         // but a `let … else`). Net +2.
+        // Constrained generics slice 0 added: type_param, where_clause,
+        // where_bound (`constraint` is a trivial wrapper over `identifier`,
+        // so the display layer collapses it). Net +3.
         // #2618 (private declarations) added: visibility_modifier. Net +1.
-        assert_eq!(rules.len(), 175);
+        assert_eq!(rules.len(), 178);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

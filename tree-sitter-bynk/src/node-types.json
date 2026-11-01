@@ -1957,7 +1957,7 @@
         "required": false,
         "types": [
           {
-            "type": "identifier",
+            "type": "type_param",
             "named": true
           }
         ]
@@ -2253,6 +2253,21 @@
         },
         {
           "type": "uses_decl",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "constraint",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
           "named": true
         }
       ]
@@ -4593,7 +4608,7 @@
         "required": false,
         "types": [
           {
-            "type": "identifier",
+            "type": "type_param",
             "named": true
           }
         ]
@@ -4627,6 +4642,10 @@
         },
         {
           "type": "self_param",
+          "named": true
+        },
+        {
+          "type": "where_clause",
           "named": true
         }
       ]
@@ -11445,7 +11464,7 @@
         "required": false,
         "types": [
           {
-            "type": "identifier",
+            "type": "type_param",
             "named": true
           }
         ]
@@ -11460,6 +11479,32 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "type_param",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "constraint",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -11927,6 +11972,47 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "where_bound",
+    "named": true,
+    "fields": {
+      "param": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "constraint",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "where_clause",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "where_bound",
+          "named": true
+        }
+      ]
     }
   },
   {

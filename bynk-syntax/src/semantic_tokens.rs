@@ -50,9 +50,13 @@ pub const TOKEN_TYPES: &[&str] = &[
     // #2387: `embed` names (embedded text). Appended at index 14
     // (never reordered); a custom type the VS Code extension declares.
     "embed",
+    // Constrained generics slice 0: constraint names in a bound (`T: Eq`,
+    // `where A: Eq`). Appended at index 15 (never reordered); standard LSP
+    // type.
+    "interface",
     // #2618: a contextual keyword the editor grammars cannot tell from an
     // identifier by spelling alone: `private` in modifier position.
-    // Appended at index 15 (never reordered); standard LSP type.
+    // Appended at index 16 (never reordered); standard LSP type.
     "keyword",
 ];
 
@@ -77,6 +81,7 @@ pub const STANDARD_TYPES: &[&str] = &[
     "method",
     "property",
     "decorator",
+    "interface",
     // #1888: `--|` doc lines (no longer emitted since #2203; the legend is
     // append-only).
     "comment",
