@@ -1,4 +1,4 @@
-// `Eq` is the only constraint in slice 0.
+// `Key` is not a constraint yet (slice 2); `Eq` and `Ord` are.
 commons c
 
-fn pick[T: Eq + Ord](a: T, b: T) -> T { a }
+fn pick[T: Eq + Key](a: T, b: T) -> T { a }

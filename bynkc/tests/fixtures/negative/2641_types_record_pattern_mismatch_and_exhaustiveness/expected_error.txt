@@ -1,3 +1,3 @@
 bynk.types.pattern_type_mismatch record pattern `Other { .. }` cannot match a value of type `Order`
-bynk.types.non_exhaustive_match non-exhaustive `match` on `Order`
+bynk.types.non_exhaustive_match non-exhaustive `match` on `Order` — `Order { status: Open, .. }` is not covered
 bynk.types.unreachable_arm this match arm is unreachable

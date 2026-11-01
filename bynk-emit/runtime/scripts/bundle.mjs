@@ -32,6 +32,7 @@ const MODULES = [
   "settle",
   "url",
   "equality",
+  "compare",
   "int",
   "errors",
   "storage",

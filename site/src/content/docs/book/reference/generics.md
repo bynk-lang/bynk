@@ -3,8 +3,9 @@ title: Generics and bounds
 ---
 A `fn` or a `type` may take **type parameters**, and a type parameter may carry
 a **bound**: a constraint every type argument must meet. Bounds are checked at
-compile time and erased in the emitted TypeScript, so a bounded generic emits
-exactly what an unbounded one does.
+compile time. An `Eq` bound is erased from the emitted TypeScript; an `Ord` bound
+adds a hidden comparator parameter (see [Ord at run time](#ord-at-run-time)).
+Code that uses no bound emits as before.
 
 ## Type parameters
 
@@ -29,8 +30,9 @@ Only a record or sum `type` may be generic.
 ## Bounds
 
 A bound is written after the parameter name: `T: Eq`, or `T: C1 + C2` for
-several. The only constraint is **`Eq`**, which says values of the type compare
-with `==` and `!=`. Any other name is `bynk.generics.unknown_constraint`.
+several. The constraints are **`Eq`**, which says values of the type compare with
+`==` and `!=`, and **`Ord`**, which says they have a total order (below). Any
+other name is `bynk.generics.unknown_constraint`.
 
 ```bynk
 commons demo.bounds
@@ -65,6 +67,64 @@ fn same[T](a: T, b: T) -> Bool { a == b }
 
 An `Eq` bound costs nothing at run time: `==` on a `T` still lowers to the
 runtime's structural comparison.
+
+## `Ord`
+
+`T: Ord` says values of `T` have a total order, so a body may compare them with
+`<` `<=` `>` `>=` and use them as a sort key. Which types are `Ord`, and the
+order each one has, is under
+[Ordering your own types](/book/reference/types/#ordering-your-own-types).
+
+```bynk,fragment
+commons demo.ord
+
+uses bynk.list
+
+fn top[T: Ord](xs: List[T]) -> Option[T] { max(xs) }
+
+fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
+  if x < lo { lo } else if x > hi { hi } else { x }
+}
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+fn highest(ps: List[Priority]) -> Option[Priority] { top(ps) }
+```
+
+- **`Ord` implies `Eq`.** A `T: Ord` may also use `==`. Writing `T: Eq + Ord` is
+  the warning `bynk.generics.redundant_eq_bound`, and its fix removes `Eq`.
+- **Ordering an unbounded `T`** (`<`, a `sortBy`/`min`/`max` key, or passing it on
+  to an `Ord`-bounded parameter) is `bynk.generics.missing_ord_bound`. The fix is
+  machine-applicable: it declares `: Ord`, replacing an existing `Eq`.
+- **A call must instantiate an `Ord`-bounded parameter with an `Ord` type.**
+  `top` over a `List[Bool]` or a record without `derives Ord` is
+  `bynk.types.not_orderable`.
+- **A bounded generic used as a value** (`xs.map(top)`) is instantiated at the
+  reference, from the expected function type. If the type arguments cannot be
+  resolved there, it is `bynk.generics.ambiguous_instantiation`; annotate the
+  expected type.
+
+```bynk,fail=bynk.generics.missing_ord_bound
+commons demo.missing.ord
+
+fn bigger[T](a: T, b: T) -> Bool { a > b }
+```
+
+`bynk.list` ships `sort`, `min` and `max` as `Ord`-bounded generics
+([`bynk.list`](/book/reference/bynk-capabilities/#related-first-party-modules)).
+
+### Ord at run time
+
+An `Eq` bound adds nothing to the emitted code. An `Ord` bound does: the emitted
+function takes one hidden trailing **comparator** parameter per `Ord`-bounded
+type parameter, `(a, b) => -1 | 0 | 1`. A method takes the receiver type's
+parameters first, then its own, each in declaration order. The caller builds the
+comparator from the concrete type argument (or forwards its own, for a `T: Ord`
+it is itself generic over). Where a comparison is on a base type, the emitted
+code is still the bare operator.
+
+These parameters are an implementation detail: they are not part of the
+published ABI, since hand-written TypeScript bindings never call a Bynk generic.
 
 ## A method's receiver parameters
 
@@ -103,15 +163,17 @@ bound to serve. `bynk.generics.bound_on_capability_op` rejects one.
 
 ## Where this is going
 
-`Eq` is the first constraint of the constrained-generics track. It replaced the
-equality requirement the compiler used to infer, so the requirement a caller must
-meet is declared in the callee's signature rather than discovered from an error.
-Further constraints (ordering, map keys, boundary serialisation) will use the
-same `T: C` syntax.
+`Eq` and `Ord` are the first constraints of the constrained-generics track. `Eq`
+replaced the equality requirement the compiler used to infer, so the requirement
+a caller must meet is declared in the callee's signature rather than discovered
+from an error. Further constraints (map keys, boundary serialisation) will use
+the same `T: C` syntax.
 
 ## See also
 
 - Guide: [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/).
-- Troubleshooting: [`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/).
+- Guide: [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/).
+- Troubleshooting: [`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/),
+  [`bynk.generics.missing_ord_bound`](/book/troubleshooting/generics-missing-ord-bound/).
 - Spec: [§5.2 Generic instantiation](/book/spec/static-semantics/) and
   [§4.3.1b](/book/spec/syntactic-grammar/).

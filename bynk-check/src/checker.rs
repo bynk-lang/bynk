@@ -41,6 +41,7 @@ pub use bynk_syntax::ast::ExprId;
 mod calls;
 mod d1;
 pub(crate) mod equality;
+pub mod ordering;
 use equality::EqScope;
 mod expressions;
 mod kernels;
@@ -49,6 +50,7 @@ mod par;
 mod refinements;
 pub use refinements::split_regex_flags;
 mod regex_ambiguity;
+mod usefulness;
 
 use calls::*;
 use expressions::*;
@@ -541,8 +543,14 @@ impl Ty {
 /// type-check cleanly.
 #[derive(Debug, Clone)]
 pub enum Callee {
-    /// A free function call.
-    Fn(Arc<FnDecl>),
+    /// A free function call. The `Vec<TyId>` is the call's comparator witnesses
+    /// (constrained-generics slice 1): the type argument of each `Ord`-bounded
+    /// type parameter of the callee, in [`ordering::witness_params`] order.
+    /// Empty for a callee with no `Ord` bound, which is almost every call.
+    Fn(Arc<FnDecl>, Vec<TyId>),
+    /// A generic function with `Ord` bounds named as a value (`xs.map(max)`),
+    /// instantiated at the reference: its witnesses, as for [`Callee::Fn`].
+    FnValue(Arc<FnDecl>, Vec<TyId>),
     /// Applying a function-typed local or parameter (`f(x)` where `f` is in
     /// scope, not declared). No stable id exists for a local beyond its
     /// name — the reference's `LocalId` presumes the same `Resolve` phase
@@ -557,8 +565,9 @@ pub enum Callee {
     Unsafe(Arc<TypeDecl>),
     /// A user-declared static method (`Type.method(...)`).
     Static(Arc<FnDecl>),
-    /// A user-declared instance method (UFCS), generic or not.
-    Method(Arc<FnDecl>),
+    /// A user-declared instance method (UFCS), generic or not. The `Vec<TyId>`
+    /// is the call's comparator witnesses, as for [`Callee::Fn`].
+    Method(Arc<FnDecl>, Vec<TyId>),
     /// A built-in method on a value — the collection/query/stream/
     /// connection/numeric/duration/instant/bytes/string/option/result/
     /// effect kernels, including the refined-receiver fallback (ADR 0168).
@@ -1517,6 +1526,7 @@ pub fn check_handler_body(
         test_actors: HashMap::new(),
         type_vars: HashSet::new(),
         eq: EqScope::default(),
+        last_witness: None,
         store_fields,
         in_agent_handler: agent_state_ty.is_some(),
     };
@@ -1664,6 +1674,7 @@ pub fn check_body(
         test_actors,
         type_vars: HashSet::new(),
         eq: EqScope::default(),
+        last_witness: None,
         store_fields: HashMap::new(),
         in_agent_handler: false,
     };
@@ -1826,6 +1837,7 @@ pub fn check_invariants(
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
             eq: EqScope::default(),
+            last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -1974,6 +1986,7 @@ pub(crate) fn check_contracts(
             test_actors: HashMap::new(),
             type_vars: type_vars.clone(),
             eq: eq.clone(),
+            last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -2202,6 +2215,7 @@ pub fn check_transitions(
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
             eq: EqScope::default(),
+            last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -2387,6 +2401,7 @@ pub fn check_migrations(
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
             eq: EqScope::default(),
+            last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -2759,6 +2774,10 @@ pub(crate) struct Ctx<'a> {
     pub type_vars: HashSet<String>,
     /// Constrained generics slice 0: the `Eq` bounds declared in scope.
     pub eq: EqScope,
+    /// Slice 1: the comparator witnesses of the generic call just checked, left
+    /// by the generic-call path for the caller that holds the call's `ExprId` to
+    /// take ([`Ctx::take_witnesses`]) and record on its [`Callee`].
+    pub last_witness: Option<Vec<TyId>>,
     /// The agent's `store` fields, by name (finding #36: collapses the five
     /// former per-kind maps — `store_cells`/`store_maps`/`store_sets`/
     /// `store_caches`/`store_logs` — into one, since a field name can only
@@ -4346,7 +4365,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     );
                     check_http_variant(id.span, v, &[], expected, ctx)
                 } else {
-                    check_ident(id, expected, ctx)
+                    check_ident_at(expr.id, id, expected, ctx)
                 }
             } else if ctx.lookup(id.name.as_str()).is_none()
                 && let Some(qv) = queue_variant(&id.name)
@@ -4363,7 +4382,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 );
                 check_queue_variant(id.span, qv, &[], ctx)
             } else {
-                check_ident(id, expected, ctx)
+                check_ident_at(expr.id, id, expected, ctx)
             }
         }
         ExprKind::Paren(inner) => type_of(inner, expected, ctx),
@@ -6101,6 +6120,8 @@ mod pure_helper_pins {
     }
     fn refined_decl(name: &str, base: BaseType, refinement: Option<Refinement>) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: ident(name),
             type_params: Vec::new(),
             body: TypeBody::Refined {
@@ -6116,6 +6137,8 @@ mod pure_helper_pins {
     }
     fn record_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: ident(name),
             type_params: Vec::new(),
             body: TypeBody::Record(bynk_syntax::ast::RecordBody {

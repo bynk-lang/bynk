@@ -8,7 +8,7 @@ title: Operators & built-ins
 | `+` `-` `*` `/` | binary | `Int` | `Int` | arithmetic; no `%` |
 | `-` | unary | `Int` | `Int` | negation |
 | `==` `!=` | binary | same equality-supporting type (compared structurally) | `Bool` | non-associative |
-| `<` `<=` `>` `>=` | binary | `Int` | `Bool` | comparison |
+| `<` `<=` `>` `>=` | binary | two operands of the same [`Ord`](/book/reference/types/#ordering-your-own-types) type | `Bool` | comparison; IEEE on `Float` (`NaN < x` is `false`) |
 | `&&` `\|\|` | binary | `Bool` | `Bool` | logical |
 | `!` | unary | `Bool` | `Bool` | logical not |
 | `implies` | binary | `Bool` | `Bool` | logical implication (`P implies Q` ≡ `!P \|\| Q`, directional); lowest precedence; in invariant predicates ([invariants](/book/reference/agent-invariants/)) |

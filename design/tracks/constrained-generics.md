@@ -348,7 +348,17 @@ obligations follow from Q6 and Q7:
 ## 9. Slice status
 
 - [x] Slice 0 — bounds and `Eq` (#2639)
-- [ ] Slice 1 — `Ord`
+- [x] Slice 1 — `Ord` (#2660)
+  - Deviation from §4: the `Float` ordering kernels (`sortBy`, `min`, `max`) and
+    every `Ord` witness use the Q5 total order (`NaN` last and equal to itself,
+    `-0` equal to `0`), so existing `Float`-key code that uses no bound changes
+    emission, and changes behaviour only when a `NaN` is present. The comparison
+    operators keep IEEE. This was a deliberate exception (DECISION G), taken so
+    `xs.sortBy((x) => x)` and `sort(xs)` agree at `NaN`.
+  - Deviation from the proposal: a comparator is built where it is used, from the
+    concrete type, rather than emitted once beside each `derives Ord` type.
+  - `Query` `sortBy`/`min`/`max` keep the five-base-type rule; widening it is a
+    separate increment.
 - [ ] Slice 2 — `Key`
 - [ ] Slice 3 — `Codable`
 - [ ] Slice 4 — static methods on generic types

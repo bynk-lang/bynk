@@ -357,7 +357,7 @@ where
     fn imported_fn(&self, e: &Expr) -> Option<(&'s FnDecl, &'s str, Vec<TypeParam>)> {
         let sc = self.scope;
         match self.typed.callee(e.id)? {
-            Callee::Fn(f) => {
+            Callee::Fn(f, _) => {
                 let FnName::Free(n) = &f.name else {
                     return None;
                 };
@@ -372,7 +372,7 @@ where
                 (decl.span == f.span)
                     .then(|| (decl.as_ref(), unit.as_str(), decl.type_params.clone()))
             }
-            Callee::Method(f) | Callee::Static(f) => {
+            Callee::Method(f, _) | Callee::Static(f) => {
                 let FnName::Method {
                     type_name,
                     method_name,

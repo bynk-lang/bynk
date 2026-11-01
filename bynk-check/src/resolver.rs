@@ -63,6 +63,8 @@ mod compute_is_uses_commons_type_tests {
 
     fn bare_record_type(name: &str) -> Arc<TypeDecl> {
         Arc::new(TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             type_params: Vec::new(),
             name: Ident {
                 name: name.to_string(),
@@ -1331,6 +1333,9 @@ fn check_type_param_bounds(params: &[TypeParam], errors: &mut Sinks) {
         for e in crate::checker::equality::unknown_constraints(&tp.bounds, &tp.name.name) {
             errors.push(e);
         }
+        if let Some(w) = crate::checker::equality::redundant_eq(&tp.bounds, &tp.name.name) {
+            errors.push(w);
+        }
     }
 }
 
@@ -1358,6 +1363,12 @@ fn check_reserved_host_name(item: &CommonsItem, errors: &mut Sinks) {
 /// Recursively walk a type declaration to check that every type reference
 /// inside it resolves.
 fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, errors: &mut Sinks) {
+    // Constrained generics slice 1: the `derives` clause.
+    let mut derive_errors = Vec::new();
+    crate::checker::ordering::check_derives(t, types, &mut derive_errors);
+    for e in derive_errors {
+        errors.push(e);
+    }
     // A `type` declaration may not reuse a compiler-known built-in type name
     // (`List`, `Map`, `Query`, …). Those names are dispatched on by the type
     // parser (`parser/types.rs`), so any *reference* to the alias would be
@@ -1638,6 +1649,9 @@ fn check_fn_refs(
         }
         for e in crate::checker::equality::unknown_constraints(&wb.bounds, &wb.param.name) {
             errors.push(e);
+        }
+        if let Some(w) = crate::checker::equality::redundant_eq(&wb.bounds, &wb.param.name) {
+            errors.push(w);
         }
     }
     let mut seen_params: HashMap<&str, &Ident> = HashMap::new();
@@ -2418,6 +2432,21 @@ fn check_type_ref_resolves_in(
                         // requires a type's bound).
                         let scope: Vec<&str> = type_params.iter().map(String::as_str).collect();
                         for (tp, arg) in decl.type_params.iter().zip(args) {
+                            // Slice 1: an `Ord` bound requires an orderable argument.
+                            if crate::checker::equality::has_ord(&tp.bounds)
+                                && let Some(part) =
+                                    crate::checker::ordering::typeref_not_ord(arg, &scope, types)
+                            {
+                                errors.push(CompileError::new(
+                                        "bynk.types.not_orderable",
+                                        arg.span(),
+                                        format!(
+                                            "`{}` requires `{}: Ord`, but this makes `{}` `{part}`, which is not orderable",
+                                            name.name, tp.name.name, tp.name.name,
+                                        ),
+                                    ));
+                                continue;
+                            }
                             if !crate::checker::equality::has_eq(&tp.bounds) {
                                 continue;
                             }

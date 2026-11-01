@@ -1,0 +1,6 @@
+commons demo
+
+type Plain = { a: Int }
+
+// #2660: a `List` ordering key is any `Ord` type; a record without `derives Ord` is not.
+fn sorted(xs: List[Plain]) -> List[Plain] { xs.sortBy((p) => p) }

@@ -375,6 +375,29 @@ mod tests {
         assert_eq!(&label[ranges[0].0..ranges[0].1], "a: T");
     }
 
+    /// Constrained generics slice 1: the label shows `Ord` bounds. The hidden
+    /// comparator-witness parameters the emitter adds are not in the AST, so
+    /// they are never offered as a parameter or in the label.
+    #[test]
+    fn free_fn_label_shows_ord_bounds_and_never_the_witness() {
+        let doc = "commons m\n\nfn top[T: Ord](xs: List[T], n: Int) -> List[T] { xs }\n\nfn both[A: Eq + Ord, B: Ord](a: A, b: B) -> A { a }\n";
+        let label = resolve_label("top", doc, None).unwrap();
+        assert_eq!(label, "top[T: Ord](xs: List[T], n: Int) -> List[T]");
+        let ranges = param_ranges(&label);
+        let params: Vec<&str> = ranges.iter().map(|&(s, e)| &label[s..e]).collect();
+        assert_eq!(params, ["xs: List[T]", "n: Int"]);
+        let both = resolve_label("both", doc, None).unwrap();
+        assert_eq!(both, "both[A: Eq + Ord, B: Ord](a: A, b: B) -> A");
+        for l in [&label, &both] {
+            let lower = l.to_lowercase();
+            assert!(
+                !lower.contains("witness") && !lower.contains("cmp") && !lower.contains("compar"),
+                "{l}"
+            );
+        }
+        assert_eq!(param_ranges(&both).len(), 2);
+    }
+
     #[test]
     fn call_context_finds_callee_and_active_param() {
         let t = "  let x = f(a, b";

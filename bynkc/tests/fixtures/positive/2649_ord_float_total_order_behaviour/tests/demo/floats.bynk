@@ -1,0 +1,50 @@
+suite demo.floats
+
+case "sort puts NaN last" {
+  let xs: List[Float] = [3.0, nan(), 1.0, nan(), 2.0]
+  let out = sorted(xs)
+  expect out.take(3) == [1.0, 2.0, 3.0]
+  expect isNaN(out.skip(3).firstOrElse(0.0))
+  expect isNaN(out.skip(4).firstOrElse(0.0))
+  expect out.count() == 5
+}
+
+case "sortBy agrees with sort at NaN" {
+  let xs: List[Float] = [nan(), 2.0, 1.0]
+  expect sortedBy(xs).take(2) == [1.0, 2.0]
+  expect isNaN(sortedBy(xs).skip(2).firstOrElse(0.0))
+}
+
+case "max is NaN when one is present, min only when all are" {
+  let mixed: List[Float] = [1.0, nan(), 5.0]
+  let all: List[Float] = [nan(), nan()]
+  expect isNaN(largest(mixed).getOrElse(0.0))
+  expect smallest(mixed) == Some(1.0)
+  expect isNaN(smallest(all).getOrElse(0.0))
+}
+
+case "negative zero and zero compare equal, so the sort is stable" {
+  let xs: List[Float] = [0.0, negZero(), minusOne()]
+  expect sorted(xs).take(1) == [minusOne()]
+  let r1 = Reading { value: 0.0, tag: "a" }
+  let r2 = Reading { value: negZero(), tag: "b" }
+  let rs: List[Reading] = [r2, r1]
+  expect readings(rs) == [r1, r2]
+  let r3 = Reading { value: negZero(), tag: "a" }
+  let ss: List[Reading] = [r2, r3]
+  expect readings(ss) == [r3, r2]
+}
+
+case "a Float in a record sorts NaN last too" {
+  let a = Reading { value: nan(), tag: "a" }
+  let b = Reading { value: 1.0, tag: "b" }
+  let rs: List[Reading] = [a, b]
+  expect readings(rs).take(1) == [b]
+}
+
+case "the operators keep IEEE semantics" {
+  expect !lessThan(nan(), 1.0)
+  expect !lessThan(1.0, nan())
+  expect lessThan(1.0, 2.0)
+  expect !(nan() == nan())
+}

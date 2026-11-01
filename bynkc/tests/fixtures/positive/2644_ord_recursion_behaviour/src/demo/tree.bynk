@@ -1,0 +1,30 @@
+---
+#2660: recursion through a bounded generic. `countBelow` calls itself at the same
+`T`, so it must forward its own comparator, not rebuild one; `isBelowEven` and
+`isBelowOdd` do the same across a mutual recursion.
+---
+commons demo.tree
+
+type Pair = { a: Int, b: String } derives Ord
+
+fn countBelow[T: Ord](xs: List[T], x: T, n: Int) -> Int {
+  if n <= 0 {
+    0
+  } else {
+    let here = match xs.skip(n - 1).first() {
+      Some(y) => if y < x { 1 } else { 0 },
+      None => 0,
+    }
+    here + countBelow(xs, x, n - 1)
+  }
+}
+
+fn isBelowEven[T: Ord](a: T, b: T, n: Int) -> Bool {
+  if n <= 0 { a < b } else { isBelowOdd(a, b, n - 1) }
+}
+
+fn isBelowOdd[T: Ord](a: T, b: T, n: Int) -> Bool {
+  if n <= 0 { a < b } else { isBelowEven(a, b, n - 1) }
+}
+
+fn countPairsBelow(xs: List[Pair], p: Pair) -> Int { countBelow(xs, p, xs.count()) }

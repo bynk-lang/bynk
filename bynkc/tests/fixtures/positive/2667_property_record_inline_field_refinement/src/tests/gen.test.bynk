@@ -1,0 +1,16 @@
+suite demo.gen {
+  // #2667: the generator ignored a field's inline `where`, drawing `qty`
+  // over all of `Int` (its first boundary value was `0`), `ratio` over
+  // `[-1000, 1000]` and `code` from length 0. Each field now draws from its
+  // own refinement's domain, as a declared refined type does.
+  property "inline field refinements hold for every drawn item" {
+    for all i: Item {
+      expect i.qty >= 1
+      expect i.pct >= 0
+      expect i.pct <= 100
+      expect i.ratio >= 0.5
+      expect i.ratio <= 2.5
+      expect i.code.length() >= 3
+    }
+  }
+}

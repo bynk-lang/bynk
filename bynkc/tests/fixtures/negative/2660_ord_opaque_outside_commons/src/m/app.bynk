@@ -1,0 +1,5 @@
+commons m.app
+
+uses m.ids
+
+fn before(a: Id, b: Id) -> Bool { a < b }

@@ -1,5 +1,5 @@
 commons bad
 
-fn sort_of[A: Ord](x: A) -> A {
+fn sort_of[A: Key](x: A) -> A {
   x
 }

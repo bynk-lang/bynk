@@ -1,0 +1,35 @@
+suite demo.pairs
+
+case "one generic type at two instantiations" {
+  let a = Entry { key: 10, value: "a" }
+  let b = Entry { key: 9, value: "z" }
+  let xs: List[Entry[Int, String]] = [a, b]
+  expect entriesByInt(xs) == [b, a]
+  let c = Entry { key: "10", value: 1 }
+  let d = Entry { key: "9", value: 2 }
+  let ys: List[Entry[String, Int]] = [d, c]
+  expect entriesByString(ys) == [c, d]
+}
+
+case "a bounded generic over a derived type forwards both comparators" {
+  let a = Entry { key: 1, value: "b" }
+  let b = Entry { key: 1, value: "a" }
+  let xs: List[Entry[Int, String]] = [a, b]
+  expect firstEntry(xs) == Some(b)
+}
+
+case "a generic sum orders by variant and then payload" {
+  let none: Maybe[Int] = Missing
+  let ms: List[Maybe[Int]] = [Present(3), none, Present(1)]
+  expect maybes(ms) == [none, Present(1), Present(3)]
+}
+
+case "type arguments nest" {
+  let k1: Maybe[Int] = Present(1)
+  let k2: Maybe[Int] = Missing
+  let a = Entry { key: k1, value: [1, 2] }
+  let b = Entry { key: k1, value: [1, 3] }
+  let c = Entry { key: k2, value: [9] }
+  let xs: List[Entry[Maybe[Int], List[Int]]] = [a, c, b]
+  expect nested(xs) == Some(b)
+}

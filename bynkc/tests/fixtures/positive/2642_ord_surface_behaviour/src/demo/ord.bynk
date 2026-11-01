@@ -1,0 +1,27 @@
+---
+#2660: `derives Ord`, the comparison operators on `Ord` types, and `sort`/`min`/`max`
+from `bynk.list` over every kind of orderable type.
+---
+commons demo.ord
+
+uses bynk.list
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+type Task = { priority: Priority, due: Int, title: String } derives Ord
+
+type Pair[A, B] = { first: A, second: B } derives Ord
+
+fn top[T: Ord](xs: List[T]) -> Option[T] { max(xs) }
+
+fn urgent(ts: List[Task]) -> List[Task] {
+  sort(ts).filter((t) => t.priority >= High)
+}
+
+fn firstAfter[T: Ord](xs: List[T], pivot: T) -> Option[T] {
+  min(xs.filter((x) => x > pivot))
+}
+
+fn titles(ts: List[Task]) -> List[String] {
+  sort(ts).map((t) => t.title)
+}

@@ -1,0 +1,9 @@
+commons demo
+
+type Only = enum { One }
+type Holder = { only: Only, n: Int }
+
+fn f(h: Holder) -> Int {
+  let Holder { only: One, n, .. } = h else { 0 }
+  n
+}

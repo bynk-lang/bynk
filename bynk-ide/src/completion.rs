@@ -218,6 +218,14 @@ pub fn complete_in(
     if after_clause_keyword(line_prefix, "provides") {
         return in_scope_capabilities(doc_text, &split());
     }
+    // 4f''. Constrained generics slice 1: `… derives <cursor>` / `derives Ord + <cursor>`
+    //      — the derivable constraint; and `derives` itself after a type's body.
+    if is_derives_list_position(line_prefix) {
+        return derivable_candidates();
+    }
+    if is_after_type_body(line_prefix, doc_text) {
+        return vec![derives_keyword_candidate()];
+    }
     // 4f'. Constrained generics slice 0: `fn f[T: <cursor>` / `where A: <cursor>`
     //      — the constraint names.
     if is_constraint_position(line_prefix) {
@@ -336,13 +344,120 @@ fn is_constraint_position(line: &str) -> bool {
     false
 }
 
-/// The constraint names (slice 0: `Eq` only).
+/// The constraints a bound may name: `Eq` and `Ord`. Mirrors the checker's
+/// `CONSTRAINTS`; `constraint_names_match_the_checker` pins the two together.
+const BOUND_CONSTRAINTS: &[(&str, &str)] = &[
+    ("Eq", "constraint: values of the type compare with `==`"),
+    (
+        "Ord",
+        "constraint: values of the type are ordered (`<`, `<=`, `>`, `>=`); implies `Eq`",
+    ),
+];
+
+/// The constraint names a bound offers.
 fn constraint_candidates() -> Vec<Completion> {
+    BOUND_CONSTRAINTS
+        .iter()
+        .map(|(name, doc)| {
+            Completion::item(*name, CompletionKind::Constraint, Some((*doc).to_string()))
+        })
+        .collect()
+}
+
+/// What `derives` accepts: `Ord` only — `Eq`, `Key` and `Codable` are automatic.
+fn derivable_candidates() -> Vec<Completion> {
     vec![Completion::item(
-        "Eq",
+        "Ord",
         CompletionKind::Constraint,
-        Some("constraint: values of the type compare with `==`".to_string()),
+        Some("derive `Ord`: order the type by declaration order".to_string()),
     )]
+}
+
+fn derives_keyword_candidate() -> Completion {
+    Completion::item(
+        "derives",
+        CompletionKind::Keyword,
+        Some(
+            "opt the type into a constraint (`derives Ord`): ordered by declaration order"
+                .to_string(),
+        ),
+    )
+}
+
+/// Constrained generics slice 1: the cursor follows `derives` or a `+` in a
+/// `derives` list (a partial name being typed is stripped first).
+fn is_derives_list_position(line: &str) -> bool {
+    let head = line.trim_end_matches(|c: char| c.is_alphanumeric() || c == '_');
+    let before = head.trim_end();
+    // A gap before the cursor, so `derives` / `Ord` is a finished word.
+    if !(head.ends_with(char::is_whitespace) || before.ends_with('+')) {
+        return false;
+    }
+    let Some(at) = before.rfind("derives") else {
+        return false;
+    };
+    // `derives` must be a whole word (not `redrives`).
+    if !before[..at].chars().last().is_none_or(char::is_whitespace) {
+        return false;
+    }
+    let after = &before[at + "derives".len()..];
+    after
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '+' | ' ' | '\t'))
+        && (after.trim().is_empty() || after.trim_end().ends_with('+'))
+}
+
+/// Constrained generics slice 1: the cursor sits after a type declaration's
+/// body, where an optional `derives` clause may follow — after a record's or
+/// enum's `}`, a pipe-sum's last variant, or a refined/opaque base. The line
+/// prefix alone is read, so a multi-line body is recognised by its closing
+/// `}` at the start of a line when the document has an unclosed `type … {`.
+fn is_after_type_body(line: &str, doc_text: &str) -> bool {
+    let head = line.trim_end_matches(|c: char| c.is_alphanumeric() || c == '_');
+    // A separating space, or a bare `}` straight before the cursor.
+    if !head.ends_with(char::is_whitespace) && !head.ends_with('}') {
+        return false;
+    }
+    let rest = head.trim_end();
+    if rest.is_empty() || line.split_whitespace().any(|w| w == "derives") {
+        return false;
+    }
+    let balanced = |s: &str| {
+        s.matches('{').count() == s.matches('}').count()
+            && s.matches('(').count() == s.matches(')').count()
+            && s.matches('[').count() == s.matches(']').count()
+    };
+    let trimmed = rest.trim_start();
+    if trimmed.starts_with("type ") || trimmed.starts_with("type\t") {
+        // `type X[..] = <body>`: a non-empty body that ends like a complete one.
+        let Some(eq) = trimmed.find('=') else {
+            return false;
+        };
+        let body = trimmed[eq + 1..].trim();
+        if body.is_empty() || !balanced(trimmed) {
+            return false;
+        }
+        let last_word = body
+            .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .next()
+            .unwrap_or("");
+        let ends_open = body
+            .ends_with(['=', '|', ',', '+', ':', '.', '>', '<', '(', '{', '[', '&'])
+            || matches!(
+                last_word,
+                "where" | "enum" | "opaque" | "and" | "or" | "implies"
+            );
+        return !ends_open && !body.ends_with("->");
+    }
+    // A multi-line body's closing `}` on its own line.
+    if rest == "}" && !line.starts_with(char::is_whitespace) {
+        return doc_text.lines().any(|l| {
+            l.starts_with("type ")
+                && l.matches('{').count() > l.matches('}').count()
+                && !l.contains("derives")
+        });
+    }
+    false
 }
 
 /// The cursor is inside a `given` list (after `given`, before the `{` body).
@@ -2663,18 +2778,102 @@ mod tests {
                 .map(|c| c.label)
                 .collect::<Vec<_>>()
         };
-        assert_eq!(eq("fn same[T: "), ["Eq"]);
-        assert_eq!(eq("fn same[T: E"), ["Eq"]);
-        assert_eq!(eq("fn same[T: Eq + "), ["Eq"]);
-        assert_eq!(eq("fn same[A, T: "), ["Eq"]);
-        assert_eq!(eq("type Pair[T: "), ["Eq"]);
-        assert_eq!(eq("fn Box.has(self, x: A) -> Bool where A: "), ["Eq"]);
-        assert_eq!(eq("fn f(self) -> Int where A: Eq, B: "), ["Eq"]);
+        assert_eq!(eq("fn same[T: "), ["Eq", "Ord"]);
+        assert_eq!(eq("fn same[T: E"), ["Eq", "Ord"]);
+        assert_eq!(eq("fn same[T: Eq + "), ["Eq", "Ord"]);
+        assert_eq!(eq("fn same[A, T: "), ["Eq", "Ord"]);
+        assert_eq!(eq("type Pair[T: "), ["Eq", "Ord"]);
+        assert_eq!(
+            eq("fn Box.has(self, x: A) -> Bool where A: "),
+            ["Eq", "Ord"]
+        );
+        assert_eq!(eq("fn f(self) -> Int where A: Eq, B: "), ["Eq", "Ord"]);
         // A parameter's type annotation and a refinement `where` are not bounds.
         assert!(eq("fn f(x: ").is_empty());
         assert!(eq("fn f(x: Int) -> ").is_empty());
         assert!(eq("type Age = Int where ").is_empty());
         assert!(eq("fn f[T](x: ").is_empty());
+        // `derives` takes only `Ord` (`Eq` is automatic), unlike a bound.
+        assert_eq!(eq("type P = { a: Int } derives "), ["Ord"]);
+    }
+
+    fn labels_of(line: &str, doc: &str) -> Vec<String> {
+        complete(line, doc, None)
+            .into_iter()
+            .map(|c| c.label)
+            .collect()
+    }
+
+    /// Constrained generics slice 1: `derives` is offered after a type's body,
+    /// whatever its shape, and nowhere else.
+    #[test]
+    fn derives_follows_a_type_body() {
+        let doc = "commons m\n";
+        for line in [
+            "type P = { a: Int } ",
+            "type P = { a: Int } de",
+            "type E = enum { A, B } ",
+            "type E = A | B(x: Int) ",
+            "type Age = Int ",
+            "type Age = Int where self >= 0 ",
+            "type Id = opaque Int ",
+            "type Box[T: Ord] = { v: T } ",
+        ] {
+            assert!(
+                labels_of(line, doc).contains(&"derives".to_string()),
+                "{line:?}"
+            );
+        }
+        // Multi-line body: the closing `}` of an open `type … {`.
+        let open = "commons m\n\ntype P = {\n  a: Int\n}\n";
+        assert!(labels_of("} ", open).contains(&"derives".to_string()));
+        // Not after an incomplete body, a clause already present, a function, or `}` with no type.
+        for line in [
+            "type P = ",
+            "type E = A | ",
+            "type Age = Int where ",
+            "type P = { a: Int } derives Ord ",
+            "fn f() -> Int { 1 } ",
+        ] {
+            assert!(
+                !labels_of(line, doc).contains(&"derives".to_string()),
+                "{line:?}"
+            );
+        }
+        assert!(!labels_of("} ", doc).contains(&"derives".to_string()));
+    }
+
+    /// Constrained generics slice 1: after `derives` and after `+`, only `Ord`
+    /// is offered — `Eq`, `Key` and `Codable` are automatic.
+    #[test]
+    fn derives_list_offers_only_ord() {
+        let doc = "commons m\n";
+        for line in [
+            "type P = { a: Int } derives ",
+            "type P = { a: Int } derives O",
+            "type P = { a: Int } derives Ord + ",
+            "} derives ",
+        ] {
+            assert_eq!(labels_of(line, doc), ["Ord"], "{line:?}");
+        }
+        assert!(!labels_of("type P = { a: Int } derives Ord ", doc).contains(&"Ord".to_string()));
+        assert!(labels_of("let derives = ", doc).iter().all(|l| l != "Ord"));
+    }
+
+    /// The bound-position list mirrors the checker: every offered name is a
+    /// constraint the checker accepts, and the checker's unknown-constraint
+    /// diagnostic lists exactly these.
+    #[test]
+    fn constraint_names_match_the_checker() {
+        for c in constraint_candidates() {
+            let src = format!("commons m\n\nfn f[T: {}](x: T) -> T {{ x }}\n", c.label);
+            assert!(crate::diagnose(&src).is_empty(), "{}", c.label);
+        }
+        let bad = crate::diagnose("commons m\n\nfn f[T: Nope](x: T) -> T { x }\n");
+        let note = format!("{:?}", bad[0].error);
+        for c in constraint_candidates() {
+            assert!(note.contains(&c.label), "{note}");
+        }
     }
 
     #[test]

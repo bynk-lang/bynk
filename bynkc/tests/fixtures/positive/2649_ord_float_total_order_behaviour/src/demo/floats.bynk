@@ -1,0 +1,30 @@
+---
+#2660 (DECISION G): the ordering kernels and `Ord` witnesses use `Float`'s total
+order, with `NaN` last and equal to itself and `-0` equal to `0`. The comparison
+operators keep their IEEE meaning.
+---
+commons demo.floats
+
+uses bynk.list
+
+type Reading = { value: Float, tag: String } derives Ord
+
+fn nan() -> Float { 0.0 / 0.0 }
+
+fn negZero() -> Float { 0.0 * (0.0 - 1.0) }
+
+fn minusOne() -> Float { 0.0 - 1.0 }
+
+fn sorted(xs: List[Float]) -> List[Float] { sort(xs) }
+
+fn smallest(xs: List[Float]) -> Option[Float] { min(xs) }
+
+fn largest(xs: List[Float]) -> Option[Float] { max(xs) }
+
+fn sortedBy(xs: List[Float]) -> List[Float] { xs.sortBy((x) => x) }
+
+fn readings(xs: List[Reading]) -> List[Reading] { sort(xs) }
+
+fn lessThan(a: Float, b: Float) -> Bool { a < b }
+
+fn isNaN(x: Float) -> Bool { x != x }

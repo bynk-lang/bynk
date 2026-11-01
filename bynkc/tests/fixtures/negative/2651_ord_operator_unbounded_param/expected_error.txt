@@ -1,0 +1,1 @@
+bynk.generics.missing_ord_bound operator `<` orders values of this type, but type parameter `T` has no `Ord` bound

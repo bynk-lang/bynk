@@ -1,0 +1,11 @@
+context rt.consumer
+
+uses rt.shapes
+consumes rt.provider
+
+service relay {
+  on call(t: Tree) -> Effect[Tree] {
+    let r <- rt.provider.trees(t)
+    Effect.pure(r)
+  }
+}

@@ -239,9 +239,16 @@ Type declarations and the type references that appear in signatures.
 {{#grammar type_decl}}
 
 `type`, a name, an optional `[A, B]` **type-parameter list** (v0.157 — only a
-record body may be generic; a parameter is an unconstrained, bound-free name
-scoped to the declaration), `=`, and a type body. Well-formedness: §5; the type
-system: §6.
+record or sum body may be generic; a parameter is a name, optionally bounded
+(§4.3.1b), scoped to the declaration), `=`, a type body, and an optional
+trailing **`derives` clause** (constrained generics, slice 1): `derives Ord`, or
+`derives Ord + C` for a list. `derives` is a contextual keyword, recognised only
+after a type body. The grammar admits any constraint name; the checker admits
+only `Ord`. `Eq`, `Key` and `Codable` are derived automatically, so naming one is
+`bynk.types.derives_automatic` (its fix removes it), and any other name is
+`bynk.generics.unknown_constraint`. Every field and payload type of a type that
+derives `Ord` MUST be `Ord` (`bynk.types.derives_field_not_orderable`).
+Well-formedness: §5; the type system: §6.
 
 ### §4.2.2 type_body
 
@@ -436,7 +443,7 @@ number of **contract clauses** (v0.115), and a block body. Well-formedness: §5.
 A type parameter: a name, optionally followed by `:` and one or more
 **constraint** names joined by `+` (`T`, `T: Eq`, `T: Eq + C`). The same form
 appears on `fn`, `type` and capability-operation type-parameter lists. The
-grammar admits any constraint name; the checker admits only `Eq`
+grammar admits any constraint name; the checker admits `Eq` and `Ord`
 (`bynk.generics.unknown_constraint`), and rejects a bound on a capability
 operation (`bynk.generics.bound_on_capability_op`). Well-formedness: §5.2.
 

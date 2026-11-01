@@ -1,0 +1,78 @@
+---
+#2660: an enum orders by variant position, a record by its fields in declaration
+order, a generic record at an instantiation, `Option` with `None` first, `List`
+lexicographically, `Bytes` unsigned lexicographically.
+---
+suite demo.ord
+
+case "an enum orders by variant declaration" {
+  let ps: List[Priority] = [High, Low, Medium]
+  expect Low < Medium
+  expect Medium < High
+  expect High >= High
+  expect !(High < Low)
+  expect sort(ps) == [Low, Medium, High]
+  expect min(ps) == Some(Low)
+  expect max(ps) == Some(High)
+}
+
+case "a record orders by its fields in order" {
+  let a = Task { priority: Low, due: 9, title: "a" }
+  let b = Task { priority: Low, due: 10, title: "a" }
+  let c = Task { priority: High, due: 1, title: "a" }
+  let ts: List[Task] = [c, a, b]
+  expect a < b
+  expect b < c
+  expect sort(ts) == [a, b, c]
+  expect titles(ts) == ["a", "a", "a"]
+}
+
+case "urgent keeps the high priority tasks in order" {
+  let low = Task { priority: Low, due: 1, title: "low" }
+  let h2 = Task { priority: High, due: 2, title: "h2" }
+  let h1 = Task { priority: High, due: 1, title: "h1" }
+  let ts: List[Task] = [h2, low, h1]
+  expect urgent(ts) == [h1, h2]
+}
+
+case "a generic record is Ord at an instantiation" {
+  let a = Pair { first: 1, second: "b" }
+  let b = Pair { first: 1, second: "c" }
+  let ps: List[Pair[Int, String]] = [b, a]
+  expect a < b
+  expect sort(ps) == [a, b]
+  expect top(ps) == Some(b)
+}
+
+case "Option orders None first" {
+  let os: List[Option[Int]] = [Some(2), None, Some(1)]
+  expect sort(os) == [None, Some(1), Some(2)]
+  expect min(os) == Some(None)
+  expect max(os) == Some(Some(2))
+}
+
+case "List orders lexicographically" {
+  let ls: List[List[Int]] = [[2], [1, 5], [1], []]
+  expect sort(ls) == [[], [1], [1, 5], [2]]
+  let ss: List[String] = ["b", "a", "c"]
+  expect top(ss) == Some("c")
+}
+
+case "Bytes order is unsigned lexicographic" {
+  let lo = Bytes.fromUtf8("a")
+  let hi = Bytes.fromUtf8("b")
+  let bs: List[Bytes] = [hi, Bytes.fromUtf8("aa"), lo]
+  expect lo < hi
+  expect !(hi < lo)
+  expect sort(bs) == [lo, Bytes.fromUtf8("aa"), hi]
+  expect max(bs) == Some(hi)
+}
+
+case "a bounded generic uses the operators on its parameter" {
+  let ns: List[Int] = [5, 1, 9, 7]
+  let ps: List[Priority] = [Low, High]
+  let ss: List[String] = ["a"]
+  expect firstAfter(ns, 5) == Some(7)
+  expect firstAfter(ps, Low) == Some(High)
+  expect firstAfter(ss, "z") == None
+}

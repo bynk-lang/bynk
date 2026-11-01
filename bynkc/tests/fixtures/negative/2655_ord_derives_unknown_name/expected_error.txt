@@ -1,0 +1,1 @@
+bynk.generics.unknown_constraint `Hash` is not a constraint a type can derive

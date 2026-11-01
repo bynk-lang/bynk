@@ -3508,6 +3508,8 @@ fn check_agent_decls(
         // Build a synthetic Record TypeDecl and stuff it into a *clone* of
         // the resolved types so handler bodies see it.
         let synthetic_state = TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: agent_state_name.clone(),
                 span: agent.span,
@@ -3604,6 +3606,8 @@ fn check_agent_decls(
         // Ident("self"), so `self` is given a one-off synthetic record type.
         let agent_self_name = format!("__{}Self", agent.name.name);
         let self_decl = TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: agent_self_name.clone(),
                 span: agent.span,
