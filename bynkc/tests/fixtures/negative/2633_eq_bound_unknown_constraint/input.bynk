@@ -1,0 +1,4 @@
+// `Eq` is the only constraint in slice 0.
+commons c
+
+fn pick[T: Eq + Ord](a: T, b: T) -> T { a }

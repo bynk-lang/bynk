@@ -611,7 +611,9 @@ depends on, and the providers that implement them.
 
 {{#grammar fn_decl}}
 
-A function or method: a name, parameters, a return type, and a block body.
+A function or method: a name, an optional type-parameter list (each parameter
+may carry bounds), parameters, a return type, an optional `where` clause, and a
+block body.
 
 **Example.**
 ```bynk
@@ -628,6 +630,43 @@ commons demo {
 {{#grammar-semantics fn_decl}}
 
 **See also.** [Operators & built-ins](/book/reference/operators/).
+
+### type_param {#rule-type_param}
+
+{{#grammar type_param}}
+
+A type parameter of a `fn`, `type` or capability operation, with optional bounds:
+`T`, `T: Eq`. The only constraint is `Eq` (`bynk.generics.unknown_constraint`
+otherwise). See [Generics and bounds](/book/reference/generics/).
+
+**Example.**
+```bynk
+commons demo {
+  fn same[T: Eq](a: T, b: T) -> Bool {
+    a == b
+  }
+}
+```
+
+**Static semantics.**
+{{#grammar-semantics type_param}}
+
+### where_clause {#rule-where_clause}
+
+{{#grammar where_clause}}
+
+A method's `where` clause: bounds on the receiver type's type parameters, between
+the return type and any contract clause (`fn Box.has(self, x: A) -> Bool where A:
+Eq`).
+
+**Static semantics.**
+{{#grammar-semantics where_clause}}
+
+### where_bound {#rule-where_bound}
+
+{{#grammar where_bound}}
+
+One `A: Eq` entry of a `where` clause.
 
 ### requires_clause {#rule-requires_clause}
 

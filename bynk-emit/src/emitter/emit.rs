@@ -8539,6 +8539,7 @@ mod ts_type_params_tests {
                 name: name.to_string(),
                 span: Span::new(0, name.len()),
             },
+            bounds: Vec::new(),
             span: Span::new(0, name.len()),
         }
     }

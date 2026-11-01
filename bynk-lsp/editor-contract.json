@@ -221,6 +221,7 @@
       "comment",
       "asset",
       "embed",
+      "interface",
       "constant"
     ]
   }

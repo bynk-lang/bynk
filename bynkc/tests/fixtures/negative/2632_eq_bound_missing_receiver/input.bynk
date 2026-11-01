@@ -1,0 +1,6 @@
+// A method that compares its receiver type's parameter needs `where A: Eq`.
+commons c
+
+type Box[A] = { value: A }
+
+fn Box.has(self, x: A) -> Bool { self.value == x }

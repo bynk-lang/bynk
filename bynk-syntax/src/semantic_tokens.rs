@@ -50,7 +50,11 @@ pub const TOKEN_TYPES: &[&str] = &[
     // #2387: `embed` names (embedded text). Appended at index 14
     // (never reordered); a custom type the VS Code extension declares.
     "embed",
-    // #2617: `const` names (named constants). Appended at index 15 (never
+    // Constrained generics slice 0: constraint names in a bound (`T: Eq`,
+    // `where A: Eq`). Appended at index 15 (never reordered); standard LSP
+    // type.
+    "interface",
+    // #2617: `const` names (named constants). Appended at index 16 (never
     // reordered); a custom type the VS Code extension declares.
     "constant",
 ];
@@ -76,6 +80,7 @@ pub const STANDARD_TYPES: &[&str] = &[
     "method",
     "property",
     "decorator",
+    "interface",
     // #1888: `--|` doc lines (no longer emitted since #2203; the legend is
     // append-only).
     "comment",

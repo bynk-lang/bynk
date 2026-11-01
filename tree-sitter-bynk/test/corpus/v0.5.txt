@@ -43,7 +43,8 @@ context billing {
       name: (identifier)
       (capability_op
         name: (identifier)
-        type_param: (identifier)
+        type_param: (type_param
+          name: (identifier))
         (param
           name: (identifier)
           type: (base_type))

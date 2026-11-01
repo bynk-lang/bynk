@@ -1,0 +1,2 @@
+bynk.generics.missing_eq_bound
+`same` requires `T: Eq`, but type parameter `U` has no `Eq` bound

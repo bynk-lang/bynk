@@ -1,0 +1,12 @@
+// A bound the receiver type declares applies to its methods' callers, with no
+// `where` clause, even when the instantiation is inferred from a construction.
+commons c
+
+type Box2[T: Eq] = { value: T }
+
+fn Box2.size(self) -> Int { 0 }
+
+fn g(f: (Int) -> Int) -> Int {
+  let s = Box2 { value: f }
+  s.size()
+}

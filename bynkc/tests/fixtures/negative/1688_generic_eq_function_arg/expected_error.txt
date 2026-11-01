@@ -1,2 +1,2 @@
 bynk.types.not_comparable
-`same` compares values of its type parameter `T`, but this call makes `T` `Int -> Int`
+`same` requires `T: Eq`, but this call makes `T` `Int -> Int`

@@ -2543,6 +2543,20 @@ pub fn in_check_order<T>(preds: &[T], kind: impl Fn(&T) -> &PredKind) -> Vec<&T>
 #[derive(Debug, Clone)]
 pub struct TypeParam {
     pub name: Ident,
+    /// Declared constraints, `T: C1 + C2` (constrained-generics slice 0). Empty
+    /// for an unbounded parameter. Slice 0 admits only `Eq`; the checker
+    /// reports any other name as `bynk.generics.unknown_constraint`.
+    pub bounds: Vec<Ident>,
+    pub span: Span,
+}
+
+/// One `A: C1 + C2` entry of a method's `where` clause (constrained-generics
+/// slice 0): bounds a type parameter the method does not declare itself — the
+/// receiver type's (`fn Box.has(self, x: A) -> Bool where A: Eq`).
+#[derive(Debug, Clone)]
+pub struct WhereBound {
+    pub param: Ident,
+    pub bounds: Vec<Ident>,
     pub span: Span,
 }
 
@@ -2573,6 +2587,10 @@ pub struct FnDecl {
     pub name: FnName,
     pub params: Vec<Param>,
     pub return_type: TypeRef,
+    /// `where A: Eq, …`, parsed between the return type and the contract
+    /// clauses; empty when absent. Bounds receiver type parameters (and may
+    /// restate the method's own).
+    pub where_bounds: Vec<WhereBound>,
     /// v0.115: preconditions (`requires <name>: <pred>`), parsed between the
     /// return type and the body. A contract clause is the invariant predicate
     /// attached to a function (ADR 0144 — one predicate surface); `requires`

@@ -1,0 +1,7 @@
+// A contract clause that compares a type parameter needs the bound too, and is
+// reported once although the body compares it as well.
+commons c
+
+fn same[T](a: T, b: T) -> Bool
+  requires distinct: a == b
+{ a == b }

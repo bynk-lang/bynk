@@ -327,6 +327,26 @@ module.exports = grammar({
         "}",
       ),
 
+    // -- Type parameters and bounds (constrained generics slice 0) --
+
+    // `T` or `T: Eq + C`. The constraint names are validated by the checker.
+    type_param: ($) =>
+      seq(
+        field("name", $.identifier),
+        optional(seq(":", sep1($.constraint, "+"))),
+      ),
+
+    constraint: ($) => $.identifier,
+
+    where_clause: ($) => seq("where", sep1($.where_bound, ",")),
+
+    where_bound: ($) =>
+      seq(
+        field("param", $.identifier),
+        ":",
+        sep1($.constraint, "+"),
+      ),
+
     // -- Type declarations --
 
     type_decl: ($) =>
@@ -335,7 +355,7 @@ module.exports = grammar({
         field("name", $.identifier),
         // v0.157 (ADR 0183): optional `[A, B]` type parameters — only a record
         // body may be generic (enforced by the checker, not the grammar).
-        optional(seq("[", sep1(field("type_param", $.identifier), ","), "]")),
+        optional(seq("[", sep1(field("type_param", $.type_param), ","), "]")),
         "=",
         field("body", $._type_body),
       ),
@@ -639,12 +659,15 @@ module.exports = grammar({
         "fn",
         field("name", choice($.method_name, $.identifier)),
         // v0.20a: optional `[A, B]` type parameters (functions only).
-        optional(seq("[", sep1(field("type_param", $.identifier), ","), "]")),
+        optional(seq("[", sep1(field("type_param", $.type_param), ","), "]")),
         "(",
         optional($._params),
         ")",
         "->",
         field("return_type", $._type_ref),
+        // Constrained generics slice 0: a method's `where A: Eq` clause bounds
+        // a receiver type's parameter.
+        optional($.where_clause),
         // v0.115: contract clauses between the return type and the body.
         repeat($.requires_clause),
         repeat($.ensures_clause),
@@ -700,7 +723,7 @@ module.exports = grammar({
         // #926: optional `[T, …]` type parameters on the op itself — resolved
         // only from an explicit type argument at the call site (mirroring
         // `fn_decl`'s own `[A, B]` slot, `grammar.js:525`).
-        optional(seq("[", sep1(field("type_param", $.identifier), ","), "]")),
+        optional(seq("[", sep1(field("type_param", $.type_param), ","), "]")),
         "(",
         optional(sep1($.param, ",")),
         optional(","),

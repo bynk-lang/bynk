@@ -27,7 +27,10 @@ consumes_decl ::= "consumes" qualified_name ("as" identifier | "{" (identifier (
 binding_decl ::= "binding" string_literal ("includes" "[" (string_literal ("," string_literal)*)? ","? "]")? ("requires" "{" (binding_requirement ("," binding_requirement)*)? ","? "}")?
 binding_requirement ::= string_literal ":" string_literal
 exports_decl ::= "exports" ("opaque" | "transparent" | "capability") "{" (identifier ("," identifier)*)? ","? "}"
-type_decl ::= "type" identifier ("[" identifier ("," identifier)* "]")? "=" type_body
+type_param ::= identifier (":" identifier ("+" identifier)*)?
+where_clause ::= "where" where_bound ("," where_bound)*
+where_bound ::= identifier ":" identifier ("+" identifier)*
+type_decl ::= "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body
 type_body ::= opaque_type | refined_type | record_type | sum_type | enum_type
 opaque_type ::= "opaque" base_type ("where" refinement)?
 refined_type ::= base_type ("where" refinement)?
@@ -53,7 +56,7 @@ function_type_ref ::= (base_type | unit_type | validation_error_type | generic_t
 unit_type ::= "(" ")"
 validation_error_type ::= "ValidationError"
 generic_type_ref ::= ("Option" | "Effect" | "HttpResult" | "List" | "Set" | "Stream" | "Query" | "Connection" | "History") "[" type_ref "]" | ("Result" | "Map") "[" type_ref "," type_ref "]"
-fn_decl ::= "fn" (method_name | identifier) ("[" identifier ("," identifier)* "]")? "(" params? ")" "->" type_ref requires_clause* ensures_clause* block
+fn_decl ::= "fn" (method_name | identifier) ("[" type_param ("," type_param)* "]")? "(" params? ")" "->" type_ref where_clause? requires_clause* ensures_clause* block
 method_name ::= identifier "." identifier
 requires_clause ::= "requires" identifier ":" expression
 ensures_clause ::= "ensures" identifier ":" expression
@@ -61,7 +64,7 @@ params ::= (self_param | param) ("," param)* ","?
 self_param ::= "self"
 param ::= identifier ":" type_ref
 capability_decl ::= "capability" identifier ("{" capability_op* "}" | "=" identifier store_annotation*)
-capability_op ::= "fn" identifier ("[" identifier ("," identifier)* "]")? "(" (param ("," param)*)? ","? ")" "->" type_ref
+capability_op ::= "fn" identifier ("[" type_param ("," type_param)* "]")? "(" (param ("," param)*)? ","? ")" "->" type_ref
 messages_decl ::= "messages" string_literal store_annotation* "{" message_entry* "}"
 message_entry ::= string_literal "=>" string_literal ","?
 provider_decl ::= "provides" identifier "=" identifier given_clause? ("{" provider_op* "}")?

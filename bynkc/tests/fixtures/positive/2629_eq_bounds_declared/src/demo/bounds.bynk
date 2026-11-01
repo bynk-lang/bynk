@@ -1,0 +1,28 @@
+---
+Constrained generics slice 0: `Eq` is declared, not inferred. A bound on the
+function (`[T: Eq]`), a `where` clause for a receiver type's parameter, a bound
+on a type declaration, and a caller that vouches for its own parameter.
+---
+commons demo.bounds
+
+type Box[A] = { value: A }
+
+type Pair[T: Eq] = { left: T, right: T }
+
+fn same[T: Eq](a: T, b: T) -> Bool { a == b }
+
+fn both[A: Eq, B: Eq](a: A, b: A, c: B, d: B) -> Bool { a == b && c == d }
+
+fn twice[U: Eq](a: U, b: U) -> Bool { same(a, b) }
+
+fn Box.has(self, x: A) -> Bool where A: Eq { self.value == x }
+
+fn Box.sameAs[U: Eq](self, other: Box[A], u: U) -> Bool where A: Eq {
+  self.value == other.value && u == u
+}
+
+fn concrete(n: Int) -> Bool { same(n, n) && twice("a", "b") }
+
+fn boxed(b: Box[Int]) -> Bool { b.has(3) && b.sameAs(b, "x") }
+
+fn left(p: Pair[Int]) -> Int { p.left }
