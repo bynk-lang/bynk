@@ -74,6 +74,13 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   be retired (S4). The track is complete and the gate is met: its live checks
   on Cloudflare are recorded on
   [#2188](https://github.com/bynk-lang/bynk/issues/2188).
+- **Constrained generics.** In progress. Slice 0 has shipped and is the 1.0
+  prerequisite: a type parameter may carry a declared bound, and `Eq` is the first
+  constraint (`fn same[T: Eq](a: T, b: T)`, or `where A: Eq` on a method for its
+  receiver type's parameter), replacing the equality requirement the compiler used
+  to infer. It is a breaking change with a machine-applicable fix; see
+  [Generics and bounds](/book/reference/generics/). Next: `Ord`, `Key` and
+  `Codable` as further constraints, then static methods on generic types.
 - **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its
   model views (sequence diagram, documentation, architecture map, wire

@@ -22,9 +22,8 @@ impl<'a> Parser<'a> {
         } else {
             FnName::Free(first)
         };
-        // v0.20a: optional `[A, B]` type parameters (free functions only —
-        // generic methods are checked semantically; bounds are rejected here
-        // with `bynk.generics.no_bounds`).
+        // v0.20a: optional `[A, B]` type parameters, each optionally bounded
+        // (`[A: Eq]`); the checker validates the constraint names.
         let type_params = self.parse_optional_type_params()?;
         self.expect(TokenKind::LParen, "after the function name")?;
         // For methods, the first parameter may be the special `self` keyword.
@@ -63,6 +62,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RParen, "to close the parameter list")?;
         self.expect(TokenKind::Arrow, "before the return type")?;
         let return_type = self.parse_type_ref("as the return type")?;
+        let where_bounds = self.parse_optional_where_bounds()?;
         // v0.115: contract clauses ride between the return type and the body —
         // any number of `requires <name>: <pred>` then `ensures <name>: <pred>`.
         // The two-list split is by keyword, not order; the checker enforces the
@@ -83,6 +83,7 @@ impl<'a> Parser<'a> {
             name,
             params,
             return_type,
+            where_bounds,
             requires,
             ensures,
             body,

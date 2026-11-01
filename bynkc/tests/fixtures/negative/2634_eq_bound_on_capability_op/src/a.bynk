@@ -1,0 +1,6 @@
+context a
+
+// A generic capability operation has no body for a bound to serve (slice 0).
+capability Idempotency {
+  fn dedup[T: Eq](key: String) -> Effect[Option[T]]
+}

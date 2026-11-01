@@ -4,4 +4,4 @@ uses m.core
 
 // #1702 review: `same` compares `T` through `eq2`, which it reaches by its own
 // `uses` — not one the importing unit shares.
-fn same[T](a: T, b: T) -> Bool { eq2(a, b) }
+fn same[T: Eq](a: T, b: T) -> Bool { eq2(a, b) }

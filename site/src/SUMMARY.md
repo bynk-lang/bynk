@@ -33,6 +33,7 @@
     - [Pattern-match with `match`](guides/type-system/match.md)
     - [Match on a record's fields](guides/type-system/match-on-a-records-fields.md)
     - [Narrow and bind with `is`](guides/type-system/narrow-with-is.md)
+    - [Declare `Eq` on a generic that compares](guides/type-system/declare-eq-bounds.md)
   - [Program structure](guides/program-structure/index.md)
     - [How a Bynk program is shaped](guides/program-structure/how-a-program-is-shaped.md)
     - [Consume another context's services](guides/program-structure/consume-services.md)
@@ -101,6 +102,7 @@
   - [Keywords](reference/keywords.md)
   - [Glossary](reference/glossary.md)
   - [Type system](reference/types.md)
+  - [Generics and bounds](reference/generics.md)
   - [Refined-type API](reference/refined-types.md)
   - [Operators & built-ins](reference/operators.md)
   - [Agents](reference/agents.md)
@@ -149,6 +151,7 @@
 # Troubleshooting
 
 - [Troubleshooting](troubleshooting/index.md)
+  - [`bynk.generics.missing_eq_bound`](troubleshooting/generics-missing-eq-bound.md)
   - [`bynk.refine.literal_violates`](troubleshooting/refine-literal-violates.md)
   - [`bynk.agents.non_zeroable_state_field`](troubleshooting/agents-non-zeroable-state-field.md)
   - [`bynk.agents.bad_state_initialiser`](troubleshooting/agents-bad-state-initialiser.md)

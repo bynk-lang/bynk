@@ -1114,6 +1114,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "The formatter's output does not re-parse to the same program, so it leaves the file unchanged.",
     ),
     dg(
+        "bynk.generics.bound_on_capability_op",
+        "A generic capability operation's type parameter carries a bound; operations take no bounds yet.",
+        &["capability_op"],
+    ),
+    dg(
         "bynk.generics.duplicate_type_param",
         "A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183).",
         &[],
@@ -1139,8 +1144,8 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["fn_decl"],
     ),
     dg(
-        "bynk.generics.no_bounds",
-        "A type parameter carries a bound (`[A: …]`); bounded generics are not in v0.20a.",
+        "bynk.generics.missing_eq_bound",
+        "A type parameter is compared with `==`/`!=`, or passed to an `Eq`-bounded parameter of another generic, but is not declared `Eq` (`[T: Eq]`, or `where A: Eq` for a receiver type's parameter). The diagnostic carries a machine-applicable fix (ADR 0430, amended by constrained-generics slice 0).",
         &["fn_decl"],
     ),
     dg(
@@ -1162,6 +1167,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.generics.uninferable_type_arg",
         "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value in v0.20a.",
         &["call"],
+    ),
+    dg(
+        "bynk.generics.unknown_constraint",
+        "A bound names something that is not a constraint; `Eq` is the only one.",
+        &["type_param"],
+    ),
+    dg(
+        "bynk.generics.unknown_where_param",
+        "A method's `where` clause bounds a name that is not a type parameter of the method or of its receiver type.",
+        &["where_clause"],
     ),
     dg(
         "bynk.given.cross_context_unknown_capability",
