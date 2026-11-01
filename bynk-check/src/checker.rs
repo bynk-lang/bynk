@@ -5036,7 +5036,7 @@ pub struct VariantInfo {
 /// Project a return type produced in the consumed context's namespace into
 /// the caller's namespace by re-resolving named types that exist on both
 /// sides. The structural shape stays the same; the brand changes.
-fn rebrand_return_type(
+pub(crate) fn rebrand_return_type(
     t: TyId,
     caller_types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
@@ -5110,7 +5110,7 @@ fn rebrand_return_type(
 /// rebrand agree on which names are swapped. `receiving` is the caller's
 /// [`projected_types`], which resolves the names the caller's declaration
 /// reaches but does not bind (an export's unexported field type).
-fn rebrand_conflict(
+pub(crate) fn rebrand_conflict(
     t: TyId,
     provider_types: &HashMap<String, Arc<TypeDecl>>,
     caller_types: &HashMap<String, Arc<TypeDecl>>,

@@ -13,6 +13,7 @@ export const Token = {
 
 export interface Jwt {
   sign(sub: string, secret: string): globalThis.Promise<Token>;
+  verify(t: Token): globalThis.Promise<boolean>;
 }
 
 export const __JwtToken: symbol = globalThis.Symbol("Jwt");

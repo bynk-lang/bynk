@@ -491,6 +491,7 @@ pub fn check_context_declarations(
     // v0.17: flattened capabilities (`consumes U { Cap }`) enter the local map
     // under their bare names, resolved from the consumed unit's exported
     // capability so bare `given Cap` / `Cap.op(…)` type-check as if local.
+    let mut receiving_cache: Option<checker::Projection> = None;
     for (cap, unit) in &cross_context.flattened_caps {
         let Some(xcap) = cross_context
             .consumed_capabilities
@@ -500,40 +501,59 @@ pub fn check_context_declarations(
             continue;
         };
         // #2634: an operation may name a type the unit declares but does not
-        // export (an adapter's `Token`); the consumer's own table lacks it, so
-        // resolve against the consumer's table projected with the unit's
-        // (§6.5, as the qualified `U.Cap.op` form does).
-        let (op_types, _) = match cross_context.consumed_types.get(unit) {
-            Some(table) => checker::projected_types(
-                &typed.types,
-                &HashMap::from([(unit.clone(), table.clone())]),
-                tys,
-            ),
-            None => (typed.types.clone(), Default::default()),
-        };
+        // export (an adapter's `Token`), or one the consumer also declares.
+        // As the qualified `U.Cap.op` call does, resolve the signature against
+        // the unit's own table; a name the consumer binds to a structurally
+        // different type is refused (`bynk.boundary.structural_mismatch`)
+        // rather than read as the consumer's.
+        let unit_types = cross_context
+            .consumed_types
+            .get(unit)
+            .unwrap_or(&typed.types);
+        let (receiving, _) = receiving_cache.get_or_insert_with(|| {
+            checker::projected_types(&typed.types, &cross_context.consumed_types, tys)
+        });
+        let mut conflicts: Vec<String> = Vec::new();
         let ops = xcap
             .ops
             .iter()
             .map(|op| {
                 let vars: HashSet<String> = op.type_params.iter().cloned().collect();
+                let mut resolve = |tr: &TypeRef| {
+                    let ty = checker::resolve_type_ref_in(tr, unit_types, &vars, tys)
+                        .unwrap_or_else(|| tys.intern(Ty::Unit));
+                    if let Some(name) =
+                        checker::rebrand_conflict(ty, unit_types, &typed.types, receiving, tys)
+                        && !conflicts.contains(&name)
+                    {
+                        conflicts.push(name);
+                    }
+                    checker::rebrand_return_type(ty, &typed.types, tys)
+                };
                 CapabilityOpInfo {
                     name: op.name.clone(),
                     type_params: op.type_params.clone(),
-                    params: op
-                        .params
-                        .iter()
-                        .map(|(_, tr)| {
-                            checker::resolve_type_ref_in(tr, &op_types, &vars, tys)
-                                .unwrap_or_else(|| tys.intern(Ty::Unit))
-                        })
-                        .collect(),
+                    params: op.params.iter().map(|(_, tr)| resolve(tr)).collect(),
                     param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
-                    return_ty: checker::resolve_type_ref_in(&op.return_type, &op_types, &vars, tys)
-                        .unwrap_or_else(|| tys.intern(Ty::Unit)),
+                    return_ty: resolve(&op.return_type),
                     codable_params: op.codable_params.clone(),
                 }
             })
             .collect();
+        for name in conflicts {
+            errors.push(
+                CompileError::new(
+                    "bynk.boundary.structural_mismatch",
+                    typed.commons.span,
+                    format!(
+                        "capability `{cap}` from `{unit}` uses its type `{name}`, but `{name}` here is a different type"
+                    ),
+                )
+                .with_note(
+                    "a value crossing the boundary takes the receiving unit's type of the same name, so the two must be structurally compatible; rename one of them",
+                ),
+            );
+        }
         capability_info_map.insert(
             cap.clone(),
             CapabilityInfo {

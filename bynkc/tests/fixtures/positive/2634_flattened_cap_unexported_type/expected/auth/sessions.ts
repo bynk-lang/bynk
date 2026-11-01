@@ -7,9 +7,10 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 import * as tokens from "../tokens.js";
 
 export const login = {
-  async call(secret: string, deps: { Jwt: tokens.Jwt }): globalThis.Promise<string> {
+  async call(secret: string, deps: { Jwt: tokens.Jwt }): globalThis.Promise<boolean> {
     const token = await deps.Jwt.sign("u1", secret);
-    return token.raw;
+    const ok = await deps.Jwt.verify(token);
+    return ok;
   },
 };
 
@@ -19,7 +20,7 @@ export interface __AuthSessionsDeps {
 
 export function __makeSurface(deps: __AuthSessionsDeps) {
   return {
-    async login(secret: string): globalThis.Promise<string> {
+    async login(secret: string): globalThis.Promise<boolean> {
       return login.call(secret, deps);
     },
   };

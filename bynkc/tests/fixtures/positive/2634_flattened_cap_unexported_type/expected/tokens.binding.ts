@@ -6,4 +6,7 @@ export class JoseJwt implements Jwt {
     // a real binding would call panva/jose; the gate checks shape, not runtime.
     return { raw: `${sub}.${secret}` };
   }
+  async verify(t: Token): Promise<boolean> {
+    return t.raw.length > 0;
+  }
 }
