@@ -1,3 +1,7 @@
 bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in a record field
 bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in a service handler signature
+bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in a sum-variant payload
+bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in an event field
+bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in a service handler signature
+bynk.types.sql_statement_at_boundary a `SqlStatement` cannot appear in an agent store field
 # exact

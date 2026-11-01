@@ -38,6 +38,15 @@ case "a case body decodes a row with Json.decodeSql" {
 	expect row == Ok(Flag { id: "a", active: true, seen: None })
 }
 
+case "a refined Bool column decodes from 0/1" {
+	let badge = Json.decodeSql[Badge]("{\"id\":\"a\",\"shown\":1,\"hidden\":0}")
+	let encoded = match badge {
+		Ok(b) => Json.encode(b)
+		Err(_) => "did not decode"
+	}
+	expect encoded == "{\"id\":\"a\",\"shown\":true,\"hidden\":{\"kind\":\"Some\",\"value\":false}}"
+}
+
 case "a flag at integration reads back as Bool" as integration {
 	let ok <- setup.call()
 	expect ok

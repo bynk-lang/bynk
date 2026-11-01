@@ -12,6 +12,11 @@ type Item = { id: String, qty: Int }
 
 type Flag = { id: String, active: Bool, seen: Option[Bool] }
 
+// A refined type over `Bool` is a flag column too.
+type Shown = Bool
+
+type Badge = { id: String, shown: Shown, hidden: Option[Shown] }
+
 service setup {
 	on call() -> Effect[Bool] given Flags {
 		let made <- Flags.run("CREATE TABLE IF NOT EXISTS flags (id TEXT PRIMARY KEY, active INTEGER NOT NULL, seen INTEGER, qty INTEGER NOT NULL DEFAULT 0)", [])

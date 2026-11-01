@@ -13,3 +13,25 @@ service exec {
     Orders.batch([s])
   }
 }
+
+type Pending = | Queued(statement: SqlStatement) | Idle
+
+event Prepared = {
+  statement: SqlStatement,
+}
+
+service prepare {
+  on call() -> Effect[Option[SqlStatement]] {
+    Effect.pure(None)
+  }
+}
+
+agent Keeper {
+  key id: String
+
+  store last: Cell[Option[SqlStatement]]
+
+  on call() -> Effect[Int] {
+    Effect.pure(1)
+  }
+}

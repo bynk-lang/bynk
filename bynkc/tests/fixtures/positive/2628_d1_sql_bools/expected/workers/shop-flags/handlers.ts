@@ -27,6 +27,23 @@ export interface Flag {
 export const Flag = {
 };
 
+export type Shown = boolean & { readonly __brand: "shop.flags.Shown" };
+
+export const Shown = {
+  of(value: boolean): Result<Shown, ValidationError> {
+    return Ok(value as Shown);
+  },
+};
+
+export interface Badge {
+  readonly id: string;
+  readonly shown: Shown;
+  readonly hidden: Option<Shown>;
+}
+
+export const Badge = {
+};
+
 export type Flags = bynk_cloudflare.D1;
 
 export const __FlagsToken: symbol = globalThis.Symbol("Flags");
