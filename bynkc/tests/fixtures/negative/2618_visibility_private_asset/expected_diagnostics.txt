@@ -1,0 +1,6 @@
+# #2618: once in the importer, once in its suite.
+# exact
+bynk.visibility.private_item	src/t/web.bynk:8:3
+bynk.visibility.private_item	src/t/web.bynk:12:3
+bynk.visibility.private_item	tests/t/web.bynk:5:12
+bynk.visibility.private_item	tests/t/web.bynk:6:12

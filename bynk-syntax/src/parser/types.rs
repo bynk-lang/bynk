@@ -186,6 +186,7 @@ impl<'a> Parser<'a> {
             documentation: None,
             span: kw.span.merge(end_span),
             trivia: Trivia::default(),
+            private: None,
         })
     }
 

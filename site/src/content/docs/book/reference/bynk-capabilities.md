@@ -1138,7 +1138,8 @@ type Url = {
   the usual edits. A `Url` is a record, so `Url { ...u, path: "/v2" }` works
   too.
 - `isScheme`, `isHost`, `isPath`, `parsePort` and `decodePair` are the pieces `parse` is
-  built from, exported because a commons has no private functions.
+  built from. They were public before a commons could declare `private`
+  helpers, and they stay public so code that calls them keeps compiling.
 
 A `Fetch` caller usually needs only `formatQuery`:
 

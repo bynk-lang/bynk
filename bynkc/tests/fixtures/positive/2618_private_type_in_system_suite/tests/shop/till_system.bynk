@@ -1,0 +1,12 @@
+// #2618: a `system` suite sees each participant as it sees itself, so it may
+// name the participant's private type `Line`.
+suite shop.till as system {
+  case "a participant's private type" {
+    let l = Line { name: "tea", price: 3 }
+    let r <- api.GET("/tea")
+    match r {
+      Ok(body) => expect body == "\(l.name): \(l.price)"
+      _ => expect false
+    }
+  }
+}

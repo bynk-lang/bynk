@@ -1,0 +1,15 @@
+// #2618: the system tier, whose suite uses two commons that both declare
+// `label`. `shop.pricing`'s is private, so `label` is `shop.labels`'s public
+// one, although `shop.pricing` is used first.
+suite shop.till as system {
+  uses shop.pricing
+  uses shop.labels
+
+  case "the public label of the second commons" {
+    let r <- api.GET("/tea")
+    match r {
+      Ok(body) => expect label(body) == "[tea: 3]"
+      _ => expect false
+    }
+  }
+}

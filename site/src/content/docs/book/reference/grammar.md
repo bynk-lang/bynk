@@ -846,6 +846,21 @@ usable as an ordinary identifier elsewhere.
 
 {{#grammar-semantics const_decl}}
 
+### visibility_modifier {#rule-visibility_modifier}
+
+{{#grammar visibility_modifier}}
+
+`private` (#2618), written immediately before a `type`, `fn`, `messages`,
+`asset` or `embed` declaration, makes it unit-private: visible across its own
+unit's files and to that unit's suites, never through `uses`. `private` is a
+contextual keyword, recognised only in that position, so
+`@cache(scope: private)` and a binding named `private` are ordinary
+identifiers. Placement (a commons or context, never an adapter, and never on a
+service, agent, capability, provider, actor or event) is a checker concern,
+not a grammar one (`bynk.visibility.private_not_allowed`).
+
+**See also.** [Design a library's public surface](/book/guides/program-structure/design-a-public-surface/).
+
 ### provider_decl {#rule-provider_decl}
 
 {{#grammar provider_decl}}

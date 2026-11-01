@@ -1419,6 +1419,10 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &a.documentation {
             self.emit_doc(doc);
         }
+        // #2618: the unit-private modifier.
+        if a.private.is_some() {
+            self.push("private ");
+        }
         self.push(&format!(
             "asset {} = \"{}\"",
             a.name.name,
@@ -1435,6 +1439,10 @@ impl<'a> Formatter<'a> {
         self.emit_leading_comments(&e.trivia.leading);
         if let Some(doc) = &e.documentation {
             self.emit_doc(doc);
+        }
+        // #2618: the unit-private modifier.
+        if e.private.is_some() {
+            self.push("private ");
         }
         self.push(&format!(
             "embed {} = \"{}\"",
@@ -1482,6 +1490,10 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &m.documentation {
             self.emit_doc(doc);
         }
+        // #2618: the unit-private modifier.
+        if m.private.is_some() {
+            self.push("private ");
+        }
         self.push(&format!("messages \"{}\"", escape_string(&m.tag)));
         for ann in &m.annotations {
             self.push(" ");
@@ -1512,6 +1524,10 @@ impl<'a> Formatter<'a> {
         self.emit_leading_comments(&t.trivia.leading);
         if let Some(doc) = &t.documentation {
             self.emit_doc(doc);
+        }
+        // #2618: the unit-private modifier.
+        if t.private.is_some() {
+            self.push("private ");
         }
         // v0.157 (ADR 0183): `[A, B]` type parameters, spelled as on a function.
         let params = if t.type_params.is_empty() {
@@ -1765,6 +1781,10 @@ impl<'a> Formatter<'a> {
         self.emit_leading_comments(&f.trivia.leading);
         if let Some(doc) = &f.documentation {
             self.emit_doc(doc);
+        }
+        // #2618: the unit-private modifier.
+        if f.private.is_some() {
+            self.push("private ");
         }
         self.push("fn ");
         self.push(&f.name.display());

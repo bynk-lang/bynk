@@ -354,8 +354,17 @@ module.exports = grammar({
 
     // -- Type declarations --
 
+    // #2618: `private` before a `fn`, `type`, `messages`, `asset` or `embed`
+    // declaration makes it unit-private. The word is contextual: with `word`
+    // set to `identifier`, it lexes as a keyword only where a declaration may
+    // start, so `@cache(scope: private)` and a binding named `private` keep
+    // parsing as identifiers. Placement (a commons or context, never an
+    // adapter) is the compiler's call (`bynk.visibility.private_not_allowed`).
+    visibility_modifier: ($) => "private",
+
     type_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "type",
         field("name", $.identifier),
         // v0.157 (ADR 0183): optional `[A, B]` type parameters — only a record
@@ -435,6 +444,7 @@ module.exports = grammar({
     // (`bynk.asset.outside_context_or_commons` rejects it in an adapter).
     asset_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "asset",
         field("name", $.identifier),
         "=",
@@ -450,6 +460,7 @@ module.exports = grammar({
     // rejects it in an adapter).
     embed_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "embed",
         field("name", $.identifier),
         "=",
@@ -664,6 +675,7 @@ module.exports = grammar({
 
     fn_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "fn",
         field("name", choice($.method_name, $.identifier)),
         // v0.20a: optional `[A, B]` type parameters (functions only).
@@ -751,6 +763,7 @@ module.exports = grammar({
     // mirroring `service_decl`/`agent_decl`'s existing permissive placement.
     messages_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "messages",
         field("tag", $.string_literal),
         repeat(field("annotation", $.store_annotation)),

@@ -1,0 +1,8 @@
+commons shop
+
+uses pricing
+
+// #2618: `lineTotal` is private to `pricing`.
+fn cost(i: Item) -> Int {
+  lineTotal(i)
+}

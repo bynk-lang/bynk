@@ -1,0 +1,2 @@
+bynk.visibility.private_messages a `private` messages bundle is never negotiated by a context that uses `app.quiet`
+bynk.visibility.private_messages `private` has no effect on this `messages` block: the bundle's `@reference` block is public, so a context that uses `app.loud` still negotiates locale "de"

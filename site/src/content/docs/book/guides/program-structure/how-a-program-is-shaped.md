@@ -69,7 +69,9 @@ a running, deployable piece of your system.
 Two relationships wire a program together:
 
 - **`uses`** brings a `commons` into scope — how a context (or another commons)
-  reaches shared types and functions.
+  reaches shared types and functions. A declaration marked `private` stays
+  behind: it is visible only within its own unit (see
+  [Design a library's public surface](/book/guides/program-structure/design-a-public-surface/)).
 - **`consumes`** declares a dependency on *another context's services*. The
   consumer calls them by qualified name (optionally through an `as` alias). This
   is the only way one context calls into another, so the dependency graph between

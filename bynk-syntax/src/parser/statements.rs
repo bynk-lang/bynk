@@ -91,6 +91,7 @@ impl<'a> Parser<'a> {
             documentation: None,
             span,
             trivia: Trivia::default(),
+            private: None,
         })
     }
 

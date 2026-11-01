@@ -148,6 +148,20 @@ name's case, the closed set of initialisers and the cycle rule are
 well-formedness: §5.12b. `const` is a contextual keyword, so it remains usable
 as an ordinary identifier elsewhere.
 
+### §4.1.12d visibility_modifier {#4112d-visibility_modifier}
+
+{{#grammar visibility_modifier}}
+
+`private`, written immediately before a `type`, `fn` (a free function or a
+method), `messages`, `asset` or `embed` declaration, makes that declaration
+unit-private. `private` is a contextual keyword (§3): it is the modifier only
+in that position and an ordinary identifier everywhere else, so
+`@cache(scope: private)` and a binding named `private` are unaffected. The
+compiler also recognises `private` before a `service`, `agent`, `capability`,
+`provides`, `actor` or `event` declaration, and in an adapter, in order to
+reject it precisely (`bynk.visibility.private_not_allowed`). Visibility is
+well-formedness: §5.1.
+
 ### §4.1.13 messages_decl (v0.228) {#4113-messages_decl}
 
 {{#grammar messages_decl}}

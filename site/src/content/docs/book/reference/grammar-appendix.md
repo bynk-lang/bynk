@@ -30,15 +30,16 @@ exports_decl ::= "exports" ("opaque" | "transparent" | "capability") "{" (identi
 type_param ::= identifier (":" identifier ("+" identifier)*)?
 where_clause ::= "where" where_bound ("," where_bound)*
 where_bound ::= identifier ":" identifier ("+" identifier)*
-type_decl ::= "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body ("derives" identifier ("+" identifier)*)?
+visibility_modifier ::= "private"
+type_decl ::= visibility_modifier? "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body ("derives" identifier ("+" identifier)*)?
 type_body ::= opaque_type | refined_type | record_type | sum_type | enum_type
 opaque_type ::= "opaque" base_type ("where" refinement)?
 refined_type ::= base_type ("where" refinement)?
 record_type ::= "{" (record_field ("," record_field)*)? ","? "}"
 record_field ::= identifier ":" type_ref ("where" refinement)? ("=" expression)?
 event_decl ::= "event" identifier store_annotation* "=" record_type
-asset_decl ::= "asset" identifier "=" string_literal ("at" string_literal)?
-embed_decl ::= "embed" identifier "=" string_literal
+asset_decl ::= visibility_modifier? "asset" identifier "=" string_literal ("at" string_literal)?
+embed_decl ::= visibility_modifier? "embed" identifier "=" string_literal
 const_decl ::= "const" identifier ":" type_ref "=" expression
 sum_type ::= sum_variant+ ("embeds" type_ref "as" constant_name ("," type_ref "as" constant_name)*)?
 sum_variant ::= "|" constant_name ("(" (variant_payload_field ("," variant_payload_field)*)? ","? ")")?
@@ -56,7 +57,7 @@ function_type_ref ::= (base_type | unit_type | validation_error_type | generic_t
 unit_type ::= "(" ")"
 validation_error_type ::= "ValidationError"
 generic_type_ref ::= ("Option" | "Effect" | "HttpResult" | "List" | "Set" | "Stream" | "Query" | "Connection" | "History") "[" type_ref "]" | ("Result" | "Map") "[" type_ref "," type_ref "]"
-fn_decl ::= "fn" (method_name | identifier) ("[" type_param ("," type_param)* "]")? "(" params? ")" "->" type_ref where_clause? requires_clause* ensures_clause* block
+fn_decl ::= visibility_modifier? "fn" (method_name | identifier) ("[" type_param ("," type_param)* "]")? "(" params? ")" "->" type_ref where_clause? requires_clause* ensures_clause* block
 method_name ::= identifier "." identifier
 requires_clause ::= "requires" identifier ":" expression
 ensures_clause ::= "ensures" identifier ":" expression
@@ -65,7 +66,7 @@ self_param ::= "self"
 param ::= identifier ":" type_ref
 capability_decl ::= "capability" identifier ("{" capability_op* "}" | "=" identifier store_annotation*)
 capability_op ::= "fn" identifier ("[" type_param ("," type_param)* "]")? "(" (param ("," param)*)? ","? ")" "->" type_ref
-messages_decl ::= "messages" string_literal store_annotation* "{" message_entry* "}"
+messages_decl ::= visibility_modifier? "messages" string_literal store_annotation* "{" message_entry* "}"
 message_entry ::= string_literal "=>" string_literal ","?
 provider_decl ::= "provides" identifier "=" identifier given_clause? ("{" provider_op* "}")?
 provider_op ::= "fn" identifier "(" (param ("," param)*)? ","? ")" "->" type_ref block

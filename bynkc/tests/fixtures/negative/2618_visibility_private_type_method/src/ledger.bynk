@@ -1,0 +1,4 @@
+commons ledger
+
+// A public `Tally` of another commons, with no methods of its own.
+type Tally = { lines: Int, sum: Int }

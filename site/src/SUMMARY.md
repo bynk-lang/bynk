@@ -42,6 +42,7 @@
     - [Consume another context's services](guides/program-structure/consume-services.md)
     - [Add an option without breaking callers](guides/program-structure/add-an-option.md)
     - [Document your code](guides/program-structure/document-your-code.md)
+    - [Design a library's public surface](guides/program-structure/design-a-public-surface.md)
   - [Effects & capabilities](guides/effects-and-capabilities/index.md)
     - [Understand the capability model](guides/effects-and-capabilities/understand-the-capability-model.md)
     - [Synchronous and asynchronous sends](guides/effects-and-capabilities/synchronous-and-asynchronous-sends.md)

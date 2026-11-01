@@ -70,6 +70,10 @@ pub const TOK_DECORATOR: u32 = 10;
 /// Legend index of the `interface` token type (constraint names in a bound).
 pub const TOK_INTERFACE: u32 = 15;
 
+/// Legend index of the `keyword` token type (#2618: `private` in modifier
+/// position, a contextual keyword the editor grammars may not know).
+pub const TOK_KEYWORD: u32 = 17;
+
 const MOD_DECLARATION: u32 = 1 << 0;
 const MOD_REFINED: u32 = 1 << 1;
 const MOD_OPAQUE: u32 = 1 << 2;
@@ -141,7 +145,8 @@ pub fn semantic_tokens(
     // Disjoint from the index/local tokens — annotations are neither symbols nor
     // locals — so they merge into the same sorted stream.
     // Constrained generics slice 0: constraint names ride the same list, as
-    // `interface` (the caller classifies each span).
+    // `interface` (the caller classifies each span). #2618: so does each
+    // `private` modifier, as `keyword`.
     for &(span, ty) in syntax_tokens {
         if in_scope(span) {
             raw.push((span, ty, 0));
@@ -244,6 +249,7 @@ mod tests {
                 "embed",     // #2387: embedded-text names — appended
                 "interface", // constrained generics slice 0: constraint names — appended
                 "constant",  // #2617: named constants — appended
+                "keyword",   // #2618: contextual `private` modifier — appended
             ]
         );
         let modifiers: Vec<&str> = legend.token_modifiers.iter().map(|m| m.as_str()).collect();

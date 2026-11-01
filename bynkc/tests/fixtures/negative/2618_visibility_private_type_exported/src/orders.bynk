@@ -1,0 +1,6 @@
+context orders
+
+exports transparent { Order }
+
+// #2618: a context may not export a private type.
+private type Order = { id: String }

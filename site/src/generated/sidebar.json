@@ -151,6 +151,10 @@
           {
             "label": "Document your code",
             "link": "/book/guides/program-structure/document-your-code/"
+          },
+          {
+            "label": "Design a library's public surface",
+            "link": "/book/guides/program-structure/design-a-public-surface/"
           }
         ]
       },

@@ -1,0 +1,8 @@
+commons shop
+
+uses pricing
+
+// #2618: `Tally` is private to `pricing`, so `shop` cannot name it.
+fn empty() -> Tally {
+  Tally { lines: 0, sum: 0 }
+}
