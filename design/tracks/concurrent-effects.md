@@ -355,10 +355,12 @@ a sub-issue of #2615.
   slice 0.
 - **Slice 3 — A general timeout**, `within(d)`, with harness-clock support and
   the `waitUntil` handover for abandoned work. Shipped in #2693
-  ([#2683](https://github.com/bynk-lang/bynk/issues/2683), ADR 0687). It refuses `within`
-  in an effectful `fn` until
-  [#2682](https://github.com/bynk-lang/bynk/issues/2682) (`~>` in a function
-  has no execution context) is resolved.
+  ([#2683](https://github.com/bynk-lang/bynk/issues/2683), ADR 0687). `within`
+  is legal only in a service handler's body: it is refused in an agent handler,
+  a WebSocket handler, a provider operation and any `fn`, none of which has an
+  execution context to hand the abandoned work to. The `fn` refusal can lift once
+  [#2682](https://github.com/bynk-lang/bynk/issues/2682) (`~>` in a function)
+  is resolved.
 - **Slice 4 — Race (loser runs to completion)**, not planned. Q7 adopted no
   general race for this track; this stays as a possible later slice.
 
