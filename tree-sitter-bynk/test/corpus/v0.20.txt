@@ -120,7 +120,8 @@ fn demo() -> String {
       (identifier))
     (fn_decl
       (identifier)
-      (identifier)
+      (type_param
+        (identifier))
       (param
         (identifier)
         (identifier))

@@ -1,0 +1,21 @@
+context demo
+
+// #2640: two bindings of one name leave it unclear which is in scope after.
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+  fn touch(id: Int) -> Effect[()]
+}
+
+service dash {
+  on call(id: Int) -> Effect[Int] given Orders {
+    par {
+      let n <- Orders.forUser(id)
+      let n <- Orders.forUser(id)
+    }
+    Effect.pure(0)
+  }
+}

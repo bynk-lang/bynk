@@ -1500,11 +1500,7 @@ impl<'a> Formatter<'a> {
         let params = if t.type_params.is_empty() {
             String::new()
         } else {
-            let names: Vec<&str> = t
-                .type_params
-                .iter()
-                .map(|tp| tp.name.name.as_str())
-                .collect();
+            let names: Vec<String> = t.type_params.iter().map(type_param_text).collect();
             format!("[{}]", names.join(", "))
         };
         self.push(&format!("type {}{} = ", t.name.name, params));
@@ -1742,17 +1738,24 @@ impl<'a> Formatter<'a> {
         self.push(&f.name.display());
         // v0.20a: `[A, B]` type parameters.
         if !f.type_params.is_empty() {
-            let names: Vec<&str> = f
-                .type_params
-                .iter()
-                .map(|tp| tp.name.name.as_str())
-                .collect();
+            let names: Vec<String> = f.type_params.iter().map(type_param_text).collect();
             self.push(&format!("[{}]", names.join(", ")));
         }
+        // A method's `where A: Eq` clause rides after the return type.
+        let where_text = if f.where_bounds.is_empty() {
+            String::new()
+        } else {
+            let entries: Vec<String> = f
+                .where_bounds
+                .iter()
+                .map(|wb| format!("{}: {}", wb.param.name, bounds_text(&wb.bounds)))
+                .collect();
+            format!(" where {}", entries.join(", "))
+        };
         // The signature tail that shares the parameter list's line: ` -> Ret`
         // plus the body's ` {` (a contract clause moves the body to its own
         // line, so only the return type counts then).
-        let tail = format!(" -> {}", type_ref_to_string(&f.return_type));
+        let tail = format!(" -> {}{where_text}", type_ref_to_string(&f.return_type));
         let reserve = if f.requires.is_empty() && f.ensures.is_empty() {
             tail.chars().count() + " {".len()
         } else {
@@ -1761,6 +1764,7 @@ impl<'a> Formatter<'a> {
         self.format_params(&f.params, f.has_self, reserve);
         self.push(" -> ");
         self.format_type_ref(&f.return_type);
+        self.push(&where_text);
         // v0.115: contract clauses on their own indented lines between the
         // return type and the body (`requires`/`ensures <name>: <pred>`).
         if f.requires.is_empty() && f.ensures.is_empty() {
@@ -1871,11 +1875,7 @@ impl<'a> Formatter<'a> {
                 f.push(&op.name.name);
                 // #926: `[T, …]` type parameters on the op itself.
                 if !op.type_params.is_empty() {
-                    let names: Vec<&str> = op
-                        .type_params
-                        .iter()
-                        .map(|tp| tp.name.name.as_str())
-                        .collect();
+                    let names: Vec<String> = op.type_params.iter().map(type_param_text).collect();
                     f.push(&format!("[{}]", names.join(", ")));
                 }
                 let reserve = 4 + type_ref_to_string(&op.return_type).chars().count();
@@ -2511,10 +2511,19 @@ impl<'a> Formatter<'a> {
             .principal
             .as_ref()
             .map(|p| format!(" {}", call_site_actor_src(p)));
-        let reserve = principal.as_deref().map_or(0, |p| p.chars().count()) + " else {".len();
+        let else_width = if le.form == LetElseForm::Plain {
+            0
+        } else {
+            " else {".len()
+        };
+        let reserve = principal.as_deref().map_or(0, |p| p.chars().count()) + else_width;
         self.format_expr_at(&l.value, 0, reserve);
         if let Some(principal) = principal {
             self.push(&principal);
+        }
+        // #2654: the `else`-less form of an irrefutable record pattern.
+        if le.form == LetElseForm::Plain {
+            return;
         }
         self.push(" else ");
         match (le.form, arms.get(1).map(|a| &a.body)) {
@@ -2579,6 +2588,20 @@ impl<'a> Formatter<'a> {
             Statement::Advance(a) => {
                 self.push(&format!("advance {} by ", a.cap.name));
                 self.format_expr(&a.amount);
+            }
+            Statement::Par(p) => {
+                self.push("par {");
+                self.newline();
+                self.indented(|f| {
+                    for stmt in &p.statements {
+                        let trivia = statement_trivia(stmt);
+                        f.emit_leading_comments(&trivia.leading);
+                        f.format_statement(stmt);
+                        f.emit_trailing_comment_or_newline(trivia.trailing.as_deref());
+                    }
+                    f.emit_leading_comments(&p.closing_comments);
+                });
+                self.push("}");
             }
         }
     }
@@ -3289,6 +3312,7 @@ fn statement_trivia(s: &Statement) -> &Trivia {
         Statement::Do(d) => &d.trivia,
         Statement::Assign(a) => &a.trivia,
         Statement::Advance(a) => &a.trivia,
+        Statement::Par(p) => &p.trivia,
     }
 }
 
@@ -3853,7 +3877,7 @@ fn let_else_binding(s: &Statement) -> Option<(&LetStmt, bool, &LetElse)> {
 /// #2010: a `let … else` pattern as source. After `let`, a bare name is a
 /// binding, not a pattern (`let Missing | Late = p` would re-parse as a
 /// binding named `Missing`), so a pattern whose text opens with a name not
-/// followed by `(` or `.` keeps the parentheses its author had to write.
+/// followed by `(`, `.` or `{` keeps the parentheses its author had to write.
 /// `None`, `true` and `false` are keywords, not names, so they need none.
 fn let_pattern_src(p: &Pattern) -> String {
     let src = pattern_to_string(p);
@@ -3863,7 +3887,9 @@ fn let_pattern_src(p: &Pattern) -> String {
     let opens_with_name = src.starts_with(|c: char| c.is_ascii_alphabetic())
         && !matches!(&src[..name_len], "None" | "true" | "false");
     let then = src[name_len..].chars().next();
-    if opens_with_name && !matches!(then, Some('(' | '.')) {
+    // #2654: `Name {` opens a record pattern, so it needs no parentheses.
+    let opens_record = src[name_len..].trim_start().starts_with('{');
+    if opens_with_name && !opens_record && !matches!(then, Some('(' | '.')) {
         format!("({src})")
     } else {
         src
@@ -3883,6 +3909,7 @@ fn let_else_to_string(l: &LetStmt, effectful: bool, le: &LetElse, arms: &[MatchA
         out.push_str(&format!(" {}", call_site_actor_src(p)));
     }
     match (le.form, arms.get(1).map(|a| &a.body)) {
+        (LetElseForm::Plain, _) => {}
         (LetElseForm::Block, Some(MatchBody::Block(otherwise))) => {
             out.push_str(&format!(" else {}", format_block_oneline(otherwise)));
         }
@@ -3936,12 +3963,63 @@ fn stmt_to_string(s: &Statement) -> String {
         Statement::Advance(a) => {
             format!("advance {} by {}", a.cap.name, expr_with_prec(&a.amount, 0))
         }
+        Statement::Par(p) => {
+            let body: Vec<String> = p.statements.iter().map(stmt_to_string).collect();
+            format!("par {{ {} }}", body.join(" "))
+        }
     }
+}
+
+/// `T` or `T: Eq + C`: a type parameter as written, bounds included.
+fn type_param_text(tp: &TypeParam) -> String {
+    if tp.bounds.is_empty() {
+        tp.name.name.clone()
+    } else {
+        format!("{}: {}", tp.name.name, bounds_text(&tp.bounds))
+    }
+}
+
+fn bounds_text(bounds: &[Ident]) -> String {
+    bounds
+        .iter()
+        .map(|b| b.name.as_str())
+        .collect::<Vec<_>>()
+        .join(" + ")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Constrained generics slice 0: bounds and a method's `where` clause print as
+    /// written, and the output is a fixed point.
+    #[test]
+    fn bounds_and_where_clauses_round_trip() {
+        let src = "commons m\n\ntype Pair[T: Eq] = {\n\tleft: T,\n}\n\nfn same[T: Eq + Ord, U](a: T, b: T, u: U) -> Bool {\n\ta == b\n}\n\nfn Pair.has(self, x: T) -> Bool where T: Eq, T: Ord {\n\tself.left == x\n}\n\nfn Pair.has2(self, x: T) -> Bool where T: Eq\n\trequires p: true\n{\n\tself.left == x\n}\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(out, src);
+    }
+
+    /// #2640: a `par` block prints one binding per line, indented, and the
+    /// output is a fixed point; comments around and inside it stay put.
+    #[test]
+    fn par_block_round_trips() {
+        let src = "commons x\n\nfn f(id: Int) -> Effect[Int] {\n\t// load both\n\tpar {\n\t\t// the user\n\t\tlet user <- Users.get(id)  // trailing\n\t\tlet orders: Int <- Orders.forUser(id)\n\t\tdo Audit.touch(id)\n\t\t// last word\n\t}\n\tEffect.pure(user + orders)\n}\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(out, src);
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
+
+    #[test]
+    fn par_block_is_reindented_and_split_onto_lines() {
+        let messy = "commons x\n\nfn f(id: Int) -> Effect[Int] {\n  if id > 0 {   par { let a <- A.get(id)   let b <- B.get(id) }\n  Effect.pure(a + b) } else { Effect.pure(0) }\n}\n";
+        let out = format_source(messy, &FormatOptions::default()).unwrap();
+        assert!(
+            out.contains("\t\tpar {\n\t\t\tlet a <- A.get(id)\n\t\t\tlet b <- B.get(id)\n\t\t}\n"),
+            "{out}"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
 
     /// #2321: a binding's `includes` list prints between the module and
     /// `requires`, and the output is a fixed point.

@@ -1,0 +1,21 @@
+context demo
+
+// #2640: a plain `let` has no effect to overlap.
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+  fn touch(id: Int) -> Effect[()]
+}
+
+service dash {
+  on call(id: Int) -> Effect[Int] given Users {
+    par {
+      let a <- Users.get(id)
+      let b = 1
+    }
+    Effect.pure(0)
+  }
+}

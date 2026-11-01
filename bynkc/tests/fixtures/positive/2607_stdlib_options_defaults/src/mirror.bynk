@@ -1,0 +1,32 @@
+---
+#2607 (Decision H): the first-party options records declare defaults that
+reproduce the plain operation, so a literal built in another unit may leave
+any of them out. `FetchOptions {}` is `send`'s behaviour.
+---
+context mirror
+
+consumes bynk { Fetch }
+
+fn request(url: String) -> Request {
+	Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None }
+}
+
+service plain {
+	on call(url: String) -> Effect[Int] given Fetch {
+		let res <- Fetch.sendWith(request(url), FetchOptions {})
+		match res {
+			Ok(r) => Effect.pure(r.status)
+			Err(_) => Effect.pure(-1)
+		}
+	}
+}
+
+service bounded {
+	on call(url: String) -> Effect[Int] given Fetch {
+		let res <- Fetch.sendWith(request(url), FetchOptions { timeout: Some(5.seconds) })
+		match res {
+			Ok(r) => Effect.pure(r.status)
+			Err(_) => Effect.pure(-1)
+		}
+	}
+}

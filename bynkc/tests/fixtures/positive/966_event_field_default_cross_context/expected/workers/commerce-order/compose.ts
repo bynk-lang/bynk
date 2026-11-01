@@ -18,5 +18,8 @@ export function compose(env: Env) {
     async markPaid(orderId: string) {
       return handlers.markPaid.call(orderId, deps);
     },
+    async markPaidDomestic(orderId: string) {
+      return handlers.markPaidDomestic.call(orderId, deps);
+    },
   };
 }

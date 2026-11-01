@@ -212,6 +212,10 @@
   ],
   "capability_op": [
     {
+      "code": "bynk.generics.bound_on_capability_op",
+      "summary": "A generic capability operation's type parameter carries a bound; operations take no bounds yet."
+    },
+    {
       "code": "bynk.parse.expected_capability_op",
       "summary": "Expected a capability operation."
     }
@@ -622,8 +626,8 @@
       "summary": "A *static* method is attached to a generic type; static methods on generic types are deferred (they have no receiver to supply the type's parameters). Instance methods on generic types are supported (#594)."
     },
     {
-      "code": "bynk.generics.no_bounds",
-      "summary": "A type parameter carries a bound (`[A: …]`); bounded generics are not in v0.20a."
+      "code": "bynk.generics.missing_eq_bound",
+      "summary": "A type parameter is compared with `==`/`!=`, or passed to an `Eq`-bounded parameter of another generic, but is not declared `Eq` (`[T: Eq]`, or `where A: Eq` for a receiver type's parameter). The diagnostic carries a machine-applicable fix (ADR 0430, amended by constrained-generics slice 0)."
     },
     {
       "code": "bynk.resolve.duplicate_fn",
@@ -825,7 +829,7 @@
     },
     {
       "code": "bynk.parse.let_pattern_without_else",
-      "summary": "A `let` binds a pattern but has no `else` saying what the block produces when the value does not match."
+      "summary": "A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it."
     }
   ],
   "let_stmt": [
@@ -946,6 +950,24 @@
     {
       "code": "bynk.types.ok_value_mismatch",
       "summary": "An `Ok` payload has the wrong type."
+    }
+  ],
+  "par_stmt": [
+    {
+      "code": "bynk.par.invalid_statement",
+      "summary": "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement."
+    },
+    {
+      "code": "bynk.par.question_in_join",
+      "summary": "A `?` appears inside a `par { … }` binding. Propagating a failure in source order across a join is a later increment, so the block takes no `?` yet; match on the result after the block."
+    },
+    {
+      "code": "bynk.par.sibling_name",
+      "summary": "A `par { … }` binding mentions a name another binding in the same block binds, or binds a name twice. The bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding."
+    },
+    {
+      "code": "bynk.par.single_binding",
+      "summary": "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning)."
     }
   ],
   "param": [
@@ -1338,6 +1360,12 @@
       "summary": "A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals."
     }
   ],
+  "type_param": [
+    {
+      "code": "bynk.generics.unknown_constraint",
+      "summary": "A bound names something that is not a constraint; `Eq` is the only one."
+    }
+  ],
   "uses_decl": [
     {
       "code": "bynk.parse.uses_after_decls",
@@ -1414,6 +1442,12 @@
     {
       "code": "bynk.types.unknown_variant_in_pattern",
       "summary": "A pattern names a variant the sum type does not have."
+    }
+  ],
+  "where_clause": [
+    {
+      "code": "bynk.generics.unknown_where_param",
+      "summary": "A method's `where` clause bounds a name that is not a type parameter of the method or of its receiver type."
     }
   ]
 }

@@ -611,7 +611,9 @@ depends on, and the providers that implement them.
 
 {{#grammar fn_decl}}
 
-A function or method: a name, parameters, a return type, and a block body.
+A function or method: a name, an optional type-parameter list (each parameter
+may carry bounds), parameters, a return type, an optional `where` clause, and a
+block body.
 
 **Example.**
 ```bynk
@@ -628,6 +630,43 @@ commons demo {
 {{#grammar-semantics fn_decl}}
 
 **See also.** [Operators & built-ins](/book/reference/operators/).
+
+### type_param {#rule-type_param}
+
+{{#grammar type_param}}
+
+A type parameter of a `fn`, `type` or capability operation, with optional bounds:
+`T`, `T: Eq`. The only constraint is `Eq` (`bynk.generics.unknown_constraint`
+otherwise). See [Generics and bounds](/book/reference/generics/).
+
+**Example.**
+```bynk
+commons demo {
+  fn same[T: Eq](a: T, b: T) -> Bool {
+    a == b
+  }
+}
+```
+
+**Static semantics.**
+{{#grammar-semantics type_param}}
+
+### where_clause {#rule-where_clause}
+
+{{#grammar where_clause}}
+
+A method's `where` clause: bounds on the receiver type's type parameters, between
+the return type and any contract clause (`fn Box.has(self, x: A) -> Bool where A:
+Eq`).
+
+**Static semantics.**
+{{#grammar-semantics where_clause}}
+
+### where_bound {#rule-where_bound}
+
+{{#grammar where_bound}}
+
+One `A: Eq` entry of a `where` clause.
 
 ### requires_clause {#rule-requires_clause}
 
@@ -1789,6 +1828,13 @@ what the enclosing block produces instead of its remaining statements, so it has
 that block's type. It is a [`block`](#rule-block) or a
 [`let_else_match`](#rule-let_else_match).
 
+The `else` may be omitted when the pattern is an irrefutable
+[`record_pattern`](#rule-record_pattern) (#2654): `let Item { sku, qty, .. } = item`
+binds `sku` and `qty` for the rest of the block, and `<-` works the same way. A
+record pattern with a refutable field (`status: Paid`) still needs its `else`
+(`bynk.parse.let_pattern_without_else`). See
+[Destructure a record with `let`](/book/guides/type-system/destructure-a-record-with-let/).
+
 **Static semantics.**
 {{#grammar-semantics let_else_stmt}}
 
@@ -1807,7 +1853,8 @@ over the values the `let` pattern does not cover, so an arm can bind them
 The patterns that may follow `let` in a `let … else`: a literal, a parenthesised
 pattern, or a variant written with a payload or a qualifier. A bare name after
 `let` is always a binding, so a nullary variant is written `Status.Done` or
-`(Done)`.
+`(Done)`. A [`record_pattern`](#rule-record_pattern) (`Item { sku, .. }`) also
+opens a `let` pattern: a capitalised name followed by `{`.
 
 ### let_variant_pattern {#rule-_let_variant_pattern}
 
@@ -1846,6 +1893,14 @@ The single patterns an [`is_pattern`](#rule-_is_pattern) is built from.
 
 An [`or_pattern`](#rule-or_pattern) after `is`, whose alternatives are
 [`is_base_pattern`](#rule-_is_base_pattern)s.
+
+### let_paren_record_pattern {#rule-_let_paren_record_pattern}
+
+{{#grammar _let_paren_record_pattern}}
+
+A [`record_pattern`](#rule-record_pattern) in parentheses after `let`
+(`let (Item { sku, .. }) = item`). The parentheses are redundant and the
+formatter drops them (#2654).
 
 ### effect_send_stmt {#rule-effect_send_stmt}
 
@@ -1890,6 +1945,25 @@ forward. `advance` is contextual: it opens a statement only before
 
 **Static semantics.**
 {{#grammar-semantics advance_stmt}}
+
+### par_stmt {#rule-par_stmt}
+
+{{#grammar par_stmt}}
+
+`par { … }` (#2640) is a concurrent binding block: it issues every effect it holds
+before awaiting any, and completes when all have settled. `par` is contextual: it
+opens a statement only before `{`. See
+[Joining independent effects](/book/reference/capabilities/#par).
+
+**Static semantics.**
+{{#grammar-semantics par_stmt}}
+
+### par_statement {#rule-_par_statement}
+
+{{#grammar _par_statement}}
+
+What a [`par_stmt`](#rule-par_stmt) may hold in the grammar: every statement but a
+`let … else`. The compiler narrows it to `let x <- e` and `do e`.
 
 ### expect_expr {#rule-expect_expr}
 
@@ -1941,9 +2015,10 @@ surface. A test-only builtin.
 
 {{#grammar _contextual_identifier}}
 
-`trace` and `advance` used as ordinary names. Both are contextual keywords —
-`trace` only in [`trace_expr`](#rule-trace_expr) and `advance` only in
-[`advance_stmt`](#rule-advance_stmt) — so outside those shapes each is an
+`trace`, `advance` and `par` used as ordinary names. Each is a contextual keyword —
+`trace` only in [`trace_expr`](#rule-trace_expr), `advance` only in
+[`advance_stmt`](#rule-advance_stmt) and `par` only in
+[`par_stmt`](#rule-par_stmt) — so outside those shapes each is an
 [`identifier`](#rule-identifier) like any other: a binding, a parameter, a call,
 or an assignment target.
 

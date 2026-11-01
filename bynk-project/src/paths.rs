@@ -810,7 +810,7 @@ fn workers_config_from(table: &toml::Table) -> Result<WorkersConfig, ProjectPath
 /// experimental first-party items it opts into using.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct UnstableConfig {
-    /// Item paths (`bynk.cloudflare.D1`, `bynk.cloudflare.Kv.list`), in
+    /// Item paths (`bynk.cloudflare.R2`, `bynk.cloudflare.Kv.list`), in
     /// manifest order. An entry covers itself and everything under it. Whether
     /// each one names something experimental is the checker's to say, since it
     /// holds the standard library's registry.
@@ -1496,7 +1496,7 @@ mod manifest_tests {
     #[test]
     fn unstable_allow_must_be_a_list_of_strings() {
         let msg = "`[unstable]` `allow` must be a list of strings";
-        assert!(err("[unstable]\nallow = \"bynk.cloudflare.D1\"\n").contains(msg));
+        assert!(err("[unstable]\nallow = \"bynk.cloudflare.R2\"\n").contains(msg));
         assert!(err("[unstable]\nallow = [\"a\", 1]\n").contains(msg));
         assert!(err("[unstable]\nallows = []\n").contains("did you mean `allow`?"));
         check_manifest_str("[unstable]\nallow = [\"bynk.anything\"]\n")

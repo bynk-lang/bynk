@@ -5,8 +5,9 @@
 //! from the project root and the overlay: the editor's overlay carries the open
 //! `bynk.toml`, and a CLI build reads it from disk. This test runs one project
 //! through both and requires the same diagnostics for its `[unstable]` entries.
-//! Nothing shipped is experimental yet, so every entry that names an item is
-//! stale; the experimental-use rule itself is tested end to end, under a
+//! Every entry here that names an item is stale: `bynk.list` was never
+//! experimental, and `bynk.cloudflare.D1` graduated (P4d, #2652). The
+//! experimental-use rule itself is tested end to end, under a
 //! supplied policy, in `bynk-check/src/stability.rs`.
 
 use bynkc::Roots;
@@ -14,7 +15,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::process::Command;
 
-const MANIFEST: &str = "[project]\nname = \"opt-in\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.list\", \"bynk.cloudflare.Kvv\"]\n";
+const MANIFEST: &str = "[project]\nname = \"opt-in\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.list\", \"bynk.cloudflare.D1\", \"bynk.cloudflare.Kvv\"]\n";
 
 const SOURCE: &str = "context app.probe\n\nuses bynk.list\n\nservice probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n";
 
@@ -86,6 +87,10 @@ fn the_build_and_the_editor_report_the_same_unstable_diagnostics() {
         (
             "bynk.project.unstable_not_experimental".to_string(),
             "bynk.list".to_string(),
+        ),
+        (
+            "bynk.project.unstable_not_experimental".to_string(),
+            "bynk.cloudflare.D1".to_string(),
         ),
         (
             "bynk.project.unstable_unknown_item".to_string(),

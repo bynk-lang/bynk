@@ -86,3 +86,10 @@ export function count(p: Page<number>): number {
   const count = p.count;
   return count;
 }
+
+export function summary(o: Order): string {
+  const __letElse1233 = o;
+  const id = __letElse1233.id;
+  const total = __letElse1233.total;
+  return `${String(id)}: ${String(total)}`;
+}

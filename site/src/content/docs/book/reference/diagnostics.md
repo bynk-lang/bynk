@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **652** codes in total.
+There are **659** codes in total.
 
 ## Agents
 
@@ -326,11 +326,9 @@ There are **652** codes in total.
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
 | `bynk.duration.literal_overflow` | A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range. |  | — |
-| `bynk.event.bad_field_default` | An event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. |  | — |
 | `bynk.event.bad_params` | An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope. |  | — |
 | `bynk.event.bad_schema_dispatch` | A `via schema(...)` dispatch clause's argument is malformed — it must be a single, positive, positional `Int` literal. |  | — |
 | `bynk.event.bad_schema_version` | An event's `@schema(N)` annotation is malformed — `N` must be a single, positive, positional `Int` literal, and `@schema` may appear at most once on an event. |  | — |
-| `bynk.event.default_outside_event` | A field default (`field: T = expr`) was written on a record field outside an `event` declaration — a default is only meaningful on an event's own field, since it exists to let an older wire event missing this key still deserialise. |  | — |
 | `bynk.event.duplicate_handler` | A `from Events` service declares more than one `on event` handler; it has exactly one. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
 | `bynk.event.emit_not_an_event` | `Events.emit[E]` named a type `E` that is declared in this context, but is not itself an `event` — only an `event` type may be emitted. |  | — |
 | `bynk.event.emit_outside_owner` | `Events.emit[E]` named an event `E` not declared in the emitting context — only an event's declaring context may emit it. |  | — |
@@ -349,16 +347,19 @@ There are **652** codes in total.
 | `bynk.fmt.comment_loss` | The formatter would drop a comment, so it leaves the file unchanged. |  | — |
 | `bynk.fmt.mixed_comment_syntax` | A file mixes the retired `--` comment or `--|` doc spellings with a line that reads differently under the old and new comment rules (#2203), so the formatter leaves it unchanged. |  | — |
 | `bynk.fmt.roundtrip` | The formatter's output does not re-parse to the same program, so it leaves the file unchanged. |  | — |
+| `bynk.generics.bound_on_capability_op` | A generic capability operation's type parameter carries a bound; operations take no bounds yet. | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
 | `bynk.generics.duplicate_type_param` | A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183). |  | — |
 | `bynk.generics.generic_non_record` | A `type` declaration carries type parameters on a refined or opaque body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.generics.generic_record_at_boundary` | A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). Since v0.174 a generic-record instantiation may otherwise cross a boundary through its monomorphised codec. |  | — |
 | `bynk.generics.generic_sum_embeds` | A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.generics.method_on_generic_type` | A *static* method is attached to a generic type; static methods on generic types are deferred (they have no receiver to supply the type's parameters). Instance methods on generic types are supported (#594). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.generics.no_bounds` | A type parameter carries a bound (`[A: …]`); bounded generics are not in v0.20a. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| `bynk.generics.missing_eq_bound` | A type parameter is compared with `==`/`!=`, or passed to an `Eq`-bounded parameter of another generic, but is not declared `Eq` (`[T: Eq]`, or `where A: Eq` for a receiver type's parameter). The diagnostic carries a machine-applicable fix (ADR 0430, amended by constrained-generics slice 0). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.generics.recursive_generic_at_boundary` | A recursive generic record (one that transitively contains itself, through any wrapper or generic argument) appears at a boundary; it has no finite set of monomorphised codecs, so it is not yet boundary-serialisable (ADR 0197). |  | — |
 | `bynk.generics.type_arg_count` | A user-declared generic type is applied to the wrong number of type arguments, or a generic type is named without its `[…]` arguments (v0.157, ADR 0183). | [`applied_type_ref`](/book/reference/grammar/#rule-applied_type_ref) | — |
 | `bynk.generics.type_arg_mismatch` | Inferred or explicit type arguments conflict, have the wrong arity, target a non-generic function, or a type parameter shadows a declared type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.generics.uninferable_type_arg` | A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value in v0.20a. | [`call`](/book/reference/grammar/#rule-call) | — |
+| `bynk.generics.unknown_constraint` | A bound names something that is not a constraint; `Eq` is the only one. | [`type_param`](/book/reference/grammar/#rule-type_param) | — |
+| `bynk.generics.unknown_where_param` | A method's `where` clause bounds a name that is not a type parameter of the method or of its receiver type. | [`where_clause`](/book/reference/grammar/#rule-where_clause) | — |
 | `bynk.held.branch_divergence` | Branches of a conditional leave a held value (e.g. `Connection[F]`) in inconsistent ownership states — one consumes or stores it, another leaves it owned (§2.9.5, real-time track slice 2). |  | — |
 | `bynk.held.consume_on_borrow` | A consuming operation (`close`/`put`/`take`) is called on a *borrowed* held reference — borrows admit only non-consuming operations like `send` (§2.9.3, real-time track slice 2). |  | — |
 | `bynk.held.leak` | A held value (`Connection[F]`) is still owned at scope exit — it must be disposed (stored, closed, or transferred) before the handler or function returns (§2.9.1, real-time track slice 2). |  | — |
@@ -399,6 +400,10 @@ There are **652** codes in total.
 | `bynk.package.unsafe_source` | A git dependency's URL or revision looks like a command-line option, or uses a transport other than `https`, `ssh` (or `file`, from the project's own manifests). |  | — |
 | `bynk.package.unsupported_in_dependency` | A dependency declares an `asset` or an `embed`, which would resolve against the consuming project's `assets/` or `embeds/`; a per-package namespace for either isn't designed yet. |  | — |
 | `bynk.package.version_conflict` | One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package. |  | — |
+| `bynk.par.invalid_statement` | A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
+| `bynk.par.question_in_join` | A `?` appears inside a `par { … }` binding. Propagating a failure in source order across a join is a later increment, so the block takes no `?` yet; match on the result after the block. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
+| `bynk.par.sibling_name` | A `par { … }` binding mentions a name another binding in the same block binds, or binds a name twice. The bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
+| `bynk.par.single_binding` | A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning). | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | Warning |
 | `bynk.query.join_key_mismatch` | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
 | `bynk.query.sum_needs_numeric` | A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`). |  | — |
 | `bynk.registry.account_refused` | `bynk login`, `bynk logout` or a `bynk org` command didn't go through: you aren't signed in or your session expired, the registry has no account API (or is read through a mirror), the sign-in was declined or its code expired, or the registry refused the request (a taken or reserved name, not the owner, an unknown member or token). |  | — |
@@ -522,7 +527,7 @@ There are **652** codes in total.
 | `bynk.parse.invariant_after_handler` | An `invariant` was declared after a handler; invariants precede handlers. |  | — |
 | `bynk.parse.let_else_on_binding` | An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt), [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
 | `bynk.parse.let_pattern_annotation` | A `let` with a pattern carries a type annotation; the pattern's names take their types from the value. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
-| `bynk.parse.let_pattern_without_else` | A `let` binds a pattern but has no `else` saying what the block produces when the value does not match. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
+| `bynk.parse.let_pattern_without_else` | A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
 | `bynk.parse.malformed_float_literal` | A float literal is missing a digit on one side of the `.` (`1.`, `.5`). | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
 | `bynk.parse.migrate_after_handler` | A `migrate` step is declared after an agent handler; migration steps precede the handlers. |  | — |
 | `bynk.parse.migrate_item` | A `migrate` step's body holds something other than `field := value`, `let` or `drop field`. |  | — |
@@ -722,6 +727,7 @@ There are **652** codes in total.
 |---|---|---|---|
 | `bynk.types.argument_mismatch` | A call, method, capability, or constructor argument has the wrong type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.types.asset_at_boundary` | An `Asset` type appears in a record field, boundary or store position; pass its `.url` instead. |  | — |
+| `bynk.types.bad_field_default` | A record or event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant, `Some`/`None`/`Ok`/`Err`, a record, a list literal, `Map.empty()`/`Set.empty()`, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. A field whose type is a generic record's type parameter, or applies a user generic, has no default. (Earlier versions reported this as `bynk.event.bad_field_default`.) |  | — |
 | `bynk.types.call_arity` | A function value was applied with the wrong number of arguments. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.types.cannot_infer_option_type_param` | The value type of `None` could not be inferred. | [`none_expr`](/book/reference/grammar/#rule-none_expr) | — |
 | `bynk.types.cannot_infer_result_type_params` | The type parameters of a `Result` could not be inferred. |  | — |
@@ -740,6 +746,7 @@ There are **652** codes in total.
 | `bynk.types.err_value_mismatch` | An `Err` payload has the wrong type. | [`err_expr`](/book/reference/grammar/#rule-err_expr) | — |
 | `bynk.types.extensible_match_needs_wildcard` | A `match` covers an extensible standard-library enum (`FetchError`, `Method`) without a wildcard; it may gain variants in a minor release. |  | — |
 | `bynk.types.field_access_on_non_record` | Field access on a value that is not a record. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
+| `bynk.types.field_default_on_variant` | A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given. |  | — |
 | `bynk.types.field_refinement_not_base` | An inline field refinement requires a base or refined type. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | `bynk.types.field_value_mismatch` | A record field was given a value of the wrong type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.types.function_at_boundary` | A function type appeared in a serialisable or boundary position (a record field, sum payload, service/agent handler signature, capability operation signature, agent state field, or agent key); functions cannot serialise or cross a boundary. | [`function_type_ref`](/book/reference/grammar/#rule-function_type_ref) | — |

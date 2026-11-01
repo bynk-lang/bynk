@@ -96,6 +96,8 @@ pub(crate) struct RuntimeUse {
     bytes_ops: Cell<bool>,
     /// K3 (#2592): the module references the `Instant` ISO-8601 helpers.
     time_ops: Cell<bool>,
+    /// #2640: the module references the `par` block's join, `__bynkSettleAll`.
+    settle_all: Cell<bool>,
     /// K2 (#2594): the module references the percent-encoding helpers.
     url_ops: Cell<bool>,
     /// #2341 (L4): the module builds a `RequestHeaders` (`__requestHeaders`).
@@ -162,6 +164,11 @@ impl RuntimeUse {
     /// Record that the module references the percent-encoding helpers (#2594).
     pub fn note_url_ops(&self) {
         self.url_ops.set(true);
+    }
+
+    /// Record that the module references the `par` join (#2640).
+    pub fn note_settle_all(&self) {
+        self.settle_all.set(true);
     }
 
     /// Record that the module builds a `RequestHeaders` value (#2341).
@@ -291,6 +298,11 @@ impl RuntimeUse {
     /// Whether the percent-encoding helpers must be imported (#2594).
     pub fn url_ops(&self) -> bool {
         self.url_ops.get()
+    }
+
+    /// Whether `__bynkSettleAll` must be imported (#2640).
+    pub fn settle_all(&self) -> bool {
+        self.settle_all.get()
     }
 
     /// Whether `__bynkEq` must be imported (#1652).

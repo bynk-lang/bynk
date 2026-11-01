@@ -1263,6 +1263,10 @@
         {
           "type": "let_stmt",
           "named": true
+        },
+        {
+          "type": "par_stmt",
+          "named": true
         }
       ]
     }
@@ -1943,7 +1947,7 @@
         "required": false,
         "types": [
           {
-            "type": "identifier",
+            "type": "type_param",
             "named": true
           }
         ]
@@ -2164,6 +2168,10 @@
           "named": true
         },
         {
+          "type": "par_stmt",
+          "named": true
+        },
+        {
           "type": "stub_clause",
           "named": true
         }
@@ -2235,6 +2243,21 @@
         },
         {
           "type": "uses_decl",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "constraint",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
           "named": true
         }
       ]
@@ -4565,7 +4588,7 @@
         "required": false,
         "types": [
           {
-            "type": "identifier",
+            "type": "type_param",
             "named": true
           }
         ]
@@ -4589,6 +4612,10 @@
         },
         {
           "type": "self_param",
+          "named": true
+        },
+        {
+          "type": "where_clause",
           "named": true
         }
       ]
@@ -5849,7 +5876,7 @@
       },
       "else": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "block",
@@ -5875,6 +5902,10 @@
           },
           {
             "type": "paren_pattern",
+            "named": true
+          },
+          {
+            "type": "record_pattern",
             "named": true
           },
           {
@@ -7871,6 +7902,49 @@
         },
         {
           "type": "wildcard_pattern",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "par_stmt",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "advance_stmt",
+          "named": true
+        },
+        {
+          "type": "assign_stmt",
+          "named": true
+        },
+        {
+          "type": "do_stmt",
+          "named": true
+        },
+        {
+          "type": "effect_let_stmt",
+          "named": true
+        },
+        {
+          "type": "effect_send_stmt",
+          "named": true
+        },
+        {
+          "type": "expect_expr",
+          "named": true
+        },
+        {
+          "type": "let_stmt",
+          "named": true
+        },
+        {
+          "type": "par_stmt",
           "named": true
         }
       ]
@@ -10137,6 +10211,10 @@
           "named": true
         },
         {
+          "type": "par_stmt",
+          "named": true
+        },
+        {
           "type": "provider_decl",
           "named": true
         },
@@ -11350,11 +11428,37 @@
         "required": false,
         "types": [
           {
+            "type": "type_param",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "type_param",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
             "type": "identifier",
             "named": true
           }
         ]
       }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "constraint",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -11822,6 +11926,47 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "where_bound",
+    "named": true,
+    "fields": {
+      "param": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "constraint",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "where_clause",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "where_bound",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -12666,6 +12811,10 @@
   },
   {
     "type": "out",
+    "named": false
+  },
+  {
+    "type": "par",
     "named": false
   },
   {

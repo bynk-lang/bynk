@@ -28,7 +28,8 @@ export const KvExpiration = {
 /**
  * The options of a `Kv.putWith` or `Kv.putBytes` write: when the entry
  * expires, and the metadata stored beside it (at most 1024 bytes once
- * serialised as JSON).
+ * serialised as JSON). Leave a field out for `Kv.put`'s behaviour: no expiry,
+ * no metadata.
  */
 export interface KvPut {
   readonly expiration: KvExpiration;
@@ -41,7 +42,7 @@ export const KvPut = {
 /**
  * The options of a `Kv.getWith` read. `cacheTtl` is how long the read may be
  * served from Cloudflare's edge cache, at least 30 seconds; `None` keeps the
- * platform's default of 60.
+ * platform's default of 60, and is the default.
  */
 export interface KvGet {
   readonly cacheTtl: Option<number>;
@@ -140,7 +141,9 @@ export const R2Condition = {
 
 /**
  * The options of an `R2.putWith` write: the content type and custom
- * metadata to store, and the precondition (`onlyIf`) the write needs.
+ * metadata to store, and the precondition (`onlyIf`) the write needs. Leave a
+ * field out for `R2.put`'s behaviour: no content type, no metadata, always
+ * written.
  */
 export interface R2Put {
   readonly contentType: Option<string>;
@@ -218,7 +221,7 @@ export const R2Part = {
 /**
  * The options of a `Queue.sendWith`. `delay` holds the message back before
  * it can be delivered: whole seconds (a part second rounds up), at most 12
- * hours; `None` delivers as soon as the queue can.
+ * hours; `None`, the default, delivers as soon as the queue can.
  */
 export interface QueueSend {
   readonly delay: Option<number>;
@@ -655,7 +658,8 @@ export function __deserialise_KvGet(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_cacheTtl = __deserialise_Option_Duration(obj["cacheTtl"], `${path}.cacheTtl`);
+  const __d_cacheTtl: __JsonValue = "cacheTtl" in obj ? obj["cacheTtl"] : { kind: "None" };
+  const __r_cacheTtl = __deserialise_Option_Duration(__d_cacheTtl, `${path}.cacheTtl`);
   if (__r_cacheTtl.tag === "Err") return __r_cacheTtl;
   const __cacheTtl = __r_cacheTtl.value;
   return Ok({ cacheTtl: __cacheTtl } as KvGet);
@@ -745,10 +749,12 @@ export function __deserialise_KvPut(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_expiration = __deserialise_KvExpiration(obj["expiration"], `${path}.expiration`);
+  const __d_expiration: __JsonValue = "expiration" in obj ? obj["expiration"] : { kind: "Never" };
+  const __r_expiration = __deserialise_KvExpiration(__d_expiration, `${path}.expiration`);
   if (__r_expiration.tag === "Err") return __r_expiration;
   const __expiration = __r_expiration.value;
-  const __r_metadata = __deserialise_Map_String_String(obj["metadata"], `${path}.metadata`);
+  const __d_metadata: __JsonValue = "metadata" in obj ? obj["metadata"] : [];
+  const __r_metadata = __deserialise_Map_String_String(__d_metadata, `${path}.metadata`);
   if (__r_metadata.tag === "Err") return __r_metadata;
   const __metadata = __r_metadata.value;
   return Ok({ expiration: __expiration, metadata: __metadata } as KvPut);
@@ -765,7 +771,8 @@ export function __deserialise_QueueSend(json: __JsonValue, path: string = "$"): 
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_delay = __deserialise_Option_Duration(obj["delay"], `${path}.delay`);
+  const __d_delay: __JsonValue = "delay" in obj ? obj["delay"] : { kind: "None" };
+  const __r_delay = __deserialise_Option_Duration(__d_delay, `${path}.delay`);
   if (__r_delay.tag === "Err") return __r_delay;
   const __delay = __r_delay.value;
   return Ok({ delay: __delay } as QueueSend);
@@ -913,13 +920,16 @@ export function __deserialise_R2Put(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_contentType = __deserialise_Option_String(obj["contentType"], `${path}.contentType`);
+  const __d_contentType: __JsonValue = "contentType" in obj ? obj["contentType"] : { kind: "None" };
+  const __r_contentType = __deserialise_Option_String(__d_contentType, `${path}.contentType`);
   if (__r_contentType.tag === "Err") return __r_contentType;
   const __contentType = __r_contentType.value;
-  const __r_metadata = __deserialise_Map_String_String(obj["metadata"], `${path}.metadata`);
+  const __d_metadata: __JsonValue = "metadata" in obj ? obj["metadata"] : [];
+  const __r_metadata = __deserialise_Map_String_String(__d_metadata, `${path}.metadata`);
   if (__r_metadata.tag === "Err") return __r_metadata;
   const __metadata = __r_metadata.value;
-  const __r_onlyIf = __deserialise_R2Condition(obj["onlyIf"], `${path}.onlyIf`);
+  const __d_onlyIf: __JsonValue = "onlyIf" in obj ? obj["onlyIf"] : { kind: "Always" };
+  const __r_onlyIf = __deserialise_R2Condition(__d_onlyIf, `${path}.onlyIf`);
   if (__r_onlyIf.tag === "Err") return __r_onlyIf;
   const __onlyIf = __r_onlyIf.value;
   return Ok({ contentType: __contentType, metadata: __metadata, onlyIf: __onlyIf } as R2Put);

@@ -1,10 +1,12 @@
 {
   "version": 1,
   "provides": {
-    "markPaid": "f754ed184415d345"
+    "markPaid": "f754ed184415d345",
+    "markPaidDomestic": "b817e943aeeabed5"
   },
   "expects": {},
   "provides_shapes": {
-    "markPaid": "Svc(\"markPaid\",P(\"orderId\",B(\"String\")),Ret(U()))"
+    "markPaid": "Svc(\"markPaid\",P(\"orderId\",B(\"String\")),Ret(U()))",
+    "markPaidDomestic": "Svc(\"markPaidDomestic\",P(\"orderId\",B(\"String\")),Ret(U()))"
   }
 }

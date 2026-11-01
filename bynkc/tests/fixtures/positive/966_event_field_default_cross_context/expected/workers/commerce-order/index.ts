@@ -51,6 +51,26 @@ export default {
             const body = null;
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
+          case "markPaidDomestic": {
+            __route = "call markPaidDomestic";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "b817e943aeeabed5") {
+              globalThis.console.error("ContractMismatch commerce.order call markPaidDomestic", { service: "markPaidDomestic", expected: "b817e943aeeabed5", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "markPaidDomestic", expected: "b817e943aeeabed5", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            const __r_orderId = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
+            if (__r_orderId.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_orderId.error), { status: 400, headers: { "content-type": "application/json" } });
+            const orderId = __r_orderId.value;
+            const result = await surface.markPaidDomestic(orderId);
+            const body = null;
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
           default:
             return new globalThis.Response("Not found", { status: 404 });
         }

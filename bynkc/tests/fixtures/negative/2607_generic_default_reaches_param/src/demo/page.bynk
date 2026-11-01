@@ -1,0 +1,7 @@
+---
+#2607 (Decision I): a default that reaches a generic record's type parameter
+holds for one instantiation at most, so it is rejected like a bare one.
+---
+context demo.page
+
+type Page[T] = { next: Option[T] = Some(1) }
