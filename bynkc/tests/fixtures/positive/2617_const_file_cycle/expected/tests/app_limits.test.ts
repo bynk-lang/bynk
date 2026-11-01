@@ -41,7 +41,9 @@ function __makeTestDeps() {
 async function test_constants_name_each_other_across_files() {
   try {
     const deps = {};
-    const { A, B, C, Maybe, Nothing, Off, Zero, fromB, label, maybeOr, total } = __ns_app_limits;
+    const { A, B, Base, C, Maybe, Nothing, Off, Size, Window, Zero, fromB, label, maybeMatch, maybeOr, sizeOf, total } = __ns_app_limits;
+    type Size = __ns_app_limits.Size;
+    type Window = __ns_app_limits.Window;
     if (!(A() === 1)) { throw __bynkExpectFailure("tests/app/limits.bynk:7:10", 145, 151, "expect A == 1\n  expected: A == 1\n  actual:   " + __bynkShow((A())) + " == " + __bynkShow((1))); }
     if (!(B() === 1)) { throw __bynkExpectFailure("tests/app/limits.bynk:8:10", 161, 167, "expect B == 1\n  expected: B == 1\n  actual:   " + __bynkShow((B())) + " == " + __bynkShow((1))); }
     if (!(C() === 1)) { throw __bynkExpectFailure("tests/app/limits.bynk:9:10", 177, 183, "expect C == 1\n  expected: C == 1\n  actual:   " + __bynkShow((C())) + " == " + __bynkShow((1))); }
@@ -58,7 +60,9 @@ async function test_constants_name_each_other_across_files() {
 async function test_functions_call_each_other_across_files_and_read_constants() {
   try {
     const deps = {};
-    const { A, B, C, Maybe, Nothing, Off, Zero, fromB, label, maybeOr, total } = __ns_app_limits;
+    const { A, B, Base, C, Maybe, Nothing, Off, Size, Window, Zero, fromB, label, maybeMatch, maybeOr, sizeOf, total } = __ns_app_limits;
+    type Size = __ns_app_limits.Size;
+    type Window = __ns_app_limits.Window;
     if (!(fromB() === 3)) { throw __bynkExpectFailure("tests/app/limits.bynk:13:10", 263, 275, "expect fromB() == 3\n  expected: fromB() == 3\n  actual:   " + __bynkShow((fromB())) + " == " + __bynkShow((3))); }
     if (!(total() === 4)) { throw __bynkExpectFailure("tests/app/limits.bynk:14:10", 285, 297, "expect total() == 4\n  expected: total() == 4\n  actual:   " + __bynkShow((total())) + " == " + __bynkShow((4))); }
     if (!(label() === "A is 1, C is 1")) { throw __bynkExpectFailure("tests/app/limits.bynk:15:10", 307, 334, "expect label() == \"A is 1, C is 1\"\n  expected: label() == \"A is 1, C is 1\"\n  actual:   " + __bynkShow((label())) + " == " + __bynkShow(("A is 1, C is 1"))); }
@@ -75,7 +79,9 @@ async function test_functions_call_each_other_across_files_and_read_constants() 
 async function test_an_is_test_reads_a_constant() {
   try {
     const deps = {};
-    const { A, B, C, Maybe, Nothing, Off, Zero, fromB, label, maybeOr, total } = __ns_app_limits;
+    const { A, B, Base, C, Maybe, Nothing, Off, Size, Window, Zero, fromB, label, maybeMatch, maybeOr, sizeOf, total } = __ns_app_limits;
+    type Size = __ns_app_limits.Size;
+    type Window = __ns_app_limits.Window;
     if (!(maybeOr(9) === 1)) { throw __bynkExpectFailure("tests/app/limits.bynk:19:10", 384, 399, "expect maybeOr(9) == 1\n  expected: maybeOr(9) == 1\n  actual:   " + __bynkShow((maybeOr(9))) + " == " + __bynkShow((1))); }
     if (!(__bynkEq(Maybe(), Some(1)))) { throw __bynkExpectFailure("tests/app/limits.bynk:20:10", 409, 425, "expect Maybe == Some(1)\n  expected: Maybe == Some(1)\n  actual:   " + __bynkShow((Maybe())) + " == " + __bynkShow((Some(1)))); }
     return { pass: true };
@@ -91,13 +97,33 @@ async function test_an_is_test_reads_a_constant() {
 async function test_falsy_constants_read_the_same_every_time() {
   try {
     const deps = {};
-    const { A, B, C, Maybe, Nothing, Off, Zero, fromB, label, maybeOr, total } = __ns_app_limits;
+    const { A, B, Base, C, Maybe, Nothing, Off, Size, Window, Zero, fromB, label, maybeMatch, maybeOr, sizeOf, total } = __ns_app_limits;
+    type Size = __ns_app_limits.Size;
+    type Window = __ns_app_limits.Window;
     if (!(Zero() === 0)) { throw __bynkExpectFailure("tests/app/limits.bynk:24:10", 488, 497, "expect Zero == 0\n  expected: Zero == 0\n  actual:   " + __bynkShow((Zero())) + " == " + __bynkShow((0))); }
     if (!(Zero() === 0)) { throw __bynkExpectFailure("tests/app/limits.bynk:25:10", 507, 516, "expect Zero == 0\n  expected: Zero == 0\n  actual:   " + __bynkShow((Zero())) + " == " + __bynkShow((0))); }
     if (!(!Off())) { throw __bynkExpectFailure("tests/app/limits.bynk:26:10", 526, 530, "expect !Off"); }
     if (!(!Off())) { throw __bynkExpectFailure("tests/app/limits.bynk:27:10", 540, 544, "expect !Off"); }
     if (!(__bynkEq(Nothing(), None))) { throw __bynkExpectFailure("tests/app/limits.bynk:28:10", 554, 569, "expect Nothing == None\n  expected: Nothing == None\n  actual:   " + __bynkShow((Nothing())) + " == " + __bynkShow((None))); }
     if (!(__bynkEq(Nothing(), None))) { throw __bynkExpectFailure("tests/app/limits.bynk:29:10", 579, 594, "expect Nothing == None\n  expected: Nothing == None\n  actual:   " + __bynkShow((Nothing())) + " == " + __bynkShow((None))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_match_reads_a_constant_and_a_field_of_one() {
+  try {
+    const deps = {};
+    const { A, B, Base, C, Maybe, Nothing, Off, Size, Window, Zero, fromB, label, maybeMatch, maybeOr, sizeOf, total } = __ns_app_limits;
+    type Size = __ns_app_limits.Size;
+    type Window = __ns_app_limits.Window;
+    if (!(maybeMatch() === 1)) { throw __bynkExpectFailure("tests/app/limits.bynk:33:10", 660, 677, "expect maybeMatch() == 1\n  expected: maybeMatch() == 1\n  actual:   " + __bynkShow((maybeMatch())) + " == " + __bynkShow((1))); }
+    if (!(sizeOf() === 5)) { throw __bynkExpectFailure("tests/app/limits.bynk:34:10", 687, 700, "expect sizeOf() == 5\n  expected: sizeOf() == 5\n  actual:   " + __bynkShow((sizeOf())) + " == " + __bynkShow((5))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -121,7 +147,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["constants name each other across files", "functions call each other across files and read constants", "an is test reads a constant", "falsy constants read the same every time"];
+export const __bynkCases: readonly string[] = ["constants name each other across files", "functions call each other across files and read constants", "an is test reads a constant", "falsy constants read the same every time", "a match reads a constant and a field of one"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -147,6 +173,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("falsy constants read the same every time")) {
     const started = __bynkCaseNow();
     const r = { name: "falsy constants read the same every time", ...(await test_falsy_constants_read_the_same_every_time()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a match reads a constant and a field of one")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a match reads a constant and a field of one", ...(await test_a_match_reads_a_constant_and_a_field_of_one()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

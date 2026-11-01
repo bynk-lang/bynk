@@ -7048,8 +7048,9 @@ fn emit_match_tail(
     // is a stable reference (a variable or property path). A call discriminant
     // such as `ShortCode.of(raw)` is re-evaluated per arm and TypeScript cannot
     // narrow it (and re-evaluation could repeat side effects), so bind it to a
-    // fresh temp once and switch on that.
-    if !is_narrowable_path(discriminant) {
+    // fresh temp once and switch on that. #2617: a path rooted at a constant
+    // lowers to a call (`Fallback()`), so it is bound to a temp too.
+    if !is_narrowable_path(discriminant) || cx.roots_at_const(discriminant) {
         let tmp = cx.fresh();
         write_line(out, indent, &format!("const {tmp} = {disc};"));
         disc = tmp;

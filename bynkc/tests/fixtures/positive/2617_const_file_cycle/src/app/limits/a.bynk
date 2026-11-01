@@ -9,6 +9,10 @@ commons app.limits
 const A: Int = 1
 const C: Int = B
 const Maybe: Option[Int] = Some(A)
+const Base: Window = Window { size: Size.Large(5), step: 1 }
+
+type Size = | Small | Large(n: Int)
+type Window = { size: Size, step: Int }
 
 // Calls `b.bynk`'s function, which reads this file's constants.
 fn total() -> Int {
@@ -24,5 +28,21 @@ fn maybeOr(fallback: Int) -> Int {
     n
   } else {
     fallback
+  }
+}
+
+// A `match` on a constant, and on a field of one: each scrutinee lowers to a
+// call, so it is bound to a temporary that TypeScript can narrow.
+fn maybeMatch() -> Int {
+  match Maybe {
+    Some(n) => n
+    None => 0
+  }
+}
+
+fn sizeOf() -> Int {
+  match Base.size {
+    Small => 0
+    Large(n) => n
   }
 }

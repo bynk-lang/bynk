@@ -13,6 +13,23 @@ import { B, fromB } from "./b.js";
  * evaluates first can still read the other's constants.
  */
 
+export type Size =
+    { readonly tag: "Small" }
+  | { readonly tag: "Large"; readonly n: number };
+
+export const Size = {
+  Small: { tag: "Small" } as Size,
+  Large: (n: number): Size => ({ tag: "Large", n }),
+};
+
+export interface Window {
+  readonly size: Size;
+  readonly step: number;
+}
+
+export const Window = {
+};
+
 var __const_A: { v: number } | undefined;
 export function A(): number { return (__const_A ??= { v: 1 }).v; }
 
@@ -21,6 +38,9 @@ export function C(): number { return (__const_C ??= { v: B() }).v; }
 
 var __const_Maybe: { v: Option<number> } | undefined;
 export function Maybe(): Option<number> { return (__const_Maybe ??= { v: Some(A()) }).v; }
+
+var __const_Base: { v: Window } | undefined;
+export function Base(): Window { return (__const_Base ??= { v: { size: Size.Large(5), step: 1 } }).v; }
 
 export function total(): number {
   return fromB() + C();
@@ -38,4 +58,32 @@ export function maybeOr(fallback: number): number {
   } else {
     return fallback;
   }
+}
+
+export function maybeMatch(): number {
+  const __r0 = Maybe();
+  switch (__r0.tag) {
+    case "Some": {
+      const n = __r0.value;
+      return n;
+    }
+    case "None": {
+      return 0;
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}
+
+export function sizeOf(): number {
+  const __r0 = Base().size;
+  switch (__r0.tag) {
+    case "Small": {
+      return 0;
+    }
+    case "Large": {
+      const n = __r0.n;
+      return n;
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
 }

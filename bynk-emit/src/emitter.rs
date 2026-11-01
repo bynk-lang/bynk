@@ -5661,14 +5661,6 @@ impl<'a> LowerCtx<'a> {
         );
         value_baseish && name_refined
     }
-    /// Read-only counterpart for the binding gatherer (which returns no
-    /// `Lowered`, so it has nowhere to hoist and cannot lift). If the receiver was already lifted to a temp during
-    /// condition lowering, reuse that temp; otherwise it must be a simple
-    /// repeatable lvalue, rendered inline. The "lower the condition before
-    /// gathering its bindings" ordering in `emit_if_tail`, `lower_and_with_is`
-    /// and the value-position `if` IIFE guarantees the temp exists before this
-    /// is called for complex receivers; `value_text_for_is` panics if it does
-    /// not (#1668).
     /// #2617: the constant `e` names, when the checker resolved this bare
     /// name to one (`Callee::Const`) rather than to a local of the same name.
     pub(crate) fn const_ref<'e>(&self, e: &'e Expr) -> Option<&'e str> {
@@ -5681,7 +5673,7 @@ impl<'a> LowerCtx<'a> {
     }
     /// #2617: whether a simple `is` receiver (an ident or a field-access
     /// chain ending at one) starts at a constant.
-    fn roots_at_const(&self, value: &Expr) -> bool {
+    pub(crate) fn roots_at_const(&self, value: &Expr) -> bool {
         match &value.kind {
             ExprKind::Ident(_) => self.const_ref(value).is_some(),
             ExprKind::FieldAccess { receiver, .. } => self.roots_at_const(receiver),
@@ -5689,6 +5681,14 @@ impl<'a> LowerCtx<'a> {
             _ => false,
         }
     }
+    /// Read-only counterpart for the binding gatherer (which returns no
+    /// `Lowered`, so it has nowhere to hoist and cannot lift). If the receiver was already lifted to a temp during
+    /// condition lowering, reuse that temp; otherwise it must be a simple
+    /// repeatable lvalue, rendered inline. The "lower the condition before
+    /// gathering its bindings" ordering in `emit_if_tail`, `lower_and_with_is`
+    /// and the value-position `if` IIFE guarantees the temp exists before this
+    /// is called for complex receivers; `value_text_for_is` panics if it does
+    /// not (#1668).
     fn is_receiver_text(&self, value: &Expr) -> String {
         if let Some(t) = self.is_receiver_temps.get(&value.span) {
             return t.clone();

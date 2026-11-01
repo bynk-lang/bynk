@@ -28,3 +28,8 @@ case "falsy constants read the same every time" {
   expect Nothing == None
   expect Nothing == None
 }
+
+case "a match reads a constant and a field of one" {
+  expect maybeMatch() == 1
+  expect sizeOf() == 5
+}

@@ -33,7 +33,8 @@ export const api = {
     return HttpResult.Ok(SmallBatch());
   },
   async http_GET_tier(deps: {}): globalThis.Promise<HttpResult<string>> {
-    switch (Preferred().tag) {
+    const __r0 = Preferred();
+    switch (__r0.tag) {
       case "Gold": {
         return HttpResult.Ok("gold");
       }
