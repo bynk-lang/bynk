@@ -11,7 +11,7 @@
 //! - a record, sum, enum or opaque type that declares `derives Ord`, and, when it
 //!   is generic, whose type arguments are `Ord`;
 //! - a type parameter declared `T: Ord` (checked separately: see
-//!   [`super::equality::require_ord_vars`]).
+//!   `super::equality::require_ord_vars`).
 //!
 //! `Bool`, `Result`, `Map`, `Set`, functions and held resources are not `Ord`.
 //!
@@ -48,7 +48,7 @@ fn base_is_ord(b: BaseType) -> bool {
 
 /// The first part of `ty` that is not `Ord`, or `None` when `ty` is `Ord` all the
 /// way down. A type variable counts as `Ord` here: whether the enclosing
-/// function declared the bound is [`require_ord_vars`]'s question.
+/// function declared the bound is `require_ord_vars`'s question.
 pub(crate) fn not_orderable(ty: TyId, ctx: &Ctx) -> Option<NotOrd> {
     let tys = ctx.tys;
     match &*tys.get(ty) {
@@ -98,7 +98,7 @@ pub(crate) enum OrdSite<'a> {
 
 /// Check that `ty` can be ordered at `span`: every concrete part is `Ord`
 /// ([`not_orderable`]) and every type parameter in it is declared `Ord`
-/// ([`require_ord_vars`]). Reports and returns `false` otherwise.
+/// (`require_ord_vars`). Reports and returns `false` otherwise.
 pub(crate) fn check_ord(ctx: &mut Ctx, ty: TyId, span: Span, site: &OrdSite) -> bool {
     if let Some(blocker) = not_orderable(ty, ctx) {
         report_not_orderable(ctx, ty, span, site, blocker);
