@@ -83,7 +83,9 @@ for range patterns (`lo..hi`, `lo..`, `..hi`, jointly with events, #990).
   reference says so and recommends the kernel folds for iteration.
 - Slice 5 gets its `..` rule decided here. It adds an interval `Constructor` and
   a range production without touching list patterns.
-- On one line, an arm body that ends in a name followed by a `[`-led arm needs a
-  separator, since `x [` there reads as a type application; arms on separate
-  lines or ending in a comma parse as before. The tree-sitter grammar loses the
+- The compiler reads an arm body ending in a name, on the previous line, as
+  complete before a `[`-led arm. The tree-sitter grammar cannot see newlines, so
+  after a bare name it keeps both readings alive, but after a field access
+  (`only.sku`) it still reads `[` as type arguments; end such an arm with a comma
+  (`[only] => only.sku,`) for editor highlighting to stay clean. The tree-sitter grammar loses the
   postfix precedence of a call with type arguments to keep both readings alive.

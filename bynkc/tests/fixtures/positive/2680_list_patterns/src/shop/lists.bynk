@@ -14,7 +14,7 @@ commons shop.lists {
   fn describe(items: List[Item]) -> String {
     match items {
       [] => "empty"
-      [only] => only.sku
+      [only] => only.sku,
       [first, _, ..] => first.sku
     }
   }
