@@ -7,5 +7,5 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 import { Origin } from "../b/main.js";
 
 export function sum(): number {
-  return Origin.x + Origin.y;
+  return Origin().x + Origin().y;
 }

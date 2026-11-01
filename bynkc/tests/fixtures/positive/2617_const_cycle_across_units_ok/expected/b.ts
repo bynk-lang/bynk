@@ -6,8 +6,9 @@ import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 import { X } from "./a.js";
 
-export const Y: number = X;
+var __const_Y: { v: number } | undefined;
+export function Y(): number { return (__const_Y ??= { v: X() }).v; }
 
 export function y(): number {
-  return Y;
+  return Y();
 }

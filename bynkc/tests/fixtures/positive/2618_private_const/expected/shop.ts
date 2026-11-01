@@ -8,5 +8,5 @@ import { Step } from "./labels.js";
 import { retries } from "./limits/plans.js";
 
 export function budget(): number {
-  return retries() + Step;
+  return retries() + Step();
 }

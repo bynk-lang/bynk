@@ -6,8 +6,8 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 /**
  * #2617: named constants of several kinds, one referring to another, used in
- * functions. Each is emitted as an exported `const`, after the types and before
- * the functions, in dependency order.
+ * functions. Each is emitted as a hoisted, cached function, after the types and
+ * before the functions, in declaration order; every reference is a call.
  */
 
 export interface Page {
@@ -61,57 +61,74 @@ export const UserId = {
   },
 };
 
+var __const_MaxRetries: { v: number } | undefined;
 /**
  * How many times a request is retried.
  */
-export const MaxRetries: number = 3;
+export function MaxRetries(): number { return (__const_MaxRetries ??= { v: 3 }).v; }
 
-export const Greeting: string = "hello";
+var __const_Greeting: { v: string } | undefined;
+export function Greeting(): string { return (__const_Greeting ??= { v: "hello" }).v; }
 
-export const Ratio: number = 0.5;
+var __const_Ratio: { v: number } | undefined;
+export function Ratio(): number { return (__const_Ratio ??= { v: 0.5 }).v; }
 
-export const Enabled: boolean = true;
+var __const_Enabled: { v: boolean } | undefined;
+export function Enabled(): boolean { return (__const_Enabled ??= { v: true }).v; }
 
-export const Floor: number = -10;
+var __const_Floor: { v: number } | undefined;
+export function Floor(): number { return (__const_Floor ??= { v: -10 }).v; }
 
-export const Timeout: number = 30000;
+var __const_Timeout: { v: number } | undefined;
+export function Timeout(): number { return (__const_Timeout ??= { v: 30000 }).v; }
 
-export const PageSize: number = 50;
+var __const_DefaultPage: { v: Page } | undefined;
+export function DefaultPage(): Page { return (__const_DefaultPage ??= { v: { size: PageSize(), offset: 0 } }).v; }
 
-export const DefaultPage: Page = { size: PageSize, offset: 0 };
+var __const_PageSize: { v: number } | undefined;
+export function PageSize(): number { return (__const_PageSize ??= { v: 50 }).v; }
 
-export const Primary: Colour = Colour.Red;
+var __const_Primary: { v: Colour } | undefined;
+export function Primary(): Colour { return (__const_Primary ??= { v: Colour.Red }).v; }
 
-export const Unit: Shape = Shape.Circle(1);
+var __const_Unit: { v: Shape } | undefined;
+export function Unit(): Shape { return (__const_Unit ??= { v: Shape.Circle(1) }).v; }
 
-export const Fallback: Option<number> = Some(MaxRetries);
+var __const_Fallback: { v: Option<number> } | undefined;
+export function Fallback(): Option<number> { return (__const_Fallback ??= { v: Some(MaxRetries()) }).v; }
 
-export const Missing: Option<number> = None;
+var __const_Missing: { v: Option<number> } | undefined;
+export function Missing(): Option<number> { return (__const_Missing ??= { v: None }).v; }
 
-export const Outcome: Result<number, string> = Ok(200);
+var __const_Outcome: { v: Result<number, string> } | undefined;
+export function Outcome(): Result<number, string> { return (__const_Outcome ??= { v: Ok(200) }).v; }
 
-export const Steps: readonly number[] = [1, 2, MaxRetries];
+var __const_Steps: { v: readonly number[] } | undefined;
+export function Steps(): readonly number[] { return (__const_Steps ??= { v: [1, 2, MaxRetries()] }).v; }
 
-export const NoTags: readonly string[] = ([] as readonly string[]);
+var __const_NoTags: { v: readonly string[] } | undefined;
+export function NoTags(): readonly string[] { return (__const_NoTags ??= { v: ([] as readonly string[]) }).v; }
 
-export const DefaultPort: Port = (8080 as Port);
+var __const_DefaultPort: { v: Port } | undefined;
+export function DefaultPort(): Port { return (__const_DefaultPort ??= { v: (8080 as Port) }).v; }
 
-export const Admin: UserId = UserId.unsafe("admin");
+var __const_Admin: { v: UserId } | undefined;
+export function Admin(): UserId { return (__const_Admin ??= { v: UserId.unsafe("admin") }).v; }
 
 export function attempts(): number {
-  return MaxRetries + 1;
+  return MaxRetries() + 1;
 }
 
 export function greet(name: string): string {
-  return `${String(Greeting)}, ${String(name)}`;
+  return `${String(Greeting())}, ${String(name)}`;
 }
 
 export function pageEnd(): number {
-  return DefaultPage.offset + DefaultPage.size;
+  return DefaultPage().offset + DefaultPage().size;
 }
 
 export function adminName(): string {
-  return (Admin as string);
+  return (Admin() as string);
 }
 
 export function shadowed(): number {

@@ -1,0 +1,48 @@
+---
+#2617: the two files of one commons import each other, through constants
+(`C` names `b.bynk`'s `B`, which names `a.bynk`'s `A`) and through functions.
+Each constant emits as a hoisted, cached function, so whichever module
+evaluates first can still read the other's constants.
+---
+commons app.limits
+
+const A: Int = 1
+const C: Int = B
+const Maybe: Option[Int] = Some(A)
+const Base: Window = Window { size: Size.Large(5), step: 1 }
+
+type Size = | Small | Large(n: Int)
+type Window = { size: Size, step: Int }
+
+// Calls `b.bynk`'s function, which reads this file's constants.
+fn total() -> Int {
+  fromB() + C
+}
+
+fn label() -> String {
+  "A is \(A), C is \(C)"
+}
+
+fn maybeOr(fallback: Int) -> Int {
+  if Maybe is Some(n) {
+    n
+  } else {
+    fallback
+  }
+}
+
+// A `match` on a constant, and on a field of one: each scrutinee lowers to a
+// call, so it is bound to a temporary that TypeScript can narrow.
+fn maybeMatch() -> Int {
+  match Maybe {
+    Some(n) => n
+    None => 0
+  }
+}
+
+fn sizeOf() -> Int {
+  match Base.size {
+    Small => 0
+    Large(n) => n
+  }
+}

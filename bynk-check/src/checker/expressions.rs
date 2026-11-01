@@ -54,7 +54,7 @@ pub(crate) fn check_ident_at(
     expected: Option<TyId>,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
-    let ty = check_ident(id, expected, ctx);
+    let ty = check_ident(expr_id, id, expected, ctx);
     if let Some(witnesses) = ctx.last_witness.take()
         && let Some(decl) = ctx.input.fns.get(&id.name)
     {
@@ -140,7 +140,14 @@ fn instantiate_bounded_value(
     Some(tys.intern(Ty::Fn { params, ret }))
 }
 
-pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> Option<TyId> {
+/// `expr_id` is the identifier expression's, so a name resolving to a
+/// constant can be recorded as `Callee::Const` for the lowering (#2617).
+pub(crate) fn check_ident(
+    expr_id: ExprId,
+    id: &Ident,
+    expected: Option<TyId>,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
     let tys = ctx.tys;
     if let Some(ty) = ctx.lookup(id.name.as_str()) {
         // #1663: a name bound to the error type (a pattern that failed to
@@ -174,6 +181,8 @@ pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> 
     // function, type or variant in scope (`bynk.resolve.name_conflict`).
     if let Some(c) = ctx.input.consts.get(&id.name) {
         ctx.refs.record(id.span, SymbolKind::Const, &id.name);
+        // The lowering emits it as a call to the constant's function.
+        ctx.callees.insert(expr_id, Callee::Const(id.name.clone()));
         let ty = resolve_type_ref(&c.ty, &ctx.input.types, tys);
         // A unit's table holds every type its constants' annotations reach
         // (`project_model::used_const_seeds`), and an annotation that does

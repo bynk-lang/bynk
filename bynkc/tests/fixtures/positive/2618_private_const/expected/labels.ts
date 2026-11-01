@@ -4,4 +4,5 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
-export const Step: number = 100;
+var __const_Step: { v: number } | undefined;
+export function Step(): number { return (__const_Step ??= { v: 100 }).v; }

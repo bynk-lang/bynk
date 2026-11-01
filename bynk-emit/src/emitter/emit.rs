@@ -1034,24 +1034,31 @@ pub(crate) fn emit_free_fn(
     stmts
 }
 
-/// #2617: this file's constants, each an exported `const` typed by its
-/// annotation, its initialiser lowered as a static expression (the agent
-/// field initialiser's lowering, `BodyMode::StaticInit`). Ordered so a
-/// constant comes after every constant of this file its initialiser names
-/// (`consts::definition_order`); one of another file is imported. Empty when
-/// the file declares none, so a module without constants is unchanged.
+/// #2617: this file's constants, in declaration order, each a hoisted,
+/// cached function rather than an exported `const`:
+///
+/// ```ts
+/// var __const_MaxRetries: { v: number } | undefined;
+/// export function MaxRetries(): number { return (__const_MaxRetries ??= { v: 3 }).v; }
+/// ```
+///
+/// A function declaration is hoisted and its cache a `var` (which reads as
+/// `undefined` before its statement runs, where a `let` would throw), so a
+/// constant can be read before its module has evaluated: when sibling files
+/// of a unit import each other in a cycle, through a function, a type or
+/// another constant, ES module evaluation order cannot reach a constant
+/// before it is initialised. The initialiser runs once, on the first read,
+/// and the `{ v }` box keeps a falsy or `null` value cached. Every reference
+/// to a constant lowers to a call (`lower_ident`, through `Callee::Const`).
+/// The initialiser is lowered as a static expression (the agent field
+/// initialiser's lowering, `BodyMode::StaticInit`). Empty when the file
+/// declares none, so a module without constants is unchanged.
 pub(crate) fn emit_consts(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::TsStmt> {
-    let local: Vec<&bynk_syntax::ast::ConstDecl> = commons
-        .commons
-        .items
-        .iter()
-        .filter_map(|i| match i {
-            CommonsItem::Const(c) => Some(c),
-            _ => None,
-        })
-        .collect();
     let mut stmts = Vec::new();
-    for c in bynk_check::consts::definition_order(&local) {
+    for item in &commons.commons.items {
+        let CommonsItem::Const(c) = item else {
+            continue;
+        };
         let mut pre = Pre::new();
         let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
         module.target = ctx.target;
@@ -1067,19 +1074,54 @@ pub(crate) fn emit_consts(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<b
             "bynk internal error: constant `{}`'s static initialiser hoisted statements",
             c.name.name
         );
+        let name = ts_ident(&c.name.name);
+        let cache = format!("__const_{}", c.name.name);
+        let ty = ts_type_ref_to_ts_type(&c.ty, None);
+        // `var __const_Name: { v: T } | undefined;`
+        let var = bynk_ts::TsStmt::var_stmt(
+            cache.clone(),
+            bynk_ts::TsType::Union {
+                members: vec![
+                    bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::Prop {
+                        name: "v".to_string(),
+                        ty: ty.clone(),
+                        optional: false,
+                        readonly: false,
+                    }]),
+                    bynk_ts::TsType::named("undefined"),
+                ],
+                multiline: false,
+            },
+            None,
+        );
+        stmts.push(var);
+        // The documentation goes on the function, which is what a consumer
+        // imports and an editor shows.
         if let Some(doc) = c.documentation.as_deref() {
-            stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
+            let mut doc = bynk_ts::TsStmt::doc_comment(doc, None);
+            doc.no_blank_before = true;
+            stmts.push(doc);
         }
-        let mut stmt = bynk_ts::TsStmt::decl(
-            bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
-                name: ts_ident(&c.name.name),
-                ty: Some(ts_type_ref_to_ts_type(&c.ty, None)),
-                init: bynk_ts::TsExpr::Ident(init),
+        // `export function Name(): T { return (__const_Name ??= { v: <init> }).v; }`
+        let mut func = bynk_ts::TsStmt::decl(
+            bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::Function {
+                name,
+                generics: Vec::new(),
+                params: Vec::new(),
+                return_type: Some(ty),
+                body: vec![bynk_ts::TsStmt::return_stmt(
+                    Some(bynk_ts::TsExpr::Ident(format!(
+                        "({cache} ??= {{ v: {init} }}).v"
+                    ))),
+                    None,
+                )],
+                is_async: false,
+                inline: true,
             })),
             Some(c.span),
         );
-        stmt.no_blank_before = c.documentation.is_some();
-        stmts.push(stmt);
+        func.no_blank_before = true;
+        stmts.push(func);
     }
     stmts
 }

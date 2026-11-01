@@ -47,12 +47,12 @@ async function test_scalar_constants_hold_their_literals() {
     type Port = __ns_lim_limits.Port;
     type Shape = __ns_lim_limits.Shape;
     type UserId = __ns_lim_limits.UserId;
-    if (!(MaxRetries === 3)) { throw __bynkExpectFailure("tests/lim/limits.bynk:7:10", 131, 146, "expect MaxRetries == 3\n  expected: MaxRetries == 3\n  actual:   " + __bynkShow((MaxRetries)) + " == " + __bynkShow((3))); }
-    if (!(Greeting === "hello")) { throw __bynkExpectFailure("tests/lim/limits.bynk:8:10", 156, 175, "expect Greeting == \"hello\"\n  expected: Greeting == \"hello\"\n  actual:   " + __bynkShow((Greeting)) + " == " + __bynkShow(("hello"))); }
-    if (!(Ratio === 0.5)) { throw __bynkExpectFailure("tests/lim/limits.bynk:9:10", 185, 197, "expect Ratio == 0.5\n  expected: Ratio == 0.5\n  actual:   " + __bynkShow((Ratio)) + " == " + __bynkShow((0.5))); }
-    if (!(Enabled)) { throw __bynkExpectFailure("tests/lim/limits.bynk:10:10", 207, 214, "expect Enabled"); }
-    if (!(Floor === -10)) { throw __bynkExpectFailure("tests/lim/limits.bynk:11:10", 224, 236, "expect Floor == -10\n  expected: Floor == -10\n  actual:   " + __bynkShow((Floor)) + " == " + __bynkShow((-10))); }
-    if (!(Timeout === 30000)) { throw __bynkExpectFailure("tests/lim/limits.bynk:12:10", 246, 267, "expect Timeout == 30.seconds\n  expected: Timeout == 30.seconds\n  actual:   " + __bynkShow((Timeout)) + " == " + __bynkShow((30000))); }
+    if (!(MaxRetries() === 3)) { throw __bynkExpectFailure("tests/lim/limits.bynk:7:10", 131, 146, "expect MaxRetries == 3\n  expected: MaxRetries == 3\n  actual:   " + __bynkShow((MaxRetries())) + " == " + __bynkShow((3))); }
+    if (!(Greeting() === "hello")) { throw __bynkExpectFailure("tests/lim/limits.bynk:8:10", 156, 175, "expect Greeting == \"hello\"\n  expected: Greeting == \"hello\"\n  actual:   " + __bynkShow((Greeting())) + " == " + __bynkShow(("hello"))); }
+    if (!(Ratio() === 0.5)) { throw __bynkExpectFailure("tests/lim/limits.bynk:9:10", 185, 197, "expect Ratio == 0.5\n  expected: Ratio == 0.5\n  actual:   " + __bynkShow((Ratio())) + " == " + __bynkShow((0.5))); }
+    if (!(Enabled())) { throw __bynkExpectFailure("tests/lim/limits.bynk:10:10", 207, 214, "expect Enabled"); }
+    if (!(Floor() === -10)) { throw __bynkExpectFailure("tests/lim/limits.bynk:11:10", 224, 236, "expect Floor == -10\n  expected: Floor == -10\n  actual:   " + __bynkShow((Floor())) + " == " + __bynkShow((-10))); }
+    if (!(Timeout() === 30000)) { throw __bynkExpectFailure("tests/lim/limits.bynk:12:10", 246, 267, "expect Timeout == 30.seconds\n  expected: Timeout == 30.seconds\n  actual:   " + __bynkShow((Timeout())) + " == " + __bynkShow((30000))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -72,10 +72,10 @@ async function test_a_constant_may_refer_to_another() {
     type Port = __ns_lim_limits.Port;
     type Shape = __ns_lim_limits.Shape;
     type UserId = __ns_lim_limits.UserId;
-    if (!(__bynkEq(DefaultPage, { size: 50, offset: 0 }))) { throw __bynkExpectFailure("tests/lim/limits.bynk:16:10", 321, 364, "expect DefaultPage == Page { size: 50, offset: 0 }\n  expected: DefaultPage == Page { size: 50, offset: 0 }\n  actual:   " + __bynkShow((DefaultPage)) + " == " + __bynkShow(({ size: 50, offset: 0 }))); }
-    if (!(DefaultPage.size === PageSize)) { throw __bynkExpectFailure("tests/lim/limits.bynk:17:10", 374, 402, "expect DefaultPage.size == PageSize\n  expected: DefaultPage.size == PageSize\n  actual:   " + __bynkShow((DefaultPage.size)) + " == " + __bynkShow((PageSize))); }
-    if (!(__bynkEq(Steps, [1, 2, 3]))) { throw __bynkExpectFailure("tests/lim/limits.bynk:18:10", 412, 430, "expect Steps == [1, 2, 3]\n  expected: Steps == [1, 2, 3]\n  actual:   " + __bynkShow((Steps)) + " == " + __bynkShow(([1, 2, 3]))); }
-    if (!(__bynkEq(Fallback, Some(3)))) { throw __bynkExpectFailure("tests/lim/limits.bynk:19:10", 440, 459, "expect Fallback == Some(3)\n  expected: Fallback == Some(3)\n  actual:   " + __bynkShow((Fallback)) + " == " + __bynkShow((Some(3)))); }
+    if (!(__bynkEq(DefaultPage(), { size: 50, offset: 0 }))) { throw __bynkExpectFailure("tests/lim/limits.bynk:16:10", 321, 364, "expect DefaultPage == Page { size: 50, offset: 0 }\n  expected: DefaultPage == Page { size: 50, offset: 0 }\n  actual:   " + __bynkShow((DefaultPage())) + " == " + __bynkShow(({ size: 50, offset: 0 }))); }
+    if (!(DefaultPage().size === PageSize())) { throw __bynkExpectFailure("tests/lim/limits.bynk:17:10", 374, 402, "expect DefaultPage.size == PageSize\n  expected: DefaultPage.size == PageSize\n  actual:   " + __bynkShow((DefaultPage().size)) + " == " + __bynkShow((PageSize()))); }
+    if (!(__bynkEq(Steps(), [1, 2, 3]))) { throw __bynkExpectFailure("tests/lim/limits.bynk:18:10", 412, 430, "expect Steps == [1, 2, 3]\n  expected: Steps == [1, 2, 3]\n  actual:   " + __bynkShow((Steps())) + " == " + __bynkShow(([1, 2, 3]))); }
+    if (!(__bynkEq(Fallback(), Some(3)))) { throw __bynkExpectFailure("tests/lim/limits.bynk:19:10", 440, 459, "expect Fallback == Some(3)\n  expected: Fallback == Some(3)\n  actual:   " + __bynkShow((Fallback())) + " == " + __bynkShow((Some(3)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -95,12 +95,12 @@ async function test_constructed_constants() {
     type Port = __ns_lim_limits.Port;
     type Shape = __ns_lim_limits.Shape;
     type UserId = __ns_lim_limits.UserId;
-    if (!(__bynkEq(Primary, Colour.Red))) { throw __bynkExpectFailure("tests/lim/limits.bynk:23:10", 503, 517, "expect Primary == Red\n  expected: Primary == Red\n  actual:   " + __bynkShow((Primary)) + " == " + __bynkShow((Colour.Red))); }
-    if (!(__bynkEq(Unit, Shape.Circle(1)))) { throw __bynkExpectFailure("tests/lim/limits.bynk:24:10", 527, 544, "expect Unit == Circle(1)\n  expected: Unit == Circle(1)\n  actual:   " + __bynkShow((Unit)) + " == " + __bynkShow((Shape.Circle(1)))); }
-    if (!(__bynkEq(Missing, None))) { throw __bynkExpectFailure("tests/lim/limits.bynk:25:10", 554, 569, "expect Missing == None\n  expected: Missing == None\n  actual:   " + __bynkShow((Missing)) + " == " + __bynkShow((None))); }
-    if (!(__bynkEq(Outcome, Ok(200)))) { throw __bynkExpectFailure("tests/lim/limits.bynk:26:10", 579, 597, "expect Outcome == Ok(200)\n  expected: Outcome == Ok(200)\n  actual:   " + __bynkShow((Outcome)) + " == " + __bynkShow((Ok(200)))); }
-    if (!((NoTags).length === 0)) { throw __bynkExpectFailure("tests/lim/limits.bynk:27:10", 607, 627, "expect NoTags.length() == 0\n  expected: NoTags.length() == 0\n  actual:   " + __bynkShow(((NoTags).length)) + " == " + __bynkShow((0))); }
-    if (!(DefaultPort === 8080)) { throw __bynkExpectFailure("tests/lim/limits.bynk:28:10", 637, 656, "expect DefaultPort == 8080\n  expected: DefaultPort == 8080\n  actual:   " + __bynkShow((DefaultPort)) + " == " + __bynkShow((8080))); }
+    if (!(__bynkEq(Primary(), Colour.Red))) { throw __bynkExpectFailure("tests/lim/limits.bynk:23:10", 503, 517, "expect Primary == Red\n  expected: Primary == Red\n  actual:   " + __bynkShow((Primary())) + " == " + __bynkShow((Colour.Red))); }
+    if (!(__bynkEq(Unit(), Shape.Circle(1)))) { throw __bynkExpectFailure("tests/lim/limits.bynk:24:10", 527, 544, "expect Unit == Circle(1)\n  expected: Unit == Circle(1)\n  actual:   " + __bynkShow((Unit())) + " == " + __bynkShow((Shape.Circle(1)))); }
+    if (!(__bynkEq(Missing(), None))) { throw __bynkExpectFailure("tests/lim/limits.bynk:25:10", 554, 569, "expect Missing == None\n  expected: Missing == None\n  actual:   " + __bynkShow((Missing())) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(Outcome(), Ok(200)))) { throw __bynkExpectFailure("tests/lim/limits.bynk:26:10", 579, 597, "expect Outcome == Ok(200)\n  expected: Outcome == Ok(200)\n  actual:   " + __bynkShow((Outcome())) + " == " + __bynkShow((Ok(200)))); }
+    if (!((NoTags()).length === 0)) { throw __bynkExpectFailure("tests/lim/limits.bynk:27:10", 607, 627, "expect NoTags.length() == 0\n  expected: NoTags.length() == 0\n  actual:   " + __bynkShow(((NoTags()).length)) + " == " + __bynkShow((0))); }
+    if (!(DefaultPort() === 8080)) { throw __bynkExpectFailure("tests/lim/limits.bynk:28:10", 637, 656, "expect DefaultPort == 8080\n  expected: DefaultPort == 8080\n  actual:   " + __bynkShow((DefaultPort())) + " == " + __bynkShow((8080))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -144,7 +144,7 @@ async function test_a_local_shadows_a_constant() {
     type Shape = __ns_lim_limits.Shape;
     type UserId = __ns_lim_limits.UserId;
     if (!(shadowed() === 7)) { throw __bynkExpectFailure("tests/lim/limits.bynk:39:10", 862, 877, "expect shadowed() == 7\n  expected: shadowed() == 7\n  actual:   " + __bynkShow((shadowed())) + " == " + __bynkShow((7))); }
-    if (!(MaxRetries === 3)) { throw __bynkExpectFailure("tests/lim/limits.bynk:40:10", 887, 902, "expect MaxRetries == 3\n  expected: MaxRetries == 3\n  actual:   " + __bynkShow((MaxRetries)) + " == " + __bynkShow((3))); }
+    if (!(MaxRetries() === 3)) { throw __bynkExpectFailure("tests/lim/limits.bynk:40:10", 887, 902, "expect MaxRetries == 3\n  expected: MaxRetries == 3\n  actual:   " + __bynkShow((MaxRetries())) + " == " + __bynkShow((3))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
