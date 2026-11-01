@@ -1,0 +1,21 @@
+context demo
+
+// #2640: `~>` is fire-and-forget; there is nothing to join.
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+  fn touch(id: Int) -> Effect[()]
+}
+
+service dash {
+  on call(id: Int) -> Effect[Int] given Users, Orders {
+    par {
+      let a <- Users.get(id)
+      ~> Orders.touch(id)
+    }
+    Effect.pure(0)
+  }
+}

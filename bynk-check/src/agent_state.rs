@@ -491,22 +491,30 @@ fn block_commits(b: &Block, store: &HashMap<String, String>, bound: &mut Vec<Str
     let scope = bound.len();
     let mut commits = false;
     for s in &b.statements {
-        commits |= match s {
-            Statement::Assign(_) => true,
-            Statement::Let(l) | Statement::EffectLet(l) => {
-                let c = expr_commits(&l.value, store, bound);
-                bound.push(l.name.name.clone());
-                c
-            }
-            Statement::Expect(a) => expr_commits(&a.value, store, bound),
-            Statement::Send(s) => expr_commits(&s.value, store, bound),
-            Statement::Do(d) => expr_commits(&d.value, store, bound),
-            Statement::Advance(a) => expr_commits(&a.amount, store, bound),
-        };
+        commits |= stmt_commits(s, store, bound);
     }
     commits |= expr_commits(&b.tail, store, bound);
     bound.truncate(scope);
     commits
+}
+
+fn stmt_commits(s: &Statement, store: &HashMap<String, String>, bound: &mut Vec<String>) -> bool {
+    match s {
+        Statement::Assign(_) => true,
+        Statement::Let(l) | Statement::EffectLet(l) => {
+            let c = expr_commits(&l.value, store, bound);
+            bound.push(l.name.name.clone());
+            c
+        }
+        Statement::Expect(a) => expr_commits(&a.value, store, bound),
+        Statement::Send(s) => expr_commits(&s.value, store, bound),
+        Statement::Do(d) => expr_commits(&d.value, store, bound),
+        Statement::Advance(a) => expr_commits(&a.amount, store, bound),
+        Statement::Par(p) => p
+            .statements
+            .iter()
+            .fold(false, |c, s| c | stmt_commits(s, store, bound)),
+    }
 }
 
 fn expr_commits(e: &Expr, store: &HashMap<String, String>, bound: &mut Vec<String>) -> bool {
@@ -820,6 +828,10 @@ impl Walker<'_> {
             Statement::Expect(e) => self.walk_expr(&e.value, paths, false),
             Statement::Send(s) => self.walk_expr(&s.value, paths, false),
             Statement::Advance(a) => self.walk_expr(&a.amount, paths, false),
+            Statement::Par(p) => p
+                .statements
+                .iter()
+                .fold(paths, |paths, s| self.walk_stmt(s, paths)),
             Statement::Assign(a) => {
                 let mut paths = self.walk_expr(&a.value, paths, false);
                 // No shadowing check: `:=` only ever targets a `store Cell`

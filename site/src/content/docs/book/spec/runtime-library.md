@@ -451,3 +451,24 @@ deliberate `ServerError(m)` decodes as `ServerError(m)`. An empty message is the
 only difference, and `ServerError("")` is itself a legal return, so it does not
 reliably tell the two apart: by design (#1811), a `system` case observes
 responses, not faults.
+
+## §7.4.13 The `par` join (#2640)
+
+`__bynkSettleAll(ps)` is the runtime half of a `par` block (§4.8.7b). `ps` is the
+tuple of promises the block issued, in source order; the result is the tuple of
+their values, in the same order.
+
+```typescript
+export async function __bynkSettleAll<const T extends readonly unknown[]>(
+  ps: T,
+): Promise<{ -readonly [P in keyof T]: Awaited<T[P]> }>;
+```
+
+The contract: it waits for **every** promise to settle (`Promise.allSettled`), so
+nothing the block started is running when it returns or throws. If none rejected it
+returns the values. If any rejected it throws the **first rejection in input
+order** — not the first in time — and attaches the later reasons to it as a
+`suppressed` array, in input order, when the first is an object. A non-promise
+element is its own value. The helper is codegen, not part of the published emit ABI
+(ADR 0310): it lives in the `settle` runtime module, which a project emits only when
+a module imports it.

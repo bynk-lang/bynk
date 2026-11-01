@@ -152,33 +152,43 @@ impl Walker<'_> {
             if self.truncated {
                 return Vec::new();
             }
-            paths = match stmt {
-                Statement::Let(l) | Statement::EffectLet(l) => {
-                    let paths = self.walk_expr(&l.value, paths, false);
-                    self.bound.push(l.name.name.clone());
-                    paths
-                }
-                Statement::Do(d) => self.walk_expr(&d.value, paths, false),
-                Statement::Expect(e) => self.walk_expr(&e.value, paths, false),
-                Statement::Send(s) => self.walk_expr(&s.value, paths, false),
-                Statement::Advance(a) => self.walk_expr(&a.amount, paths, false),
-                Statement::Assign(a) => {
-                    let mut paths = self.walk_expr(&a.value, paths, false);
-                    for p in &mut paths {
-                        p.writes.push(EffectWrite {
-                            field: a.target.name.clone(),
-                            op: ":=".to_string(),
-                            key: None,
-                            span: a.span,
-                        });
-                    }
-                    paths
-                }
-            };
+            paths = self.walk_stmt(stmt, paths);
         }
         let paths = self.walk_expr(&block.tail, paths, tail);
         self.bound.truncate(scope);
         paths
+    }
+
+    fn walk_stmt(&mut self, stmt: &Statement, paths: Vec<Path>) -> Vec<Path> {
+        match stmt {
+            Statement::Let(l) | Statement::EffectLet(l) => {
+                let paths = self.walk_expr(&l.value, paths, false);
+                self.bound.push(l.name.name.clone());
+                paths
+            }
+            Statement::Do(d) => self.walk_expr(&d.value, paths, false),
+            Statement::Expect(e) => self.walk_expr(&e.value, paths, false),
+            Statement::Send(s) => self.walk_expr(&s.value, paths, false),
+            Statement::Advance(a) => self.walk_expr(&a.amount, paths, false),
+            Statement::Assign(a) => {
+                let mut paths = self.walk_expr(&a.value, paths, false);
+                for p in &mut paths {
+                    p.writes.push(EffectWrite {
+                        field: a.target.name.clone(),
+                        op: ":=".to_string(),
+                        key: None,
+                        span: a.span,
+                    });
+                }
+                paths
+            }
+            // #2640: a `par` block's bindings run together; each is walked in
+            // source order, which is the order their effects are issued in.
+            Statement::Par(p) => p
+                .statements
+                .iter()
+                .fold(paths, |paths, s| self.walk_stmt(s, paths)),
+        }
     }
 
     fn walk_expr(&mut self, expr: &Expr, mut paths: Vec<Path>, tail: bool) -> Vec<Path> {

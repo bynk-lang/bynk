@@ -784,6 +784,7 @@ pub(crate) fn block_uses_send(b: &Block) -> bool {
             Statement::Do(d) => expr(&d.value),
             Statement::Assign(a) => expr(&a.value),
             Statement::Advance(a) => expr(&a.amount),
+            Statement::Par(p) => p.statements.iter().any(stmt),
         }
     }
     fn expr(e: &Expr) -> bool {
@@ -2789,31 +2790,46 @@ fn collect_refs_in_block(
     out: &mut ExternalReferences,
 ) {
     for stmt in &b.statements {
-        match stmt {
-            Statement::Let(l) | Statement::EffectLet(l) => {
-                if let Some(t) = &l.type_annot {
-                    collect_refs_in_typeref(t, local_to_file, ctx, out);
-                }
-                collect_refs_in_expr(&l.value, local_to_file, commons, ctx, out);
+        collect_refs_in_stmt(stmt, local_to_file, commons, ctx, out);
+    }
+    collect_refs_in_expr(&b.tail, local_to_file, commons, ctx, out);
+}
+
+fn collect_refs_in_stmt(
+    stmt: &Statement,
+    local_to_file: &HashSet<String>,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    out: &mut ExternalReferences,
+) {
+    match stmt {
+        Statement::Let(l) | Statement::EffectLet(l) => {
+            if let Some(t) = &l.type_annot {
+                collect_refs_in_typeref(t, local_to_file, ctx, out);
             }
-            Statement::Expect(a) => {
-                collect_refs_in_expr(&a.value, local_to_file, commons, ctx, out);
-            }
-            Statement::Send(s) => {
-                collect_refs_in_expr(&s.value, local_to_file, commons, ctx, out);
-            }
-            Statement::Do(d) => {
-                collect_refs_in_expr(&d.value, local_to_file, commons, ctx, out);
-            }
-            Statement::Assign(a) => {
-                collect_refs_in_expr(&a.value, local_to_file, commons, ctx, out);
-            }
-            Statement::Advance(a) => {
-                collect_refs_in_expr(&a.amount, local_to_file, commons, ctx, out);
+            collect_refs_in_expr(&l.value, local_to_file, commons, ctx, out);
+        }
+        Statement::Expect(a) => {
+            collect_refs_in_expr(&a.value, local_to_file, commons, ctx, out);
+        }
+        Statement::Send(s) => {
+            collect_refs_in_expr(&s.value, local_to_file, commons, ctx, out);
+        }
+        Statement::Do(d) => {
+            collect_refs_in_expr(&d.value, local_to_file, commons, ctx, out);
+        }
+        Statement::Assign(a) => {
+            collect_refs_in_expr(&a.value, local_to_file, commons, ctx, out);
+        }
+        Statement::Advance(a) => {
+            collect_refs_in_expr(&a.amount, local_to_file, commons, ctx, out);
+        }
+        Statement::Par(p) => {
+            for inner in &p.statements {
+                collect_refs_in_stmt(inner, local_to_file, commons, ctx, out);
             }
         }
     }
-    collect_refs_in_expr(&b.tail, local_to_file, commons, ctx, out);
 }
 
 fn collect_refs_in_expr(
@@ -3938,6 +3954,13 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.settle_all() {
+            parts.extend(
+                SETTLE_ALL_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
         if ctx.runtime_use.url_ops() {
             parts.extend(URL_OPS_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
@@ -4035,6 +4058,12 @@ fn write_header_single(
         } else {
             ""
         };
+        // #2640: the `par` join, imported only when a body has a `par` block.
+        let settle_all_imports = if runtime_use.settle_all() {
+            SETTLE_ALL_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #2341 (L4): the `RequestHeaders` constructor, imported only when a
         // body built one (`RequestHeaders.of`/`empty`).
         let request_headers_imports = if runtime_use.request_headers() {
@@ -4070,7 +4099,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{url_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{url_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4092,6 +4121,9 @@ pub(crate) const REQUEST_HEADERS_RUNTIME_IMPORTS: &str = ", __requestHeaders";
 /// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
 /// appended only when the body calls one.
 pub(crate) const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkInstantFromIso";
+
+/// #2640: the join a `par { … }` block awaits, appended only when a body has one.
+pub(crate) const SETTLE_ALL_RUNTIME_IMPORTS: &str = ", __bynkSettleAll";
 
 /// K2 (#2594): the percent-encoding helpers (`percentEncode`,
 /// `percentDecode`), appended only when the body calls one.
@@ -5342,6 +5374,11 @@ impl<'a> LowerCtx<'a> {
     /// Record that this lowering emitted a percent-encoding helper (#2594).
     fn note_url_ops(&self) {
         self.runtime_use().note_url_ops();
+    }
+
+    /// Record that this lowering emitted a `par` join (#2640).
+    fn note_settle_all(&self) {
+        self.runtime_use().note_settle_all();
     }
 
     /// Record that this lowering built a `RequestHeaders` value (#2341), so

@@ -2580,6 +2580,20 @@ impl<'a> Formatter<'a> {
                 self.push(&format!("advance {} by ", a.cap.name));
                 self.format_expr(&a.amount);
             }
+            Statement::Par(p) => {
+                self.push("par {");
+                self.newline();
+                self.indented(|f| {
+                    for stmt in &p.statements {
+                        let trivia = statement_trivia(stmt);
+                        f.emit_leading_comments(&trivia.leading);
+                        f.format_statement(stmt);
+                        f.emit_trailing_comment_or_newline(trivia.trailing.as_deref());
+                    }
+                    f.emit_leading_comments(&p.closing_comments);
+                });
+                self.push("}");
+            }
         }
     }
 
@@ -3289,6 +3303,7 @@ fn statement_trivia(s: &Statement) -> &Trivia {
         Statement::Do(d) => &d.trivia,
         Statement::Assign(a) => &a.trivia,
         Statement::Advance(a) => &a.trivia,
+        Statement::Par(p) => &p.trivia,
     }
 }
 
@@ -3907,12 +3922,37 @@ fn stmt_to_string(s: &Statement) -> String {
         Statement::Advance(a) => {
             format!("advance {} by {}", a.cap.name, expr_with_prec(&a.amount, 0))
         }
+        Statement::Par(p) => {
+            let body: Vec<String> = p.statements.iter().map(stmt_to_string).collect();
+            format!("par {{ {} }}", body.join(" "))
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #2640: a `par` block prints one binding per line, indented, and the
+    /// output is a fixed point; comments around and inside it stay put.
+    #[test]
+    fn par_block_round_trips() {
+        let src = "commons x\n\nfn f(id: Int) -> Effect[Int] {\n\t// load both\n\tpar {\n\t\t// the user\n\t\tlet user <- Users.get(id)  // trailing\n\t\tlet orders: Int <- Orders.forUser(id)\n\t\tdo Audit.touch(id)\n\t\t// last word\n\t}\n\tEffect.pure(user + orders)\n}\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(out, src);
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
+
+    #[test]
+    fn par_block_is_reindented_and_split_onto_lines() {
+        let messy = "commons x\n\nfn f(id: Int) -> Effect[Int] {\n  if id > 0 {   par { let a <- A.get(id)   let b <- B.get(id) }\n  Effect.pure(a + b) } else { Effect.pure(0) }\n}\n";
+        let out = format_source(messy, &FormatOptions::default()).unwrap();
+        assert!(
+            out.contains("\t\tpar {\n\t\t\tlet a <- A.get(id)\n\t\t\tlet b <- B.get(id)\n\t\t}\n"),
+            "{out}"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
 
     /// #2321: a binding's `includes` list prints between the module and
     /// `requires`, and the output is a fixed point.
