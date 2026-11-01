@@ -110,6 +110,15 @@ message template.
 **Static semantics.**
 {{#grammar-semantics string_literal}}
 
+### escape_sequence {#rule-escape_sequence}
+
+{{#grammar escape_sequence}}
+
+One escape inside an ordinary or multi-line string literal (#2619): `\n`, `\r`,
+`\t`, `\0`, `\"`, `\\`, or `\u{…}` with 1 to 6 hex digits. Whether a `\u{…}`
+names a Unicode scalar value (not a surrogate, at most `10FFFF`) is checked by
+the compiler, not the grammar. A raw string has no escapes.
+
 ### string_interpolation {#rule-string_interpolation}
 
 {{#grammar string_interpolation}}

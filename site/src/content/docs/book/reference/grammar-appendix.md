@@ -190,7 +190,8 @@ identifier ::= /[A-Za-z][A-Za-z0-9_]*/
 constant_name ::= /[A-Z][A-Za-z0-9_]*/
 number_literal ::= /[0-9]+(_[0-9]+)*/
 float_literal ::= /[0-9]+(_[0-9]+)*\.[0-9]+(_[0-9]+)*([eE][+-]?[0-9]+(_[0-9]+)*)?|[0-9]+(_[0-9]+)*[eE][+-]?[0-9]+(_[0-9]+)*/
-string_literal ::= """ (/[^"\\\n]+/ | /\\[nt"\\]/ | string_interpolation)* """
+string_literal ::= """ (/[^"\\\n]+/ | escape_sequence | string_interpolation)* """ | /"""\r?\n/ (/[^"\\]+/ | /"{1,2}[^"\\]/ | escape_sequence | string_interpolation)* """"" | raw_string
+escape_sequence ::= /\\[ntr0"\\]/ | /\\u\{[0-9a-fA-F]{1,6}\}/
 string_interpolation ::= "\(" expression ")"
 boolean_literal ::= "true" | "false"
 unit_literal ::= "(" ")"
@@ -201,4 +202,4 @@ line_comment ::= "//" /[^\n]*/
 
 - **Word token:** `identifier`
 - **Ignored between tokens:** `/\s+/`, `doc_line`, `line_comment`, `doc_block`
-- **External tokens:** `doc_block`, `doc_line`
+- **External tokens:** `doc_block`, `doc_line`, `raw_string`

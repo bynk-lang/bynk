@@ -2411,13 +2411,19 @@ mod tests {
             .collect();
         assert_eq!(shape, ["a", "\"\\n  \"", "b", "\" x\""]);
         // A whitespace-only line shallower than the margin is empty.
-        assert_eq!(string_value("\"\"\"\n    a\n  \n    b\n    \"\"\""), "a\n\nb");
+        assert_eq!(
+            string_value("\"\"\"\n    a\n  \n    b\n    \"\"\""),
+            "a\n\nb"
+        );
         // Mixed tabs and spaces that do not match the margin exactly.
         let err = tokenize("\"\"\"\n\t  a\n    \"\"\"").unwrap_err();
         assert_eq!(err.category, "bynk.lex.multiline_indent");
         assert!(err.notes[0].contains("character for character"));
         // CRLF inside a raw multi-line string; a lone CR is not a line break.
-        assert_eq!(string_value("r\"\"\"\r\n  a\\\r\n  b\r\n  \"\"\""), "a\\\nb");
+        assert_eq!(
+            string_value("r\"\"\"\r\n  a\\\r\n  b\r\n  \"\"\""),
+            "a\\\nb"
+        );
         assert_eq!(string_value("\"\"\"\n  a\rb\n  \"\"\""), "a\rb");
         // The raw form holds `"` and `""` but not `"""`.
         assert_eq!(string_value("r\"\"\"\n  \"a\"\" b\n  \"\"\""), "\"a\"\" b");

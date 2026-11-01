@@ -140,6 +140,13 @@ with none is the plain string literal above. The hole rule and emission are
 specified in [§5.2 well-typedness](/book/spec/static-semantics/#52-well-typedness) and
 [§7 emission](/book/spec/emission/).
 
+### §3.2.2b escape_sequence
+
+{{#grammar escape_sequence}}
+
+One escape sequence inside an ordinary or multi-line string literal (#2619); the
+table in §3.2.2 gives each value.
+
 ### §3.2.2a string_interpolation
 
 {{#grammar string_interpolation}}

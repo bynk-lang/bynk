@@ -59,10 +59,10 @@ async function test_unicode_escapes_name_the_scalar_value() {
   try {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
-    if (!(nbsp() === "a b")) { throw __bynkExpectFailure("tests/text.test.bynk:9:12", 304, 319, "expect nbsp() == \"a b\"\n  expected: nbsp() == \"a b\"\n  actual:   " + __bynkShow((nbsp())) + " == " + __bynkShow(("a b"))); }
-    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:a\\u00A0b)(?![\\s\\S])", "").test(nbsp()))) { throw __bynkExpectFailure("tests/text.test.bynk:10:12", 331, 363, "expect nbsp().matchesRegex(r\"a\\u00A0b\")"); }
-    if (!(grin() === "😀")) { throw __bynkExpectFailure("tests/text.test.bynk:11:12", 375, 391, "expect grin() == \"😀\"\n  expected: grin() == \"😀\"\n  actual:   " + __bynkShow((grin())) + " == " + __bynkShow(("😀"))); }
-    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:a\\u2028b)(?![\\s\\S])", "").test(lineSeparator()))) { throw __bynkExpectFailure("tests/text.test.bynk:12:12", 403, 444, "expect lineSeparator().matchesRegex(r\"a\\u2028b\")"); }
+    if (!(nbsp() === "a b")) { throw __bynkExpectFailure("tests/text.test.bynk:9:12", 304, 320, "expect nbsp() == \"a b\"\n  expected: nbsp() == \"a b\"\n  actual:   " + __bynkShow((nbsp())) + " == " + __bynkShow(("a b"))); }
+    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:a\\u00A0b)(?![\\s\\S])", "").test(nbsp()))) { throw __bynkExpectFailure("tests/text.test.bynk:10:12", 332, 364, "expect nbsp().matchesRegex(r\"a\\u00A0b\")"); }
+    if (!(grin() === "😀")) { throw __bynkExpectFailure("tests/text.test.bynk:11:12", 376, 392, "expect grin() == \"😀\"\n  expected: grin() == \"😀\"\n  actual:   " + __bynkShow((grin())) + " == " + __bynkShow(("😀"))); }
+    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:a\\u2028b)(?![\\s\\S])", "").test(lineSeparator()))) { throw __bynkExpectFailure("tests/text.test.bynk:12:12", 404, 445, "expect lineSeparator().matchesRegex(r\"a\\u2028b\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -77,7 +77,7 @@ async function test_nul_survives_to_the_runtime() {
   try {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
-    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:x\\x00y)(?![\\s\\S])", "").test(nul()))) { throw __bynkExpectFailure("tests/text.test.bynk:16:12", 500, 529, "expect nul().matchesRegex(r\"x\\x00y\")"); }
+    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:x\\x00y)(?![\\s\\S])", "").test(nul()))) { throw __bynkExpectFailure("tests/text.test.bynk:16:12", 501, 530, "expect nul().matchesRegex(r\"x\\x00y\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -92,10 +92,10 @@ async function test_a_raw_string_is_taken_as_written() {
   try {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
-    if (!(digits() === "\\d+\\.\\d+")) { throw __bynkExpectFailure("tests/text.test.bynk:20:12", 590, 615, "expect digits() == \"\\\\d+\\\\.\\\\d+\"\n  expected: digits() == \"\\\\d+\\\\.\\\\d+\"\n  actual:   " + __bynkShow((digits())) + " == " + __bynkShow(("\\d+\\.\\d+"))); }
-    if (!(windowsPath() === "C:\\Users\\bynk")) { throw __bynkExpectFailure("tests/text.test.bynk:21:12", 627, 661, "expect windowsPath() == \"C:\\\\Users\\\\bynk\"\n  expected: windowsPath() == \"C:\\\\Users\\\\bynk\"\n  actual:   " + __bynkShow((windowsPath())) + " == " + __bynkShow(("C:\\Users\\bynk"))); }
-    if (!(hashed() === "she said \"hi\" \\n")) { throw __bynkExpectFailure("tests/text.test.bynk:22:12", 673, 706, "expect hashed() == \"she said \\\"hi\\\" \\\\n\"\n  expected: hashed() == \"she said \\\"hi\\\" \\\\n\"\n  actual:   " + __bynkShow((hashed())) + " == " + __bynkShow(("she said \"hi\" \\n"))); }
-    if (!(noHole() === "\\(name)")) { throw __bynkExpectFailure("tests/text.test.bynk:23:12", 718, 740, "expect noHole() == \"\\\\(name)\"\n  expected: noHole() == \"\\\\(name)\"\n  actual:   " + __bynkShow((noHole())) + " == " + __bynkShow(("\\(name)"))); }
+    if (!(digits() === "\\d+\\.\\d+")) { throw __bynkExpectFailure("tests/text.test.bynk:20:12", 591, 616, "expect digits() == \"\\\\d+\\\\.\\\\d+\"\n  expected: digits() == \"\\\\d+\\\\.\\\\d+\"\n  actual:   " + __bynkShow((digits())) + " == " + __bynkShow(("\\d+\\.\\d+"))); }
+    if (!(windowsPath() === "C:\\Users\\bynk")) { throw __bynkExpectFailure("tests/text.test.bynk:21:12", 628, 662, "expect windowsPath() == \"C:\\\\Users\\\\bynk\"\n  expected: windowsPath() == \"C:\\\\Users\\\\bynk\"\n  actual:   " + __bynkShow((windowsPath())) + " == " + __bynkShow(("C:\\Users\\bynk"))); }
+    if (!(hashed() === "she said \"hi\" \\n")) { throw __bynkExpectFailure("tests/text.test.bynk:22:12", 674, 707, "expect hashed() == \"she said \\\"hi\\\" \\\\n\"\n  expected: hashed() == \"she said \\\"hi\\\" \\\\n\"\n  actual:   " + __bynkShow((hashed())) + " == " + __bynkShow(("she said \"hi\" \\n"))); }
+    if (!(noHole() === "\\(name)")) { throw __bynkExpectFailure("tests/text.test.bynk:23:12", 719, 741, "expect noHole() == \"\\\\(name)\"\n  expected: noHole() == \"\\\\(name)\"\n  actual:   " + __bynkShow((noHole())) + " == " + __bynkShow(("\\(name)"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -110,7 +110,7 @@ async function test_a_multi_line_string_strips_the_closing_indentation() {
   try {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
-    if (!(query() === "SELECT id, total\n  FROM orders\n WHERE customer = ?")) { throw __bynkExpectFailure("tests/text.test.bynk:27:12", 819, 884, "expect query() == \"SELECT id, total\\n  FROM orders\\n WHERE customer = ?\"\n  expected: query() == \"SELECT id, total\\n  FROM orders\\n WHERE customer = ?\"\n  actual:   " + __bynkShow((query())) + " == " + __bynkShow(("SELECT id, total\n  FROM orders\n WHERE customer = ?"))); }
+    if (!(query() === "SELECT id, total\n  FROM orders\n WHERE customer = ?")) { throw __bynkExpectFailure("tests/text.test.bynk:27:12", 820, 885, "expect query() == \"SELECT id, total\\n  FROM orders\\n WHERE customer = ?\"\n  expected: query() == \"SELECT id, total\\n  FROM orders\\n WHERE customer = ?\"\n  actual:   " + __bynkShow((query())) + " == " + __bynkShow(("SELECT id, total\n  FROM orders\n WHERE customer = ?"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -125,7 +125,7 @@ async function test_a_multi_line_string_interpolates_and_escapes() {
   try {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
-    if (!(greeting("Ada") === "Hello, Ada!\nTab:\tdone")) { throw __bynkExpectFailure("tests/text.test.bynk:31:12", 957, 1001, "expect greeting(\"Ada\") == \"Hello, Ada!\\nTab:\\tdone\"\n  expected: greeting(\"Ada\") == \"Hello, Ada!\\nTab:\\tdone\"\n  actual:   " + __bynkShow((greeting("Ada"))) + " == " + __bynkShow(("Hello, Ada!\nTab:\tdone"))); }
+    if (!(greeting("Ada") === "Hello, Ada!\nTab:\tdone")) { throw __bynkExpectFailure("tests/text.test.bynk:31:12", 958, 1002, "expect greeting(\"Ada\") == \"Hello, Ada!\\nTab:\\tdone\"\n  expected: greeting(\"Ada\") == \"Hello, Ada!\\nTab:\\tdone\"\n  actual:   " + __bynkShow((greeting("Ada"))) + " == " + __bynkShow(("Hello, Ada!\nTab:\tdone"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -140,7 +140,7 @@ async function test_a_raw_multi_line_string_keeps_its_backslashes() {
   try {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
-    if (!(pattern() === "^\\d{3}-\\d{4}$")) { throw __bynkExpectFailure("tests/text.test.bynk:35:12", 1075, 1105, "expect pattern() == \"^\\\\d{3}-\\\\d{4}$\"\n  expected: pattern() == \"^\\\\d{3}-\\\\d{4}$\"\n  actual:   " + __bynkShow((pattern())) + " == " + __bynkShow(("^\\d{3}-\\d{4}$"))); }
+    if (!(pattern() === "^\\d{3}-\\d{4}$")) { throw __bynkExpectFailure("tests/text.test.bynk:35:12", 1076, 1106, "expect pattern() == \"^\\\\d{3}-\\\\d{4}$\"\n  expected: pattern() == \"^\\\\d{3}-\\\\d{4}$\"\n  actual:   " + __bynkShow((pattern())) + " == " + __bynkShow(("^\\d{3}-\\d{4}$"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -155,10 +155,10 @@ async function test_a_raw_regex_pattern_checks_and_runs_like_the_doubled_form() 
   try {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
-    if (!(isVersion("3.14"))) { throw __bynkExpectFailure("tests/text.test.bynk:39:12", 1191, 1208, "expect isVersion(\"3.14\")"); }
-    if (!(!isVersion("3x14"))) { throw __bynkExpectFailure("tests/text.test.bynk:40:12", 1220, 1238, "expect !isVersion(\"3x14\")"); }
-    if (!(isVersion("10.0") === isVersionEscaped("10.0"))) { throw __bynkExpectFailure("tests/text.test.bynk:41:12", 1250, 1295, "expect isVersion(\"10.0\") == isVersionEscaped(\"10.0\")\n  expected: isVersion(\"10.0\") == isVersionEscaped(\"10.0\")\n  actual:   " + __bynkShow((isVersion("10.0"))) + " == " + __bynkShow((isVersionEscaped("10.0")))); }
-    if (!(isVersion("v") === isVersionEscaped("v"))) { throw __bynkExpectFailure("tests/text.test.bynk:42:12", 1307, 1346, "expect isVersion(\"v\") == isVersionEscaped(\"v\")\n  expected: isVersion(\"v\") == isVersionEscaped(\"v\")\n  actual:   " + __bynkShow((isVersion("v"))) + " == " + __bynkShow((isVersionEscaped("v")))); }
+    if (!(isVersion("3.14"))) { throw __bynkExpectFailure("tests/text.test.bynk:39:12", 1192, 1209, "expect isVersion(\"3.14\")"); }
+    if (!(!isVersion("3x14"))) { throw __bynkExpectFailure("tests/text.test.bynk:40:12", 1221, 1239, "expect !isVersion(\"3x14\")"); }
+    if (!(isVersion("10.0") === isVersionEscaped("10.0"))) { throw __bynkExpectFailure("tests/text.test.bynk:41:12", 1251, 1296, "expect isVersion(\"10.0\") == isVersionEscaped(\"10.0\")\n  expected: isVersion(\"10.0\") == isVersionEscaped(\"10.0\")\n  actual:   " + __bynkShow((isVersion("10.0"))) + " == " + __bynkShow((isVersionEscaped("10.0")))); }
+    if (!(isVersion("v") === isVersionEscaped("v"))) { throw __bynkExpectFailure("tests/text.test.bynk:42:12", 1308, 1347, "expect isVersion(\"v\") == isVersionEscaped(\"v\")\n  expected: isVersion(\"v\") == isVersionEscaped(\"v\")\n  actual:   " + __bynkShow((isVersion("v"))) + " == " + __bynkShow((isVersionEscaped("v")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

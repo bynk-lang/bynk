@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: "String literals gain `\\r`, `\\0` and `\\u{…}` escapes, raw strings (`r\"…\"`, `r#\"…\"#`) and multi-line strings (`\"\"\"…\"\"\"`, `r\"\"\"…\"\"\"`) that strip the closing delimiter's indentation; a raw or multi-line literal is accepted wherever a string literal is required, so regex patterns and SQL statements read as written (proposed in [#2619](https://github.com/bynk-lang/bynk/issues/2619))"
-probes: diagnostic_coverage
+probes: diagnostic_coverage, ts_writes
 ---
 
 ## ADR: string-literal-forms
