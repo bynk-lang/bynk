@@ -32,8 +32,9 @@ Only a record or sum `type` may be generic.
 A bound is written after the parameter name: `T: Eq`, or `T: C1 + C2` for
 several. The constraints are **`Eq`**, which says values of the type compare with
 `==` and `!=`, **`Ord`**, which says they have a total order (below), and
-**`Key`**, which says they can key a `Map` or `Set` ([below](#key)). Any other name
-is `bynk.generics.unknown_constraint`.
+**`Key`**, which says they can key a `Map` or `Set` ([below](#key)), and
+**`Codable`**, which says they cross the JSON boundary ([below](#codable)). Any other
+name is `bynk.generics.unknown_constraint`.
 
 ```bynk
 commons demo.bounds
@@ -174,6 +175,53 @@ parameter is bounded with `where K: Key`, or on the type.
 `Key` costs nothing at run time and adds no hidden argument: composite keys are
 held under a canonical encoding the runtime derives from the value itself.
 
+## `Codable`
+
+`Codable` says a value encodes and decodes with `Json`: `Json.encode(v)` and
+`Json.decode[T](s)` work on a type parameter declared `T: Codable`.
+
+```bynk
+commons demo.codable
+
+fn roundTrip[T: Codable](v: T) -> Result[T, JsonError] {
+  Json.decode[T](Json.encode(v))
+}
+
+fn encodeAll[T: Codable](xs: List[T]) -> String { Json.encode(xs) }
+```
+
+`Codable` is automatic, never derived, and means exactly what `Json.decode` accepts:
+base types (including `Float` and `Bytes`), refined and opaque types, `Option`,
+`List`, `Set`, `Map` and `Result` of a `Codable`, records, sums and enums, and a
+generic type instantiated at `Codable` arguments. It does not hold for top-level `()`
+(it encodes but does not decode), functions, `Effect`, `Query`, a `Stream` or a type
+that carries one, a held `Connection`, the HTTP and queue result types, `Asset`,
+request headers, token claims or an actor. A call that instantiates a `Codable`
+parameter with one of these is `bynk.types.not_codable`.
+
+Without the bound, `Json.encode` or `Json.decode[T]` on a type parameter is
+`bynk.generics.missing_codable_bound`, and so is passing the parameter to another
+generic's `Codable` parameter; the diagnostic's fix adds the bound, and `bynk check
+--fix` applies it across a project. Unlike `Ord` and `Key`, `Codable` does not imply
+`Eq`, so the fix writes `T: Eq + Codable`. A method's receiver parameter is bounded
+with `where A: Codable`.
+
+**At run time**, a `Codable` parameter takes one hidden trailing argument, a codec
+(`__codec_T`), built at the call site from the same generated `__serialise_X` and
+`__deserialise_X` a monomorphic boundary uses. So a refined type is re-validated on
+the way in, exactly as at an HTTP boundary. When a function has several witnesses they
+follow the type parameters in declaration order, and within one parameter the
+comparator comes first: `[T: Ord + Codable]` takes `__cmp_T` then `__codec_T`. Like an
+`Ord` witness, a codec is internal and not part of the published ABI.
+
+`List`, `Option`, `Set`, `Map` and `Result` over a type parameter encode and decode
+inside the function; a `Set[T]` needs `T: Key + Codable`. A generic type of your own
+over a type parameter (`Box[T]` inside `fn f[T: Codable]`) is not supported yet:
+`bynk.generics.codec_generic_at_rigid`. A concrete `Box[Order]` is unaffected.
+
+An opaque type decoded outside the unit that owns it is checked no more than it is at
+any boundary there; `Codable` does not change that.
+
 ## A method's receiver parameters
 
 A method on a generic type sees the type's parameters (`A` in `Box[A]`) without
@@ -204,28 +252,44 @@ T }`. The bound is checked where the type is applied to a written type argument:
 declared. No construct requires a bound on a type yet, so a bare type parameter
 as the argument (`Pair[U]`) is not checked.
 
-## Capability operations take only `Key`
+## Capability operations take `Key` and `Codable`
 
 A generic capability operation (`fn dedup[T](key: String) -> …`) has no body for a
 bound to serve, so `bynk.generics.bound_on_capability_op` rejects `Eq` and `Ord`.
 `Key` alone is allowed (`fn snapshot[K: Key](keys: Set[K]) -> …`): it adds no hidden
-argument and nothing to the operation's published ABI, and without it an operation
-over a `Map[K, _]` could not be written.
+argument, and without it an operation over a `Map[K, _]` could not be written.
+
+`Codable` is allowed too (`fn append[T: Codable](id: String, event: T) -> Effect[()]`).
+The **call site** encodes each argument whose parameter type mentions the `Codable`
+parameter, whole, with the codec of its concrete type, and the emitted interface
+declares that parameter as `unknown`: *a JSON value in Bynk's boundary encoding*. Other
+parameters pass through unchanged (`id` stays a `string`). So a provider is
+hand-written TypeScript that receives plain JSON, never a codec, and the operation's
+ABI does not grow. The type arguments are inferred from the arguments when they
+determine every parameter: `Queue.sendValue(order)`.
+
+A `Codable` parameter may not appear in the operation's return type
+(`bynk.generics.codable_op_return`): decoding a provider's reply raises what a failed
+decode of stored data means, which is not settled. Typed reads wait for that. As for
+any generic operation, it needs a provider written in TypeScript
+(`bynk.provider.generic_op_requires_external`).
 
 ## Where this is going
 
-`Eq`, `Ord` and `Key` are the first constraints of the constrained-generics track. `Eq`
-replaced the equality requirement the compiler used to infer, so the requirement
+`Eq`, `Ord`, `Key` and `Codable` are the constraints of the constrained-generics track.
+`Eq` replaced the equality requirement the compiler used to infer, so the requirement
 a caller must meet is declared in the callee's signature rather than discovered
-from an error. A further constraint (boundary serialisation) will use the same
-`T: C` syntax.
+from an error. Typed reads from a capability (a `Codable` return type) and a codec for a
+generic type of your own over a type parameter are the open follow-ups.
 
 ## See also
 
 - Guide: [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/).
 - Guide: [Key a map by a record](/book/guides/type-system/key-a-map-by-a-record/).
 - Guide: [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/).
-- Troubleshooting: [`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/),
+- Guide: [Generic code that crosses the boundary](/book/guides/type-system/generic-code-that-crosses-the-boundary/).
+- Troubleshooting: [`bynk.generics.missing_codable_bound`](/book/troubleshooting/generics-missing-codable-bound/),
+  [`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/),
   [`bynk.generics.missing_ord_bound`](/book/troubleshooting/generics-missing-ord-bound/).
 - Spec: [§5.2 Generic instantiation](/book/spec/static-semantics/) and
   [§4.3.1b](/book/spec/syntactic-grammar/).

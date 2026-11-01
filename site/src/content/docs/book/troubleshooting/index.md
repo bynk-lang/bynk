@@ -4,6 +4,8 @@ title: Troubleshooting
 One page per common diagnostic — the cause and the fix. Search for the error
 code you saw.
 
+- [`bynk.generics.missing_codable_bound`](/book/troubleshooting/generics-missing-codable-bound/) — a generic encodes or
+  decodes a type parameter that is not declared `Codable`.
 - [`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/) — a generic compares a
   type parameter that is not declared `Eq`.
 - [`bynk.generics.missing_key_bound`](/book/troubleshooting/generics-missing-key-bound/) — a generic keys a `Map` or

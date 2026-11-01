@@ -1,2 +1,0 @@
-bynk.generics.unknown_constraint
-`Codable` is not a constraint

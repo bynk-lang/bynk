@@ -619,12 +619,16 @@ on POST("/orders") (order: Order) -> Effect[HttpResult[String]] by Visitor given
   back before it can be delivered. The delay is whole seconds (a part second
   rounds up), at most 12 hours.
 - `sendBatch(bodies)` sends its bodies in one call, all or none.
+- `sendValue(message)` takes any `Codable` value and sends exactly the message
+  `send(Json.encode(message))` would. The call site does the encoding, so nothing
+  can go wrong with the text: `OrderEvents.sendValue(order)`.
 
 Text that is not JSON faults the send, and so does going over the platform's
 caps: 128 KB a message, and 100 messages or 256 KB a batch. Delivery is at least
 once and the platform stores the messages, so make consumers idempotent and keep
 secrets out of bodies. Nothing checks that a producer's message matches the
-consumer's message type: the body is text, encoded by the caller.
+consumer's message type: `send`'s body is text, encoded by the caller, and
+`sendValue` checks only that its argument is `Codable`.
 
 In tests each instance accepts every send, checking that each body is JSON (and
 a delay is in range) as the platform binding does; nothing is delivered to a

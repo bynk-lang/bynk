@@ -784,6 +784,11 @@ service api from http {
 \t\tOk(\"sent\")
 \t}
 
+\ton GET(\"/value/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet _ <- Orders.sendValue(Placed { id: id, total: 9 })
+\t\tOk(\"sent\")
+\t}
+
 \ton GET(\"/raw/:text\") (text: String) -> Effect[HttpResult[String]] by Visitor given Orders {
 \t\tlet _ <- Orders.send(text)
 \t\tOk(\"sent\")
@@ -820,11 +825,20 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
                 ("/send/o-1", 200, r#""sent""#),
                 ("/later/o-2", 200, r#""sent""#),
                 ("/batch/o-3/o-4", 200, r#""sent""#),
+                // `sendValue` encodes at the call site and must reach the same
+                // consumer, decoded the same way, as `send(Json.encode(…))`.
+                ("/value/o-5", 200, r#""sent""#),
                 ("/raw/not-json", 500, ""),
             ],
         );
         // Local queues deliver in batches, after a timeout: poll.
-        let expected = [("o-1", "7"), ("o-2", "8"), ("o-3", "1"), ("o-4", "2")];
+        let expected = [
+            ("o-1", "7"),
+            ("o-2", "8"),
+            ("o-3", "1"),
+            ("o-4", "2"),
+            ("o-5", "9"),
+        ];
         let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             let seen = expected

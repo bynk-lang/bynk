@@ -1,0 +1,1 @@
+bynk.generics.bound_on_capability_op

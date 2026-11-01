@@ -66,9 +66,9 @@ use crate::requirements::RequirementSink;
 use crate::resolver::ResolvedCommons;
 
 /// The constraint names a bound may use. Slice 0 admitted only `Eq`; slice 1
-/// added `Ord`, slice 2 adds `Key`, and a later slice of the constrained-generics
-/// track adds `Codable`.
-pub(crate) const CONSTRAINTS: &[&str] = &["Eq", "Ord", "Key"];
+/// added `Ord`, slice 2 `Key`, and slice 3 `Codable`. The order is the witness
+/// order within one type parameter (comparator before codec).
+pub(crate) const CONSTRAINTS: &[&str] = &["Eq", "Ord", "Key", "Codable"];
 
 /// Whether `bounds` includes `Ord`.
 pub(crate) fn has_ord(bounds: &[Ident]) -> bool {
@@ -78,6 +78,11 @@ pub(crate) fn has_ord(bounds: &[Ident]) -> bool {
 /// Whether `bounds` includes `Key`.
 pub(crate) fn has_key(bounds: &[Ident]) -> bool {
     bounds.iter().any(|b| b.name == "Key")
+}
+
+/// Whether `bounds` includes `Codable`.
+pub(crate) fn has_codable(bounds: &[Ident]) -> bool {
+    bounds.iter().any(|b| b.name == "Codable")
 }
 
 /// Whether `bounds` grants `Eq`: an explicit `Eq`, or `Ord` or `Key`, which imply
@@ -171,11 +176,14 @@ pub(crate) struct EqScope {
     ord: HashSet<String>,
     /// Parameters declared `Key`.
     key: HashSet<String>,
+    /// Parameters declared `Codable`.
+    codable: HashSet<String>,
     /// Shared by every clone (a function's contract clauses and its body check
     /// in separate contexts), so a parameter is reported once per function.
     reported: Rc<RefCell<HashSet<String>>>,
     reported_ord: Rc<RefCell<HashSet<String>>>,
     reported_key: Rc<RefCell<HashSet<String>>>,
+    reported_codable: Rc<RefCell<HashSet<String>>>,
     fix: FixSite,
 }
 
@@ -186,6 +194,7 @@ impl EqScope {
         let mut declared = HashSet::new();
         let mut ord = HashSet::new();
         let mut key = HashSet::new();
+        let mut codable = HashSet::new();
         let mut fix = FixSite::default();
         for tp in &f.type_params {
             if has_eq(&tp.bounds) {
@@ -196,6 +205,9 @@ impl EqScope {
             }
             if has_key(&tp.bounds) {
                 key.insert(tp.name.name.clone());
+            }
+            if has_codable(&tp.bounds) {
+                codable.insert(tp.name.name.clone());
             }
             if let Some(eq) = tp.bounds.iter().find(|b| b.name == "Eq") {
                 fix.eq_bound.insert(tp.name.name.clone(), eq.span);
@@ -218,6 +230,9 @@ impl EqScope {
             }
             if has_key(&wb.bounds) {
                 key.insert(wb.param.name.clone());
+            }
+            if has_codable(&wb.bounds) {
+                codable.insert(wb.param.name.clone());
             }
             if let Some(eq) = wb.bounds.iter().find(|b| b.name == "Eq") {
                 fix.eq_bound.insert(wb.param.name.clone(), eq.span);
@@ -246,15 +261,20 @@ impl EqScope {
                 if has_key(&tp.bounds) {
                     key.insert(tp.name.name.clone());
                 }
+                if has_codable(&tp.bounds) {
+                    codable.insert(tp.name.name.clone());
+                }
             }
         }
         EqScope {
             declared,
             ord,
             key,
+            codable,
             reported: Rc::default(),
             reported_ord: Rc::default(),
             reported_key: Rc::default(),
+            reported_codable: Rc::default(),
             fix,
         }
     }
@@ -268,7 +288,9 @@ impl EqScope {
         constraint: &str,
     ) -> Option<(String, Vec<(Span, String)>)> {
         let msg = format!("declare `{param}: {constraint}`");
-        if constraint != "Eq"
+        // `Ord` and `Key` imply `Eq`, so they replace an explicit `Eq`; `Codable`
+        // does not, so it is added beside it.
+        if matches!(constraint, "Ord" | "Key")
             && let Some(at) = self.fix.eq_bound.get(param)
         {
             return Some((msg, vec![(*at, constraint.to_string())]));
@@ -409,6 +431,41 @@ pub(crate) fn require_key_vars_in(
             err = err.with_suggestion(msg, edits, Applicability::MachineApplicable);
         }
         errors.push(err);
+    }
+    false
+}
+
+/// Require `Codable` of every type parameter in `ty` that the enclosing function
+/// has not declared it for. Reports `bynk.generics.missing_codable_bound`, once
+/// per parameter per function, and returns `false` when any was missing. The
+/// structural half of the requirement is [`super::codable::check_codable`].
+pub(crate) fn require_codable_vars(ctx: &mut Ctx, ty: TyId, span: Span, site: &str) -> bool {
+    let mut vars = HashSet::new();
+    collect_vars(ty, ctx.tys, &mut vars);
+    let mut missing: Vec<String> = vars
+        .into_iter()
+        .filter(|v| ctx.type_vars.contains(v) && !ctx.eq.codable.contains(v))
+        .collect();
+    if missing.is_empty() {
+        return true;
+    }
+    missing.sort();
+    for param in missing {
+        if !ctx.eq.reported_codable.borrow_mut().insert(param.clone()) {
+            continue;
+        }
+        let mut err = CompileError::new(
+            "bynk.generics.missing_codable_bound",
+            span,
+            format!("{site}, but type parameter `{param}` has no `Codable` bound"),
+        )
+        .with_note(format!(
+            "a type parameter that crosses the boundary must say so: declare `{param}: Codable`"
+        ));
+        if let Some((msg, edits)) = ctx.eq.fix_for(&param, "Codable") {
+            err = err.with_suggestion(msg, edits, Applicability::MachineApplicable);
+        }
+        ctx.errors.push(err);
     }
     false
 }

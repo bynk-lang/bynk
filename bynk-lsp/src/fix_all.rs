@@ -156,6 +156,26 @@ mod tests {
         assert!(bynk_ide::diagnose(&out).is_empty(), "{out}");
     }
 
+    /// Constrained generics slice 3: fix-all adds `Codable` where a type parameter
+    /// is encoded or decoded without it, beside an existing `Eq` (which `Codable`,
+    /// unlike `Ord` and `Key`, does not imply).
+    #[test]
+    fn migrates_missing_codable_bounds_in_one_action() {
+        let text = "commons m\n\nfn enc[T](v: T) -> String { Json.encode(v) }\n\nfn keep[T: Eq](v: T) -> String { Json.encode(v) }\n";
+        let cats: Vec<&str> = bynk_ide::diagnose(text)
+            .iter()
+            .map(|d| d.error.category)
+            .collect();
+        assert!(
+            cats.contains(&"bynk.generics.missing_codable_bound"),
+            "{cats:?}"
+        );
+        let out = fixed(text);
+        assert!(out.contains("fn enc[T: Codable](v: T)"), "{out}");
+        assert!(out.contains("fn keep[T: Eq + Codable](v: T)"), "{out}");
+        assert!(bynk_ide::diagnose(&out).is_empty(), "{out}");
+    }
+
     /// Constrained generics slice 1: the redundant `Eq` beside `Ord`, and a
     /// `derives` of an automatic constraint, are removed by fix-all.
     #[test]

@@ -2567,6 +2567,56 @@ pub(crate) fn serialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExp
     }
 }
 
+/// Constrained generics slice 3: the `{ encode, decode }` witness for a
+/// variable-free type, from the generated codec for it. A named or container
+/// codec takes the path it is called with. A base type has no generated helper,
+/// so its decoder is the one a record field or container element uses
+/// ([`emit_field_deserialise`]), reporting at the path it is given: that is what
+/// every position nested in a container decodes with.
+pub(crate) fn witness_codec_expr(t: &TypeRef, ru: &RuntimeUse) -> TsExpr {
+    let encode = serialise_ref_via(t, "", ru);
+    let decode = match strip_effect(t) {
+        TypeRef::Named(_)
+        | TypeRef::Result(..)
+        | TypeRef::Option(..)
+        | TypeRef::List(..)
+        | TypeRef::Set(..)
+        | TypeRef::Map(..)
+        | TypeRef::App { .. } => deserialise_ref_via(t, "", ru),
+        other => {
+            let mut body = emit_field_deserialise("v", other, "__j", "__p", None, ru);
+            body.push(return_(call(
+                ident("Ok"),
+                vec![as_expr(
+                    ident("__v"),
+                    TsType::named(crate::emitter::ts_type_ref(other)),
+                )],
+            )));
+            // The statements are printed and joined onto one line: the printer's
+            // compact object literal takes no multi-line block.
+            let one_line = body
+                .iter()
+                .map(|st| {
+                    bynk_ts::print_stmt(st, 0)
+                        .split('\n')
+                        .map(str::trim)
+                        .filter(|l| !l.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            ident(format!(
+                "(__j: __JsonValue, __p: string) => {{ {one_line} }}"
+            ))
+        }
+    };
+    TsExpr::object(vec![
+        ("encode".to_string(), encode),
+        ("decode".to_string(), decode),
+    ])
+}
+
 /// #1678: does an agent-call position carry a value with no wire form, so the
 /// workers Durable Object call passes it through unencoded, as it did before
 /// #1678? True when the type holds a `Connection`, a function, a `Stream`, a

@@ -2323,13 +2323,52 @@ pub(crate) fn emit_capability(
         .iter()
         .zip(ops)
         .map(|(op, sig)| {
+            // Constrained generics slice 3 (DECISION D): a parameter whose type
+            // mentions a `Codable` type parameter is encoded whole at the call
+            // site, so the provider receives a JSON value, never a witness.
+            let codable = bynk_check::checker::codable::codable_op_params(op);
+            let encoded: Vec<bool> = op
+                .params
+                .iter()
+                .map(|p| bynk_check::checker::codable::mentions_any(&p.type_ref, &codable))
+                .collect();
             let params: Vec<bynk_ts::TsParam> = sig
                 .params
                 .iter()
-                .map(|(name, ty)| bynk_ts::TsParam {
+                .zip(&encoded)
+                .map(|((name, ty), encoded)| bynk_ts::TsParam {
                     name: ts_ident(name),
-                    ty: Some(ts_ty_to_ts_type(*ty, &commons.ty_intern)),
+                    ty: Some(if *encoded {
+                        bynk_ts::TsType::named("unknown")
+                    } else {
+                        ts_ty_to_ts_type(*ty, &commons.ty_intern)
+                    }),
                     optional: false,
+                })
+                .collect();
+            // A type parameter that only occurs in encoded parameters is not in
+            // the interface (nothing would use it).
+            let kept: Vec<String> = op
+                .type_params
+                .iter()
+                .map(|tp| tp.name.name.clone())
+                .filter(|tp| {
+                    codable.is_empty()
+                        || op
+                            .params
+                            .iter()
+                            .zip(&encoded)
+                            .filter(|(_, enc)| !**enc)
+                            .any(|(p, _)| {
+                                bynk_check::checker::codable::mentions_any(
+                                    &p.type_ref,
+                                    std::slice::from_ref(tp),
+                                )
+                            })
+                        || bynk_check::checker::codable::mentions_any(
+                            &op.return_type,
+                            std::slice::from_ref(tp),
+                        )
                 })
                 .collect();
             // #926 (Decision C): a genuine generic TS interface method, no
@@ -2340,11 +2379,7 @@ pub(crate) fn emit_capability(
             // to render from (Decision A/B, #1193).
             bynk_ts::TsTypeMember::Method {
                 name: op.name.name.clone(),
-                generics: op
-                    .type_params
-                    .iter()
-                    .map(|tp| tp.name.name.clone())
-                    .collect(),
+                generics: kept,
                 params,
                 ret: ts_ty_to_ts_type(sig.return_ty, &commons.ty_intern),
                 doc: op.documentation.as_deref().map(str::to_owned),

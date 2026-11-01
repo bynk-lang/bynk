@@ -1970,18 +1970,60 @@ fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> String {
 /// interface method (Decision C) — with no argument of type `T`, TypeScript
 /// cannot infer a return-position-only parameter, so the call site must
 /// name it explicitly.
-fn capability_call_type_args_ts(type_args: &[TypeRef]) -> String {
-    if type_args.is_empty() {
+fn capability_call_type_args_ts(
+    type_args: &[TypeRef],
+    wire: Option<&bynk_check::checker::codable::CapEncoding>,
+) -> String {
+    // Constrained generics slice 3: a type parameter that only occurs in encoded
+    // (`unknown`) arguments is not in the emitted interface, so a call omits it.
+    let kept: Vec<&TypeRef> = match wire {
+        Some(w) => type_args
+            .iter()
+            .zip(&w.keep_type_args)
+            .filter_map(|(t, keep)| keep.then_some(t))
+            .collect(),
+        None => type_args.iter().collect(),
+    };
+    if kept.is_empty() {
         return String::new();
     }
     format!(
         "<{}>",
-        type_args
-            .iter()
+        kept.into_iter()
             .map(ts_type_ref)
             .collect::<Vec<_>>()
             .join(", ")
     )
+}
+
+/// Constrained generics slice 3: how the capability call `e` encodes its
+/// `Codable` arguments, when it has any.
+fn capability_wire(
+    e: &Expr,
+    cx: &LowerCtx,
+) -> Option<std::sync::Arc<bynk_check::checker::codable::CapEncoding>> {
+    match cx.commons().callee(e.id) {
+        Some(Callee::Capability { wire, .. } | Callee::CrossCap { wire, .. }) => wire.clone(),
+        _ => None,
+    }
+}
+
+/// Constrained generics slice 3 (DECISION D): encode each argument whose
+/// parameter mentions a `Codable` type parameter, whole, with the codec of its
+/// instantiated type. The provider receives plain JSON and no witness.
+fn encode_capability_args(
+    wire: Option<&bynk_check::checker::codable::CapEncoding>,
+    args: &mut [String],
+    cx: &LowerCtx,
+) {
+    let Some(wire) = wire else {
+        return;
+    };
+    for (arg, ty) in args.iter_mut().zip(&wire.encode) {
+        if let Some(ty) = ty {
+            *arg = cx.encode_call(*ty, arg);
+        }
+    }
 }
 
 /// #934 (call-site key scoping): `Idempotency.dedup[T](key)` and
@@ -2670,12 +2712,14 @@ fn lower_method_call(
             &mut args_lowered,
             cx,
         );
+        let wire = capability_wire(e, cx);
+        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
         return pre.finish(format!(
             "{}.{}.{}{}({})",
             cx.cap_deps_expr(),
             cap,
             method.name,
-            capability_call_type_args_ts(type_args),
+            capability_call_type_args_ts(type_args, wire.as_deref()),
             args_lowered.join(", ")
         ));
     }
@@ -2715,7 +2759,7 @@ fn lower_method_call(
     if let ExprKind::Ident(_) = &receiver.kind
         && matches!(
             cx.commons().callee(e.id),
-            Some(Callee::Capability { cap, op }) if cap == "Events" && op == "emit"
+            Some(Callee::Capability { cap, op, .. }) if cap == "Events" && op == "emit"
         )
         && cx.is_first_party_events()
     {
@@ -2796,12 +2840,14 @@ fn lower_method_call(
                     .map(String::as_str)
                     == Some("bynk"));
         scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
+        let wire = capability_wire(e, cx);
+        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
         return pre.finish(format!(
             "{}.{}.{}{}({})",
             cx.cap_deps_expr(),
             id.name,
             method.name,
-            capability_call_type_args_ts(type_args),
+            capability_call_type_args_ts(type_args, wire.as_deref()),
             args_lowered.join(", ")
         ));
     }
@@ -3514,7 +3560,7 @@ fn lower_method_call(
     // ordinary arguments.
     let mut needs_exec = false;
     if let Some(Callee::Method(decl, witnesses)) = cx.commons().callees.get(&e.id) {
-        all.extend(witnesses.iter().map(|w| cx.comparator(*w)));
+        all.extend(cx.witness_args(decl, witnesses));
         // #2719: a method in the needs-context set takes the context last.
         if cx.commons().exec_plan.fn_needs(decl) {
             all.push(cx.exec_expr());
@@ -3566,6 +3612,19 @@ fn lower_json_codec_call(
         Some(Callee::Intrinsic { ns, .. }) if *ns == JSON
     ) && args.len() == 1
     {
+        // Constrained generics slice 3: a value whose type mentions a type
+        // parameter encodes through the codec witness of that type.
+        if method.name == "encode"
+            && let Some(arg_ty) = cx.commons().expr_types.get(&args[0].id).map(|te| te.ty)
+            && super::codec::has_var(arg_ty, cx.commons())
+        {
+            if cx.in_test_scaffold() {
+                note_ground_roots(arg_ty, cx);
+            }
+            let codec = cx.codec(arg_ty);
+            let v = pre.lower(&args[0], cx);
+            return Some(pre.finish(format!("globalThis.JSON.stringify({codec}.encode({v}))")));
+        }
         if method.name == "encode"
             && let Some(arg_ty) = cx
                 .commons()
@@ -3594,13 +3653,20 @@ fn lower_json_codec_call(
         }
         if matches!(method.name.as_str(), "decode" | "decodeSql")
             && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-            && let Some(tref) = ty_to_type_ref(t, tys)
+            && let rigid = super::codec::has_var(t, cx.commons())
+            && let Some(tref) = if rigid {
+                // A target that mentions a type parameter decodes through the
+                // codec witness; `tref` is then only a placeholder.
+                Some(TypeRef::Unit(bynk_syntax::span::Span::default()))
+            } else {
+                ty_to_type_ref(t, tys)
+            }
         {
             // #917: in a test-scaffold module `T` may be foreign (owned by the
             // suite target or one of its `uses`, never declared locally), so its
             // TS type positions reach through the module's namespace qualifier —
             // empty everywhere else, where this renders identically to `ts_ty`.
-            let ts = if cx.in_test_scaffold() {
+            let ts = if cx.in_test_scaffold() && !rigid {
                 // #1437 (Arc E slice 2): `serialisation::ts_type_ref_qualified`
                 // deleted — folded into `serialisation::qualified_ts_type`,
                 // which bridges this file's own dotted-prefix qualifier
@@ -3621,7 +3687,7 @@ fn lower_json_codec_call(
             // `TypeRef` — `tref` above still exists for this call site's own,
             // separate codec-rendering use.
             if cx.in_test_scaffold() {
-                cx.runtime_use().note_json_codec_root(t);
+                note_ground_roots(t, cx);
             }
             // #914: the wrapper below names `Result`, `JsonValue` and `JsonError`
             // in its own signature and body, whichever arm the inner deserialiser
@@ -3630,12 +3696,16 @@ fn lower_json_codec_call(
             // otherwise emits all three unimported.
             cx.runtime_use().note_json_codec();
             // #1435 (Arc E slice 1): boundary-print, same treatment as above.
-            let des = bynk_ts::print_expr(&serialisation::deserialise_expr(
-                &tref,
-                "__j",
-                "$",
-                cx.runtime_use(),
-            ));
+            let des = if rigid {
+                format!("{}.decode(__j, \"$\")", cx.codec(t))
+            } else {
+                bynk_ts::print_expr(&serialisation::deserialise_expr(
+                    &tref,
+                    "__j",
+                    "$",
+                    cx.runtime_use(),
+                ))
+            };
             let sql_bools = if method.name == "decodeSql" {
                 sql_bool_pass(t, cx)
             } else {
@@ -3658,6 +3728,17 @@ fn lower_json_codec_call(
     }
     let text: Option<String> = None;
     text.map(|expr| pre.finish(expr))
+}
+
+/// #917 and constrained generics slice 3: record the variable-free parts of a
+/// codec target as roots, so the test-scaffold module that spliced the body in
+/// generates the codecs its witnesses name.
+fn note_ground_roots(t: bynk_check::checker::TyId, cx: &LowerCtx) {
+    let mut parts = Vec::new();
+    super::codec::ground_parts(t, cx.commons(), &mut parts);
+    for p in parts {
+        cx.runtime_use().note_json_codec_root(p);
+    }
 }
 
 /// P4c (#2628): `Json.decodeSql[T]`'s pass over the parsed rows before the
@@ -6011,7 +6092,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         };
         let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
         let mut args = names.clone();
-        args.extend(witnesses.iter().map(|w| cx.comparator(*w)));
+        args.extend(cx.witness_args(decl, witnesses));
         // #2719: a function in the needs-context set closes over the context in
         // scope where it is named.
         if cx.commons().exec_plan.fn_needs(decl) {
@@ -6309,7 +6390,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     let mut args_lowered = args_lowered;
     let mut needs_exec = false;
     if let Some(Callee::Fn(decl, witnesses)) = cx.commons().callee(e.id) {
-        args_lowered.extend(witnesses.iter().map(|w| cx.comparator(*w)));
+        args_lowered.extend(cx.witness_args(decl, witnesses));
         // #2719: a function in the needs-context set takes the context last.
         if cx.commons().exec_plan.fn_needs(decl) {
             args_lowered.push(cx.exec_expr());

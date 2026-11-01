@@ -1,0 +1,7 @@
+// `Codable` is a constraint (constrained-generics slice 3), and it composes with
+// `Eq`: unlike `Ord` and `Key`, `Codable` does not imply `Eq`.
+commons c
+
+fn pick[T: Eq + Codable](a: T, b: T) -> String {
+  if a == b { Json.encode(a) } else { Json.encode(b) }
+}

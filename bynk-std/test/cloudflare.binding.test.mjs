@@ -785,6 +785,32 @@ t("WorkersQueue.send: a missing binding names it", async () => {
   );
 });
 
+t("WorkersQueue.sendValue: puts on the wire exactly the message send(Json.encode(v)) does", async () => {
+  // A value as the call site's `__serialise_X` leaves it: a `None`, a `()` as
+  // null, a `-0.0`, a field that is absent (undefined), nested arrays.
+  const encoded = { id: 7, note: { kind: "None" }, unit: null, f: -0, gone: undefined, tags: [["a"], []] };
+  const viaSend = fakeQueue();
+  await new WorkersQueue({ QUEUE_ORDERS: viaSend }, "QUEUE_ORDERS").send(JSON.stringify(encoded));
+  const viaValue = fakeQueue();
+  await new WorkersQueue({ QUEUE_ORDERS: viaValue }, "QUEUE_ORDERS").sendValue(encoded);
+  assert.deepStrictEqual(viaValue.sends, viaSend.sends);
+  assert.deepStrictEqual(viaValue.sends[0].options, { contentType: "json" });
+  for (const scalar of [0, "s", true, null, [1, 2]]) {
+    const a = fakeQueue();
+    const b = fakeQueue();
+    await new WorkersQueue({ QUEUE_ORDERS: a }, "QUEUE_ORDERS").send(JSON.stringify(scalar));
+    await new WorkersQueue({ QUEUE_ORDERS: b }, "QUEUE_ORDERS").sendValue(scalar);
+    assert.deepStrictEqual(b.sends, a.sends);
+  }
+});
+
+t("WorkersQueue.sendValue: a missing binding names it", async () => {
+  await assert.rejects(
+    new WorkersQueue({}, "QUEUE_ORDERS").sendValue(1),
+    /requires a queue producer binding \(env\.QUEUE_ORDERS\)/,
+  );
+});
+
 t("WorkersQueue.sendWith: a delay goes as whole seconds, a part second rounded up", async () => {
   const q = fakeQueue();
   const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");

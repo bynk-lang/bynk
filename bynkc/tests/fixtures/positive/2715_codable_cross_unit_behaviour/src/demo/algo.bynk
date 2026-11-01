@@ -1,0 +1,20 @@
+---
+#2715: bounded generics in their own unit. Witnesses follow the type parameters in
+declaration order, comparator before codec within one parameter, so a caller in
+another unit and the callee agree without sharing a file.
+---
+commons demo.algo
+
+fn tagged[A: Codable, B: Ord](a: A, x: B, y: B) -> String {
+  if x < y { Json.encode(a) } else { "" }
+}
+
+fn both[T: Ord + Codable](a: T, b: T) -> String {
+  if a < b { Json.encode(a) } else { Json.encode(b) }
+}
+
+fn forwards[A: Codable, B: Ord](a: A, x: B, y: B) -> String { tagged(a, x, y) }
+
+fn Box.show(self) -> String where A: Codable { Json.encode(self.value) }
+
+type Box[A] = { value: A }

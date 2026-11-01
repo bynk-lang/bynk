@@ -1,0 +1,2 @@
+bynk.types.not_codable
+capability operation `Audit.put` requires `T: Codable`

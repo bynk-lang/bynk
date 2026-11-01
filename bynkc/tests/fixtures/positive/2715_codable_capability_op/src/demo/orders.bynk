@@ -1,0 +1,19 @@
+context demo.orders
+
+consumes audit { Audit }
+
+type Order = { id: String, total: Int }
+
+type Email = String where MinLength(3)
+
+service place {
+  on call(order: Order, email: Email) -> Effect[()] given Audit {
+    let _ <- Audit.append("order", order)
+    let _ <- Audit.append[Email]("typed", email)
+    let _ <- Audit.appendAll([order])
+    let keyed: Map[Order, Int] = Map.empty().insert(order, 1)
+    let _ <- Audit.appendKeyed(keyed)
+    let _ <- Audit.note("plain")
+    Audit.note("done")
+  }
+}

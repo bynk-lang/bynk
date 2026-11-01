@@ -1120,8 +1120,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.generics.bound_on_capability_op",
-        "A generic capability operation's type parameter carries a bound other than `Key`; operations take only `Key` bounds yet.",
+        "A generic capability operation's type parameter carries a bound other than `Key` or `Codable`; operations take only those two (constrained-generics slices 2 and 3).",
         &["capability_op"],
+    ),
+    dg(
+        "bynk.generics.codable_op_return",
+        "A capability operation\'s `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider\'s reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3).",
+        &["capability_op"],
+    ),
+    dg(
+        "bynk.generics.codec_generic_at_rigid",
+        "A user generic type is applied to a type parameter inside a `Codable` context (`Paginated[T]` in a body with `T: Codable`). Its codec would need a factory per generic declaration, which is deferred; the built-in containers over a type parameter are supported, as is a concrete instantiation (constrained-generics slice 3).",
+        &["fn_decl"],
     ),
     dg(
         "bynk.generics.duplicate_type_param",
@@ -1146,6 +1156,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.generics.method_on_generic_type",
         "A *static* method is attached to a generic type; static methods on generic types are deferred (they have no receiver to supply the type's parameters). Instance methods on generic types are supported (#594).",
+        &["fn_decl"],
+    ),
+    dg(
+        "bynk.generics.missing_codable_bound",
+        "A type parameter is encoded or decoded with `Json.encode`/`Json.decode`, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, but is not declared `Codable` (`[T: Codable]`, or `where A: Codable` for a receiver type\'s parameter). The diagnostic carries a machine-applicable fix that declares `Codable`, beside an existing `Eq`, which `Codable` does not imply (constrained-generics slice 3).",
         &["fn_decl"],
     ),
     dg(
@@ -3110,6 +3125,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.non_exhaustive_match",
         "A `match` does not cover every value.",
         &["match_expr"],
+    ),
+    d(
+        "bynk.types.not_codable",
+        "A type is instantiated at a `Codable`-bounded parameter (of a generic function, or of a capability operation) but is outside the domain `Json.decode` accepts: top-level `()`, a function, `Effect`, `Query`, a `Stream` or a type that carries one, a connection, the HTTP and queue result types, `Asset`, request headers, token claims, or an actor (constrained-generics slice 3).",
     ),
     d(
         "bynk.types.not_comparable",

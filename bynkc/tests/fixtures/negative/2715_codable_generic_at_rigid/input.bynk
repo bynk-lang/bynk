@@ -1,0 +1,5 @@
+commons c
+
+type Box[T] = { value: T }
+
+fn f[T: Codable](b: Box[T]) -> String { Json.encode(b) }

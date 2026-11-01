@@ -1,0 +1,7 @@
+context a
+
+// A `Codable` parameter is encoded at the call site; decoding a provider's reply
+// is deferred, so it may not appear in the return type.
+capability Store {
+  fn load[T: Codable](id: String) -> Effect[Option[T]]
+}
