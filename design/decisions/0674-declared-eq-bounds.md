@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: "**Breaking:** a generic that compares a type parameter now declares it, `fn same[T: Eq](a: T, b: T)`, or `where A: Eq` for a method's receiver type parameter, in place of ADR 0430's inferred bound (constrained-generics slice 0); `bynk.generics.missing_eq_bound` carries a machine-applicable fix, and `bynk.generics.no_bounds` is retired; apply the fixes with `source.fixAll.bynk` or `bynk check --fix` (#2642), see [the migration note](/book/troubleshooting/generics-missing-eq-bound/)"
----
+# 0674 — Type-parameter bounds are declared, and `Eq` replaces the inferred equality bound
 
-## ADR: declared-eq-bounds
-title: Type-parameter bounds are declared, and `Eq` replaces the inferred equality bound
-summary: Bounds `T: Eq` and a method `where A: Eq`; `==` on an undeclared type parameter is `missing_eq_bound`; amends ADR 0430
+- **Status:** Accepted (v0.459)
 
 **Context.** ADR 0028 left generics without bounds, and ADR 0430 closed the gap
 for equality by *inferring* which type parameters a generic compares, then
