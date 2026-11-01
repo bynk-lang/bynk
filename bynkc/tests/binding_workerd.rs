@@ -229,7 +229,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.D1\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.D1\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -1137,7 +1137,154 @@ fn bytes_upstream() -> u16 {
     port
 }
 
-fn fetch_bytes_source(upstream: u16) -> String {
+/// K5c (#2627): an upstream on `127.0.0.1` for the streamed-body smoke.
+/// `/chunks` answers the bytes 0–255 chunked, in four parts 150 ms apart, so
+/// the body outlasts a 300 ms head timeout; `/text` answers `alpha beta
+/// gamma` chunked; `/echo` answers the request body it was sent — read chunked
+/// or by content-length — with how it was framed as `x-seen-te` and
+/// `x-seen-length`.
+fn streams_upstream() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind the upstream");
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut stream = stream;
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+                let mut got = Vec::new();
+                let fill = |got: &mut Vec<u8>, stream: &mut std::net::TcpStream| -> bool {
+                    let mut buf = [0u8; 4096];
+                    match stream.read(&mut buf) {
+                        Ok(0) | Err(_) => false,
+                        Ok(n) => {
+                            got.extend_from_slice(&buf[..n]);
+                            true
+                        }
+                    }
+                };
+                let split = loop {
+                    if let Some(i) = got.windows(4).position(|w| w == b"\r\n\r\n") {
+                        break i + 4;
+                    }
+                    if !fill(&mut got, &mut stream) {
+                        return;
+                    }
+                };
+                let head = String::from_utf8_lossy(&got[..split]).to_string();
+                let header = |name: &str| {
+                    head.lines().find_map(|l| {
+                        let (k, v) = l.split_once(':')?;
+                        k.eq_ignore_ascii_case(name).then(|| v.trim().to_string())
+                    })
+                };
+                let te = header("transfer-encoding");
+                let length = header("content-length");
+                let mut body = Vec::new();
+                if te
+                    .as_deref()
+                    .is_some_and(|t| t.eq_ignore_ascii_case("chunked"))
+                {
+                    // `<hex size>\r\n<data>\r\n`, until a size of zero.
+                    let mut at = split;
+                    loop {
+                        let line_end = loop {
+                            if let Some(i) = got[at..].windows(2).position(|w| w == b"\r\n") {
+                                break at + i;
+                            }
+                            if !fill(&mut got, &mut stream) {
+                                return;
+                            }
+                        };
+                        let size_text = String::from_utf8_lossy(&got[at..line_end]).to_string();
+                        let size =
+                            usize::from_str_radix(size_text.split(';').next().unwrap().trim(), 16)
+                                .unwrap_or(0);
+                        if size == 0 {
+                            break;
+                        }
+                        while got.len() < line_end + 2 + size + 2 {
+                            if !fill(&mut got, &mut stream) {
+                                return;
+                            }
+                        }
+                        body.extend_from_slice(&got[line_end + 2..line_end + 2 + size]);
+                        at = line_end + 2 + size + 2;
+                    }
+                } else {
+                    let n: usize = length.as_deref().and_then(|v| v.parse().ok()).unwrap_or(0);
+                    while got.len() < split + n {
+                        if !fill(&mut got, &mut stream) {
+                            break;
+                        }
+                    }
+                    body.extend_from_slice(&got[split..(split + n).min(got.len())]);
+                }
+                let path = head.split_whitespace().nth(1).unwrap_or("/");
+                let chunked = |stream: &mut std::net::TcpStream, parts: Vec<Vec<u8>>, gap: u64| {
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 200 OK\r\ncontent-type: application/octet-stream\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n",
+                    );
+                    for part in parts {
+                        let mut chunk = format!("{:x}\r\n", part.len()).into_bytes();
+                        chunk.extend_from_slice(&part);
+                        chunk.extend_from_slice(b"\r\n");
+                        let _ = stream.write_all(&chunk);
+                        let _ = stream.flush();
+                        std::thread::sleep(Duration::from_millis(gap));
+                    }
+                    let _ = stream.write_all(b"0\r\n\r\n");
+                };
+                match path {
+                    "/chunks" => {
+                        let all: Vec<u8> = (0..=255u8).collect();
+                        chunked(
+                            &mut stream,
+                            all.chunks(64).map(<[u8]>::to_vec).collect(),
+                            150,
+                        );
+                    }
+                    "/text" => chunked(
+                        &mut stream,
+                        vec![b"alpha ".to_vec(), b"beta ".to_vec(), b"gamma".to_vec()],
+                        50,
+                    ),
+                    _ => {
+                        let mut reply = format!(
+                            "HTTP/1.1 200 OK\r\nx-seen-te: {}\r\nx-seen-length: {}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                            te.unwrap_or_else(|| "none".into()),
+                            length.unwrap_or_else(|| "none".into()),
+                            body.len()
+                        )
+                        .into_bytes();
+                        reply.extend_from_slice(&body);
+                        let _ = stream.write_all(&reply);
+                    }
+                }
+            });
+        }
+    });
+    port
+}
+
+/// K5c (#2627): the payload of a chunked HTTP/1.1 body, as [`get`] returns it
+/// undecoded.
+fn dechunk(body: &str) -> String {
+    let mut out = String::new();
+    let mut rest = body;
+    while let Some((size, after)) = rest.split_once("\r\n") {
+        let Ok(n) = usize::from_str_radix(size.trim(), 16) else {
+            break;
+        };
+        if n == 0 || after.len() < n {
+            break;
+        }
+        out.push_str(&after[..n]);
+        rest = after[n..].trim_start_matches("\r\n");
+    }
+    out
+}
+
+fn fetch_bytes_source(upstream: u16, streams: u16) -> String {
     format!(
         "context fb.smoke
 
@@ -1161,6 +1308,51 @@ service api from http {{
 \t\t}}
 \t}}
 
+\t// K5c (#2627): a platform stream, piped from one fetch into the next. The
+\t// 300 ms timeout bounds the head alone; the body takes about 600 ms.
+\ton GET(\"/stream-round\") () -> Effect[HttpResult[String]] by Visitor given Fetch {{
+\t\tlet options = FetchOptions {{ timeout: Some(Duration.millis(300)), redirect: Follow }}
+\t\tlet down = Request {{ method: Get, url: \"http://127.0.0.1:{streams}/chunks\", contentType: None, authorization: None, headers: Map.empty(), body: None }}
+\t\tlet got <- Fetch.receiveStream(down, options)
+\t\tmatch got {{
+\t\t\tOk(d) => {{
+\t\t\t\tlet up = Request {{ method: Post, url: \"http://127.0.0.1:{streams}/echo\", contentType: None, authorization: None, headers: Map.empty(), body: None }}
+\t\t\t\tlet echoed <- Fetch.sendStream(up, d.body, FetchOptions {{ timeout: Some(5.seconds), redirect: Follow }})
+\t\t\t\tmatch echoed {{
+\t\t\t\t\tOk(e) => {{
+\t\t\t\t\t\tlet parts <- e.body.collect()
+\t\t\t\t\t\tlet all = parts.fold(Bytes.empty(), (acc, b) => acc.concat(b))
+\t\t\t\t\t\tOk(\"\\(all.toBase64()) \\(e.headers.get(\"x-seen-te\").getOrElse(\"\")) \\(e.headers.get(\"x-seen-length\").getOrElse(\"\"))\")
+\t\t\t\t\t}}
+\t\t\t\t\tErr(_) => Ok(\"upload failed\")
+\t\t\t\t}}
+\t\t\t}}
+\t\t\tErr(_) => Ok(\"download failed\")
+\t\t}}
+\t}}
+
+\ton GET(\"/proxy\") () -> Effect[HttpResult[()]] by Visitor given Fetch {{
+\t\tlet down = Request {{ method: Get, url: \"http://127.0.0.1:{streams}/text\", contentType: None, authorization: None, headers: Map.empty(), body: None }}
+\t\tlet got <- Fetch.receiveStream(down, FetchOptions {{ timeout: Some(5.seconds), redirect: Follow }})
+\t\tmatch got {{
+\t\t\tOk(d) => RawStreamed(d.body, \"text/plain\")
+\t\t\tErr(_) => BadGateway(\"download failed\")
+\t\t}}
+\t}}
+
+\ton GET(\"/stream-twice\") () -> Effect[HttpResult[String]] by Visitor given Fetch {{
+\t\tlet down = Request {{ method: Get, url: \"http://127.0.0.1:{streams}/text\", contentType: None, authorization: None, headers: Map.empty(), body: None }}
+\t\tlet got <- Fetch.receiveStream(down, FetchOptions {{ timeout: Some(5.seconds), redirect: Follow }})
+\t\tmatch got {{
+\t\t\tOk(d) => {{
+\t\t\t\tlet first <- d.body.collect()
+\t\t\t\tlet second <- d.body.collect()
+\t\t\t\tOk(\"read twice: \\(first.length() + second.length())\")
+\t\t\t}}
+\t\t\tErr(_) => Ok(\"download failed\")
+\t\t}}
+\t}}
+
 \ton GET(\"/ready\") () -> Effect[HttpResult[String]] by Visitor {{
 \t\tOk(\"ready\")
 \t}}
@@ -1174,17 +1366,40 @@ fn fetch_bytes_round_trip_every_byte_on_workerd() {
     // K5b (#2604): `receiveBytes` and `sendBytes` against workerd's own
     // `fetch`: bytes 0–255 come down and go back up unchanged, and the
     // upload's Content-Type is the one the request set.
+    //
+    // K5c (#2627), in the same Worker (the port bands are all taken):
+    // `receiveStream` hands out a platform stream that outlasts its head
+    // timeout, `sendStream` pipes it upstream chunked with no content-length,
+    // `RawStreamed` re-serves one, and a second read of one faults.
     let upstream = bytes_upstream();
-    let source = fetch_bytes_source(upstream);
+    let streams = streams_upstream();
+    let source = fetch_bytes_source(upstream, streams);
     let expected = format!(r#""{ALL_BYTES_BASE64} {ALL_BYTES_BASE64} application/octet-stream""#);
+    let streamed = format!(r#""{ALL_BYTES_BASE64} chunked none""#);
     let Some((failures, log)) = run_smoke("fb-smoke", "fb", &source, "/ready", 8, &|port| {
-        check_steps(port, &[("/round", 200, &expected)])
+        let mut failures = check_steps(
+            port,
+            &[
+                ("/round", 200, &expected),
+                ("/stream-round", 200, &streamed),
+                ("/stream-twice", 500, ""),
+            ],
+        );
+        // A `RawStreamed` body has no content-length, so it arrives chunked.
+        match get(port, "/proxy") {
+            Ok((200, b)) if dechunk(&b) == "alpha beta gamma" => {}
+            Ok((s, b)) => {
+                failures.push(format!("/proxy: {s} {b:?}, expected 200 alpha beta gamma"))
+            }
+            Err(e) => failures.push(format!("/proxy: {e}")),
+        }
+        failures
     }) else {
         return;
     };
     assert!(
         failures.is_empty(),
-        "Fetch.receiveBytes/sendBytes on workerd disagree with the contract their fake models:\n{}\n--- wrangler log ---\n{log}",
+        "Fetch.receiveBytes/sendBytes/receiveStream/sendStream on workerd disagree with the contract their fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

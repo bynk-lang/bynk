@@ -193,6 +193,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("applyEdgeCache", "http"),
     ("applySecurityHeaders", "http"),
     ("boundaryError", "boundary"),
+    ("byteStreamBody", "http"),
     ("callDurableObjectMethod", "agent"),
     ("callService", "boundary"),
     ("checkStoredSchemaVersion", "boundary"),

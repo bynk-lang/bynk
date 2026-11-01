@@ -143,6 +143,13 @@ function pullBody<T>(
   );
 }
 
+// K5c (#2627): a lazy byte body over a `Stream[Bytes]`, claiming it now.
+// `RawStreamed` writes its response with it, and the Fetch bindings their
+// `sendStream` request body, so the empty-chunk skip lives in one place.
+export function byteStreamBody(stream: AsyncIterable<Uint8Array>): ReadableStream<Uint8Array> {
+  return pullBody(stream, (chunk) => (chunk.byteLength === 0 ? [] : [chunk]));
+}
+
 export function httpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
@@ -213,10 +220,10 @@ export function httpResultToResponse<T>(
     // validator, whatever `weakEtag` says: the bytes can't be hashed without
     // buffering them. An empty chunk is skipped, since it writes nothing.
     case "RawStreamed":
-      return new Response(
-        pullBody(result.body, (chunk) => (chunk.byteLength === 0 ? [] : [chunk])),
-        { status: 200, headers: { "content-type": result.contentType } },
-      );
+      return new Response(byteStreamBody(result.body), {
+        status: 200,
+        headers: { "content-type": result.contentType },
+      });
     // 201 with a raw body — `Raw`'s writer at the creation status (#2403, L6).
     // It answers a write, so it carries no validator, whatever `weakEtag` says.
     case "RawCreated":

@@ -7,6 +7,7 @@ import type {
   LogLevel,
   Request as FetchRequest,
   Response as FetchResponse,
+  StreamResponse,
 } from "./bynk.js";
 import type { FetchError } from "./bynk.js";
 import { Uuid } from "./bynk.js";
@@ -99,6 +100,20 @@ export class FetchProvider implements Fetch {
     _body: Uint8Array,
     _options: FetchOptions,
   ): Promise<Result<BytesResponse, FetchError>> {
+    throw new Error(
+      "bynk.Fetch is unavailable in the browser playground: outbound HTTP is withheld for safety. Run the program on a platform that provides Fetch (node or cloudflare).",
+    );
+  }
+  async receiveStream(_req: FetchRequest, _options: FetchOptions): Promise<Result<StreamResponse, FetchError>> {
+    throw new Error(
+      "bynk.Fetch is unavailable in the browser playground: outbound HTTP is withheld for safety. Run the program on a platform that provides Fetch (node or cloudflare).",
+    );
+  }
+  async sendStream(
+    _req: FetchRequest,
+    _body: AsyncIterable<Uint8Array>,
+    _options: FetchOptions,
+  ): Promise<Result<StreamResponse, FetchError>> {
     throw new Error(
       "bynk.Fetch is unavailable in the browser playground: outbound HTTP is withheld for safety. Run the program on a platform that provides Fetch (node or cloudflare).",
     );

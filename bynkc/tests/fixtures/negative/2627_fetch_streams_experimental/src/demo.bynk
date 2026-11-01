@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk { Fetch }
+
+// #2627: `Fetch.sendStream` ships experimental, though `Fetch` is stable.
+service probe {
+  on call(req: Request) -> Effect[Int] given Fetch {
+    let _ <- Fetch.sendStream(req, Stream.of([Bytes.empty()]), FetchOptions { timeout: None, redirect: Follow })
+    Effect.pure(0)
+  }
+}
