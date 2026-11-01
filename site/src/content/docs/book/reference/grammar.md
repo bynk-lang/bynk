@@ -1842,6 +1842,13 @@ what the enclosing block produces instead of its remaining statements, so it has
 that block's type. It is a [`block`](#rule-block) or a
 [`let_else_match`](#rule-let_else_match).
 
+The `else` may be omitted when the pattern is an irrefutable
+[`record_pattern`](#rule-record_pattern) (#2654): `let Item { sku, qty, .. } = item`
+binds `sku` and `qty` for the rest of the block, and `<-` works the same way. A
+record pattern with a refutable field (`status: Paid`) still needs its `else`
+(`bynk.parse.let_pattern_without_else`). See
+[Destructure a record with `let`](/book/guides/type-system/destructure-a-record-with-let/).
+
 **Static semantics.**
 {{#grammar-semantics let_else_stmt}}
 
@@ -1860,7 +1867,8 @@ over the values the `let` pattern does not cover, so an arm can bind them
 The patterns that may follow `let` in a `let … else`: a literal, a parenthesised
 pattern, or a variant written with a payload or a qualifier. A bare name after
 `let` is always a binding, so a nullary variant is written `Status.Done` or
-`(Done)`.
+`(Done)`. A [`record_pattern`](#rule-record_pattern) (`Item { sku, .. }`) also
+opens a `let` pattern: a capitalised name followed by `{`.
 
 ### let_variant_pattern {#rule-_let_variant_pattern}
 
@@ -1899,6 +1907,14 @@ The single patterns an [`is_pattern`](#rule-_is_pattern) is built from.
 
 An [`or_pattern`](#rule-or_pattern) after `is`, whose alternatives are
 [`is_base_pattern`](#rule-_is_base_pattern)s.
+
+### let_paren_record_pattern {#rule-_let_paren_record_pattern}
+
+{{#grammar _let_paren_record_pattern}}
+
+A [`record_pattern`](#rule-record_pattern) in parentheses after `let`
+(`let (Item { sku, .. }) = item`). The parentheses are redundant and the
+formatter drops them (#2654).
 
 ### effect_send_stmt {#rule-effect_send_stmt}
 

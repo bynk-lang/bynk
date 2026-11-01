@@ -32,6 +32,7 @@
     - [Work with `Result` and optional values](guides/type-system/result-and-optionals.md)
     - [Pattern-match with `match`](guides/type-system/match.md)
     - [Match on a record's fields](guides/type-system/match-on-a-records-fields.md)
+    - [Destructure a record with `let`](guides/type-system/destructure-a-record-with-let.md)
     - [Narrow and bind with `is`](guides/type-system/narrow-with-is.md)
     - [Declare `Eq` on a generic that compares](guides/type-system/declare-eq-bounds.md)
   - [Program structure](guides/program-structure/index.md)

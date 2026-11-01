@@ -86,6 +86,9 @@ a name or `_`. A pattern with a literal or variant field is partial, so end the
 `match` with a `_` arm, as `describe` does above. Exhaustiveness across several
 partial arms is not yet precise.
 
+To bind a record's fields without a `match`, see
+[Destructure a record with `let`](/book/guides/type-system/destructure-a-record-with-let/).
+
 **See also:** [Pattern-match with `match`](/book/guides/type-system/match/),
 [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/),
 [Reference — Record patterns](/book/reference/types/#record-patterns).

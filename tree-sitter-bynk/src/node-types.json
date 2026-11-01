@@ -6068,7 +6068,7 @@
       },
       "else": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "block",
@@ -6094,6 +6094,10 @@
           },
           {
             "type": "paren_pattern",
+            "named": true
+          },
+          {
+            "type": "record_pattern",
             "named": true
           },
           {

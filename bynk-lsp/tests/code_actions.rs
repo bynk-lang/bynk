@@ -599,7 +599,7 @@ fn bynk_list_deprecation_quick_fix_rewrites_to_method() {
 }
 
 /// #2641: the two record-pattern parse errors each carry a machine-applicable
-/// fix, offered as a quick fix and leaving the file clean once applied.
+/// fix (#2654: and so does the irrefutable record `let … else`), offered as a quick fix and leaving the file clean once applied.
 #[test]
 fn record_pattern_parse_errors_offer_quick_fixes() {
     const PRELUDE: &str = "\
@@ -621,6 +621,26 @@ type Order = { id: String, status: Status, total: Int }
             "parenthesise the record pattern",
             "fn f(o: Order) -> Bool {\n  if o is Order { status: Paid, .. } { true } else { false }\n}\n",
             "fn f(o: Order) -> Bool {\n  if o is (Order { status: Paid, .. }) { true } else { false }\n}\n",
+        ),
+        // #2654: the same fixes fire in `let` position, and a record `let …
+        // else` that cannot fail offers to drop its `else`.
+        (
+            "bynk.parse.record_pattern_without_rest",
+            "add the trailing `..`",
+            "fn f(o: Order) -> Int {\n  let Order { total } = o\n  total\n}\n",
+            "fn f(o: Order) -> Int {\n  let Order { total, .. } = o\n  total\n}\n",
+        ),
+        (
+            "bynk.types.unreachable_arm",
+            "remove the `else`",
+            "fn f(o: Order) -> Int {\n  let Order { total, .. } = o else { 0 }\n  total\n}\n",
+            "fn f(o: Order) -> Int {\n  let Order { total, .. } = o\n  total\n}\n",
+        ),
+        (
+            "bynk.types.unreachable_arm",
+            "remove the `else`",
+            "fn f(o: Order) -> Int {\n  let ((Order { total, .. })) = o else match {\n    _ => 0\n  }\n  total\n}\n",
+            "fn f(o: Order) -> Int {\n  let Order { total, .. } = o\n  total\n}\n",
         ),
     ];
     for (n, (code, title, body, fixed_body)) in cases.into_iter().enumerate() {

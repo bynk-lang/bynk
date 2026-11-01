@@ -1,0 +1,6 @@
+# A type error in a `let` record pattern is one `pattern_type_mismatch` each: nothing
+# about an `else`, a `match`, exhaustiveness or the hidden binder follows it.
+bynk.types.pattern_type_mismatch record pattern `Item { .. }` cannot match a value of type `Other`
+bynk.types.pattern_type_mismatch record pattern `Item { .. }` cannot match a value of type `Option[Item]`
+bynk.types.pattern_type_mismatch record pattern `Item { .. }` cannot match a value of type `Int`
+bynk.types.pattern_type_mismatch record pattern `Item { .. }` cannot match a value of type `List[Int]`

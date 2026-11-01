@@ -523,8 +523,8 @@ fn record_construction_receiver(line: &str) -> Option<String> {
 
 /// #2641: the cursor is at a field-name position of a record *pattern* —
 /// `Type { <cursor>` where the text before `Type` is only pattern syntax (a
-/// match arm's start, `Some(`, `is (`, `field: `, `|`), never an expression
-/// (`let o = Type {`). Returns the type name and the fields already listed.
+/// match arm's start, `Some(`, `is (`, `let `, `field: `, `|`), never an
+/// expression (`let o = Type {`). Returns the type name and the fields already listed.
 fn record_pattern_receiver(line: &str) -> Option<(String, Vec<String>)> {
     let recv = record_construction_receiver(line)?;
     let open = line.rfind('{')?;
@@ -537,6 +537,11 @@ fn record_pattern_receiver(line: &str) -> Option<(String, Vec<String>)> {
     // What precedes the type name must be pattern syntax only: separators, an
     // uppercase constructor before `(`, or a field name before `:`.
     let mut rest = after_is.trim_start();
+    // #2654: a `let` opens a pattern too — `let Item { <cursor>`. An ordinary
+    // `let o = Item {` leaves the `o =` behind, which is not pattern syntax.
+    if let Some(after_let) = rest.strip_prefix("let ") {
+        rest = after_let;
+    }
     loop {
         let before = rest;
         rest = rest.trim_start_matches(|c: char| c.is_whitespace() || c == '(' || c == '|');
@@ -3348,6 +3353,11 @@ mod tests {
             "    Some(Order { ",
             "  if o is (Order { ",
             "    Ok(Order { id: 1, ",
+            // #2654: a destructuring `let`, plain, parenthesised and under a variant.
+            "  let Order { ",
+            "  let Order { id, ",
+            "  let (Order { ",
+            "  let Some(Order { ",
         ] {
             let got = labels(prefix, doc);
             assert!(got.contains(&"..".to_string()), "{prefix}: {got:?}");
@@ -3366,6 +3376,11 @@ mod tests {
         );
         let got = labels("  => Order { id: 1, ", doc);
         assert!(!got.contains(&"..".to_string()), "{got:?}");
+        // A `let` that binds a name and then constructs is a construction.
+        let got = labels("  let o = Order { ", doc);
+        assert!(!got.contains(&"..".to_string()), "{got:?}");
+        let got = labels("  let Order { id, ", doc);
+        assert!(!got.contains(&"id".to_string()), "{got:?}");
     }
 
     #[test]
