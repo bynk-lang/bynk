@@ -682,6 +682,9 @@ pub(crate) fn emit_worker_entry(
     // Worker hosts, with its lock version, for the `/_bynk/migrate/` route.
     // Empty when the build has no lock or the context hosts no agent.
     migratable: &[(String, i64)],
+    // #2719: whether any of this context's service handlers hands work to the
+    // execution context, from the checker's needs-context set.
+    ctx_uses_send: bool,
 ) -> TsProgram {
     let mut program = TsProgram::new();
     // Which conditional runtime helpers the entry's own inbound/outbound codecs
@@ -699,11 +702,6 @@ pub(crate) fn emit_worker_entry(
     // v0.79: if any handler uses `~>`, each entry point captures the runtime's
     // execution context and threads it into `compose`, so a fire-and-forget send
     // can hand its promise to `waitUntil`. Otherwise the signatures are unchanged.
-    let ctx_uses_send = table.services.values().any(|s| {
-        s.handlers
-            .iter()
-            .any(|h| crate::emitter::block_uses_send(&h.body))
-    });
     let exec_params: Vec<TsParam> = if ctx_uses_send {
         vec![TsParam {
             name: "ctx".to_string(),

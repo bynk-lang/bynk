@@ -297,6 +297,11 @@ pub(crate) fn emit_worker_compose(
     // #2137: the test build of a context a `system` harness stands up — its
     // first-party `Clock` reads the harness clock (`ProviderNamespaces::Workers`).
     harness_clock: bool,
+    // #2719: whether any of this context's service handlers hands work to the
+    // execution context (`~>`, `within` or `race`, directly or through the
+    // functions it calls), so `compose` takes the request's and threads its
+    // `waitUntil` into `deps.__exec`. From the checker's needs-context set.
+    ctx_uses_send: bool,
 ) -> (TsProgram, bool) {
     // v0.15: cross-context capabilities this Worker uses (in handlers or in a
     // local provider's `given`) → `deps_key → consumed_context`. Their
@@ -558,11 +563,6 @@ pub(crate) fn emit_worker_compose(
 
     // v0.79: if any handler in this context uses `~>`, `compose` also takes the
     // request's execution context and threads its `waitUntil` into `deps.__exec`.
-    let ctx_uses_send = table.services.values().any(|s| {
-        s.handlers
-            .iter()
-            .any(|h| crate::emitter::block_uses_send(&h.body))
-    });
 
     // -- Build the `compose` function's own body (Decision A/B: real nodes
     // throughout) before assembling the header — `runtime_imports`' own

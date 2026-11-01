@@ -1,0 +1,19 @@
+context r
+
+consumes bynk
+
+fn tick(n: Int) -> Effect[()] {
+	let _ <- Effect.pure(n).within(1.seconds)
+	Effect.pure(())
+}
+
+fn twice(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
+	~> f(n)
+	Effect.pure(n)
+}
+
+// #2719: a pure function has no execution context to give, so naming a function that
+// needs one is refused, even as a value it only returns.
+fn pick() -> (Int) -> Effect[()] {
+	tick
+}

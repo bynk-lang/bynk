@@ -60,6 +60,18 @@ pub(crate) fn check_ident_at(
     {
         ctx.callees
             .insert(expr_id, Callee::FnValue(Arc::clone(decl), witnesses));
+    } else if ty.is_some()
+        && ctx.lookup(id.name.as_str()).is_none()
+        && !ctx.input.assets.contains_key(&id.name)
+        && !ctx.input.embeds.contains_key(&id.name)
+        && !ctx.input.consts.contains_key(&id.name)
+        && let Some(decl) = ctx.input.fns.get(&id.name)
+    {
+        // #2719: every function named as a value is recorded (with no
+        // witnesses when it has no `Ord` bound), so the needs-context analysis
+        // sees an edge from the naming body to the function.
+        ctx.callees
+            .insert(expr_id, Callee::FnValue(Arc::clone(decl), Vec::new()));
     }
     ty
 }

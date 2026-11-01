@@ -1,0 +1,20 @@
+context shop
+
+// #2719: a function in a dependency package that sends, called through its alias.
+// The package is compiled in the same build, so the context reaches it.
+uses lib.notify
+
+capability Audit {
+  fn note(n: Int) -> Effect[()]
+}
+
+provides Audit = NoAudit {
+  fn note(n: Int) -> Effect[()] { () }
+}
+
+service api {
+  on call(n: Int) -> Effect[Int] given Audit {
+    let r <- announce((x) => Audit.note(x), n)
+    Effect.pure(r)
+  }
+}

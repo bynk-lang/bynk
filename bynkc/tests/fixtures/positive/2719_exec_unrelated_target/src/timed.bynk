@@ -1,0 +1,16 @@
+context timed
+
+consumes bynk
+
+// #2719: this unit has a function that needs the execution context.
+fn tick(n: Int) -> Effect[()] {
+	let _ <- Effect.pure(n).within(1.seconds)
+	Effect.pure(())
+}
+
+service ticks {
+	on call(n: Int) -> Effect[Int] {
+		let _ <- tick(n)
+		Effect.pure(n)
+	}
+}

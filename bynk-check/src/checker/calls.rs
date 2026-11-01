@@ -194,6 +194,7 @@ pub(crate) fn check_fn(
         store_fields: HashMap::new(),
         in_agent_handler: false,
         in_service_handler: false,
+        in_fn_body: true,
     };
     let Some(body_ty) = type_of_block(&f.body, Some(return_ty), &mut ctx) else {
         return;
@@ -347,6 +348,7 @@ fn type_static_initialiser(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            in_fn_body: false,
         };
         type_of(init, Some(field_ty), &mut ctx)
     };

@@ -1,0 +1,118 @@
+context shapes
+
+consumes bynk
+
+// #2719: `~>`, `within` and `race` in a `fn`. A function that uses one, or calls
+// or names one that does, takes the execution context as a hidden trailing
+// parameter; every call passes it on.
+
+capability Audit {
+	fn note(n: Int) -> Effect[()]
+}
+
+capability Quotes {
+	fn quote(id: Int) -> Effect[Int]
+}
+
+provides Audit = NoAudit {
+	fn note(n: Int) -> Effect[()] { () }
+}
+
+provides Quotes = FixedQuotes {
+	fn quote(id: Int) -> Effect[Int] { id }
+}
+
+// A free function that sends.
+fn twice(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
+	~> f(n)
+	let _ <- f(n + 1)
+	Effect.pure(n)
+}
+
+// A three-deep chain: handler -> outer -> middle -> twice.
+fn middle(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
+	let r <- twice(f, n)
+	Effect.pure(r + 1)
+}
+
+fn outer(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
+	middle(f, n)
+}
+
+// `within` in a function: the helper that knows a call is slow bounds it.
+fn bounded(e: Effect[Int]) -> Effect[Bool] {
+	let r <- e.within(2.seconds)
+	Effect.pure(r.isOk())
+}
+
+// A generic function.
+fn hedged[T](a: Effect[T], b: Effect[T]) -> Effect[T] {
+	a.race(b)
+}
+
+// A lambda inside a function.
+fn viaLambda(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
+	let g = (k: Int) => twice(f, k)
+	g(n)
+}
+
+// A function named as a value.
+fn tick(n: Int) -> Effect[()] {
+	let _ <- Effect.pure(n).within(1.seconds)
+	Effect.pure(())
+}
+
+// The contract guard forwards the context.
+fn guarded(f: (Int) -> Effect[()], n: Int) -> Effect[Int]
+	requires positive: n > 0
+	ensures kept: result == n
+{
+	~> f(n)
+	Effect.pure(n)
+}
+
+type Box = { n: Int }
+
+// A method and a static method.
+fn Box.bump(self, d: Int) -> Effect[Int] {
+	let r <- Effect.pure(self.n + d).within(1.seconds)
+	Effect.pure(self.n + d)
+}
+
+fn Box.make(n: Int) -> Effect[Box] {
+	let _ <- Effect.pure(n).within(1.seconds)
+	Effect.pure(Box { n: n })
+}
+
+// A user type's own `race` is not the kernel one: it needs no context, so an
+// agent handler may call a function that uses it.
+type Dice = { n: Int }
+
+fn Dice.race(self, other: Int) -> Int { self.n + other }
+
+fn rolled(d: Dice) -> Effect[Int] { Effect.pure(d.race(2)) }
+
+agent Roller {
+	key id: String
+	store rolls: Cell[Int] = 0
+
+	on call roll() -> Effect[Int] {
+		let r <- rolled(Dice { n: 1 })
+		Effect.pure(r)
+	}
+}
+
+service run {
+	on call(n: Int) -> Effect[Int] given Audit, Quotes {
+		let a <- outer((x) => Audit.note(x), n)
+		let b <- bounded(Quotes.quote(n))
+		let c <- hedged(Quotes.quote(1), Quotes.quote(2))
+		let d <- viaLambda((x) => Audit.note(x), n)
+		let _ <- [1, 2].parTraverse(tick)
+		let e <- guarded((x) => Audit.note(x), n)
+		let box <- Box.make(n)
+		let f <- box.bump(1)
+		let g <- Roller("r").roll()
+		Effect.pure(a + c + d + e + f + g)
+	}
+}
