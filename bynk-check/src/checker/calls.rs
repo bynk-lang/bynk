@@ -2837,6 +2837,17 @@ pub(crate) fn check_method_call(
                 );
                 return check_effect_within_method(method, args, *inner, span, ctx);
             }
+            // #2711: `race` is on every `Effect[T]` too.
+            if method.name == "race" {
+                ctx.callees.insert(
+                    expr_id,
+                    Callee::Kernel {
+                        recv: recv_ty,
+                        op: method.name.clone(),
+                    },
+                );
+                return check_effect_race_method(args, *inner, span, ctx);
+            }
             if let Ty::Result(ok, err) = &*tys.get(*inner) {
                 ctx.callees.insert(
                     expr_id,

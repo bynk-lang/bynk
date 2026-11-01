@@ -1,0 +1,20 @@
+context r
+
+consumes bynk
+
+capability Prices {
+	fn get(sku: Int) -> Effect[Int]
+	fn label(sku: Int) -> Effect[String]
+}
+
+provides Prices = FixedPrices {
+	fn get(sku: Int) -> Effect[Int] { sku }
+	fn label(sku: Int) -> Effect[String] { "x" }
+}
+
+service prices {
+	// #2711: both sides of a `race` must produce the same type.
+	on call(sku: Int) -> Effect[Int] given Prices {
+		Prices.get(sku).race(Prices.label(sku))
+	}
+}

@@ -157,6 +157,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__bynkMapInsert", "keys"),
     ("__bynkPercentDecode", "url"),
     ("__bynkPercentEncode", "url"),
+    ("__bynkRace", "settle"),
     ("__bynkSetInsert", "keys"),
     ("__bynkSetOf", "keys"),
     ("__bynkSetRemove", "keys"),

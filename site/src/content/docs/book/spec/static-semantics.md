@@ -1162,6 +1162,30 @@ function and calls into one need no rule of their own, and a WebSocket handler r
 in the connection's Durable Object, which has none either. A `within` in a `par` binding bounds its own effect
 alone, as the binding would be checked written outside the block.
 
+A **race** (`a.race(b)`; #2711) takes the first of two effects to succeed. It is a
+method of every `Effect[T]`: `b` MUST have type `Effect[T]` (a mismatch is an ordinary
+type error), and the call has type `Effect[T]`. It chains, and `a.race(b).race(c)` is
+the first of three. Both effects are already running when `race` is called, because an
+`Effect` is eager. The result is that of the first effect to **succeed**; a fault in a
+side does not end the race while another side may still succeed. If every side faults,
+the first fault in source order (not in time) is raised, with the others attached as
+`suppressed`, as a `par` block raises. A `Result` is a value, so an `Err` returned by an
+`Effect[Result[T, E]]` is a success and may win; there is no flattening form. A tie,
+where two sides settle at the same instant, goes to the earlier in source order (the
+receiver before the argument). **The losers are not cancelled** (concurrent-effects Q7,
+option (b), as amended by #2711): each is handed to the execution context's `waitUntil`,
+so it runs to completion and its side effects still happen; a fault in one after the
+race is decided is the platform's to log. `race` is for idempotent work.
+
+`race` is legal exactly where `within` is, and for the same reason: in a **service
+handler's body**, a lambda written there included, and in event, cron and queue
+handlers. It MUST NOT occur in an **agent handler**, a lambda within one included
+(`bynk.race.in_agent_handler`); it MUST occur in an effectful position
+(`bynk.race.in_pure_context`); and it MUST NOT occur in an effectful `fn`, a provider
+operation or a WebSocket handler (`bynk.race.outside_handler`). Its argument is consumed
+by the call, so the unawaited-effect check (`bynk.effect.unbound_effect`) does not flag
+it. The `race` of a `race`, or of a `within`, composes: `a.race(b).within(d)`.
+
 **Implicit unit tail (§4.8.1).** A block with no trailing expression has value
 `()`: the tail auto-lift (an `Effect[T]` context lifts a tail of type `T`) then
 lifts it to `Effect[()]` where the enclosing return type is `Effect[()]`, so an

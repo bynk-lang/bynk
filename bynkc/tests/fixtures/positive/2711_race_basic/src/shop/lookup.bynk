@@ -1,0 +1,59 @@
+context shop.lookup
+
+consumes bynk
+
+// #2711: `a.race(b)` takes whichever of two effects succeeds first and hands the
+// other to `waitUntil`, uncancelled. Both sides are consumed by the call, so the
+// unawaited-effect check (#1658) does not flag the argument.
+
+capability Prices {
+	fn get(region: String, sku: Int) -> Effect[Int]
+}
+
+capability Audit {
+	fn note(sku: Int) -> Effect[()]
+}
+
+provides Prices = FixedPrices {
+	fn get(region: String, sku: Int) -> Effect[Int] { sku }
+}
+
+provides Audit = NoAudit {
+	fn note(sku: Int) -> Effect[()] { () }
+}
+
+// Bound and returned: the argument effect is built inside the call.
+service bound {
+	on call(sku: Int) -> Effect[Int] given Prices {
+		let p <- Prices.get("east", sku).race(Prices.get("west", sku))
+		Effect.pure(p)
+	}
+}
+
+// The tail of the body: the raced effect is returned as the handler's value.
+service tail {
+	on call(sku: Int) -> Effect[Int] given Prices {
+		Prices.get("east", sku).race(Prices.get("west", sku))
+	}
+}
+
+// Run for its effect with `do`.
+service sequenced {
+	on call(sku: Int) -> Effect[()] given Audit {
+		do Audit.note(sku).race(Audit.note(sku + 1))
+	}
+}
+
+// A chain lowers to one race over all three.
+service chained {
+	on call(sku: Int) -> Effect[Int] given Prices {
+		Prices.get("east", sku).race(Prices.get("west", sku)).race(Prices.get("north", sku))
+	}
+}
+
+// In a lambda written in the handler, and composed with `within`.
+service many {
+	on call(skus: List[Int]) -> Effect[List[Result[Int, TimedOut]]] given Prices {
+		skus.parTraverseAll((sku) => Prices.get("east", sku).race(Prices.get("west", sku)).within(1.seconds))
+	}
+}

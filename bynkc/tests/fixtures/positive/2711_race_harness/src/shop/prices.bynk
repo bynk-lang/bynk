@@ -1,0 +1,62 @@
+context shop.prices
+
+consumes bynk
+
+// #2711: `race` against two mirrors of one capability, told apart by argument.
+
+capability Prices {
+	fn get(region: String, sku: Int) -> Effect[Int]
+}
+
+capability Audit {
+	fn note(sku: Int) -> Effect[()]
+}
+
+provides Prices = FixedPrices {
+	fn get(region: String, sku: Int) -> Effect[Int] { sku }
+}
+
+provides Audit = NoAudit {
+	fn note(sku: Int) -> Effect[()] { () }
+}
+
+service prices {
+	on call(sku: Int) -> Effect[Int] given Prices {
+		Prices.get("east", sku).race(Prices.get("west", sku))
+	}
+}
+
+// A chain takes the first of three to succeed.
+service three {
+	on call(sku: Int) -> Effect[Int] given Prices {
+		let p <- Prices.get("east", sku).race(Prices.get("west", sku)).race(Prices.get("north", sku))
+		Effect.pure(p)
+	}
+}
+
+// The loser is still run: both writes happen.
+service audited {
+	on call(sku: Int) -> Effect[Bool] given Audit {
+		let r <- Audit.note(sku).race(Audit.note(sku + 1))
+		Effect.pure(true)
+	}
+}
+
+// `race` composes with `within`.
+service bounded {
+	on call(sku: Int) -> Effect[String] given Prices {
+		let r <- Prices.get("east", sku).race(Prices.get("west", sku)).within(2.seconds)
+		match r {
+			Ok(p) => Effect.pure("price \(p)")
+			Err(TimedOut { after, .. }) => Effect.pure("timed out after \(after.toMillis())")
+		}
+	}
+}
+
+// A lambda written in the handler closes over its `deps`.
+service many {
+	on call(skus: List[Int]) -> Effect[Int] given Prices {
+		let ps <- skus.parTraverseAll((sku) => Prices.get("east", sku).race(Prices.get("west", sku)).within(9.seconds))
+		Effect.pure(ps.length())
+	}
+}

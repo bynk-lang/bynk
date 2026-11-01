@@ -1,0 +1,111 @@
+// #2711: `race` on virtual time. The first effect to succeed wins, decided by
+// the latency stubs; the loser still runs to completion.
+
+suite shop.prices {
+  case "the faster mirror wins" {
+    stub Prices.get("east", _) returns 1 after 2.seconds
+    stub Prices.get("west", _) returns 2 after 1.seconds
+    let p <- prices.call(7)
+    expect p == 2
+  }
+
+  case "the receiver wins when it is faster" {
+    stub Prices.get("east", _) returns 1 after 1.seconds
+    stub Prices.get("west", _) returns 2 after 2.seconds
+    let p <- prices.call(7)
+    expect p == 1
+  }
+
+  case "a fast fault loses to a slower success" {
+    stub Prices.get("west", _) fails
+    stub Prices.get("east", _) returns 1 after 3.seconds
+    let p <- prices.call(7)
+    expect p == 1
+  }
+
+  case "a fast fault in the receiver loses to a slower success too" {
+    stub Prices.get("east", _) fails
+    stub Prices.get("west", _) returns 2 after 3.seconds
+    let p <- prices.call(7)
+    expect p == 2
+  }
+
+  case "when every side faults, the call faults" {
+    stub Prices.get(_, _) fails
+    expect prices.call(7) faults
+  }
+
+  case "a same-instant tie goes to the receiver" {
+    stub Prices.get("east", _) returns 1 after 1.seconds
+    stub Prices.get("west", _) returns 2 after 1.seconds
+    let p <- prices.call(7)
+    expect p == 1
+  }
+
+  case "a same-instant tie in a chain goes to the earliest side" {
+    stub Prices.get("east", _) returns 1 after 1.seconds
+    stub Prices.get("west", _) returns 2 after 5.seconds
+    stub Prices.get("north", _) returns 3 after 1.seconds
+    let p <- three.call(7)
+    expect p == 1
+  }
+
+  case "the third of a chain can win" {
+    stub Prices.get("east", _) returns 1 after 5.seconds
+    stub Prices.get("west", _) returns 2 after 4.seconds
+    stub Prices.get("north", _) returns 3 after 1.seconds
+    let p <- three.call(7)
+    expect p == 3
+  }
+
+  case "the loser is still recorded" {
+    stub Prices.get("east", _) returns 1 after 9.seconds
+    stub Prices.get("west", _) returns 2 after 1.seconds
+    let p <- prices.call(7)
+    expect p == 2
+    expect Prices.get called 2 times
+    expect Prices.get called with region == "east"
+  }
+
+  case "both writes of a raced pair happen" {
+    stub Audit.note(_) returns () after 1.seconds
+    let ok <- audited.call(1)
+    expect ok == true
+    expect Audit.note called 2 times
+  }
+
+  case "race then within: the race wins inside the deadline" {
+    stub Prices.get("east", _) returns 1 after 5.seconds
+    stub Prices.get("west", _) returns 2 after 1.seconds
+    let r <- bounded.call(7)
+    expect r == "price 2"
+  }
+
+  case "race then within times out when both sides never finish" {
+    stub Prices.get(_, _) never
+    let r <- bounded.call(7)
+    expect r == "timed out after 2000"
+  }
+
+  case "a lambda in the handler races each element alone" {
+    stub Prices.get("east", 1) returns 10 after 2.seconds
+    stub Prices.get("west", 1) returns 11 after 1.seconds
+    stub Prices.get("east", 2) returns 20 after 1.seconds
+    stub Prices.get("west", 2) returns 21 after 2.seconds
+    let n <- many.call([1, 2])
+    expect n == 2
+    expect Prices.get called 4 times
+  }
+
+  case "a real provider answers" {
+    let p <- prices.call(3)
+    expect p == 3
+  }
+
+  case "a latency stub decides the race at integration" as integration {
+    stub Prices.get("east", _) returns 1 after 2.seconds
+    stub Prices.get("west", _) returns 2 after 1.seconds
+    let p <- prices.call(7)
+    expect p == 2
+  }
+}

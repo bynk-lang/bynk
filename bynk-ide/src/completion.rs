@@ -3501,11 +3501,18 @@ mod tests {
             Some("within(d: Duration) -> Effect[Result[T, TimedOut]]")
         );
         assert!(find(&items, "mapOk", CompletionKind::Member).is_none());
+        // #2711: `race` is offered beside it.
+        let race = find(&items, "race", CompletionKind::Member).expect("race is offered");
+        assert_eq!(
+            race.detail.as_deref(),
+            Some("race(other: Effect[T]) -> Effect[T]")
+        );
 
         let result = TYS.intern(Ty::Result(int, int));
         let fallible = TYS.intern(Ty::Effect(result));
         let items = value_member_candidates(fallible, &TYS, "context a.b\n", None);
         assert!(find(&items, "within", CompletionKind::Member).is_some());
+        assert!(find(&items, "race", CompletionKind::Member).is_some());
         assert!(find(&items, "mapOk", CompletionKind::Member).is_some());
     }
 

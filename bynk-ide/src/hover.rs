@@ -192,10 +192,12 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 return Some(content);
             }
         }
-        // 3a. #2683: the `within` of `e.within(d)` on an `Effect`.
+        // 3a. #2683, #2711: the `within` of `e.within(d)` or the `race` of
+        //     `a.race(b)` on an `Effect`.
         if let Some(text) = a.snapshots.get(a.rel)
             && let Some(entries) = a.expr_types.get(a.rel)
-            && let Some(content) = crate::symbols::describe_within_at(text, a.offset, entries, tys)
+            && let Some(content) =
+                crate::symbols::describe_effect_method_at(text, a.offset, entries, tys)
         {
             return Some(content);
         }

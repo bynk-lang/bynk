@@ -1987,14 +1987,90 @@ pub(crate) fn check_string_kernel_method(
     Some(tys.intern(ret))
 }
 
+/// #2683, #2711: the execution-context check shared by `e.within(d)` and
+/// `a.race(b)`. Both hand an abandoned effect to the execution context's
+/// `waitUntil` (it is never cancelled, track Q7), so each is legal only where a
+/// service handler's `deps` supply that context: a service handler's body,
+/// lambdas included. An agent handler (like `~>`, #2017) and every function or
+/// provider body are refused. The check order is agent handler, pure context,
+/// then outside a handler, so each position reports the remedy that applies to
+/// it. Returns whether the call was refused; `codes` are the agent-handler,
+/// pure-context and outside-handler diagnostics, in that order.
+fn check_exec_context(name: &str, codes: [&'static str; 3], span: Span, ctx: &mut Ctx) -> bool {
+    let [agent_code, pure_code, outside_code] = codes;
+    let tys = ctx.tys;
+    if ctx.in_agent_handler {
+        let remedy = if name == "within" {
+            "move the `within` to the service handler that calls the agent, or bound the work another way, such as `FetchOptions.timeout`"
+        } else {
+            "move the `race` to the service handler that calls the agent"
+        };
+        let what = if name == "within" {
+            "the abandoned effect"
+        } else {
+            "the losing effect"
+        };
+        ctx.errors.push(
+            CompileError::new(
+                agent_code,
+                span,
+                format!("`{name}` cannot be used in an agent handler: an agent handler has no execution context to hand {what} to"),
+            )
+            .with_note(remedy),
+        );
+        true
+    } else if !ctx.effectful {
+        ctx.errors.push(
+            CompileError::new(
+                pure_code,
+                span,
+                format!(
+                    "`{name}` can only be used inside an effectful body (one returning `Effect[T]`)"
+                ),
+            )
+            .with_label(
+                ctx.return_ty_span,
+                format!("enclosing return type is `{}`", ctx.return_ty.display(tys)),
+            )
+            .with_note("change the enclosing handler's return type to `Effect[...]`"),
+        );
+        true
+    } else if !ctx.in_service_handler {
+        let what = if name == "within" {
+            "the abandoned effect"
+        } else {
+            "the losing effect"
+        };
+        let case = if name == "within" {
+            "a test `case` body is not a service handler either: address a service whose handler calls `within`, and test it with `stub … after`."
+        } else {
+            "a test `case` body is not a service handler either: address a service whose handler calls `race`, and test it with `stub … after`."
+        };
+        let advice = if name == "within" {
+            "call the `within` from a service handler (not a WebSocket one) that uses this function, and pass the function the bounded effect, not the work"
+        } else {
+            "call the `race` from a service handler (not a WebSocket one) that uses this function, and pass the function the raced effect, not the work"
+        };
+        ctx.errors.push(
+            CompileError::new(
+                outside_code,
+                span,
+                format!("`{name}` can only be used in a service handler's body: a function, a provider operation or a WebSocket handler has no execution context to hand {what} to"),
+            )
+            .with_note(format!(
+                "{case} A function has no execution context (#2682), and a WebSocket handler runs in the connection's Durable Object, which has none either; {advice}"
+            )),
+        );
+        true
+    } else {
+        false
+    }
+}
+
 /// #2683: `e.within(d)` on any `Effect[T]` — `within(d: Duration) ->
 /// Effect[Result[T, TimedOut]]`. It races `e` against a deadline and hands the
 /// abandoned effect to the execution context's `waitUntil` (it is never
-/// cancelled, track Q7), so it is legal only where a service handler's `deps`
-/// supply that context: a service handler's body, lambdas included. An agent
-/// handler (like `~>`, #2017) and every function or provider body are refused.
-/// The check order is agent handler, pure context, then outside a handler, so
-/// each position reports the remedy that applies to it.
+/// cancelled, track Q7); see [`check_exec_context`] for where it is legal.
 pub(crate) fn check_effect_within_method(
     method: &Ident,
     args: &[Expr],
@@ -2003,46 +2079,16 @@ pub(crate) fn check_effect_within_method(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    let mut refused = false;
-    if ctx.in_agent_handler {
-        refused = true;
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.within.in_agent_handler",
-                span,
-                "`within` cannot be used in an agent handler: an agent handler has no execution context to hand the abandoned effect to",
-            )
-            .with_note(
-                "move the `within` to the service handler that calls the agent, or bound the work another way, such as `FetchOptions.timeout`",
-            ),
-        );
-    } else if !ctx.effectful {
-        refused = true;
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.within.in_pure_context",
-                span,
-                "`within` can only be used inside an effectful body (one returning `Effect[T]`)",
-            )
-            .with_label(
-                ctx.return_ty_span,
-                format!("enclosing return type is `{}`", ctx.return_ty.display(tys)),
-            )
-            .with_note("change the enclosing handler's return type to `Effect[...]`"),
-        );
-    } else if !ctx.in_service_handler {
-        refused = true;
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.within.outside_handler",
-                span,
-                "`within` can only be used in a service handler's body: a function, a provider operation or a WebSocket handler has no execution context to hand the abandoned effect to",
-            )
-            .with_note(
-                "a test `case` body is not a service handler either: address a service whose handler calls `within`, and test it with `stub … after`. A function has no execution context (#2682), and a WebSocket handler runs in the connection's Durable Object, which has none either; call the `within` from a service handler (not a WebSocket one) that uses this function, and pass the function the bounded effect, not the work",
-            ),
-        );
-    }
+    let refused = check_exec_context(
+        "within",
+        [
+            "bynk.within.in_agent_handler",
+            "bynk.within.in_pure_context",
+            "bynk.within.outside_handler",
+        ],
+        span,
+        ctx,
+    );
     let duration = tys.intern(Ty::Base(BaseType::Duration));
     if args.len() != 1 {
         ctx.errors.push(CompileError::new(
@@ -2077,6 +2123,63 @@ pub(crate) fn check_effect_within_method(
     };
     let result = tys.intern(Ty::Result(inner, timed_out));
     Some(tys.intern(Ty::Effect(result)))
+}
+
+/// #2711: `a.race(b)` on `a: Effect[T]` — `race(other: Effect[T]) -> Effect[T]`.
+/// The first side to succeed wins; the other is handed, uncancelled, to the
+/// execution context's `waitUntil` (track Q7 option (b)), so it is legal exactly
+/// where `within` is ([`check_exec_context`]). `race` is the first kernel method
+/// to take an `Effect` as an argument: `other` is typed against `Effect[T]`, so a
+/// mismatched `T` is an ordinary type error, and the argument is consumed by the
+/// call rather than built and abandoned (#1658 does not descend into arguments).
+pub(crate) fn check_effect_race_method(
+    args: &[Expr],
+    inner: TyId,
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    check_exec_context(
+        "race",
+        [
+            "bynk.race.in_agent_handler",
+            "bynk.race.in_pure_context",
+            "bynk.race.outside_handler",
+        ],
+        span,
+        ctx,
+    );
+    let effect = tys.intern(Ty::Effect(inner));
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!("`Effect.race` takes 1 argument, got {}", args.len()),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    if let Some(actual) = type_of(&args[0], Some(effect), ctx)
+        && !compatible(actual, effect, tys)
+    {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.types.type_mismatch",
+                args[0].span,
+                format!(
+                    "the `Effect.race` other side has type `{}`, but `{}` is required",
+                    actual.display(tys),
+                    effect.display(tys)
+                ),
+            )
+            .with_note(
+                "both sides of a `race` must produce the same type; map each side into a shared type first with `.map`, `.mapOk` or a lambda",
+            ),
+        );
+    }
+    Some(effect)
 }
 
 /// v0.22a: type a function-valued kernel argument (the 0048 combinators —

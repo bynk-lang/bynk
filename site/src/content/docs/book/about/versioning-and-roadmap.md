@@ -121,8 +121,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   the block is unwrapped with `?` after it, in source order. `e.within(d)` now bounds
   how long an effect may take, and tests drive it on virtual time
   ([#2683](https://github.com/bynk-lang/bynk/issues/2683)); it is for service
-  handlers, and does not cancel the work it gives up on
-  ([#2615](https://github.com/bynk-lang/bynk/issues/2615)).
+  handlers, and does not cancel the work it gives up on.
+  `a.race(b)` takes whichever of two effects succeeds first and hands the other
+  to `waitUntil` to finish, so it suits idempotent reads
+  ([#2711](https://github.com/bynk-lang/bynk/issues/2711),
+  [#2615](https://github.com/bynk-lang/bynk/issues/2615)).
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 

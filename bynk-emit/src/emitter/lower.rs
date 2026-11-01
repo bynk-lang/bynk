@@ -3399,6 +3399,42 @@ fn lower_method_call(
                         deps = cx.cap_deps_expr()
                     ));
                 }
+                // #2711: `a.race(b)` takes the first side to succeed and hands
+                // the rest to the same execution context, uncancelled.
+                if method.name == "race" && args.len() == 1 {
+                    cx.note_race();
+                    // A chain `a.race(b).race(c)` lowers to one
+                    // `__bynkRace([a, b, c], …)`: nesting would let `c` beat `a`
+                    // in a same-instant tie, as the inner race settles a
+                    // microtask later, and ties go to source order.
+                    let mut operands: Vec<&Expr> = vec![&args[0]];
+                    let mut head: &Expr = receiver;
+                    while let ExprKind::MethodCall {
+                        receiver: inner,
+                        method: m,
+                        args: a,
+                        ..
+                    } = &head.kind
+                        && m.name == "race"
+                        && a.len() == 1
+                        && matches!(
+                            cx.commons().expr_ty(inner.id).as_deref(),
+                            Some(Ty::Effect(_))
+                        )
+                    {
+                        operands.push(&a[0]);
+                        head = inner;
+                    }
+                    operands.push(head);
+                    operands.reverse();
+                    let lowered: Vec<String> =
+                        operands.into_iter().map(|o| pre.lower(o, cx)).collect();
+                    return pre.finish(format!(
+                        "__bynkRace([{}], {deps}.__exec)",
+                        lowered.join(", "),
+                        deps = cx.cap_deps_expr()
+                    ));
+                }
                 if let Ty::Result(ok, err) = &*tys.get(*inner)
                     && let Some(s) = pre.absorb_opt(lower_effect_result_kernel(
                         e, receiver, method, args, *ok, *err, cx,

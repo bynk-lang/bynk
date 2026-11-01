@@ -1105,6 +1105,9 @@ fn emit_integration_module(
     if runtime_use.within() {
         append_missing_bindings(&mut runtime_names, emitter::WITHIN_RUNTIME_IMPORTS);
     }
+    if runtime_use.race() {
+        append_missing_bindings(&mut runtime_names, emitter::RACE_RUNTIME_IMPORTS);
+    }
     if runtime_use.url_ops() {
         append_missing_bindings(&mut runtime_names, emitter::URL_OPS_RUNTIME_IMPORTS);
     }
@@ -3949,6 +3952,9 @@ fn emit_test_module(
     }
     if runtime_use.within() {
         append_missing_bindings(&mut runtime_names, emitter::WITHIN_RUNTIME_IMPORTS);
+    }
+    if runtime_use.race() {
+        append_missing_bindings(&mut runtime_names, emitter::RACE_RUNTIME_IMPORTS);
     }
     if runtime_use.url_ops() {
         append_missing_bindings(&mut runtime_names, emitter::URL_OPS_RUNTIME_IMPORTS);

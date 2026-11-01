@@ -13,6 +13,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 **Do**
 - [Run independent calls at the same time](/book/guides/effects-and-capabilities/run-independent-calls-at-the-same-time/)
 - [Bound how long a call may take](/book/guides/effects-and-capabilities/bound-how-long-a-call-may-take/)
+- [Ask two sources and take the first answer](/book/guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer/)
 - [Compose a provider from other capabilities](/book/guides/effects-and-capabilities/compose-a-provider/)
 - [Share a capability across contexts](/book/guides/effects-and-capabilities/share-across-contexts/)
 - [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/)

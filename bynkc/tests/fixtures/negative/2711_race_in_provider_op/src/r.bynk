@@ -1,0 +1,14 @@
+context r
+
+consumes bynk
+
+capability Pricing {
+	fn quote(id: Int) -> Effect[Int]
+}
+
+// #2711: a provider operation has no execution context either.
+provides Pricing = HedgedPricing {
+	fn quote(id: Int) -> Effect[Int] {
+		Effect.pure(id).race(Effect.pure(id + 1))
+	}
+}

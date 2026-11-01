@@ -1200,11 +1200,12 @@ pub fn describe_self_at(
     Some(format!("```bynk\nself: {name}\n```"))
 }
 
-/// #2683: hover on the `within` of `e.within(d)`, where `e` is an `Effect`: its
-/// signature and what it does and does not do. The kernel methods have no
-/// declaration to read a doc from, so this one is written here; the receiver's
-/// type keeps a user type's own `within` method from being described as it.
-pub fn describe_within_at(
+/// #2683, #2711: hover on the `within` of `e.within(d)` or the `race` of
+/// `a.race(b)`, where the receiver is an `Effect`: its signature and what it
+/// does and does not do. The kernel methods have no declaration to read a doc
+/// from, so these are written here; the receiver's type keeps a user type's own
+/// `within` or `race` method from being described as them.
+pub fn describe_effect_method_at(
     text: &str,
     offset: usize,
     expr_types: &[(Span, bynk_check::checker::TyId)],
@@ -1212,8 +1213,11 @@ pub fn describe_within_at(
 ) -> Option<String> {
     let tokens = tokenize(text).ok()?;
     let tok = tokens.iter().find(|t| {
-        t.span.start <= offset && offset < t.span.end && &text[t.span.start..t.span.end] == "within"
+        t.span.start <= offset
+            && offset < t.span.end
+            && matches!(&text[t.span.start..t.span.end], "within" | "race")
     })?;
+    let word = &text[tok.span.start..tok.span.end];
     let before = text[..tok.span.start].trim_end();
     let after = text[tok.span.end..].trim_start();
     if !before.ends_with('.') || !after.starts_with('(') {
@@ -1223,6 +1227,22 @@ pub fn describe_within_at(
     let recv = bynk_check::expr_types::type_at_offset(expr_types, dot.checked_sub(1)?, tys)?;
     if !matches!(&*tys.get(recv), bynk_check::checker::Ty::Effect(_)) {
         return None;
+    }
+    if word == "race" {
+        return Some(
+            "```bynk\nrace(other: Effect[T]) -> Effect[T]\n```\n\n\
+             Takes whichever of the two effects succeeds first. A side that faults does not \
+             win while the other may still succeed; if both fault, the first fault in source \
+             order is raised, with the other attached as `suppressed`. A same-instant tie goes \
+             to the receiver.\n\n\
+             **The loser is not cancelled.** It is handed to the platform's `waitUntil` and \
+             runs to completion, so its side effects still happen: use `race` for idempotent \
+             work such as a read, not a write. Use `FetchOptions.timeout` when work must \
+             actually stop.\n\n\
+             Only in a service handler's body (lambdas included): an agent handler or a \
+             function has no execution context to hand the loser to."
+                .to_string(),
+        );
     }
     Some(
         "```bynk\nwithin(d: Duration) -> Effect[Result[T, TimedOut]]\n```\n\n\
@@ -2900,7 +2920,7 @@ mod tests {
         let dot = src.find(".within").unwrap();
         let at = src.find("within").unwrap() + 1;
         let on_effect = [(Span::new(8, dot), effect)];
-        let hover = describe_within_at(src, at, &on_effect, &tys).expect("within hovers");
+        let hover = describe_effect_method_at(src, at, &on_effect, &tys).expect("within hovers");
         assert!(
             hover.contains("within(d: Duration) -> Effect[Result[T, TimedOut]]"),
             "{hover}"
@@ -2909,9 +2929,24 @@ mod tests {
         assert!(hover.contains("waitUntil"), "{hover}");
         // A receiver that is not an `Effect` is a user's own `within`.
         let on_int = [(Span::new(8, dot), int)];
-        assert!(describe_within_at(src, at, &on_int, &tys).is_none());
+        assert!(describe_effect_method_at(src, at, &on_int, &tys).is_none());
         // Elsewhere on the line is not `within`.
-        assert!(describe_within_at(src, 0, &on_effect, &tys).is_none());
+        assert!(describe_effect_method_at(src, 0, &on_effect, &tys).is_none());
+
+        // #2711: `race` hovers the same way, with the loser caveat.
+        let src = "let r <- p.get(1).race(p.get(2))\n";
+        let dot = src.find(".race").unwrap();
+        let at = src.find("race").unwrap() + 1;
+        let on_effect = [(Span::new(8, dot), effect)];
+        let hover = describe_effect_method_at(src, at, &on_effect, &tys).expect("race hovers");
+        assert!(
+            hover.contains("race(other: Effect[T]) -> Effect[T]"),
+            "{hover}"
+        );
+        assert!(hover.contains("loser is not cancelled"), "{hover}");
+        assert!(hover.contains("idempotent"), "{hover}");
+        let on_int = [(Span::new(8, dot), int)];
+        assert!(describe_effect_method_at(src, at, &on_int, &tys).is_none());
     }
 
     /// A constant's hover shows its `private` modifier as written, and the
