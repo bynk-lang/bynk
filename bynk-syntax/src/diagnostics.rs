@@ -2887,6 +2887,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.constructor_base_mismatch",
         "A `.of` constructor was given an argument of the wrong base type.",
     ),
+    d(
+        "bynk.types.decimal_division_unscaled",
+        "`/` was used on `Decimal` operands. A quotient has no exact decimal answer, so division states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)` (#2622).",
+    ),
     dg(
         "bynk.types.derives_automatic",
         "A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1).",
@@ -3114,7 +3118,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.no_numeric_coercion",
-        "`Int` and `Float` were mixed without an explicit conversion — in an operation or in refinement bounds.",
+        "`Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds.",
         &["binary_expr", "refinement"],
     ),
     dg(
@@ -3236,6 +3240,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.return_mismatch",
         "A returned value does not match the declared return type.",
     ),
+    d(
+        "bynk.types.rounding_mode_position",
+        "`RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622).",
+    ),
     dg(
         "bynk.types.some_value_mismatch",
         "A `Some` payload has the wrong type.",
@@ -3281,6 +3289,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.unknown_pattern_field",
         "A pattern names a field the variant does not have.",
         &["variant_pattern"],
+    ),
+    d(
+        "bynk.types.unknown_rounding_mode",
+        "A `Decimal` `round` or `div` was not given a rounding mode written `RoundingMode.<mode>`; the modes are `Down`, `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown` and `HalfEven` (#2622).",
     ),
     dg(
         "bynk.types.unknown_static_member",

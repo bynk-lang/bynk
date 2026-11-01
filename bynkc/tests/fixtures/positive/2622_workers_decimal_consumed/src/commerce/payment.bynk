@@ -1,0 +1,9 @@
+context commerce.payment
+
+uses commerce.money
+
+service authorise {
+  on call(amount: Money) -> Effect[Result[Decimal, Int]] {
+    Ok(amount.amount + amount.fee)
+  }
+}

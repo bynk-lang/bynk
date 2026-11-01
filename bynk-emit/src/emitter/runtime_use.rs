@@ -267,6 +267,13 @@ impl RuntimeUse {
         self.note_cmp(name);
     }
 
+    /// Record that the module references the `Decimal` runtime helper `name`
+    /// (`decimal.ts`, #2622). Rides the same set as the comparator helpers, so
+    /// every import site already emits it.
+    pub fn note_decimal(&self, name: &'static str) {
+        self.note_cmp(name);
+    }
+
     /// The comparator helpers to import, as a `", a, b"` run (empty when the
     /// module uses none), in the shape the other conditional groups take.
     pub fn cmp_imports(&self) -> String {

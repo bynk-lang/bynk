@@ -76,6 +76,7 @@ impl<'a> CmpGen<'a> {
             BaseType::String => "__bynkCmpString",
             BaseType::Float => "__bynkCmpFloat",
             BaseType::Bytes => "__bynkCmpBytes",
+            BaseType::Decimal => "__bynkCmpDecimal",
             // The checker rejects ordering a `Bool`; a comparator for one is
             // never requested.
             BaseType::Bool => unreachable!("bynk internal error: Bool is not Ord"),

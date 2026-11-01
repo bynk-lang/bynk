@@ -350,7 +350,7 @@ fn emit_refined_checks(
     }
     if let Some(r) = refinement {
         for pred in bynk_syntax::ast::in_check_order(&r.predicates, |p| &p.kind) {
-            emit_pred_check(out, name, &pred.kind);
+            emit_pred_check(out, name, &pred.kind, base);
         }
     }
 }
@@ -403,8 +403,8 @@ fn print_guard_if_stmt(
     bynk_ts::print_stmt(&if_stmt, 2)
 }
 
-fn emit_pred_check(out: &mut String, type_name: &str, pred: &PredKind) {
-    let (cond, msg) = crate::emitter::pred_condition_and_message(pred, "value");
+fn emit_pred_check(out: &mut String, type_name: &str, pred: &PredKind, base: BaseType) {
+    let (cond, msg) = crate::emitter::pred_condition_and_message_for(pred, "value", Some(base));
     // #1471: `cond` is now a real `TsExpr` (a `Binary`/`Call` node, not
     // opaque text) — the explicit `Paren` stays regardless, matching this
     // function's own pre-#1471 output byte-for-byte: it was already always
@@ -4209,11 +4209,14 @@ pub(crate) fn holds_callee_typed(e: &Expr, cx: &LowerCtx) -> bool {
     // A compile-time literal, a negated number (`-3`) included, as the
     // checker's `const_literal` reads one.
     let literal = match &e.kind {
-        ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::StrLit(_) => true,
+        ExprKind::IntLit { .. }
+        | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
+        | ExprKind::StrLit(_) => true,
         ExprKind::UnaryOp(bynk_syntax::ast::UnaryOp::Neg, inner) => {
             matches!(
                 inner.kind,
-                ExprKind::IntLit { .. } | ExprKind::FloatLit { .. }
+                ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. }
             )
         }
         _ => false,
@@ -8736,7 +8739,7 @@ mod ts_type_params_tests {
 #[cfg(test)]
 mod refined_checks_tests {
     use super::{emit_pred_check, print_numeric_guard_stmt};
-    use bynk_syntax::ast::PredKind;
+    use bynk_syntax::ast::{BaseType, PredKind};
 
     /// #1335: the real, converted `print_numeric_guard_stmt` matches
     /// `254_multi_file_commons_workers_codec`'s own real `Cents.of`
@@ -8757,7 +8760,7 @@ mod refined_checks_tests {
     #[test]
     fn pred_check_matches_the_real_fixtures_own_non_negative_check_byte_for_byte() {
         let mut out = String::new();
-        emit_pred_check(&mut out, "Cents", &PredKind::NonNegative);
+        emit_pred_check(&mut out, "Cents", &PredKind::NonNegative, BaseType::Int);
         assert_eq!(
             out,
             "    if (!(value >= 0)) {\n      \
@@ -8787,7 +8790,12 @@ mod refined_checks_tests {
     #[test]
     fn pred_check_does_not_double_escape_a_matches_patterns_own_backslash() {
         let mut out = String::new();
-        emit_pred_check(&mut out, "Code", &PredKind::Matches(r"\d+".to_string()));
+        emit_pred_check(
+            &mut out,
+            "Code",
+            &PredKind::Matches(r"\d+".to_string()),
+            BaseType::String,
+        );
         // `escape_ts_string` doubles the pattern's one real backslash to two
         // backslash *characters* — the correctly-escaped form, not a bug.
         // Both the regex-source string and the message embed that same

@@ -7142,7 +7142,46 @@ fn base_canon(base: BaseType) -> String {
         BaseType::Float => "0".to_string(),
         BaseType::Duration | BaseType::Instant => "0".to_string(),
         BaseType::Bytes => "new globalThis.Uint8Array()".to_string(),
+        BaseType::Decimal => "{ coefficient: 0n, scale: 0 }".to_string(),
     }
+}
+
+/// `Decimal` generation bounds `(lo, hi, scale)` as coefficients at `scale`,
+/// from a refinement (#2622). Unrefined draws over `[-1000.00, 1000.00]`.
+fn decimal_bounds(refinement: Option<&Refinement>) -> (i128, i128, u32) {
+    let mut scale = 2u32;
+    if let Some(r) = refinement {
+        for p in &r.predicates {
+            if let PredKind::InRangeD(a, b) = &p.kind {
+                scale = scale.max(a.scale).max(b.scale);
+            }
+        }
+    }
+    let at = |coef: &str, from: u32| -> Option<i128> {
+        coef.parse::<i128>()
+            .ok()?
+            .checked_mul(10i128.checked_pow(scale - from)?)
+    };
+    let (mut lo, mut hi) = (-100_000i128, 100_000i128);
+    if let Some(r) = refinement {
+        for p in &r.predicates {
+            match &p.kind {
+                PredKind::Positive => lo = lo.max(1),
+                PredKind::NonNegative => lo = lo.max(0),
+                PredKind::InRangeD(a, b) => {
+                    if let (Some(x), Some(y)) = (at(&a.coef, a.scale), at(&b.coef, b.scale)) {
+                        lo = x;
+                        hi = y;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if lo > hi {
+        hi = lo;
+    }
+    (lo, hi, scale)
 }
 
 /// A TypeScript expression drawing a random inhabitant of `base` within
@@ -7175,6 +7214,18 @@ fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> TsExpr {
             )
         }
         BaseType::Bool => method_call(ident("rng"), "bool", vec![]),
+        // #2622: a random coefficient at a fixed scale.
+        BaseType::Decimal => {
+            let (lo, hi, scale) = decimal_bounds(refinement);
+            ident(format!(
+                "{{ coefficient: {}, scale: {scale} }}",
+                bynk_ts::print_expr(&method_call(
+                    ident("rng"),
+                    "int",
+                    vec![num_lit(format!("{lo}n")), num_lit(format!("{hi}n"))],
+                ))
+            ))
+        }
         _ => ident(base_canon(base)),
     }
 }
@@ -7196,6 +7247,12 @@ fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> TsExpr {
             str_lit("x".repeat(min.max(0) as usize))
         }
         BaseType::Bool => TsExpr::Lit(TsLit::Bool(true)),
+        BaseType::Decimal => {
+            let (lo, hi, scale) = decimal_bounds(refinement);
+            // The value closest to zero the refinement admits.
+            let c = 0i128.clamp(lo, hi);
+            ident(format!("{{ coefficient: {c}n, scale: {scale} }}"))
+        }
         other => ident(base_canon(other)),
     }
 }

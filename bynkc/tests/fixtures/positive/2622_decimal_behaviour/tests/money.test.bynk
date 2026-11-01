@@ -1,0 +1,152 @@
+// #2622: `Decimal` arithmetic, comparison, rounding and the wire form, run.
+suite money {
+  case "sums are exact" {
+    expect 1.10d + 2.20d == 3.30d
+    expect (1.10d + 2.20d).toString() == "3.30"
+    expect 0.10d + 0.20d == 0.30d
+    expect 2.50d - 0.75d == 1.75d
+    expect 1.5d * 2.50d == 3.750d
+    expect -1.25d + 1.25d == 0d
+  }
+
+  case "equality and order are by value; the scale is kept" {
+    expect 1.20d == 1.2d
+    expect 1.20d.scale() == 2
+    expect 1.2d.scale() == 1
+    expect 1.20d.toString() == "1.20"
+    expect 9.99d < 10d
+    expect -0.50d < -0.4d
+    expect 2.0d >= 2d
+    expect 1.0d != 1.1d
+    expect 1.20d.min(1.3d) == 1.2d
+    expect (-3.5d).abs() == 3.5d
+  }
+
+  case "money in a refined type" {
+    let unit: Price = 4.99d
+    expect lineTotal(unit, 3) == 14.97d
+    expect Price.of(4.99d) is Ok(_)
+    expect Price.of(0d) is Err(_)
+    expect Price.of(-1.00d) is Err(_)
+    let rate: Rate = 0.20d
+    expect withTax(100.00d, rate) == 120.00d
+    expect Rate.of(1.00d) is Ok(_)
+    expect Rate.of(1.01d) is Err(_)
+  }
+
+  case "div states a scale and a mode" {
+    expect split(10.00d, 3) == 3.33d
+    expect 1d.div(3d, 4, RoundingMode.HalfEven) == 0.3333d
+    expect 2d.div(3d, 4, RoundingMode.HalfEven) == 0.6667d
+    expect 2d.div(3d, 4, RoundingMode.Down) == 0.6666d
+    expect (-1d).div(3d, 2, RoundingMode.Floor) == -0.34d
+    expect (-1d).div(3d, 2, RoundingMode.Ceiling) == -0.33d
+    expect 10.00d.div(4d, 0, RoundingMode.HalfUp) == 3d
+    expect 10.00d.div(4d, 0, RoundingMode.HalfEven) == 2d
+  }
+
+  case "round honours each mode" {
+    expect roundTo(2.5d, "down") == 2d
+    expect roundTo(2.5d, "up") == 3d
+    expect roundTo(2.5d, "floor") == 2d
+    expect roundTo(2.5d, "ceiling") == 3d
+    expect roundTo(2.5d, "halfUp") == 3d
+    expect roundTo(2.5d, "halfDown") == 2d
+    expect roundTo(2.5d, "halfEven") == 2d
+    expect roundTo(3.5d, "halfEven") == 4d
+    expect roundTo(-2.5d, "down") == -2d
+    expect roundTo(-2.5d, "up") == -3d
+    expect roundTo(-2.5d, "floor") == -3d
+    expect roundTo(-2.5d, "ceiling") == -2d
+    expect roundTo(-2.5d, "halfUp") == -3d
+    expect roundTo(-2.5d, "halfDown") == -2d
+    expect roundTo(2.51d, "halfDown") == 3d
+    expect 1.005d.round(2, RoundingMode.HalfEven).toString() == "1.00"
+    expect 1.5d.round(3, RoundingMode.HalfEven).toString() == "1.500"
+  }
+
+  case "conversions" {
+    expect Decimal.parse("12.50") is Some(_)
+    expect Decimal.parse("1e3") is None
+    expect Decimal.parse("+1") is None
+    expect Decimal.parse(".5") is None
+    expect Decimal.parse("") is None
+    expect parsed("0012.50") == 12.5d
+    expect 42.00d.toInt() == Some(42)
+    expect 42.5d.toInt() is None
+    expect Decimal.fromInt(7).toString() == "7"
+    expect 0.1d.toFloat() == 0.1
+  }
+
+  case "lists, keys and text" {
+    expect total([0.10d, 0.20d, 0.30d]) == 0.60d
+    expect total([]) == 0d
+    expect cheapest([2.50d, 1.5d, 3d]) == Some(1.50d)
+    expect sorted([2.50d, 1.5d, 3d, -1d]) == [-1d, 1.5d, 2.50d, 3d]
+    expect distinctCount([1.20d, 1.2d, 1.200d, 2d]) == 2
+    let known: Map[Decimal, Int] = Map.empty().insert(1.20d, 1)
+    expect seen(known, 1.2d)
+    expect seen(known, 1.3d) == false
+    expect label(1.20d) == "total: 1.20"
+    expect "\(2d + 0.50d)" == "2.50"
+  }
+
+  case "a sum payload of a refined decimal round-trips" {
+    expect encodeReceipt(Paid(12.50d)) == "{\"kind\":\"Paid\",\"amount\":\"12.50\"}"
+    expect decodeReceipt("{\"kind\":\"Paid\",\"amount\":\"3.10\"}") == Some(Paid(3.10d))
+    expect decodeReceipt("{\"kind\":\"Paid\",\"amount\":\"0\"}") is None
+    expect decodeReceipt("{\"kind\":\"Paid\",\"amount\":7}") is None
+    expect amountText(Paid(1.5d)) == "1.5"
+    expect amountText(Pending) == "pending"
+  }
+
+  case "a mocked value holds a decimal" {
+    let o = Val[Order]
+    expect o.total == o.total
+    let r = Val[Receipt]
+    expect r == r
+  }
+
+  case "constants and field defaults" {
+    expect gross(100.00d) == 120.00d
+    expect refund() == -1.5d
+    expect refund().toString() == "-1.50"
+    expect feeOf("{\"sku\": \"a\"}") == "0.00 0.50"
+    expect feeOf("{\"sku\": \"a\", \"fee\": \"2.5\"}") == "2.5 0.50"
+    expect feeOf("{\"sku\": \"a\", \"tip\": \"-1\"}") == "bad"
+  }
+
+  case "a decimal field round-trips as a JSON string" {
+    let line = Line { sku: "a-1", unit: 4.50d, qty: 2 }
+    expect Json.encode(line) == "{\"sku\":\"a-1\",\"unit\":\"4.50\",\"qty\":2}"
+    let back = decodeLine("{\"sku\": \"a-1\", \"unit\": \"4.5\", \"qty\": 2}")
+    expect back == Some(line)
+    expect back is Some(_)
+  }
+
+  case "a malformed decimal on the wire is rejected at the field path" {
+    expect Json.decode[Line]("{\"sku\": \"a\", \"unit\": \"1e3\", \"qty\": 1}") is Err(_)
+    expect Json.decode[Line]("{\"sku\": \"a\", \"unit\": 4.5, \"qty\": 1}") is Err(_)
+    expect Json.decode[Line]("{\"sku\": \"a\", \"unit\": \"-1.00\", \"qty\": 1}") is Err(_)
+    expect Json.decode[Line]("{\"sku\": \"a\", \"unit\": \"+1.00\", \"qty\": 1}") is Err(_)
+    expect lineError("{\"sku\": \"a\", \"unit\": \"1e3\", \"qty\": 1}") == "StructuralMismatch $.unit"
+    expect lineError("{\"sku\": \"a\", \"unit\": 4.5, \"qty\": 1}") == "StructuralMismatch $.unit"
+    expect lineError("{\"sku\": \"a\", \"unit\": \"0.00\", \"qty\": 1}") == "RefinementViolation $.unit"
+    expect lineError("{\"sku\": \"a\", \"unit\": \"1.00\", \"qty\": 1}") == "ok"
+  }
+
+  property "addition is exact and commutative" {
+    for all a: Decimal, b: Decimal {
+      expect a + b == b + a
+      expect (a + b) - b == a
+    }
+  }
+
+  property "a positive price survives the wire" {
+    for all p: Price {
+      let line = Line { sku: "x", unit: p, qty: 1 }
+      expect decodeLine(Json.encode(line)) == Some(line)
+      expect p > 0d
+    }
+  }
+}

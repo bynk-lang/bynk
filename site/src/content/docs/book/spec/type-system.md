@@ -31,6 +31,19 @@ the numeric kernel (also §5.2). Both erase to the same TypeScript `number`
 ([§7.3.1](/book/spec/emission/#731-types)) — the distinction is enforced entirely by
 the checker.
 
+`Decimal` (#2622) is a further base type: an **exact base-10 number**, an
+arbitrary-precision integer coefficient with a non-negative scale. Its values are
+decimal literals
+([§3.2.1b](/book/spec/lexical-grammar/#321b-decimal_literal)). It is distinct from
+`Int` and `Float` and mixing it with either is `bynk.types.no_numeric_coercion`.
+`+`, `-` and `*` are exact; `/` is not defined on `Decimal`
+(`bynk.types.decimal_division_unscaled`), because a quotient has no exact answer:
+division is the kernel method `a.div(b, scale, mode)` ([§5.2](/book/spec/static-semantics/#52-well-typedness)).
+Equality and order are **by numeric value** (`1.20 == 1.2`), independent of the
+scale each side was written with; the scale is observable only through
+`scale()` and `toString()`. A `Decimal` is `Eq`, `Ord` and `Key`, and its JSON
+form is a string ([§7.3.1](/book/spec/emission/#731-types)).
+
 ### §6.1.2 Refined types
 
 A refined type is a base type narrowed by a `where` refinement
@@ -188,7 +201,7 @@ shape; neither error builtin passes through the JSON codec itself
 `Set` member, and the key of `distinct`, `distinctBy`, `groupBy` and the joins of a
 `List`. It is automatic, never derived. A type is `Key` when it is:
 
-- `String`, `Int`, `Bool`, `Instant`, `Duration` or `Bytes`, or a refined or opaque
+- `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes` or `Decimal`, or a refined or opaque
   type over one of them;
 - `Option[T]` or `List[T]` with `T` `Key`;
 - a record, sum or enum whose every field and payload is `Key`; a generic one is
@@ -219,7 +232,7 @@ built-in predicates joined by `&&`. Each predicate applies to a specific base
 
 {{#grammar predicate_name}}
 
-**On `Int` and `Float`:**
+**On `Int`, `Float` and `Decimal`:**
 
 | Predicate | Holds when |
 |---|---|
@@ -229,22 +242,26 @@ built-in predicates joined by `&&`. Each predicate applies to a specific base
 
 `InRange` bounds are numeric literals whose type must **match the base**
 (v0.21): integer bounds on `Int` (`InRange(0, 10)`), float bounds on `Float`
-(`InRange(0.0, 1.0)`). A bound of the other numeric type — or a mix — is
+(`InRange(0.0, 1.0)`), decimal bounds on `Decimal` (`InRange(0.00d, 1.00d)`,
+compared by value). A bound of another numeric type — or a mix — is
 `bynk.types.no_numeric_coercion`. On `Float`, `Positive` excludes `0.0`
 exactly as it excludes `0` on `Int`, and the `.of` constructor additionally
 requires the value to be **finite** ([§7.2](/book/spec/emission/#72-targets)).
 
 ```bynk
 commons pricing {
-  type Price = Float where Positive
-  type Ratio = Float where InRange(0.0, 1.0)
+  type Price = Decimal where Positive
+  type Ratio = Decimal where InRange(0.00d, 1.00d)
 
-  fn discounted(p: Price, r: Ratio) -> Float {
-    p * r
+  fn discounted(p: Price, r: Ratio) -> Decimal {
+    (p * r).round(2, RoundingMode.HalfEven)
   }
 
-  fn toCents(f: Float) -> Int {
-    (f * 100.0).round()
+  fn toCents(d: Decimal) -> Int {
+    match (d * 100d).round(0, RoundingMode.HalfEven).toInt() {
+      Some(n) => n
+      None => 0
+    }
   }
 }
 ```

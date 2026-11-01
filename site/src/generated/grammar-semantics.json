@@ -85,7 +85,7 @@
     },
     {
       "code": "bynk.types.no_numeric_coercion",
-      "summary": "`Int` and `Float` were mixed without an explicit conversion — in an operation or in refinement bounds."
+      "summary": "`Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds."
     }
   ],
   "binding_decl": [
@@ -1307,7 +1307,7 @@
     },
     {
       "code": "bynk.types.no_numeric_coercion",
-      "summary": "`Int` and `Float` were mixed without an explicit conversion — in an operation or in refinement bounds."
+      "summary": "`Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds."
     },
     {
       "code": "bynk.types.polynomial_regex",

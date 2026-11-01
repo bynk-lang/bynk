@@ -64,6 +64,18 @@ under maximal munch: `2.5.round()` lexes as `2.5` `.` `round`, and
 **lexeme** through emission and formatting — `1e10` does not normalise to
 `10000000000`.
 
+### §3.2.1b decimal_literal {#321b-decimal_literal}
+
+{{#grammar decimal_literal}}
+
+A `Decimal` literal (#2622): digits with an optional fraction, then a trailing
+`d` (`1.20d`, `5d`, `0.005d`). Like the other numeric literals the token is
+unsigned, a `_` may separate digits, and the `.` needs a digit on both sides.
+There is no exponent form. The **scale** is the number of fraction digits as
+written, so `1.20d` has scale 2 and `1.2d` scale 1, and the compiler preserves
+the literal's lexeme through formatting. A decimal literal has no `Int` or
+`Float` reading and is never converted implicitly.
+
 ### §3.2.2 string_literal
 
 {{#grammar string_literal}}

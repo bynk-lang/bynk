@@ -9,12 +9,13 @@ Bynk reserves names in four tiers. The first two are lexer keywords; the third a
 
 ## Hard keywords
 
-Reserved everywhere — these **60** words can never be used as an identifier.
+Reserved everywhere — these **61** words can never be used as an identifier.
 
 | Keyword | Meaning |
 |---|---|
 | `Bool` | The boolean base type. |
 | `Bytes` | The binary base type — an immutable octet sequence, erased to `Uint8Array` (`Bytes.fromUtf8(s)`). |
+| `Decimal` | The exact decimal base type — an arbitrary-precision coefficient with a scale (`1.20d`). |
 | `Duration` | The time-span base type, in milliseconds (`5.minutes`). |
 | `Effect` | The effectful-computation type, `Effect[T]`. |
 | `Err` | The error variant of `Result`. |

@@ -215,6 +215,7 @@ fn atomic(e: &Expr) -> bool {
         e.kind,
         ExprKind::IntLit { .. }
             | ExprKind::FloatLit { .. }
+            | ExprKind::DecimalLit { .. }
             | ExprKind::DurationLit { .. }
             | ExprKind::StrLit(_)
             | ExprKind::InterpStr(_)

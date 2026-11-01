@@ -152,7 +152,7 @@ fn report_not_orderable(ctx: &mut Ctx, ty: TyId, span: Span, site: &OrdSite, blo
         }
         None => {
             err = err.with_note(format!(
-                "`{}` is not orderable; orderable types are `Int`, `Float`, `String`, `Duration`, `Instant`, `Bytes`, `Option` and `List` of an orderable type, refined types over them, and types that declare `derives Ord`",
+                "`{}` is not orderable; orderable types are `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant`, `Bytes`, `Option` and `List` of an orderable type, refined types over them, and types that declare `derives Ord`",
                 blocker.part
             ));
         }

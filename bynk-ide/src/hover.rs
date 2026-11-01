@@ -490,6 +490,7 @@ pub fn identifier_at(text: &str, offset: usize) -> Option<(String, Span)> {
                         | TokenKind::String
                         | TokenKind::Bool
                         | TokenKind::Float
+                        | TokenKind::Decimal
                         | TokenKind::Result
                         | TokenKind::Option
                         | TokenKind::Effect

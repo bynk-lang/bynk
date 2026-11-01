@@ -3091,6 +3091,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         }
         ExprKind::IntLit { .. }
         | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
         | ExprKind::DurationLit { .. }
         | ExprKind::StrLit(_)
         | ExprKind::BoolLit(_)
@@ -3519,6 +3520,30 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 return;
             }
+            // #2622: `RoundingMode.HalfEven` — a `Decimal` `round`/`div` mode,
+            // qualified. The checker admits it only as that argument.
+            if let ExprKind::Ident(id) = &receiver.kind
+                && !name_in_scope(&id.name, cx.params, &cx.scopes)
+                && id.name == "RoundingMode"
+                && !cx.types.contains_key(&id.name)
+            {
+                if bynk_syntax::ast::RoundingMode::from_name(&field.name).is_none() {
+                    cx.errors.push(CompileError::new(
+                        "bynk.resolve.unknown_static_member",
+                        field.span,
+                        format!(
+                            "`RoundingMode` has no mode named `{}` — the modes are {}",
+                            field.name,
+                            bynk_syntax::ast::RoundingMode::ALL
+                                .iter()
+                                .map(|m| format!("`{}`", m.name()))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    ));
+                }
+                return;
+            }
             // `TypeName.Variant` — qualified nullary variant reference.
             // #1927: not for a local asset that hides an imported type of its
             // name: `logo.url` reads the asset, as the emitted module does.
@@ -3591,6 +3616,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         | "Instant"
                         | "Stream"
                         | "Bytes"
+                        | "Decimal"
                         | "RequestHeaders"
                         | "TokenClaims"
                 )
@@ -3618,6 +3644,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         "fromBase64Url",
                         "empty",
                     ],
+                    // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
+                    "Decimal" => &["parse", "fromInt"],
                     // #2341 (L4): the test-side constructors.
                     "RequestHeaders" => &["of", "empty"],
                     // #2380 (L5): the test-side constructor.

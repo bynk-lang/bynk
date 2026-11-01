@@ -309,6 +309,7 @@ fn base_name(b: BaseType) -> &'static str {
         BaseType::Duration => "Duration",
         BaseType::Instant => "Instant",
         BaseType::Bytes => "Bytes",
+        BaseType::Decimal => "Decimal",
     }
 }
 

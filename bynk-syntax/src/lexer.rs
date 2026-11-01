@@ -102,6 +102,9 @@ pub enum TokenKind {
     // v0.110 keyword (ADR 0142): the `Bytes` base type.
     #[token("Bytes")]
     Bytes,
+    // ADR (#2622): the `Decimal` base type.
+    #[token("Decimal")]
+    Decimal,
     // v0.1 keywords
     #[token("let")]
     Let,
@@ -322,6 +325,11 @@ pub enum TokenKind {
         r"[0-9]+(_[0-9]+)*\.[0-9]+(_[0-9]+)*([eE][+-]?[0-9]+(_[0-9]+)*)?|[0-9]+(_[0-9]+)*[eE][+-]?[0-9]+(_[0-9]+)*"
     )]
     FloatLit,
+    // A decimal literal (#2622): an integer or fraction with a trailing `d`
+    // (`1.20d`, `5d`). The as-written scale is the number of fraction digits.
+    // No exponent form. Digit separators may appear in either group.
+    #[regex(r"[0-9]+(_[0-9]+)*(\.[0-9]+(_[0-9]+)*)?d")]
+    DecimalLit,
     // A string literal with no interpolation hole: `"…"`, the raw forms
     // `r"…"` / `r#"…"#`, and the multi-line forms `"""…"""` / `r"""…"""`
     // (#2619). Hand-scanned in `tokenize` (never produced by logos) so one
@@ -431,6 +439,7 @@ impl TokenKind {
             Duration => "`Duration`",
             Instant => "`Instant`",
             Bytes => "`Bytes`",
+            Decimal => "`Decimal`",
             Let => "`let`",
             If => "`if`",
             Else => "`else`",
@@ -493,6 +502,7 @@ impl TokenKind {
             Ident => "identifier",
             IntLit => "integer literal",
             FloatLit => "float literal",
+            DecimalLit => "decimal literal",
             StrLit => "string literal",
             InterpStr => "interpolated string",
             Arrow => "`->`",
@@ -2174,6 +2184,30 @@ mod tests {
         assert_eq!(kinds("..-1"), vec![DotDot, Minus, IntLit]);
         assert_eq!(kinds("-5..-1"), vec![Minus, IntLit, DotDot, Minus, IntLit]);
         assert_eq!(kinds("1_000..2_000"), vec![IntLit, DotDot, IntLit]);
+    }
+
+    #[test]
+    fn a_decimal_literal_is_one_token_with_a_d_suffix() {
+        use TokenKind::*;
+        // #2622: digits, an optional fraction, a trailing `d`.
+        assert_eq!(kinds("1.20d"), vec![DecimalLit]);
+        assert_eq!(kinds("5d"), vec![DecimalLit]);
+        assert_eq!(kinds("1_000.50d"), vec![DecimalLit]);
+        // No `d` is still an `Int` or a `Float`, and the other numeric forms are
+        // unchanged (a duration unit, a method on a literal, a range).
+        assert_eq!(kinds("1.20"), vec![FloatLit]);
+        assert_eq!(kinds("5.days"), vec![IntLit, Dot, Ident]);
+        assert_eq!(
+            kinds("2.5.round()"),
+            vec![FloatLit, Dot, Ident, LParen, RParen]
+        );
+        assert_eq!(kinds("0..9"), vec![IntLit, DotDot, IntLit]);
+        // The sign stays a separate operator; there is no exponent form, so an
+        // exponent is a float followed by an identifier.
+        assert_eq!(kinds("-1.5d"), vec![Minus, DecimalLit]);
+        assert_eq!(kinds("1e5d"), vec![FloatLit, Ident]);
+        // `Decimal` is a keyword.
+        assert_eq!(kinds("Decimal"), vec![Decimal]);
     }
 
     #[test]

@@ -103,7 +103,17 @@ export const Status = {
 };
 ```
 
-All four base types lower to TypeScript primitives: `Int` and `Float` both
+`Decimal` (#2622) lowers to a plain object `{ readonly coefficient: bigint;
+readonly scale: number }`, written inline wherever the type appears (no import).
+A literal is the object literal (`1.20d` is `{ coefficient: 120n, scale: 2 }`).
+`+`, `-`, `*`, unary `-`, `==` and the kernel methods call the runtime's
+`decimal` module (`__bynkDecimalAdd`, `__bynkDecimalEqual`,
+`__bynkDecimalRound`, …); the ordering operators use `__bynkCmpDecimal`. A
+refined `Decimal`'s `.of` tests its predicates inline over the `bigint`
+coefficient. The `bigint` coefficient is what marks a value as a decimal to the
+runtime's structural `==` and `Key` walkers.
+
+The other base types lower to TypeScript primitives: `Int` and `Float` both
 emit `number` (v0.21 — the distinction is checker-side only and erased),
 `String` emits `string`, `Bool` emits `boolean`. A refined `Int`'s `.of`
 includes a `Number.isInteger` check; a refined `Float`'s `.of` includes
@@ -904,6 +914,19 @@ workers boundary path, deduped against helpers that path already emitted.
 The codec runtime types (`JsonError`, `__JsonValue`, `__BoundaryError`) are
 imported only by modules that use the codec, so non-codec modules emit
 byte-identically to v0.22a.
+
+**`Decimal` on the wire** (#2622). A `Decimal` is a JSON **string** of its
+canonical text (`"1.20"`), written by `__bynkDecimalToString` and read by
+`__bynkDecimalParse`, which accepts an optional `-`, digits, and optionally `.`
+and digits (at most 1000 characters). It rejects an exponent, a leading `+`,
+whitespace, `.5` and `5.`; a non-string, or a string that does not parse, is a
+`StructuralMismatch` (`expected: "decimal string"`) at the field's path. The
+scale is the number of fraction digits written and survives the round trip. A
+refined or opaque type over `Decimal` parses first and then applies its
+predicates to the decoded value, so a well-formed string that fails them is a
+`RefinementViolation`. A `Decimal` is never a JSON number, because a number is
+read as a float by most clients. The encoding is part of a persisted agent's
+stored state and is frozen with the other stored shapes.
 
 **`Option[U]` on the wire** (#1887). `__serialise_Option_<U>` writes the tagged
 form, `{ "kind": "Some", "value": … }` or `{ "kind": "None" }`.

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "provides": {
+    "placeOrder": "ba4ea4a6fc3ed052",
+    "quick": "3b2df2c2e724111f"
+  },
+  "expects": {
+    "commerce.payment": {
+      "authorise": "fc3f07f8ff163a35"
+    }
+  },
+  "provides_shapes": {
+    "placeOrder": "Svc(\"placeOrder\",P(\"total\",Rec(\"Money\",F(\"amount\",Rf(\"Amount\",\"Decimal\",\"Positive\")),F(\"fee\",B(\"Decimal\"),\"InRangeD(0, 5)\"))),Ret(R(B(\"Decimal\"),B(\"Int\"))))",
+    "quick": "Svc(\"quick\",Ret(R(B(\"Decimal\"),B(\"Int\"))))"
+  },
+  "expects_shapes": {
+    "commerce.payment": {
+      "authorise": "Svc(\"authorise\",P(\"amount\",Rec(\"Money\",F(\"amount\",Rf(\"Amount\",\"Decimal\",\"Positive\")),F(\"fee\",B(\"Decimal\"),\"InRangeD(0, 5)\"))),Ret(R(B(\"Decimal\"),B(\"Int\"))))"
+    }
+  }
+}

@@ -48,7 +48,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   defaults on a field whose type applies a user generic. The agent schema lock now
   counts a defaulted field added inside stored state as additive
   ([#2676](https://github.com/bynk-lang/bynk/issues/2676)); adding a sum variant to
-  stored state is the next candidate there.
+  stored state is the next candidate there. The exact `Decimal` type
+  ([#2622](https://github.com/bynk-lang/bynk/issues/2622)) ships without a
+  currency: a `bynk.money` commons that pairs a `Decimal` with an ISO 4217 code
+  is planned as a follow-on, along with `average` over a `List[Decimal]`, `Decimal`
+  in a `Query` aggregate and a first-class `RoundingMode`.
 - **Events.** Slices 0–2, 3a–3c, and 4 have shipped — `event` declarations,
   `given Events` emission with owner-only enforcement, `from Events(E)`
   subscription across contexts on every platform, structural pattern

@@ -1695,6 +1695,7 @@ impl<'a> Formatter<'a> {
             )),
             PredKind::InRange(a, b) => self.push(&format!("InRange({}, {})", a.value, b.value)),
             PredKind::InRangeF(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
+            PredKind::InRangeD(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
             PredKind::MinLength(n) => self.push(&format!("MinLength({n})")),
             PredKind::MaxLength(n) => self.push(&format!("MaxLength({n})")),
             PredKind::Length(n) => self.push(&format!("Length({n})")),
@@ -3581,6 +3582,7 @@ fn pred_to_string(p: &RefinementPred) -> String {
         PredKind::Matches(re) => format!("Matches({})", literal_text(matches_argument_span(p), re)),
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::InRangeD(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::MinLength(n) => format!("MinLength({n})"),
         PredKind::MaxLength(n) => format!("MaxLength({n})"),
         PredKind::Length(n) => format!("Length({n})"),
@@ -3638,6 +3640,7 @@ fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         ExprKind::IntLit { lexeme, .. } => lexeme.clone(),
         // v0.21: the stored lexeme verbatim — formatting must not normalise.
         ExprKind::FloatLit { lexeme, .. } => lexeme.clone(),
+        ExprKind::DecimalLit { lexeme, .. } => lexeme.clone(),
         // v0.86 (ADR 0112): a duration literal `<value>.<unit>`.
         ExprKind::DurationLit { value, unit, .. } => format!("{value}.{}", unit.name()),
         ExprKind::StrLit(s) => {

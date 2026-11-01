@@ -551,8 +551,12 @@ impl<'a> Parser<'a> {
                     // `1.` — a numeric literal followed by `.` and no method
                     // name is a malformed float literal, not a member access
                     // (v0.21 §3). `1.toFloat()` stays a method call.
-                    if matches!(e.kind, ExprKind::IntLit { .. } | ExprKind::FloatLit { .. })
-                        && self.peek_kind() != Some(TokenKind::Ident)
+                    if matches!(
+                        e.kind,
+                        ExprKind::IntLit { .. }
+                            | ExprKind::FloatLit { .. }
+                            | ExprKind::DecimalLit { .. }
+                    ) && self.peek_kind() != Some(TokenKind::Ident)
                     {
                         return Err(CompileError::new(
                             "bynk.parse.malformed_float_literal",
@@ -771,6 +775,21 @@ impl<'a> Parser<'a> {
                     span: t.span,
                 })
             }
+            TokenKind::DecimalLit => {
+                self.bump();
+                let slice = self.slice(t.span);
+                let body = crate::lexer::strip_digit_separators(&slice[..slice.len() - 1]);
+                let scale = body.split_once('.').map_or(0, |(_, f)| f.len() as u32);
+                Ok(Expr {
+                    id: self.alloc_expr_id(),
+                    kind: ExprKind::DecimalLit {
+                        coef: body.replace('.', ""),
+                        scale,
+                        lexeme: slice.to_string(),
+                    },
+                    span: t.span,
+                })
+            }
             // `.5` — a float literal missing its leading digit (v0.21 §3).
             TokenKind::Dot
                 if matches!(
@@ -861,9 +880,11 @@ impl<'a> Parser<'a> {
             // (ADR 0114): `Instant.fromEpochMillis(…)` joins them.
             TokenKind::Int
             | TokenKind::Float
+            | TokenKind::Decimal
             | TokenKind::Duration
             | TokenKind::Instant
             | TokenKind::Bytes
+            | TokenKind::Decimal
                 if self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::Dot) =>
             {
                 self.bump();
