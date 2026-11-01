@@ -11,6 +11,14 @@ case "a tree at the bound round-trips" {
   expect treeRoundTrips(tree(256))
 }
 
+case "an index through a Map at the bound round-trips" {
+  expect indexRoundTrips(index(256))
+}
+
+case "mutually recursive sums 255 levels deep round-trip" {
+  expect exprRoundTrips(expr(255))
+}
+
 case "a hand-written chain at the bound decodes" {
   expect decodesChain(chainJson(256))
 }
@@ -27,4 +35,12 @@ case "encoding a chain one level past the bound faults" {
 
 case "encoding a tree one level past the bound faults" {
   expect encodeTree(tree(257)) faults
+}
+
+case "encoding an index one level past the bound faults" {
+  expect encodeIndex(index(257)) faults
+}
+
+case "encoding mutually recursive sums past the bound faults" {
+  expect encodeExpr(expr(257)) faults
 }

@@ -809,7 +809,10 @@ pub fn recursive_codec_suffixes(
             }
             let s = codec_suffix(&c);
             if !edges.contains_key(&s) {
-                work.push((s.clone(), ref_codec_children(&c, types, &recursive_generics)));
+                work.push((
+                    s.clone(),
+                    ref_codec_children(&c, types, &recursive_generics),
+                ));
             }
             out.push(s);
         }
@@ -1652,6 +1655,41 @@ mod tests {
             }
         }
         (types, services)
+    }
+
+    /// #2656: only the codecs on a type cycle carry a depth: the recursive
+    /// types and the containers their cycles pass through, not a type that
+    /// merely holds a recursive one, nor a container off the cycle.
+    #[test]
+    fn recursive_codec_suffixes_are_the_codecs_on_a_cycle() {
+        let types = types_of(
+            "commons x\n\n\
+             type Tree =\n  | Leaf\n  | Node(left: Tree, right: Tree)\n\n\
+             type Dir = { name: String, children: List[Dir], tags: List[String] }\n\n\
+             type Chain = { value: Int, next: Option[Chain] }\n\n\
+             type Index = { entries: Map[String, Index] }\n\n\
+             type Expr =\n  | Lit(value: Int)\n  | Block(stmts: List[Stmt])\n\n\
+             type Stmt =\n  | Eval(expr: Expr)\n\n\
+             type Holder = { tree: Tree, dirs: List[Dir], maybe: Option[Tree] }\n\n\
+             type Flat = { n: Int, names: List[String] }\n",
+        );
+        let mut got: Vec<String> = recursive_codec_suffixes(&types).into_iter().collect();
+        got.sort();
+        assert_eq!(
+            got,
+            [
+                "Chain",
+                "Dir",
+                "Expr",
+                "Index",
+                "List_Dir",
+                "List_Stmt",
+                "Map_String_Index",
+                "Option_Chain",
+                "Stmt",
+                "Tree",
+            ]
+        );
     }
 
     #[test]

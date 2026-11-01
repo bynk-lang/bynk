@@ -3572,14 +3572,7 @@ pub(crate) fn emit_generic_helpers_qualified(
                 let mut body = object_shape_guard();
                 body.push(wire_kind_dispatch_raw(
                     "Ok",
-                    emit_field_deserialise(
-                        "v",
-                        ok,
-                        "obj[\"value\"]",
-                        "`${path}.value`",
-                        depth,
-                        ru,
-                    ),
+                    emit_field_deserialise("v", ok, "obj[\"value\"]", "`${path}.value`", depth, ru),
                     return_(call(
                         ident("Ok"),
                         vec![as_expr(

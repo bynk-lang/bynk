@@ -13,6 +13,18 @@ type Tree =
   | Leaf
   | Node(left: Tree, value: Int, right: Tree)
 
+// A record recursing through a `Map`.
+type Index = { entries: Map[String, Index] }
+
+// Two sums recursing through each other: an `Expr` and a `Stmt` each count a
+// level.
+type Expr =
+  | Lit(value: Int)
+  | Block(stmts: List[Stmt])
+
+type Stmt =
+  | Eval(expr: Expr)
+
 // A chain of `n` levels.
 fn chain(n: Int) -> Chain {
   if n <= 1 {
@@ -25,6 +37,21 @@ fn chain(n: Int) -> Chain {
 // A tree of `n` levels down its left spine.
 fn tree(n: Int) -> Tree {
   if n <= 1 { Leaf } else { Node(tree(n - 1), n, Leaf) }
+}
+
+// An index of `n` levels.
+fn index(n: Int) -> Index {
+  let empty: Map[String, Index] = Map.empty()
+  if n <= 1 {
+    Index { entries: empty }
+  } else {
+    Index { entries: empty.insert("k", index(n - 1)) }
+  }
+}
+
+// An expression of `n` levels, alternating `Expr` and `Stmt`, for an odd `n`.
+fn expr(n: Int) -> Expr {
+  if n <= 1 { Lit(1) } else { Block([Eval(expr(n - 2))]) }
 }
 
 // `s` repeated `n` times.
@@ -49,6 +76,28 @@ fn encodeChain(c: Chain) -> Effect[String] {
 
 fn encodeTree(t: Tree) -> Effect[String] {
   Effect.pure(Json.encode(t))
+}
+
+fn encodeIndex(i: Index) -> Effect[String] {
+  Effect.pure(Json.encode(i))
+}
+
+fn encodeExpr(e: Expr) -> Effect[String] {
+  Effect.pure(Json.encode(e))
+}
+
+fn indexRoundTrips(i: Index) -> Bool {
+  match Json.decode[Index](Json.encode(i)) {
+    Ok(d) => d == i
+    Err(_) => false
+  }
+}
+
+fn exprRoundTrips(e: Expr) -> Bool {
+  match Json.decode[Expr](Json.encode(e)) {
+    Ok(d) => d == e
+    Err(_) => false
+  }
 }
 
 fn chainRoundTrips(c: Chain) -> Bool {

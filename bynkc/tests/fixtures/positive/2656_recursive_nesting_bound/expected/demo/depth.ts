@@ -29,12 +29,44 @@ export const Tree = {
   Node: (left: Tree, value: number, right: Tree): Tree => ({ tag: "Node", left, value, right }),
 };
 
+export interface Index {
+  readonly entries: ReadonlyMap<string, Index>;
+}
+
+export const Index = {
+};
+
+export type Expr =
+    { readonly tag: "Lit"; readonly value: number }
+  | { readonly tag: "Block"; readonly stmts: readonly Stmt[] };
+
+export const Expr = {
+  Lit: (value: number): Expr => ({ tag: "Lit", value }),
+  Block: (stmts: readonly Stmt[]): Expr => ({ tag: "Block", stmts }),
+};
+
+export type Stmt =
+    { readonly tag: "Eval"; readonly expr: Expr };
+
+export const Stmt = {
+  Eval: (expr: Expr): Stmt => ({ tag: "Eval", expr }),
+};
+
 export function chain(n: number): Chain {
   return (n <= 1 ? { value: 1, next: None } : { value: n, next: Some(chain(n - 1)) });
 }
 
 export function tree(n: number): Tree {
   return (n <= 1 ? Tree.Leaf : Tree.Node(tree(n - 1), n, Tree.Leaf));
+}
+
+export function index(n: number): Index {
+  const empty: ReadonlyMap<string, Index> = new globalThis.Map<string, Index>();
+  return (n <= 1 ? { entries: empty } : { entries: new globalThis.Map(empty).set("k", index(n - 1)) });
+}
+
+export function expr(n: number): Expr {
+  return (n <= 1 ? Expr.Lit(1) : Expr.Block([Stmt.Eval(expr(n - 2))]));
 }
 
 export function repeat(s: string, n: number): string {
@@ -51,6 +83,42 @@ export async function encodeChain(c: Chain): globalThis.Promise<string> {
 
 export async function encodeTree(t: Tree): globalThis.Promise<string> {
   return globalThis.JSON.stringify(__serialise_Tree(t));
+}
+
+export async function encodeIndex(i: Index): globalThis.Promise<string> {
+  return globalThis.JSON.stringify(__serialise_Index(i));
+}
+
+export async function encodeExpr(e: Expr): globalThis.Promise<string> {
+  return globalThis.JSON.stringify(__serialise_Expr(e));
+}
+
+export function indexRoundTrips(i: Index): boolean {
+  const __r0 = ((__s: string): Result<Index, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Index(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Index); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Index(i)));
+  switch (__r0.tag) {
+    case "Ok": {
+      const d = __r0.value;
+      return __bynkEq(d, i);
+    }
+    case "Err": {
+      return false;
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}
+
+export function exprRoundTrips(e: Expr): boolean {
+  const __r0 = ((__s: string): Result<Expr, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Expr(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Expr); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Expr(e)));
+  switch (__r0.tag) {
+    case "Ok": {
+      const d = __r0.value;
+      return __bynkEq(d, e);
+    }
+    case "Err": {
+      return false;
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
 }
 
 export function chainRoundTrips(c: Chain): boolean {
@@ -137,6 +205,100 @@ export function __deserialise_Chain(json: __JsonValue, path: string = "$", depth
   return Ok({ value: __value, next: __next } as Chain);
 }
 
+export function __serialise_Expr(value: Expr, depth: number = 0): __JsonValue {
+  if (depth >= 256) throw new globalThis.Error("value nested more than 256 levels deep at boundary");
+  switch (value.tag) {
+    case "Lit": {
+      return { kind: "Lit", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "Block": {
+      return { kind: "Block", stmts: __serialise_List_Stmt(value.stmts, depth + 1) };
+    }
+  }
+}
+
+export function __deserialise_Expr(json: __JsonValue, path: string = "$", depth: number = 0): Result<Expr, __BoundaryError> {
+  if (depth >= 256) {
+    return Err({ kind: "StructuralMismatch", path, expected: "a value nested at most 256 levels deep", actual: "a value nested more deeply" });
+  }
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Lit": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "Lit", value: __value } as Expr);
+    }
+    case "Block": {
+  const __r_stmts = __deserialise_List_Stmt(obj["stmts"], `${path}.stmts`, depth + 1);
+  if (__r_stmts.tag === "Err") return __r_stmts;
+  const __stmts = __r_stmts.value;
+      return Ok({ tag: "Block", stmts: __stmts } as Expr);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_Index(value: Index, depth: number = 0): __JsonValue {
+  if (depth >= 256) throw new globalThis.Error("value nested more than 256 levels deep at boundary");
+  return {
+    entries: __serialise_Map_String_Index(value.entries, depth + 1),
+  };
+}
+
+export function __deserialise_Index(json: __JsonValue, path: string = "$", depth: number = 0): Result<Index, __BoundaryError> {
+  if (depth >= 256) {
+    return Err({ kind: "StructuralMismatch", path, expected: "a value nested at most 256 levels deep", actual: "a value nested more deeply" });
+  }
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_entries = __deserialise_Map_String_Index(obj["entries"], `${path}.entries`, depth + 1);
+  if (__r_entries.tag === "Err") return __r_entries;
+  const __entries = __r_entries.value;
+  return Ok({ entries: __entries } as Index);
+}
+
+export function __serialise_Stmt(value: Stmt, depth: number = 0): __JsonValue {
+  if (depth >= 256) throw new globalThis.Error("value nested more than 256 levels deep at boundary");
+  switch (value.tag) {
+    case "Eval": {
+      return { kind: "Eval", expr: __serialise_Expr(value.expr, depth + 1) };
+    }
+  }
+}
+
+export function __deserialise_Stmt(json: __JsonValue, path: string = "$", depth: number = 0): Result<Stmt, __BoundaryError> {
+  if (depth >= 256) {
+    return Err({ kind: "StructuralMismatch", path, expected: "a value nested at most 256 levels deep", actual: "a value nested more deeply" });
+  }
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Eval": {
+  const __r_expr = __deserialise_Expr(obj["expr"], `${path}.expr`, depth + 1);
+  if (__r_expr.tag === "Err") return __r_expr;
+  const __expr = __r_expr.value;
+      return Ok({ tag: "Eval", expr: __expr } as Stmt);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
 export function __serialise_Tree(value: Tree, depth: number = 0): __JsonValue {
   if (depth >= 256) throw new globalThis.Error("value nested more than 256 levels deep at boundary");
   switch (value.tag) {
@@ -220,4 +382,55 @@ export function __deserialise_Option_Chain(json: __JsonValue, path: string = "$"
     return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
   }
   return __b;
+}
+
+export function __serialise_List_Stmt(value: readonly Stmt[], depth: number = 0): __JsonValue {
+  return value.map((v) => __serialise_Stmt(v, depth));
+}
+
+export function __deserialise_List_Stmt(json: __JsonValue, path: string = "$", depth: number = 0): Result<readonly Stmt[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: Stmt[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_Stmt(item, `${path}[${i}]`, depth);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as Stmt);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Map_String_Index(value: ReadonlyMap<string, Index>, depth: number = 0): __JsonValue {
+  const entries: __JsonValue[] = [];
+  for (const [k, v] of value) {
+    entries.push([k as __JsonValue, __serialise_Index(v, depth)]);
+  }
+  return entries;
+}
+
+export function __deserialise_Map_String_Index(json: __JsonValue, path: string = "$", depth: number = 0): Result<ReadonlyMap<string, Index>, __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out = new globalThis.Map<string, Index>();
+  for (let i = 0; i < json.length; i++) {
+  const entry = json[i];
+  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+  }
+  const entryK = entry[0];
+  const entryV = entry[1];
+  if (typeof entryK !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+  }
+  const __k = entryK;
+  const __r_v = __deserialise_Index(entryV, `${path}[${i}][1]`, depth);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  out.set(__k as string, __v as Index);
+  }
+  return Ok(out);
 }
