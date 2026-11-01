@@ -1,0 +1,19 @@
+suite pricing {
+  // #2618: a unit suite sees its target's private declarations.
+  case "a private helper and a private type" {
+    expect lineTotal(Item { price: 3, qty: 4 }) == 12
+    let t = tally([Item { price: 2, qty: 1 }, Item { price: 5, qty: 2 }])
+    expect t.lines == 2
+    expect t.sum == 12
+  }
+
+  case "a private method on a public type" {
+    expect Item { price: 2, qty: 10 }.discounted() == 18
+    expect Item { price: 2, qty: 10 }.cost() == 18
+  }
+
+  case "the public surface" {
+    expect total([Item { price: 2, qty: 3 }]) == 6
+    expect summary([Item { price: 2, qty: 3 }]) == "1 lines, 6 in total"
+  }
+}

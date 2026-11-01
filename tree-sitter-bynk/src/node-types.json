@@ -742,6 +742,16 @@
             "named": true
           }
         ]
+      },
+      "visibility": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "visibility_modifier",
+            "named": true
+          }
+        ]
       }
     }
   },
@@ -3448,6 +3458,16 @@
             "named": true
           }
         ]
+      },
+      "visibility": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "visibility_modifier",
+            "named": true
+          }
+        ]
       }
     }
   },
@@ -4781,6 +4801,16 @@
         "types": [
           {
             "type": "type_param",
+            "named": true
+          }
+        ]
+      },
+      "visibility": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "visibility_modifier",
             "named": true
           }
         ]
@@ -7244,6 +7274,16 @@
         "types": [
           {
             "type": "string_literal",
+            "named": true
+          }
+        ]
+      },
+      "visibility": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "visibility_modifier",
             "named": true
           }
         ]
@@ -11638,6 +11678,16 @@
             "named": true
           }
         ]
+      },
+      "visibility": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "visibility_modifier",
+            "named": true
+          }
+        ]
       }
     }
   },
@@ -13142,6 +13192,10 @@
   {
     "type": "via",
     "named": false
+  },
+  {
+    "type": "visibility_modifier",
+    "named": true
   },
   {
     "type": "websocket",

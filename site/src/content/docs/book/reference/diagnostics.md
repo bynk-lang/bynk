@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **672** codes in total.
+There are **676** codes in total.
 
 ## Agents
 
@@ -486,6 +486,10 @@ There are **672** codes in total.
 | `bynk.tier.cross_context_needs_system` | A `unit` or `integration` case, or a `property`, reaches another context's service, directly or through a target service or agent handler that calls one; below `system` no other context is stood up to call, so the flow belongs in a `suite … as system`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.tier.mixed_system_suite` | A suite mixes `system` cases with `unit` or `integration` ones; a `system` case runs against deployed Workers and addresses services by context path, so it needs a `suite … as system` of its own. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.tier.system_needs_wire` | An `as system` test stands up fewer than two contexts; the system tier wires across contexts. |  | — |
+| `bynk.visibility.private_in_public` | A public declaration's signature names a `private` type of its own unit, which an importer could neither name nor build. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
+| `bynk.visibility.private_item` | A reference from another unit names a `private` declaration, which is visible only within its own unit and that unit's suites. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
+| `bynk.visibility.private_messages` | A `messages` block in a commons is `private`. A bundle whose `@reference` block is private is never negotiated by a context that uses the commons, and `private` on another block of a bundle whose reference is public has no effect (warning). | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | Warning |
+| `bynk.visibility.private_not_allowed` | `private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset` or `embed` in a commons or context. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
 | `bynk.wasm.panic` | The in-browser compiler panicked internally (a compiler bug, reported as a diagnostic instead of crashing the page). |  | — |
 | `bynk.wasm.strip_failed` | The in-browser compiler could not strip the emitted TypeScript to JavaScript. |  | — |
 | `bynk.ws.message_frame_param` | A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii). |  | — |

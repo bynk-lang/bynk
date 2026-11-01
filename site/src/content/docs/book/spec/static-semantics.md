@@ -145,6 +145,57 @@ is rejected (`bynk.lex.legacy_comment`, `bynk.lex.legacy_doc_line`,
 still read as a comment, so no unmigrated source is accepted with another
 meaning.
 
+### §5.1c Unit-private declarations {#private-declarations}
+
+A `type`, `fn` (a free function or a method), `messages`, `asset` or `embed`
+declaration in a `commons` or `context` MAY carry the `private` modifier
+([§4.1.12d](/book/spec/syntactic-grammar/#4112d-visibility_modifier)). A
+declaration without it is public, as every declaration was before the modifier
+existed. A private declaration is visible throughout its own unit, across all
+of the unit's files, and to the unit's suites (§5.9). It is never visible
+through `uses`.
+
+- A unit that `uses` a commons does not see that commons' private
+  declarations at all: they are not imported, and so they never conflict with
+  the unit's own declarations or with another import of the same name
+  (`bynk.uses.name_conflict` does not apply to them). A reference from such a
+  unit that resolves to nothing but a private declaration (a call, a type
+  reference, a static or instance method call, an asset or embed name) is
+  rejected (`bynk.visibility.private_item`), naming the declaration and its
+  unit. A reference the unit's own declaration answers is the unit's own.
+- A private type's methods are out of an importer's reach with the type,
+  whether or not they are marked `private`. A private method of a public type
+  hides only that method.
+- A public declaration MUST NOT name a private type of its own unit in its
+  signature: a public function's or method's parameter and return types, a
+  public type's record field types and variant payloads, and a context's
+  `exports` list (`bynk.visibility.private_in_public`). A method of a private
+  type is exempt. Signatures of services, agents, capabilities, providers,
+  actors and events are not constrained by this rule: how far they reach is
+  governed by `exports` and `consumes` (§5.8), and the cross-context
+  structural rule of §6.5 is unchanged.
+- `private` MUST NOT modify a `service`, `agent`, `capability`, `provides`,
+  `actor` or `event` declaration, nor any declaration in an `adapter`
+  (`bynk.visibility.private_not_allowed`).
+- A context negotiates its locale (`Locale.current()`) against the bundle of
+  a commons it `uses` only when that bundle's `@reference` block is public. A
+  private `@reference` block keeps the whole bundle out of every such
+  context; the commons' own `render` still reads every block. `private` on a
+  `messages` block warns (`bynk.visibility.private_messages`): on the
+  `@reference` block because no context will negotiate against the bundle,
+  and on any other block of a bundle whose reference is public because it
+  has no effect.
+- A `system` suite (§5.9) may name every type a participant context
+  declares, its private types included, although a context that `consumes`
+  the participant may not: a harness test often needs to build or inspect a
+  value the system keeps to itself. The suite's own `uses` commons keep their
+  private declarations, as in any other unit.
+
+Visibility is a naming rule only. It does not change what a declaration
+means, how it is checked within its own unit, or what is emitted for it. A
+private `asset` is still served publicly by the platform, since that is what
+an asset is: the modifier hides its *name* from importers, not its file.
+
 ## §5.2 Well-typedness
 
 Every expression MUST have the type its position requires. A function or method
@@ -1864,6 +1915,15 @@ An `expect` MUST occur only in a `case` body and MUST be given a `Bool` predicat
 predicate surface as `invariant`/`ensures` (one predicate surface, ADR 0144). A
 `suite` MUST target an existing unit and MUST NOT duplicate a case description
 (`bynk.suite.unknown_target`, `bynk.suite.duplicate_case_name`).
+
+A suite below `system` sees its target as the target sees itself, so the
+target's private declarations (§5.1c) are in scope in its cases, stubs and
+properties: tests routinely exercise helpers. The exception covers the target
+alone. A commons that the target, or the suite, `uses` keeps its own private
+declarations, and a reference to one is `bynk.visibility.private_item` as it
+would be in any other unit.
+A `system` suite may instead name every type a participant context declares,
+its private types included (§5.1c).
 
 `Val[T]` (v0.114, retiring `Mock[T]`) MUST occur only in a test body
 (`bynk.val.outside_test`), name a resolvable type (`bynk.val.unknown_type`), and

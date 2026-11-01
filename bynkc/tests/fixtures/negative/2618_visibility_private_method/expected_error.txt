@@ -1,0 +1,2 @@
+bynk.visibility.private_item `Item.discounted` is a private method of `pricing`
+# exact

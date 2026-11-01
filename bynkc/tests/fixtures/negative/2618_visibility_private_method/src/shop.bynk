@@ -1,0 +1,8 @@
+commons shop
+
+uses pricing
+
+// #2618: `Item` is public, but its `discounted` method is private.
+fn cost(i: Item) -> Int {
+  i.discounted()
+}

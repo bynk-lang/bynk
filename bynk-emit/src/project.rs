@@ -2709,6 +2709,8 @@ fn run_checks(
         &groups,
         &mut errors,
     );
+    // -- 6.1. #2618: a public signature naming a private type. --
+    project_model::phase_private_in_public(&parsed, &groups, &mut errors);
 
     // -- 6a0. #1883, slice 1b: every declared asset names a file in the
     //         `assets/` folder. A build with no folder read checks against an

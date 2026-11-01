@@ -751,7 +751,13 @@ pub fn compose_unit_assets(
         let Some(used_info) = unit_info.get(used) else {
             continue;
         };
-        for (asset_name, decl) in &used_info.table.assets {
+        // #2618: a used commons' `private` assets stay in it.
+        for (asset_name, decl) in used_info
+            .table
+            .assets
+            .iter()
+            .filter(|(_, d)| d.private.is_none())
+        {
             // #1925: a local declaration of any kind shadows the import.
             if crate::symbols::local_value_kind(&info.table, asset_name).is_some() {
                 continue;
@@ -1060,6 +1066,7 @@ mod tests {
                 documentation: None,
                 span: Default::default(),
                 trivia: Default::default(),
+                private: None,
             }
         }
         let mut tables: HashMap<String, crate::symbols::UnitTable> = HashMap::new();
@@ -1228,6 +1235,7 @@ mod tests {
                 documentation: None,
                 span: Default::default(),
                 trivia: Default::default(),
+                private: None,
             }
         }
         let mut tables: HashMap<String, crate::symbols::UnitTable> = HashMap::new();

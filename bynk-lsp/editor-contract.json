@@ -222,7 +222,8 @@
       "asset",
       "embed",
       "interface",
-      "constant"
+      "constant",
+      "keyword"
     ]
   }
 }

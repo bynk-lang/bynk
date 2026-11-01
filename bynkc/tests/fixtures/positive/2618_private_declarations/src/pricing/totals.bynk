@@ -1,0 +1,20 @@
+commons pricing
+
+// #2618: a public surface built on unit-private helpers. `lineTotal` and
+// `Tally` are declared `private` in `pricing/helpers.bynk`, another file of
+// this unit, and are visible here.
+
+type Item = { price: Int, qty: Int }
+
+fn total(items: List[Item]) -> Int {
+  items.fold(0, (acc, i) => acc + lineTotal(i))
+}
+
+fn summary(items: List[Item]) -> String {
+  let t = tally(items)
+  "\(t.lines) lines, \(t.sum) in total"
+}
+
+fn Item.cost(self) -> Int {
+  self.discounted()
+}

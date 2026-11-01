@@ -1,0 +1,8 @@
+// #2618: a suite sees its target's private declarations, not those of a
+// commons the target uses: `t.brand`'s private asset and embed stay hidden.
+suite t.web {
+  case "the used commons' private asset and embed" {
+    expect logo.url == "/x"
+    expect shell == "x"
+  }
+}

@@ -1,0 +1,17 @@
+commons t.web
+
+uses t.brand
+
+// #2618: `logo` and `shell` are private to `t.brand`, so `t.web` cannot name
+// them; its public `badge` and `page` remain in reach.
+fn logoUrl() -> String {
+  logo.url
+}
+
+fn rawShell() -> String {
+  shell
+}
+
+fn home() -> String {
+  page(badge())
+}

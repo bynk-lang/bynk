@@ -2345,6 +2345,12 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_INTERFACE)),
         );
+        // #2618: each `private` modifier, as `keyword`.
+        dt.extend(
+            crate::symbols::private_modifier_token_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
         crate::index_queries::semantic_tokens(&analysis.index, &lt, &dt, &rel, text, span)
     }
 
