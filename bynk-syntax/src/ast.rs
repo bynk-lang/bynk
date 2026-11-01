@@ -3771,6 +3771,15 @@ pub enum Pattern {
         rest_span: Span,
         span: Span,
     },
+    /// `[p₁, …, pₙ]` or `[p₁, …, pₙ, ..]` / `[p₁, …, pₙ, ..rest]` — a list
+    /// pattern (patterns track, slice 4, #2680). Without `rest` it matches a
+    /// list of exactly `n` elements, element `i` against `pᵢ`; with `rest` it
+    /// matches `n` or more, and a named rest binds the remaining elements.
+    List {
+        elems: Vec<Pattern>,
+        rest: Option<ListRest>,
+        span: Span,
+    },
     /// `p 'where' refinement-predicate` — a refinement guard on a pattern
     /// (#472). Matches when `inner` matches *and* the scrutinee satisfies
     /// `predicate` at runtime. v1 admits only `Wildcard` as `inner` (no
@@ -3791,6 +3800,15 @@ pub enum Pattern {
     /// (including refinement) in each, and every alternative matches the same
     /// value type.
     Or(Vec<Pattern>, Span),
+}
+
+/// The trailing `..` of a list pattern, with the optional name that binds the
+/// remaining elements (`..rest`).
+#[derive(Debug, Clone)]
+pub struct ListRest {
+    pub binder: Option<Ident>,
+    /// The span of the `..` token.
+    pub span: Span,
 }
 
 /// The value carried by a [`Pattern::Literal`]. A closed set (ADR 0001):
@@ -3823,6 +3841,7 @@ impl Pattern {
             Pattern::Literal { span, .. } => *span,
             Pattern::Variant { span, .. } => *span,
             Pattern::Record { span, .. } => *span,
+            Pattern::List { span, .. } => *span,
             Pattern::Refined { span, .. } => *span,
             Pattern::Or(_, span) => *span,
         }
@@ -3851,6 +3870,11 @@ impl Pattern {
                     None => vec![name],
                 })
                 .collect(),
+            Pattern::List { elems, rest, .. } => elems
+                .iter()
+                .flat_map(Pattern::bound_names)
+                .chain(rest.iter().filter_map(|r| r.binder.as_ref()))
+                .collect(),
             Pattern::Refined { inner, .. } => inner.bound_names(),
             Pattern::Or(alts, _) => alts.first().map(Pattern::bound_names).unwrap_or_default(),
         }
@@ -3874,6 +3898,8 @@ impl Pattern {
             Pattern::Record { fields, .. } => fields
                 .iter()
                 .all(|(_, sub)| sub.as_ref().is_none_or(Pattern::is_irrefutable)),
+            // `[..]` and `[..rest]` match every list; any fixed length does not.
+            Pattern::List { elems, rest, .. } => elems.is_empty() && rest.is_some(),
             _ => false,
         }
     }

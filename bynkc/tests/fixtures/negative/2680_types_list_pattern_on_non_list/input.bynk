@@ -1,0 +1,28 @@
+commons demo
+
+type Pair = { a: Int, b: Int }
+
+fn onInt(n: Int) -> Int {
+  match n {
+    [] => 0
+    _ => 1
+  }
+}
+
+fn onRecord(p: Pair) -> Int {
+  match p {
+    [x, ..] => x
+    _ => 0
+  }
+}
+
+fn onSet(s: Set[Int]) -> Int {
+  match s {
+    [x, ..] => x
+    _ => 0
+  }
+}
+
+fn onIs(p: Pair) -> Bool {
+  p is [_, ..]
+}

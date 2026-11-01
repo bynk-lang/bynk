@@ -1,0 +1,4 @@
+bynk.types.unreachable_arm this match arm is unreachable — every value `[_, ..]` matches is already matched by an earlier arm @ 6:5
+# exact
+bynk.types.unreachable_arm this match arm is unreachable — every value `[_, _]` matches is already matched by an earlier arm @ 14:5
+bynk.types.unreachable_arm this match arm is unreachable because a wildcard arm precedes it @ 22:5

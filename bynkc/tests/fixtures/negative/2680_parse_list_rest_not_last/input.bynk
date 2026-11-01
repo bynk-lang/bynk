@@ -1,0 +1,9 @@
+commons demo
+
+// #2680: the `..` ends a list pattern; suffix forms are not available.
+fn f(xs: List[Int]) -> Int {
+  match xs {
+    [.., last] => last
+    _ => 0
+  }
+}

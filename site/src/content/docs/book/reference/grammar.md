@@ -1684,8 +1684,8 @@ position; a match arm's pattern is always followed by a fixed terminator
 
 {{#grammar _pattern}}
 
-A pattern: a wildcard, a literal, a binding, a variant pattern, an
-or-pattern, or a parenthesized pattern. A lowercase-led identifier is a
+A pattern: a wildcard, a literal, a binding, a variant pattern, a record or
+list pattern, an or-pattern, or a parenthesized pattern. A lowercase-led identifier is a
 binding (it matches anything and binds the value); an uppercase-led one is a
 nullary variant — in the concrete grammar both parse as `variant_pattern`.
 
@@ -1754,6 +1754,29 @@ trailing `..` is required (`bynk.parse.record_pattern_without_rest`), so adding 
 field to a record never breaks a pattern. After `is` it must be parenthesised
 (`bynk.parse.record_pattern_in_is_unparenthesised`). See
 [Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/).
+
+### list_pattern {#rule-list_pattern}
+
+{{#grammar list_pattern}}
+
+`[]`, `[p₁, …, pₙ]`, `[p₁, …, pₙ, ..]` and `[p₁, …, pₙ, ..rest]` (patterns
+track, slice 4, #2680) — matches a `List` by its length and elements. The
+[`list_rest`](#rule-list_rest) is last, and an element is any pattern. A `[`
+begins no other pattern, so a list pattern needs no parentheses after `is`. See
+[Match on a list's shape](/book/guides/type-system/match-on-a-lists-shape/).
+
+**Static semantics.**
+{{#grammar-semantics list_pattern}}
+
+### list_rest {#rule-list_rest}
+
+{{#grammar list_rest}}
+
+The `..` that ends a [`list_pattern`](#rule-list_pattern), with the optional
+name that binds the remaining elements (`..rest`). After `..`, a lowercase name
+or nothing makes a rest marker (a capitalised name is reserved, like a literal); a literal would make the bound of a range pattern,
+which is not available yet (`bynk.parse.range_pattern_unsupported`). Anything
+after the rest is `bynk.parse.list_rest_not_last`.
 
 ### record_pattern_field {#rule-record_pattern_field}
 
@@ -1885,7 +1908,8 @@ The patterns that may follow `let` in a `let … else`: a literal, a parenthesis
 pattern, or a variant written with a payload or a qualifier. A bare name after
 `let` is always a binding, so a nullary variant is written `Status.Done` or
 `(Done)`. A [`record_pattern`](#rule-record_pattern) (`Item { sku, .. }`) also
-opens a `let` pattern: a capitalised name followed by `{`.
+opens a `let` pattern: a capitalised name followed by `{`. So does a
+[`list_pattern`](#rule-list_pattern) (`[head, ..]`), which begins with `[`.
 
 ### let_variant_pattern {#rule-_let_variant_pattern}
 
