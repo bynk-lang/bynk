@@ -3,7 +3,7 @@
 //! `design/tracks/constrained-generics.md`).
 //!
 //! `Codable` is automatic, never derived, and its meaning is one predicate: the
-//! domain `Json.decode` accepts ([`json_codable`]), which `Json.encode`,
+//! domain `Json.decode` accepts , which `Json.encode`,
 //! `Json.decode` and a `Codable` bound all share so they cannot drift. A type is
 //! `Codable` when it is:
 //!
