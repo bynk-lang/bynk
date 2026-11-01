@@ -166,6 +166,27 @@ An `Effect[T]` is realised as a `Promise<T>`; it has no runtime constructor.
 to `Promise.resolve(x)` in a synchronous or tail position. The `<-` bind is
 therefore `await` and needs no runtime support.
 
+**Recursion** ([§5.2](/book/spec/static-semantics/#52-well-typedness)) lowers to
+direct recursion in TypeScript: a recursive call is an ordinary call, and no
+tail-call elimination is performed or guaranteed, so a call in tail position
+uses a stack frame like any other. The depth a program can reach is
+host-defined, as `Float` arithmetic is (ADR 0042): it depends on the platform's
+stack size and on how far the host has optimised the function, so it is not a
+fixed number, and this specification states no limit. Exceeding it
+raises the host's stack-overflow error, which is a **fault**
+([§5.9e](/book/spec/static-semantics/#59e-fault-claim)): a handler that faults this
+way commits no `store` writes, as any fault does (ADR 0109), and a test case
+that hits it fails.
+
+An effectful function's body is an `async` function, so the host's stack is
+not the limit when each level **awaits before it recurses**. In the `repeat`
+example of §5.2,
+`do step(n)` awaits, and the recursive call then runs from a fresh job with an
+empty stack, so the depth is bounded by memory and the platform's CPU-time
+limit instead. A recursive call made **before** the body's first await (for
+example `let r <- repeat(n - 1, step)` as its first statement) still descends
+on one stack and is limited as synchronous recursion is.
+
 An **asynchronous send** (`~>`, §4.8.5) lowers on the Workers target to
 `deps.__exec.waitUntil(<effect>)`: the effect's `Promise` is handed to the
 execution context's `waitUntil` rather than awaited, so it settles *after* the
@@ -686,11 +707,15 @@ one toolchain-supplied binding copied to `bynk/cloudflare.binding.ts`.
 `putTtl` passes `{ expirationTtl }` to the namespace (0051). `list(prefix:
 Option[String]) -> Effect[List[String]]` is a **binding-side drain** (0050):
 the cursor loops inside the host binding (`env.KV.list({ prefix, cursor })`
-until `list_complete`, projecting `keys[].name`) because no Bynk routine can
-both recurse and hold a capability — the `given`-on-free-functions gap,
-recorded for a future increment. The drain is **eager and unbounded**,
-normatively: a very large namespace loads every matching key; cursor-paging
-is deferred until the language can consume it. The runtime `KVNamespace`
+until `list_complete`, projecting `keys[].name`). The drain is **eager and
+unbounded**, normatively: a very large namespace loads every matching key.
+A program that needs to stop early pages explicitly with the experimental
+`listPage` (standard-library P1, #2590), one page per call; a loop over pages
+can be written in Bynk as a recursive function given the page-reading effect
+([§5.2](/book/spec/static-semantics/#52-well-typedness), "Recursion"). (This
+paragraph previously said no Bynk routine could both recurse and hold a
+capability. That has never held for a function given an effectful function
+value, #2612.) The runtime `KVNamespace`
 interface ([§7.4](/book/spec/runtime-library/)) carries the matching `list` page
 shape and `put` options parameter. Its resources exist **only on the
 Worker `env`** — there is no `globalThis` path — so its binding reads `env.KV`

@@ -180,6 +180,37 @@ dissolves the apparent circularity. A nested lambda's effects are its own.
 arguments against the function type's parameters
 (`bynk.types.argument_mismatch`, `bynk.types.call_arity`).
 
+**Recursion** (#2612). A function MAY call itself, and functions MAY call one
+another in a cycle: a free function, a generic function, and a method alike,
+within one unit or across units a `uses` clause connects. A recursive call is
+checked like any other call, and a recursive generic function instantiates its
+type parameters at each call as usual. A lambda has no name, so it cannot call
+itself. Termination is not checked: a well-formed program may recurse without
+bound, and what happens at run time is specified in
+[§7.3.2](/book/spec/emission/#732-expressions).
+
+A free function cannot name a capability ([§5.5](#55-effects-capabilities--providers)),
+so it cannot perform an effect of its own accord. It can perform the effects of
+an effectful function value it is given, so a recursive function can drive
+capability calls on behalf of the handler that passed it one:
+
+```bynk
+commons loops {
+  fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
+    if n <= 0 {
+      Effect.pure(())
+    } else {
+      do step(n)
+      repeat(n - 1, step)
+    }
+  }
+}
+```
+
+Iteration over a collection is the kernel's (`fold`, `forEach`, the traverse
+family, [§5.10](#510-collections)), which needs no recursion and has no depth
+limit; recursion is for structures and loops the kernel does not cover.
+
 **Numeric operators** (v0.21). The arithmetic operators `+ - * /` are
 defined on `Int` operands (yielding `Int`) and on `Float` operands
 (yielding `Float`). They MUST NOT mix the two: an `Int` and a `Float`
