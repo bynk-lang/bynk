@@ -703,7 +703,7 @@ pub(crate) fn emit_project(
     // rebranded type nominally distinct (v0.4 §6.2).
     if ctx.unit_kind == UnitKind::Context {
         stmts.extend(emit_context_rebrands(&references, commons, ctx));
-        stmts.extend(emit_consumed_type_reexports(&references, ctx));
+        stmts.extend(emit_consumed_type_reexports(&references, commons, ctx));
     }
     stmts.append(&mut body);
     // #1476: `ctx.runtime_use` is fully populated now — every producer above has
@@ -2197,7 +2197,8 @@ fn called_consumed_services(
 /// imports from a consumed context. `compose.ts` names every type in a
 /// wrapper's signature as `handlers.<Name>` (it imports no type names of its
 /// own), so a consumed `Batch` in a handler's parameters must be a member of
-/// `handlers` too, the way a `uses`d commons type is through its rebrand
+/// `handlers` too (a consumed *adapter's* type — `R2Upload` — likewise, #2647:
+/// it is imported from the adapter's module by the same statement), the way a `uses`d commons type is through its rebrand
 /// alias. Type-only (`export { type Batch }`): `compose.ts` uses the name in
 /// type position only, a consumed refined alias has no value to re-export
 /// (TS1205 under `isolatedModules`), and a value re-export would deepen the
@@ -2205,16 +2206,37 @@ fn called_consumed_services(
 /// are re-exported, so each is bound here.
 fn emit_consumed_type_reexports(
     refs: &ExternalReferences,
+    commons: &TypedCommons,
     ctx: &EmitProjectCtx,
 ) -> Vec<bynk_ts::TsStmt> {
     if ctx.target != BuildTarget::Workers {
         return Vec::new();
     }
+    // #2647: a consumed *adapter's* types are re-exported only when an `on call`
+    // parameter names them (the one place `compose.ts` spells a type). A
+    // consumed context's are re-exported whenever imported, as before.
+    let call_param_types: HashSet<String> = commons
+        .commons
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Service(s) => Some(s),
+            _ => None,
+        })
+        .flat_map(|s| s.handlers.iter())
+        .filter(|h| matches!(h.kind, bynk_syntax::ast::HandlerKind::Call))
+        .flat_map(|h| h.params.iter())
+        .flat_map(|p| workers::named_types_in(&p.type_ref))
+        .collect();
     let mut names: Vec<String> = refs
         .by_commons
         .iter()
-        .filter(|(unit, _)| !ctx.consumed_adapters.contains(unit.as_str()))
-        .flat_map(|(_, set)| set.iter())
+        .flat_map(|(unit, set)| {
+            let adapter = ctx.consumed_adapters.contains(unit.as_str());
+            let call_param_types = &call_param_types;
+            set.iter()
+                .filter(move |n| !adapter || call_param_types.contains(n.as_str()))
+        })
         .filter(|n| ctx.imported_from_kind.get(n.as_str()) == Some(&UnitKind::Context))
         .map(|n| format!("type {}", ts_ident(n)))
         .collect();

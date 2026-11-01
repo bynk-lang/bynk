@@ -1,0 +1,11 @@
+context media.store
+
+consumes bynk.cloudflare { R2 }
+
+capability Videos = R2
+
+service abandon {
+	on call(upload: R2Upload) -> Effect[()] given Videos {
+		Videos.abortUpload(upload)
+	}
+}
