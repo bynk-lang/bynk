@@ -361,6 +361,10 @@
             "link": "/book/guides/projects-build-and-deployment/run-a-private-registry/"
           },
           {
+            "label": "Apply a breaking-change migration without an editor",
+            "link": "/book/guides/projects-build-and-deployment/apply-a-migration-without-an-editor/"
+          },
+          {
             "label": "Run your project locally",
             "link": "/book/guides/projects-build-and-deployment/run-locally/"
           },

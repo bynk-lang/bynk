@@ -330,6 +330,7 @@ name = "bynk-lsp"
 version = "0.453.0"
 dependencies = [
  "bynk-check",
+ "bynk-driver",
  "bynk-emit",
  "bynk-fmt",
  "bynk-ide",

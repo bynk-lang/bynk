@@ -421,13 +421,15 @@ as [`bynkc check`](/docs/cli/#bynkc-check), through the driver. Runs the compile
 pipeline **in-process**: no separately-installed `bynkc` is required.
 
 ```text
-bynk check [INPUT] [--format rich|short] [--locked] [--offline]
+bynk check [INPUT] [--format rich|short] [--fix] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
 |---|---|---|
 | `INPUT` | `.` | A `.bynk` file, or a project root directory (a `bynk.toml` or `src/` subdir selects project mode; otherwise the directory is itself the source tree). |
 | `--format` | `rich` | `rich` is the source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for the VS Code problem-matcher, CI, and scripts. In both, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports. `rich` is coloured only when stderr is a terminal and `NO_COLOR` is unset or empty; `FORCE_COLOR` or `CLICOLOR_FORCE` set to anything but empty or `0` colours it without a terminal (for `less -R` or a CI log); `0` doesn't turn colour off on a terminal, `NO_COLOR` does, and it wins over both. `rich` cuts a source line longer than 400 bytes to a window around its labels, marked `…`. |
+
+| `--fix` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. See [Applying fixes](#applying-fixes). |
 
 **Exit code** — `0` when the input type-checks (warnings are surfaced but do not
 fail the build, per the [diagnostics rule](/docs/cli/#exit-codes-and-diagnostics));
@@ -440,6 +442,47 @@ checks every member, in path order. `rich` heads each member's report with a
 to the working directory, so they stay unambiguous across members. Every member
 is checked even when an earlier one fails, and the exit code is non-zero if any
 member fails.
+
+### Applying fixes
+
+`--fix` writes the compiler's own fix suggestions back to your files, then
+reports what is left as an ordinary `check` does. It is the command-line form of
+the editor's [fix all](/docs/tooling/bynk-lsp/#on-save) (`source.fixAll.bynk`),
+and takes exactly the fixes that action takes: a fix from a diagnostic that
+offers exactly one machine-applicable fix, never a choice between candidates and
+never one with placeholders for you to fill in.
+
+```sh
+bynk check --fix
+bynk check --fix --format short
+bynk check --fix src/shop.bynk
+```
+
+- **It repeats until nothing more applies.** A fix can expose another fixable
+  diagnostic (adding a capability to an agent handler's `given` makes a provider
+  that calls it short of the same capability), so each round re-checks the
+  edited text and takes what is now fixable, up to ten rounds.
+- **It writes nothing unless the whole run is sound.** Every round runs in
+  memory and the files are written once it settles. If a round would introduce a
+  diagnostic that has no single machine-applicable fix, or the fixes are still
+  being applied after ten rounds (two fixes undoing each other), the run names
+  the problem, writes nothing, and exits non-zero. The report of the diagnostics
+  that remain follows as usual.
+- **It writes only files that change, in place, and does not format.** A file
+  with nothing to fix keeps its modification time. Run [`bynk fmt`](#bynk-fmt)
+  afterwards if you want both. One line per file written precedes the report:
+  `fixed: src/shop.bynk (3 edits)`.
+- **There is no dry run.** Review with `git diff` and undo with `git checkout`.
+- **At a workspace root** every member is planned first, in path order, and
+  files are written only if every member's plan is accepted. One refused member
+  writes nothing anywhere and fails the run. Members are planned independently,
+  so a fix in one member that exposes a fix in another (through a dependency
+  between them) may need a second run.
+- **Under `BYNK_BYNKC`** the flag is passed to the pinned `bynkc`, which must be
+  new enough to know it. [Version skew](#version-skew) names the gap.
+
+The exit code is that of the check that follows: success only if no error
+remains.
 
 ---
 
