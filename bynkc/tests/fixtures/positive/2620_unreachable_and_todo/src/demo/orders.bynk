@@ -20,6 +20,48 @@ context demo.orders {
   }
 
   ---
+  The fault may come first: the join of `Never` and `String` is `String` either way round.
+  ---
+  fn firstArm(s: Status) -> String {
+    match s {
+      Archived => unreachable("archived orders are filtered upstream"),
+      Open => "open",
+      Closed => "closed",
+    }
+  }
+
+  ---
+  A guard with no `else` whose branch only faults is `()` where it is not taken.
+  ---
+  fn guard(n: Int) -> Int {
+    let _ = if n < 0 { unreachable("negative") }
+    n
+  }
+
+  ---
+  `let … else` with a fault in the `else`.
+  ---
+  fn unwrap(o: Option[Int]) -> Int {
+    let Some(v) = o else { unreachable("callers pass Some") }
+    v
+  }
+
+  ---
+  A fault in a lambda body takes its type from the expected function type.
+  ---
+  fn viaLambda(n: Int) -> String {
+    let f: (Int) -> String = (x) => unreachable("never called")
+    if n > 0 { "ok" } else { f(n) }
+  }
+
+  ---
+  A parameter named `todo` shadows the built-in: this is an ordinary call.
+  ---
+  fn shadowed(todo: (String) -> Int) -> Int {
+    todo("note")
+  }
+
+  ---
   Unfinished code type-checks as the declared return type; running it faults.
   ---
   fn refund(s: Status) -> Effect[Result[Int, String]] {
@@ -29,6 +71,30 @@ context demo.orders {
   service labels {
     on call(s: Status) -> Effect[String] {
       label(s)
+    }
+  }
+
+  service guards {
+    on call(n: Int) -> Effect[Int] {
+      guard(n)
+    }
+  }
+
+  service unwraps {
+    on call(o: Option[Int]) -> Effect[Int] {
+      unwrap(o)
+    }
+  }
+
+  service firsts {
+    on call(s: Status) -> Effect[String] {
+      firstArm(s)
+    }
+  }
+
+  service lambdas {
+    on call(n: Int) -> Effect[String] {
+      viaLambda(n)
     }
   }
 

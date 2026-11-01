@@ -45,15 +45,97 @@ export function half(n: number): number {
 }
 
 /**
+ * The fault may come first: the join of `Never` and `String` is `String` either way round.
+ */
+export function firstArm(s: Status): string {
+  switch (s.tag) {
+    case "Archived": {
+      return __fault("Unreachable", "archived orders are filtered upstream", "demo/orders.bynk:27:19");
+    }
+    case "Open": {
+      return "open";
+    }
+    case "Closed": {
+      return "closed";
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}
+
+/**
+ * A guard with no `else` whose branch only faults is `()` where it is not taken.
+ */
+export function guard(n: number): number {
+  const __r0 = (n < 0 ? __fault("Unreachable", "negative", "demo/orders.bynk:37:24") : undefined);
+  return n;
+}
+
+/**
+ * `let … else` with a fault in the `else`.
+ */
+export function unwrap(o: Option<number>): number {
+  const __letElse1099 = o;
+  switch (__letElse1099.tag) {
+    case "Some": {
+      const v = __letElse1099.value;
+      return v;
+    }
+    default: {
+      return __fault("Unreachable", "callers pass Some", "demo/orders.bynk:45:28");
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}
+
+/**
+ * A fault in a lambda body takes its type from the expected function type.
+ */
+export function viaLambda(n: number): string {
+  const f: (a0: number) => string = (x) => __fault("Unreachable", "never called", "demo/orders.bynk:53:37");
+  return (n > 0 ? "ok" : f(n));
+}
+
+/**
+ * A parameter named `todo` shadows the built-in: this is an ordinary call.
+ */
+export function shadowed(todo: (a0: string) => number): number {
+  return todo("note");
+}
+
+/**
  * Unfinished code type-checks as the declared return type; running it faults.
  */
 export async function refund(s: Status): globalThis.Promise<Result<number, string>> {
-  return __fault("Todo", "refunds", "demo/orders.bynk:26:5");
+  return __fault("Todo", "refunds", "demo/orders.bynk:68:5");
 }
 
 export const labels = {
   async call(s: Status, deps: {}): globalThis.Promise<string> {
     return label(s);
+  },
+};
+
+export const guards = {
+  async call(n: number, deps: {}): globalThis.Promise<number> {
+    return guard(n);
+  },
+};
+
+export const unwraps = {
+  async call(o: Option<number>, deps: {}): globalThis.Promise<number> {
+    return unwrap(o);
+  },
+};
+
+export const firsts = {
+  async call(s: Status, deps: {}): globalThis.Promise<string> {
+    return firstArm(s);
+  },
+};
+
+export const lambdas = {
+  async call(n: number, deps: {}): globalThis.Promise<string> {
+    return viaLambda(n);
   },
 };
 
@@ -111,7 +193,7 @@ export class Ledger {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await (() => { __state.total = ((n) => n + 1)(__state.total); return undefined; })();
-      return (fail ? __fault("Unreachable", "the ledger was told to fail", "demo/orders.bynk:56:17") : __state.total);
+      return (fail ? __fault("Unreachable", "the ledger was told to fail", "demo/orders.bynk:122:17") : __state.total);
     })();
     await this.commitState(__state);
     return __result;
@@ -149,7 +231,7 @@ export const reads = {
  */
 export const awaits = {
   async call(deps: {}): globalThis.Promise<number> {
-    const n = await __fault("Todo", "awaiting", "demo/orders.bynk:85:16");
+    const n = await __fault("Todo", "awaiting", "demo/orders.bynk:151:16");
     return n;
   },
 };
@@ -165,6 +247,18 @@ export function __makeSurface(deps: __DemoOrdersDeps) {
   return {
     async labels(s: Status): globalThis.Promise<string> {
       return labels.call(s, deps);
+    },
+    async guards(n: number): globalThis.Promise<number> {
+      return guards.call(n, deps);
+    },
+    async unwraps(o: Option<number>): globalThis.Promise<number> {
+      return unwraps.call(o, deps);
+    },
+    async firsts(s: Status): globalThis.Promise<string> {
+      return firsts.call(s, deps);
+    },
+    async lambdas(n: number): globalThis.Promise<string> {
+      return lambdas.call(n, deps);
     },
     async halves(n: number): globalThis.Promise<number> {
       return halves.call(n, deps);

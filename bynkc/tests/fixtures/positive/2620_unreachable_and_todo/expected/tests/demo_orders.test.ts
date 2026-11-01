@@ -42,7 +42,7 @@ async function test_a_reachable_arm_returns_its_value() {
   try {
     __ns_demo_orders.__resetAgents();
     const deps = __makeTestDeps();
-    const { Ledger, Status, __makeLedger, awaits, bumps, half, halves, label, labels, reads, refund, refunds } = __ns_demo_orders;
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
     const l = await labels.call(Status.Open, deps);
     if (!(l === "open")) { throw __bynkExpectFailure("tests/orders.test.bynk:4:12", 107, 118, "expect l == \"open\"\n  expected: l == \"open\"\n  actual:   " + __bynkShow((l)) + " == " + __bynkShow(("open"))); }
@@ -60,7 +60,7 @@ async function test_an_unreachable_arm_faults_when_evaluated() {
   try {
     __ns_demo_orders.__resetAgents();
     const deps = __makeTestDeps();
-    const { Ledger, Status, __makeLedger, awaits, bumps, half, halves, label, labels, reads, refund, refunds } = __ns_demo_orders;
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
     if (!((await (async () => { try { await (labels.call(Status.Archived, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:8:12", 187, 215, "expect labels.call(Archived) faults\n  the call returned without faulting"); }
     return { pass: true };
@@ -77,7 +77,7 @@ async function test_an_unreachable_branch_is_not_taken_for_a_valid_input() {
   try {
     __ns_demo_orders.__resetAgents();
     const deps = __makeTestDeps();
-    const { Ledger, Status, __makeLedger, awaits, bumps, half, halves, label, labels, reads, refund, refunds } = __ns_demo_orders;
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
     const h = await halves.call(8, deps);
     if (!(h === 4)) { throw __bynkExpectFailure("tests/orders.test.bynk:13:12", 324, 330, "expect h == 4\n  expected: h == 4\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow((4))); }
@@ -95,7 +95,7 @@ async function test_an_unreachable_branch_faults_on_an_invalid_input() {
   try {
     __ns_demo_orders.__resetAgents();
     const deps = __makeTestDeps();
-    const { Ledger, Status, __makeLedger, awaits, bumps, half, halves, label, labels, reads, refund, refunds } = __ns_demo_orders;
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
     if (!((await (async () => { try { await (halves.call(0 - 1, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:17:12", 407, 432, "expect halves.call(0 - 1) faults\n  the call returned without faulting"); }
     return { pass: true };
@@ -112,7 +112,7 @@ async function test_todo_faults_when_it_runs() {
   try {
     __ns_demo_orders.__resetAgents();
     const deps = __makeTestDeps();
-    const { Ledger, Status, __makeLedger, awaits, bumps, half, halves, label, labels, reads, refund, refunds } = __ns_demo_orders;
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
     if (!((await (async () => { try { await (refunds.call(Status.Open, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:21:12", 485, 510, "expect refunds.call(Open) faults\n  the call returned without faulting"); }
     return { pass: true };
@@ -129,7 +129,7 @@ async function test_a_handler_that_faults_does_not_commit_agent_state() {
   try {
     __ns_demo_orders.__resetAgents();
     const deps = __makeTestDeps();
-    const { Ledger, Status, __makeLedger, awaits, bumps, half, halves, label, labels, reads, refund, refunds } = __ns_demo_orders;
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
     const a = await bumps.call(false, deps);
     if (!(a === 1)) { throw __bynkExpectFailure("tests/orders.test.bynk:26:12", 619, 625, "expect a == 1\n  expected: a == 1\n  actual:   " + __bynkShow((a)) + " == " + __bynkShow((1))); }
@@ -150,9 +150,102 @@ async function test_bind_on_a_fault_call_faults() {
   try {
     __ns_demo_orders.__resetAgents();
     const deps = __makeTestDeps();
-    const { Ledger, Status, __makeLedger, awaits, bumps, half, halves, label, labels, reads, refund, refunds } = __ns_demo_orders;
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
     if (!((await (async () => { try { await (awaits.call(deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:33:12", 768, 788, "expect awaits.call() faults\n  the call returned without faulting"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_fault_in_the_first_arm_joins_with_the_others() {
+  try {
+    __ns_demo_orders.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
+    type Status = __ns_demo_orders.Status;
+    const l = await firsts.call(Status.Closed, deps);
+    if (!(l === "closed")) { throw __bynkExpectFailure("tests/orders.test.bynk:38:12", 896, 909, "expect l == \"closed\"\n  expected: l == \"closed\"\n  actual:   " + __bynkShow((l)) + " == " + __bynkShow(("closed"))); }
+    if (!((await (async () => { try { await (firsts.call(Status.Archived, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:39:12", 921, 949, "expect firsts.call(Archived) faults\n  the call returned without faulting"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_faulting_guard_with_no_else() {
+  try {
+    __ns_demo_orders.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
+    type Status = __ns_demo_orders.Status;
+    const n = await guards.call(3, deps);
+    if (!(n === 3)) { throw __bynkExpectFailure("tests/orders.test.bynk:44:12", 1035, 1041, "expect n == 3\n  expected: n == 3\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((3))); }
+    if (!((await (async () => { try { await (guards.call(0 - 1, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:45:12", 1053, 1078, "expect guards.call(0 - 1) faults\n  the call returned without faulting"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_let_else_with_a_fault() {
+  try {
+    __ns_demo_orders.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
+    type Status = __ns_demo_orders.Status;
+    const n = await unwraps.call(Some(5), deps);
+    if (!(n === 5)) { throw __bynkExpectFailure("tests/orders.test.bynk:50:12", 1163, 1169, "expect n == 5\n  expected: n == 5\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((5))); }
+    if (!((await (async () => { try { await (unwraps.call(None, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:51:12", 1181, 1206, "expect unwraps.call(None) faults\n  the call returned without faulting"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_fault_in_a_lambda_body() {
+  try {
+    __ns_demo_orders.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
+    type Status = __ns_demo_orders.Status;
+    const ok = await lambdas.call(1, deps);
+    if (!(ok === "ok")) { throw __bynkExpectFailure("tests/orders.test.bynk:56:12", 1289, 1299, "expect ok == \"ok\"\n  expected: ok == \"ok\"\n  actual:   " + __bynkShow((ok)) + " == " + __bynkShow(("ok"))); }
+    if (!((await (async () => { try { await (lambdas.call(0, deps)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/orders.test.bynk:57:12", 1311, 1333, "expect lambdas.call(0) faults\n  the call returned without faulting"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_parameter_named_todo_shadows_the_built_in() {
+  try {
+    __ns_demo_orders.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Ledger, Status, __makeLedger, awaits, bumps, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
+    type Status = __ns_demo_orders.Status;
+    if (!(shadowed((s) => (s).length) === 4)) { throw __bynkExpectFailure("tests/orders.test.bynk:61:12", 1405, 1437, "expect shadowed((s) => s.length()) == 4\n  expected: shadowed((s) => s.length()) == 4\n  actual:   " + __bynkShow((shadowed((s) => (s).length))) + " == " + __bynkShow((4))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -176,7 +269,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a reachable arm returns its value", "an unreachable arm faults when evaluated", "an unreachable branch is not taken for a valid input", "an unreachable branch faults on an invalid input", "todo faults when it runs", "a handler that faults does not commit agent state", "bind on a fault call faults"];
+export const __bynkCases: readonly string[] = ["a reachable arm returns its value", "an unreachable arm faults when evaluated", "an unreachable branch is not taken for a valid input", "an unreachable branch faults on an invalid input", "todo faults when it runs", "a handler that faults does not commit agent state", "bind on a fault call faults", "a fault in the first arm joins with the others", "a faulting guard with no else", "let else with a fault", "a fault in a lambda body", "a parameter named todo shadows the built-in"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -220,6 +313,36 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("bind on a fault call faults")) {
     const started = __bynkCaseNow();
     const r = { name: "bind on a fault call faults", ...(await test_bind_on_a_fault_call_faults()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a fault in the first arm joins with the others")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fault in the first arm joins with the others", ...(await test_a_fault_in_the_first_arm_joins_with_the_others()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a faulting guard with no else")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a faulting guard with no else", ...(await test_a_faulting_guard_with_no_else()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("let else with a fault")) {
+    const started = __bynkCaseNow();
+    const r = { name: "let else with a fault", ...(await test_let_else_with_a_fault()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a fault in a lambda body")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fault in a lambda body", ...(await test_a_fault_in_a_lambda_body()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a parameter named todo shadows the built-in")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a parameter named todo shadows the built-in", ...(await test_a_parameter_named_todo_shadows_the_built_in()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

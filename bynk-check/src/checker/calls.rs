@@ -868,7 +868,7 @@ fn check_fault_call(
             ));
         }
     }
-    if kind == "Todo" {
+    if name.name == crate::builtin_names::faults::TODO {
         ctx.errors.push(
             CompileError::new(
                 "bynk.fault.todo",

@@ -576,7 +576,7 @@ export function fault(
 
 The contract: it **throws** an `Error` whose message reads `<kind>: <message> (<location>)`
 and which carries the `Fault` record as its `fault` property. `location` is the call's
-project-relative `path:line:col` (the form an `expect` failure uses). Because it returns
+project-relative `path:line:col` (the form an `expect` failure uses). A single-file compile, which has no project-relative path, reports `offset <n>` (the byte offset) instead. Because it returns
 `never`, a call is an expression of any type, and inside an `async` body it rejects the
 effect. It rides the same uncaught-fault channel as an invariant violation: the handler
 faults, the agent's commit does not happen, and the caller observes a fault, not an outcome;

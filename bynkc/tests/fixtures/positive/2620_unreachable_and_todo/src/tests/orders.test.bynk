@@ -32,4 +32,32 @@ suite demo.orders {
   case "bind on a fault call faults" {
     expect awaits.call() faults
   }
+
+  case "a fault in the first arm joins with the others" {
+    let l <- firsts.call(Closed)
+    expect l == "closed"
+    expect firsts.call(Archived) faults
+  }
+
+  case "a faulting guard with no else" {
+    let n <- guards.call(3)
+    expect n == 3
+    expect guards.call(0 - 1) faults
+  }
+
+  case "let else with a fault" {
+    let n <- unwraps.call(Some(5))
+    expect n == 5
+    expect unwraps.call(None) faults
+  }
+
+  case "a fault in a lambda body" {
+    let ok <- lambdas.call(1)
+    expect ok == "ok"
+    expect lambdas.call(0) faults
+  }
+
+  case "a parameter named todo shadows the built-in" {
+    expect shadowed((s) => s.length()) == 4
+  }
 }
