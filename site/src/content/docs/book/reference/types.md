@@ -1075,9 +1075,9 @@ fail is `bynk.types.unreachable_arm`, and the editor offers to remove it. See
 A lambda parameter may be an irrefutable record pattern too (#2712):
 
 ```bynk,fragment
-items.map((Item { sku, .. }) => sku)
-items.fold(0, (total, Item { qty, price, .. }) => total + qty * price)
-orders.filter((Order { customer: Customer { vip, .. }, .. }) => vip)
+let skus = items.map((Item { sku, .. }) => sku)
+let total = items.fold(0, (sum, Item { qty, price, .. }) => sum + qty * price)
+let vips = orders.filter((Order { customer: Customer { vip, .. }, .. }) => vip)
 ```
 
 It takes the place of a name, mixes freely with name parameters, and binds its
