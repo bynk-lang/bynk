@@ -80,6 +80,7 @@ produce and take:
 | `String` | `string` |
 | `Bool` | `boolean` |
 | `Bytes` | `Uint8Array` |
+| `Decimal` | `{ readonly coefficient: bigint; readonly scale: number }`, a JSON string on the wire (`"1.20"`); the client parses and writes it for you |
 | `()` | `void` |
 | `List[T]` | `readonly T[]` |
 | `Map[K, V]` | `ReadonlyMap<K, V>` |

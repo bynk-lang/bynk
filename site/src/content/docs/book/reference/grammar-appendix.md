@@ -49,8 +49,8 @@ refinement ::= refinement_pred ("&&" refinement_pred)*
 refinement_pred ::= pred_call | predicate_name
 pred_call ::= predicate_name "(" (pred_arg ("," pred_arg)*)? ")"
 predicate_name ::= "Matches" | "InRange" | "MinLength" | "MaxLength" | "Length" | "NonNegative" | "Positive" | "NonEmpty"
-pred_arg ::= "-"? number_literal | "-"? float_literal | string_literal
-base_type ::= "Int" | "String" | "Bool" | "Float" | "Duration" | "Instant" | "Bytes"
+pred_arg ::= "-"? number_literal | "-"? float_literal | "-"? decimal_literal | string_literal
+base_type ::= "Int" | "String" | "Bool" | "Float" | "Duration" | "Instant" | "Bytes" | "Decimal"
 type_ref ::= function_type_ref | base_type | unit_type | validation_error_type | generic_type_ref | applied_type_ref | identifier
 applied_type_ref ::= identifier "[" type_ref ("," type_ref)* "]"
 function_type_ref ::= (base_type | unit_type | validation_error_type | generic_type_ref | applied_type_ref | identifier | "(" type_ref ("," type_ref)* ","? ")") "->" type_ref
@@ -162,7 +162,7 @@ named_binding ::= identifier ":" pattern
 is_expr ::= expression "is" is_pattern
 binary_expr ::= expression "implies" expression | expression "||" expression | expression "&&" expression | expression ("==" | "!=") expression | expression ("<" | "<=" | ">" | ">=") expression | expression ("+" | "-") expression | expression ("*" | "/") expression
 unary_expr ::= ("!" | "-") expression
-primary ::= lambda_expr | paren_expr | method_call | field_access | call | record_construction | record_spread | question_expr | ok_expr | err_expr | some_expr | none_expr | effect_pure_expr | val_expr | wire_expr | trace_expr | list_literal | block | number_literal | float_literal | string_literal | boolean_literal | unit_literal | self_expr | identifier | contextual_identifier
+primary ::= lambda_expr | paren_expr | method_call | field_access | call | record_construction | record_spread | question_expr | ok_expr | err_expr | some_expr | none_expr | effect_pure_expr | val_expr | wire_expr | trace_expr | list_literal | block | number_literal | float_literal | decimal_literal | string_literal | boolean_literal | unit_literal | self_expr | identifier | contextual_identifier
 contextual_identifier ::= "trace" | "advance" | "par"
 lambda_expr ::= "(" (lambda_param ("," lambda_param)*)? ")" "=>" (expression | block)
 lambda_param ::= (identifier | contextual_identifier) (":" type_ref)? | lambda_record_pattern
@@ -190,6 +190,7 @@ identifier ::= /[A-Za-z][A-Za-z0-9_]*/
 constant_name ::= /[A-Z][A-Za-z0-9_]*/
 number_literal ::= /[0-9]+(_[0-9]+)*/
 float_literal ::= /[0-9]+(_[0-9]+)*\.[0-9]+(_[0-9]+)*([eE][+-]?[0-9]+(_[0-9]+)*)?|[0-9]+(_[0-9]+)*[eE][+-]?[0-9]+(_[0-9]+)*/
+decimal_literal ::= /[0-9]+(_[0-9]+)*(\.[0-9]+(_[0-9]+)*)?d/
 string_literal ::= """ (/[^"\\\n]+/ | escape_sequence | string_interpolation)* """ | /"""\r?\n/ (/[^"\\]+/ | /"{1,2}[^"\\]/ | escape_sequence | string_interpolation)* """"" | raw_string
 escape_sequence ::= /\\[ntr0"\\]/ | /\\u\{[0-9a-fA-F]{1,6}\}/
 string_interpolation ::= "\(" expression ")"

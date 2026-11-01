@@ -2681,6 +2681,21 @@ pub(crate) fn check_method_call(
         );
         return check_numeric_parse_static(id, method, args, span, ctx);
     }
+    // #2622: the `Decimal` statics — `Decimal.parse(s)` / `Decimal.fromInt(n)`.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && id.name == DECIMAL
+        && ctx.lookup(DECIMAL).is_none()
+        && !ctx.input.types.contains_key(DECIMAL)
+    {
+        ctx.callees.insert(
+            expr_id,
+            Callee::Intrinsic {
+                ns: DECIMAL,
+                op: method.name.clone(),
+            },
+        );
+        return check_decimal_static(method, args, span, ctx);
+    }
     // v0.86 (ADR 0112): the `Duration.millis(n)` static constructor — the way to
     // build a `Duration` from a runtime `Int` (the literal covers constants).
     if let ExprKind::Ident(id) = &receiver.kind
@@ -2949,6 +2964,17 @@ pub(crate) fn check_method_call(
             );
             return check_bytes_kernel_method(method, args, span, ctx);
         }
+        // #2622: the `Decimal` kernel.
+        Ty::Base(BaseType::Decimal) => {
+            ctx.callees.insert(
+                expr_id,
+                Callee::Kernel {
+                    recv: recv_ty,
+                    op: method.name.clone(),
+                },
+            );
+            return check_decimal_kernel_method(method, args, span, ctx);
+        }
         // v0.22a: the string kernel (ADR 0046).
         Ty::Base(BaseType::String) => {
             ctx.callees.insert(
@@ -3152,6 +3178,7 @@ pub(crate) fn check_method_call(
                 BaseType::Duration => return check_duration_kernel_method(method, args, span, ctx),
                 BaseType::Instant => return check_instant_kernel_method(method, args, span, ctx),
                 BaseType::Bytes => return check_bytes_kernel_method(method, args, span, ctx),
+                BaseType::Decimal => return check_decimal_kernel_method(method, args, span, ctx),
                 BaseType::Bool => {}
             }
         }

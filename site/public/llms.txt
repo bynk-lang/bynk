@@ -85,7 +85,9 @@ type Token = opaque String                           // opaque: nominally distin
   or the unchecked `T.unsafe(v)`, only inside the unit that declares it.
 - Records are constructed `Order { id: id, customer: c }` and updated functionally
   `Order { ...o, customer: c }`.
-- Base types: `String`, `Int`, `Float`, `Bool`, `Bytes`, `Duration` (ms, e.g.
+- Base types: `String`, `Int`, `Float`, `Bool`, `Bytes`, `Decimal` (exact, for
+  money: literal `1.20d`, `/` replaced by `a.div(b, 2, RoundingMode.HalfEven)`,
+  a JSON string on the wire), `Duration` (ms, e.g.
   `5.minutes`), `Instant` (epoch ms, from `Clock.now()` or
   `Instant.fromEpochMillis(n)`). Library types: `Option[T]`, `Result[T, E]`,
   `Effect[T]`, `List[T]`, `Map[K, V]`.
@@ -297,8 +299,8 @@ case "an over-limit request is denied" {
 
 ## Keywords
 
-**60** hard keywords — never usable as an identifier:
-`Bool` `Bytes` `Duration` `Effect` `Err` `Float` `Instant` `Int` `JsonError`
+**61** hard keywords — never usable as an identifier:
+`Bool` `Bytes` `Decimal` `Duration` `Effect` `Err` `Float` `Instant` `Int` `JsonError`
 `None` `Ok` `Option` `Result` `Some` `String` `ValidationError` `actor`
 `adapter` `agent` `as` `binding` `by` `capability` `commons` `consumes`
 `context` `cron` `do` `else` `ensures` `enum` `expect` `exports` `false` `fn`

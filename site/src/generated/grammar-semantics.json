@@ -85,7 +85,7 @@
     },
     {
       "code": "bynk.types.no_numeric_coercion",
-      "summary": "`Int` and `Float` were mixed without an explicit conversion — in an operation or in refinement bounds."
+      "summary": "`Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds."
     }
   ],
   "binding_decl": [
@@ -468,6 +468,12 @@
     {
       "code": "bynk.cron.return_not_effect_result",
       "summary": "A cron handler does not return `Effect[Result[(), E]]`."
+    }
+  ],
+  "decimal_literal": [
+    {
+      "code": "bynk.lex.decimal_literal_too_large",
+      "summary": "A decimal literal has more than 100 fraction digits or more than 1000 characters, the most any `Decimal` may have (#2622)."
     }
   ],
   "do_stmt": [
@@ -1307,7 +1313,7 @@
     },
     {
       "code": "bynk.types.no_numeric_coercion",
-      "summary": "`Int` and `Float` were mixed without an explicit conversion — in an operation or in refinement bounds."
+      "summary": "`Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds."
     },
     {
       "code": "bynk.types.polynomial_regex",

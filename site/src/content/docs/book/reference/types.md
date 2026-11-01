@@ -11,6 +11,7 @@ title: Type system
 | `Bool` | `true`, `false` | `boolean` |
 | `Duration` | unit literals (`5.minutes`, `30.seconds`) | `number` (millis) |
 | `Instant` | no literal — `Clock.now()` / `Instant.fromEpochMillis(n)` / `Instant.fromIso(s)` | `number` (epoch millis) |
+| `Decimal` | decimal literals (`1.20d`, `5d`) | `{ coefficient: bigint, scale: number }` |
 | `Bytes` | no literal — `Bytes.fromUtf8(s)` / `Bytes.fromBase64(s)` / `Bytes.fromHex(s)` / `Bytes.fromBase64Url(s)` / `Bytes.empty()` | `Uint8Array` |
 
 The unit type is written `()`. `Int` and `Float` are **distinct and
@@ -22,6 +23,101 @@ result is not a safe integer); parse a string with `Int.parse(s)` /
 decimal only (`" 7 "`, `"0x10"` and, for `Int`, `"1e3"` are `None`). An `Int`
 is a JS safe integer at every entry point: a larger literal, a wire value, a
 parse result or a conversion is rejected, and `Int` division by zero faults.
+
+### Decimal
+
+`Decimal` is an **exact base-10 number**: an arbitrary-precision integer
+coefficient and a non-negative scale, the value being `coefficient / 10^scale`.
+It is the type for money and any other fractional quantity that must not drift
+(`0.1 + 0.2` is exactly `0.3`). It does not emit to a `number`: a `Decimal` is a
+frozen `{ coefficient: bigint, scale: number }` object, and the generated code
+handles it through the runtime's `decimal` module.
+
+A **literal** is digits with an optional fraction and a trailing `d`: `1.20d`,
+`5d`, `0.005d`, `1_000.50d`. The scale is the number of fraction digits
+**as written**, so `1.20d` has scale 2 and `1.2d` scale 1. There is no exponent
+form, and no `Float` or `Int` literal is ever a `Decimal`.
+
+```bynk
+commons guide.decimal
+
+fn total(unit: Decimal, qty: Int) -> Decimal {
+  unit * Decimal.fromInt(qty)
+}
+
+fn halves(d: Decimal) -> Bool {
+  d + d == d * 2d
+}
+```
+
+- `+`, `-`, `*` and unary `-` are **exact**. A sum or difference has the larger
+  scale; a product has the sum of the scales. `1.10d + 2.20d == 3.30d`.
+- `==`, `!=`, `<`, `<=`, `>`, `>=` compare **by numeric value**, so
+  `1.20d == 1.2d`. `scale()` still tells them apart. A `Decimal` is `Ord` and
+  `Key` (a `Map` key or `Set` member holds `1.20d` and `1.2d` as one key), and
+  `list.sum(key)` over a `Decimal` key is exact. A `Decimal` prints in a string
+  hole as its canonical text (`"total: \(price)"`).
+- **`/` is not defined.** A quotient has no exact decimal answer, so division
+  states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)`
+  (`bynk.types.decimal_division_unscaled`). A zero divisor faults, as `Int`
+  division does. Every `Decimal` has a scale of 0 to 100 and canonical text of at most 1000
+  characters; an operation whose result would exceed either (`*` summing scales,
+  `round`/`div` asked for a larger scale, a long product) **faults at the
+  operation**, so a value never exists that the wire could not read back. A
+  literal over the limits is `bynk.lex.decimal_literal_too_large`.
+- `d.round(scale, mode)` returns the value at exactly `scale` fraction digits: a
+  larger scale pads with zeros, a smaller one rounds by `mode`.
+- A `Decimal` never mixes with `Int` or `Float`
+  (`bynk.types.no_numeric_coercion`). Convert with `Decimal.fromInt(n)`,
+  `d.toInt()` (`Some` only for a whole number in the safe-`Int` range) and
+  `d.toFloat()` (lossy, by design).
+
+| Statics | |
+|---|---|
+| `Decimal.parse(s: String) -> Option[Decimal]` | plain decimal text only (`"1.20"`, `"-0.5"`, `"7"`): no exponent, no leading `+`, no `.5` or `5.`, no whitespace, at most 1000 characters and 100 fraction digits |
+| `Decimal.fromInt(n: Int) -> Decimal` | exact, at scale 0 |
+
+| Methods | |
+|---|---|
+| `scale() -> Int` | the number of fraction digits |
+| `toString() -> String` | the canonical text, with the scale kept: `1.20d` is `"1.20"` |
+| `round(scale: Int, mode: RoundingMode) -> Decimal` | |
+| `div(other: Decimal, scale: Int, mode: RoundingMode) -> Decimal` | |
+| `abs()`, `min(other)`, `max(other)` | |
+| `toInt() -> Option[Int]`, `toFloat() -> Float` | |
+
+**Rounding modes** are written `RoundingMode.<mode>` and are read where the
+rounding happens: a mode is not a first-class value, so it cannot be bound to a
+name or passed as an argument (`bynk.types.rounding_mode_position`).
+
+| Mode | Rounds | `2.5` | `-2.5` | `2.4` |
+|---|---|---|---|---|
+| `Down` | toward zero | 2 | -2 | 2 |
+| `Up` | away from zero | 3 | -3 | 3 |
+| `Floor` | toward negative infinity | 2 | -3 | 2 |
+| `Ceiling` | toward positive infinity | 3 | -2 | 3 |
+| `HalfUp` | to nearest; a tie away from zero | 3 | -3 | 2 |
+| `HalfDown` | to nearest; a tie toward zero | 2 | -2 | 2 |
+| `HalfEven` | to nearest; a tie to the even neighbour | 2 | -2 | 2 |
+
+**Refinements.** `Positive`, `NonNegative` and `InRange(lo, hi)` apply, with
+`Decimal` literals as the bounds (`Decimal where InRange(0.00d, 1.00d)`); a
+bound of another numeric type is `bynk.types.no_numeric_coercion`. A bare
+`Decimal` has no zero value, so a `Decimal` field of an agent's state needs an
+initialiser.
+
+**On the wire** a `Decimal` is a **JSON string** (`"1.20"`), never a number: a
+number invites every client to parse it as a float. Decoding is strict (the rules
+of `Decimal.parse`, and in addition no leading zero: `"007"` is refused on the wire,
+though `Decimal.parse("007")` is `Some(7)`), and the scale survives the round trip. A string that is
+malformed, or a JSON number, is a `StructuralMismatch` at the field's path; a
+well-formed string that fails the type's refinement is a `RefinementViolation`.
+The encoding is part of a persisted agent's stored state, so it is frozen. See
+[Wire format](/book/reference/wire-format/#base-types).
+
+Pairing a `Decimal` with an ISO 4217 currency is not part of the type; a
+`bynk.money` commons that does so is a planned follow-on. See
+[Handle money correctly](/book/guides/type-system/handle-money-correctly/).
 
 ### Duration
 

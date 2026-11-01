@@ -1,0 +1,1 @@
+bynk.types.no_numeric_coercion `InRange` bounds are `Int` literals, but the base type is `Decimal`

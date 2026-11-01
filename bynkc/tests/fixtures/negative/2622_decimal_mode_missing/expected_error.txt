@@ -1,0 +1,1 @@
+bynk.types.unknown_rounding_mode `Decimal.round` needs a rounding mode written `RoundingMode.<mode>`

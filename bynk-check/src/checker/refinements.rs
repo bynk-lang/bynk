@@ -180,12 +180,16 @@ pub(crate) fn const_literal(e: &Expr) -> Option<ConstLit> {
     match &e.kind {
         ExprKind::IntLit { value: n, .. } => Some(ConstLit::Int(*n)),
         ExprKind::FloatLit { value, .. } => Some(ConstLit::Float(*value)),
+        ExprKind::DecimalLit { coef, scale, .. } => Some(ConstLit::Decimal(coef.clone(), *scale)),
         ExprKind::StrLit(s) => Some(ConstLit::Str(s.clone())),
         ExprKind::BoolLit(b) => Some(ConstLit::Bool(*b)),
         ExprKind::UnitLit => Some(ConstLit::Unit),
         ExprKind::UnaryOp(UnaryOp::Neg, inner) => match &inner.kind {
             ExprKind::IntLit { value: n, .. } => Some(ConstLit::Int(n.checked_neg()?)),
             ExprKind::FloatLit { value, .. } => Some(ConstLit::Float(-*value)),
+            ExprKind::DecimalLit { coef, scale, .. } => {
+                Some(ConstLit::Decimal(format!("-{coef}"), *scale))
+            }
             _ => None,
         },
         _ => None,
@@ -206,6 +210,13 @@ pub(crate) fn eval_predicate(pred: &PredKind, lit: &ConstLit) -> bool {
         (PredKind::NonNegative, ConstLit::Float(v)) => *v >= 0.0,
         (PredKind::Positive, ConstLit::Float(v)) => *v > 0.0,
         (PredKind::InRangeF(lo, hi), ConstLit::Float(v)) => lo.value <= *v && *v <= hi.value,
+        (PredKind::NonNegative, ConstLit::Decimal(c, _)) => bynk_syntax::decimal::sign(c) >= 0,
+        (PredKind::Positive, ConstLit::Decimal(c, _)) => bynk_syntax::decimal::sign(c) > 0,
+        (PredKind::InRangeD(lo, hi), ConstLit::Decimal(c, s)) => {
+            use std::cmp::Ordering::Greater;
+            bynk_syntax::decimal::cmp(&lo.coef, lo.scale, c, *s) != Greater
+                && bynk_syntax::decimal::cmp(c, *s, &hi.coef, hi.scale) != Greater
+        }
         (PredKind::MinLength(k), ConstLit::Str(s)) => s.chars().count() as i64 >= *k,
         (PredKind::MaxLength(k), ConstLit::Str(s)) => (s.chars().count() as i64) <= *k,
         (PredKind::Length(k), ConstLit::Str(s)) => s.chars().count() as i64 == *k,
@@ -292,6 +303,7 @@ pub(crate) fn literal_matches_base(lit: &ConstLit, base: BaseType) -> bool {
             | (ConstLit::Str(_), BaseType::String)
             | (ConstLit::Bool(_), BaseType::Bool)
             | (ConstLit::Float(_), BaseType::Float)
+            | (ConstLit::Decimal(..), BaseType::Decimal)
     )
 }
 
@@ -386,14 +398,20 @@ pub(crate) fn check_refinement(
             // to refinement bounds, not a predicate/base mismatch.
             let numeric_bound_mismatch = matches!(
                 (&pred.kind, base),
-                (PredKind::InRange(_, _), BaseType::Float)
-                    | (PredKind::InRangeF(_, _), BaseType::Int)
+                (PredKind::InRange(_, _), BaseType::Float | BaseType::Decimal)
+                    | (PredKind::InRangeF(_, _), BaseType::Int | BaseType::Decimal)
+                    | (PredKind::InRangeD(_, _), BaseType::Int | BaseType::Float)
             );
             if numeric_bound_mismatch {
-                let (bounds, want) = if base == BaseType::Float {
-                    ("`Int`", "`InRange(0.0, 1.0)`")
-                } else {
-                    ("`Float`", "`InRange(0, 1)`")
+                let bounds = match &pred.kind {
+                    PredKind::InRange(..) => "`Int`",
+                    PredKind::InRangeF(..) => "`Float`",
+                    _ => "`Decimal`",
+                };
+                let want = match base {
+                    BaseType::Float => "`InRange(0.0, 1.0)`",
+                    BaseType::Decimal => "`InRange(0.00d, 1.00d)`",
+                    _ => "`InRange(0, 1)`",
                 };
                 errors.push(
                     CompileError::new(
@@ -538,6 +556,27 @@ pub(crate) fn check_refinement(
                     );
                 }
             }
+            PredKind::InRangeD(lo, hi) => {
+                if bynk_syntax::decimal::cmp(&lo.coef, lo.scale, &hi.coef, hi.scale)
+                    == std::cmp::Ordering::Greater
+                {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.types.inverted_range",
+                            pred.span,
+                            format!(
+                                "`InRange({}, {})` has its bounds inverted (`min` must be ≤ `max`)",
+                                lo.lexeme, hi.lexeme
+                            ),
+                        )
+                        .with_suggestion(
+                            "swap the bounds",
+                            vec![(lo.span, hi.lexeme.clone()), (hi.span, lo.lexeme.clone())],
+                            Applicability::MachineApplicable,
+                        ),
+                    );
+                }
+            }
             PredKind::MinLength(n) | PredKind::MaxLength(n) | PredKind::Length(n) => {
                 if *n < 0 {
                     errors.push(CompileError::new(
@@ -568,6 +607,9 @@ pub(crate) fn check_refinement(
         // refined one is rejected upstream and there is nothing to
         // consistency-check here.
         BaseType::Duration | BaseType::Instant | BaseType::Bytes => {}
+        // #2622: a decimal range has no further consistency check here; an
+        // inverted `InRange` is reported above.
+        BaseType::Decimal => {}
     }
 }
 
@@ -577,11 +619,18 @@ fn pred_applies_to(pred: &PredKind, base: BaseType) -> bool {
         (PredKind::Matches(_), BaseType::String)
             | (PredKind::InRange(_, _), BaseType::Int)
             | (PredKind::InRangeF(_, _), BaseType::Float)
+            | (PredKind::InRangeD(_, _), BaseType::Decimal)
             | (PredKind::MinLength(_), BaseType::String)
             | (PredKind::MaxLength(_), BaseType::String)
             | (PredKind::Length(_), BaseType::String)
-            | (PredKind::NonNegative, BaseType::Int | BaseType::Float)
-            | (PredKind::Positive, BaseType::Int | BaseType::Float)
+            | (
+                PredKind::NonNegative,
+                BaseType::Int | BaseType::Float | BaseType::Decimal
+            )
+            | (
+                PredKind::Positive,
+                BaseType::Int | BaseType::Float | BaseType::Decimal
+            )
             | (PredKind::NonEmpty, BaseType::String)
     )
 }
@@ -591,9 +640,9 @@ fn predicate_base_help(name: &str) -> &'static str {
         "Matches" | "MinLength" | "MaxLength" | "Length" | "NonEmpty" => {
             "this predicate applies to `String` only"
         }
-        "NonNegative" | "Positive" => "this predicate applies to `Int` and `Float` only",
+        "NonNegative" | "Positive" => "this predicate applies to `Int`, `Float` and `Decimal` only",
         "InRange" => {
-            "this predicate applies to `Int` and `Float` only, with bounds matching the base"
+            "this predicate applies to `Int`, `Float` and `Decimal` only, with bounds matching the base"
         }
         _ => "see the documentation for valid predicate-base combinations",
     }
@@ -827,6 +876,9 @@ fn zero_of_base(b: BaseType) -> Option<String> {
             // v0.110 (ADR 0142): the zero of `Bytes` is the empty octet
             // sequence (`""` in base64), erased to an empty `Uint8Array`.
             BaseType::Bytes => "new globalThis.Uint8Array()",
+            // #2622: a `Decimal`'s zero is a runtime value (`0d`), not an inline
+            // literal, so a bare `Decimal` state field has no zero default.
+            BaseType::Decimal => return None,
         }
         .to_string(),
     )
@@ -866,6 +918,15 @@ fn pred_admits_zero(base: BaseType, k: &PredKind) -> bool {
         // No refinement predicate applies to `Duration`, `Instant`, or
         // `Bytes`, so the question is vacuous — admit it (mirrors `Bool`).
         BaseType::Duration | BaseType::Instant | BaseType::Bytes => true,
+        BaseType::Decimal => match k {
+            PredKind::NonNegative => true,
+            PredKind::Positive => false,
+            PredKind::InRangeD(lo, hi) => {
+                bynk_syntax::decimal::sign(&lo.coef) <= 0
+                    && bynk_syntax::decimal::sign(&hi.coef) >= 0
+            }
+            _ => false,
+        },
         BaseType::Float => match k {
             PredKind::NonNegative => true,
             PredKind::Positive => false,

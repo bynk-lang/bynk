@@ -10,11 +10,11 @@
 > this document's names differ from what was built:
 >
 > - **Primitives.** The `PrimType` set in §1.1 is the built set, under the
->   compiler's names: `Int`, `Float` (ADR 0040), `String`, `Bool`, `Bytes`
->   (ADR 0142), `Instant` (ADR 0114), `Duration` (ADR 0112) and `Unit`, which
->   source writes `()`. This draft first named `Float` `Decimal` and `Instant`
->   `Timestamp`; it now uses the shipped names. Bynk has no exact-decimal
->   primitive (see §2.5.0).
+>   compiler's names: `Int`, `Float` (ADR 0040), `Decimal` (#2622), `String`,
+>   `Bool`, `Bytes` (ADR 0142), `Instant` (ADR 0114), `Duration` (ADR 0112) and
+>   `Unit`, which source writes `()`. This draft first named `Float` `Decimal`
+>   and `Instant` `Timestamp`; it now uses the shipped names, and `Decimal` has
+>   since been built as a distinct exact type (see §2.5.0).
 > - **Held resources.** `Held[T]` is a closed kind, not a type you write; its one
 >   built instance is `Connection[F]` (ADR 0130).
 > - **Agent references.** `Ref[A]` is not built. An agent is addressed by
@@ -65,7 +65,7 @@ The grammar of types:
     |   q.T                                 -- qualified type name from context q
     |   T                                   -- nominal type name
 
-PrimType ::= Int | Float | String | Bool | Bytes
+PrimType ::= Int | Float | Decimal | String | Bool | Bytes
            | Instant | Duration | Unit
 ```
 
@@ -78,9 +78,9 @@ Type schemes generalise types over type variables:
 
 A type scheme is a polymorphic type; a type is a monotype. Generalisation happens at let-bindings; instantiation at use sites (§1.3).
 
-The `PrimType` set is fixed by the language. New primitive types require language work, not user definition. The current set covers numeric (`Int`, `Float`), text (`String`, `Bytes`), logical (`Bool`), temporal (`Instant`, `Duration`), and the unit type (`Unit`).
+The `PrimType` set is fixed by the language. New primitive types require language work, not user definition. The current set covers numeric (`Int`, `Float`, `Decimal`), text (`String`, `Bytes`), logical (`Bool`), temporal (`Instant`, `Duration`), and the unit type (`Unit`).
 
-**Numeric primitives.** `Int` is an integer in the host's safe-integer domain, ±(2^53 − 1). `Float` is an IEEE 754 double (ADR 0040): a binary floating-point number, not an exact decimal, so `0.1 + 0.2` is not `0.3`. Both erase to the host `number`; the checker alone keeps them apart, and there is no implicit coercion between them (ADR 0041). A `Float` that crosses the wire must be finite. There is no exact-decimal primitive: quantities that need exact decimal arithmetic, money above all, are integers in their smallest unit (§2.5.0).
+**Numeric primitives.** `Int` is an integer in the host's safe-integer domain, ±(2^53 − 1). `Float` is an IEEE 754 double (ADR 0040): a binary floating-point number, not an exact decimal, so `0.1 + 0.2` is not `0.3`. Both erase to the host `number`; the checker alone keeps them apart, and there is no implicit coercion between them (ADR 0041). A `Float` that crosses the wire must be finite. `Decimal` (#2622) is the exact one: an arbitrary-precision base-10 number with a kept scale, for money above all. It does not erase to `number` (it is a `{ coefficient: bigint, scale }` object), `/` is not defined on it (division states its scale and rounding mode), equality and order are by value, it never mixes with `Int` or `Float`, and its JSON form is a string (§2.5.0).
 
 **Temporal primitives.** `Instant` (ADR 0114) is an integer count of milliseconds since the Unix epoch (1970-01-01T00:00:00Z). It carries the semantic of "an instant in time" but exposes only integer-like operations: comparison, arithmetic with `Duration`, equality. No calendar awareness — no year/month/day decomposition, no timezone handling, no parsing of date strings. It has no literal: an `Instant` comes from `Clock.now()` or from `Instant.fromEpochMillis(n: Int)`, and `t.toEpochMillis()` turns it back into an `Int`. `Duration` is a signed integer count of milliseconds, with arithmetic that composes with itself and with `Instant` (Instant + Duration = Instant; Instant - Duration = Instant; Instant - Instant = Duration; Duration + Duration = Duration; Duration * Int = Duration). The temporal primitives are the lowest layer; richer calendrical types (`Date`, `DateTime`, etc.) are library types built on these primitives in `bynk.time` and consumed by applications that need them.
 
@@ -940,7 +940,7 @@ This is the central new commitment (§15 of design notes) and the largest piece 
 
 #### 2.5.0 Discipline: refinement complements primitive choice — Settled
 
-Refinement is the tool for constraints the primitive type cannot express; it is not a substitute for choosing the right primitive. If a complex refinement is needed to compensate for a loose representation, the representation is likely wrong. The canonical instance: representing money as a fractional number (a `Float`, or a hypothetical exact-decimal type) invites a `Scale(N)` predicate to track precision; representing money as an integer count of the minor currency unit (`{ minorUnits: Int, currency: CurrencyCode }`) makes precision exact by construction and removes the predicate. The discipline guides both language and library design: refinement is the right tool where the primitive cannot reach (`Matches(regex)` on a `String`), and the wrong tool where a sharper primitive would have made the constraint structural.
+Refinement is the tool for constraints the primitive type cannot express; it is not a substitute for choosing the right primitive. If a complex refinement is needed to compensate for a loose representation, the representation is likely wrong. The canonical instance: representing money as a fractional number (a `Float`) invites a `Scale(N)` predicate to track precision. The exact-decimal `Decimal` (#2622) answers that case differently: its scale is part of the value, and `round`/`div` set it explicitly, so no `Scale(N)` predicate is needed. An integer count of the minor currency unit (`{ minorUnits: Int, currency: CurrencyCode }`) makes precision exact by construction and removes the predicate. The discipline guides both language and library design: refinement is the right tool where the primitive cannot reach (`Matches(regex)` on a `String`), and the wrong tool where a sharper primitive would have made the constraint structural.
 
 This shapes the vocabulary in §2.5.2: predicates that compensate for representational looseness (the rejected `Scale(N)` being the leading example) are not in the language; predicates that capture properties the primitive genuinely cannot encode (regex match, numeric range, length, sign, non-emptiness) are.
 

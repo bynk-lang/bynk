@@ -69,6 +69,17 @@ rejected at lex time.
 **Static semantics.**
 {{#grammar-semantics float_literal}}
 
+### decimal_literal {#rule-decimal_literal}
+
+{{#grammar decimal_literal}}
+
+A `Decimal` literal: digits with an optional fraction (a digit required on both
+sides of the `.`) and a trailing `d` (`1.20d`, `5d`, `0.005d`). There is no
+exponent form. The scale is the number of fraction digits as written.
+
+**Static semantics.**
+{{#grammar-semantics decimal_literal}}
+
 ### string_literal {#rule-string_literal}
 
 {{#grammar string_literal}}

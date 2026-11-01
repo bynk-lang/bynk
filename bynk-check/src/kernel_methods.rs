@@ -365,6 +365,23 @@ pub const BYTES_METHODS: &[KernelMethod] = &[
     m("decodeUtf8", "decodeUtf8() -> Option[String]"),
 ];
 
+/// The `Decimal` kernel (#2622). `round` and `div` take a `RoundingMode`
+/// (`RoundingMode.HalfEven`), read syntactically at that argument.
+pub const DECIMAL_METHODS: &[KernelMethod] = &[
+    m("scale", "scale() -> Int"),
+    m("toString", "toString() -> String"),
+    m("round", "round(scale: Int, mode: RoundingMode) -> Decimal"),
+    m(
+        "div",
+        "div(other: Decimal, scale: Int, mode: RoundingMode) -> Decimal",
+    ),
+    m("abs", "abs() -> Decimal"),
+    m("min", "min(other: Decimal) -> Decimal"),
+    m("max", "max(other: Decimal) -> Decimal"),
+    m("toInt", "toInt() -> Option[Int]"),
+    m("toFloat", "toFloat() -> Float"),
+];
+
 /// `RequestHeaders` (#2341, L4): an HTTP handler's read-only view of the
 /// request's headers.
 pub const REQUEST_HEADERS_METHODS: &[KernelMethod] = &[
@@ -389,6 +406,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::Base(BaseType::Duration) => DURATION_METHODS,
         Ty::Base(BaseType::Instant) => INSTANT_METHODS,
         Ty::Base(BaseType::Bytes) => BYTES_METHODS,
+        Ty::Base(BaseType::Decimal) => DECIMAL_METHODS,
         Ty::Base(BaseType::String) => STRING_METHODS,
         Ty::RequestHeaders => REQUEST_HEADERS_METHODS,
         Ty::TokenClaims => TOKEN_CLAIMS_METHODS,
@@ -415,6 +433,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
             BaseType::Duration => DURATION_METHODS,
             BaseType::Instant => INSTANT_METHODS,
             BaseType::Bytes => BYTES_METHODS,
+            BaseType::Decimal => DECIMAL_METHODS,
             BaseType::String => STRING_METHODS,
             BaseType::Bool => &[],
         },
@@ -432,6 +451,21 @@ mod tests {
             kind: NamedKind::Refined(base),
             args: Vec::new(),
         })
+    }
+
+    #[test]
+    fn decimal_receiver_offers_its_kernel_and_a_refined_one_inherits_it() {
+        let tys = &Types::new();
+        // #2622: bare and refined `Decimal` receivers both surface the kernel.
+        let names = |ms: &[KernelMethod]| ms.iter().map(|m| m.name).collect::<Vec<_>>();
+        let bare = tys.intern(Ty::Base(BaseType::Decimal));
+        for n in ["scale", "toString", "round", "div", "toInt"] {
+            assert!(names(methods_for(bare, tys)).contains(&n), "{n}");
+        }
+        assert_eq!(
+            methods_for(refined(tys, BaseType::Decimal), tys).len(),
+            DECIMAL_METHODS.len()
+        );
     }
 
     #[test]

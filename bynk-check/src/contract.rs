@@ -632,6 +632,11 @@ pub fn canon_predicate(p: &PredKind) -> String {
         // parsed value is what canonicalises.
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("InRangeF({}, {})", a.value, b.value),
+        PredKind::InRangeD(a, b) => format!(
+            "InRangeD({}, {})",
+            bynk_syntax::decimal::canonical(&a.coef, a.scale),
+            bynk_syntax::decimal::canonical(&b.coef, b.scale)
+        ),
         PredKind::MinLength(n) => format!("MinLength({n})"),
         PredKind::MaxLength(n) => format!("MaxLength({n})"),
         PredKind::Length(n) => format!("Length({n})"),

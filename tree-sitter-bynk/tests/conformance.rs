@@ -906,6 +906,11 @@ const EXCLUDED_PARSE_TIME_CATEGORIES: &[(&str, &str)] = &[
          the `Int` safe-integer range), not a grammar shape",
     ),
     (
+        "bynk.lex.decimal_literal_too_large",
+        "inexpressible: a magnitude check on the literal's digit counts (at most \
+         100 fraction digits and 1000 characters), not a grammar shape",
+    ),
+    (
         "bynk.lex.float_literal_overflow",
         "inexpressible: an arithmetic-magnitude check on the literal's parsed \
          value, not a grammar shape",

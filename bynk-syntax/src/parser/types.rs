@@ -578,11 +578,15 @@ impl<'a> Parser<'a> {
                     self.bump();
                     Ok((BaseType::Bytes, t.span))
                 }
+                TokenKind::Decimal => {
+                    self.bump();
+                    Ok((BaseType::Decimal, t.span))
+                }
                 _ => Err(CompileError::new(
                     "bynk.parse.expected_base_type",
                     t.span,
                     format!(
-                        "expected `Int`, `String`, `Bool`, `Float`, `Duration`, `Instant`, or `Bytes`, found {}",
+                        "expected `Int`, `String`, `Bool`, `Float`, `Duration`, `Instant`, `Bytes`, or `Decimal`, found {}",
                         t.kind.describe()
                     ),
                 )
@@ -593,7 +597,7 @@ impl<'a> Parser<'a> {
             None => Err(CompileError::new(
                 "bynk.parse.unexpected_eof",
                 self.eof_span(),
-                "expected `Int`, `String`, `Bool`, `Float`, `Duration`, `Instant`, or `Bytes`, found end of file",
+                "expected `Int`, `String`, `Bool`, `Float`, `Duration`, `Instant`, `Bytes`, or `Decimal`, found end of file",
             )),
         }
     }
@@ -657,15 +661,18 @@ impl<'a> Parser<'a> {
                 let kind = match (lo, hi) {
                     (SignedNumLit::Int(a), SignedNumLit::Int(b)) => PredKind::InRange(a, b),
                     (SignedNumLit::Float(a), SignedNumLit::Float(b)) => PredKind::InRangeF(a, b),
+                    (SignedNumLit::Decimal(a), SignedNumLit::Decimal(b)) => {
+                        PredKind::InRangeD(a, b)
+                    }
                     _ => {
                         return Err(CompileError::new(
                             "bynk.types.no_numeric_coercion",
                             start.merge(close.span),
-                            "`InRange` bounds mix an `Int` literal and a `Float` literal",
+                            "`InRange` bounds mix different numeric literal types",
                         )
                         .with_note(
                             "both bounds must be the same numeric type — \
-                             write `InRange(0, 1)` or `InRange(0.0, 1.0)`",
+                             write `InRange(0, 1)`, `InRange(0.0, 1.0)` or `InRange(0.00d, 1.00d)`",
                         ));
                     }
                 };
@@ -789,6 +796,24 @@ impl<'a> Parser<'a> {
                     span: span_of(t.span),
                 }))
             }
+            Some(t) if t.kind == TokenKind::DecimalLit => {
+                self.bump();
+                let slice = self.slice(t.span);
+                let body = crate::lexer::strip_digit_separators(&slice[..slice.len() - 1]);
+                let scale = body.split_once('.').map_or(0, |(_, f)| f.len() as u32);
+                let mut coef = body.replace('.', "");
+                let mut lexeme = slice.to_string();
+                if neg {
+                    coef.insert(0, '-');
+                    lexeme.insert(0, '-');
+                }
+                Ok(SignedNumLit::Decimal(DecimalBound {
+                    coef,
+                    scale,
+                    lexeme,
+                    span: span_of(t.span),
+                }))
+            }
             Some(t) => Err(CompileError::new(
                 "bynk.parse.expected_token",
                 t.span,
@@ -901,6 +926,10 @@ impl<'a> Parser<'a> {
                 TokenKind::Bytes => {
                     self.bump();
                     Ok(TypeRef::Base(BaseType::Bytes, t.span))
+                }
+                TokenKind::Decimal => {
+                    self.bump();
+                    Ok(TypeRef::Base(BaseType::Decimal, t.span))
                 }
                 TokenKind::Result => {
                     self.bump();

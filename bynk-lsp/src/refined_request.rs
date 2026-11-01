@@ -134,6 +134,12 @@ impl Predicate {
                 min: Bound::Float(a.value),
                 max: Bound::Float(b.value),
             },
+            // A `Decimal` has no refined-request panel (`base_name` declines it);
+            // the bounds read as `Float` only to keep this match total.
+            PredKind::InRangeD(a, b) => Predicate::Range {
+                min: Bound::Float(a.lexeme.trim_end_matches('d').parse().unwrap_or(0.0)),
+                max: Bound::Float(b.lexeme.trim_end_matches('d').parse().unwrap_or(0.0)),
+            },
             PredKind::NonEmpty => Predicate::NonEmpty,
             PredKind::MinLength(n) => Predicate::MinLength { length: *n },
             PredKind::MaxLength(n) => Predicate::MaxLength { length: *n },
@@ -239,6 +245,7 @@ fn clause(kind: &PredKind) -> Clause {
         PredKind::Positive => "value > 0".to_string(),
         PredKind::InRange(a, b) => format!("{} ≤ value ≤ {}", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
+        PredKind::InRangeD(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
         PredKind::NonEmpty => "length ≥ 1".to_string(),
         PredKind::MinLength(n) => format!("length ≥ {n}"),
         PredKind::MaxLength(n) => format!("length ≤ {n}"),

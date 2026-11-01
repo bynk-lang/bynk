@@ -1,0 +1,5 @@
+commons demo
+
+fn share(total: Decimal, ways: Decimal) -> Decimal {
+  total / ways
+}

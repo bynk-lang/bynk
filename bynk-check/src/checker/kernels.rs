@@ -852,6 +852,10 @@ pub(crate) fn check_list_kernel_method(
                 return None;
             }
             let key = check_kernel_fn_arg(&args[0], vec![elem], "the `List.sum` key", ctx)?;
+            // #2622: a `Decimal` key sums exactly, to a plain `Decimal`.
+            if key.base(tys) == Some(BaseType::Decimal) {
+                return Some(tys.intern(Ty::Base(BaseType::Decimal)));
+            }
             require_numeric(key, "List.sum", args[0].span, ctx);
             Some(key)
         }
@@ -3280,6 +3284,156 @@ pub(crate) fn check_map_kernel_method(
             None
         }
     }
+}
+
+/// #2622: the `Decimal` kernel methods. `round(scale, mode)` and
+/// `div(other, scale, mode)` take a `RoundingMode` that is read syntactically
+/// (`RoundingMode.HalfEven`), never typed as an expression.
+pub(crate) fn check_decimal_kernel_method(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let dec = Ty::Base(BaseType::Decimal);
+    let int = Ty::Base(BaseType::Int);
+    // (parameter types, with `None` marking a rounding-mode slot; return)
+    let sig: Option<(Vec<Option<TyId>>, Ty)> = match method.name.as_str() {
+        "scale" => Some((vec![], int)),
+        "toString" => Some((vec![], Ty::Base(BaseType::String))),
+        "abs" => Some((vec![], dec)),
+        "toInt" => Some((vec![], Ty::Option(tys.intern(int)))),
+        "toFloat" => Some((vec![], Ty::Base(BaseType::Float))),
+        "min" | "max" => Some((vec![Some(tys.intern(dec.clone()))], dec)),
+        "round" => Some((vec![Some(tys.intern(int)), None], dec)),
+        "div" => Some((
+            vec![Some(tys.intern(dec.clone())), Some(tys.intern(int)), None],
+            dec,
+        )),
+        _ => None,
+    };
+    let Some((params, ret)) = sig else {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_not_found",
+            method.span,
+            format!(
+                "the built-in `Decimal` type has no method `{}` — the kernel is `scale`, \
+                 `toString`, `round`, `div`, `abs`, `min`, `max`, `toInt`, `toFloat`",
+                method.name
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`Decimal.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for (a, p) in args.iter().zip(
+            params
+                .iter()
+                .chain(std::iter::repeat(&Some(tys.intern(Ty::Unit)))),
+        ) {
+            if p.is_none() && bynk_syntax::ast::rounding_mode(a).is_some() {
+                continue;
+            }
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(&params) {
+        match p {
+            Some(p) => check_arg(
+                a,
+                *p,
+                &format!("the `Decimal.{}` argument", method.name),
+                ctx,
+            ),
+            None => {
+                if bynk_syntax::ast::rounding_mode(a).is_none() {
+                    ctx.errors.push(
+                        CompileError::new(
+                            "bynk.types.unknown_rounding_mode",
+                            a.span,
+                            format!(
+                                "`Decimal.{}` needs a rounding mode written `RoundingMode.<mode>`",
+                                method.name
+                            ),
+                        )
+                        .with_note(format!(
+                            "the modes are {}",
+                            bynk_syntax::ast::RoundingMode::ALL
+                                .iter()
+                                .map(|m| format!("`{}`", m.name()))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )),
+                    );
+                }
+            }
+        }
+    }
+    Some(tys.intern(ret))
+}
+
+/// #2622: the `Decimal` statics. `parse(s)` reads the canonical decimal text
+/// (`"1.20"`, `"-0.5"`; no exponent, no leading `+`) and is `None` on anything
+/// else; `fromInt(n)` is exact at scale 0.
+pub(crate) fn check_decimal_static(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let sig: Option<(Ty, Ty)> = match method.name.as_str() {
+        "parse" => Some((
+            Ty::Base(BaseType::String),
+            Ty::Option(tys.intern(Ty::Base(BaseType::Decimal))),
+        )),
+        "fromInt" => Some((Ty::Base(BaseType::Int), Ty::Base(BaseType::Decimal))),
+        _ => None,
+    };
+    let Some((param, ret)) = sig else {
+        // The resolver owns the unknown-static diagnostic; don't double up.
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`Decimal.{}` takes 1 argument, got {}",
+                method.name,
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    check_arg(
+        &args[0],
+        tys.intern(param),
+        &format!("the `Decimal.{}` argument", method.name),
+        ctx,
+    );
+    Some(tys.intern(ret))
 }
 
 #[cfg(test)]

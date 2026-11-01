@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "authorise": "fc3f07f8ff163a35"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "authorise": "Svc(\"authorise\",P(\"amount\",Rec(\"Money\",F(\"amount\",Rf(\"Amount\",\"Decimal\",\"Positive\")),F(\"fee\",B(\"Decimal\"),\"InRangeD(0, 5)\"))),Ret(R(B(\"Decimal\"),B(\"Int\"))))"
+  }
+}

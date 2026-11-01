@@ -15,6 +15,8 @@ pub mod types {
     pub const DURATION: &str = "Duration";
     pub const INSTANT: &str = "Instant";
     pub const BYTES: &str = "Bytes";
+    /// #2622: the exact decimal base type.
+    pub const DECIMAL: &str = "Decimal";
     /// #2341 (L4): an HTTP handler's read-only view of the request's headers.
     pub const REQUEST_HEADERS: &str = "RequestHeaders";
     /// #2380 (L5): an `Oidc` actor's verified token claims.

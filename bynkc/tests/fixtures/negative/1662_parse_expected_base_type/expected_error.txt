@@ -1,2 +1,2 @@
 bynk.parse.expected_base_type
-expected `Int`, `String`, `Bool`, `Float`, `Duration`, `Instant`, or
+expected `Int`, `String`, `Bool`, `Float`, `Duration`, `Instant`, `Bytes`, or

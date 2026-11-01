@@ -310,7 +310,7 @@
       "patterns": [
         {
           "name": "support.type.builtin.bynk",
-          "match": "\\b(Int|String|Bool|Float|Duration|Instant|Bytes|Result|Option|Effect|ValidationError|JsonError|HttpResult|List|Map|History)\\b"
+          "match": "\\b(Int|String|Bool|Float|Duration|Instant|Bytes|Decimal|Result|Option|Effect|ValidationError|JsonError|HttpResult|List|Map|History)\\b"
         },
         {
           "name": "support.function.predicate.bynk",
@@ -386,7 +386,7 @@
     },
     "numbers": {
       "name": "constant.numeric.bynk",
-      "match": "\\b[0-9]+(_[0-9]+)*(\\.[0-9]+(_[0-9]+)*)?([eE][+-]?[0-9]+(_[0-9]+)*)?\\b"
+      "match": "\\b[0-9]+(_[0-9]+)*(\\.[0-9]+(_[0-9]+)*)?([eE][+-]?[0-9]+(_[0-9]+)*|d)?\\b"
     },
     "builtins": {
       "comment": "Capitalised builtins must precede #types so the generic entity.name.type rule does not shadow them.",
