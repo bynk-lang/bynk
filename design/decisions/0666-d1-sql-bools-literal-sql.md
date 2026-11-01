@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`D1` call sites close their two gaps: `Json.decodeSql[T]` decodes a SQL row (or a `List` of rows) as `Json.decode` does, but also reads SQLite's `0`/`1` at a `Bool` field, and a `D1` statement's SQL must be a string literal (the first argument of `all`/`first`/`run`, and every `SqlStatement`'s `sql`), so data only reaches it as bound `SqlValue` parameters. `SqlStatement` is now non-storable and non-boundary. New diagnostics: `bynk.types.sql_not_literal`, `bynk.types.sql_statement_at_boundary` and `bynk.types.sql_row_shape` (standard-library P4c, [#2628](https://github.com/bynk-lang/bynk/issues/2628))"
----
+# 0666 — D1 rows decode SQLite flags as Bool through Json.decodeSql, and D1 SQL is literal-only
 
-## ADR: d1-sql-bools-literal-sql
-title: D1 rows decode SQLite flags as Bool through Json.decodeSql, and D1 SQL is literal-only
-summary: `Json.decodeSql[T]` is `Json.decode` for a flat SQL row or list of rows, reading exactly `0`/`1` at a `Bool` field, while the shared `Bool` codec stays strict; `all`/`first`/`run`'s SQL and every `SqlStatement`'s `sql` must be a string literal, and `SqlStatement` never crosses a boundary, so SQL injection is ruled out by construction; amends ADR 0662 E
+- **Status:** Accepted (v0.452)
 
 **Context.** ADR 0662 shipped `D1` with two gaps it routed out as language
 work (ADR 0023), and ADR 0664 G kept `D1` experimental until both closed.
