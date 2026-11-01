@@ -188,7 +188,7 @@ fn is_column_base(b: BaseType) -> bool {
 
 /// The names of `T`'s row fields that decode as `Bool` (directly, through an
 /// `Option`, or under a refined or opaque type), for `Json.decodeSql`'s pass
-/// over SQLite's `0`/`1`. `T` has passed [`check_row_shape`].
+/// over SQLite's `0`/`1`. `T` has passed `check_row_shape`.
 pub fn row_bool_fields(row: &str, types: &HashMap<String, Arc<TypeDecl>>) -> Vec<String> {
     fn is_bool(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
         match r {
