@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics
+probes: emit_diagnostics, diagnostic_coverage
 changelog: "A `private` modifier on a commons or context `fn` (including a method), `type`, `messages`, `asset` or `embed` keeps it within its own unit: visible across the unit's files and to its suites, never through `uses`. A reference from another unit is `bynk.visibility.private_item`, a public signature naming a private type is `bynk.visibility.private_in_public`, and `private` on any other declaration is `bynk.visibility.private_not_allowed`. `private` is a contextual keyword, so `@cache(scope: private)` is unchanged ([#2618](https://github.com/bynk-lang/bynk/issues/2618))"
 ---
 
