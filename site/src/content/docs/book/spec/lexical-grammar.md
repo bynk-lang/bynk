@@ -71,7 +71,7 @@ under maximal munch: `2.5.round()` lexes as `2.5` `.` `round`, and
 A `Decimal` literal (#2622): digits with an optional fraction, then a trailing
 `d` (`1.20d`, `5d`, `0.005d`). Like the other numeric literals the token is
 unsigned, a `_` may separate digits, and the `.` needs a digit on both sides.
-There is no exponent form. The **scale** is the number of fraction digits as
+There is no exponent form, and a literal has at most 100 fraction digits and 1000 characters (`bynk.lex.decimal_literal_too_large`). The **scale** is the number of fraction digits as
 written, so `1.20d` has scale 2 and `1.2d` scale 1, and the compiler preserves
 the literal's lexeme through formatting. A decimal literal has no `Int` or
 `Float` reading and is never converted implicitly.

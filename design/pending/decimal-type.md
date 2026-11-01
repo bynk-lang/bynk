@@ -28,10 +28,15 @@ be refined, admitted from a literal, compared and keyed as a base type:
   `/` is **not defined**: `bynk.types.decimal_division_unscaled` points at
   `a.div(b, scale, mode)`, which states the quotient's scale and rounding mode, so
   cost and rounding stay visible. A zero divisor faults, as `Int` division does.
-  `d.round(scale, mode)` pads when the scale grows and rounds when it shrinks. The
-  scale of `round` and `div` is capped at 1000, in line with the 1000-character
-  parse cap: above it (or below zero) the call faults, so a hostile scale cannot
-  allocate a huge `BigInt`.
+  `d.round(scale, mode)` pads when the scale grows and rounds when it shrinks. One
+  invariant holds for every `Decimal`: a scale of 0 to 100 and canonical text of
+  at most 1000 characters. Every operation that produces a decimal (`+`, `-`,
+  `*`, `round`, `div`, `fromInt`) faults at the operation if its result would
+  break it, `Decimal.parse` and the wire decoder refuse text that would, and a
+  literal that would is `bynk.lex.decimal_literal_too_large`. So a value that
+  exists always encodes to text that decodes: a handler cannot persist a value
+  that every later load rejects, and a hostile scale cannot allocate a huge
+  `BigInt`.
   The modes are `Down`, `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown`, `HalfEven`.
 - **Literals (C).** A `d` suffix: `1.20d`, `5d`, `0.005d`, with `_` separators and
   no exponent. The scale is the number of fraction digits as written. No `Int` or
@@ -40,7 +45,7 @@ be refined, admitted from a literal, compared and keyed as a base type:
   (`Decimal.fromInt`, `toInt`, `toFloat`).
 - **Wire (D).** A JSON string of the canonical text, `"1.20"`. Decode is strict
   like `Int.parse`: an optional `-`, digits, optionally `.` and digits, at most
-  1000 characters; an exponent, a leading `+`, whitespace, `.5`, `5.` or a JSON
+  1000 characters and 100 fraction digits; an exponent, a leading `+`, whitespace, `.5`, `5.` or a JSON
   number is a `StructuralMismatch` at the field path, and a refined type then
   applies its predicates to the decoded value (`RefinementViolation`), and
   reports the offending value as its canonical text. The wire decoder also

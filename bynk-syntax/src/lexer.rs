@@ -729,6 +729,23 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
                         ));
                     }
                 }
+                if kind == TokenKind::DecimalLit {
+                    // #2622: the limits every `Decimal` obeys, so a literal
+                    // always encodes to text the wire decoder accepts.
+                    let slice = &source[span.range()];
+                    let body = strip_digit_separators(&slice[..slice.len() - 1]).into_owned();
+                    let frac = body.split_once('.').map_or(0, |(_, f)| f.len());
+                    if frac > 100 || body.len() > 1000 {
+                        return Err(CompileError::new(
+                            "bynk.lex.decimal_literal_too_large",
+                            span,
+                            "decimal literal is too large",
+                        )
+                        .with_note(
+                            "a `Decimal` has at most 100 fraction digits and 1000 characters",
+                        ));
+                    }
+                }
                 if kind == TokenKind::FloatLit {
                     let slice = &source[span.range()];
                     match strip_digit_separators(slice).parse::<f64>() {
@@ -2208,6 +2225,15 @@ mod tests {
         assert_eq!(kinds("1e5d"), vec![FloatLit, Ident]);
         // `Decimal` is a keyword.
         assert_eq!(kinds("Decimal"), vec![Decimal]);
+    }
+
+    #[test]
+    fn a_decimal_literal_obeys_the_decimal_limits() {
+        let frac = |n: usize| format!("0.{}d", "1".repeat(n));
+        assert!(tokenize(&frac(100)).is_ok());
+        assert!(tokenize(&frac(101)).is_err());
+        assert!(tokenize(&format!("{}d", "9".repeat(1000))).is_ok());
+        assert!(tokenize(&format!("{}d", "9".repeat(1001))).is_err());
     }
 
     #[test]

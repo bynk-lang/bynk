@@ -1504,6 +1504,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["string_literal"],
     ),
     dg(
+        "bynk.lex.decimal_literal_too_large",
+        "A decimal literal has more than 100 fraction digits or more than 1000 characters, the most any `Decimal` may have (#2622).",
+        &["decimal_literal"],
+    ),
+    dg(
         "bynk.lex.float_literal_overflow",
         "A float literal does not fit a finite 64-bit float.",
         &["float_literal"],

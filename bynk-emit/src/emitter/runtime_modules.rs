@@ -99,6 +99,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__AgentWire", "agent"),
     ("__AnalyticsDataset", "storage"),
     ("__BYNK_DECIMAL_MAX_SCALE", "decimal"),
+    ("__BYNK_DECIMAL_MAX_TEXT", "decimal"),
     ("__BoundaryError", "boundary"),
     ("__BynkCmp", "compare"),
     ("__BynkCmpField", "compare"),

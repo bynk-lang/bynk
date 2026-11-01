@@ -194,8 +194,18 @@ export type __BynkRoundingMode =
 /** The longest decimal text `__bynkDecimalParse` accepts, in characters. */
 const MAX_TEXT = 1000;
 
-/** The largest scale `round` and `div` accept; above it they fault, as a negative scale does. */
-export const __BYNK_DECIMAL_MAX_SCALE = 1000;
+/** The largest scale any decimal may have; an operation that would exceed it faults. */
+export const __BYNK_DECIMAL_MAX_SCALE = 100;
+
+/** The longest canonical text any decimal may have (`MAX_TEXT`), so every value encodes to text that decodes. */
+export const __BYNK_DECIMAL_MAX_TEXT = MAX_TEXT;
+
+// The length of the canonical text of `coefficient / 10^scale`.
+function textLength(coefficient: bigint, scale: number): number {
+  const digits = (coefficient < 0n ? -coefficient : coefficient).toString().length;
+  const body = scale === 0 ? digits : Math.max(digits, scale + 1) + 1;
+  return body + (coefficient < 0n ? 1 : 0);
+}
 
 function checkScale(scale: number, op: string): void {
   if (!Number.isSafeInteger(scale) || scale < 0 || scale > __BYNK_DECIMAL_MAX_SCALE) {
@@ -205,6 +215,15 @@ function checkScale(scale: number, op: string): void {
 
 /** Build a decimal from a coefficient and a scale. */
 export function __bynkDecimal(coefficient: bigint, scale: number): __BynkDecimalValue {
+  // The one invariant every decimal-producing operation shares with the wire
+  // decoder: scale 0..MAX_SCALE and canonical text of at most MAX_TEXT
+  // characters, so a value that exists can always be stored and read back.
+  if (scale > __BYNK_DECIMAL_MAX_SCALE) {
+    throw new Error(`Decimal: the scale ${scale} exceeds ${__BYNK_DECIMAL_MAX_SCALE}`);
+  }
+  if (textLength(coefficient, scale) > MAX_TEXT) {
+    throw new Error(`Decimal: the value exceeds ${MAX_TEXT} characters`);
+  }
   return Object.freeze({ coefficient, scale });
 }
 
@@ -387,6 +406,7 @@ export function __bynkDecimalParse(s: string): Option<__BynkDecimalValue> {
   const m = CANONICAL.exec(s);
   if (m === null) return None;
   const frac = m[3] ?? "";
+  if (frac.length > __BYNK_DECIMAL_MAX_SCALE) return None;
   const coefficient = BigInt(m[2] + frac);
   return Some(__bynkDecimal(m[1] === "-" ? -coefficient : coefficient, frac.length));
 }

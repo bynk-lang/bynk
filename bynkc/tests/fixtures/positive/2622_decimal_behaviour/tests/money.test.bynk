@@ -116,7 +116,7 @@ suite money {
 
   case "rounding to the largest scale works" {
     expect roundTo(1d, "down") == 1d
-    expect 1d.round(1000, RoundingMode.Down).scale() == 1000
+    expect 1d.round(100, RoundingMode.Down).scale() == 100
   }
 
   case "a leading zero is refused on the wire but not by parse" {

@@ -470,6 +470,12 @@
       "summary": "A cron handler does not return `Effect[Result[(), E]]`."
     }
   ],
+  "decimal_literal": [
+    {
+      "code": "bynk.lex.decimal_literal_too_large",
+      "summary": "A decimal literal has more than 100 fraction digits or more than 1000 characters, the most any `Decimal` may have (#2622)."
+    }
+  ],
   "do_stmt": [
     {
       "code": "bynk.effect.do_in_pure_context",

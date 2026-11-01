@@ -110,11 +110,11 @@ test("__bynkDecimalShow prints a decimal wherever it sits, and never throws", ()
 });
 
 test("round and div fault above the scale cap, not at it", () => {
-  assert.equal(__BYNK_DECIMAL_MAX_SCALE, 1000);
-  assert.equal(__bynkDecimalRound(d("1"), 1000, "Down").scale, 1000);
-  assert.throws(() => __bynkDecimalRound(d("1"), 1001, "Down"), /0 to 1000/);
-  assert.equal(__bynkDecimalDiv(d("1"), d("3"), 1000, "Down").scale, 1000);
-  assert.throws(() => __bynkDecimalDiv(d("1"), d("3"), 1001, "Down"), /0 to 1000/);
+  assert.equal(__BYNK_DECIMAL_MAX_SCALE, 100);
+  assert.equal(__bynkDecimalRound(d("1"), 100, "Down").scale, 100);
+  assert.throws(() => __bynkDecimalRound(d("1"), 101, "Down"), /0 to 100/);
+  assert.equal(__bynkDecimalDiv(d("1"), d("3"), 100, "Down").scale, 100);
+  assert.throws(() => __bynkDecimalDiv(d("1"), d("3"), 101, "Down"), /0 to 100/);
   assert.throws(() => __bynkDecimalRound(d("1"), -1, "Down"));
   assert.throws(() => __bynkDecimalRound(d("1"), 1.5, "Down"));
 });
@@ -127,4 +127,31 @@ test("the wire decoder refuses leading zeros; parse stays lenient", () => {
     assert.equal(__bynkDecimalParseWire(bad).tag, "None", bad);
   }
   assert.equal(__bynkDecimalParse("007").tag, "Some");
+});
+
+test("every value an operation yields encodes to text that decodes back equal", () => {
+  // The largest scale, and a magnitude whose text is exactly MAX_TEXT long.
+  const widest = __bynkDecimalRound(d("1"), 100, "Down");
+  assert.equal(__bynkDecimalToString(widest).length, 102);
+  const back = __bynkDecimalParseWire(__bynkDecimalToString(widest));
+  assert.equal(back.tag, "Some");
+  assert.equal(__bynkDecimalEqual((back as { value: __BynkDecimalValue }).value, widest), true);
+
+  const longest = "9".repeat(999);
+  const big = d(longest);
+  assert.equal(__bynkDecimalToString(big).length, 999);
+  const exact = "-" + "9".repeat(999);
+  assert.equal(__bynkDecimalToString(d(exact)).length, 1000);
+  const rt = __bynkDecimalParseWire(__bynkDecimalToString(d(exact)));
+  assert.equal(rt.tag, "Some");
+  assert.equal(__bynkDecimalEqual((rt as { value: __BynkDecimalValue }).value, d(exact)), true);
+});
+
+test("an operation whose result breaks the invariant faults at the operation", () => {
+  const x = d("0." + "1".repeat(60));
+  assert.throws(() => __bynkDecimalMul(x, x), /scale 120 exceeds 100/);
+  assert.throws(() => __bynkDecimalMul(d("9".repeat(600)), d("9".repeat(600))), /exceeds 1000 characters/);
+  assert.throws(() => __bynkDecimalAdd(d("9".repeat(1000)), d("1")), /exceeds 1000 characters/);
+  assert.equal(__bynkDecimalParse("0." + "1".repeat(101)).tag, "None");
+  assert.equal(__bynkDecimalParse("0." + "1".repeat(100)).tag, "Some");
 });

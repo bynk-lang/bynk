@@ -60,7 +60,11 @@ fn halves(d: Decimal) -> Bool {
 - **`/` is not defined.** A quotient has no exact decimal answer, so division
   states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)`
   (`bynk.types.decimal_division_unscaled`). A zero divisor faults, as `Int`
-  division does. So does a `scale` below 0 or above 1000.
+  division does. Every `Decimal` has a scale of 0 to 100 and canonical text of at most 1000
+  characters; an operation whose result would exceed either (`*` summing scales,
+  `round`/`div` asked for a larger scale, a long product) **faults at the
+  operation**, so a value never exists that the wire could not read back. A
+  literal over the limits is `bynk.lex.decimal_literal_too_large`.
 - `d.round(scale, mode)` returns the value at exactly `scale` fraction digits: a
   larger scale pads with zeros, a smaller one rounds by `mode`.
 - A `Decimal` never mixes with `Int` or `Float`
@@ -70,7 +74,7 @@ fn halves(d: Decimal) -> Bool {
 
 | Statics | |
 |---|---|
-| `Decimal.parse(s: String) -> Option[Decimal]` | plain decimal text only (`"1.20"`, `"-0.5"`, `"7"`): no exponent, no leading `+`, no `.5` or `5.`, no whitespace, at most 1000 characters |
+| `Decimal.parse(s: String) -> Option[Decimal]` | plain decimal text only (`"1.20"`, `"-0.5"`, `"7"`): no exponent, no leading `+`, no `.5` or `5.`, no whitespace, at most 1000 characters and 100 fraction digits |
 | `Decimal.fromInt(n: Int) -> Decimal` | exact, at scale 0 |
 
 | Methods | |
