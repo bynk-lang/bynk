@@ -1409,6 +1409,7 @@ impl<'a> Formatter<'a> {
             CommonsItem::Event(e) => self.format_event_decl(e),
             CommonsItem::Asset(a) => self.format_asset_decl(a),
             CommonsItem::Embed(e) => self.format_embed_decl(e),
+            CommonsItem::Const(c) => self.format_const_decl(c),
         }
     }
 
@@ -1449,6 +1450,22 @@ impl<'a> Formatter<'a> {
             escape_string(&e.path)
         ));
         self.emit_trailing_comment_or_newline(e.trivia.trailing.as_deref());
+    }
+
+    /// #2617: `const Name: Type = <expr>`, the initialiser laid out like a
+    /// `let` value (a long record construction breaks across lines).
+    fn format_const_decl(&mut self, c: &ConstDecl) {
+        self.emit_leading_comments(&c.trivia.leading);
+        if let Some(doc) = &c.documentation {
+            self.emit_doc(doc);
+        }
+        self.push("const ");
+        self.push(&c.name.name);
+        self.push(": ");
+        self.format_type_ref(&c.ty);
+        self.push(" = ");
+        self.format_expr(&c.init);
+        self.emit_trailing_comment_or_newline(c.trivia.trailing.as_deref());
     }
 
     fn format_event_decl(&mut self, e: &EventDecl) {

@@ -2,6 +2,7 @@
 // context broadcast
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
+import { __bynkSettleAll } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
@@ -83,7 +84,7 @@ export class Room {
 
   async fanoutPar(text: string, deps: {}): globalThis.Promise<Result<readonly void[], string>> {
     const __state = await this.loadState();
-    return (async () => { const __rs = await globalThis.Promise.all(globalThis.Object.values(__state.conns).map((__x) => (async (c: Connection<ServerFrame>) => {
+    return (async () => { const __rs = await __bynkSettleAll(globalThis.Object.values(__state.conns).map((__x) => () => (async (c: Connection<ServerFrame>) => {
     await (c).send({ text: text });
     const r: Result<void, string> = Ok(undefined);
     return r;

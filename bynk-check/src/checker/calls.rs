@@ -238,9 +238,53 @@ fn check_static_initialiser(
     subject: &str,
     tys: &Types,
 ) {
-    let Some(field_ty) = resolve_type_ref(field_type, &input.types, tys) else {
+    let Some((field_ty, result, local_errors)) = type_static_initialiser(
+        init, field_type, input, expr_types, callees, refs, hints, locals, tys,
+    ) else {
         return; // an unresolved field type is reported elsewhere
     };
+    let compatible_result = matches!(&result, Some(t) if compatible(*t, field_ty, tys));
+    if !compatible_result || !local_errors.is_empty() {
+        let got = result
+            .map(|t| t.display(tys))
+            .unwrap_or_else(|| "an invalid expression".to_string());
+        errors.push(
+            CompileError::new(
+                code,
+                init.span,
+                format!(
+                    "{subject} must be a static value of type `{}` (got `{got}`)",
+                    field_ty.display(tys),
+                ),
+            )
+            .with_note(
+                "an initialiser is a compile-time value — a literal (including one admitted to a \
+                 refined type), a sum variant, `Some`/`None`/`Ok`/`Err`, a record, or — for an \
+                 opaque type — `T.unsafe(lit)` — with no reference to `self`, parameters, or \
+                 capabilities",
+            ),
+        );
+    }
+}
+
+/// The typing half of [`check_static_initialiser`]: `init` typed against
+/// `field_type` in an empty, pure scope, recording its expression types and
+/// callees. Returns the resolved field type, the initialiser's type and the
+/// diagnostics the typing raised (unreported), or `None` when `field_type`
+/// does not resolve.
+#[allow(clippy::too_many_arguments)]
+fn type_static_initialiser(
+    init: &Expr,
+    field_type: &TypeRef,
+    input: &ResolvedCommons,
+    expr_types: &mut HashMap<ExprId, TypedExpr>,
+    callees: &mut HashMap<ExprId, Callee>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+    tys: &Types,
+) -> Option<(TyId, Option<TyId>, Vec<CompileError>)> {
+    let field_ty = resolve_type_ref(field_type, &input.types, tys)?;
     let mut local_errors: Vec<CompileError> = Vec::new();
     // A static initialiser is a pure value — no capability calls reach here —
     // so requirements are discarded into a throwaway sink.
@@ -278,26 +322,60 @@ fn check_static_initialiser(
         };
         type_of(init, Some(field_ty), &mut ctx)
     };
-    let compatible_result = matches!(&result, Some(t) if compatible(*t, field_ty, tys));
-    if !compatible_result || !local_errors.is_empty() {
-        let got = result
-            .map(|t| t.display(tys))
-            .unwrap_or_else(|| "an invalid expression".to_string());
+    Some((field_ty, result, local_errors))
+}
+
+/// #2617: check a `const` declaration declared in this file. Its name is
+/// upper-camel (`bynk.resolve.const_name_case`) and is no variant of a sum
+/// type in scope (`bynk.resolve.name_conflict`); its initialiser is inside the
+/// closed static set (`bynk.resolve.bad_const_initialiser`, decision A) and,
+/// typed against the annotation in an empty, pure scope (the
+/// `check_static_initialiser` discipline), a value of that type. A diagnostic
+/// the typing raises (a literal its refined type rejects, `.unsafe` outside the
+/// defining commons) is reported as it stands; a value of another type is
+/// `bynk.resolve.bad_const_initialiser`. The initialiser's expression types
+/// are recorded for the emitter.
+#[allow(clippy::too_many_arguments)]
+pub fn check_const_decl(
+    c: &ConstDecl,
+    input: &ResolvedCommons,
+    tys: &Types,
+    expr_types: &mut HashMap<ExprId, TypedExpr>,
+    callees: &mut HashMap<ExprId, Callee>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+) {
+    errors.extend(crate::consts::name_case_error(c));
+    errors.extend(crate::consts::variant_conflict_error(c, &input.types));
+    if let Some(err) = crate::consts::static_error(c, &input.consts, &input.types) {
+        errors.push(err);
+        return;
+    }
+    let Some((field_ty, result, local_errors)) = type_static_initialiser(
+        &c.init, &c.ty, input, expr_types, callees, refs, hints, locals, tys,
+    ) else {
+        return; // an unresolved annotation is the resolver's to report
+    };
+    if !local_errors.is_empty() {
+        errors.extend(local_errors);
+        return;
+    }
+    let Some(got) = result else { return };
+    if !compatible(got, field_ty, tys) {
         errors.push(
             CompileError::new(
-                code,
-                init.span,
+                "bynk.resolve.bad_const_initialiser",
+                c.init.span,
                 format!(
-                    "{subject} must be a static value of type `{}` (got `{got}`)",
+                    "constant `{}` is declared `{}`, but its initialiser is a `{}`",
+                    c.name.name,
                     field_ty.display(tys),
+                    got.display(tys),
                 ),
             )
-            .with_note(
-                "an initialiser is a compile-time value — a literal (including one admitted to a \
-                 refined type), a sum variant, `Some`/`None`/`Ok`/`Err`, a record, or — for an \
-                 opaque type — `T.unsafe(lit)` — with no reference to `self`, parameters, or \
-                 capabilities",
-            ),
+            .with_label(c.ty.span(), "declared type"),
         );
     }
 }
@@ -335,7 +413,7 @@ pub fn check_state_initialiser(
 
 /// Events slice 3a (#972): type-check an event field's default expression
 /// (`field: T = init`), reusing `check_static_initialiser`'s empty-pure-scope
-/// discipline. Pushes `bynk.event.bad_field_default`.
+/// discipline. Pushes `bynk.types.bad_field_default`.
 ///
 /// One admission `check_static_initialiser` doesn't cover on its own: an
 /// opaque type's `T.unsafe(lit)` is, by design (ADR 0182), a bypass of its
@@ -349,11 +427,14 @@ pub fn check_state_initialiser(
 /// actually triggers it — a deferred, surprising failure this check closes
 /// statically instead. Only `T.unsafe(lit)` on a *literal* argument is
 /// checked here (anything else already fails the static-value requirement
-/// above); a violated refinement pushes the same `bynk.event.bad_field_default`.
+/// above); a violated refinement pushes the same `bynk.types.bad_field_default`.
 #[allow(clippy::too_many_arguments)]
 pub fn check_event_field_default(
     init: &Expr,
     field_type: &TypeRef,
+    // #2607: what the default belongs to, for the message ("event field
+    // default", "record field default").
+    subject: &str,
     input: &ResolvedCommons,
     tys: &Types,
     expr_types: &mut HashMap<ExprId, TypedExpr>,
@@ -373,8 +454,8 @@ pub fn check_event_field_default(
         refs,
         hints,
         locals,
-        "bynk.event.bad_field_default",
-        "event field default",
+        "bynk.types.bad_field_default",
+        subject,
         tys,
     );
     // `T.unsafe(lit)` parses as `ExprKind::MethodCall { receiver: Ident(T),
@@ -398,10 +479,10 @@ pub fn check_event_field_default(
     {
         errors.push(
             CompileError::new(
-                "bynk.event.bad_field_default",
+                "bynk.types.bad_field_default",
                 lit_expr.span,
                 format!(
-                    "`{}.unsafe(...)` bypasses its own refinement, but an event field default \
+                    "`{}.unsafe(...)` bypasses its own refinement, but a {subject} \
                      must be a value the wire could actually carry — this literal fails `{}`",
                     type_name.name,
                     failed.name(),

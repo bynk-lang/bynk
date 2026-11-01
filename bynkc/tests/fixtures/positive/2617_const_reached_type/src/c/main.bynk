@@ -1,0 +1,9 @@
+commons c
+
+// `c` uses only `b`, so it cannot name `Pt`; the constant's type still
+// resolves, in `b`'s scope, as an imported function's signature does.
+uses b
+
+fn sum() -> Int {
+  Origin.x + Origin.y
+}

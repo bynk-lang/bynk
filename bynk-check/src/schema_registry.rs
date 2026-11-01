@@ -1672,6 +1672,7 @@ mod tests {
             flattened_caps: StdHashMap::new(),
             assets: StdHashMap::new(),
             embeds: StdHashMap::new(),
+            consts: StdHashMap::new(),
             derived: StdHashMap::new(),
         }
     }

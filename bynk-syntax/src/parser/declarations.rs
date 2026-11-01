@@ -348,6 +348,24 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
+                // #2617: `const` parses wherever `embed` does; placement
+                // (context or commons, never an adapter) is the checker's call
+                // (`bynk.resolve.const_outside_context_or_commons`).
+                Some(TokenKind::Const) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_const_decl() {
+                        Ok(mut a) => {
+                            a.documentation = doc;
+                            a.trivia.leading = leading;
+                            a.trivia.trailing = self.take_trailing_trivia();
+                            last_span = a.span;
+                            items.push(CommonsItem::Const(a));
+                            seen_item = true;
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
                 Some(TokenKind::Capability) => {
                     let err = CompileError::new(
                         "bynk.capability.outside_context",
@@ -1478,6 +1496,24 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
+                // #2617: `const` parses wherever `embed` does; placement
+                // (context or commons, never an adapter) is the checker's call
+                // (`bynk.resolve.const_outside_context_or_commons`).
+                Some(TokenKind::Const) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_const_decl() {
+                        Ok(mut a) => {
+                            a.documentation = doc;
+                            a.trivia.leading = leading;
+                            a.trivia.trailing = self.take_trailing_trivia();
+                            last_span = a.span;
+                            items.push(CommonsItem::Const(a));
+                            seen_item = true;
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
                 _ => {
                     let t = match self.peek() {
                         Some(t) => t,
@@ -1834,6 +1870,23 @@ impl<'a> Parser<'a> {
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
                             items.push(CommonsItem::Embed(a));
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
+                // #2617: `const` parses wherever `embed` does; placement
+                // (context or commons, never an adapter) is the checker's call
+                // (`bynk.resolve.const_outside_context_or_commons`).
+                Some(TokenKind::Const) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_const_decl() {
+                        Ok(mut a) => {
+                            a.documentation = doc;
+                            a.trivia.leading = leading;
+                            a.trivia.trailing = self.take_trailing_trivia();
+                            last_span = a.span;
+                            items.push(CommonsItem::Const(a));
                         }
                         Err(e) => self.handle_item_err(e)?,
                     }
@@ -3710,6 +3763,43 @@ impl<'a> Parser<'a> {
             span: kw.span.merge(path_span),
             trivia: Trivia::default(),
             private: None,
+        })
+    }
+
+    /// #2617: `const Name: Type = <expr>`. The annotation is required: a
+    /// constant is part of its unit's interface, and a reader (or a `uses`-ing
+    /// unit) should see its type without inferring it, so a missing one is
+    /// `bynk.parse.const_missing_type` rather than an inference. The name's
+    /// case and the initialiser's static-ness are checker concerns; this
+    /// parses identically wherever it is called from.
+    fn parse_const_decl(&mut self) -> Result<ConstDecl, CompileError> {
+        let kw = self.expect(TokenKind::Const, "to start a constant declaration")?;
+        let name = self.expect_ident("after `const`")?;
+        if let Some(t) = self.peek()
+            && t.kind == TokenKind::Eq
+        {
+            return Err(CompileError::new(
+                "bynk.parse.const_missing_type",
+                name.span.merge(t.span),
+                format!("constant `{}` needs a type annotation", name.name),
+            )
+            .with_note(format!(
+                "write the type after the name: `const {}: Type = …`",
+                name.name
+            )));
+        }
+        self.expect(TokenKind::Colon, "after the constant name")?;
+        let ty = self.parse_type_ref("for the constant's type")?;
+        self.expect(TokenKind::Eq, "after the constant's type")?;
+        let init = self.parse_expr()?;
+        let span = kw.span.merge(init.span);
+        Ok(ConstDecl {
+            name,
+            ty,
+            init,
+            documentation: None,
+            span,
+            trivia: Trivia::default(),
         })
     }
 

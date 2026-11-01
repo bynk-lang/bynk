@@ -1,0 +1,7 @@
+commons limits
+
+// #2617: constants may refer to each other, but not in a cycle. The cycle is
+// reported once, at the member declared first.
+const First: Int = Second
+const Second: Int = Third
+const Third: Int = First

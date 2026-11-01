@@ -368,7 +368,7 @@ To land with, or just before, slice 0:
 ## 9. Slice status
 
 - [x] Slice 0 — concurrent binding block (#2640, shipped in #2646, ADR 0672)
-- [ ] Slice 0b — settle-all for the `parTraverse` family (#2662)
+- [x] Slice 0b — settle-all for the `parTraverse` family (#2662)
 - [ ] Slice 1 — `Result` and `?` in a join
 - [x] Slice 2 — agent handlers (folded into slice 0: the workerd gate test in
   #2646 found no new interleaving, so `par` stays legal in agent handlers)

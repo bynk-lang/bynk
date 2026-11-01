@@ -496,6 +496,23 @@ impl<'a> Parser<'a> {
         let name = self.expect_ident("as a variant payload field name")?;
         self.expect(TokenKind::Colon, "after the variant payload field name")?;
         let type_ref = self.parse_type_ref("as the variant payload field type")?;
+        // #2607 (Decision A): a default belongs to a record's field only. A
+        // variant is built like a call, every payload field given, so a default
+        // here would be an optional argument by another name.
+        if let Some(eq) = self.peek().filter(|t| t.kind == TokenKind::Eq) {
+            return Err(CompileError::new(
+                "bynk.types.field_default_on_variant",
+                eq.span,
+                format!(
+                    "variant payload field `{}` cannot have a default",
+                    name.name
+                ),
+            )
+            .with_note(
+                "only a record's fields take defaults; build the variant with every payload \
+                 field, or hold the optional values in a record with defaults",
+            ));
+        }
         let span = name.span.merge(type_ref.span());
         Ok(VariantField {
             name,

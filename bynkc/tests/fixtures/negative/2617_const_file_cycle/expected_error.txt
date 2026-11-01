@@ -1,0 +1,1 @@
+bynk.resolve.const_file_cycle constants in `app/limits/a.bynk` → `app/limits/b.bynk` → `app/limits/a.bynk` refer to each other across files: `C` in `app/limits/a.bynk` names `B`, `B` in `app/limits/b.bynk` names `A`

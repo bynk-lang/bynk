@@ -22,7 +22,7 @@ Some words are **contextual keywords**: they always lex as identifiers, and
 the syntactic grammar gives them a keyword's meaning only in one position. For
 example, `private` is the visibility modifier only immediately before a
 `type`, `fn`, `messages`, `asset` or `embed` declaration
-([§4.1.12c](/book/spec/syntactic-grammar/#4112c-visibility_modifier)); a
+([§4.1.12d](/book/spec/syntactic-grammar/#4112d-visibility_modifier)); a
 binding named `private`, or the `private` in `@cache(scope: private)`, is an
 ordinary identifier.
 
@@ -30,8 +30,10 @@ ordinary identifier.
 
 {{#grammar constant_name}}
 
-An upper-case-initial name. Constant names denote sum-type variants and enum
-constants.
+An upper-case-initial name. Constant names denote sum-type variants, enum
+constants and named constants (`const MaxRetries: Int = 3`,
+[§5.12b](/book/spec/static-semantics/#constants)), whose names MUST have this
+shape.
 
 ## §3.2 Literals
 

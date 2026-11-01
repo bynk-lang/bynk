@@ -116,7 +116,8 @@ export const Redirect = {
  * result is `Err(Timeout)`. A
  * timeout of zero or less, or over 2,147,483,647 ms (about 24 days, the
  * longest a platform timer takes), faults the call, with nothing sent. `None` waits as
- * long as the platform does.
+ * long as the platform does. Each field defaults to what `send` does, so
+ * `FetchOptions {}` is `send`.
  */
 export interface FetchOptions {
   readonly timeout: Option<number>;

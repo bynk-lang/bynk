@@ -208,6 +208,11 @@ pub struct ResolvedCommons {
     /// name is a `String` value. Empty unless set with
     /// [`ResolvedCommons::with_embeds`].
     pub embeds: HashMap<String, EmbedDecl>,
+    /// #2617: every `const` visible in this unit — its own and its `uses`d
+    /// commons' ([`crate::consts::compose_unit_consts`]). A constant's name
+    /// is a value of its annotated type. Empty unless set with
+    /// [`ResolvedCommons::with_consts`].
+    pub consts: HashMap<String, ConstDecl>,
     /// #1925: the `uses`-imported values this unit's own declarations of
     /// another kind shadow, by name. Empty unless set with
     /// [`ResolvedCommons::with_shadowed_imports`]; read through
@@ -439,6 +444,7 @@ impl ResolvedCommons {
             uses_commons_type_names,
             assets: HashMap::new(),
             embeds: HashMap::new(),
+            consts: HashMap::new(),
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
             stability: Default::default(),
@@ -458,6 +464,13 @@ impl ResolvedCommons {
     /// [`ResolvedCommons::with_assets`].
     pub fn with_embeds(mut self, embeds: HashMap<String, EmbedDecl>) -> Self {
         self.embeds = embeds;
+        self
+    }
+
+    /// #2617: the constants visible in this unit, a builder like
+    /// [`ResolvedCommons::with_embeds`].
+    pub fn with_consts(mut self, consts: HashMap<String, ConstDecl>) -> Self {
+        self.consts = consts;
         self
     }
 
@@ -568,7 +581,11 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             // live in `symbols::build_unit_table`; it has no type refs.
             | CommonsItem::Asset(_)
             // #2387, slice 1: likewise an embed (`embeds::path_errors`).
-            | CommonsItem::Embed(_) => {}
+            | CommonsItem::Embed(_)
+            // #2617: a constant's name rules live in `build_unit_table` and
+            // `consts::single_file_const_errors`; its type and initialiser
+            // resolve in the second pass.
+            | CommonsItem::Const(_) => {}
             CommonsItem::Type(t) => {
                 if let Some(prev) = types.get(&t.name.name) {
                     errors.push(
@@ -756,6 +773,17 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
         }
     }
 
+    // #2617: likewise the constants, first declaration winning
+    // (`consts::single_file_const_errors` reports a second).
+    let mut local_consts: HashMap<String, ConstDecl> = HashMap::new();
+    for item in &commons.items {
+        if let CommonsItem::Const(c) = item {
+            local_consts
+                .entry(c.name.name.clone())
+                .or_insert_with(|| c.clone());
+        }
+    }
+
     // Second pass: validate references inside type-refs and function bodies.
     let mut refs = RefSink::new(); // single-file mode: no recording context.
     let mut sinks = Sinks {
@@ -779,10 +807,14 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
                     &methods,
                     &local_assets,
                     &local_embeds,
+                    &local_consts,
                     // A single file has no `uses` imports to shadow.
                     &HashMap::new(),
                     &mut sinks,
                 );
+            }
+            CommonsItem::Const(c) => {
+                check_const_refs(c, &types, &fns, &methods, &local_consts, &mut sinks);
             }
             // v0.5 items' bodies are resolved via a separate context-level
             // pass; their signatures here (#1679).
@@ -828,6 +860,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             event_type_names,
             assets: local_assets,
             embeds: local_embeds,
+            consts: local_consts,
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
             stability: Default::default(),
@@ -1083,7 +1116,19 @@ pub fn resolve_file_record(
                     &resolved.methods,
                     &resolved.assets,
                     &resolved.embeds,
+                    &resolved.consts,
                     &resolved.shadowed_imports,
+                    &mut sinks,
+                );
+            }
+            CommonsItem::Const(c) => {
+                sinks.refs.set_owner(&c.name.name);
+                check_const_refs(
+                    c,
+                    &resolved.types,
+                    &resolved.fns,
+                    &resolved.methods,
+                    &resolved.consts,
                     &mut sinks,
                 );
             }
@@ -1210,7 +1255,8 @@ fn check_signature_refs(
         | CommonsItem::Fn(_)
         | CommonsItem::Messages(_)
         | CommonsItem::Asset(_)
-        | CommonsItem::Embed(_) => {}
+        | CommonsItem::Embed(_)
+        | CommonsItem::Const(_) => {}
     }
 }
 
@@ -1527,6 +1573,7 @@ fn check_fn_refs(
     methods: &HashMap<String, MethodTable>,
     assets: &HashMap<String, AssetDecl>,
     embeds: &HashMap<String, EmbedDecl>,
+    consts: &HashMap<String, ConstDecl>,
     shadowed: &HashMap<String, ShadowedImport>,
     errors: &mut Sinks,
 ) {
@@ -1627,11 +1674,45 @@ fn check_fn_refs(
         methods,
         assets,
         embeds,
+        consts,
         shadowed,
         scopes: Vec::new(),
         errors,
     };
     check_block_references(&f.body, &mut cx);
+}
+
+/// #2617: a constant's annotation resolves, and its initialiser names only
+/// what is in scope. The initialiser has no parameters or bindings, so this is
+/// the function walk over an empty scope; whether the initialiser is *static*
+/// is the checker's call (`consts::static_error`).
+fn check_const_refs(
+    c: &ConstDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    fns: &HashMap<String, Arc<FnDecl>>,
+    methods: &HashMap<String, MethodTable>,
+    consts: &HashMap<String, ConstDecl>,
+    errors: &mut Sinks,
+) {
+    let type_params = HashSet::new();
+    check_type_ref_resolves_in(&c.ty, types, &type_params, errors);
+    let params = HashMap::new();
+    let (assets, embeds, shadowed) = (HashMap::new(), HashMap::new(), HashMap::new());
+    let mut cx = RefCheckCtx {
+        params: &params,
+        in_method: false,
+        types,
+        type_params: &type_params,
+        fns,
+        methods,
+        assets: &assets,
+        embeds: &embeds,
+        consts,
+        shadowed: &shadowed,
+        scopes: Vec::new(),
+        errors,
+    };
+    check_expr_references(&c.init, &mut cx);
 }
 
 /// #1807, #1814: the walk the naming gates share: every place source writes
@@ -2084,6 +2165,10 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                 }
             }
             CommonsItem::Messages(_) | CommonsItem::Asset(_) | CommonsItem::Embed(_) => {}
+            CommonsItem::Const(c) => {
+                g.type_ref(&c.ty);
+                g.expr(&c.init);
+            }
         }
     }
 }
@@ -2583,10 +2668,13 @@ pub(crate) fn check_record_field_set(
     // inserts `x: <default>` at a fmt-stable position, and — when more than one
     // field is missing and every missing field is defaultable — the first such
     // diagnostic also carries an "add all missing fields" convenience.
+    //
+    // #2607 (Decision C): a field that declares a default is not required — a
+    // literal that leaves it out takes the default.
     let missing: Vec<&RecordField> = record
         .fields
         .iter()
-        .filter(|f| !provided.contains_key(f.name.name.as_str()))
+        .filter(|f| f.init.is_none() && !provided.contains_key(f.name.name.as_str()))
         .collect();
     // The edit for a `body` of one or more `name: default` entries. With
     // existing fields it appends `, body` right after the last one. With an
@@ -2681,6 +2769,8 @@ struct RefCheckCtx<'a, 'b> {
     assets: &'a HashMap<String, AssetDecl>,
     /// #2387, slice 1: the embed names in scope, `String` values.
     embeds: &'a HashMap<String, EmbedDecl>,
+    /// #2617: the constant names in scope, values of their annotated types.
+    consts: &'a HashMap<String, ConstDecl>,
     /// #1925: imports a local declaration of another kind hides.
     shadowed: &'a HashMap<String, ShadowedImport>,
     scopes: Vec<HashMap<String, ()>>,
@@ -2884,6 +2974,17 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             }
             if name_in_scope(&id.name, cx.params, &cx.scopes) {
                 // OK.
+            } else if cx.consts.contains_key(&id.name)
+                && cx
+                    .shadowed
+                    .get(&id.name)
+                    .is_none_or(|s| s.imported == "type")
+            {
+                // #2617: a constant name is a value of its annotated type;
+                // the checker types it (`check_ident`). A constant never
+                // shares a name with a variant in scope
+                // (`consts::variant_conflict_error`), so it is met first.
+                cx.errors.refs.record(id.span, SymbolKind::Const, &id.name);
             } else if http_variant(&id.name).is_some() {
                 // v0.9: predeclared HttpResult variant (e.g. `NoContent`,
                 // `Unauthorized`). The checker validates payload arity and
@@ -2915,7 +3016,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 // module; the checker types it (`check_ident` meets assets
                 // and embeds before types).
             } else if let Some(s) = cx.shadowed.get(&id.name)
-                && !matches!(s.local, "function" | "asset" | "embed")
+                && !matches!(s.local, "function" | "asset" | "embed" | "constant")
             {
                 // #1925: the local declaration (a type, event, service,
                 // agent or provider) is no value here, and it hides the import.

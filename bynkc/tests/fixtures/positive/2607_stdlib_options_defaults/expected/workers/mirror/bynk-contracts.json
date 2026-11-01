@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "bounded": "047cb594ba8cc69b",
+    "plain": "d765d75ef39b7846"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "bounded": "Svc(\"bounded\",P(\"url\",B(\"String\")),Ret(B(\"Int\")))",
+    "plain": "Svc(\"plain\",P(\"url\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}

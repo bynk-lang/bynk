@@ -197,6 +197,16 @@ fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
     if args.skip_unsupported {
         argv.push("--skip-unsupported".into());
     }
+    // #2658: a smoke run, which `bynkc` synthesises.
+    if args.smoke {
+        argv.push("--smoke".into());
+    }
+    if args.print {
+        argv.push("--print".into());
+    }
+    if args.smoke_unsafe {
+        argv.push("--smoke-unsafe".into());
+    }
     if starts_dev {
         let me = match std::env::current_exe() {
             Ok(me) => me,

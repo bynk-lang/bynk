@@ -9,9 +9,9 @@ use crate::resolver::{self, MethodTable as ResolverMethodTable};
 use bynk_project::{ParsedFile, UnitKind};
 use bynk_syntax::ast::{
     ActorDecl, AgentDecl, AssetDecl, BaseType, Block, CapRef, CapabilityDecl, CommonsItem,
-    EmbedDecl, EventDecl, ExportKind, Expr, ExprId, ExprKind, FnDecl, FnName, HandlerKind, Ident,
-    Param, ProviderDecl, ServiceDecl, ServiceProtocol, Trivia, TypeBody, TypeDecl, TypeRef,
-    Visibility,
+    ConstDecl, EmbedDecl, EventDecl, ExportKind, Expr, ExprId, ExprKind, FnDecl, FnName,
+    HandlerKind, Ident, Param, ProviderDecl, ServiceDecl, ServiceProtocol, Trivia, TypeBody,
+    TypeDecl, TypeRef, Visibility,
 };
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
@@ -105,6 +105,13 @@ pub fn assemble_index(
                     CommonsItem::Embed(e) => (
                         SymbolKind::Embed,
                         &e.name.name,
+                        symbol_modifiers(&unit, None),
+                    ),
+                    // #2617: a constant indexes under its own kind, keyed by
+                    // name in the declaring unit.
+                    CommonsItem::Const(c) => (
+                        SymbolKind::Const,
+                        &c.name.name,
                         symbol_modifiers(&unit, None),
                     ),
                 };
@@ -318,6 +325,17 @@ pub fn assemble_index(
                         symbol_modifiers(&unit, None),
                     );
                 }
+                // #2617: a constant's declaration site — a def that owns the
+                // references in its initialiser (another constant, a type).
+                CommonsItem::Const(c) => {
+                    builder.add_leaf_def(
+                        &unit,
+                        SymbolKind::Const,
+                        &c.name.name,
+                        site(&c.name),
+                        symbol_modifiers(&unit, None),
+                    );
+                }
             }
         }
     }
@@ -385,6 +403,12 @@ pub struct UnitTable {
     /// only (`bynk.embed.outside_context_or_commons`); a unit's visible embeds
     /// add those of the commons it `uses` (`embeds::compose_unit_embeds`).
     pub embeds: HashMap<String, EmbedDecl>,
+    /// #2617: `const` declarations, by name — values of their annotated type,
+    /// local to this unit. A context or commons only
+    /// (`bynk.resolve.const_outside_context_or_commons`); a unit's visible
+    /// constants add those of the commons it `uses`
+    /// (`consts::compose_unit_consts`).
+    pub consts: HashMap<String, ConstDecl>,
     /// #291: the capabilities this unit flattens in with `consumes U { Cap }`,
     /// each mapped to the unit providing it — `phase_resolve_consumes`'s
     /// per-unit answer, recorded by [`record_flattened_caps`] so a test body's
@@ -1007,6 +1031,67 @@ pub fn build_unit_table(
         }
         out.extend(errors.into_iter().map(|e| (parsed[i].identity_path(), e)));
     }
+    // #2617: `const` declarations, after the embed pass, by the same rule: a
+    // constant is a value, in the same namespace as a free function.
+    for &i in indices {
+        let mut errors: Vec<CompileError> = Vec::new();
+        for item in parsed[i].items() {
+            let CommonsItem::Const(c) = item else {
+                continue;
+            };
+            if !matches!(kind, UnitKind::Context | UnitKind::Commons) {
+                errors.push(crate::consts::placement_error(c));
+                continue;
+            }
+            let key = &c.name.name;
+            match crate::consts::name_error(
+                c,
+                table.consts.get(key).map(|p| &p.name),
+                table.embeds.get(key).map(|p| &p.name),
+                table.assets.get(key).map(|a| &a.name),
+                table.fns.get(key).map(|f| f.name.ident()),
+                table.types.get(key).map(|t| &t.name),
+            )
+            .or_else(|| crate::consts::builtin_name_error(c))
+            {
+                Some(err) => errors.push(err),
+                None => {
+                    table.consts.insert(key.clone(), c.clone());
+                }
+            }
+        }
+        out.extend(errors.into_iter().map(|e| (parsed[i].identity_path(), e)));
+    }
+    // #2617: constants that name each other across files make the files'
+    // modules import each other, so one would read a constant before it is
+    // defined. A unit's constants are complete here, after the pass above.
+    if indices.len() > 1 && !table.consts.is_empty() {
+        let files: Vec<(String, Vec<&ConstDecl>)> = indices
+            .iter()
+            .map(|&i| {
+                let consts = parsed[i]
+                    .items()
+                    .iter()
+                    .filter_map(|item| match item {
+                        CommonsItem::Const(c) => Some(c),
+                        _ => None,
+                    })
+                    .collect();
+                // Shown with `/` on every platform, so the diagnostic reads
+                // the same on Windows.
+                let shown = parsed[i]
+                    .source_path()
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                (shown, consts)
+            })
+            .collect();
+        for (k, err) in crate::consts::file_cycle_errors(&files, &table.consts) {
+            out.push((parsed[indices[k]].identity_path(), err));
+        }
+    }
     // #1925: a service, agent or provider shares one namespace with the
     // unit's functions, assets, types and events (and with each other) — they
     // are all one scope of the emitted TypeScript module, so a shared name
@@ -1115,6 +1200,8 @@ pub fn local_value_kind(table: &UnitTable, name: &str) -> Option<(&'static str, 
         Some(("asset", a.name.span))
     } else if let Some(e) = table.embeds.get(name) {
         Some(("embed", e.name.span))
+    } else if let Some(c) = table.consts.get(name) {
+        Some(("constant", c.name.span))
     } else if let Some(e) = table.events.get(name) {
         Some(("event", e.name.span))
     } else if let Some(t) = table.types.get(name) {
@@ -1161,6 +1248,8 @@ fn value_namespace_error(
         ("asset", a.name.span)
     } else if let Some(e) = table.embeds.get(key) {
         ("embed", e.name.span)
+    } else if let Some(c) = table.consts.get(key) {
+        ("constant", c.name.span)
     } else if let Some(e) = table.events.get(key) {
         ("event", e.name.span)
     } else if let Some(t) = table.types.get(key) {
@@ -1192,7 +1281,7 @@ fn value_namespace_error(
         )
         .with_label(prev, format!("{other} declared here"))
         .with_note(
-            "a unit's services, agents, providers, functions, assets, types and events share one namespace",
+            "a unit's services, agents, providers, functions, assets, embeds, constants, types and events share one namespace",
         ),
     )
 }
@@ -1362,6 +1451,13 @@ pub fn build_file_decl_index(indices: &[usize], parsed: &[ParsedFile]) -> FileDe
                 CommonsItem::Embed(e) => {
                     idx.fns
                         .entry(e.name.name.clone())
+                        .or_insert_with(|| path.clone());
+                }
+                // #2617: a constant is an exported `const` of its file, in the
+                // function namespace, imported like an embed.
+                CommonsItem::Const(c) => {
+                    idx.fns
+                        .entry(c.name.name.clone())
                         .or_insert_with(|| path.clone());
                 }
             }
@@ -2471,6 +2567,7 @@ mod value_namespace_tests {
         Event,
         Asset,
         Embed,
+        Const,
         Service,
         Agent,
         Provider,
@@ -2478,12 +2575,13 @@ mod value_namespace_tests {
         Actor,
     }
 
-    const ALL: [Kind; 10] = [
+    const ALL: [Kind; 11] = [
         Kind::Fn,
         Kind::Type,
         Kind::Event,
         Kind::Asset,
         Kind::Embed,
+        Kind::Const,
         Kind::Service,
         Kind::Agent,
         Kind::Provider,
@@ -2501,6 +2599,7 @@ mod value_namespace_tests {
             CommonsItem::Event(_) => Some(Kind::Event),
             CommonsItem::Asset(_) => Some(Kind::Asset),
             CommonsItem::Embed(_) => Some(Kind::Embed),
+            CommonsItem::Const(_) => Some(Kind::Const),
             CommonsItem::Service(_) => Some(Kind::Service),
             CommonsItem::Agent(_) => Some(Kind::Agent),
             CommonsItem::Provider(_) => Some(Kind::Provider),
@@ -2524,6 +2623,7 @@ mod value_namespace_tests {
             Kind::Event => format!("event {n} = {{ n: Int }}\n"),
             Kind::Asset => format!("asset {n} = \"assets/x.json\"\n"),
             Kind::Embed => format!("embed {n} = \"embeds/x.txt\"\n"),
+            Kind::Const => format!("const {n}: Int = 1\n"),
             Kind::Service => {
                 format!(
                     "service {n} {{\n  on call() -> Effect[Int] {{\n    Effect.pure(1)\n  }}\n}}\n"
@@ -2567,6 +2667,11 @@ mod value_namespace_tests {
                 // Both declaration orders, under both casings.
                 for (first, second) in [(a, b), (b, a)] {
                     for n in ["thing", "Thing"] {
+                        // A constant's name is upper-camel or it is also
+                        // `bynk.resolve.const_name_case`; one casing suffices.
+                        if n == "thing" && (a == Kind::Const || b == Kind::Const) {
+                            continue;
+                        }
                         let src = format!("{HEADER}{}\n{}", decl(first, n), decl(second, n));
                         let r = analyse(&[
                             ("app/main.bynk", &src),

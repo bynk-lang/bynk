@@ -15,3 +15,11 @@ service markPaid {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: Region.International })
   }
 }
+
+// #2607 (Decision C): an event literal may leave a defaulted field out; it is
+// filled with the default's in-memory value, not a qualified reference.
+service markPaidDomestic {
+  on call(orderId: String) -> Effect[()] given Events {
+    Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
+  }
+}

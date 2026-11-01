@@ -1,0 +1,4 @@
+commons limits
+
+// #2617 (decision B): a constant's type is always written.
+const MaxRetries = 3

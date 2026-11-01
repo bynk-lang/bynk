@@ -129,8 +129,8 @@ type Redirect   = enum { Follow, Manual }
 type LogLevel   = enum { Debug, Info, Warn, Error }
 
 type FetchOptions = {
-  timeout:  Option[Duration],
-  redirect: Redirect,
+  timeout:  Option[Duration] = None,
+  redirect: Redirect = Redirect.Follow,
 }
 
 type Request = {
@@ -217,6 +217,11 @@ takes the same request with a `FetchOptions`:
 let res <- Fetch.sendWith(req, FetchOptions { timeout: Some(5.seconds), redirect: Manual })
 ```
 
+Each field defaults to what `send` does, so a caller writes only the options it
+changes: `FetchOptions { timeout: Some(5.seconds) }` bounds the call and still
+follows redirects, and `FetchOptions {}` is `send`. The same holds for `KvGet`,
+`KvPut`, `R2Put` and `QueueSend` (see [Field defaults](/book/reference/types/#field-defaults)).
+
 - `timeout` bounds the whole exchange, the response body included, except for
   the [streamed operations](#streamed-bodies), where it bounds the response
   head only. When it elapses the result is `Err(Timeout)`. A timeout of zero or less, or over
@@ -226,9 +231,9 @@ let res <- Fetch.sendWith(req, FetchOptions { timeout: Some(5.seconds), redirect
   `3xx` itself, with its `location` header, so the service decides whether to
   follow it (to refuse a redirect to an internal host, say).
 
-The options are a record of their own, not fields of `Request`, because adding a
-field to `Request` would break every request literal: record fields have no
-defaults. `sendWith` is experimental: list `"bynk.Fetch.sendWith"` under
+The options are a record of their own, not fields of `Request`, so `send` keeps
+its one-argument form and every request literal stays as it is. A later option
+is a new `FetchOptions` field with a default, which no caller has to write. `sendWith` is experimental: list `"bynk.Fetch.sendWith"` under
 `[unstable] allow`. A test stubs it as it does `send`:
 `stub Fetch.sendWith(_, _) returns Ok(Response { … })`.
 
@@ -394,8 +399,8 @@ unchanged.
 
 ```bynk
 type KvExpiration = | Never | After(ttl: Duration) | At(instant: Instant)
-type KvPut      = { expiration: KvExpiration, metadata: Map[String, String] }
-type KvGet      = { cacheTtl: Option[Duration] }
+type KvPut      = { expiration: KvExpiration = KvExpiration.Never, metadata: Map[String, String] = Map.empty() }
+type KvGet      = { cacheTtl: Option[Duration] = None }
 type KvEntry    = { value: String, metadata: Map[String, String] }
 type KvKey      = { name: String, expiration: Option[Instant], metadata: Map[String, String] }
 type KvList     = { prefix: Option[String], cursor: Option[String], limit: Option[Int] }

@@ -137,6 +137,10 @@
             "link": "/book/guides/program-structure/consume-services/"
           },
           {
+            "label": "Add an option without breaking callers",
+            "link": "/book/guides/program-structure/add-an-option/"
+          },
+          {
             "label": "Document your code",
             "link": "/book/guides/program-structure/document-your-code/"
           },
@@ -495,6 +499,10 @@
       {
         "label": "Embedded text",
         "link": "/book/reference/embeds/"
+      },
+      {
+        "label": "Named constants",
+        "link": "/book/reference/constants/"
       },
       {
         "label": "Actors",

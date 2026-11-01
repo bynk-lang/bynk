@@ -1,0 +1,33 @@
+---
+#2617: a context that `uses` the commons reads its constants, and declares
+one of its own in a sibling file.
+---
+context shop.api
+
+uses shop.limits
+
+service api from http {
+  on GET("/limit") () -> Effect[HttpResult[Int]] by Visitor {
+    Ok(MaxItems)
+  }
+
+  on GET("/greeting") () -> Effect[HttpResult[String]] by Visitor {
+    Ok(Welcome)
+  }
+
+  on GET("/pages") () -> Effect[HttpResult[Int]] by Visitor {
+    Ok(pages() + DefaultPage.offset)
+  }
+
+  // A used commons' refined and sum constants, through the context's rebrand.
+  on GET("/batch") () -> Effect[HttpResult[Quantity]] by Visitor {
+    Ok(SmallBatch)
+  }
+
+  on GET("/tier") () -> Effect[HttpResult[String]] by Visitor {
+    match Preferred {
+      Gold => Ok("gold")
+      Silver => Ok("silver")
+    }
+  }
+}

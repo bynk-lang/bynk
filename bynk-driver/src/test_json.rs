@@ -319,6 +319,12 @@ impl TestRun {
     /// in its suite (a new `integration` suite when none of that name ran).
     pub fn with_remote(mut self, transport: String, skipped: &[(String, String, String)]) -> Self {
         self.transport = Some(transport);
+        self.with_skips(skipped)
+    }
+
+    /// Each skipped case as an `outcome: "skipped"` case whose `message` is
+    /// why, in its suite: a remote run's (#2138) or a smoke run's (#2658).
+    pub fn with_skips(mut self, skipped: &[(String, String, String)]) -> Self {
         if skipped.is_empty() {
             return self;
         }
@@ -331,7 +337,7 @@ impl TestRun {
                 message: Some(reason.clone()),
                 location: None,
                 retries: None,
-                // A remote run skips only `system` cases.
+                // A remote or smoke run skips only `system` cases.
                 tier: Some("system".to_string()),
                 kind: None,
                 seed: None,

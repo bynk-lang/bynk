@@ -1,0 +1,7 @@
+commons limits
+
+// #2617: a literal is admitted to a refined type only when it satisfies the
+// refinement, as for any other initialiser.
+type Port = Int where InRange(1, 65535)
+
+const DefaultPort: Port = 0

@@ -56,6 +56,8 @@ fn token_type_index(kind: SymbolKind) -> u32 {
         SymbolKind::Asset => 13,
         // #2387: embed names append `embed` at 14.
         SymbolKind::Embed => 14,
+        // #2617: constant names append `constant` at 16.
+        SymbolKind::Const => 16,
     }
 }
 
@@ -70,7 +72,7 @@ pub const TOK_INTERFACE: u32 = 15;
 
 /// Legend index of the `keyword` token type (#2618: `private` in modifier
 /// position, a contextual keyword the editor grammars may not know).
-pub const TOK_KEYWORD: u32 = 16;
+pub const TOK_KEYWORD: u32 = 17;
 
 const MOD_DECLARATION: u32 = 1 << 0;
 const MOD_REFINED: u32 = 1 << 1;
@@ -246,6 +248,7 @@ mod tests {
                 "asset",     // #1883: static asset names — appended
                 "embed",     // #2387: embedded-text names — appended
                 "interface", // constrained generics slice 0: constraint names — appended
+                "constant",  // #2617: named constants — appended
                 "keyword",   // #2618: contextual `private` modifier — appended
             ]
         );

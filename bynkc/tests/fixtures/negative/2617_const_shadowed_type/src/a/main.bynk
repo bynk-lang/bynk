@@ -1,0 +1,3 @@
+commons a
+
+type Pt = { x: Int, y: Int }

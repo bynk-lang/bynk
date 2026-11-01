@@ -54,9 +54,12 @@ pub const TOKEN_TYPES: &[&str] = &[
     // `where A: Eq`). Appended at index 15 (never reordered); standard LSP
     // type.
     "interface",
+    // #2617: `const` names (named constants). Appended at index 16 (never
+    // reordered); a custom type the VS Code extension declares.
+    "constant",
     // #2618: a contextual keyword the editor grammars cannot tell from an
     // identifier by spelling alone: `private` in modifier position.
-    // Appended at index 16 (never reordered); standard LSP type.
+    // Appended at index 17 (never reordered); standard LSP type.
     "keyword",
 ];
 

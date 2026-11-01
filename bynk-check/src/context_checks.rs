@@ -428,6 +428,7 @@ pub fn check_context_declarations(
     // #1883, slice 1a: a handler body sees the unit's assets too.
     .with_assets(typed.assets.clone())
     .with_embeds(typed.embeds.clone())
+    .with_consts(typed.consts.clone())
     .with_shadowed_imports(typed.shadowed_imports.clone())
     .with_extensible_enums(typed.extensible_enums.clone())
     .with_stability(typed.stability.clone());
@@ -666,7 +667,7 @@ fn check_class_declarations(table: &UnitTable, errors: &mut Vec<CompileError>) {
 /// 1. **Static/pure/typed** — `checker::check_event_field_default`, the same
 ///    empty-pure-scope discipline agent `store` field defaults already have
 ///    (`bynk.agents.bad_state_initialiser`'s sibling), pushing
-///    `bynk.event.bad_field_default` on failure.
+///    `bynk.types.bad_field_default` on failure.
 /// 2. **Constructible** — `crate::wire_default::lower_field_default_wire`
 ///    against `subscriber_visible_types`, the *narrower* table a subscriber
 ///    regenerating this event's codec cross-context will actually see. This
@@ -700,6 +701,7 @@ fn check_event_field_defaults(
             checker::check_event_field_default(
                 init,
                 &field.type_ref,
+                "event field default",
                 resolved,
                 tys,
                 expr_types,
@@ -719,7 +721,7 @@ fn check_event_field_defaults(
             ) {
                 errors.push(
                     CompileError::new(
-                        "bynk.event.bad_field_default",
+                        "bynk.types.bad_field_default",
                         init.span,
                         format!(
                             "event field `{}`'s default cannot be represented on the wire: {reason}",
@@ -3545,6 +3547,7 @@ fn check_agent_decls(
         // #1883, slice 1a: a handler body sees the unit's assets too.
         .with_assets(typed.assets.clone())
         .with_embeds(typed.embeds.clone())
+        .with_consts(typed.consts.clone())
         .with_shadowed_imports(typed.shadowed_imports.clone())
         .with_extensible_enums(typed.extensible_enums.clone())
         .with_stability(typed.stability.clone());
@@ -3648,6 +3651,7 @@ fn check_agent_decls(
         // #1883, slice 1a: a handler body sees the unit's assets too.
         .with_assets(typed.assets.clone())
         .with_embeds(typed.embeds.clone())
+        .with_consts(typed.consts.clone())
         .with_shadowed_imports(typed.shadowed_imports.clone())
         .with_extensible_enums(typed.extensible_enums.clone())
         .with_stability(typed.stability.clone());
@@ -3748,6 +3752,7 @@ fn check_agent_decls(
                 checker::check_event_field_default(
                     init,
                     &field.type_ref,
+                    "old-state field default",
                     &resolved_for_handler,
                     tys,
                     &mut typed.expr_types,
@@ -3766,7 +3771,7 @@ fn check_agent_decls(
                     &resolved_for_handler.types,
                 ) {
                     errors.push(CompileError::new(
-                        "bynk.event.bad_field_default",
+                        "bynk.types.bad_field_default",
                         init.span,
                         format!(
                             "old-state field `{}`'s default cannot be represented on the wire: \

@@ -402,6 +402,16 @@ fn push_item(out: &mut Vec<DocEntry>, item: &CommonsItem) {
             span: e.name.span,
             file: None,
         }),
+        // #2617.
+        CommonsItem::Const(c) => out.push(DocEntry {
+            name: c.name.name.clone(),
+            kind: "constant",
+            depth: 0,
+            markdown: symbols::describe_const(c),
+            documented: c.documentation.is_some(),
+            span: c.name.span,
+            file: None,
+        }),
     }
 }
 

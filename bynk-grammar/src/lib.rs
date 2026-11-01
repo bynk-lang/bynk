@@ -446,6 +446,7 @@ mod tests {
         // #2641 (record patterns) added: record_pattern, record_pattern_field,
         // and _is_pattern, _is_base_pattern, _is_or_pattern (the patterns an
         // `is` takes unparenthesised, which exclude a record pattern). Net +5.
+        // #2617 (named constants) added: const_decl. Net +1.
         // #2640 (concurrent effects, slice 0) added: par_stmt (the `par { … }`
         // binding block) and _par_statement (what it may hold: every statement
         // but a `let … else`). Net +2.
@@ -454,8 +455,9 @@ mod tests {
         // so the display layer collapses it). Net +3.
         // #2654 (`let` destructuring) added: _let_paren_record_pattern (the
         // parenthesised record pattern of an `else`-less `let`). Net +1.
+        // Named constants (#2617) added const_decl. Net +1.
         // #2618 (private declarations) added: visibility_modifier. Net +1.
-        assert_eq!(rules.len(), 179);
+        assert_eq!(rules.len(), 180);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.
