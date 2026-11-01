@@ -63,6 +63,7 @@ mod compute_is_uses_commons_type_tests {
 
     fn bare_record_type(name: &str) -> Arc<TypeDecl> {
         Arc::new(TypeDecl {
+            derives: Vec::new(),
             type_params: Vec::new(),
             name: Ident {
                 name: name.to_string(),

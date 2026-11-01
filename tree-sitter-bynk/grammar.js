@@ -355,6 +355,9 @@ module.exports = grammar({
         optional(seq("[", sep1(field("type_param", $.type_param), ","), "]")),
         "=",
         field("body", $._type_body),
+        // Constrained generics slice 1: a trailing `derives Ord` clause, `+`
+        // separated like a bound list. `derives` is a contextual word.
+        optional(seq("derives", sep1(field("derive", $.constraint), "+"))),
       ),
 
     _type_body: ($) =>

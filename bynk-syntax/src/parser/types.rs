@@ -51,6 +51,16 @@ impl<'a> Parser<'a> {
         Ok(bounds)
     }
 
+    /// `derives Ord + …`: the names after `derives`, `+`-separated like a bound
+    /// list. Which names mean anything is the checker's call.
+    fn parse_derive_list(&mut self) -> Result<Vec<Ident>, CompileError> {
+        let mut names = vec![self.expect_ident("as a constraint name after `derives`")?];
+        while self.eat(TokenKind::Plus).is_some() {
+            names.push(self.expect_ident("as a constraint name after `+`")?);
+        }
+        Ok(names)
+    }
+
     /// An optional method `where A: C, B: C1 + C2` clause (after the return type).
     pub(crate) fn parse_optional_where_bounds(&mut self) -> Result<Vec<WhereBound>, CompileError> {
         let mut out = Vec::new();
@@ -155,10 +165,22 @@ impl<'a> Parser<'a> {
                 )
             }
         };
+        // Constrained generics slice 1: a trailing `derives Ord` clause. `derives`
+        // is a contextual word (an ordinary identifier everywhere else), read
+        // only here, after the body.
+        let mut derives = Vec::new();
+        let mut end_span = end_span;
+        if matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "derives")
+        {
+            self.bump();
+            derives = self.parse_derive_list()?;
+            end_span = derives.last().map_or(end_span, |d| d.span);
+        }
         Ok(TypeDecl {
             name,
             type_params,
             body,
+            derives,
             documentation: None,
             span: kw.span.merge(end_span),
             trivia: Trivia::default(),

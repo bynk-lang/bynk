@@ -10309,6 +10309,7 @@ mod tests {
 
     fn refined_int_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
             name: Ident {
                 name: name.to_string(),
                 span: Span::default(),
@@ -10327,6 +10328,7 @@ mod tests {
 
     fn opaque_int_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
             name: Ident {
                 name: name.to_string(),
                 span: Span::default(),
@@ -10430,6 +10432,7 @@ mod tests {
 
     fn sum_decl(name: &str, variants: Vec<(&str, Vec<(&str, TypeRef)>)>) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
             name: Ident {
                 name: name.to_string(),
                 span: Span::default(),

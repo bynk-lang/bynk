@@ -5928,6 +5928,7 @@ mod pure_helper_pins {
     }
     fn refined_decl(name: &str, base: BaseType, refinement: Option<Refinement>) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
             name: ident(name),
             type_params: Vec::new(),
             body: TypeBody::Refined {
@@ -5942,6 +5943,7 @@ mod pure_helper_pins {
     }
     fn record_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
             name: ident(name),
             type_params: Vec::new(),
             body: TypeBody::Record(bynk_syntax::ast::RecordBody {

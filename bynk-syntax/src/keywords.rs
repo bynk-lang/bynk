@@ -226,6 +226,10 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
         "Move the test harness's clock forward in a `case` (`advance Clock by 15.minutes`).",
     ),
     k(
+        "derives",
+        "After a type declaration's body, opts the type into a constraint (`type Priority = enum { Low, High } derives Ord`): the type is then ordered by declaration order.",
+    ),
+    k(
         "drop",
         "Inside a `migrate` step, discard a stored field's value on purpose (`drop owner`).",
     ),
