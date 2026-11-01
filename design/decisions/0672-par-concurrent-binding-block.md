@@ -26,9 +26,9 @@ carries the decisions slice 0 (#2640) fixed.
   permanent, not a placeholder for slice 1: `?` takes a `Result` value, not an
   effect, so a binding's `Result` is unwrapped after the block, where the `?`
   lines run in source order and Q2's rule already holds. Slice 1 was dropped
-  (track doc Q2). The parser admits any statement but a `let … else` and the checker
-  names the rest, so the editor still sees the rejected statement in place. A
-  `?` inside a lambda belongs to the lambda and is not refused.
+  (track doc Q2). The parser admits any statement but a `let … else` and the
+  checker names the rest, so the editor still sees the rejected statement in
+  place. A `?` inside a lambda belongs to the lambda and is not refused.
 - **C. Sibling names.** No binding may mention a name another binding of the
   same block binds, and no two bindings bind one name (`bynk.par.sibling_name`).
   The rule holds even where the name would resolve to an outer binding, so
