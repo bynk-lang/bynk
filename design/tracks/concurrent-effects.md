@@ -7,9 +7,9 @@
   shipped in #2669 ([#2662](https://github.com/bynk-lang/bynk/issues/2662));
   slice 1 was dropped (Q2); slice 3, the timeout, shipped in #2693
   ([#2683](https://github.com/bynk-lang/bynk/issues/2683), ADR 0687); slice 4,
-  the race `a.race(b)`, is in review in
-  [#2711](https://github.com/bynk-lang/bynk/issues/2711) and reopens Q7 (see
-  its **[Amended]** answer). Spine
+  the race `a.race(b)`, shipped in #2713
+  ([#2711](https://github.com/bynk-lang/bynk/issues/2711), ADR 0691) and reopened
+  Q7 (see its **[Amended]** answer). Every planned slice has shipped. Spine
   [#2615](https://github.com/bynk-lang/bynk/issues/2615).
 - **Realises:** the effect model of `design/bynk-design-notes.md` (an `Effect` is
   the only way a program reaches the outside world), extending the
@@ -428,7 +428,7 @@ To land with, or just before, slice 0:
 - [x] Slice 2 — agent handlers (folded into slice 0: the workerd gate test in
   #2646 found no new interleaving, so `par` stays legal in agent handlers)
 - [x] Slice 3 — general timeout (#2683, shipped in #2693, ADR 0687)
-- [ ] Slice 4 — race (#2711; adopts Q7 (b))
+- [x] Slice 4 — race (#2711, shipped in #2713, ADR 0691; adopts Q7 (b))
 
 ## 10. Non-goals
 
