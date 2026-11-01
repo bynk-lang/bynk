@@ -68,8 +68,72 @@ under maximal munch: `2.5.round()` lexes as `2.5` `.` `round`, and
 
 {{#grammar string_literal}}
 
-A double-quoted string. The escape sequences `\n`, `\t`, `\"`, and `\\` are
-recognised; an unescaped newline does not appear within the token.
+A string literal has three **forms** (#2619). All three denote a `String`; they
+differ in how the source text maps to the value.
+
+**Ordinary** — `"…"`, on one line. The escape sequences are:
+
+| Escape | Value |
+|---|---|
+| `\n` | line feed (U+000A) |
+| `\r` | carriage return (U+000D) |
+| `\t` | tab (U+0009) |
+| `\0` | NUL (U+0000) |
+| `\"` | a double quote |
+| `\\` | a backslash |
+| `\u{H…}` | the Unicode scalar value with 1 to 6 hexadecimal digits |
+
+A `\u{…}` naming a surrogate code point (U+D800 to U+DFFF) or a value above
+U+10FFFF is `bynk.lex.bad_unicode_escape`, so every literal is valid Unicode
+text; a malformed one (no braces, no digits, more than six, a non-hex digit) and
+any other backslash sequence is `bynk.lex.bad_escape`. An unescaped newline does
+not appear within the token (`bynk.lex.unterminated_string`).
+
+**Raw** — `r"…"`, or `r#"…"#` with any number of `#` (the closing `"` is followed
+by the same number). A raw literal has **no escapes and no interpolation**: every
+character, backslashes included, stands for itself, so `r"\d+\.\d+"` is the
+eight characters `\d+\.\d+`. The `#` form lets the text hold a `"`
+(`r#"say "hi""#`). The `r` is a raw opener only when it is immediately followed by
+the `#`s and the `"`; `r "x"` is an identifier `r` and a string. A raw literal is
+on one line; use the raw multi-line form for several.
+
+**Multi-line** — `"""…"""` and the raw form `r"""…"""`. The opening delimiter is
+followed by a newline (`bynk.lex.multiline_open` otherwise) and the closing
+delimiter has a line of its own (`bynk.lex.multiline_close_not_own_line` when a
+`"""` ends a line of text). The text is the lines between them, joined by `\n`:
+
+- the **closing delimiter's indentation** (its leading spaces and tabs) is
+  removed from the start of every line; a line that is not blank and does not
+  start with that indentation is `bynk.lex.multiline_indent`, and a blank line
+  shorter than the indentation is empty;
+- the newline before the closing delimiter is not part of the value, so a body
+  of one line `SELECT 1` has the value `SELECT 1`; a blank last line adds a
+  trailing `\n`;
+- **line endings are always `\n`**: a source file's `\r\n` does not reach the value,
+  and a `\r\n` in a literal is written explicitly;
+- the ordinary form takes the same escapes and interpolation holes as `"…"` (an
+  interpolation hole closes on the line it opens on); the raw form takes neither.
+  A `"` or `""` may appear in the text; in the ordinary form a `"""` is written
+  `\"""`, and a raw multi-line literal cannot hold a `"""` at all.
+- the indentation must match the closing delimiter's **character for
+  character**: a tab is not a space, and a line that mixes them differently is
+  `bynk.lex.multiline_indent`, whose note says so;
+- indentation is removed from each physical line *before* interpolation holes
+  are found, and never inside a hole; the newline right after the opening
+  delimiter is not part of the value; a lone `\r` is not a line break.
+
+A multi-line string cannot appear inside an interpolation hole
+(`bynk.lex.multiline_in_hole`): a hole closes on the line it opens on. A line
+whose text starts with `"""` closes the literal unless a letter, digit, `_` or
+`"` follows it, in which case the `"""` is a stray delimiter
+(`bynk.lex.multiline_close_not_own_line`).
+
+Design choices (#2619): the closing delimiter has a line to itself, a
+single-line raw literal cannot span lines, and `#` delimiters belong to the
+single-line raw form only (there is no `r#"""`).
+
+Indentation is removed *before* escapes are read, so `\t` is a tab in the value
+whatever the margin.
 
 A string may also contain **interpolation holes** of the form `\(expr)`
 (v0.43): the text `\(` opens a hole whose body runs to its matching `)`
@@ -81,6 +145,13 @@ escape). A string containing one or more holes is an *interpolated string*; one
 with none is the plain string literal above. The hole rule and emission are
 specified in [§5.2 well-typedness](/book/spec/static-semantics/#52-well-typedness) and
 [§7 emission](/book/spec/emission/).
+
+### §3.2.2b escape_sequence
+
+{{#grammar escape_sequence}}
+
+One escape sequence inside an ordinary or multi-line string literal (#2619); the
+table in §3.2.2 gives each value.
 
 ### §3.2.2a string_interpolation
 

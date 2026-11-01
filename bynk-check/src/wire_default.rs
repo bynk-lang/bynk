@@ -491,6 +491,11 @@ pub fn escape_ts_literal(s: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\t' => out.push_str("\\t"),
             '\r' => out.push_str("\\r"),
+            // #2619: `\0`, other control characters and the JS line terminators
+            // U+2028/U+2029 print as `\u{…}` escapes (valid in strings and templates).
+            c if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') => {
+                out.push_str(&format!("\\u{{{:X}}}", c as u32));
+            }
             c => out.push(c),
         }
     }

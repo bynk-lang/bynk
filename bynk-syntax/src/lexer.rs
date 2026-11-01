@@ -322,10 +322,11 @@ pub enum TokenKind {
         r"[0-9]+(_[0-9]+)*\.[0-9]+(_[0-9]+)*([eE][+-]?[0-9]+(_[0-9]+)*)?|[0-9]+(_[0-9]+)*[eE][+-]?[0-9]+(_[0-9]+)*"
     )]
     FloatLit,
-    // A double-quoted string with simple escapes. The body excludes the closing
-    // quote; we accept any non-quote/non-backslash/non-newline char, or a
-    // backslash followed by one of the four allowed escapes.
-    #[regex(r#""([^"\\\n]|\\[nt"\\])*""#)]
+    // A string literal with no interpolation hole: `"…"`, the raw forms
+    // `r"…"` / `r#"…"#`, and the multi-line forms `"""…"""` / `r"""…"""`
+    // (#2619). Hand-scanned in `tokenize` (never produced by logos) so one
+    // scanner owns every form; the span covers the whole lexeme and
+    // [`decode_string_literal`] recovers the value.
     StrLit,
     // An interpolated string `"… \(expr) …"` (v0.43). Hand-scanned in
     // `tokenize` (logos cannot balance the holes' parens), never produced by
@@ -660,15 +661,19 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
             pos += 1;
             continue;
         }
-        // An interpolated string `"… \(expr) …"` (v0.43): only strings that
-        // actually contain a `\(` hole are hand-scanned here; plain strings
-        // fall through to the logos `StrLit` path unchanged. `\(` is an
-        // invalid escape in the logos grammar, so this never re-routes a
-        // currently-valid literal.
-        if bytes[pos] == b'"' && has_interp_hole(bytes, pos) {
-            let end = scan_str(bytes, source, pos, 0, file)?;
+        // A string literal in any of its forms (#2619): plain, raw, or
+        // multi-line. One hand-scanner validates and decodes the literal; a
+        // literal holding a `\(` hole lexes as `InterpStr`, any other as
+        // `StrLit`.
+        if string_open(bytes, pos).is_some() {
+            let (end, segments) = lex_string(source, pos, 0, file)?;
+            let kind = if segments.iter().any(|s| matches!(s, InterpSegment::Hole(_))) {
+                TokenKind::InterpStr
+            } else {
+                TokenKind::StrLit
+            };
             tokens.push(Token {
-                kind: TokenKind::InterpStr,
+                kind,
                 span: Span::new_in(file, pos, end),
             });
             pos = end;
@@ -819,40 +824,88 @@ fn expand_hole_token(source: &str, file: FileId, tok: Token, out: &mut Vec<Token
     }
 }
 
-/// Cheap routing pre-scan (v0.43): does the string opening at `start` contain a
-/// `\(` interpolation hole before it closes (or the line ends)? Decides whether
-/// `tokenize` hand-scans the string as an `InterpStr` or defers to logos for a
-/// plain `StrLit`. Deliberately tolerant — a malformed string with a hole is
-/// routed here so the hole-aware scanner produces the precise error.
-fn has_interp_hole(bytes: &[u8], start: usize) -> bool {
-    let mut i = start + 1;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\n' | b'"' => return false,
-            b'\\' => {
-                if bytes.get(i + 1) == Some(&b'(') {
-                    return true;
-                }
-                i += 2;
-            }
-            _ => i += 1,
-        }
-    }
-    false
+// ---- String literals (v0.43 interpolation; #2619 raw / multi-line / more escapes) ----
+
+/// The shape of a string literal opening at some offset.
+#[derive(Clone, Copy)]
+struct StringOpen {
+    /// `r"…"`, `r#"…"#`, `r"""…"""`: no escapes, no interpolation.
+    raw: bool,
+    /// `"""…"""` / `r"""…"""`: the body spans lines.
+    multi: bool,
+    /// Number of `#` between the `r` and the opening quote (single-line raw only).
+    hashes: usize,
+    /// Offset just past the opening delimiter (`"`, `"""`, `r#"`, …).
+    body: usize,
 }
 
-/// Scan a double-quoted string starting at `start` (the opening `"`), returning
-/// the byte offset just past the closing `"`. Recognises the four simple
-/// escapes plus `\(…)` interpolation holes, whose parens are balanced (and
-/// whose nested strings are skipped) by [`scan_hole`]. (v0.43.)
-fn scan_str(
-    bytes: &[u8],
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Does a string literal open at `start`? `r` opens a raw string only when it
+/// is *immediately* followed by `#`s and a `"`, so an identifier `r` followed by
+/// a (spaced) string is unaffected.
+fn string_open(bytes: &[u8], start: usize) -> Option<StringOpen> {
+    let raw = bytes.get(start) == Some(&b'r');
+    let mut p = start + usize::from(raw);
+    let mut hashes = 0;
+    if raw {
+        while bytes.get(p) == Some(&b'#') {
+            hashes += 1;
+            p += 1;
+        }
+    }
+    if bytes.get(p) != Some(&b'"') {
+        return None;
+    }
+    let multi = hashes == 0 && bytes[p..].starts_with(b"\"\"\"");
+    Some(StringOpen {
+        raw,
+        multi,
+        hashes,
+        body: if multi { p + 3 } else { p + 1 },
+    })
+}
+
+fn unterminated_string(file: FileId, start: usize, end: usize, multi: bool) -> CompileError {
+    let note = if multi {
+        "a multi-line string closes with `\"\"\"` on a line of its own"
+    } else {
+        "string literals must close with `\"` on the same line (use `\"\"\"` for a multi-line string); \
+         supported escapes: \\n \\r \\t \\0 \\\" \\\\ \\u{…} and `\\(…)` interpolation"
+    };
+    CompileError::new(
+        "bynk.lex.unterminated_string",
+        Span::new_in(file, start, end),
+        "unterminated string literal",
+    )
+    .with_note(note)
+}
+
+/// Span of the byte range `from..to`, advanced to a char boundary so it never
+/// splits a multibyte codepoint (a fuzz invariant).
+fn boundary_span(source: &str, file: FileId, from: usize, to: usize) -> Span {
+    let mut end = to.min(source.len());
+    while end < source.len() && !source.is_char_boundary(end) {
+        end += 1;
+    }
+    Span::new_in(file, from, end)
+}
+
+const ESCAPE_NOTE: &str = "supported escapes: \\n \\r \\t \\0 \\\" \\\\ \\u{…} \\(…)";
+
+/// Scan and decode the string literal opening at `start`, returning the offset
+/// just past it and its segments (literal chunks with escapes resolved, and the
+/// spans of any `\(…)` holes). This is the single scanner for every form.
+fn lex_string(
     source: &str,
     start: usize,
     depth: usize,
     file: FileId,
-) -> Result<usize, CompileError> {
-    debug_assert_eq!(bytes[start], b'"');
+) -> Result<(usize, Vec<InterpSegment>), CompileError> {
+    let bytes = source.as_bytes();
+    let open = string_open(bytes, start).expect("caller checked string_open");
     if depth > crate::MAX_NESTING_DEPTH {
         // Anchor on the opening `"` of the string that tipped over the limit.
         return Err(too_deeply_nested_interpolation(Span::new_in(
@@ -861,52 +914,345 @@ fn scan_str(
             start + 1,
         )));
     }
-    let mut i = start + 1;
+    let mut segments = Vec::new();
+    let mut chunk = String::new();
+    if open.multi {
+        let end = lex_multiline(source, start, open, depth, file, &mut segments, &mut chunk)?;
+        if !chunk.is_empty() {
+            segments.push(InterpSegment::Chunk(chunk));
+        }
+        return Ok((end, segments));
+    }
+    if open.raw {
+        // `r#"…"#`: the body runs to the first `"` followed by `hashes` `#`s.
+        let mut i = open.body;
+        loop {
+            if i >= bytes.len() || bytes[i] == b'\n' {
+                return Err(unterminated_string(file, start, i.min(bytes.len()), false));
+            }
+            if bytes[i] == b'"' && (1..=open.hashes).all(|k| bytes.get(i + k) == Some(&b'#')) {
+                break;
+            }
+            i += 1;
+        }
+        chunk.push_str(&source[open.body..i]);
+        if !chunk.is_empty() {
+            segments.push(InterpSegment::Chunk(chunk));
+        }
+        return Ok((i + 1 + open.hashes, segments));
+    }
+    let end = decode_run(
+        source,
+        open.body,
+        Stop::Quote(start),
+        depth,
+        file,
+        &mut segments,
+        &mut chunk,
+    )?;
+    if !chunk.is_empty() {
+        segments.push(InterpSegment::Chunk(chunk));
+    }
+    Ok((end + 1, segments))
+}
+
+/// Where a [`decode_run`] stops.
+#[derive(Clone, Copy)]
+enum Stop {
+    /// At the closing `"` of a single-line string (the payload is the literal's
+    /// start, for the unterminated error); a newline or end of input first is an
+    /// error.
+    Quote(usize),
+    /// At a fixed offset: one line of a multi-line string, where a bare `"""`
+    /// inside the line is an error (the closing delimiter has a line to itself).
+    End(usize),
+}
+
+/// Decode non-raw string text from `from`, appending to `chunk` / `segments`.
+/// Returns the offset where it stopped (the closing `"` for [`Stop::Quote`]).
+fn decode_run(
+    source: &str,
+    from: usize,
+    stop: Stop,
+    depth: usize,
+    file: FileId,
+    segments: &mut Vec<InterpSegment>,
+    chunk: &mut String,
+) -> Result<usize, CompileError> {
+    let bytes = source.as_bytes();
+    let limit = match stop {
+        Stop::Quote(_) => bytes.len(),
+        Stop::End(e) => e,
+    };
+    let mut i = from;
     loop {
-        if i >= bytes.len() || bytes[i] == b'\n' {
-            return Err(CompileError::new(
-                "bynk.lex.unterminated_string",
-                Span::new_in(file, start, i.min(bytes.len())),
-                "unterminated string literal",
-            )
-            .with_note(
-                "string literals must close with `\"` on the same line; \
-                 supported escapes are `\\n`, `\\t`, `\\\"`, `\\\\`, and `\\(…)` interpolation",
-            ));
+        if i >= limit {
+            match stop {
+                Stop::End(_) => return Ok(i),
+                Stop::Quote(start) => {
+                    return Err(unterminated_string(file, start, i.min(bytes.len()), false));
+                }
+            }
         }
         match bytes[i] {
-            b'"' => return Ok(i + 1),
-            b'\\' => match bytes.get(i + 1) {
-                Some(b'n' | b't' | b'"' | b'\\') => i += 2,
-                Some(b'(') => i = scan_hole(bytes, source, i + 2, depth + 1, file)?,
-                other => {
-                    let shown = other.map(|b| (*b as char).to_string()).unwrap_or_default();
-                    // Cover `\` plus the whole offending char, advanced to a char
-                    // boundary so the span never splits a multibyte codepoint
-                    // (e.g. `\é`) — a fuzz invariant.
-                    let mut end = (i + 2).min(bytes.len());
-                    while end < source.len() && !source.is_char_boundary(end) {
-                        end += 1;
+            b'\n' if matches!(stop, Stop::Quote(_)) => {
+                let Stop::Quote(start) = stop else {
+                    unreachable!()
+                };
+                return Err(unterminated_string(file, start, i, false));
+            }
+            b'"' => match stop {
+                Stop::Quote(_) => return Ok(i),
+                Stop::End(e) => {
+                    if bytes[i..e].starts_with(b"\"\"\"") {
+                        return Err(CompileError::new(
+                            "bynk.lex.multiline_close_not_own_line",
+                            Span::new_in(file, i, i + 3),
+                            "a `\"\"\"` inside a multi-line string closes it, but it is not on a line of its own",
+                        )
+                        .with_note(
+                            "put the closing `\"\"\"` on its own line, or escape a quote as `\\\"`",
+                        ));
                     }
-                    return Err(CompileError::new(
-                        "bynk.lex.bad_escape",
-                        Span::new_in(file, i, end),
-                        format!("invalid escape sequence `\\{shown}` in string literal"),
-                    )
-                    .with_note("supported escapes: \\n \\t \\\" \\\\ \\(…)"));
+                    chunk.push('"');
+                    i += 1;
                 }
             },
-            // Any other byte advances one position. UTF-8 continuation bytes
-            // are all >= 0x80, so they never collide with the ASCII specials.
-            _ => i += 1,
+            b'\\' => {
+                let next = if i + 1 < limit {
+                    Some(bytes[i + 1])
+                } else {
+                    None
+                };
+                match next {
+                    Some(b'n') => {
+                        chunk.push('\n');
+                        i += 2;
+                    }
+                    Some(b't') => {
+                        chunk.push('\t');
+                        i += 2;
+                    }
+                    Some(b'r') => {
+                        chunk.push('\r');
+                        i += 2;
+                    }
+                    Some(b'0') => {
+                        chunk.push('\0');
+                        i += 2;
+                    }
+                    Some(b'"') => {
+                        chunk.push('"');
+                        i += 2;
+                    }
+                    Some(b'\\') => {
+                        chunk.push('\\');
+                        i += 2;
+                    }
+                    Some(b'u') => {
+                        let (ch, after) = decode_unicode_escape(source, i, limit, file)?;
+                        chunk.push(ch);
+                        i = after;
+                    }
+                    Some(b'(') => {
+                        if !chunk.is_empty() {
+                            segments.push(InterpSegment::Chunk(std::mem::take(chunk)));
+                        }
+                        let hole_start = i + 2;
+                        let after = scan_hole(bytes, source, hole_start, depth + 1, file)?;
+                        // `after` is one past the matching `)`; the hole body is
+                        // everything up to that `)`.
+                        segments.push(InterpSegment::Hole(Span::new_in(
+                            file,
+                            hole_start,
+                            after - 1,
+                        )));
+                        i = after;
+                    }
+                    other => {
+                        let shown = other.map(|b| (b as char).to_string()).unwrap_or_default();
+                        // Cover `\` plus the whole offending char, advanced to a
+                        // char boundary.
+                        return Err(CompileError::new(
+                            "bynk.lex.bad_escape",
+                            boundary_span(source, file, i, i + 2),
+                            format!("invalid escape sequence `\\{shown}` in string literal"),
+                        )
+                        .with_note(ESCAPE_NOTE));
+                    }
+                }
+            }
+            // Any other byte: copy the whole char. UTF-8 continuation bytes are
+            // all >= 0x80, so they never collide with the ASCII specials.
+            _ => {
+                let ch = source[i..].chars().next().unwrap();
+                chunk.push(ch);
+                i += ch.len_utf8();
+            }
         }
     }
+}
+
+/// Decode `\u{…}` at `i` (the `\`): 1–6 hex digits naming a Unicode scalar
+/// value. Returns the char and the offset past the `}`. A lone surrogate
+/// (D800–DFFF) or a value above 10FFFF is a lexical error, so every literal is
+/// valid UTF-8 text.
+fn decode_unicode_escape(
+    source: &str,
+    i: usize,
+    limit: usize,
+    file: FileId,
+) -> Result<(char, usize), CompileError> {
+    let bytes = source.as_bytes();
+    let malformed = |end: usize| {
+        CompileError::new(
+            "bynk.lex.bad_escape",
+            Span::new_in(file, i, end),
+            "invalid `\\u{…}` escape in string literal",
+        )
+        .with_note(
+            "a Unicode escape is `\\u{` followed by 1 to 6 hex digits and `}`, e.g. `\\u{1F600}`",
+        )
+    };
+    let mut p = i + 2; // past `\u`
+    if p >= limit || bytes[p] != b'{' {
+        return Err(malformed(p));
+    }
+    p += 1;
+    let digits_start = p;
+    while p < limit && bytes[p].is_ascii_hexdigit() {
+        p += 1;
+    }
+    let digits = p - digits_start;
+    if digits == 0 || digits > 6 || p >= limit || bytes[p] != b'}' {
+        return Err(malformed(p.min(limit)));
+    }
+    let value = u32::from_str_radix(&source[digits_start..p], 16).expect("hex digits");
+    p += 1; // past `}`
+    match char::from_u32(value) {
+        Some(ch) => Ok((ch, p)),
+        None => Err(CompileError::new(
+            "bynk.lex.bad_unicode_escape",
+            Span::new_in(file, i, p),
+            format!("`\\u{{{value:X}}}` is not a Unicode scalar value"),
+        )
+        .with_note(
+            "surrogate code points (D800 to DFFF) and values above 10FFFF cannot appear in a string",
+        )),
+    }
+}
+
+/// Scan and decode a multi-line literal (`"""` / `r"""`) opening at `start`.
+/// Returns the offset just past the closing `"""`. The closing delimiter sits on
+/// a line of its own; its indentation is stripped from every body line, and a
+/// non-blank line indented less is an error. Newlines in the value are always
+/// `\n`, whatever the file's line endings.
+fn lex_multiline(
+    source: &str,
+    start: usize,
+    open: StringOpen,
+    depth: usize,
+    file: FileId,
+    segments: &mut Vec<InterpSegment>,
+    chunk: &mut String,
+) -> Result<usize, CompileError> {
+    let bytes = source.as_bytes();
+    // The opening `"""` is followed by a newline (`\n` or `\r\n`).
+    let mut pos = match (bytes.get(open.body), bytes.get(open.body + 1)) {
+        (Some(b'\n'), _) => open.body + 1,
+        (Some(b'\r'), Some(b'\n')) => open.body + 2,
+        _ => {
+            return Err(CompileError::new(
+                "bynk.lex.multiline_open",
+                Span::new_in(file, start, open.body),
+                "the opening `\"\"\"` of a multi-line string must be followed by a newline",
+            )
+            .with_note("the text starts on the next line; write `\"\"\"` then press enter"));
+        }
+    };
+    // Pass 1: split into lines up to the closing line.
+    let mut lines: Vec<(usize, usize)> = Vec::new(); // (start, end) excluding the `\n` / `\r\n`
+    let (indent_len, end) = loop {
+        if pos >= bytes.len() {
+            return Err(unterminated_string(file, start, bytes.len(), true));
+        }
+        let line_end = bytes[pos..]
+            .iter()
+            .position(|&b| b == b'\n')
+            .map_or(bytes.len(), |n| pos + n);
+        let mut ws = pos;
+        while ws < line_end && matches!(bytes[ws], b' ' | b'\t') {
+            ws += 1;
+        }
+        // A closing delimiter ends its line's text: `"""quoted"""` is body text
+        // holding a stray `"""`, which `decode_run` reports.
+        if bytes[ws..line_end].starts_with(b"\"\"\"")
+            && !bytes
+                .get(ws + 3)
+                .is_some_and(|&b| is_ident_byte(b) || b == b'"')
+        {
+            break (ws - pos, ws + 3);
+        }
+        let trimmed_end = if line_end > pos && bytes[line_end - 1] == b'\r' {
+            line_end - 1
+        } else {
+            line_end
+        };
+        lines.push((pos, trimmed_end));
+        if line_end >= bytes.len() {
+            return Err(unterminated_string(file, start, bytes.len(), true));
+        }
+        pos = line_end + 1;
+    };
+    let closing_line_start = end - 3 - indent_len;
+    let indent = &bytes[closing_line_start..closing_line_start + indent_len];
+    // Pass 2: strip the indentation and decode each line.
+    for (n, &(ls, le)) in lines.iter().enumerate() {
+        if n > 0 {
+            chunk.push('\n');
+        }
+        let line = &bytes[ls..le];
+        let blank = line.iter().all(|b| matches!(b, b' ' | b'\t'));
+        let content = if line.starts_with(indent) {
+            ls + indent_len
+        } else if blank {
+            le // a blank line shorter than the indentation is empty
+        } else {
+            return Err(CompileError::new(
+                "bynk.lex.multiline_indent",
+                boundary_span(source, file, ls, le),
+                "a line of this multi-line string is indented less than its closing `\"\"\"`",
+            )
+            .with_note(if line.len() >= indent.len() {
+                "the indentation must match the closing delimiter's character for character: \
+                 a tab does not match a space, so mixed tabs and spaces fail here"
+            } else {
+                "every non-blank line must start with the closing delimiter's indentation, \
+                 which is stripped from the value"
+            }));
+        };
+        if open.raw {
+            let text = &source[content..le];
+            if let Some(at) = text.find("\"\"\"") {
+                return Err(CompileError::new(
+                    "bynk.lex.multiline_close_not_own_line",
+                    Span::new_in(file, content + at, content + at + 3),
+                    "a `\"\"\"` inside a multi-line string closes it, but it is not on a line of its own",
+                )
+                .with_note("put the closing `\"\"\"` on its own line"));
+            }
+            chunk.push_str(text);
+        } else {
+            decode_run(source, content, Stop::End(le), depth, file, segments, chunk)?;
+        }
+    }
+    Ok(end)
 }
 
 /// Scan an interpolation hole body. `start` points just past the `\(`; returns
 /// the offset just past the matching `)`. Tracks paren depth and skips nested
 /// strings (whose own parens must not close the hole), recursing through
-/// [`scan_str`] so nested interpolation nests correctly. (v0.43.)
+/// [`lex_string`] so nested interpolation nests correctly. (v0.43.)
 fn scan_hole(
     bytes: &[u8],
     source: &str,
@@ -949,15 +1295,43 @@ fn scan_hole(
                     return Ok(i);
                 }
             }
-            b'"' => i = scan_str(bytes, source, i, nesting + 1, file)?,
+            b'"' => i = nested_string(source, i, nesting, file)?,
+            // A nested raw string: `r"…"` (not the tail of an identifier).
+            b'r' if (i == start || !is_ident_byte(bytes[i - 1]))
+                && string_open(bytes, i).is_some() =>
+            {
+                i = nested_string(source, i, nesting, file)?
+            }
             _ => i += 1,
         }
     }
 }
 
+/// Skip a string literal nested in an interpolation hole. A hole closes on the
+/// line it opens on, so a multi-line string cannot sit inside one (#2619).
+fn nested_string(
+    source: &str,
+    at: usize,
+    nesting: usize,
+    file: FileId,
+) -> Result<usize, CompileError> {
+    if string_open(source.as_bytes(), at).is_some_and(|o| o.multi) {
+        return Err(CompileError::new(
+            "bynk.lex.multiline_in_hole",
+            Span::new_in(file, at, at + 3),
+            "a multi-line string cannot appear inside an interpolation hole",
+        )
+        .with_note(
+            "an interpolation hole `\\(…)` closes on the line it opens on; \
+             bind the multi-line text to a name and interpolate that",
+        ));
+    }
+    Ok(lex_string(source, at, nesting + 1, file)?.0)
+}
+
 /// The bounded-depth diagnostic for interpolation that nests past
 /// [`crate::MAX_NESTING_DEPTH`]. `\("\("\(…` mutually recurses
-/// [`scan_str`] ↔ [`scan_hole`], one stack frame per level, so an unbounded
+/// [`lex_string`] ↔ [`scan_hole`], one stack frame per level, so an unbounded
 /// scanner overflows and aborts `tokenize` (#713). `span` anchors the report on
 /// the opener that tipped over the limit (the `"` or the `\(`).
 fn too_deeply_nested_interpolation(span: Span) -> CompileError {
@@ -984,65 +1358,119 @@ pub(crate) enum InterpSegment {
     Hole(Span),
 }
 
-/// Split an `InterpStr` token (its `span` covers the whole `"…"`) into chunks
-/// and hole spans. Escapes in the chunks are resolved here (mirroring
-/// [`parse_string_literal`]); holes are returned as spans for the parser to
-/// re-lex and parse as expressions. (v0.43.)
+/// Split a string token (its `span` covers the whole lexeme) into chunks and
+/// hole spans. Escapes in the chunks are resolved by [`lex_string`], the one
+/// decoder every form shares; holes are returned as spans for the parser to
+/// re-lex and parse as expressions. (v0.43, #2619.)
 pub(crate) fn split_interp(source: &str, span: Span) -> Result<Vec<InterpSegment>, CompileError> {
-    let bytes = source.as_bytes();
-    let inner_end = span.end - 1; // the closing `"`
-    let mut segments = Vec::new();
-    let mut chunk = String::new();
-    let mut i = span.start + 1; // past the opening `"`
-    while i < inner_end {
-        match bytes[i] {
-            b'\\' => match bytes[i + 1] {
-                b'n' => {
-                    chunk.push('\n');
-                    i += 2;
-                }
-                b't' => {
-                    chunk.push('\t');
-                    i += 2;
-                }
-                b'"' => {
-                    chunk.push('"');
-                    i += 2;
-                }
-                b'\\' => {
-                    chunk.push('\\');
-                    i += 2;
-                }
-                b'(' => {
-                    if !chunk.is_empty() {
-                        segments.push(InterpSegment::Chunk(std::mem::take(&mut chunk)));
-                    }
-                    let hole_start = i + 2;
-                    let after = scan_hole(bytes, source, hole_start, 0, span.file)?;
-                    // `after` is one past the matching `)`; the hole body is
-                    // everything up to that `)`.
-                    segments.push(InterpSegment::Hole(Span::new_in(
-                        span.file,
-                        hole_start,
-                        after - 1,
-                    )));
-                    i = after;
-                }
-                // The lexer already validated every escape, so nothing else
-                // can appear here.
-                other => unreachable!("unvalidated escape `\\{}` in InterpStr", other as char),
-            },
-            _ => {
-                let ch = source[i..].chars().next().unwrap();
-                chunk.push(ch);
-                i += ch.len_utf8();
-            }
+    lex_string(source, span.start, 0, span.file).map(|(_, segments)| segments)
+}
+
+/// A highlighted part of a string literal (#2619), for the semantic tokens.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StringPart {
+    /// An escape sequence (`\n`, `\u{1F600}`, …).
+    Escape,
+    /// A raw literal's delimiter (`r#"` or `"#`), which the TextMate grammar
+    /// cannot tell from an identifier `r` and a quote.
+    RawDelimiter,
+}
+
+/// The escape sequences and raw delimiters of every string literal in `source`
+/// (including those inside interpolation holes), for the editor's semantic
+/// tokens. Empty when the file does not lex.
+pub fn string_parts(source: &str) -> Vec<(Span, StringPart)> {
+    let mut out = Vec::new();
+    if let Ok(tokens) = tokenize(source) {
+        for tok in tokens {
+            string_parts_of(source, tok, &mut out);
         }
     }
-    if !chunk.is_empty() {
-        segments.push(InterpSegment::Chunk(chunk));
+    out
+}
+
+/// [`string_parts`] for one token, recursing into the holes of an
+/// interpolated string (each hole re-lexed and rebased to absolute offsets).
+fn string_parts_of(source: &str, tok: Token, out: &mut Vec<(Span, StringPart)>) {
+    if !matches!(tok.kind, TokenKind::StrLit | TokenKind::InterpStr) {
+        return;
     }
-    Ok(segments)
+    let bytes = source.as_bytes();
+    let file = tok.span.file;
+    let Some(open) = string_open(bytes, tok.span.start) else {
+        return;
+    };
+    if open.raw {
+        // `r#"` and the closing `"#`; a multi-line raw literal's `r"""` /
+        // `"""` likewise.
+        let close = if open.multi { 3 } else { 1 + open.hashes };
+        out.push((
+            Span::new_in(file, tok.span.start, open.body),
+            StringPart::RawDelimiter,
+        ));
+        out.push((
+            Span::new_in(file, tok.span.end - close, tok.span.end),
+            StringPart::RawDelimiter,
+        ));
+        return;
+    }
+    let Ok(segments) = split_interp(source, tok.span) else {
+        return;
+    };
+    let holes: Vec<Span> = segments
+        .iter()
+        .filter_map(|s| match s {
+            InterpSegment::Hole(h) => Some(*h),
+            InterpSegment::Chunk(_) => None,
+        })
+        .collect();
+    let mut i = open.body;
+    let end = tok.span.end - if open.multi { 3 } else { 1 };
+    while i < end {
+        if bytes[i] != b'\\' {
+            i += 1;
+            continue;
+        }
+        if let Some(hole) = holes.iter().find(|h| h.start == i + 2) {
+            i = hole.end + 1; // past the hole's `)`
+            continue;
+        }
+        let len = if bytes.get(i + 1) == Some(&b'u') {
+            bytes[i..end]
+                .iter()
+                .position(|&b| b == b'}')
+                .map_or(2, |n| n + 1)
+        } else {
+            2
+        };
+        out.push((Span::new_in(file, i, i + len), StringPart::Escape));
+        i += len;
+    }
+    for hole in holes {
+        let Ok(hole_tokens) = tokenize_in(&source[hole.range()], file) else {
+            continue;
+        };
+        for mut t in hole_tokens {
+            t.span = Span::new_in(file, t.span.start + hole.start, t.span.end + hole.start);
+            string_parts_of(source, t, out);
+        }
+    }
+}
+
+/// The value of a hole-free string lexeme (any form), for callers that hold the
+/// lexeme rather than the surrounding source. `span` locates the lexeme in the
+/// file so a (normally unreachable — the lexer already validated it) error
+/// points at the right place.
+pub fn decode_string_literal(lexeme: &str, span: Span) -> Result<String, CompileError> {
+    let (_, segments) =
+        lex_string(lexeme, 0, 0, span.file).map_err(|e| e.offset_spans(span.start))?;
+    let mut out = String::with_capacity(lexeme.len());
+    for segment in segments {
+        if let InterpSegment::Chunk(text) = segment {
+            out.push_str(&text);
+        }
+    }
+    Ok(out)
 }
 
 /// If a `---` doc-block marker line starts at or shortly after `pos` (which
@@ -1476,7 +1904,7 @@ mod tests {
 
     #[test]
     fn deeply_nested_interpolation_is_bounded_not_overflowed() {
-        // `"\("\("\(…` mutually recurses scan_str <-> scan_hole, one frame per
+        // `"\("\("\(…` mutually recurses lex_string <-> scan_hole, one frame per
         // level, and an unbounded scanner overflows `tokenize` and aborts the
         // process (#713). Well past the limit it must return a bounded-depth
         // diagnostic instead. The holes are left open so the depth guard, not a
@@ -1903,6 +2331,197 @@ mod tests {
     fn bad_escape_in_interp_string_is_an_error() {
         let err = tokenize(r#""a \q \(x)""#).unwrap_err();
         assert_eq!(err.category, "bynk.lex.bad_escape");
+    }
+
+    /// The decoded value of the one string token in `src`.
+    fn string_value(src: &str) -> String {
+        let toks = tokenize(src).unwrap();
+        assert_eq!(toks.len(), 1, "{src:?}");
+        assert_eq!(toks[0].kind, TokenKind::StrLit, "{src:?}");
+        decode_string_literal(&src[toks[0].span.range()], toks[0].span).unwrap()
+    }
+
+    /// #2619: `\r`, `\0` and `\u{…}` join the escape set.
+    #[test]
+    fn new_escapes_decode() {
+        assert_eq!(string_value(r#""a\r\nb""#), "a\r\nb");
+        assert_eq!(string_value(r#""\0""#), "\0");
+        assert_eq!(string_value(r#""\u{1F600}""#), "\u{1F600}");
+        assert_eq!(string_value(r#""a\u{00A0}b""#), "a\u{A0}b");
+        assert_eq!(string_value(r#""\u{41}\u{000041}""#), "AA");
+        assert_eq!(string_value(r#""\u{10FFFF}""#), "\u{10FFFF}");
+    }
+
+    #[test]
+    fn bad_unicode_escapes_are_lexical_errors() {
+        for src in [r#""\u{D800}""#, r#""\u{DFFF}""#, r#""\u{110000}""#] {
+            assert_eq!(
+                tokenize(src).unwrap_err().category,
+                "bynk.lex.bad_unicode_escape",
+                "{src}"
+            );
+        }
+        for src in [
+            r#""\u""#,
+            r#""\u{}""#,
+            r#""\u{1234567}""#,
+            r#""\u{12""#,
+            r#""\u{zz}""#,
+        ] {
+            assert_eq!(
+                tokenize(src).unwrap_err().category,
+                "bynk.lex.bad_escape",
+                "{src}"
+            );
+        }
+    }
+
+    #[test]
+    fn raw_strings_keep_backslashes_and_do_not_interpolate() {
+        assert_eq!(string_value(r#"r"\d+\.\d+""#), "\\d+\\.\\d+");
+        assert_eq!(string_value(r#"r"a\(b)""#), "a\\(b)");
+        assert_eq!(string_value(r###"r#"say "hi""#"###), "say \"hi\"");
+        assert_eq!(string_value(r#"r"""#), "");
+        // `r` followed by a space is an identifier then a string.
+        use TokenKind::*;
+        assert_eq!(kinds(r#"r "x""#), vec![Ident, StrLit]);
+        assert_eq!(kinds(r#"bar"x""#), vec![Ident, StrLit]);
+        // A raw string is not terminated by a newline.
+        assert_eq!(
+            tokenize("r\"abc\n\"").unwrap_err().category,
+            "bynk.lex.unterminated_string"
+        );
+    }
+
+    #[test]
+    fn multiline_strings_strip_the_closing_indentation() {
+        let src = "\"\"\"\n    SELECT id\n      FROM t\n\n    \"\"\"";
+        assert_eq!(string_value(src), "SELECT id\n  FROM t\n");
+        // No indentation, and escapes still apply.
+        assert_eq!(string_value("\"\"\"\na\\tb\n\"\"\""), "a\tb");
+        // An empty body.
+        assert_eq!(string_value("\"\"\"\n\"\"\""), "");
+        // Quotes inside are fine; the raw form keeps backslashes.
+        assert_eq!(
+            string_value("\"\"\"\n  a \"q\" \"\"b\n  \"\"\""),
+            "a \"q\" \"\"b"
+        );
+        assert_eq!(string_value("r\"\"\"\n  \\d+\n  \"\"\""), "\\d+");
+    }
+
+    /// Decision D: newlines are `\n` whatever the source's line endings.
+    #[test]
+    fn multiline_newlines_are_normalised() {
+        assert_eq!(string_value("\"\"\"\r\n  a\r\n  b\r\n  \"\"\""), "a\nb");
+    }
+
+    #[test]
+    fn multiline_with_a_hole_is_an_interpolated_string() {
+        use TokenKind::*;
+        assert_eq!(kinds("\"\"\"\n  hi \\(name)\n  \"\"\""), vec![InterpStr]);
+    }
+
+    /// Pinned by review of #2619: edge cases of the multi-line rules.
+    #[test]
+    fn multiline_edge_cases() {
+        // A hole at the start of an indented line: the margin is stripped
+        // first, never inside the hole.
+        let src = "\"\"\"\n    \\(a)\n      \\(b) x\n    \"\"\"";
+        let toks = tokenize(src).unwrap();
+        assert_eq!(toks[0].kind, TokenKind::InterpStr);
+        let segs = split_interp(src, toks[0].span).unwrap();
+        let shape: Vec<String> = segs
+            .iter()
+            .map(|s| match s {
+                InterpSegment::Chunk(c) => format!("{c:?}"),
+                InterpSegment::Hole(h) => src[h.range()].to_string(),
+            })
+            .collect();
+        assert_eq!(shape, ["a", "\"\\n  \"", "b", "\" x\""]);
+        // A whitespace-only line shallower than the margin is empty.
+        assert_eq!(
+            string_value("\"\"\"\n    a\n  \n    b\n    \"\"\""),
+            "a\n\nb"
+        );
+        // Mixed tabs and spaces that do not match the margin exactly.
+        let err = tokenize("\"\"\"\n\t  a\n    \"\"\"").unwrap_err();
+        assert_eq!(err.category, "bynk.lex.multiline_indent");
+        assert!(err.notes[0].contains("character for character"));
+        // CRLF inside a raw multi-line string; a lone CR is not a line break.
+        assert_eq!(
+            string_value("r\"\"\"\r\n  a\\\r\n  b\r\n  \"\"\""),
+            "a\\\nb"
+        );
+        assert_eq!(string_value("\"\"\"\n  a\rb\n  \"\"\""), "a\rb");
+        // The raw form holds `"` and `""` but not `"""`.
+        assert_eq!(string_value("r\"\"\"\n  \"a\"\" b\n  \"\"\""), "\"a\"\" b");
+        // Empty `\u{}` and an eight-digit escape.
+        assert!(tokenize(r#""\u{}""#).is_err());
+        assert!(tokenize(r#""\u{00000041}""#).is_err());
+    }
+
+    /// Review of #2619: a multi-line string cannot nest in a hole, and a
+    /// `"""` followed by text is not a closing delimiter.
+    #[test]
+    fn multiline_in_hole_and_stray_delimiters() {
+        let cat = |src: &str| tokenize(src).unwrap_err().category;
+        assert_eq!(
+            cat("\"a \\(f(\"\"\"\n  x\n  \"\"\")) b\""),
+            "bynk.lex.multiline_in_hole"
+        );
+        assert_eq!(
+            cat("\"\"\"\n  \\(g(\"\"\"\n  x\n  \"\"\"))\n  \"\"\""),
+            "bynk.lex.multiline_in_hole"
+        );
+        // `"""quoted"""` on a body line is a stray delimiter, not a close.
+        assert_eq!(
+            cat("\"\"\"\n  \"\"\"quoted\"\"\"\n  \"\"\""),
+            "bynk.lex.multiline_close_not_own_line"
+        );
+        // A closing delimiter may be followed by punctuation.
+        let toks = tokenize("\"\"\"\n  a\n  \"\"\", x)").unwrap();
+        assert_eq!(toks.len(), 4);
+    }
+
+    #[test]
+    fn multiline_errors() {
+        let cat = |src: &str| tokenize(src).unwrap_err().category;
+        // Under-indented line.
+        assert_eq!(
+            cat("\"\"\"\n    a\n  b\n    \"\"\""),
+            "bynk.lex.multiline_indent"
+        );
+        // Text after the opening delimiter.
+        assert_eq!(cat("\"\"\"abc\n\"\"\""), "bynk.lex.multiline_open");
+        // Never closed.
+        assert_eq!(cat("\"\"\"\n  a\n"), "bynk.lex.unterminated_string");
+        // A closing delimiter that shares a line with text.
+        assert_eq!(
+            cat("\"\"\"\n  a \"\"\" b\n  \"\"\""),
+            "bynk.lex.multiline_close_not_own_line"
+        );
+    }
+
+    /// #2619: the semantic-token parts of the three string forms.
+    #[test]
+    fn string_parts_cover_escapes_and_raw_delimiters() {
+        let src = "\"a\\n\\u{41}\" r#\"x\\n\"# \"\"\"\n  \\t \\(\"\\r\")\n  \"\"\"";
+        let texts: Vec<(&str, StringPart)> = string_parts(src)
+            .into_iter()
+            .map(|(s, p)| (&src[s.range()], p))
+            .collect();
+        use StringPart::*;
+        assert_eq!(
+            texts,
+            vec![
+                ("\\n", Escape),
+                ("\\u{41}", Escape),
+                ("r#\"", RawDelimiter),
+                ("\"#", RawDelimiter),
+                ("\\t", Escape),
+                ("\\r", Escape),
+            ]
+        );
     }
 
     fn doc_block_span(source: &str) -> Span {

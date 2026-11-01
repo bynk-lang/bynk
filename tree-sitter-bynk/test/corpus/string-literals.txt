@@ -1,0 +1,101 @@
+==========================
+string — new escapes
+==========================
+
+commons d {
+	fn f() -> String { "a\r\n\0\u{1F600}\u{00A0}" }
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (base_type)
+      (block
+        (string_literal
+          (escape_sequence)
+          (escape_sequence)
+          (escape_sequence)
+          (escape_sequence)
+          (escape_sequence))))))
+
+==========================
+string — raw forms
+==========================
+
+commons d {
+	fn a() -> String { r"\d+\.\d+" }
+	fn b() -> String { r#"say "hi""# }
+	fn c() -> String { r"" }
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (base_type)
+      (block
+        (string_literal
+          (raw_string))))
+    (fn_decl
+      (identifier)
+      (base_type)
+      (block
+        (string_literal
+          (raw_string))))
+    (fn_decl
+      (identifier)
+      (base_type)
+      (block
+        (string_literal
+          (raw_string))))))
+
+==========================
+string — multi-line
+==========================
+
+commons d {
+	fn sql(name: String) -> String {
+		"""
+		SELECT "id", ""x""
+		  FROM t WHERE n = \(name)\tend
+		"""
+	}
+	fn raw() -> String {
+		r"""
+		^\d+$
+		"""
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (base_type)
+      (block
+        (string_literal
+          (string_interpolation
+            (identifier))
+          (escape_sequence))))
+    (fn_decl
+      (identifier)
+      (base_type)
+      (block
+        (string_literal
+          (raw_string))))))

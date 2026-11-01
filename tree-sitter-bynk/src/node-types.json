@@ -11048,6 +11048,14 @@
       "required": false,
       "types": [
         {
+          "type": "escape_sequence",
+          "named": true
+        },
+        {
+          "type": "raw_string",
+          "named": true
+        },
+        {
           "type": "string_interpolation",
           "named": true
         }
@@ -12858,6 +12866,10 @@
     "named": false
   },
   {
+    "type": "\"\"\"",
+    "named": false
+  },
+  {
     "type": "&&",
     "named": false
   },
@@ -13256,6 +13268,10 @@
     "named": false
   },
   {
+    "type": "escape_sequence",
+    "named": true
+  },
+  {
     "type": "event",
     "named": false
   },
@@ -13419,6 +13435,10 @@
   {
     "type": "queue",
     "named": false
+  },
+  {
+    "type": "raw_string",
+    "named": true
   },
   {
     "type": "rejected",

@@ -1,0 +1,1 @@
+bynk.lex.multiline_close_not_own_line a `"""` inside a multi-line string closes it, but it is not on a line of its own

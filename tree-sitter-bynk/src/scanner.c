@@ -31,6 +31,7 @@
 enum TokenType {
     DOC_BLOCK,
     DOC_LINE,
+    RAW_STRING,
 };
 
 void *tree_sitter_bynk_external_scanner_create(void) { return NULL; }
@@ -77,10 +78,68 @@ static bool match_marker_line(TSLexer *l) {
     return false;
 }
 
+// #2619: a raw string literal — `r"…"`, `r#"…"#` (any number of `#`), or the
+// multi-line `r"""…"""`. No escapes, no interpolation, so the body is opaque:
+// only the closing delimiter matters, and counting `#`s is beyond a regex
+// token. The lexer is at the `r` on entry.
+static bool scan_raw_string(TSLexer *l) {
+    advance(l); // `r`
+    int hashes = 0;
+    while (l->lookahead == '#') {
+        advance(l);
+        hashes++;
+    }
+    if (l->lookahead != '"') {
+        return false;
+    }
+    advance(l); // opening `"`
+    if (hashes == 0 && l->lookahead == '"') {
+        advance(l); // second quote: `r""` (empty) or the start of `r"""`
+        if (l->lookahead != '"') {
+            l->result_symbol = RAW_STRING;
+            return true;
+        }
+        advance(l); // `r"""`: a multi-line raw string closes at the next `"""`
+        int quotes = 0;
+        while (l->lookahead != 0) {
+            if (l->lookahead == '"') {
+                quotes++;
+                advance(l);
+                if (quotes == 3) {
+                    l->result_symbol = RAW_STRING;
+                    return true;
+                }
+            } else {
+                quotes = 0;
+                advance(l);
+            }
+        }
+        return false;
+    }
+    // Single line: the body runs to a `"` followed by `hashes` `#`s.
+    while (l->lookahead != 0 && l->lookahead != '\n') {
+        if (l->lookahead == '"') {
+            advance(l);
+            int seen = 0;
+            while (seen < hashes && l->lookahead == '#') {
+                advance(l);
+                seen++;
+            }
+            if (seen == hashes) {
+                l->result_symbol = RAW_STRING;
+                return true;
+            }
+        } else {
+            advance(l);
+        }
+    }
+    return false;
+}
+
 bool tree_sitter_bynk_external_scanner_scan(void *payload, TSLexer *lexer,
                                             const bool *valid_symbols) {
     (void)payload;
-    if (!valid_symbols[DOC_BLOCK] && !valid_symbols[DOC_LINE]) {
+    if (!valid_symbols[DOC_BLOCK] && !valid_symbols[DOC_LINE] && !valid_symbols[RAW_STRING]) {
         return false;
     }
     // A one-line doc must be first on its line: the scanner starts at column
@@ -99,6 +158,9 @@ bool tree_sitter_bynk_external_scanner_scan(void *payload, TSLexer *lexer,
             first_on_line = true;
         }
         skip(lexer);
+    }
+    if (lexer->lookahead == 'r') {
+        return valid_symbols[RAW_STRING] && scan_raw_string(lexer);
     }
     if (lexer->lookahead != '-') {
         return false;

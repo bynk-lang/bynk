@@ -1,0 +1,1 @@
+bynk.lex.multiline_open the opening `"""` of a multi-line string must be followed by a newline
