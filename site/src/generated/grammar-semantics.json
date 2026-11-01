@@ -1509,7 +1509,7 @@
     },
     {
       "code": "bynk.visibility.private_not_allowed",
-      "summary": "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset` or `embed` in a commons or context."
+      "summary": "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset`, `embed` or `const` in a commons or context."
     }
   ],
   "where_clause": [

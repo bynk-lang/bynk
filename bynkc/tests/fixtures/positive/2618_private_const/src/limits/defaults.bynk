@@ -1,0 +1,11 @@
+commons limits
+
+// A unit-private constant and a private constant of a private type. Both are
+// visible in `limits/plans.bynk`, another file of this unit, and to the
+// unit's suite, but never through `uses`.
+
+private const Step: Int = 5
+
+private type Window = { size: Int, offset: Int }
+
+private const Narrow: Window = Window { size: 2, offset: 1 }

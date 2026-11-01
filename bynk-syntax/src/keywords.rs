@@ -251,7 +251,7 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
     ),
     k(
         "private",
-        "Before a `fn`, `type`, `messages`, `asset` or `embed` declaration in a commons or context: visible only within its own unit (and that unit's suites), never through `uses` (`private fn helper(…)`).",
+        "Before a `fn`, `type`, `messages`, `asset`, `embed` or `const` declaration in a commons or context: visible only within its own unit (and that unit's suites), never through `uses` (`private fn helper(…)`).",
     ),
     k(
         "removed",

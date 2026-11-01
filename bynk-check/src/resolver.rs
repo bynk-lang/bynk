@@ -951,7 +951,8 @@ pub fn split_broken_decl_echoes(
 pub struct PrivateImport {
     /// The commons that declares it.
     pub unit: String,
-    /// `"function"`, `"type"`, `"method"`, `"asset"` or `"embed"`.
+    /// `"function"`, `"type"`, `"method"`, `"asset"`, `"embed"` or
+    /// `"constant"`.
     pub kind: &'static str,
 }
 

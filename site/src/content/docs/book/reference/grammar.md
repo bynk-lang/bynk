@@ -851,7 +851,7 @@ usable as an ordinary identifier elsewhere.
 {{#grammar visibility_modifier}}
 
 `private` (#2618), written immediately before a `type`, `fn`, `messages`,
-`asset` or `embed` declaration, makes it unit-private: visible across its own
+`asset`, `embed` or `const` declaration, makes it unit-private: visible across its own
 unit's files and to that unit's suites, never through `uses`. `private` is a
 contextual keyword, recognised only in that position, so
 `@cache(scope: private)` and a binding named `private` are ordinary

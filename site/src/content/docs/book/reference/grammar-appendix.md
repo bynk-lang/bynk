@@ -40,7 +40,7 @@ record_field ::= identifier ":" type_ref ("where" refinement)? ("=" expression)?
 event_decl ::= "event" identifier store_annotation* "=" record_type
 asset_decl ::= visibility_modifier? "asset" identifier "=" string_literal ("at" string_literal)?
 embed_decl ::= visibility_modifier? "embed" identifier "=" string_literal
-const_decl ::= "const" identifier ":" type_ref "=" expression
+const_decl ::= visibility_modifier? "const" identifier ":" type_ref "=" expression
 sum_type ::= sum_variant+ ("embeds" type_ref "as" constant_name ("," type_ref "as" constant_name)*)?
 sum_variant ::= "|" constant_name ("(" (variant_payload_field ("," variant_payload_field)*)? ","? ")")?
 variant_payload_field ::= identifier ":" type_ref

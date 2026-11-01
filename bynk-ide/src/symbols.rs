@@ -653,7 +653,7 @@ pub fn describe_par_at(source: &str, offset: usize) -> Option<String> {
 
 /// #2618: a hover for the contextual `private` modifier under the cursor:
 /// an identifier spelled `private` immediately before a `fn`, `type`,
-/// `messages`, `asset` or `embed` keyword, the one position the parser reads
+/// `messages`, `asset`, `embed` or `const` keyword, the one position the parser reads
 /// it as the modifier. `None` anywhere else, where `private` is an ordinary
 /// name.
 pub fn describe_private_at(source: &str, offset: usize) -> Option<String> {
@@ -669,7 +669,12 @@ pub fn describe_private_at(source: &str, offset: usize) -> Option<String> {
     let next = tokens.get(idx + 1)?.kind;
     if !matches!(
         next,
-        TokenKind::Fn | TokenKind::Type | TokenKind::Messages | TokenKind::Asset | TokenKind::Embed
+        TokenKind::Fn
+            | TokenKind::Type
+            | TokenKind::Messages
+            | TokenKind::Asset
+            | TokenKind::Embed
+            | TokenKind::Const
     ) {
         return None;
     }
@@ -2496,7 +2501,9 @@ pub(crate) fn describe_embed(e: &EmbedDecl) -> String {
 /// and initialiser), then its doc.
 pub(crate) fn describe_const(c: &ConstDecl) -> String {
     let mut out = format!(
-        "```bynk\nconst {}: {} = {}\n```\n",
+        "```bynk\n{}const {}: {} = {}\n```\n",
+        // The unit-private modifier, as written.
+        if c.private.is_some() { "private " } else { "" },
         c.name.name,
         type_ref_str(&c.ty),
         bynk_fmt::expr_to_string(&c.init)
@@ -2838,6 +2845,25 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// A constant's hover shows its `private` modifier as written, and the
+    /// modifier itself hovers before `const` as before the other kinds.
+    #[test]
+    fn private_const_hover_shows_the_modifier() {
+        let src = "commons m\n\nprivate const MaxRetries: Int = 3\n\nconst Shown: Int = 1\n";
+        let tokens = tokenize(src).unwrap();
+        let (Some(SourceUnit::Commons(c)), _) = parse_unit_with_recovery(&tokens, src) else {
+            panic!("a commons");
+        };
+        let hidden = describe_item(&c.items[0], "MaxRetries").unwrap();
+        assert!(
+            hidden.starts_with("```bynk\nprivate const MaxRetries: Int = 3\n"),
+            "{hidden}"
+        );
+        let shown = describe_item(&c.items[1], "Shown").unwrap();
+        assert!(shown.starts_with("```bynk\nconst Shown"), "{shown}");
+        assert!(describe_private_at(src, src.find("private").unwrap()).is_some());
+    }
+
     /// #2640: `par` hovers only as the head of a `par { … }` block.
     #[test]
     fn par_hover_is_for_the_block_keyword_only() {

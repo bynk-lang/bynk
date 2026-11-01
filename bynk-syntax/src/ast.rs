@@ -710,7 +710,7 @@ impl CommonsItem {
 
     /// #2618: the span of the item's `private` modifier, when it has one.
     /// Only the kinds that may carry the modifier (`fn`, `type`, `messages`,
-    /// `asset`, `embed`) ever answer `Some`.
+    /// `asset`, `embed`, `const`) ever answer `Some`.
     pub fn private_span(&self) -> Option<Span> {
         match self {
             CommonsItem::Type(t) => t.private,
@@ -718,15 +718,13 @@ impl CommonsItem {
             CommonsItem::Messages(m) => m.private,
             CommonsItem::Asset(a) => a.private,
             CommonsItem::Embed(e) => e.private,
+            CommonsItem::Const(c) => c.private,
             CommonsItem::Capability(_)
             | CommonsItem::Provider(_)
             | CommonsItem::Service(_)
             | CommonsItem::Agent(_)
             | CommonsItem::Actor(_)
             | CommonsItem::Event(_) => None,
-            // #2617 (constants) and #2618 landed in parallel; extending
-            // `private` to `const` is the follow-up decision N names.
-            CommonsItem::Const(_) => None,
         }
     }
 
@@ -819,6 +817,10 @@ pub struct ConstDecl {
     pub ty: TypeRef,
     pub init: Expr,
     pub documentation: Option<Doc>,
+    /// The span of a leading `private` modifier, when the constant is
+    /// unit-private: visible across its own unit's files (and to that unit's
+    /// suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }

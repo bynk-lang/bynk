@@ -653,8 +653,8 @@ pub fn single_file_const_errors(items: &[CommonsItem]) -> Vec<CompileError> {
     errors
 }
 
-/// Every constant visible in unit `name`: its own, plus those of each commons
-/// it `uses` (one level, the mixin rule [`crate::embeds::compose_unit_embeds`]
+/// Every constant visible in unit `name`: its own, plus the public ones of
+/// each commons it `uses` (one level, the mixin rule [`crate::embeds::compose_unit_embeds`]
 /// applies to embeds). A local declaration of any kind wins over an imported
 /// constant of the same name; two used commons declaring the same name is
 /// `bynk.uses.name_conflict`, so which is kept here is never observable in a
@@ -671,7 +671,13 @@ pub fn compose_unit_consts(
         let Some(used_info) = unit_info.get(used) else {
             continue;
         };
-        for (const_name, decl) in &used_info.table.consts {
+        // A used commons' `private` constants stay in it.
+        for (const_name, decl) in used_info
+            .table
+            .consts
+            .iter()
+            .filter(|(_, d)| d.private.is_none())
+        {
             if crate::symbols::local_value_kind(&info.table, const_name).is_some() {
                 continue;
             }

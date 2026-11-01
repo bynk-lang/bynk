@@ -2363,7 +2363,8 @@ pub fn phase_consumes_aliases(
 /// name nor build a value of that type. Checked positions: a public `fn`'s
 /// parameter and return types (a method's too, unless its type is itself
 /// private, when the method is out of an importer's reach with it), a public
-/// type's record fields and variant payloads, and a context's `exports` list.
+/// type's record fields and variant payloads, a public constant's type
+/// annotation, and a context's `exports` list.
 /// Each is `bynk.visibility.private_in_public`.
 ///
 /// A service, agent, capability, provider, actor or event signature is not
@@ -2465,6 +2466,13 @@ pub fn phase_private_in_public(
                             if let Some(ty) = first_private(r, &vars) {
                                 report(r.span(), &decl, &ty);
                             }
+                        }
+                    }
+                    // A public constant's annotation is part of what an
+                    // importer sees, like a public function's signature.
+                    CommonsItem::Const(c) if c.private.is_none() => {
+                        if let Some(ty) = first_private(&c.ty, &HashSet::new()) {
+                            report(c.ty.span(), &format!("constant `{}`", c.name.name), &ty);
                         }
                     }
                     _ => {}
@@ -5071,8 +5079,8 @@ fn consumed_service_seeds(name: &str, unit_info: &BTreeMap<String, UnitInfo>) ->
 
 /// #2617: the type names the constants of every commons `name` uses name in
 /// their annotations, resolved in that commons' scope, in a stable order. A
-/// constant the unit hides behind a local declaration is not imported, so it
-/// reaches nothing.
+/// constant the unit hides behind a local declaration, or one its commons
+/// marks `private`, is not imported, so it reaches nothing.
 fn used_const_seeds(name: &str, unit_info: &BTreeMap<String, UnitInfo>) -> Vec<Reached> {
     let mut out = Vec::new();
     let Some(info) = unit_info.get(name) else {
@@ -5086,6 +5094,7 @@ fn used_const_seeds(name: &str, unit_info: &BTreeMap<String, UnitInfo>) -> Vec<R
             .table
             .consts
             .values()
+            .filter(|c| c.private.is_none())
             .filter(|c| crate::symbols::local_value_kind(&info.table, &c.name.name).is_none())
             .collect();
         consts.sort_by(|a, b| a.name.name.cmp(&b.name.name));
