@@ -40,7 +40,7 @@ as written on 2026-11-01, the Recommended option for every decision below.
    are); a type parameter declared `T: Ord`. `Bool`, `Result`, `Map`, `Set`,
    functions and held resources are not. `derives Ord` requires every field and
    payload to be `Ord`, the declaration's own parameters taken as `Ord`
-   (`bynk.types.derives_field_not_orderable`, naming the field). Anything else
+   (`bynk.types.derives_field_not_orderable`, naming the field). A recursive reference that changes the type's arguments (`Nest[List[T]]` inside `Nest[T]`) is rejected the same way, since its comparator would need one nesting level per depth. Anything else
    that is ordered is `bynk.types.not_orderable`. An opaque type is not `Ord`
    outside its defining commons unless it declares `derives Ord` there (Q2). A
    record orders by its fields in declaration order, a sum by variant declaration

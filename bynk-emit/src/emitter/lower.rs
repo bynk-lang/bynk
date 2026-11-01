@@ -4277,11 +4277,14 @@ fn lower_list_kernel(
                 ),
                 // Constrained generics slice 1 (DECISION H): `Float` (total
                 // order, DECISION G), `Bytes`, and every other `Ord` key.
-                Some(cmp) => with_comparator(&cmp, |c| {
-                    format!(
-                        "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {c}(({key})(__a), ({key})(__b)))"
-                    )
-                }),
+                // `recv` is an argument, not part of the arrow's body, so it
+                // lowers exactly where it did before.
+                Some(cmp) if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') => format!(
+                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp}(({key})(__a), ({key})(__b)))"
+                ),
+                Some(cmp) => format!(
+                    "((__c, __r: readonly {elem_el}[]) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})(__a), ({key})(__b))))({cmp}, {recv})"
+                ),
             })
         }
         ("distinct", []) => {

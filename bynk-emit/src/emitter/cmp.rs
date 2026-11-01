@@ -152,6 +152,13 @@ impl<'a> CmpGen<'a> {
             .map(|p| p.name.name.clone())
             .zip(args.iter().cloned())
             .collect();
+        // The checker rejects a recursive reference that changes the type's
+        // arguments (`derives_field_not_orderable`), which is the only way the
+        // expansion could fail to stop.
+        assert!(
+            stack.len() < 64,
+            "bynk internal error: comparator for `{name}` does not terminate"
+        );
         let self_ident = format!("__self{}", stack.len());
         stack.push(Frame {
             name: name.to_string(),

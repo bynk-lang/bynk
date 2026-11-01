@@ -23,7 +23,7 @@
 //! predicate (`kernels::is_orderable`): their ordering runs on the storage path,
 //! where a user-type comparator has no SQL lowering (DECISION H).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use bynk_syntax::ast::{BaseType, FnDecl, FnName, Ident, TypeBody, TypeDecl, TypeRef};
@@ -163,22 +163,19 @@ fn report_not_orderable(ctx: &mut Ctx, ty: TyId, span: Span, site: &OrdSite, blo
 // -- `derives` validation (declaration side) --
 
 /// Whether a declared field type is `Ord`, with the declaring type's own
-/// parameters `params` taken as `Ord`. `visited` keeps recursive types finite.
+/// parameters `params` taken as `Ord`.
 /// Returns the first offending part, rendered as written.
 pub(crate) fn typeref_not_ord(
     t: &TypeRef,
     params: &[&str],
     types: &HashMap<String, Arc<TypeDecl>>,
-    visited: &mut HashSet<String>,
 ) -> Option<String> {
     match t {
         TypeRef::Base(b, _) => (!base_is_ord(*b)).then(|| super::equality::render(t)),
-        TypeRef::Option(a, _) | TypeRef::List(a, _) => typeref_not_ord(a, params, types, visited),
+        TypeRef::Option(a, _) | TypeRef::List(a, _) => typeref_not_ord(a, params, types),
         TypeRef::Named(id) if params.contains(&id.name.as_str()) => None,
-        TypeRef::Named(id) => named_not_ord(&id.name, &[], t, params, types, visited),
-        TypeRef::App { name, args, .. } => {
-            named_not_ord(&name.name, args, t, params, types, visited)
-        }
+        TypeRef::Named(id) => named_not_ord(&id.name, &[], t, params, types),
+        TypeRef::App { name, args, .. } => named_not_ord(&name.name, args, t, params, types),
         _ => Some(super::equality::render(t)),
     }
 }
@@ -189,7 +186,6 @@ fn named_not_ord(
     whole: &TypeRef,
     params: &[&str],
     types: &HashMap<String, Arc<TypeDecl>>,
-    visited: &mut HashSet<String>,
 ) -> Option<String> {
     let Some(decl) = types.get(name) else {
         // An unresolved name is reported by the resolver, not here.
@@ -207,9 +203,7 @@ fn named_not_ord(
             }
         }
     }
-    let _ = visited;
-    args.iter()
-        .find_map(|a| typeref_not_ord(a, params, types, visited))
+    args.iter().find_map(|a| typeref_not_ord(a, params, types))
 }
 
 /// `derives` validation for one type declaration: unknown names, the automatic
@@ -244,7 +238,37 @@ pub(crate) fn check_derives(
         .iter()
         .map(|p| p.name.name.as_str())
         .collect();
-    let mut visited = HashSet::new();
+    // A recursive reference with different arguments (`Nest[List[T]]` inside
+    // `Nest[T]`) would need a comparator per nesting depth, so it has none.
+    let all_fields: Vec<(&str, &TypeRef, Span)> = match &decl.body {
+        TypeBody::Record(r) => r
+            .fields
+            .iter()
+            .map(|f| (f.name.name.as_str(), &f.type_ref, f.type_ref.span()))
+            .collect(),
+        TypeBody::Sum(s) => s
+            .variants
+            .iter()
+            .flat_map(|v| v.payload.iter())
+            .map(|p| (p.name.name.as_str(), &p.type_ref, p.type_ref.span()))
+            .collect(),
+        _ => Vec::new(),
+    };
+    for (field, t, span) in all_fields {
+        if irregular_self_reference(t, decl, &params) {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.derives_field_not_orderable",
+                    span,
+                    format!(
+                        "`{}` derives `Ord`, but field `{field}` refers to `{}` with different type arguments",
+                        decl.name.name, decl.name.name
+                    ),
+                )
+                .with_note("a recursive reference in a type that derives `Ord` must repeat the type's own parameters unchanged"),
+            );
+        }
+    }
     let mut fail = |what: String, part: String, span: Span| {
         errors.push(
             CompileError::new(
@@ -261,7 +285,7 @@ pub(crate) fn check_derives(
     match &decl.body {
         TypeBody::Record(r) => {
             for f in &r.fields {
-                if let Some(part) = typeref_not_ord(&f.type_ref, &params, types, &mut visited) {
+                if let Some(part) = typeref_not_ord(&f.type_ref, &params, types) {
                     fail(format!("field `{}`", f.name.name), part, f.type_ref.span());
                 }
             }
@@ -269,7 +293,7 @@ pub(crate) fn check_derives(
         TypeBody::Sum(s) => {
             for v in &s.variants {
                 for p in &v.payload {
-                    if let Some(part) = typeref_not_ord(&p.type_ref, &params, types, &mut visited) {
+                    if let Some(part) = typeref_not_ord(&p.type_ref, &params, types) {
                         fail(
                             format!(
                                 "`{}.{}`'s field `{}`",
@@ -392,4 +416,24 @@ pub(crate) fn check_declared_ord_args(
         out.push(arg_ty);
     }
     Some(out)
+}
+
+/// Whether `t` mentions the declaration's own name applied to anything but its
+/// own parameters, in order.
+fn irregular_self_reference(t: &TypeRef, decl: &TypeDecl, params: &[&str]) -> bool {
+    match t {
+        TypeRef::Option(a, _) | TypeRef::List(a, _) => irregular_self_reference(a, decl, params),
+        TypeRef::App { name, args, .. } => {
+            let same = args.len() == params.len()
+                && args
+                    .iter()
+                    .zip(params)
+                    .all(|(a, p)| matches!(a, TypeRef::Named(id) if id.name == *p));
+            (name.name == decl.name.name && !same)
+                || args
+                    .iter()
+                    .any(|a| irregular_self_reference(a, decl, params))
+        }
+        _ => false,
+    }
 }
