@@ -324,7 +324,7 @@ fn type_static_initialiser(
 /// type in scope (`bynk.resolve.name_conflict`); its initialiser is inside the
 /// closed static set (`bynk.resolve.bad_const_initialiser`, decision A) and,
 /// typed against the annotation in an empty, pure scope (the
-/// [`check_static_initialiser`] discipline), a value of that type. A diagnostic
+/// `check_static_initialiser` discipline), a value of that type. A diagnostic
 /// the typing raises (a literal its refined type rejects, `.unsafe` outside the
 /// defining commons) is reported as it stands; a value of another type is
 /// `bynk.resolve.bad_const_initialiser`. The initialiser's expression types
