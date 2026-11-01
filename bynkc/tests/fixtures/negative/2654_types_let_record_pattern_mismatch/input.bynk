@@ -1,0 +1,24 @@
+commons demo
+
+type Item = { sku: String, qty: Int }
+type Other = { sku: String, qty: Int }
+
+fn wrongRecord(o: Other) -> Int {
+  let Item { qty, .. } = o
+  qty
+}
+
+fn wrongWrapper(o: Option[Item]) -> Int {
+  let Item { qty, .. } = o
+  qty
+}
+
+fn notARecord(n: Int) -> Int {
+  let Item { qty, .. } = n
+  qty
+}
+
+fn notMatchable(xs: List[Int]) -> Int {
+  let Item { qty, .. } = xs
+  qty
+}

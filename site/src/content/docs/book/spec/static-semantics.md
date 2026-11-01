@@ -180,6 +180,40 @@ dissolves the apparent circularity. A nested lambda's effects are its own.
 arguments against the function type's parameters
 (`bynk.types.argument_mismatch`, `bynk.types.call_arity`).
 
+**Recursion** (#2612). A function MAY call itself, and functions MAY call one
+another in a cycle: a free function, a generic function, and a method alike. A
+call cycle stays within one unit, because `uses` clauses may not form a cycle;
+a recursive function in a unit another `uses` is called like any other function.
+A recursive call is checked like any other call, and a recursive generic
+function instantiates its type parameters at each call as usual. A lambda has no
+name of its own, and a `let` binding is not in scope in its own initialiser, so
+`let f = (x) => f(x)` is rejected (`bynk.resolve.unknown_function`): a lambda
+cannot call itself. Termination is not checked: a well-formed program may recurse without
+bound, and what happens at run time is specified in
+[§7.3.2](/book/spec/emission/#732-expressions).
+
+A free function cannot name a capability ([§5.5](#55-effects-capabilities--providers)),
+so it cannot perform an effect of its own accord. It can perform the effects of
+an effectful function value it is given, so a recursive function can drive
+capability calls on behalf of the handler that passed it one:
+
+```bynk
+commons loops {
+  fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
+    if n <= 0 {
+      Effect.pure(())
+    } else {
+      do step(n)
+      repeat(n - 1, step)
+    }
+  }
+}
+```
+
+Iteration over a collection is the kernel's (`fold`, `forEach`, the traverse
+family, [§5.10](#510-collections)), which needs no recursion and has no depth
+limit; recursion is for structures and loops the kernel does not cover.
+
 **Numeric operators** (v0.21). The arithmetic operators `+ - * /` are
 defined on `Int` operands (yielding `Int`) and on `Float` operands
 (yielding `Float`). They MUST NOT mix the two: an `Int` and a `Float`
@@ -1163,7 +1197,15 @@ for `let P <- e else E`, where `v` is a name the program cannot write; for
   includes an arm `P` already covers (`bynk.types.unreachable_arm`,
   `bynk.types.duplicate_variant_arm`).
 - If `P` matches every value of `e`'s type, the `else` can never run, which is
-  `bynk.types.unreachable_arm`. Bind the value with a plain `let` instead.
+  `bynk.types.unreachable_arm`. Bind the value with a plain `let` instead; for a
+  record pattern, drop the `else` (the diagnostic offers that fix).
+- A `let` whose pattern is an irrefutable record pattern may omit the `else`
+  (#2654, [§4.8.4a](/book/spec/syntactic-grammar/#484a-let_else_stmt-2010)):
+  `let T { f, .. } = e` means `match v { T { f, .. } => { S… t } }`, a
+  one-arm `match` with no fallback, whose coverage is the record-pattern
+  coverage rule above. It adds no type rule: the pattern's type checks,
+  visibility (`bynk.context.opaque_inspection`) and binding scopes are those of
+  the `match` arm.
 - `<-` follows the `effect_let_stmt` rules (§5.5): the body MUST be effectful,
   and `P` matches the `Effect`'s payload.
 

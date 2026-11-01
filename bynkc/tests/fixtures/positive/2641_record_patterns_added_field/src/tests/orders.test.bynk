@@ -23,4 +23,8 @@ suite shop.orders {
   case "a generic record takes its type arguments from the scrutinee" {
     expect count(Page { items: [1, 2], count: 2 }) == 2
   }
+
+  case "a destructuring let survives an added field" {
+    expect summary(Order { id: "a", status: Paid, total: 3, note: "" }) == "a: 3"
+  }
 }

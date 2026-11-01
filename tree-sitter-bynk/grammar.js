@@ -48,6 +48,10 @@ module.exports = grammar({
   word: ($) => $.identifier,
 
   conflicts: ($) => [
+    // #2654: `let (T { … })` is a parenthesised pattern either way; only the
+    // end of the statement (an `else` or none) says whether the record
+    // pattern stood alone.
+    [$._pattern, $._let_paren_record_pattern],
     // `match e { … }` / `if e { … }`: after a bare identifier `e`,
     // the `{` is ambiguous between opening the match/if body and opening a
     // record construction/spread `e { … }`. Keep all parses alive; the body
@@ -1398,15 +1402,32 @@ module.exports = grammar({
     // lenient (a bare-name `variant_pattern` is admitted) because the compiler,
     // not the highlighter, reports `bynk.parse.let_else_on_binding`.
     let_else_stmt: ($) =>
-      seq(
-        "let",
-        field("pattern", choice($._let_pattern, alias($._let_or_pattern, $.or_pattern))),
-        field("bind", choice("=", "<-")),
-        field("value", $._expression),
-        optional(field("principal", $.call_site_actor)),
-        "else",
-        field("else", choice($.block, $.let_else_match)),
+      choice(
+        seq(
+          "let",
+          field("pattern", choice($._let_pattern, alias($._let_or_pattern, $.or_pattern))),
+          field("bind", choice("=", "<-")),
+          field("value", $._expression),
+          optional(field("principal", $.call_site_actor)),
+          "else",
+          field("else", choice($.block, $.let_else_match)),
+        ),
+        // #2654 (patterns track, slice 2): `let Item { sku, .. } = item` — the
+        // `else` is optional when the pattern is a record pattern (the compiler further
+        // requires it to be irrefutable, `let_pattern_without_else`; whether a
+        // field's sub-pattern is a binding or a variant is a matter of
+        // capitalisation, which this grammar cannot see). Parentheses around
+        // the pattern are transparent.
+        seq(
+          "let",
+          field("pattern", choice($.record_pattern, alias($._let_paren_record_pattern, $.paren_pattern))),
+          field("bind", choice("=", "<-")),
+          field("value", $._expression),
+          optional(field("principal", $.call_site_actor)),
+          optional(seq("else", field("else", choice($.block, $.let_else_match)))),
+        ),
       ),
+    _let_paren_record_pattern: ($) => seq("(", $.record_pattern, ")"),
     // #2010: the patterns that may open a `let … else`, mirroring the Rust
     // parser's `let_pattern_ahead`: a literal, a parenthesised pattern, or a
     // variant with a payload or a qualifier. A bare name stays a binding (and
@@ -1419,7 +1440,10 @@ module.exports = grammar({
       ),
     // `let Ok(x) | Err(x) = …`: an or-chain whose first alternative opens a
     // pattern; the rest are any patterns.
-    _let_or_pattern: ($) => prec.left(1, seq($._let_pattern, "|", $._pattern)),
+    // #2654: a record pattern may open the chain too (`let Item { .. } | …`),
+    // though on its own it is the `else`-less alternative of `let_else_stmt`.
+    _let_or_pattern: ($) =>
+      prec.left(1, seq(choice($._let_pattern, $.record_pattern), "|", $._pattern)),
     _let_variant_pattern: ($) => {
       const payload = seq("(", optional(sep1($._pattern_binding, ",")), optional(","), ")");
       return prec.right(

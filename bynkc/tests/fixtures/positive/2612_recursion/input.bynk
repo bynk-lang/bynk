@@ -1,0 +1,43 @@
+// #2612: recursion is well-formed — self, mutual, generic and method
+// recursion, and a recursive function driving the effects of a function
+// value it is given. Each lowers to direct TypeScript recursion.
+commons recursion {
+  fn fact(n: Int) -> Int {
+    if n <= 1 { 1 } else { n * fact(n - 1) }
+  }
+
+  fn isEven(n: Int) -> Bool {
+    if n == 0 { true } else { isOdd(n - 1) }
+  }
+
+  fn isOdd(n: Int) -> Bool {
+    if n == 0 { false } else { isEven(n - 1) }
+  }
+
+  fn len[A](xs: List[A]) -> Int {
+    match xs.first() {
+      None => 0,
+      Some(_) => 1 + len(xs.skip(1)),
+    }
+  }
+
+  type Tree =
+    | Leaf
+    | Node(left: Tree, value: Int, right: Tree)
+
+  fn Tree.sum(self) -> Int {
+    match self {
+      Leaf => 0,
+      Node(l, v, r) => l.sum() + v + r.sum(),
+    }
+  }
+
+  fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
+    if n <= 0 {
+      Effect.pure(())
+    } else {
+      do step(n)
+      repeat(n - 1, step)
+    }
+  }
+}

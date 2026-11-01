@@ -1,0 +1,9 @@
+commons demo
+
+type Status = enum { Open, Paid }
+type Order = { status: Status, total: Int }
+
+fn f(o: Order) -> Int {
+  let Order { status: Paid, total, .. } = o
+  total
+}

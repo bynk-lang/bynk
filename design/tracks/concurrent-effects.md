@@ -2,8 +2,10 @@
 
 - **Status:** Settled (#2635, merged 2026-11-01). Every question in §5 is
   closed; the maintainer confirmed the adopted answers on 2026-11-01. Q1 adopted
-  the concurrent binding block, so the language gains no tuple type. Slicing
-  next: no slice is authorised until its proposal is accepted. Spine
+  the concurrent binding block, so the language gains no tuple type. Slicing:
+  slice 0 shipped in #2646 (ADR 0672), with slice 2 folded into it; slice 0b
+  is proposed in [#2662](https://github.com/bynk-lang/bynk/issues/2662). No
+  slice is authorised until its proposal is accepted. Spine
   [#2615](https://github.com/bynk-lang/bynk/issues/2615).
 - **Realises:** the effect model of `design/bynk-design-notes.md` (an `Effect` is
   the only way a program reaches the outside world), extending the
@@ -365,10 +367,11 @@ To land with, or just before, slice 0:
 
 ## 9. Slice status
 
-- [ ] Slice 0 — concurrent binding block
-- [x] Slice 0b — settle-all for the `parTraverse` family
+- [x] Slice 0 — concurrent binding block (#2640, shipped in #2646, ADR 0672)
+- [x] Slice 0b — settle-all for the `parTraverse` family (#2662)
 - [ ] Slice 1 — `Result` and `?` in a join
-- [ ] Slice 2 — agent handlers (may fold into slice 0)
+- [x] Slice 2 — agent handlers (folded into slice 0: the workerd gate test in
+  #2646 found no new interleaving, so `par` stays legal in agent handlers)
 - [ ] Slice 3 — general timeout
 - [ ] Slice 4 — race (not planned; possible later slice)
 
