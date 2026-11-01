@@ -5,6 +5,7 @@ commons money
 type Price = Decimal where Positive
 type Rate = Decimal where InRange(0.00d, 1.00d)
 type Debt = Decimal where InRange(-5.00d, -1.00d)
+type Wide = Decimal where InRange(1d, 2.0000000000000000000000000000000000000000d)
 
 type Line = { sku: String, unit: Price, qty: Int }
 

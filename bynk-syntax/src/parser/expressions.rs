@@ -884,7 +884,6 @@ impl<'a> Parser<'a> {
             | TokenKind::Duration
             | TokenKind::Instant
             | TokenKind::Bytes
-            | TokenKind::Decimal
                 if self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::Dot) =>
             {
                 self.bump();

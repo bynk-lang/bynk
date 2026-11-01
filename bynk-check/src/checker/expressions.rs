@@ -856,7 +856,21 @@ pub(crate) fn check_unary(op: UnaryOp, inner: &Expr, op_span: Span, ctx: &mut Ct
             if t.base(tys) == Some(BaseType::Int) {
                 Some(tys.intern(Ty::Base(BaseType::Int)))
             } else if t.base(tys) == Some(BaseType::Decimal) {
-                // #2622: negation is exact.
+                // #2622: negation is exact. A folded `-<literal>` is a value
+                // too, so it obeys the 1000-character limit with its sign.
+                if let ExprKind::DecimalLit { coef, scale, .. } = &inner.kind
+                    && bynk_syntax::decimal::render(coef, *scale).len() + 1 > 1000
+                {
+                    ctx.errors.push(
+                        CompileError::new(
+                            "bynk.types.decimal_negation_too_large",
+                            inner.span,
+                            "decimal literal is too large once negated",
+                        )
+                        .with_note("a `Decimal` has at most 100 fraction digits and 1000 characters, sign included"),
+                    );
+                    return None;
+                }
                 Some(tys.intern(Ty::Base(BaseType::Decimal)))
             } else {
                 ctx.errors.push(CompileError::new(

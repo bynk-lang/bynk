@@ -6075,6 +6075,15 @@ pub(crate) const DECIMAL_TS_TYPE: &str = "{ readonly coefficient: bigint; readon
 /// #2622: a `Decimal` literal as a TypeScript object literal - no runtime
 /// import. `coef` is the signed coefficient digits.
 pub(crate) fn decimal_ts_literal(coef: &str, scale: u32) -> String {
+    format!(
+        "{{ coefficient: {}n, scale: {scale} }}",
+        decimal_signed_coef(coef)
+    )
+}
+
+/// #2622: a coefficient as a signed `bigint` literal body: no leading zeros
+/// (`007n` is not valid TypeScript) and no negative zero.
+pub(crate) fn decimal_signed_coef(coef: &str) -> String {
     let (neg, mag) = match coef.strip_prefix('-') {
         Some(rest) => (true, rest),
         None => (false, coef),
@@ -6082,7 +6091,7 @@ pub(crate) fn decimal_ts_literal(coef: &str, scale: u32) -> String {
     let mag = mag.trim_start_matches('0');
     let mag = if mag.is_empty() { "0" } else { mag };
     let sign = if neg && mag != "0" { "-" } else { "" };
-    format!("{{ coefficient: {sign}{mag}n, scale: {scale} }}")
+    format!("{sign}{mag}")
 }
 
 pub(crate) fn ts_type_ref(r: &TypeRef) -> String {
@@ -7129,15 +7138,7 @@ pub(crate) fn decimal_range_condition(
     hi: &bynk_syntax::ast::DecimalBound,
 ) -> String {
     let bound = |op: &str, b: &bynk_syntax::ast::DecimalBound| {
-        let c = decimal_ts_literal(&b.coef, 0);
-        // `decimal_ts_literal` yields an object literal; the bare coefficient
-        // is what the comparison needs.
-        let coef = c
-            .trim_start_matches("{ coefficient: ")
-            .split("n, scale")
-            .next()
-            .unwrap_or("0")
-            .to_string();
+        let coef = decimal_signed_coef(&b.coef);
         format!(
             "(({recv}).coefficient * 10n ** globalThis.BigInt({}) {op} ({coef}n) * 10n ** globalThis.BigInt(({recv}).scale))",
             b.scale

@@ -112,6 +112,9 @@ suite money {
     expect d.toString() == "-1.00"
     expect Debt.of(-3.00d) is Ok(_)
     expect Debt.of(0d) is Err(_)
+    let w = Val[Wide]
+    expect w.toString() == "1"
+    expect Wide.of(1.5d) is Ok(_)
   }
 
   case "rounding to the largest scale works" {

@@ -1,0 +1,1 @@
+bynk.types.decimal_negation_too_large decimal literal is too large once negated

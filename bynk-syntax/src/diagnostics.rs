@@ -2900,6 +2900,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.decimal_division_unscaled",
         "`/` was used on `Decimal` operands. A quotient has no exact decimal answer, so division states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)` (#2622).",
     ),
+    d(
+        "bynk.types.decimal_negation_too_large",
+        "A negated decimal literal would have more than 1000 characters of canonical text once its sign is counted, the most any `Decimal` may have (#2622).",
+    ),
     dg(
         "bynk.types.derives_automatic",
         "A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1).",

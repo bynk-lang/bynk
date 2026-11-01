@@ -1918,8 +1918,16 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                     match &p.kind {
                         PredKind::Positive => lo = lo.max(1),
                         PredKind::InRangeD(a, b) => {
-                            if let Some(v) = scaled_coef(&a.coef, a.scale, scale) {
-                                lo = lo.max(v);
+                            match scaled_coef(&a.coef, a.scale, scale) {
+                                Some(v) => lo = lo.max(v),
+                                // The bound does not fit once lifted to the
+                                // common scale: the bound itself, at its own
+                                // scale, is the smallest value in range.
+                                None => {
+                                    return Some(crate::emitter::decimal_ts_literal(
+                                        &a.coef, a.scale,
+                                    ));
+                                }
                             }
                             if let Some(v) = scaled_coef(&b.coef, b.scale, scale) {
                                 hi = Some(hi.map_or(v, |h| h.min(v)));

@@ -41,6 +41,17 @@ export const Debt = {
   },
 };
 
+export type Wide = { readonly coefficient: bigint; readonly scale: number } & { readonly __brand: "Wide" };
+
+export const Wide = {
+  of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Wide, ValidationError> {
+    if (!((((value).coefficient * 10n ** globalThis.BigInt(0) >= (1n) * 10n ** globalThis.BigInt((value).scale)) && ((value).coefficient * 10n ** globalThis.BigInt(40) <= (20000000000000000000000000000000000000000n) * 10n ** globalThis.BigInt((value).scale))))) {
+      return Err({ field: "Wide", message: "must be in range [1, 2.0000000000000000000000000000000000000000]", value: __bynkDecimalToString(value) });
+    }
+    return Ok(value as Wide);
+  },
+};
+
 export interface Line {
   readonly sku: string;
   readonly unit: Price;
