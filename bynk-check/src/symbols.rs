@@ -993,7 +993,15 @@ pub fn build_unit_table(
                         _ => None,
                     })
                     .collect();
-                (parsed[i].source_path().display().to_string(), consts)
+                // Shown with `/` on every platform, so the diagnostic reads
+                // the same on Windows.
+                let shown = parsed[i]
+                    .source_path()
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                (shown, consts)
             })
             .collect();
         for (k, err) in crate::consts::file_cycle_errors(&files, &table.consts) {
