@@ -2,7 +2,7 @@
 // commons commerce.identifiers
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
-import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow } from "./__bynk_runtime/int.js";
+import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, __bynkIntAnd, __bynkIntOr, __bynkIntXor, __bynkIntAndNot, __bynkIntShl, __bynkIntShr } from "./__bynk_runtime/int.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Sku = string & { readonly __brand: "Sku" };

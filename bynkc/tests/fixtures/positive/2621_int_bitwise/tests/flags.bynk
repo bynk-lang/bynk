@@ -1,0 +1,45 @@
+suite flags
+
+// #2621: values past 2^31 (where JS's 32-bit operators would truncate), and
+// the faults.
+
+case "past 32 bits the result is exact" {
+	expect 1.shl(40).or(5).and(5) == 5
+	expect 1.shl(40).or(5) == 1099511627781
+	expect 1.shl(52).shr(52) == 1
+	expect 9007199254740991.and(1099511627776) == 1099511627776
+	expect 9007199254740991.xor(1099511627776) == 9007199254740991 - 1099511627776
+	expect 9007199254740991.andNot(1099511627776) == 9007199254740991 - 1099511627776
+}
+
+case "small operands behave as bit sets" {
+	expect 12.and(10) == 8
+	expect 12.or(10) == 14
+	expect 12.xor(10) == 6
+	expect 12.andNot(10) == 4
+	expect 5.shl(2) == 20
+	expect 20.shr(2) == 5
+	expect 5.shr(0) == 5
+}
+
+case "flags and packed ids round-trip" {
+	let flags = 1.or(4)
+	expect has(flags, 4)
+	expect !has(flags, 2)
+	let id = pack(1234, 987654321)
+	expect shardOf(id) == 1234
+	expect seqOf(id) == 987654321
+}
+
+case "a negative operand faults" {
+	expect bits.call(-1, 1) faults
+	expect bits.call(1, -1) faults
+}
+
+case "a shift count outside 0..52, or a result past the safe range, faults" {
+	expect shift.call(1, 53) faults
+	expect shift.call(1, -1) faults
+	expect shift.call(2, 52) faults
+	let top <- shift.call(1, 52)
+	expect top == 4503599627370496
+}
