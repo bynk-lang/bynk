@@ -3129,6 +3129,93 @@ mod tests {
     }
 
     #[test]
+    fn an_irrefutable_record_let_needs_no_else() {
+        // #2654: `let T { .. } = e` is the one-arm `match` of a `let … else`
+        // with no `else` arm, marked `LetElseForm::Plain`.
+        for body in [
+            "let Item { sku, qty: n, .. } = item\n  n",
+            "let (Item { sku, .. }) = item\n  sku",
+            "let Item { sku: _, inner: Inner { x, .. }, .. } <- load(1)\n  x",
+            "let Item { sku, .. } <- load(1) by Admin(\"a\")\n  sku",
+        ] {
+            let b = body_block(body);
+            let (Statement::Let(l) | Statement::EffectLet(l)) = &b.statements[0] else {
+                panic!("{body:?}: expected the hidden binding");
+            };
+            let le = l.let_else.as_ref().expect("the binding records the sugar");
+            assert_eq!(le.form, LetElseForm::Plain, "{body:?}");
+            assert_eq!(le.else_span.start, le.else_span.end, "no `else` extent");
+            let ExprKind::Match { arms, .. } = &b.tail.kind else {
+                panic!("{body:?}: expected a match tail");
+            };
+            assert_eq!(arms.len(), 1, "{body:?}: only the pattern's arm");
+            assert!(matches!(arms[0].pattern, Pattern::Record { .. }));
+        }
+    }
+
+    #[test]
+    fn a_refutable_record_let_without_else_names_the_refutable_field() {
+        for (body, field) in [
+            (
+                "let Order { status: Paid, total, .. } = o\n  total",
+                "status: Paid",
+            ),
+            (
+                "let Order { total, c: Cust { kind: Gold, .. }, .. } = o\n  total",
+                "kind: Gold",
+            ),
+            ("let Order { id: 1, .. } <- load()\n  1", "id: 1"),
+        ] {
+            let errs = body_err(body);
+            assert_eq!(errs[0].category, "bynk.parse.let_pattern_without_else");
+            assert!(
+                errs[0]
+                    .notes
+                    .iter()
+                    .any(|n| n.contains(&format!("`{field}` can fail to match"))),
+                "{body:?}: {:?}",
+                errs[0].notes
+            );
+        }
+        // Any other pattern without an `else` is refused as before, with no field named.
+        for body in [
+            "let Ok(n) = r\n  n",
+            "let (Ok(n)) = r\n  n",
+            "let Item { sku, .. } | Other = r\n  1",
+        ] {
+            let errs = body_err(body);
+            assert_eq!(
+                errs[0].category, "bynk.parse.let_pattern_without_else",
+                "{body:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_record_let_keeps_an_else_when_one_is_written() {
+        let b = body_block("let Item { sku, .. } = item else { 0 }\n  1");
+        let Statement::Let(l) = &b.statements[0] else {
+            panic!("expected the hidden binding");
+        };
+        assert_eq!(l.let_else.as_ref().unwrap().form, LetElseForm::Block);
+    }
+
+    #[test]
+    fn a_capitalised_binding_is_not_a_record_pattern() {
+        // `let Name = e` and `let Name: T = e` read `Name` as a binding, as before.
+        for body in ["let Total = 1\n  Total", "let Total: Int = 1\n  Total"] {
+            let b = body_block(body);
+            let Statement::Let(l) = &b.statements[0] else {
+                panic!("{body:?}: expected a plain let");
+            };
+            assert!(l.let_else.is_none(), "{body:?}");
+        }
+        // And `let Name {` is no longer an error at the brace: it opens a pattern.
+        let errs = body_err("let Item { sku } = item\n  1");
+        assert_eq!(errs[0].category, "bynk.parse.record_pattern_without_rest");
+    }
+
+    #[test]
     fn let_else_as_the_last_statement_leaves_a_unit_rest() {
         let b = body_block("let Some(n) = find(1) else { () }");
         let ExprKind::Match { arms, .. } = &b.tail.kind else {

@@ -446,7 +446,9 @@ mod tests {
         // #2641 (record patterns) added: record_pattern, record_pattern_field,
         // and _is_pattern, _is_base_pattern, _is_or_pattern (the patterns an
         // `is` takes unparenthesised, which exclude a record pattern). Net +5.
-        assert_eq!(rules.len(), 172);
+        // #2654 (`let` destructuring) added: _let_paren_record_pattern (the
+        // parenthesised record pattern of an `else`-less `let`). Net +1.
+        assert_eq!(rules.len(), 173);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

@@ -2749,17 +2749,26 @@ pub struct LetStmt {
 pub struct LetElse {
     /// Whether the `else` was a block or a `match { arms }`.
     pub form: LetElseForm,
-    /// The `else` keyword.
+    /// The `else` keyword (empty, at the end of the statement, for [`LetElseForm::Plain`]).
     pub else_span: Span,
+    /// #2654: for a record pattern, the source ranges whose deletion leaves the
+    /// `else`-less form — any parentheses around the pattern, and the `else`
+    /// clause with the space before it. Empty for every other pattern, and for
+    /// the plain form.
+    pub remove_else: Vec<Span>,
 }
 
-/// #2010: the two spellings of a `let … else` fallback.
+/// #2010: the spellings of a `let … else` fallback (and, #2654, its absence).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LetElseForm {
     /// `else { … }` — desugared to a trailing `_ => { … }` arm.
     Block,
     /// `else match { arms }` — the arms follow the pattern's arm unchanged.
     Match,
+    /// No `else` at all (#2654): an irrefutable record pattern, `let Item { sku, .. } = e`,
+    /// desugared to a one-arm `match`. `else_span` is then empty, at the end of
+    /// the statement.
+    Plain,
 }
 
 /// #2010: the prefix of every hidden `let … else` binding. User identifiers
