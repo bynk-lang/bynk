@@ -2044,7 +2044,7 @@ pub(crate) fn check_effect_within_method(
                 "`within` can only be used in a service handler's body: a function, a provider operation or a WebSocket handler has no execution context to hand the abandoned effect to",
             )
             .with_note(
-                "call the `within` from a service handler (not a WebSocket one) that uses this function, and pass the function the bounded effect, not the work",
+                "a function has no execution context (#2682), and a WebSocket handler runs in the connection's Durable Object, which has none either; call the `within` from a service handler (not a WebSocket one) that uses this function, and pass the function the bounded effect, not the work",
             ),
         );
     }
@@ -2073,7 +2073,9 @@ pub(crate) fn check_effect_within_method(
                     method.span,
                     "`within` yields `Result[_, TimedOut]`, but `TimedOut` is not in scope here",
                 )
-                .with_note("add `consumes bynk` to this unit"),
+                .with_note(
+                    "add the line `consumes bynk { TimedOut }` to this unit, or add `TimedOut` to its existing `consumes bynk { … }` list",
+                ),
             );
         }
         return None;

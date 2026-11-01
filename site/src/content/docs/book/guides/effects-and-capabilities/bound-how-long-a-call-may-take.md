@@ -29,7 +29,7 @@ service quotes {
 }
 ```
 
-`TimedOut` belongs to `bynk`, so the context consumes it. `within` works on any
+`TimedOut` belongs to `bynk`, so the context needs `consumes bynk` (or `consumes bynk { TimedOut }`). `within` works on any
 `Effect`, so it needs no support from the capability behind it.
 
 If the effect already returns a `Result`, you get one more layer, and you unwrap both:

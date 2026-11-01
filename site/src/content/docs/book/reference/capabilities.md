@@ -102,6 +102,8 @@ keep their effects, exactly as in a sequence of `<-`s. See
 `Effect[T]`, `d` is a `Duration`, and the result is `Effect[Result[T, TimedOut]]`:
 
 ```bynk,fragment
+consumes bynk { TimedOut }
+
 let r <- Pricing.quote(id).within(2.seconds)
 match r {
   Ok(q) => Effect.pure("quoted \(q)")
@@ -109,7 +111,9 @@ match r {
 }
 ```
 
-`TimedOut { after: Duration }` is `bynk`'s, so the unit consumes `bynk`. When the
+`TimedOut { after: Duration }` is `bynk`'s, so the unit needs `consumes bynk { TimedOut }`
+(or `TimedOut` in its existing `consumes bynk { … }` list); without it the call is
+`bynk.within.timed_out_not_in_scope`. When the
 deadline passes first, the effect is **not cancelled**: it is handed to the
 platform's `waitUntil` and may still complete after the handler returns, with its side
 effects. A tie goes to the effect. `FetchOptions.timeout` is the tool when the work must

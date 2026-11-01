@@ -1,7 +1,7 @@
 ---
 level: minor
 probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`e.within(d)`: a general timeout on any `Effect[T]` yielding `Effect[Result[T, TimedOut]]`; the abandoned effect is handed to `waitUntil`, not cancelled; service handlers only; tests drive it on virtual time with `stub … returns v after d` and `stub … never` (concurrent effects, slice 3, [#2683](https://github.com/bynk-lang/bynk/issues/2683))"
+changelog: "`e.within(d)` (the unit `consumes bynk { TimedOut }`): a general timeout on any `Effect[T]` yielding `Effect[Result[T, TimedOut]]`; the abandoned effect is handed to `waitUntil`, not cancelled; service handlers only; tests drive it on virtual time with `stub … returns v after d` and `stub … never` (concurrent effects, slice 3, [#2683](https://github.com/bynk-lang/bynk/issues/2683))"
 ---
 
 ## ADR: effect-within-timeout
@@ -23,8 +23,8 @@ halfway through a write. This record carries the decisions slice 3 (#2683) fixed
   handler becomes `NotFound` (ADR 0177), so a timeout would read as a missing
   resource. `Result` keeps the timeout named and composes with `?` and with
   `embeds TimedOut as V` (ADR 0178); ADR 0178 F deliberately has no automatic lift
-  into a status. A unit that calls `within` must consume `bynk` to name `TimedOut`
-  (`bynk.within.timed_out_not_in_scope`); the checker will not import it implicitly.
+  into a status. Naming the result type requires `TimedOut` in scope: a unit that calls `within` must consume `bynk` to name `TimedOut`
+  (`bynk.within.timed_out_not_in_scope`, whose note quotes the line to add, `consumes bynk { TimedOut }`), as `Idempotency` and `Events` already need `consumes bynk`; the checker will not import it implicitly.
 - **B. Effects that already return a `Result`.** No special case:
   `Effect[Result[T, E]].within(d)` is `Effect[Result[Result[T, E], TimedOut]]`. A
   flattening variant is left until real code asks for it; one method with one rule
@@ -47,8 +47,9 @@ halfway through a write. This record carries the decisions slice 3 (#2683) fixed
   provider operation is `bynk.within.outside_handler`; a pure body is
   `bynk.within.in_pure_context`. No function has an execution context today (#2682);
   threading one is that bug's fix, and `within` in a function can be allowed in the
-  same change. A WebSocket handler is refused too (its Durable Object has no execution
-  context). The Bundle target's `__makeSurface` deps gain `__exec` for a context
+  same change. A WebSocket handler (`on open`, `on message`, `on close`) is refused too, as
+  `bynk.within.outside_handler`: it runs in the connection-hosting Durable Object,
+  whose `deps` carry no execution context. The Bundle target's `__makeSurface` deps gain `__exec` for a context
   with a `call` handler that needs it, supplied by a composition-root `waitUntil` that
   keeps the promise alive and logs its fault.
 - **F. Production timer.** A runtime helper, `__bynkWithin(promise, ms, exec)`, in the

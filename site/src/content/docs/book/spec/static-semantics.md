@@ -1130,7 +1130,8 @@ nothing inside the block can rely on, because no binding can read another's resu
 A **timeout** (`e.within(d)`; #2683) bounds how long an effect may take. It is a
 method of every `Effect[T]`: `d` MUST be a `Duration`, and the call has type
 `Effect[Result[T, TimedOut]]`, where `TimedOut { after: Duration }` is `bynk`'s (a
-unit that calls `within` MUST consume `bynk`, `bynk.within.timed_out_not_in_scope`).
+unit that calls `within` MUST have `TimedOut` in scope, as `consumes bynk { TimedOut }` or an
+entry in its existing `consumes bynk { … }`, `bynk.within.timed_out_not_in_scope`).
 The effect is raced against `d`. If it settles first, the result is `Ok` of its
 value (a fault in it first faults the call, as it would unbounded), and the timer is
 cleared. If `d` passes first, the result is `Err(TimedOut { after: d })`. **The
