@@ -151,6 +151,14 @@ pub enum Command {
         /// same path `fmt` reports.
         #[arg(long, value_enum, default_value = "rich")]
         format: DiagFormat,
+        /// Apply the machine-applicable fix suggestions to the sources, in
+        /// place, before checking (#2642): the same fixes the editor's
+        /// "fix all" applies, repeated until none remain. Writes only files
+        /// that change, does not format, and writes nothing if applying the
+        /// fixes would leave a problem that needs a human. What remains is
+        /// reported as usual.
+        #[arg(long)]
+        fix: bool,
     },
     /// Format `.bynk` source files in place. Passing `-` reads from stdin
     /// and writes to stdout.

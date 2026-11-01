@@ -173,3 +173,25 @@ fn migrates_the_legacy_comment_and_doc_spellings() {
     let (_, after) = diagnose(&root, "app/notes.bynk", Some(&fixed));
     assert!(after.is_empty(), "{:?}", categories(&after));
 }
+
+/// #2642: `bynk check --fix` and the editor share one selection rule, so on
+/// the same project the CLI's first pass takes exactly the edits fix-all
+/// offers, and its fixpoint is the text repeated fix-all reaches.
+#[test]
+fn the_cli_first_pass_takes_the_editors_edits() {
+    // `one` lists `Gamma` it never uses; `two` uses `Beta` it never lists.
+    let src = handlers(" given Alpha, Gamma", ALPHA, " given Alpha", ALPHA_BETA);
+    let root = setup_project("cli", &[("app/handlers.bynk", src.as_str())]);
+    let (text, diags) = diagnose(&root, "app/handlers.bynk", None);
+    let editor = fix_all::edits(&text, &diags);
+    assert_eq!(editor.len(), 2);
+
+    let plan = bynk_driver::fix::plan_project(&root)
+        .expect("the project is set up")
+        .expect("the fixes are accepted");
+    assert_eq!(plan.files.len(), 1);
+    let file = &plan.files[0];
+    assert_eq!(file.path, root.join("app/handlers.bynk"));
+    assert_eq!(file.first_pass, editor);
+    assert_eq!(file.fixed, fix_all::apply(&text, &editor));
+}

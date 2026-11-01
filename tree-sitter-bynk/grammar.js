@@ -1362,6 +1362,7 @@ module.exports = grammar({
         $.do_stmt,
         $.assign_stmt,
         $.advance_stmt,
+        $.par_stmt,
         prec(1, $.expect_expr),
       ),
 
@@ -1473,6 +1474,28 @@ module.exports = grammar({
         field("capability", $.identifier),
         "by",
         field("amount", $._expression),
+      ),
+
+    // #2640 (concurrent effects, slice 0): `par { let a <- e1  let b <- e2 }` —
+    // issue every effect, then wait for them all. `par` is contextual: it opens
+    // a statement only before `{`. The grammar stays permissive about the
+    // block's contents (any statement parses); the compiler admits only
+    // `let x <- e` and `do e` (`bynk.par.invalid_statement`).
+    par_stmt: ($) => seq("par", "{", repeat($._par_statement), "}"),
+
+    // Any statement but `let … else`, which would take the rest of the block as
+    // its arm and so has no room inside a `par` (the compiler's parser refuses
+    // it with `bynk.par.invalid_statement`).
+    _par_statement: ($) =>
+      choice(
+        $.let_stmt,
+        $.effect_let_stmt,
+        $.effect_send_stmt,
+        $.do_stmt,
+        $.assign_stmt,
+        $.advance_stmt,
+        $.par_stmt,
+        prec(1, $.expect_expr),
       ),
 
     // A let/effect-let may bind the discard name `_`.
@@ -1771,7 +1794,7 @@ module.exports = grammar({
         $._contextual_identifier,
       ),
 
-    // `trace` and `advance` are contextual in the compiler — ordinary
+    // `trace`, `advance` and `par` are contextual in the compiler — ordinary
     // identifiers outside `trace(Cap.op)` / `advance Clock by …`. Here, as
     // `word`-shaped literals, they are extracted as keyword tokens, and where an
     // identifier and the keyword are both valid (an expression or statement
@@ -1779,7 +1802,8 @@ module.exports = grammar({
     // `identifier` in exactly those positions. The next tokens decide: `advance`
     // followed by an identifier can only open an `advance_stmt`, and `trace (`
     // is a declared conflict that `trace_expr`'s dynamic precedence settles.
-    _contextual_identifier: ($) => alias(choice("trace", "advance"), $.identifier),
+    _contextual_identifier: ($) =>
+      alias(choice("trace", "advance", "par"), $.identifier),
 
     // v0.20a: a lambda — `(params) => expr | block`. Conflicts with
     // paren_expr/unit_literal until the `=>` disambiguates (GLR conflict

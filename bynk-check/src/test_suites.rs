@@ -1560,7 +1560,7 @@ impl<'a> CrossingServices<'a> {
             return bound;
         };
         for b in blocks_deep(block) {
-            for s in &b.statements {
+            for s in flat_statements(b) {
                 if let Statement::Let(l) | Statement::EffectLet(l) = s
                     && let ExprKind::Call { name, .. } = &l.value.kind
                     && table.agents.contains_key(&name.name)
@@ -1591,8 +1591,8 @@ impl<'a> CrossingServices<'a> {
         let bound = self.agent_bindings(body);
         // A name a `let` in the body rebinds is the binding, not a service.
         let shadowed: HashSet<String> = blocks_deep(body)
-            .iter()
-            .flat_map(|b| &b.statements)
+            .into_iter()
+            .flat_map(flat_statements)
             .filter_map(|s| match s {
                 Statement::Let(l) | Statement::EffectLet(l) => Some(l.name.name.clone()),
                 _ => None,
@@ -1733,6 +1733,21 @@ fn exprs_in_order(block: &Block) -> Vec<&Expr> {
         out.push(e);
         stack.extend(bynk_syntax::ast::expr_children(e).into_iter().rev());
     }
+    out
+}
+
+/// A block's statements with each `par` block (#2640) opened up: its bindings are
+/// statements of the case in every respect these scans care about (a name bound,
+/// a `by` principal), so they are read as if written in sequence.
+fn flat_statements(block: &Block) -> Vec<&Statement> {
+    fn push<'a>(s: &'a Statement, out: &mut Vec<&'a Statement>) {
+        match s {
+            Statement::Par(p) => p.statements.iter().for_each(|inner| push(inner, out)),
+            other => out.push(other),
+        }
+    }
+    let mut out = Vec::new();
+    block.statements.iter().for_each(|s| push(s, &mut out));
     out
 }
 
@@ -2227,7 +2242,7 @@ fn check_unsigned_route_at_system(
     // The call-site principal of each `let x <- <address> by <Actor>`.
     let mut principals: HashMap<ExprId, &str> = HashMap::new();
     for b in blocks_deep(&case.body) {
-        for st in &b.statements {
+        for st in flat_statements(b) {
             if let Statement::EffectLet(l) = st
                 && let Some(p) = &l.principal
             {
@@ -2382,7 +2397,7 @@ fn check_faults_tier(
 /// is the same credential-less call.
 fn block_uses_nobody(block: &Block) -> bool {
     blocks_deep(block).into_iter().any(|b| {
-        b.statements.iter().any(|s| {
+        flat_statements(b).into_iter().any(|s| {
             matches!(s, Statement::EffectLet(l)
                 if l.principal.as_ref().is_some_and(|p| p.actor.name == "Nobody"))
         })
@@ -2410,7 +2425,7 @@ fn check_bad_signature_tier(
     }
     let mut names: Vec<&str> = blocks_deep(&case.body)
         .into_iter()
-        .flat_map(|b| b.statements.iter())
+        .flat_map(flat_statements)
         .filter_map(|s| match s {
             Statement::EffectLet(l) => l
                 .principal

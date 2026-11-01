@@ -1630,6 +1630,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package.",
     ),
     dg(
+        "bynk.par.invalid_statement",
+        "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement.",
+        &["par_stmt"],
+    ),
+    dg(
+        "bynk.par.question_in_join",
+        "A `?` appears inside a `par { … }` binding. Propagating a failure in source order across a join is a later increment, so the block takes no `?` yet; match on the result after the block.",
+        &["par_stmt"],
+    ),
+    dg(
+        "bynk.par.sibling_name",
+        "A `par { … }` binding mentions a name another binding in the same block binds, or binds a name twice. The bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding.",
+        &["par_stmt"],
+    ),
+    warn(dg(
+        "bynk.par.single_binding",
+        "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning).",
+        &["par_stmt"],
+    )),
+    dg(
         "bynk.parse.const_missing_type",
         "A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`).",
         &["const_decl"],

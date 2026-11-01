@@ -642,6 +642,53 @@ fn word_before_brace(text: &str, open: usize) -> &str {
     &head[start..]
 }
 
+/// #2640: the cursor is directly inside a `par { … }` block — the innermost open
+/// brace is opened by the word `par`.
+pub fn in_par_block_position(text: &str, offset: usize) -> bool {
+    innermost_open_brace(text, offset).is_some_and(|open| word_before_brace(text, open) == "par")
+}
+
+/// #2640: what a `par { … }` block can hold, so nothing else is offered there:
+/// the effectful binding and the unit effect (DECISION B).
+pub fn par_block_candidates() -> Vec<Completion> {
+    vec![
+        Completion::snippet("let x <-", "let ${1:name} <- ${2:effect}"),
+        Completion::item(
+            "do",
+            CompletionKind::Keyword,
+            Some("run a unit effect alongside the others in this `par` block".to_string()),
+        ),
+    ]
+}
+
+/// #2640: whether `offset` sits in an effectful body, the only place a `par`
+/// block is legal. Lexical, like the other position cells: walk the enclosing
+/// braces outwards; the first one whose header declares a return type decides —
+/// effectful when that type is `Effect[…]`. A brace with no `->` (an `if`, a
+/// `match` arm, a bare block) defers to the one around it.
+pub fn in_effectful_body_position(text: &str, offset: usize) -> bool {
+    let mut at = offset.min(text.len());
+    while let Some(open) = innermost_open_brace(text, at) {
+        let before = &text[..open];
+        let header_start = before.rfind(['{', '}']).map_or(0, |i| i + 1);
+        let header = &before[header_start..];
+        if let Some(arrow) = header.rfind("->") {
+            return header[arrow + 2..].trim_start().starts_with("Effect[");
+        }
+        at = open;
+    }
+    false
+}
+
+/// #2640: the `par` block snippet, offered at statement position in an
+/// effectful body.
+pub fn par_snippet() -> Completion {
+    Completion::snippet(
+        "par",
+        "par {\n\tlet ${1:first} <- ${2:effect}\n\tlet ${3:second} <- ${4:effect}\n}",
+    )
+}
+
 /// v0.131: the cursor is at a field-*name* position inside a `cors { … }` block —
 /// the innermost open brace is opened by `cors`, and the current field segment
 /// (since the last `,` or newline) has no `:` yet (a value position).
@@ -3339,6 +3386,35 @@ mod tests {
         // Not inside a `cors` block (an ordinary record construction) — no.
         let doc3 = "let x = Order {\n    ";
         assert!(!in_cors_field_position(doc3, doc3.len()));
+    }
+
+    /// #2640: inside `par { }` only the two statement forms are offered, and the
+    /// `par` snippet appears only where a body is effectful.
+    #[test]
+    fn par_block_positions_and_candidates() {
+        let inside = "service s {\n  on call() -> Effect[Int] {\n    par {\n      ";
+        assert!(in_par_block_position(inside, inside.len()));
+        let labels: Vec<String> = par_block_candidates()
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(labels, ["let x <-", "do"]);
+        // After the closing brace the statement is an ordinary one again.
+        let after =
+            "service s {\n  on call() -> Effect[Int] {\n    par {\n      let a <- f()\n    }\n    ";
+        assert!(!in_par_block_position(after, after.len()));
+        assert!(in_effectful_body_position(after, after.len()));
+    }
+
+    #[test]
+    fn par_snippet_is_for_effectful_bodies_only() {
+        let effectful = "fn f() -> Effect[Int] {\n  if true {\n    ";
+        assert!(in_effectful_body_position(effectful, effectful.len()));
+        let pure = "fn f() -> Int {\n  ";
+        assert!(!in_effectful_body_position(pure, pure.len()));
+        let top = "context c\n\n";
+        assert!(!in_effectful_body_position(top, top.len()));
+        assert!(par_snippet().insert_text.unwrap().starts_with("par {"));
     }
 
     #[test]

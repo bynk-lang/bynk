@@ -2695,6 +2695,11 @@ pub enum Statement {
     /// (#2137, end-to-end testing track §3.4). `advance` is contextual: it
     /// opens a statement only before `<Ident> by`. Only valid in a `case` body.
     Advance(AdvanceStmt),
+    /// `par { let a <- e1  let b <- e2 }` — a concurrent binding block (#2640,
+    /// concurrent-effects slice 0). `par` is contextual: it opens a statement
+    /// only before `{`. The parser admits any statements inside; the checker
+    /// accepts only `let x <- e` and `do e`.
+    Par(ParStmt),
 }
 
 impl Statement {
@@ -2706,8 +2711,24 @@ impl Statement {
             Statement::Do(d) => d.span,
             Statement::Assign(a) => a.span,
             Statement::Advance(a) => a.span,
+            Statement::Par(p) => p.span,
         }
     }
+}
+
+/// #2640: a `par { … }` block. `statements` is what the author wrote between
+/// the braces, unvalidated: the checker rejects every form but the effectful
+/// `let` and `do` (`bynk.par.invalid_statement`), so the editor still sees the
+/// rejected statement in place.
+#[derive(Debug, Clone)]
+pub struct ParStmt {
+    /// The contextual `par` keyword.
+    pub keyword: Span,
+    pub statements: Vec<Statement>,
+    /// Comments between the last statement and the closing `}`.
+    pub closing_comments: Vec<Comment>,
+    pub span: Span,
+    pub trivia: Trivia,
 }
 
 /// #2137: `advance <Cap> by <amount>` — moves the case's harness clock forward
@@ -3528,6 +3549,7 @@ pub fn statement_exprs<'a>(s: &'a Statement, out: &mut Vec<&'a Expr>) {
         Statement::Do(d) => out.push(&d.value),
         Statement::Assign(a) => out.push(&a.value),
         Statement::Advance(a) => out.push(&a.amount),
+        Statement::Par(p) => p.statements.iter().for_each(|s| statement_exprs(s, out)),
     }
 }
 
@@ -4108,6 +4130,19 @@ fn f(x: Int) -> Int {
                 span: _,
                 trivia: _,
             }) => out.push(("advance.amount", amount)),
+            Statement::Par(ParStmt {
+                keyword: _,
+                statements,
+                closing_comments: _,
+                span: _,
+                trivia: _,
+            }) => {
+                for s in statements {
+                    for (slot, e) in oracle_statement(s) {
+                        out.push((slot, e));
+                    }
+                }
+            }
         }
         out
     }

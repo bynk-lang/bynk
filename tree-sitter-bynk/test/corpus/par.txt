@@ -1,0 +1,80 @@
+================================================================================
+Concurrent binding block — par { let a <- e … } (#2640)
+================================================================================
+
+fn load(id: Int) -> Effect[Int] {
+  par {
+    let user <- Users.get(id)
+    let orders: Int <- Orders.forUser(id)
+    do Audit.touch(id)
+  }
+  Effect.pure(user + orders)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (fn_decl
+    (identifier)
+    (param
+      (identifier)
+      (base_type))
+    (generic_type_ref
+      (builtin_type)
+      (base_type))
+    (block
+      (par_stmt
+        (effect_let_stmt
+          (identifier)
+          (method_call
+            (identifier)
+            (identifier)
+            (identifier)))
+        (effect_let_stmt
+          (identifier)
+          (base_type)
+          (method_call
+            (identifier)
+            (identifier)
+            (identifier)))
+        (do_stmt
+          (method_call
+            (identifier)
+            (identifier)
+            (identifier))))
+      (effect_pure_expr
+        (binary_expr
+          (identifier)
+          (identifier))))))
+
+================================================================================
+Contextual par — an identifier outside its keyword shape (#2640)
+================================================================================
+
+fn f(par: Int) -> Int {
+  let x = par
+  let y = par + 1
+  x + y
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (fn_decl
+    (identifier)
+    (param
+      (identifier)
+      (base_type))
+    (base_type)
+    (block
+      (let_stmt
+        (identifier)
+        (identifier))
+      (let_stmt
+        (identifier)
+        (binary_expr
+          (identifier)
+          (number_literal)))
+      (binary_expr
+        (identifier)
+        (identifier)))))
