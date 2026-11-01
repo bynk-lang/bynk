@@ -4,7 +4,7 @@
 > services. The shape of a program — its contexts, services, agents, and the types
 > that flow between them — is part of the language, not a convention layered on top.
 > Bynk compiles to typed TypeScript and targets Cloudflare Workers. It is pre-1.0
-> and evolves in small, spec-first increments (currently v0.455).
+> and evolves in small, spec-first increments (currently v0.457).
 
 This file is a self-contained primer for an LLM agent. The first half teaches
 enough Bynk to read and write it; the second half links to the canonical [Bynk
@@ -116,7 +116,10 @@ match found {                 // found : Option[Item]
 
 Effectful work has type `Effect[T]`. Inside a handler, `let x <- expr` sequences
 an effect (binds its result); `let x = expr` binds a pure value; `do expr` runs a
-unit effect as a statement. `Effect.pure(v)` lifts a value. A handler declares
+unit effect as a statement. `par { let a <- e1  let b <- e2 }` issues independent
+effects together and waits for all of them; it holds only `let x <- e` and `do e`,
+no binding may mention a sibling's name, and a fault raises the first in source
+order once every effect has settled. `Effect.pure(v)` lifts a value. A handler declares
 the capabilities it needs with `given`:
 
 ```bynk
@@ -304,7 +307,7 @@ Reserved only in their own position (ordinary names elsewhere): `asset` `case`
 `embed` `event` `messages` `on` `suite`.
 
 Contextual words (keywords in one place only): `advance` `drop` `key` `migrate`
-`removed` `replaces` `store`.
+`par` `removed` `replaces` `store`.
 
 Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 `Connection` `History` `HttpResult` `List` `Map` `Query` `QueueResult`

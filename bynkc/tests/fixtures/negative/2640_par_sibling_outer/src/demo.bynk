@@ -1,0 +1,23 @@
+context demo
+
+// #2640: the rule holds even where the name resolves to an outer binding, so
+// the stale `user` is never picked up silently.
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+  fn touch(id: Int) -> Effect[()]
+}
+
+service dash {
+  on call(id: Int) -> Effect[Int] given Users, Orders {
+    let user <- Users.get(id)
+    par {
+      let user <- Users.get(id)
+      let n <- Orders.forUser(user.length())
+    }
+    Effect.pure(0)
+  }
+}

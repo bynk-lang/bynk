@@ -1263,6 +1263,10 @@
         {
           "type": "let_stmt",
           "named": true
+        },
+        {
+          "type": "par_stmt",
+          "named": true
         }
       ]
     }
@@ -2161,6 +2165,10 @@
         },
         {
           "type": "let_stmt",
+          "named": true
+        },
+        {
+          "type": "par_stmt",
           "named": true
         },
         {
@@ -7896,6 +7904,49 @@
     }
   },
   {
+    "type": "par_stmt",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "advance_stmt",
+          "named": true
+        },
+        {
+          "type": "assign_stmt",
+          "named": true
+        },
+        {
+          "type": "do_stmt",
+          "named": true
+        },
+        {
+          "type": "effect_let_stmt",
+          "named": true
+        },
+        {
+          "type": "effect_send_stmt",
+          "named": true
+        },
+        {
+          "type": "expect_expr",
+          "named": true
+        },
+        {
+          "type": "let_stmt",
+          "named": true
+        },
+        {
+          "type": "par_stmt",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "param",
     "named": true,
     "fields": {
@@ -10153,6 +10204,10 @@
         },
         {
           "type": "messages_decl",
+          "named": true
+        },
+        {
+          "type": "par_stmt",
           "named": true
         },
         {
@@ -12752,6 +12807,10 @@
   },
   {
     "type": "out",
+    "named": false
+  },
+  {
+    "type": "par",
     "named": false
   },
   {

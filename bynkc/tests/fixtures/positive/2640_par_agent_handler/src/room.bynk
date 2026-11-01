@@ -1,0 +1,32 @@
+context room
+
+// #2640: a `par` block in an agent handler. The join adds no interleaving a
+// sequence of `<-`s does not already allow (checked on a real `workerd` by
+// `bynkc/tests/par_gate_workerd.rs`), so it is legal here as anywhere else; the
+// `store` read before the block and the `:=` write after it stay sequential.
+
+consumes bynk { Fetch }
+
+agent Room {
+  key id: String
+
+  store hits: Cell[Int] = 0
+
+  on call load(url: String) -> Effect[Int] given Fetch {
+    let seen = hits
+    let req = Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None }
+    par {
+      let first <- Fetch.send(req)
+      let second <- Fetch.send(req)
+    }
+    hits := seen + 1
+    Effect.pure(seen)
+  }
+}
+
+service api from http {
+  on GET("/load/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+    let n <- Room(id).load("https://example.com/")
+    Ok("\(n)")
+  }
+}

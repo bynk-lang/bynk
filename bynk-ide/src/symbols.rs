@@ -586,6 +586,24 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
     )
 }
 
+/// #2640 (ADR 0156): hover for the contextual `par` keyword of a `par { … }`
+/// binding block. `None` anywhere else, so an ordinary identifier named `par`
+/// keeps its own hover.
+pub fn describe_par_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let text = |i: usize| tokens.get(i).map(|t| &source[t.span.start..t.span.end]);
+    if text(idx)? != "par" || tokens.get(idx + 1)?.kind != bynk_syntax::lexer::TokenKind::LBrace {
+        return None;
+    }
+    Some(
+        "```bynk\npar {\n  let a <- first()\n  let b <- second()\n}\n```\n\nIssues every effect in the block, in source order, before awaiting any of them, and completes when all have settled. The names bound inside are in scope after the closing brace; no binding may mention a name a sibling binds. If any effect faults, the block waits for the rest, then raises the first fault in source order. Holds only `let x <- e` and `do e`."
+            .to_string(),
+    )
+}
+
 /// #2138: the doc `run.id` shows on hover and in completion.
 pub const RUN_ID_DOC: &str = "**`run.id`** — this test run's identity, a `String`. In process it is always `\"local\"`; each `bynk test --against` run gets a fresh one, so a key built from it (`\"order-\\(run.id)\"`) doesn't collide with an earlier run's data on a shared deployment.";
 
@@ -629,6 +647,13 @@ fn run_bound_in_block(block: &Block, at: usize, bound: &mut Vec<String>) -> Opti
         // A `let`'s own value doesn't see its name; what follows does.
         if let Statement::Let(l) | Statement::EffectLet(l) = stmt {
             bound.push(l.name.name.clone());
+        }
+        // #2640: a `par` block's names enter scope after its closing brace.
+        if let Statement::Par(p) = stmt {
+            bound.extend(p.statements.iter().filter_map(|s| match s {
+                Statement::EffectLet(l) => Some(l.name.name.clone()),
+                _ => None,
+            }));
         }
     }
     let found = found.or_else(|| run_bound_in_expr(&block.tail, at, bound));
@@ -2672,6 +2697,18 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #2640: `par` hovers only as the head of a `par { … }` block.
+    #[test]
+    fn par_hover_is_for_the_block_keyword_only() {
+        let block =
+            "fn f() -> Effect[Int] {\n  par {\n    let a <- g()\n  }\n  Effect.pure(a)\n}\n";
+        let at = block.find("par").unwrap();
+        assert!(describe_par_at(block, at).unwrap().contains("par {"));
+        let ident = "fn f(par: Int) -> Int {\n  par\n}\n";
+        assert!(describe_par_at(ident, ident.find("par").unwrap()).is_none());
+        assert!(describe_par_at(ident, ident.rfind("par").unwrap()).is_none());
+    }
+
     use super::*;
 
     /// #2136: the `system` cron/queue hover answers only when the receiver is

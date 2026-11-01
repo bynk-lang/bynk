@@ -195,6 +195,11 @@ impl Lin<'_> {
             Statement::Do(d) => self.walk_expr(&d.value, state),
             Statement::Assign(a) => self.walk_expr(&a.value, state),
             Statement::Advance(a) => self.walk_expr(&a.amount, state),
+            Statement::Par(p) => {
+                for s in &p.statements {
+                    self.walk_stmt(s, state, introduced);
+                }
+            }
         }
     }
 

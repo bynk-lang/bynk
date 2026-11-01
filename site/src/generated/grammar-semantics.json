@@ -952,6 +952,24 @@
       "summary": "An `Ok` payload has the wrong type."
     }
   ],
+  "par_stmt": [
+    {
+      "code": "bynk.par.invalid_statement",
+      "summary": "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement."
+    },
+    {
+      "code": "bynk.par.question_in_join",
+      "summary": "A `?` appears inside a `par { … }` binding. Propagating a failure in source order across a join is a later increment, so the block takes no `?` yet; match on the result after the block."
+    },
+    {
+      "code": "bynk.par.sibling_name",
+      "summary": "A `par { … }` binding mentions a name another binding in the same block binds, or binds a name twice. The bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding."
+    },
+    {
+      "code": "bynk.par.single_binding",
+      "summary": "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning)."
+    }
+  ],
   "param": [
     {
       "code": "bynk.resolve.duplicate_param",

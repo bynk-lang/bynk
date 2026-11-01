@@ -216,6 +216,10 @@ mod oidc_auth;
 mod package_dependencies;
 #[path = "package_exports.rs"]
 mod package_exports;
+#[path = "par_behaviour.rs"]
+mod par_behaviour;
+#[path = "par_gate_workerd.rs"]
+mod par_gate_workerd;
 #[path = "property_behaviour.rs"]
 mod property_behaviour;
 #[path = "provider_agent_cross_context_target.rs"]
