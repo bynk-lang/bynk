@@ -1236,6 +1236,13 @@ fn infer_op_type_args(
     let mut typed = Vec::with_capacity(args.len());
     let mut ok = true;
     for (pattern, arg) in op.params.iter().zip(args) {
+        // Only an argument whose parameter mentions a type parameter takes part
+        // in inference; the others are checked against their own parameter type,
+        // so contextual typing (`None`, `[]`, a literal for a `Float`) still holds.
+        if !contains_var(*pattern, tys) {
+            typed.push(type_of(arg, Some(*pattern), ctx));
+            continue;
+        }
         let t = type_of(arg, None, ctx);
         match t {
             Some(t) => ok &= unify(*pattern, t, &mut subst, tys),
@@ -4907,7 +4914,7 @@ fn check_cross_context_capability_call(
                     ),
                 )
                 .with_note(format!(
-                    "give it explicitly: `{consumed}.{cap}.{}[T](…)`",
+                    "a qualified cross-context call takes its type arguments explicitly: `{consumed}.{cap}.{}[T](…)`",
                     method.name
                 )),
             );

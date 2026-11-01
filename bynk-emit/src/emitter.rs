@@ -5024,6 +5024,9 @@ impl<'a> LowerCtx<'a> {
                 self.runtime_use(),
             ));
         }
+        // A capability call inside a generic function would reach here, but only
+        // handlers hold `given` today, so no program does yet: the first one that
+        // does needs a fixture for this branch.
         format!("{}.encode({value})", self.codec(ty))
     }
 
