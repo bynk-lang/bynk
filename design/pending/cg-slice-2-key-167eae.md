@@ -64,7 +64,9 @@ key-rule text of ADRs 0038, 0142 and 0658.
    `groupBy` or a join, must be declared `K: Key`
    (`bynk.generics.missing_key_bound`, machine-applicable: it declares the bound,
    replacing an explicit `Eq`). A call must instantiate each `Key`-bounded
-   parameter with a key type. This retires the type-parameter exemptions. `Key` is
+   parameter with a key type. A bare type-parameter argument to a `Key`-bounded
+   *type* (`Index[T]`) is not checked, as for `Eq` and `Ord` (slice 0); it is
+   sound because every keyed value is built at a checked site. This retires the type-parameter exemptions. `Key` is
    allowed on a capability operation's type parameter, alone among the
    constraints, since it adds no hidden argument and nothing to the ABI.
 7. **`Key` implies `Eq` (G).** `Ord` does not imply `Key`. `T: Eq + Key` is the

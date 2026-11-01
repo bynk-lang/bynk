@@ -2476,8 +2476,6 @@ fn serialise_field_expr_wire(
 pub(crate) use bynk_check::wire::codec_suffix as inner_ts_name;
 pub(crate) use bynk_check::wire::collect_codec_closure;
 
-/// v0.22b: an expression-form serialise for a codec target — the same
-/// dispatch as a record field's serialisation.
 /// Constrained generics slice 2: whether a `Map` key / `Set` element declared as
 /// `t` is a JS primitive, so a plain `Map`/`Set` compares it by value. Every
 /// other `Key` type decodes into the keyed collections (`keys.ts`).
@@ -2493,6 +2491,8 @@ fn is_plain_key_ref(t: &TypeRef, types: &std::collections::HashMap<String, Arc<T
     }
 }
 
+/// v0.22b: an expression-form serialise for a codec target — the same
+/// dispatch as a record field's serialisation.
 pub(crate) fn serialise_expr(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
     serialise_field_expr(t, value, None, ru)
 }
