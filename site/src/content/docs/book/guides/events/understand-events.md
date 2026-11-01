@@ -212,9 +212,10 @@ all — minted before this field existed — it deserialises with the default
 default must be a static, wire-representable value of the field's declared
 type (a literal, a sum variant, `Some`/`None`/`Ok`/`Err`, a record, or
 `T.unsafe(lit)` for an opaque type), with no reference to `self`, a
-parameter, or a capability. A default on a plain (non-event) record field is
-rejected — it exists specifically for an event's wire-evolution story, which
-an ordinary record doesn't have.
+parameter, or a capability. Ordinary record types take defaults under the
+same rule (see [Records](/book/reference/types/#field-defaults)); on an event,
+a default is also what lets the schema registry count an added field as
+additive.
 
 **A default only rescues an absent key, not a present-but-different one.**
 This matters for `Option[T]` fields in particular. For an `Option` field with a

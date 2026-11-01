@@ -1,0 +1,18 @@
+---
+#2607: the options a caller leaves out arrive as their defaults.
+---
+suite mirror
+
+case "an empty options record is send's behaviour" {
+	stub Fetch.sendWith(_, _) returns Ok(Response { status: 200, headers: Map.empty(), body: "" })
+	let n <- plain.call("https://upstream.test/")
+	expect n == 200
+	expect Fetch.sendWith called once with options.timeout == None && options.redirect == Follow
+}
+
+case "a written option is kept and the rest default" {
+	stub Fetch.sendWith(_, _) returns Ok(Response { status: 204, headers: Map.empty(), body: "" })
+	let n <- bounded.call("https://upstream.test/")
+	expect n == 204
+	expect Fetch.sendWith called once with options.timeout == Some(5.seconds) && options.redirect == Follow
+}

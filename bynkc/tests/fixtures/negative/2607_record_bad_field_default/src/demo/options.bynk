@@ -1,0 +1,9 @@
+---
+#2607 (Decision B): a record field's default is a static value, the rule an
+event field's default follows. A call is not one.
+---
+context demo.options
+
+fn three() -> Int { 3 }
+
+type Options = { count: Int = three() }

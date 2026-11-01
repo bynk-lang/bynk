@@ -1,0 +1,2 @@
+# #2607: the event literal that leaves `region` out gets its default.
+payload: { orderId: orderId, region: { tag: "Domestic" } }

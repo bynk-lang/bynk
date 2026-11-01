@@ -2486,10 +2486,13 @@ pub(crate) fn check_record_field_set(
     // inserts `x: <default>` at a fmt-stable position, and — when more than one
     // field is missing and every missing field is defaultable — the first such
     // diagnostic also carries an "add all missing fields" convenience.
+    //
+    // #2607 (Decision C): a field that declares a default is not required — a
+    // literal that leaves it out takes the default.
     let missing: Vec<&RecordField> = record
         .fields
         .iter()
-        .filter(|f| !provided.contains_key(f.name.name.as_str()))
+        .filter(|f| f.init.is_none() && !provided.contains_key(f.name.name.as_str()))
         .collect();
     // The edit for a `body` of one or more `name: default` entries. With
     // existing fields it appends `, body` right after the last one. With an

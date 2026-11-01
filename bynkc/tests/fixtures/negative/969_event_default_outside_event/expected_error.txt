@@ -1,1 +1,0 @@
-bynk.event.default_outside_event
