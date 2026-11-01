@@ -1,0 +1,24 @@
+context media.store
+
+consumes bynk.cloudflare { R2 }
+
+capability Videos = R2
+
+service abandon {
+	on call(upload: R2Upload) -> Effect[()] given Videos {
+		Videos.abortUpload(upload)
+	}
+}
+
+service uploads from queue("uploads") {
+	on message(m: R2Upload) -> Effect[QueueResult] {
+		Ack
+	}
+}
+
+service intake from http {
+	on POST("/uploads") (body: R2Upload) -> Effect[HttpResult[String]] by Visitor given Videos {
+		let _ <- Videos.abortUpload(body)
+		Created("aborted")
+	}
+}

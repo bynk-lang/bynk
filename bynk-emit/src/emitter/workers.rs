@@ -2398,7 +2398,7 @@ fn emit_http_sum_wrapper(
 /// v0.176 (#642): the user-named types appearing anywhere in a type-ref, including
 /// through generic arguments — the set a compose wrapper qualifies against the
 /// `handlers` namespace.
-fn named_types_in(r: &TypeRef) -> Vec<String> {
+pub(crate) fn named_types_in(r: &TypeRef) -> Vec<String> {
     let mut out = Vec::new();
     fn walk(r: &TypeRef, out: &mut Vec<String>) {
         match r {
