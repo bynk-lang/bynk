@@ -162,7 +162,8 @@ fn in_sibling_scope<R>(
 }
 
 /// The two rules that look at a binding's expression before it is typed: no
-/// `?` (a source-order `Err` is a later increment), and no mention of a name a
+/// `?` (a binding's `Result` is unwrapped after the block, where the `?` lines
+/// run in source order; track Q2, slice 1 dropped), and no mention of a name a
 /// *different* binding of the block binds. Returns whether it is clean.
 fn check_binding_value(
     value: &Expr,
@@ -181,7 +182,10 @@ fn check_binding_value(
                     "`?` cannot appear inside a `par` block",
                 )
                 .with_note(
-                    "bind the result in the block and match on it after the block; propagating a failure in source order across a join is not available yet",
+                    "bind the `Result` in the block and apply `?` after it (`let userR <- Users.get(id)` inside, `let user = userR?` after); the block has waited for every binding, so the first `Err` in source order propagates",
+                )
+                .with_note(
+                    "a `?` on an argument can be computed before the block (`let key = parse(raw)?`, then `Orders.get(key)` inside)",
                 ),
             );
             clean = false;
