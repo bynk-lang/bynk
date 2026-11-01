@@ -65,3 +65,16 @@ service branch {
     }
   }
 }
+
+// A name a lambda parameter, a `match` arm or an inner `let` binds for itself is
+// that binding, not a sibling's: only reading the sibling's own name is refused.
+service shadow {
+  on call(id: Int) -> Effect[Int] given Users, Orders {
+    par {
+      let user <- Users.get(id)
+      let n <- Orders.forUser([1, 2].map((user) => user + 1).length())
+      let m <- Orders.forUser(match Some(id) { Some(user) => user, None => 0 })
+    }
+    Effect.pure(user.length() + n + m)
+  }
+}

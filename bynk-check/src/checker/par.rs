@@ -171,7 +171,7 @@ fn check_binding_value(
     ctx: &mut Ctx,
 ) -> bool {
     let mut clean = true;
-    let mut visit = |e: &Expr, in_lambda: bool, ctx: &mut Ctx| match &e.kind {
+    let mut visit = |e: &Expr, in_lambda: bool, shadowed: &[String], ctx: &mut Ctx| match &e.kind {
         // A `?` inside a lambda belongs to the lambda, not to the binding.
         ExprKind::Question(_) if !in_lambda => {
             ctx.errors.push(
@@ -186,7 +186,10 @@ fn check_binding_value(
             );
             clean = false;
         }
-        ExprKind::Ident(id) if owners.get(id.name.as_str()).is_some_and(|&o| o != own) => {
+        ExprKind::Ident(id)
+            if owners.get(id.name.as_str()).is_some_and(|&o| o != own)
+                && !shadowed.contains(&id.name) =>
+        {
             ctx.errors.push(
                 CompileError::new(
                     "bynk.par.sibling_name",
@@ -204,19 +207,85 @@ fn check_binding_value(
         }
         _ => {}
     };
-    walk(value, false, &mut visit, ctx);
+    walk(value, false, &mut Vec::new(), &mut visit, ctx);
     clean
 }
 
 /// Visit `e` and every expression beneath it, lambda bodies included, saying
-/// whether the expression is inside one: a sibling's name read in a lambda is
-/// captured just the same, but a `?` there belongs to the lambda.
-fn walk(e: &Expr, in_lambda: bool, visit: &mut impl FnMut(&Expr, bool, &mut Ctx), ctx: &mut Ctx) {
-    visit(e, in_lambda, ctx);
-    let in_lambda = in_lambda || matches!(e.kind, ExprKind::Lambda(_));
-    for child in expr_children(e) {
-        walk(child, in_lambda, visit, ctx);
+/// whether the expression is inside one (a sibling's name read in a lambda is
+/// captured just the same, but a `?` there belongs to the lambda) and which names
+/// the code around it has bound itself: a lambda parameter, a `match` arm's
+/// pattern, a `let` in a block or an `is` pattern named like a sibling is that
+/// binding, not the sibling.
+fn walk(
+    e: &Expr,
+    in_lambda: bool,
+    shadowed: &mut Vec<String>,
+    visit: &mut impl FnMut(&Expr, bool, &[String], &mut Ctx),
+    ctx: &mut Ctx,
+) {
+    visit(e, in_lambda, shadowed, ctx);
+    let mark = shadowed.len();
+    let names = |p: &Pattern| -> Vec<String> {
+        p.bound_names()
+            .into_iter()
+            .map(|i| i.name.clone())
+            .collect()
+    };
+    match &e.kind {
+        ExprKind::Lambda(l) => {
+            shadowed.extend(l.params.iter().map(|p| p.name.name.clone()));
+            walk(&l.body, true, shadowed, visit, ctx);
+        }
+        ExprKind::Match { discriminant, arms } => {
+            walk(discriminant, in_lambda, shadowed, visit, ctx);
+            for arm in arms {
+                let arm_mark = shadowed.len();
+                shadowed.extend(names(&arm.pattern));
+                if let Some(g) = &arm.guard {
+                    walk(g, in_lambda, shadowed, visit, ctx);
+                }
+                match &arm.body {
+                    MatchBody::Expr(x) => walk(x, in_lambda, shadowed, visit, ctx),
+                    MatchBody::Block(b) => walk_block(b, in_lambda, shadowed, visit, ctx),
+                }
+                shadowed.truncate(arm_mark);
+            }
+        }
+        ExprKind::Block(b) => walk_block(b, in_lambda, shadowed, visit, ctx),
+        _ => {
+            for child in expr_children(e) {
+                walk(child, in_lambda, shadowed, visit, ctx);
+                // An `is` test binds for what follows it (`x is Some(u) && u > 0`).
+                if let ExprKind::Is { pattern, .. } = &child.kind {
+                    shadowed.extend(names(pattern));
+                }
+            }
+        }
     }
+    shadowed.truncate(mark);
+}
+
+fn walk_block(
+    b: &Block,
+    in_lambda: bool,
+    shadowed: &mut Vec<String>,
+    visit: &mut impl FnMut(&Expr, bool, &[String], &mut Ctx),
+    ctx: &mut Ctx,
+) {
+    let mark = shadowed.len();
+    for st in &b.statements {
+        let mut exprs = Vec::new();
+        statement_exprs(st, &mut exprs);
+        for x in exprs {
+            walk(x, in_lambda, shadowed, visit, ctx);
+        }
+        if let Statement::Let(l) | Statement::EffectLet(l) = st {
+            shadowed.push(l.name.name.clone());
+        }
+    }
+    walk(&b.tail, in_lambda, shadowed, visit, ctx);
+    shadowed.truncate(mark);
 }
 
 /// `:=` and `.update` keep `store` writes sequential (track Q4): a binding whose

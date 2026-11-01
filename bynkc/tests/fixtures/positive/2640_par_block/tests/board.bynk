@@ -47,4 +47,10 @@ suite shop.board {
     expect second == 8
     expect Users.get before Orders.forUser
   }
+
+  case "a lambda parameter or match arm named like a sibling is its own binding" {
+    stub Orders.forUser(_) returns 2
+    let r <- shadow.call(1)
+    expect r == 3 + 2 + 2
+  }
 }

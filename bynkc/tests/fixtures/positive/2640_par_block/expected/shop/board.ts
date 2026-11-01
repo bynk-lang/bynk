@@ -73,6 +73,24 @@ export const branch = {
   },
 };
 
+export const shadow = {
+  async call(id: number, deps: { Users: Users; Orders: Orders }): globalThis.Promise<number> {
+    const [user, n, m] = await __bynkSettleAll([deps.Users.get(id), deps.Orders.forUser((([1, 2]).map((__x: number) => ((user) => user + 1)(__x))).length), deps.Orders.forUser(((__d) => {
+    switch (__d.tag) {
+      case "Some": {
+        const user = __d.value;
+        return user;
+      }
+      case "None": {
+        return 0;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  })(Some(id)))]);
+    return (user).length + n + m;
+  },
+};
+
 export interface __ShopBoardDeps {
   readonly Users: Users;
   readonly Orders: Orders;
@@ -89,6 +107,9 @@ export function __makeSurface(deps: __ShopBoardDeps) {
     },
     async branch(id: number): globalThis.Promise<number> {
       return branch.call(id, deps);
+    },
+    async shadow(id: number): globalThis.Promise<number> {
+      return shadow.call(id, deps);
     },
   };
 }
