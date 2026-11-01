@@ -21,7 +21,7 @@ commons shop.ranges {
 
   fn temperature(t: Int) -> String {
     match t {
-      ..-10 => "freezing"
+      ..-10 => "freezing",
       -9..-1 => "cold"
       0 => "zero"
       1..25 => "mild"
@@ -36,6 +36,11 @@ commons shop.ranges {
       Some(n) => "ok"
       None => "missing"
     }
+  }
+
+  // A range nested after `is`: only the top level is refused.
+  fn nestedIs(o: Option[Int], xs: List[Int]) -> Bool {
+    o is Some(0..9) || xs is [0..9, ..]
   }
 
   // A range inside a record pattern.

@@ -40,7 +40,7 @@ function __makeTestDeps() {
 async function test_sign_splits_the_integers() {
   try {
     const deps = {};
-    const { Reading, Score, bucket, digit, edge, exactly, grade, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
+    const { Reading, Score, bucket, digit, edge, exactly, grade, nestedIs, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
     type Reading = __ns_shop_ranges.Reading;
     type Score = __ns_shop_ranges.Score;
     if (!(sign(-5) === "negative")) { throw __bynkExpectFailure("tests/ranges.test.bynk:3:12", 67, 89, "expect sign(-5) == \"negative\"\n  expected: sign(-5) == \"negative\"\n  actual:   " + __bynkShow((sign(-5))) + " == " + __bynkShow(("negative"))); }
@@ -61,7 +61,7 @@ async function test_sign_splits_the_integers() {
 async function test_bounds_are_inclusive() {
   try {
     const deps = {};
-    const { Reading, Score, bucket, digit, edge, exactly, grade, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
+    const { Reading, Score, bucket, digit, edge, exactly, grade, nestedIs, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
     type Reading = __ns_shop_ranges.Reading;
     type Score = __ns_shop_ranges.Score;
     if (!(bucket(-1) === "invalid")) { throw __bynkExpectFailure("tests/ranges.test.bynk:11:12", 310, 333, "expect bucket(-1) == \"invalid\"\n  expected: bucket(-1) == \"invalid\"\n  actual:   " + __bynkShow((bucket(-1))) + " == " + __bynkShow(("invalid"))); }
@@ -84,7 +84,7 @@ async function test_bounds_are_inclusive() {
 async function test_negative_bounds_and_a_literal_between_ranges() {
   try {
     const deps = {};
-    const { Reading, Score, bucket, digit, edge, exactly, grade, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
+    const { Reading, Score, bucket, digit, edge, exactly, grade, nestedIs, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
     type Reading = __ns_shop_ranges.Reading;
     type Score = __ns_shop_ranges.Score;
     if (!(temperature(-11) === "freezing")) { throw __bynkExpectFailure("tests/ranges.test.bynk:21:12", 602, 632, "expect temperature(-11) == \"freezing\"\n  expected: temperature(-11) == \"freezing\"\n  actual:   " + __bynkShow((temperature(-11))) + " == " + __bynkShow(("freezing"))); }
@@ -108,7 +108,7 @@ async function test_negative_bounds_and_a_literal_between_ranges() {
 async function test_ranges_nest_in_variants_and_or_patterns() {
   try {
     const deps = {};
-    const { Reading, Score, bucket, digit, edge, exactly, grade, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
+    const { Reading, Score, bucket, digit, edge, exactly, grade, nestedIs, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
     type Reading = __ns_shop_ranges.Reading;
     type Score = __ns_shop_ranges.Score;
     if (!(edge(Some(0)) === "edge")) { throw __bynkExpectFailure("tests/ranges.test.bynk:32:12", 961, 984, "expect edge(Some(0)) == \"edge\"\n  expected: edge(Some(0)) == \"edge\"\n  actual:   " + __bynkShow((edge(Some(0)))) + " == " + __bynkShow(("edge"))); }
@@ -132,7 +132,7 @@ async function test_ranges_nest_in_variants_and_or_patterns() {
 async function test_ranges_nest_in_records_and_lists() {
   try {
     const deps = {};
-    const { Reading, Score, bucket, digit, edge, exactly, grade, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
+    const { Reading, Score, bucket, digit, edge, exactly, grade, nestedIs, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
     type Reading = __ns_shop_ranges.Reading;
     type Score = __ns_shop_ranges.Score;
     if (!(warm({ value: 20, unit: "C" }))) { throw __bynkExpectFailure("tests/ranges.test.bynk:43:12", 1290, 1328, "expect warm(Reading { value: 20, unit: \"C\" })"); }
@@ -155,18 +155,39 @@ async function test_ranges_nest_in_records_and_lists() {
 }
 
 // case tier: unit
+async function test_a_range_nested_after_is() {
+  try {
+    const deps = {};
+    const { Reading, Score, bucket, digit, edge, exactly, grade, nestedIs, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
+    type Reading = __ns_shop_ranges.Reading;
+    type Score = __ns_shop_ranges.Score;
+    if (!(nestedIs(Some(5), []))) { throw __bynkExpectFailure("tests/ranges.test.bynk:56:12", 1775, 1796, "expect nestedIs(Some(5), [])"); }
+    if (!(!nestedIs(Some(10), []))) { throw __bynkExpectFailure("tests/ranges.test.bynk:57:12", 1808, 1831, "expect !nestedIs(Some(10), [])"); }
+    if (!(nestedIs(None, [3, 99]))) { throw __bynkExpectFailure("tests/ranges.test.bynk:58:12", 1843, 1866, "expect nestedIs(None, [3, 99])"); }
+    if (!(!nestedIs(None, [10]))) { throw __bynkExpectFailure("tests/ranges.test.bynk:59:12", 1878, 1899, "expect !nestedIs(None, [10])"); }
+    if (!(!nestedIs(None, []))) { throw __bynkExpectFailure("tests/ranges.test.bynk:60:12", 1911, 1930, "expect !nestedIs(None, [])"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
 async function test_a_partly_covered_range_keeps_the_rest() {
   try {
     const deps = {};
-    const { Reading, Score, bucket, digit, edge, exactly, grade, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
+    const { Reading, Score, bucket, digit, edge, exactly, grade, nestedIs, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
     type Reading = __ns_shop_ranges.Reading;
     type Score = __ns_shop_ranges.Score;
-    if (!(overlap(0) === 1)) { throw __bynkExpectFailure("tests/ranges.test.bynk:56:12", 1789, 1804, "expect overlap(0) == 1\n  expected: overlap(0) == 1\n  actual:   " + __bynkShow((overlap(0))) + " == " + __bynkShow((1))); }
-    if (!(overlap(9) === 1)) { throw __bynkExpectFailure("tests/ranges.test.bynk:57:12", 1816, 1831, "expect overlap(9) == 1\n  expected: overlap(9) == 1\n  actual:   " + __bynkShow((overlap(9))) + " == " + __bynkShow((1))); }
-    if (!(overlap(10) === 2)) { throw __bynkExpectFailure("tests/ranges.test.bynk:58:12", 1843, 1859, "expect overlap(10) == 2\n  expected: overlap(10) == 2\n  actual:   " + __bynkShow((overlap(10))) + " == " + __bynkShow((2))); }
-    if (!(overlap(15) === 2)) { throw __bynkExpectFailure("tests/ranges.test.bynk:59:12", 1871, 1887, "expect overlap(15) == 2\n  expected: overlap(15) == 2\n  actual:   " + __bynkShow((overlap(15))) + " == " + __bynkShow((2))); }
-    if (!(overlap(16) === 3)) { throw __bynkExpectFailure("tests/ranges.test.bynk:60:12", 1899, 1915, "expect overlap(16) == 3\n  expected: overlap(16) == 3\n  actual:   " + __bynkShow((overlap(16))) + " == " + __bynkShow((3))); }
-    if (!(overlap(-1) === 3)) { throw __bynkExpectFailure("tests/ranges.test.bynk:61:12", 1927, 1943, "expect overlap(-1) == 3\n  expected: overlap(-1) == 3\n  actual:   " + __bynkShow((overlap(-1))) + " == " + __bynkShow((3))); }
+    if (!(overlap(0) === 1)) { throw __bynkExpectFailure("tests/ranges.test.bynk:64:12", 1996, 2011, "expect overlap(0) == 1\n  expected: overlap(0) == 1\n  actual:   " + __bynkShow((overlap(0))) + " == " + __bynkShow((1))); }
+    if (!(overlap(9) === 1)) { throw __bynkExpectFailure("tests/ranges.test.bynk:65:12", 2023, 2038, "expect overlap(9) == 1\n  expected: overlap(9) == 1\n  actual:   " + __bynkShow((overlap(9))) + " == " + __bynkShow((1))); }
+    if (!(overlap(10) === 2)) { throw __bynkExpectFailure("tests/ranges.test.bynk:66:12", 2050, 2066, "expect overlap(10) == 2\n  expected: overlap(10) == 2\n  actual:   " + __bynkShow((overlap(10))) + " == " + __bynkShow((2))); }
+    if (!(overlap(15) === 2)) { throw __bynkExpectFailure("tests/ranges.test.bynk:67:12", 2078, 2094, "expect overlap(15) == 2\n  expected: overlap(15) == 2\n  actual:   " + __bynkShow((overlap(15))) + " == " + __bynkShow((2))); }
+    if (!(overlap(16) === 3)) { throw __bynkExpectFailure("tests/ranges.test.bynk:68:12", 2106, 2122, "expect overlap(16) == 3\n  expected: overlap(16) == 3\n  actual:   " + __bynkShow((overlap(16))) + " == " + __bynkShow((3))); }
+    if (!(overlap(-1) === 3)) { throw __bynkExpectFailure("tests/ranges.test.bynk:69:12", 2134, 2150, "expect overlap(-1) == 3\n  expected: overlap(-1) == 3\n  actual:   " + __bynkShow((overlap(-1))) + " == " + __bynkShow((3))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -180,17 +201,17 @@ async function test_a_partly_covered_range_keeps_the_rest() {
 async function test_a_refined_Int__a_guard__a_single_value_range_and_let_else() {
   try {
     const deps = {};
-    const { Reading, Score, bucket, digit, edge, exactly, grade, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
+    const { Reading, Score, bucket, digit, edge, exactly, grade, nestedIs, overlap, sign, small, temperature, warm } = __ns_shop_ranges;
     type Reading = __ns_shop_ranges.Reading;
     type Score = __ns_shop_ranges.Score;
-    if (!(grade((95 as any)) === "A")) { throw __bynkExpectFailure("tests/ranges.test.bynk:65:12", 2029, 2045, "expect grade(95) == \"A\"\n  expected: grade(95) == \"A\"\n  actual:   " + __bynkShow((grade((95 as any)))) + " == " + __bynkShow(("A"))); }
-    if (!(grade((80 as any)) === "B")) { throw __bynkExpectFailure("tests/ranges.test.bynk:66:12", 2057, 2073, "expect grade(80) == \"B\"\n  expected: grade(80) == \"B\"\n  actual:   " + __bynkShow((grade((80 as any)))) + " == " + __bynkShow(("B"))); }
-    if (!(grade((75 as any)) === "C")) { throw __bynkExpectFailure("tests/ranges.test.bynk:67:12", 2085, 2101, "expect grade(75) == \"C\"\n  expected: grade(75) == \"C\"\n  actual:   " + __bynkShow((grade((75 as any)))) + " == " + __bynkShow(("C"))); }
-    if (!(grade((10 as any)) === "C")) { throw __bynkExpectFailure("tests/ranges.test.bynk:68:12", 2113, 2129, "expect grade(10) == \"C\"\n  expected: grade(10) == \"C\"\n  actual:   " + __bynkShow((grade((10 as any)))) + " == " + __bynkShow(("C"))); }
-    if (!(exactly(7))) { throw __bynkExpectFailure("tests/ranges.test.bynk:69:12", 2141, 2151, "expect exactly(7)"); }
-    if (!(!exactly(8))) { throw __bynkExpectFailure("tests/ranges.test.bynk:70:12", 2163, 2174, "expect !exactly(8)"); }
-    if (!(digit(4) === 4)) { throw __bynkExpectFailure("tests/ranges.test.bynk:71:12", 2186, 2199, "expect digit(4) == 4\n  expected: digit(4) == 4\n  actual:   " + __bynkShow((digit(4))) + " == " + __bynkShow((4))); }
-    if (!(digit(12) === -1)) { throw __bynkExpectFailure("tests/ranges.test.bynk:72:12", 2211, 2226, "expect digit(12) == -1\n  expected: digit(12) == -1\n  actual:   " + __bynkShow((digit(12))) + " == " + __bynkShow((-1))); }
+    if (!(grade((95 as any)) === "A")) { throw __bynkExpectFailure("tests/ranges.test.bynk:73:12", 2236, 2252, "expect grade(95) == \"A\"\n  expected: grade(95) == \"A\"\n  actual:   " + __bynkShow((grade((95 as any)))) + " == " + __bynkShow(("A"))); }
+    if (!(grade((80 as any)) === "B")) { throw __bynkExpectFailure("tests/ranges.test.bynk:74:12", 2264, 2280, "expect grade(80) == \"B\"\n  expected: grade(80) == \"B\"\n  actual:   " + __bynkShow((grade((80 as any)))) + " == " + __bynkShow(("B"))); }
+    if (!(grade((75 as any)) === "C")) { throw __bynkExpectFailure("tests/ranges.test.bynk:75:12", 2292, 2308, "expect grade(75) == \"C\"\n  expected: grade(75) == \"C\"\n  actual:   " + __bynkShow((grade((75 as any)))) + " == " + __bynkShow(("C"))); }
+    if (!(grade((10 as any)) === "C")) { throw __bynkExpectFailure("tests/ranges.test.bynk:76:12", 2320, 2336, "expect grade(10) == \"C\"\n  expected: grade(10) == \"C\"\n  actual:   " + __bynkShow((grade((10 as any)))) + " == " + __bynkShow(("C"))); }
+    if (!(exactly(7))) { throw __bynkExpectFailure("tests/ranges.test.bynk:77:12", 2348, 2358, "expect exactly(7)"); }
+    if (!(!exactly(8))) { throw __bynkExpectFailure("tests/ranges.test.bynk:78:12", 2370, 2381, "expect !exactly(8)"); }
+    if (!(digit(4) === 4)) { throw __bynkExpectFailure("tests/ranges.test.bynk:79:12", 2393, 2406, "expect digit(4) == 4\n  expected: digit(4) == 4\n  actual:   " + __bynkShow((digit(4))) + " == " + __bynkShow((4))); }
+    if (!(digit(12) === -1)) { throw __bynkExpectFailure("tests/ranges.test.bynk:80:12", 2418, 2433, "expect digit(12) == -1\n  expected: digit(12) == -1\n  actual:   " + __bynkShow((digit(12))) + " == " + __bynkShow((-1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -214,7 +235,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["sign splits the integers", "bounds are inclusive", "negative bounds and a literal between ranges", "ranges nest in variants and or-patterns", "ranges nest in records and lists", "a partly covered range keeps the rest", "a refined Int, a guard, a single-value range and let-else"];
+export const __bynkCases: readonly string[] = ["sign splits the integers", "bounds are inclusive", "negative bounds and a literal between ranges", "ranges nest in variants and or-patterns", "ranges nest in records and lists", "a range nested after is", "a partly covered range keeps the rest", "a refined Int, a guard, a single-value range and let-else"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -246,6 +267,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("ranges nest in records and lists")) {
     const started = __bynkCaseNow();
     const r = { name: "ranges nest in records and lists", ...(await test_ranges_nest_in_records_and_lists()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a range nested after is")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a range nested after is", ...(await test_a_range_nested_after_is()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

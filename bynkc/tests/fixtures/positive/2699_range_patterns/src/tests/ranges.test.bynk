@@ -52,6 +52,14 @@ suite shop.ranges {
     expect small([4, 1]) == "other"
   }
 
+  case "a range nested after is" {
+    expect nestedIs(Some(5), [])
+    expect !nestedIs(Some(10), [])
+    expect nestedIs(None, [3, 99])
+    expect !nestedIs(None, [10])
+    expect !nestedIs(None, [])
+  }
+
   case "a partly covered range keeps the rest" {
     expect overlap(0) == 1
     expect overlap(9) == 1

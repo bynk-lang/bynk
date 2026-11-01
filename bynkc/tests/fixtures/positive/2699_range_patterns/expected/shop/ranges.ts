@@ -85,6 +85,10 @@ export function edge(reading: Option<number>): string {
   throw new globalThis.Error("non-exhaustive match");
 }
 
+export function nestedIs(o: Option<number>, xs: readonly number[]): boolean {
+  return o.tag === "Some" && o.value >= 0 && o.value <= 9 || xs.length >= 1 && xs[0] >= 0 && xs[0] <= 9;
+}
+
 export function warm(r: Reading): boolean {
   if (r.value >= 20 && r.value <= 30) {
     return true;
@@ -141,8 +145,8 @@ export function exactly(n: number): boolean {
 }
 
 export function digit(n: number): number {
-  const __letElse1848 = n;
-  if (__letElse1848 >= 0 && __letElse1848 <= 9) {
+  const __letElse2012 = n;
+  if (__letElse2012 >= 0 && __letElse2012 <= 9) {
     return n;
   }
   return -1;

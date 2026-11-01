@@ -100,3 +100,12 @@ range forms. Slice 4 (ADR 0685) reserved `..` followed by a literal as
 - A module whose every `via schema(...)` subscriber omits `env` imports no
   `EventEnvelope` for its synthetic envelope parameter, a gap that predates this
   change and that the behavioural test works around as slice 4's does.
+- The tree-sitter grammar cannot see newlines, so an arm body followed on the next
+  line by an arm that opens with `-` (`-5..-1`) reads as a subtraction. The
+  compiler is unaffected; end such a body with a comma (`"freezing",`) for editor
+  highlighting to stay right, as ADR 0685 advises for `[`-led arms.
+- A range nested after `is` (`o is Some(0..9)`, `xs is [0..9, ..]`) is legal, since
+  only the top level is the literal rule's concern; the behavioural fixture pins it.
+- `Events(E { n: 1.. })` still parses, as `n == 1` followed by the event pattern's
+  rest marker, because a payload field's value takes no range. It is not a
+  range, and now looks like one. Left as it was; a payload range is a later proposal.
