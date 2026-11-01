@@ -181,11 +181,14 @@ arguments against the function type's parameters
 (`bynk.types.argument_mismatch`, `bynk.types.call_arity`).
 
 **Recursion** (#2612). A function MAY call itself, and functions MAY call one
-another in a cycle: a free function, a generic function, and a method alike,
-within one unit or across units a `uses` clause connects. A recursive call is
-checked like any other call, and a recursive generic function instantiates its
-type parameters at each call as usual. A lambda has no name, so it cannot call
-itself. Termination is not checked: a well-formed program may recurse without
+another in a cycle: a free function, a generic function, and a method alike. A
+call cycle stays within one unit, because `uses` clauses may not form a cycle;
+a recursive function in a unit another `uses` is called like any other function.
+A recursive call is checked like any other call, and a recursive generic
+function instantiates its type parameters at each call as usual. A lambda has no
+name of its own, and a `let` binding is not in scope in its own initialiser, so
+`let f = (x) => f(x)` is rejected (`bynk.resolve.unknown_function`): a lambda
+cannot call itself. Termination is not checked: a well-formed program may recurse without
 bound, and what happens at run time is specified in
 [§7.3.2](/book/spec/emission/#732-expressions).
 
