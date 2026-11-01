@@ -421,6 +421,129 @@ fn find_cycle(start: &str, consts: &HashMap<String, ConstDecl>) -> Option<Vec<St
     dfs(start, start, consts, &mut path, &mut visited).then_some(path)
 }
 
+/// `bynk.resolve.const_file_cycle` for each cycle among a unit's files, where
+/// file X has an edge to file Y when a constant initialiser in X names a
+/// constant declared in Y. Each file emits as a module that imports the
+/// constants it names from its siblings, so such a cycle is an import cycle in
+/// which one module reads another's `const` before it is initialised, even
+/// when no constant depends on itself. A function reading a sibling's constant
+/// adds no edge: it runs after every module has loaded.
+///
+/// `files` holds each file's name (as a diagnostic shows it) and its constants
+/// in declaration order; `consts` is the unit's constants by name, the first
+/// declaration of each. Returns `(file index, error)` pairs, one per cycle,
+/// reported in the cycle's first file (by index) at its first crossing
+/// reference.
+pub fn file_cycle_errors(
+    files: &[(String, Vec<&ConstDecl>)],
+    consts: &HashMap<String, ConstDecl>,
+) -> Vec<(usize, CompileError)> {
+    // Which file declares each constant, by its declaration's span: a
+    // duplicate in another file is not the declaration `consts` holds.
+    let mut owner: HashMap<&str, usize> = HashMap::new();
+    for (i, (_, cs)) in files.iter().enumerate() {
+        for c in cs {
+            if consts
+                .get(&c.name.name)
+                .is_some_and(|d| d.name.span == c.name.span)
+            {
+                owner.entry(c.name.name.as_str()).or_insert(i);
+            }
+        }
+    }
+    // Edges in declaration order: (from file, to file, constant in `from`,
+    // the reference to the constant in `to`).
+    let mut edges: Vec<Vec<(usize, &ConstDecl, &Ident)>> = vec![Vec::new(); files.len()];
+    for (i, (_, cs)) in files.iter().enumerate() {
+        for c in cs {
+            let mut refs = Vec::new();
+            referenced_consts(&c.init, consts, &mut refs);
+            for r in refs {
+                if let Some(&j) = owner.get(r.name.as_str())
+                    && j != i
+                    && !edges[i].iter().any(|(to, _, _)| *to == j)
+                {
+                    edges[i].push((j, c, r));
+                }
+            }
+        }
+    }
+    fn dfs(
+        node: usize,
+        start: usize,
+        edges: &[Vec<(usize, &ConstDecl, &Ident)>],
+        path: &mut Vec<usize>,
+        visited: &mut HashSet<usize>,
+    ) -> bool {
+        path.push(node);
+        for (to, _, _) in &edges[node] {
+            if *to == start {
+                return true;
+            }
+            if visited.insert(*to) && dfs(*to, start, edges, path, visited) {
+                return true;
+            }
+        }
+        path.pop();
+        false
+    }
+    let mut errors = Vec::new();
+    for start in 0..files.len() {
+        let mut path = Vec::new();
+        let mut visited = HashSet::new();
+        if !dfs(start, start, &edges, &mut path, &mut visited) {
+            continue;
+        }
+        // Reported once, from the cycle's first file.
+        if path.iter().any(|&f| f < start) {
+            continue;
+        }
+        let hops: Vec<(usize, &ConstDecl, &Ident)> = path
+            .iter()
+            .enumerate()
+            .map(|(k, &from)| {
+                let to = path.get(k + 1).copied().unwrap_or(start);
+                let (_, c, r) = edges[from]
+                    .iter()
+                    .find(|(t, _, _)| *t == to)
+                    .expect("an edge on the cycle");
+                (from, *c, *r)
+            })
+            .collect();
+        let shown = hops
+            .iter()
+            .map(|(from, c, r)| {
+                format!(
+                    "`{}` in `{}` names `{}`",
+                    c.name.name, files[*from].0, r.name
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let file_list = path
+            .iter()
+            .chain(std::iter::once(&start))
+            .map(|&f| format!("`{}`", files[f].0))
+            .collect::<Vec<_>>()
+            .join(" → ");
+        let (_, _, first_ref) = hops[0];
+        errors.push((
+            start,
+            CompileError::new(
+                "bynk.resolve.const_file_cycle",
+                first_ref.span,
+                format!("constants in {file_list} refer to each other across files: {shown}"),
+            )
+            .with_note(
+                "each file is a module that imports the constants it names, so these modules \
+                 would import each other and one would read a constant before it is defined",
+            )
+            .with_note("move the constants on this cycle into one file"),
+        ));
+    }
+    errors
+}
+
 /// The order to define `local` (one file's constants, in declaration order) so
 /// each comes after every constant of the same file it refers to. Constants of
 /// other files are imported, so they impose no order here. Assumes no cycle

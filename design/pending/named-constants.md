@@ -88,6 +88,23 @@ Choices this increment made that the proposal left open:
   topologically ordered so each comes after every constant of the same file it
   names; a constant of a sibling file or a used commons is imported, as a
   function is. A module without constants emits byte for byte as before.
+- **No cycle of files through constants.** Each file of a unit emits as a
+  module that imports the constants it names from its siblings. Constants in
+  two files that name each other's file in both directions (file a declares
+  `A = 1` and `C = B`, file b declares `B = A`) form no cycle among
+  constants, but the modules would import each other, and an ES module cycle
+  evaluates one module's `const` before the other's is initialised (a
+  `ReferenceError` at load). So the checker builds, per unit, a graph of files
+  with an edge from X to Y when a constant initialiser in X names a constant
+  declared in Y, and refuses a cycle in it as `bynk.resolve.const_file_cycle`,
+  naming the files and the constants on it, with a note to move them into one
+  file. Only constant-to-constant references count: a function reads a
+  constant when it is called, after every module has loaded. A cycle across
+  units cannot arise, since `uses` is acyclic.
+  - **Rejected:** leaving it as a documented hazard, which would compile a
+    program that fails as soon as it loads;
+  - **Rejected:** emitting every constant of a unit into one module, which
+    would change the per-file module layout every other declaration follows.
 - **Editor support.** Constants get their own index kind and a new
   semantic-token type, `constant`, appended to the legend at index 15. Hover
   shows the declaration with its type and initialiser; completion, document
@@ -99,14 +116,9 @@ and emitter reuse the embed plumbing (unit tables, `uses` composition, the
 file declaration index) and the static-initialiser typing, so a constant
 behaves like an embed everywhere names are resolved.
 
-- Two constants in *different files* of one unit that refer to each other's
-  file in both directions (file A's constant naming file B's, and B's function
-  or constant naming A's) give the emitted modules an import cycle, and an
-  ES module cycle evaluates one module's `const` before the other's is
-  initialised. A cycle *between constants* is refused, but this module-level
-  shape is not detected; keeping mutually dependent constants in one file
-  avoids it.
-- A constant's type is resolved where the constant is used, in that unit's
-  type namespace, as an imported function's signature is.
+- An imported constant's type resolves in the declaring commons' scope, as
+  an imported function's signature does: its annotation seeds the
+  reachable-type closure, and a value crossing a type the importing unit
+  shadows is `bynk.uses.name_conflict`.
 - The follow-ons are constants in compile-time positions (decision C) and,
   if wanted, arithmetic on literals in an initialiser.

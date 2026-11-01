@@ -76,7 +76,13 @@ const DefaultPort: Port = 8080
 
 Constants may refer to each other in any order, across files and through
 `uses`, but not in a cycle: `const A: Int = B` with `const B: Int = A` is
-`bynk.resolve.const_cycle`, which names the members of the cycle.
+`bynk.resolve.const_cycle`, which names the members of the cycle. Nor may the
+files of a unit depend on each other in a cycle through their constants: if
+`a.bynk` declares `const C: Int = B` and `b.bynk` declares `const B: Int = A`,
+where `A` is declared in `a.bynk`, each file's module would import the other's
+and read a constant before it is defined. That is
+`bynk.resolve.const_file_cycle`; move the constants into one file. A function
+reading another file's constant is always fine.
 
 A constant cannot yet stand in a compile-time position, such as a refinement
 bound (`InRange(1, MaxQty)`) or an annotation argument.
