@@ -168,6 +168,25 @@ pub struct TestArgs {
         default_value = "5s"
     )]
     pub settle: Option<String>,
+    /// Run a smoke test of every `from http` route instead of the project's
+    /// own suites (#2658): each route is called with arguments `Val`
+    /// fabricates and must not answer a 5xx or a body that does not decode; a
+    /// route with a JSON body must reject a malformed one, and a route behind
+    /// an actor must refuse a call with no credential. A route whose arguments
+    /// or principal can't be fabricated is skipped and named. Combine with
+    /// `--against` to smoke a running system.
+    #[arg(long)]
+    pub smoke: bool,
+    /// With `--smoke`, print the synthesised suites as `.bynk` source and run
+    /// nothing: a starting point to copy into `tests/` and extend.
+    #[arg(long, requires = "smoke")]
+    pub print: bool,
+    /// With `--smoke --against <target>`, also call the routes that write
+    /// (`POST`, `PUT`, `PATCH`, `DELETE`). Without it a named target sees only
+    /// `GET` requests, since fabricated writes would land on a shared
+    /// deployment. In process and against `dev` every route is called.
+    #[arg(long, requires = "smoke")]
+    pub smoke_unsafe: bool,
 }
 
 /// Where `test` writes its output: `-o`, or `<input>/out`.
@@ -209,6 +228,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         against,
         skip_unsupported,
         settle,
+        smoke,
+        print,
+        smoke_unsafe,
     } = args;
     // `json` is "machine-readable": the document or the stream. `stream` says
     // which; everything that prints a document goes through `print_run`.
@@ -272,6 +294,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                             settle: settle.clone(),
                             run_id: crate::remote::fresh_run_id(),
                             bynk,
+                            smoke,
                         },
                     );
                 }
@@ -371,6 +394,31 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             o
         }
     };
+    // #2658: a smoke run builds the synthesised suites in place of the
+    // project's own. Against a named target only `GET` routes are called
+    // unless `--smoke-unsafe`; in process and against `dev` every route is.
+    let mut smoke_skips: Vec<(String, bynk_emit::project::RemoteSkip)> = Vec::new();
+    let options = if smoke {
+        let methods = match remote.as_ref() {
+            Some(run) if run.dev_env.is_none() && !smoke_unsafe => crate::smoke::Methods::SafeOnly,
+            _ => crate::smoke::Methods::All,
+        };
+        // One `--against dev` group's run: the run that started it reported.
+        let report = std::env::var_os(crate::remote::DEV_URLS_ENV).is_none();
+        match crate::smoke::prepare(program, options, methods, json, stream, report && !print) {
+            Ok(mut prepared) => {
+                if print {
+                    print!("{}", prepared.smoke.print(&input));
+                    return ExitCode::SUCCESS;
+                }
+                smoke_skips = prepared.smoke.remote_skips();
+                prepared.options
+            }
+            Err(code) => return code,
+        }
+    } else {
+        options
+    };
     let out = match bynk_emit::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => {
@@ -392,8 +440,10 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // `bynk test` is then compiled in and run like any other case.
     let mut out = out;
     let mut doc_aliases: Vec<(String, String)> = Vec::new();
-    // A remote run builds only the `system` suites, so it has no doc examples.
+    // A remote run builds only the `system` suites, and a smoke run only the
+    // smoke, so neither has doc examples.
     if remote.is_none()
+        && !smoke
         && let Some(sources) = &options.sources
     {
         let docs = crate::doc_examples::DocExamples::collect(sources);
@@ -495,6 +545,8 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 );
             }
         }
+        // The smoke's skips were reported when they were decided.
+        run.skipped.append(&mut smoke_skips);
     }
 
     // Write every artefact to disk under the output root.
@@ -604,7 +656,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // type-stripping, so the source maps written above resolve `.bynk`
     // breakpoints. Node prints its inspector URL; a debugger attaches there.
     if inspect {
-        return run_inspect(program, &main_ts, seed_hex.as_deref(), &filter);
+        return run_inspect(program, &main_ts, seed_hex.as_deref(), &filter, smoke);
     }
 
     let tsconfig = output_root.join("tsconfig.json");
@@ -725,6 +777,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         if tsc_ok {
             let mut node_cmd = ProcCommand::new(crate::probe::program_path("node"));
             node_cmd.arg(&main_js);
+            if smoke {
+                node_cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
+            }
             // #854: the coverage path owns the node launch (it sets
             // `NODE_V8_COVERAGE` and reads the result back), so it does not go
             // through `finish_runner`.
@@ -748,6 +803,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 seed_hex.as_deref(),
                 &filter,
                 remote.as_ref(),
+                &smoke_skips,
                 &out.discovered,
                 &doc_aliases,
             ) {
@@ -797,6 +853,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             cmd.arg(p);
         }
         cmd.arg(&main_ts);
+        if smoke {
+            cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
+        }
         match finish_runner(
             program,
             cmd,
@@ -804,6 +863,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             seed_hex.as_deref(),
             &filter,
             remote.as_ref(),
+            &smoke_skips,
             &out.discovered,
             &doc_aliases,
         ) {
@@ -932,6 +992,8 @@ fn finish_runner(
     seed_hex: Option<&str>,
     filter: &crate::test_filter::TestFilter,
     remote: Option<&crate::remote::RemoteRun>,
+    // #2658: an in-process smoke run's skips (a remote run's are on `remote`).
+    local_skips: &[(String, bynk_emit::project::RemoteSkip)],
     discovered: &[bynk_emit::project::DiscoveredSuite],
     aliases: &[(String, String)],
 ) -> std::io::Result<ExitCode> {
@@ -951,13 +1013,10 @@ fn finish_runner(
     // The skipped cases the filter selects are not in the build, so the runner
     // is told they exist, and the document lists only those.
     let selected_skips: Vec<&(String, bynk_emit::project::RemoteSkip)> = remote
-        .map(|run| {
-            run.skipped
-                .iter()
-                .filter(|(suite, skip)| filter.selects(suite, &skip.case))
-                .collect()
-        })
-        .unwrap_or_default();
+        .map_or(local_skips, |run| run.skipped.as_slice())
+        .iter()
+        .filter(|(suite, skip)| filter.selects(suite, &skip.case))
+        .collect();
     filter
         .clone()
         .with_skipped(
@@ -992,13 +1051,14 @@ fn finish_runner(
         let parsed = crate::test_json::parse_ndjson(&stdout);
         let unmatched = parsed.unmatched.clone();
         let mut doc = parsed.into_document(&stderr).with_tiers(discovered);
-        if let Some(run) = remote {
-            let skipped: Vec<(String, String, String)> = selected_skips
-                .iter()
-                .map(|(suite, k)| (suite.clone(), k.case.clone(), k.reason.clone()))
-                .collect();
-            doc = doc.with_remote(run.transport(), &skipped);
-        }
+        let skipped: Vec<(String, String, String)> = selected_skips
+            .iter()
+            .map(|(suite, k)| (suite.clone(), k.case.clone(), k.reason.clone()))
+            .collect();
+        doc = match remote {
+            Some(run) => doc.with_remote(run.transport(), &skipped),
+            None => doc.with_skips(&skipped),
+        };
         print!("{}", doc.render());
         unmatched.report(program);
         Ok(exit_from(out.status.success()))
@@ -1203,6 +1263,7 @@ fn run_inspect(
     entry: &Path,
     seed_hex: Option<&str>,
     filter: &crate::test_filter::TestFilter,
+    smoke: bool,
 ) -> ExitCode {
     let Some(node) = resolve_tool("node") else {
         eprintln!("{program} test --inspect: `node` was not found on PATH");
@@ -1215,6 +1276,9 @@ fn run_inspect(
     let mut cmd = ProcCommand::new(node);
     if let Some(hex) = seed_hex {
         cmd.env("BYNK_TEST_SEED", hex);
+    }
+    if smoke {
+        cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
     }
     filter.apply(program, &mut cmd);
     let default_free = std::net::TcpListener::bind(("127.0.0.1", NODE_INSPECT_PORT)).is_ok();

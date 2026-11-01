@@ -22,8 +22,10 @@ identifier.
 
 {{#grammar constant_name}}
 
-An upper-case-initial name. Constant names denote sum-type variants and enum
-constants.
+An upper-case-initial name. Constant names denote sum-type variants, enum
+constants and named constants (`const MaxRetries: Int = 3`,
+[§5.12b](/book/spec/static-semantics/#constants)), whose names MUST have this
+shape.
 
 ## §3.2 Literals
 

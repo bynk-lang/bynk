@@ -848,7 +848,7 @@ case "a hold older than fifteen minutes has expired" {
   (`bynk.test.remote_clock_dependent`): compare instants the run produced
   (`expires > created`) instead.
 
-## `Val[T]` — value fabrication
+## `Val[T]` — value fabrication {#val}
 
 `Val[T]` fabricates a valid inhabitant of `T` drawn from its refinement domain;
 `Val[T](pin)` pins a specific one, refinement-checked at compile time.
@@ -861,7 +861,7 @@ case "a hold older than fifteen minutes has expired" {
 | `String where MinLength(k)` / `Length(k)` | a string of length `k` |
 | `String where Matches(…)` | **error** — must pin (`bynk.val.needs_pin`) |
 | sum | the first variant (payloads recursively fabricated) |
-| record | every field fabricated |
+| record | every field fabricated, an inline `where` on a field narrowing it as a refined type's does (`qty: Int where Positive` is `1`; a field `where Matches(…)` must pin) |
 | opaque | `.unsafe(<base zero>)` |
 
 `Val[T]` is test-only (`bynk.val.outside_test`). A pin must be a compile-time
@@ -900,7 +900,7 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | `String where MinLength(k)` / `Length(k)` | strings at and above length `k` |
 | `String where Matches(…)` | **must pin** (`bynk.val.needs_pin`) — no generator |
 | sum | each variant |
-| record | each field generated |
+| record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
 | opaque | over the base type |
 
 A type must be **refinement-generable** to appear in `for all` (or `Val`): a
@@ -1257,6 +1257,44 @@ the same):
 
 Only `---` doc-blocks on a `commons` or `context` hold examples. See [Write
 examples that stay true](/book/guides/program-structure/document-your-code/#examples).
+
+## Smoke tests — `bynk test --smoke` {#smoke}
+
+`bynk test --smoke` writes a `system` suite for each context with a `from http`
+service, and runs it instead of the project's own suites. The cases use only
+the surface above: arguments from [`Val`](#val), a [`by`](#call-site-by)
+principal, a [`Wire`](#driving-a-rejection-with-wire) body and
+[`by Nobody`](#failure-principals). For a route `PUT /cart/:sku` guarded by
+`by u: User`, `bynk test --smoke --print` shows:
+
+```bynk,fragment
+case "smoke: PUT /cart/:sku answers" {
+  let r <- api.PUT("/cart/:sku", Val[Sku], Val[Item]) by User(Val[UserId])
+  expect !(r is ServerError(_) || r is NotImplemented(_) || r is BadGateway(_) || r is ServiceUnavailable(_) || r is GatewayTimeout(_))
+}
+case "smoke: PUT /cart/:sku rejects a malformed body" {
+  let r <- api.PUT("/cart/:sku", Val[Sku], Wire("{not json")) by User(Val[UserId])
+  expect r is Rejected(_)
+}
+case "smoke: PUT /cart/:sku refuses no credential" {
+  let r <- api.PUT("/cart/:sku", Val[Sku], Val[Item]) by Nobody
+  expect r is Rejected(Unauthorized)
+}
+```
+
+- **answers** is made for every route. It passes unless the answer is a 5xx,
+  even one the handler builds itself: its input is valid by construction.
+- **rejects a malformed body** is made for a route with a JSON `body` (not a
+  [`@raw`](/book/reference/http/#raw-request-bodies) one). On a service with
+  `on rejected`, a rendered `400` (`Handled(BadRequest(_))`) passes too.
+- **refuses no credential** is made for a route whose actor isn't public.
+
+In a smoke run decoding is strict: a status no `HttpResult` carries, or a JSON
+body that doesn't decode as the route's declared type, fails the case. A route
+`Val` can't fill (a `Matches` type, a principal it can't build) is skipped and
+named with the checker's reason. See
+[Smoke-testing every route](/docs/bynk-cli/#smoke-testing-every-route) for
+the flags, and for which routes run against a deployment.
 
 ## Running
 

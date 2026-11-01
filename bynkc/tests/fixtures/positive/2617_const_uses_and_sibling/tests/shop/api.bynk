@@ -1,0 +1,50 @@
+---
+#2617: constants across files and units, proved at run time.
+---
+suite shop.api
+
+case "the context reads a used commons' constants" {
+  expect MaxItems == 20
+  expect DefaultPage.size == 10
+  expect Window == 20
+}
+
+case "a service answers with a used constant" {
+  let r <- api.GET("/limit")
+  match r {
+    Ok(n) => expect n == 20
+    _ => expect false
+  }
+}
+
+case "a service answers with the context's own constant" {
+  let r <- api.GET("/greeting")
+  match r {
+    Ok(s) => expect s == Welcome
+    _ => expect false
+  }
+}
+
+case "a sibling file's function reads its sibling's constants" {
+  let r <- api.GET("/pages")
+  match r {
+    Ok(n) => expect n == 2
+    _ => expect false
+  }
+}
+
+case "a refined constant crosses the context's rebrand" {
+  let b <- api.GET("/batch")
+  match b {
+    Ok(q) => expect q == SmallBatch
+    _ => expect false
+  }
+}
+
+case "a sum constant crosses the context's rebrand" {
+  let t <- api.GET("/tier")
+  match t {
+    Ok(s) => expect s == "gold"
+    _ => expect false
+  }
+}

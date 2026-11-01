@@ -68,7 +68,7 @@ bynkc fmt [INPUTS] [--check] [--indent <INDENT>] [--indent-width <N>] [--max-lin
 Discover and run test declarations in a project. Compiles the project (including all generated `tests/*.test.ts` modules), then invokes Node.js on the aggregated runner script. Requires `tsc` and `node` to be on PATH
 
 ```text
-bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect] [--seed <SEED>] [--case <NAME>] [--suite <NAME>] [--partial-selection] [--coverage] [--against <TARGET>] [--skip-unsupported] [--settle <DURATION>]
+bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect] [--seed <SEED>] [--case <NAME>] [--suite <NAME>] [--partial-selection] [--coverage] [--against <TARGET>] [--skip-unsupported] [--settle <DURATION>] [--smoke] [--print] [--smoke-unsafe]
 ```
 
 | Argument | Required | Default | Description |
@@ -86,3 +86,6 @@ bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect
 | `--against` | no | — | Run the `system` suites against a real runtime instead of in process: `dev`, a local `bynk dev` the runner starts itself (through `bynk test` only), or a target named under `[test.targets]` in `bynk.toml`. A bare URL is refused, and so is a target marked `production = true`. A named target's secrets are read from the environment. Only the `system` suites run, and a case that uses what a real runtime can't honour (an `on call` address, `advance Clock`, a cron or queue address, an asset fetch) is refused unless `--skip-unsupported` is passed |
 | `--skip-unsupported` | no | — | With `--against`, skip each `system` case a real runtime can't honour, naming it and why, instead of refusing the run |
 | `--settle` | no | `5s` | With `--against`, how long a failing `expect` is retried before it fails, for each retried stretch: the addresses since the last unsafe one (anything but `GET`, `HEAD` or `OPTIONS`) are re-run before each retry, so a real system's latency doesn't fail a case. A duration such as `5s`, `500ms` or `0` (no retry) |
+| `--smoke` | no | — | Run a smoke test of every `from http` route instead of the project's own suites (#2658): each route is called with arguments `Val` fabricates and must not answer a 5xx or a body that does not decode; a route with a JSON body must reject a malformed one, and a route behind an actor must refuse a call with no credential. A route whose arguments or principal can't be fabricated is skipped and named. Combine with `--against` to smoke a running system |
+| `--print` | no | — | With `--smoke`, print the synthesised suites as `.bynk` source and run nothing: a starting point to copy into `tests/` and extend |
+| `--smoke-unsafe` | no | — | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). Without it a named target sees only `GET` requests, since fabricated writes would land on a shared deployment. In process and against `dev` every route is called |

@@ -354,6 +354,36 @@
       "summary": "A suite mixes `system` cases with `unit` or `integration` ones; a `system` case runs against deployed Workers and addresses services by context path, so it needs a `suite … as system` of its own."
     }
   ],
+  "const_decl": [
+    {
+      "code": "bynk.parse.const_missing_type",
+      "summary": "A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`)."
+    },
+    {
+      "code": "bynk.resolve.bad_const_initialiser",
+      "summary": "A `const` initialiser is not a static value of the declared type: only literals, constructors over static values, `T.unsafe(lit)`, `List.empty()`/`Map.empty()`/`Set.empty()`, `Duration` literals and references to other constants are allowed."
+    },
+    {
+      "code": "bynk.resolve.const_cycle",
+      "summary": "Constants refer to each other in a cycle, so none of them has a value."
+    },
+    {
+      "code": "bynk.resolve.const_file_cycle",
+      "summary": "Constants in different files of one unit refer to each other in a cycle of files, so the files' modules would import each other and one would read a constant before it is defined."
+    },
+    {
+      "code": "bynk.resolve.const_name_case",
+      "summary": "A constant's name is not upper-camel case (`MaxRetries`, not `maxRetries`)."
+    },
+    {
+      "code": "bynk.resolve.const_outside_context_or_commons",
+      "summary": "A `const` declaration appears outside a context or commons."
+    },
+    {
+      "code": "bynk.resolve.duplicate_const",
+      "summary": "Two constants share a name."
+    }
+  ],
   "consumes_decl": [
     {
       "code": "bynk.adapter.consumes_context",
@@ -901,7 +931,7 @@
     },
     {
       "code": "bynk.types.non_exhaustive_match",
-      "summary": "A `match` does not cover every variant."
+      "summary": "A `match` does not cover every value."
     }
   ],
   "method_call": [

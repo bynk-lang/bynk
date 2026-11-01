@@ -1,0 +1,1 @@
+bynk.resolve.bad_const_initialiser the initialiser of constant `Limit` must be a static value, but a function call is not

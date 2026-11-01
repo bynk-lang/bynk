@@ -1,0 +1,11 @@
+commons demo
+
+type Status = enum { Pending, Paid, Cancelled }
+type Priority = enum { Low, High }
+type Order = { status: Status, priority: Priority, total: Int }
+
+fn code(o: Order) -> Int {
+  match o {
+    Order { status: Paid, .. } => 1
+  }
+}

@@ -827,6 +827,77 @@ fn embed_reference_gets_the_embed_semantic_token() {
     assert_eq!(found, vec![("shell".len() as u32, embed)]);
 }
 
+/// #2617 — a constant reference in a unit that `uses` its commons hovers as
+/// its declaration, with its type and initialiser; the same content at the
+/// declaration.
+#[test]
+fn const_reference_hovers_as_its_declaration() {
+    let (r, rel, text, root) = analysed(
+        "../bynkc/tests/fixtures/positive/2617_const_uses_and_sibling/src",
+        "api/service.bynk",
+    );
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "Ok(MaxItems)", "MaxItems"),
+    )
+    .expect("hover on the `MaxItems` constant reference");
+    assert!(
+        hover.contains("const MaxItems: Int = 20"),
+        "missing the declaration in:\n{hover}"
+    );
+
+    let (r, rel, text, root) = analysed(
+        "../bynkc/tests/fixtures/positive/2617_const_uses_and_sibling/src",
+        "limits/limits.bynk",
+    );
+    let decl = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "const MaxItems", "MaxItems"),
+    )
+    .expect("hover on the declaration");
+    assert_eq!(hover, decl);
+}
+
+/// #2617 — a constant reference is coloured as a constant: the `constant`
+/// token type (legend index 15), not a variable or a function.
+#[test]
+fn const_reference_gets_the_constant_semantic_token() {
+    let (r, rel, text, _) = analysed(
+        "../bynkc/tests/fixtures/positive/2617_const_uses_and_sibling/src",
+        "api/service.bynk",
+    );
+    let legend = bynk_lsp::index_queries::semantic_tokens_legend();
+    let constant = legend
+        .token_types
+        .iter()
+        .position(|t| t.as_str() == "constant")
+        .expect("`constant` is in the legend") as u32;
+    let tokens = bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &rel, &text, None);
+    let off = at(&text, "Ok(MaxItems)", "MaxItems");
+    let want_line = text[..off].matches('\n').count() as u32;
+    let want_col = (off - text[..off].rfind('\n').map_or(0, |n| n + 1)) as u32;
+    let (mut line, mut col) = (0u32, 0u32);
+    let mut found = Vec::new();
+    for t in &tokens {
+        if t.delta_line > 0 {
+            line += t.delta_line;
+            col = t.delta_start;
+        } else {
+            col += t.delta_start;
+        }
+        if (line, col) == (want_line, want_col) {
+            found.push((t.length, t.token_type));
+        }
+    }
+    assert_eq!(found, vec![("MaxItems".len() as u32, constant)]);
+}
+
 /// #1883 — an asset with an `at` path hovers as served at that fixed path,
 /// never at a content-hashed `/_assets/` one (review of #1924).
 #[test]

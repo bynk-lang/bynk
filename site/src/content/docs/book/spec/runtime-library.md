@@ -472,6 +472,6 @@ settle (`Promise.allSettled`), so nothing the block started is running when it
 returns or throws. If none rejected it returns the values. If any rejected it throws
 the **first rejection in input order** — not the first in time — and attaches the
 later reasons to it as a `suppressed` array, in input order, when the first is an
-object. The helper is codegen, not part of the published emit ABI (ADR 0310): it
+object. Callers are the `par` block and, since #2662, the `parTraverse`, `parTraverseAll` and `parTraverseTry` lowerings (list and query/broadcast receivers), which pass `xs.map((x) => () => f(x))`; the result is then an array of the awaited values, in input order. The helper is codegen, not part of the published emit ABI (ADR 0310): it
 lives in the `settle` runtime module, which a project emits only when a module
 imports it.

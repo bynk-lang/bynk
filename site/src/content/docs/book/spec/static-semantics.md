@@ -40,11 +40,12 @@ with each occurrence free to change type. The emitter gives a re-bound name
 its own emitted identifier so each `let` still lowers to a distinct binding.
 
 A unit's top-level declarations share one namespace, except capabilities and
-actors, which each keep their own. A function, an asset, a type or event, a
-service, an agent and a provider with a body (by its implementation name,
-`provides Cap = Name`) MUST NOT share a name, across all of the unit's files
-(`bynk.resolve.name_conflict`; two types, or a type and an event, are
-`bynk.resolve.duplicate_type`). They are all one scope of the emitted module.
+actors, which each keep their own. A function, an asset, an embed, a constant,
+a type or event, a service, an agent and a provider with a body (by its
+implementation name, `provides Cap = Name`) MUST NOT share a name, across all
+of the unit's files (`bynk.resolve.name_conflict`; two types, or a type and an
+event, are `bynk.resolve.duplicate_type`; two constants are
+`bynk.resolve.duplicate_const`). They are all one scope of the emitted module.
 
 A bare reference to a **named function** is a value only where a function
 type is expected (v0.20a); elsewhere it MUST be called
@@ -88,8 +89,8 @@ types is not a crossing. If `t.app` declares `type Repo = Int` beside `uses
 t.core` and `uses t.model`, then `Run { repo: first(r) }` is legal in `t.app`,
 and `Run { repo: 42 }` and `r.repo + 1` are not.
 
-A unit's own declaration also shadows a function or asset of the same name
-from a commons it `uses`, whatever the local declaration's kind, as in the
+A unit's own declaration also shadows a function, asset, embed or constant of
+the same name from a commons it `uses`, whatever the local declaration's kind, as in the
 emitted module: the import is not in scope. Where the local declaration cannot
 answer a reference (a call to a type or service, a bare event name, an asset
 used as a function), the reference is `bynk.uses.name_conflict`, naming both
@@ -1134,8 +1135,8 @@ operation of the same capability is unaffected.
 
 ## §5.6 Pattern matching
 
-A `match` MUST be **exhaustive** — every variant of the scrutinised sum,
-`Result`, or `Option` covered (`bynk.types.non_exhaustive_match`) — and its
+A `match` MUST be **exhaustive** — every value of the scrutinee covered by some
+unguarded arm (`bynk.types.non_exhaustive_match`) — and its
 scrutinee MUST be a sum type, a primitive, or a record matched by record
 patterns (`bynk.types.match_non_sum_discriminant`). Its arms
 MUST **join** to a common result type — their least upper bound, so a refined
@@ -1145,6 +1146,40 @@ variant (`bynk.types.duplicate_variant_arm`), and MUST NOT be unreachable
 (`bynk.types.unreachable_arm`): every arm MUST match some value that no earlier
 unguarded arm matches. A guarded arm or a refined pattern (`n where P`) never
 covers a later arm, since its guard or predicate may fail.
+
+**Coverage is usefulness** (patterns track, slice 3, #2665). Both rules are one
+question about a matrix whose rows are the earlier unguarded arms' patterns. A
+pattern is *useful* after those rows when it matches some value none of them
+does; a `match` is exhaustive exactly when `_` is not useful after all of its
+unguarded arms, and an arm is unreachable exactly when its pattern is not useful
+after the unguarded arms before it. The values a type has are its constructors:
+
+- a sum, `Result` or `Option` has its declared variants, whose payload fields are
+  its columns in declared order (named and positional bindings are the same
+  columns);
+- a record has one constructor whose columns are all its fields in declared
+  order, and a field a record pattern does not list matches anything;
+- `Bool` has `true` and `false`;
+- `Int` and `String` have a literal for every value, so no finite set of literals
+  is complete and only an irrefutable pattern covers them; a refined type has
+  its base's constructors, and an opaque type has no patterns.
+
+An or-pattern, at any depth, stands for each of its alternatives. A guarded arm
+contributes no row. A refined pattern contributes no row, and as the arm under
+test it is tested as the pattern it refines. So `Pair(true, _)`,
+`Pair(false, true)` and `Pair(false, false)` cover a `Pair(Bool, Bool)` with no
+wildcard, and the arms of `Order { status: Paid, .. }`, `Order { status: Pending, .. }`
+and `Order { status: Cancelled, .. }` cover an `Order` between them, after which
+an `Order { total, .. }` arm is `bynk.types.unreachable_arm`. Redundancy may be
+spread across several earlier arms.
+
+Each value no arm covers is reported as a pattern that can be written as an arm:
+`Pair(false, false)`, `Order { status: Cancelled, .. }`, or `_` for an unbounded
+type, with `_` standing for a field the uncovered values leave unconstrained. At
+most eight are reported for one `match`, followed by a count of the rest. A
+checker MAY bound the work it does: when a `match` is too complex to decide, it
+MUST report `bynk.types.non_exhaustive_match` (asking for a wildcard arm) rather
+than accept it, and MUST NOT report an arm unreachable.
 
 **Extensible enums** (standard-library S3, #1963). A standard-library enum
 marked extensible in the first-party registry (`FetchError`, `Method`) may gain
@@ -1175,12 +1210,8 @@ In `T { f, g: p, .. }`:
   NOT name a type the unit may not inspect, such as another context's
   `exports opaque` type (`bynk.context.opaque_inspection`, reported at the
   pattern).
-- **Coverage is conservative.** A record pattern covers its type only when every
-  field sub-pattern is irrefutable (a name or `_`); otherwise it is partial,
-  and a later irrefutable arm is needed for the `match` to be exhaustive
-  (`bynk.types.non_exhaustive_match`). An arm is `bynk.types.unreachable_arm`
-  when an earlier unguarded arm's record pattern is no more specific on any
-  field. Precise multi-field coverage is a later increment.
+- **Coverage is precise.** A record pattern is one constructor over the record's
+  fields, so several arms cover a record between them, as stated above.
 - After `is`, the names bound by a record pattern in scope are its flat fields:
   bare `f` and `f: name`, like a variant's flat payload bindings.
 
@@ -2128,7 +2159,16 @@ slow element does not head-of-line-block the rest; the order in which side
 effects interleave is unspecified. Unlike the sequential `forEach` (which
 short-circuits on the first failure and never issues the rest), a rejecting
 element does **not** cancel siblings already issued — every element's effect is
-in flight before the first failure surfaces, and each runs to completion.
+issued, in input order, before any is awaited. The fan-out has **settle-all**
+fault semantics, as a `par` block does (§4.8.7b): when any element faults it waits
+for **every** element to settle, then raises the **first fault in input order**
+(not the first in time), so no element's work outlives the call and the fault a
+program sees does not depend on timing. Later faults ride on the raised one as
+`suppressed` and are not catchable separately. A fast fault therefore waits for a
+slow sibling. A synchronous throw from `f` is a fault of that element only: the
+elements before and after it are still issued and awaited. The same holds for
+`parTraverseAll` and `parTraverseTry` and for the `Query`/`Map` broadcast forms
+([#2662](https://github.com/bynk-lang/bynk/issues/2662)).
 
 The **collect-all** pair `traverseAll` / `parTraverseAll` (v0.148,
 [ADR 0172](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0172-list-collect-all-iterators.md))
@@ -2154,8 +2194,9 @@ take the same `f: T -> Effect[Result[U, E]]` but **stop at the first `Err`**,
 returning `Effect[Result[List[U], E]]` — `Ok` of the collected values, or the
 first `Err` encountered. `traverseTry` awaits each element in order and bails on
 the first `Err` (later elements never run); `parTraverseTry` issues all at once,
-awaits them, then returns the first `Err` in input order (in-flight calls are not
-cancelled). They are the fault-**propagating** counterpart to the fault-gathering
+awaits them all, then returns the first `Err` in input order — unless an element
+faulted, in which case the fault (first in input order) is raised instead, whatever
+the `Err` positions. They are the fault-**propagating** counterpart to the fault-gathering
 `traverseAll`/`parTraverseAll`, and likewise apply over the `Query`/`Map`
 broadcast.
 
@@ -2474,3 +2515,68 @@ drops one that nothing references. A unit-tier `suite` case names the embeds of
 its target and of the commons the target `uses`. A single file has no project
 root to find `embeds/` under, so building one that declares an embed is
 `bynk.embed.needs_project`; checking it is unaffected.
+
+## §5.12b Named constants {#constants}
+
+A **constant** declaration, `const Name: T = e`
+([§4.1.12c](/book/spec/syntactic-grammar/#4112c-const_decl)), names a value of
+type `T`. In an expression, `Name` has type `T` and its value is `e`'s.
+
+- A `const` MUST be declared in a context or a commons
+  (`bynk.resolve.const_outside_context_or_commons`).
+- Its name MUST be upper-camel, a
+  [`constant_name`](/book/spec/lexical-grammar/#312-constant_name)
+  (`/[A-Z][A-Za-z0-9_]*/`; `bynk.resolve.const_name_case`).
+- Its name MUST NOT be declared twice in one unit
+  (`bynk.resolve.duplicate_const`), and MUST NOT equal the name of another
+  declaration in the unit's namespace ([§5.1](#51-name-resolution--visibility)):
+  a function, an asset, an embed, a type, an event, a service, an agent or a
+  provider (`bynk.resolve.name_conflict`). Nor may it equal a built-in type name
+  (`List`, `Map`) or the name of a variant of a sum type in scope, including a
+  predeclared `HttpResult` variant, since a bare reference would then read as
+  either (`bynk.resolve.name_conflict`).
+- A unit sees its own constants and those of each commons it `uses`, one level,
+  as with functions; a local declaration wins. Two used commons that declare
+  the same name are `bynk.uses.name_conflict`. A `let` binding or parameter
+  shadows a constant of the same name.
+
+The initialiser `e` MUST be a **static expression** (ADR 0004) or a reference
+to another constant (`bynk.resolve.bad_const_initialiser`). The closed set is:
+
+- an `Int`, `Float`, `Bool` or unit literal, a negative numeric literal, or a
+  plain string literal with no interpolation hole;
+- a `Duration` literal (`30.seconds`);
+- a parenthesised static expression;
+- a list literal, a record construction with every field given (no spread, no
+  shorthand), a sum-variant construction (a bare or qualified nullary variant,
+  or a variant call), or `Some`/`None`/`Ok`/`Err`, each over static values;
+- `T.unsafe(lit)` for an opaque type `T`, `lit` a literal (confined to the
+  defining commons as anywhere else, [§6.4](/book/spec/type-system/#64-admission--construction));
+- `List.empty()`, `Map.empty()` or `Set.empty()`;
+- the name of another constant in scope.
+
+Anything else is refused: a function or method call, an operator, a field
+access, `self`, a capability, a bind, an interpolated string, a lambda or a
+control-flow expression. `e` is then checked against `T` in an empty, pure
+scope, as an agent state initialiser is ([§5.4](#54-agents--state)): a literal
+is admitted to a refined `T` only when it satisfies the refinement
+(`bynk.refine.literal_violates`), and a value of another type is
+`bynk.resolve.bad_const_initialiser`.
+
+Constants MAY refer to one another, across the files of a unit and to the
+constants of a commons the unit `uses`, but MUST NOT do so in a cycle
+(`bynk.resolve.const_cycle`, reported once per cycle, naming its members in
+order). Nor may the *files* of a unit form a cycle through their constants:
+where a constant initialiser in one file names a constant declared in another,
+the first file depends on the second, and a cycle of such dependencies among a
+unit's files is `bynk.resolve.const_file_cycle`, naming the files and the
+constants on it, even when no constant depends on itself. Each file emits as a
+module that imports the constants it names, so the modules would import each
+other and one would read a constant before it is defined. A function that reads
+a constant of another file adds no dependency. A constant MAY NOT yet appear in a compile-time position, such as a
+refinement bound (`InRange(1, MaxQty)`) or an annotation argument.
+
+A constant is emitted as an exported `const` of the declaring module
+([§7.3.1a](/book/spec/emission/#731a-named-constants)), imported like a function by a
+sibling file or a unit that `uses` it. A unit-tier `suite` case names the
+constants of its target and of the commons the target `uses`.

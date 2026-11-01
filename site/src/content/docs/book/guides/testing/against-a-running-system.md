@@ -84,7 +84,33 @@ built from a constant draws a `bynk.test.remote_clock_dependent` warning.
 Compare instants the run produced (`expires > created`) instead of absolute
 ones.
 
-## 4. What can't run remotely
+## 4. Smoke-test every route
+
+Before you write a case, check that every route answers at all:
+
+```sh
+bynk test --smoke --against dev
+```
+
+`--smoke` writes a `system` suite from your `from http` services and runs it
+instead of yours. Each route is called with arguments
+[`Val`](/book/reference/testing/#val) fabricates, and must not answer a 5xx or
+a body that doesn't decode as its declared type. A route with a JSON body must
+reject a malformed one, and a route behind an actor must refuse a call with no
+credential.
+
+A route `Val` can't fill, such as one whose path parameter is a
+`String where Matches(…)`, is skipped and named. `bynk test --smoke --print`
+prints the suites, so you can copy one into `tests/` and finish it by hand.
+Against a named target only `GET` routes are called, unless you pass
+`--smoke-unsafe`. See
+[Smoke-testing every route](/docs/bynk-cli/#smoke-testing-every-route).
+
+A smoke shows that each route answers as declared. It can't tell you what the
+answer should be, or what a sequence of requests does: that is what your own
+cases are for.
+
+## 5. What can't run remotely
 
 A deployment answers only on its public `http` routes. A case that moves the
 clock, addresses an `on call` service, delivers a queue message, runs a cron

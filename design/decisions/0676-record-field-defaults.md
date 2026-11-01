@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes
-changelog: "A record type's fields may now declare defaults (`field: T = expr`), as an event's could. A record literal may leave a defaulted field out and takes its default, a spread still takes unwritten fields from its base, and a body decoded without the field's key (an HTTP body, a queue message, a service call, `Json.decode`, agent-state rehydration) takes it too. A default is a static value with a wire form, now including `Map.empty()` and `Set.empty()`; in a generic record it must hold for every instantiation. `FetchOptions`, `QueueSend`, `KvGet`, `KvPut` and `R2Put` give every field the default that reproduces the plain operation, so `Fetch.sendWith(req, FetchOptions {})` is `send(req)`. `bynk.event.bad_field_default` is now `bynk.types.bad_field_default`, `bynk.event.default_outside_event` is retired, and a default on a variant payload field is `bynk.types.field_default_on_variant`. See [Field defaults](/book/reference/types/#field-defaults) and [Add an option without breaking callers](/book/guides/program-structure/add-an-option/)."
----
+# 0676 — Record field defaults on every record type, applied at the literal and at the decode
 
-## ADR: record-field-defaults
-title: Record field defaults on every record type, applied at the literal and at the decode
-summary: Optional inputs stay in options records; their fields take defaults, so function arity stays fixed
+- **Status:** Accepted (v0.461)
 
 **Context.** Bynk has no optional parameters and no overloading (ADR 0051), so an
 operation's optional inputs travel in an options record beside the plain

@@ -1778,12 +1778,18 @@ fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> String {
 /// type's predicates, for bare `Val[T]`. `None` when no default can be derived
 /// (a `Matches` refinement — the checker rejects bare `Val` for those).
 fn refined_default(decl: &TypeDecl) -> Option<String> {
-    let (base, refinement) = match &decl.body {
+    match &decl.body {
         TypeBody::Refined {
             base, refinement, ..
-        } => (*base, refinement.as_ref()),
-        _ => return None,
-    };
+        } => refinement_default(*base, refinement.as_ref()),
+        _ => None,
+    }
+}
+
+/// [`refined_default`] over a base type and its refinement, wherever it is
+/// written: a refined type's declaration, or a record field's inline `where`
+/// (#2658: `qty: Int where Positive` must fabricate `1`, not `0`).
+fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option<String> {
     match base {
         BaseType::Int => {
             let mut lo: i64 = 0;
@@ -1919,13 +1925,24 @@ fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> String {
                         .fields
                         .iter()
                         .map(|f| {
-                            let fv = bynk_check::checker::resolve_type_ref(
-                                &f.type_ref,
-                                &cx.commons().types,
-                                tys,
-                            )
-                            .map(|t| mock_value(t, cx, depth - 1))
-                            .unwrap_or_else(|| "undefined".to_string());
+                            // An inline `where` on a base-typed field narrows
+                            // the base's default, as a declared refined type's
+                            // does; the field stays a plain base value.
+                            let inline = match (&f.type_ref, &f.refinement) {
+                                (TypeRef::Base(base, _), Some(r)) => {
+                                    refinement_default(*base, Some(r))
+                                }
+                                _ => None,
+                            };
+                            let fv = inline.unwrap_or_else(|| {
+                                bynk_check::checker::resolve_type_ref(
+                                    &f.type_ref,
+                                    &cx.commons().types,
+                                    tys,
+                                )
+                                .map(|t| mock_value(t, cx, depth - 1))
+                                .unwrap_or_else(|| "undefined".to_string())
+                            });
                             format!("{}: {}", f.name.name, fv)
                         })
                         .collect();
@@ -2061,6 +2078,7 @@ fn lower_method_call(
             // **resolved** connections (the present ones — a connId whose socket has
             // closed drops out).
             _ => {
+                note_par_fan_out(cx, method);
                 let other_elem_ts = args
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
@@ -2179,6 +2197,7 @@ fn lower_method_call(
                     .agent_store_map_value_ts(&id.name)
                     .cloned()
                     .unwrap_or_else(|| "unknown".to_string());
+                note_par_fan_out(cx, method);
                 let other_elem_ts = args
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
@@ -2332,6 +2351,7 @@ fn lower_method_call(
                     .agent_store_log_value_ts(&id.name)
                     .cloned()
                     .unwrap_or_else(|| "unknown".to_string());
+                note_par_fan_out(cx, method);
                 let other_elem_ts = args
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
@@ -3242,6 +3262,7 @@ fn lower_method_call(
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
                 let result_ty = cx.commons().expr_types.get(&e.id).map(|te| te.ty);
+                note_par_fan_out(cx, method);
                 let other_elem_ts = args
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
@@ -4130,10 +4151,11 @@ fn lower_list_kernel(
         // not head-of-line-block the rest. The eager `List` analogue of the
         // `Query.parTraverse` terminal, emitted inline.
         (PAR_TRAVERSE, [f]) => {
+            cx.note_settle_all();
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => {{ await globalThis.Promise.all(__xs.map((__x: {elem_ts}) => ({f})(__x))); }})({recv})"
+                "(async (__xs: readonly {elem_el}[]) => {{ await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))); }})({recv})"
             ))
         }
         // v0.148 (ADR 0172): the collect-all iterators — every element's
@@ -4164,10 +4186,11 @@ fn lower_list_kernel(
             ))
         }
         (PAR_TRAVERSE_ALL, [f]) => {
+            cx.note_settle_all();
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => await globalThis.Promise.all(__xs.map((__x: {elem_ts}) => ({f})(__x))))({recv})"
+                "(async (__xs: readonly {elem_el}[]) => await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))))({recv})"
             ))
         }
         // v0.150 (ADR 0174): the short-circuit collect iterators — stop at the
@@ -4184,12 +4207,13 @@ fn lower_list_kernel(
             ))
         }
         (PAR_TRAVERSE_TRY, [f]) => {
+            cx.note_settle_all();
             let u_ts = list_ok_elem_ts(cx.commons().expr_types.get(&e.id).map(|te| te.ty), tys);
             let u_el = ts_array_elem(&u_ts);
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => {{ const __rs = await globalThis.Promise.all(__xs.map((__x: {elem_ts}) => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})({recv})"
+                "(async (__xs: readonly {elem_el}[]) => {{ const __rs = await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})({recv})"
             ))
         }
         // v0.88 (ADR 0116): the eager builder/terminal vocabulary. Most lower
@@ -4364,6 +4388,18 @@ fn lower_list_kernel(
         _ => None,
     };
     text.map(|expr| pre.finish(expr))
+}
+
+/// Slice 0b (#2662): the `parTraverse` family joins through `__bynkSettleAll`,
+/// so a module using it needs the import even with no `par` block.
+/// `lower_query_method` has no `cx`, so its callers note it here.
+fn note_par_fan_out(cx: &LowerCtx, method: &Ident) {
+    if matches!(
+        method.name.as_str(),
+        "parTraverse" | "parTraverseAll" | "parTraverseTry"
+    ) {
+        cx.note_settle_all();
+    }
 }
 
 /// v0.94 (ADR 0120): the TS element type of a join's `other` collection (its
@@ -4558,7 +4594,7 @@ fn lower_query_method(
         // does not head-of-line-block the rest.
         ("parTraverse", [f]) => {
             format!(
-                "(async () => {{ await globalThis.Promise.all({source}.map((__x) => ({f})(__x))); }})()"
+                "(async () => {{ await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); }})()"
             )
         }
         // v0.149 (ADR 0173): the collect-all terminals over a query/broadcast —
@@ -4578,7 +4614,7 @@ fn lower_query_method(
         }
         ("parTraverseAll", [f]) => {
             format!(
-                "(async () => await globalThis.Promise.all({source}.map((__x) => ({f})(__x))))()"
+                "(async () => await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))))()"
             )
         }
         // v0.150 (ADR 0174): the short-circuit collect terminals — stop at the
@@ -4594,7 +4630,7 @@ fn lower_query_method(
             let u_ts = list_ok_elem_ts(result_ty, tys);
             let u_el = ts_array_elem(&u_ts);
             format!(
-                "(async () => {{ const __rs = await globalThis.Promise.all({source}.map((__x) => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})()"
+                "(async () => {{ const __rs = await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})()"
             )
         }
         _ => return None,

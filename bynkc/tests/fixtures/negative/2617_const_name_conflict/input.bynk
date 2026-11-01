@@ -1,0 +1,8 @@
+commons limits
+
+// #2617 (decision E): a constant shares the unit's one value namespace.
+fn Retries() -> Int {
+  3
+}
+
+const Retries: Int = 3

@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **659** codes in total.
+There are **666** codes in total.
 
 ## Agents
 
@@ -495,6 +495,7 @@ There are **659** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| `bynk.parse.const_missing_type` | A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`). | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.parse.consumes_after_decls` | `consumes` appears after other declarations. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.parse.dangling_handler_annotation` | A handler-position annotation (e.g. `@cache`) is not followed by an `on` handler. |  | — |
 | `bynk.parse.doc_block_contains_code` | A documentation block's content (outside Markdown code fences) parses as declarations, so a pair of dash dividers has turned code into documentation. |  | — |
@@ -625,9 +626,15 @@ There are **659** codes in total.
 |---|---|---|---|
 | `bynk.resolve.ambiguous_variant` | A variant name is ambiguous across several sum types. |  | — |
 | `bynk.resolve.arity_mismatch` | A function was called with the wrong number of arguments. | [`call`](/book/reference/grammar/#rule-call) | — |
+| `bynk.resolve.bad_const_initialiser` | A `const` initialiser is not a static value of the declared type: only literals, constructors over static values, `T.unsafe(lit)`, `List.empty()`/`Map.empty()`/`Set.empty()`, `Duration` literals and references to other constants are allowed. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
+| `bynk.resolve.const_cycle` | Constants refer to each other in a cycle, so none of them has a value. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
+| `bynk.resolve.const_file_cycle` | Constants in different files of one unit refer to each other in a cycle of files, so the files' modules would import each other and one would read a constant before it is defined. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
+| `bynk.resolve.const_name_case` | A constant's name is not upper-camel case (`MaxRetries`, not `maxRetries`). | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
+| `bynk.resolve.const_outside_context_or_commons` | A `const` declaration appears outside a context or commons. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.resolve.duplicate_actor` | Two actors share a name. |  | — |
 | `bynk.resolve.duplicate_agent` | Two agents share a name. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.resolve.duplicate_capability` | Two capabilities share a name. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| `bynk.resolve.duplicate_const` | Two constants share a name. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.resolve.duplicate_field` | A record declares a field twice. | [`record_type`](/book/reference/grammar/#rule-record_type) | — |
 | `bynk.resolve.duplicate_field_init` | A record construction initialises a field twice. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.resolve.duplicate_fn` | Two functions share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
@@ -779,7 +786,7 @@ There are **659** codes in total.
 | `bynk.types.mixed_pattern_bindings` | A pattern mixes named and positional bindings. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | `bynk.types.negative_length` | A length predicate was given a negative value. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.no_numeric_coercion` | `Int` and `Float` were mixed without an explicit conversion — in an operation or in refinement bounds. | [`binary_expr`](/book/reference/grammar/#rule-binary_expr), [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.types.non_exhaustive_match` | A `match` does not cover every variant. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
+| `bynk.types.non_exhaustive_match` | A `match` does not cover every value. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
 | `bynk.types.not_comparable` | A value compared with `==`/`!=` contains a function, `Effect`, or `Query` somewhere inside it — those have no value equality, so the type is not equality-supporting (type-system §2.3.5, #1652). |  | — |
 | `bynk.types.ok_value_mismatch` | An `Ok` payload has the wrong type. | [`ok_expr`](/book/reference/grammar/#rule-ok_expr) | — |
 | `bynk.types.opaque_raw_outside` | `.raw` on an opaque type was used outside its defining commons. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |

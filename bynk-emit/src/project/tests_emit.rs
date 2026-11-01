@@ -2745,6 +2745,7 @@ fn integration_typed_commons(
         actor_bindings: HashMap::new(),
         assets: HashMap::new(),
         embeds: HashMap::new(),
+        consts: HashMap::new(),
         shadowed_imports: HashMap::new(),
         extensible_enums: Default::default(),
         stability: Default::default(),
@@ -5109,6 +5110,7 @@ fn synthetic_typed_commons_for_target(
         actor_bindings: HashMap::new(),
         assets: HashMap::new(),
         embeds: HashMap::new(),
+        consts: HashMap::new(),
         shadowed_imports: HashMap::new(),
         extensible_enums: Default::default(),
         stability: Default::default(),
@@ -6315,6 +6317,7 @@ fn emit_test_scope_setup(
             .chain(table.fns.keys())
             .chain(table.assets.keys())
             .chain(table.embeds.keys())
+            .chain(table.consts.keys())
             .cloned()
             .collect();
         // For contexts, also bring services and providers into scope.
@@ -6359,6 +6362,7 @@ fn emit_test_scope_setup(
                 .chain(t.fns.keys())
                 .chain(t.assets.keys())
                 .chain(t.embeds.keys())
+                .chain(t.consts.keys())
                 .collect()
         })
         .unwrap_or_default();
@@ -6402,6 +6406,7 @@ fn emit_test_scope_setup(
                     .chain(table.fns.keys())
                     .chain(assets)
                     .chain(table.embeds.keys())
+                    .chain(table.consts.keys())
                     .filter(|n| !target_values.contains(n))
                     .cloned()
                     .collect();
@@ -6955,16 +6960,11 @@ fn base_canon(base: BaseType) -> String {
     }
 }
 
-/// A TypeScript expression that draws a random inhabitant of `base` (refined by
-/// `refinement`), branded to `<name>` — via `<name>.unsafe(...)` for an opaque
-/// type, or an inline `as` cast for a refined/alias type (ADR 0182).
-fn refined_gen_ts(
-    name: &str,
-    base: BaseType,
-    refinement: Option<&Refinement>,
-    is_opaque: bool,
-) -> TsExpr {
-    let draw = match base {
+/// A TypeScript expression drawing a random inhabitant of `base` within
+/// `refinement`'s domain, unbranded — the draw [`refined_gen_ts`] brands, and
+/// the draw a record field with an inline `where` uses as is.
+fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> TsExpr {
+    match base {
         BaseType::Int => {
             let (lo, hi, _) = int_bounds(refinement);
             method_call(
@@ -6991,7 +6991,40 @@ fn refined_gen_ts(
         }
         BaseType::Bool => method_call(ident("rng"), "bool", vec![]),
         _ => ident(base_canon(base)),
-    };
+    }
+}
+
+/// The canonical (boundary) inhabitant of `base` within `refinement`'s domain,
+/// unbranded: the refinement's floor, or a string of its minimum length.
+fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> TsExpr {
+    match base {
+        BaseType::Int => {
+            let (lo, _, _) = int_bounds(refinement);
+            num_lit(format!("{lo}n"))
+        }
+        BaseType::Float => {
+            let (lo, _) = float_bounds(refinement);
+            num_lit(lo.to_string())
+        }
+        BaseType::String => {
+            let min = str_min(refinement);
+            str_lit("x".repeat(min.max(0) as usize))
+        }
+        BaseType::Bool => TsExpr::Lit(TsLit::Bool(true)),
+        other => ident(base_canon(other)),
+    }
+}
+
+/// A TypeScript expression that draws a random inhabitant of `base` (refined by
+/// `refinement`), branded to `<name>` — via `<name>.unsafe(...)` for an opaque
+/// type, or an inline `as` cast for a refined/alias type (ADR 0182).
+fn refined_gen_ts(
+    name: &str,
+    base: BaseType,
+    refinement: Option<&Refinement>,
+    is_opaque: bool,
+) -> TsExpr {
+    let draw = base_draw_ts(base, refinement);
     // `unchecked_construct_test` is also called from `lower.rs`'s own
     // permanently-excluded general expression lowering (Third correction) and
     // must keep its exact `-> String` signature — its own branching (a real
@@ -7316,12 +7349,16 @@ fn gen_ts_for_ty(
                         .map(|f| {
                             let g = checker::resolve_type_ref(&f.type_ref, types, tys)
                                 .map(|t| {
-                                    coerce_int_field(
-                                        t,
-                                        types,
-                                        tys,
-                                        gen_ts_for_ty(t, types, depth - 1, tys),
-                                    )
+                                    let v = match (&*tys.get(t), f.refinement.as_ref()) {
+                                        // #2667: an inline `where` on a base-typed
+                                        // field draws from its own domain, as a
+                                        // declared refined type over that base does.
+                                        (checker::Ty::Base(b), Some(r)) => {
+                                            base_draw_ts(*b, Some(r))
+                                        }
+                                        _ => gen_ts_for_ty(t, types, depth - 1, tys),
+                                    };
+                                    coerce_int_field(t, types, tys, v)
                                 })
                                 .unwrap_or_else(|| ident("undefined"));
                             (f.name.name.clone(), g)
@@ -7377,22 +7414,7 @@ fn canon_ts_for_ty(
                 | TypeBody::Opaque {
                     base, refinement, ..
                 } => {
-                    let lit = match base {
-                        BaseType::Int => {
-                            let (lo, _, _) = int_bounds(refinement.as_ref());
-                            num_lit(format!("{lo}n"))
-                        }
-                        BaseType::Float => {
-                            let (lo, _) = float_bounds(refinement.as_ref());
-                            num_lit(lo.to_string())
-                        }
-                        BaseType::String => {
-                            let min = str_min(refinement.as_ref());
-                            str_lit("x".repeat(min.max(0) as usize))
-                        }
-                        BaseType::Bool => TsExpr::Lit(TsLit::Bool(true)),
-                        other => ident(base_canon(*other)),
-                    };
+                    let lit = base_canon_ts(*base, refinement.as_ref());
                     ident(emitter::unchecked_construct_test(
                         name,
                         &bynk_ts::print_expr(&lit),
@@ -7429,12 +7451,16 @@ fn canon_ts_for_ty(
                         .map(|f| {
                             let g = checker::resolve_type_ref(&f.type_ref, types, tys)
                                 .map(|t| {
-                                    coerce_int_field(
-                                        t,
-                                        types,
-                                        tys,
-                                        canon_ts_for_ty(t, types, depth - 1, tys),
-                                    )
+                                    let v = match (&*tys.get(t), f.refinement.as_ref()) {
+                                        // #2667: an inline `where` on a base-typed
+                                        // field draws from its own domain, as a
+                                        // declared refined type over that base does.
+                                        (checker::Ty::Base(b), Some(r)) => {
+                                            base_canon_ts(*b, Some(r))
+                                        }
+                                        _ => canon_ts_for_ty(t, types, depth - 1, tys),
+                                    };
+                                    coerce_int_field(t, types, tys, v)
                                 })
                                 .unwrap_or_else(|| ident("undefined"));
                             (f.name.name.clone(), g)

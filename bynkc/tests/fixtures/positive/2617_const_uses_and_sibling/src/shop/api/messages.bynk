@@ -1,0 +1,4 @@
+context shop.api
+
+// A constant of the context, in a file of its own.
+const Welcome: String = "welcome"

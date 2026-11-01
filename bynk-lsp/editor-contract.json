@@ -138,6 +138,7 @@
     "capability",
     "case",
     "commons",
+    "const",
     "consumes",
     "context",
     "cron",
@@ -194,7 +195,8 @@
       "actor",
       "messages",
       "asset",
-      "embed"
+      "embed",
+      "constant"
     ],
     "modifiers": [
       "declaration",
@@ -219,7 +221,8 @@
       "comment",
       "asset",
       "embed",
-      "interface"
+      "interface",
+      "constant"
     ]
   }
 }

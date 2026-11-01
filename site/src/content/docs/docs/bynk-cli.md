@@ -614,7 +614,7 @@ Discover and run a project's test declarations — the same behaviour as
 Node.js) or `tsx` on `PATH`, exactly as `bynkc test`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--allow-skew]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--allow-skew]
 ```
 
 | Argument | Default | Meaning |
@@ -631,6 +631,9 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect]
 | `--against TARGET` | — | Run the `system` suites against a real runtime instead of in process: `dev`, a local `bynk dev` the runner starts itself, or a target named under [`[test.targets]`](/docs/manifest/#test) in `bynk.toml`. See [Running against a deployment](#running-against-a-deployment). Incompatible with `--inspect` and `--coverage`. |
 | `--skip-unsupported` | off | With `--against`, skip each `system` case a real runtime can't honour, naming it and why, instead of refusing the run. |
 | `--settle DURATION` | `5s` | With `--against`, how long a failing `expect` is retried before it fails, replaying the reads before it (see [Waiting for a real system](#waiting-for-a-real-system)). `500ms`, `5s`, `2m`, or `0` for no retry. |
+| `--smoke` | off | Run a smoke test of every `from http` route instead of the project's own suites. See [Smoke-testing every route](#smoke-testing-every-route). Combine with `--against` to smoke a running system. |
+| `--print` | off | With `--smoke`, print the synthesised suites as `.bynk` source and run nothing. |
+| `--smoke-unsafe` | off | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). |
 | `--allow-skew` | off | Run even when the resolved `bynkc` is a different **major** version from `bynk` (see [skew](#version-skew)). Also settable as `BYNK_ALLOW_SKEW=1`. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
@@ -834,6 +837,46 @@ harness, and each response is decoded exactly as in process.
 
 Under `--format json` the document gains `"transport": "remote:<name>"`, and
 a case that `--settle` retried carries `"retries"`.
+
+### Smoke-testing every route
+
+`--smoke` derives a `system` suite from each context's `from http` services
+and runs it in place of the project's own suites, so every declared route is
+called without a test written for it. Each route gets up to three cases:
+
+| Case | Sent | Passes when |
+|---|---|---|
+| `smoke: <METHOD> <path> answers` | every argument fabricated by [`Val`](/book/reference/testing/#val), as the route's actor | the answer is not a 5xx, and its JSON body decodes as the route's declared type |
+| `smoke: <METHOD> <path> rejects a malformed body` | the same, with `{not json` as the body (routes with a JSON `body`) | the boundary refuses it, or the service's [`on rejected`](/book/reference/http/#rendering-rejections) renders a `400` |
+| `smoke: <METHOD> <path> refuses no credential` | the same, `by Nobody` (routes behind an actor) | the auth seam refuses it with `401` |
+
+A case acts as `Visitor` when the route admits it, and otherwise as the route's
+first actor with a fabricated identity (`by User(Val[UserId])`). A context with
+more than one `from http` service puts the service's name before the method.
+
+- **What is skipped.** A route whose arguments or principal `Val` can't
+  fabricate, such as a `String where Matches(…)` path parameter, is skipped and
+  named with the checker's reason (`[bynk.val.needs_pin]`). Under
+  `--format json` it is an `outcome: "skipped"` case, counted in `skipped`.
+  The run reports `smoke: <n> cases from <m> routes, <k> skipped`, and fails if
+  no case could be built.
+- **Only the smoke runs.** The project's own suites and doc examples are left
+  out of a smoke run, so one of them a real runtime can't honour doesn't refuse
+  it.
+- **Writes stay local.** In process and against `dev` every route is called.
+  Against a named target only `GET` routes are, since fabricated writes would
+  land on a shared deployment; pass `--smoke-unsafe` to call the others too.
+- **Decoding is strict.** A smoke case fails on a status no `HttpResult`
+  carries, or a JSON body that doesn't decode as the route's declared type,
+  where an author's own case receives the raw value to judge. That catches a
+  deployment built from different source than the run.
+- **`--print`.** Prints the synthesised suites, each headed by the path it would
+  have beside its context file, and the skipped cases as comments. Copy one
+  into `tests/` to extend it. A smoke run writes nothing into the project: a
+  failure's location names the synthesised file, which `--print` shows.
+
+A smoke proves that every route answers as declared. It says nothing about
+behaviour across requests, which the project's own suites cover.
 
 Every `--format json` document, in a run or in `--no-run` discovery, gives a case
 its effective tier as `"tier"` (`unit`, `integration` or `system`: its own `as`
