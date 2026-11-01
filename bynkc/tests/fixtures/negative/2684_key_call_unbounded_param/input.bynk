@@ -1,0 +1,9 @@
+commons demo
+
+fn index[K: Key, V](xs: List[V], key: (V) -> K) -> Map[K, V] {
+  let init: Map[K, V] = Map.empty()
+  xs.fold(init, (acc, x) => acc.insert(key(x), x))
+}
+
+// A caller that passes its own unbounded parameter on.
+fn byKey[U, V](xs: List[V], key: (V) -> U) -> Int { index(xs, key).length() }

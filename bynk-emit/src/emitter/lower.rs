@@ -2475,6 +2475,10 @@ fn lower_method_call(
     {
         let t = *t;
         let xs = pre.lower(&args[0], cx);
+        if !key_is_plain(t, tys) {
+            cx.runtime_use().note_key("__bynkSetOf");
+            return pre.finish(format!("__bynkSetOf<{}>({xs})", ts_ty(t, tys)));
+        }
         return pre.finish(format!("new globalThis.Set<{}>({xs})", ts_ty(t, tys)));
     }
     // v0.22b: the typed JSON codec (ADR 0045).
@@ -4353,6 +4357,46 @@ fn lower_list_kernel(
                 ),
             })
         }
+        ("distinct", []) if !key_is_plain(elem, tys) => {
+            cx.runtime_use().note_key("__bynkDistinct");
+            let recv = pre.lower(receiver, cx);
+            Some(format!("__bynkDistinct({recv})"))
+        }
+        ("distinctBy", [key]) if !key_fn_is_plain(key, cx) => {
+            cx.runtime_use().note_key("__bynkDistinctBy");
+            let recv = pre.lower(receiver, cx);
+            let key = pre.lower(key, cx);
+            Some(format!("__bynkDistinctBy({recv}, {key})"))
+        }
+        ("joinOn", [other, left, ..]) if !key_fn_is_plain(left, cx) => {
+            cx.runtime_use().note_key("__bynkJoinOn");
+            let recv = pre.lower(receiver, cx);
+            let other = pre.lower(other, cx);
+            let left = pre.lower(left, cx);
+            let right = pre.lower(&args[2], cx);
+            let into = pre.lower(&args[3], cx);
+            Some(format!(
+                "__bynkJoinOn({recv}, {other}, {left}, {right}, {into})"
+            ))
+        }
+        ("leftJoin", [other, left, ..]) if !key_fn_is_plain(left, cx) => {
+            cx.runtime_use().note_key("__bynkLeftJoin");
+            let recv = pre.lower(receiver, cx);
+            let other = pre.lower(other, cx);
+            let left = pre.lower(left, cx);
+            let right = pre.lower(&args[2], cx);
+            let into = pre.lower(&args[3], cx);
+            Some(format!(
+                "__bynkLeftJoin({recv}, {other}, {left}, {right}, {into})"
+            ))
+        }
+        ("groupBy", [key, into]) if !key_fn_is_plain(key, cx) => {
+            cx.runtime_use().note_key("__bynkGroupBy");
+            let recv = pre.lower(receiver, cx);
+            let key = pre.lower(key, cx);
+            let into = pre.lower(into, cx);
+            Some(format!("__bynkGroupBy({recv}, {key}, {into})"))
+        }
         ("distinct", []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("[...new globalThis.Set({recv})]"))
@@ -5524,6 +5568,18 @@ fn lower_set_kernel(
             let x = pre.lower(x, cx);
             Some(format!("({recv}).has({x})"))
         }
+        ("insert", [x]) if !key_is_plain(elem, tys) => {
+            cx.runtime_use().note_key("__bynkSetInsert");
+            let recv = pre.lower(receiver, cx);
+            let x = pre.lower(x, cx);
+            Some(format!("__bynkSetInsert<{elem_ts}>({recv}, {x})"))
+        }
+        ("remove", [x]) if !key_is_plain(elem, tys) => {
+            cx.runtime_use().note_key("__bynkSetRemove");
+            let recv = pre.lower(receiver, cx);
+            let x = pre.lower(x, cx);
+            Some(format!("__bynkSetRemove<{elem_ts}>({recv}, {x})"))
+        }
         ("insert", [x]) => {
             let recv = pre.lower(receiver, cx);
             let x = pre.lower(x, cx);
@@ -5582,6 +5638,15 @@ fn lower_map_kernel(
             let k = pre.lower(k, cx);
             Some(format!(
                 "((__m: ReadonlyMap<{key_ts}, {val_ts}>, __k: {key_ts}) => __m.has(__k) ? Some(__m.get(__k) as {val_ts}) : None)({recv}, {k})"
+            ))
+        }
+        ("insert", [k, v]) if !key_is_plain(key, tys) => {
+            cx.runtime_use().note_key("__bynkMapInsert");
+            let recv = pre.lower(receiver, cx);
+            let k = pre.lower(k, cx);
+            let v = pre.lower(v, cx);
+            Some(format!(
+                "__bynkMapInsert<{key_ts}, {val_ts}>({recv}, {k}, {v})"
             ))
         }
         ("insert", [k, v]) => {
@@ -6416,6 +6481,39 @@ fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<String> {
         Some(BaseType::Int | BaseType::String | BaseType::Duration | BaseType::Instant)
     );
     (!plain).then(|| cx.comparator(*ret))
+}
+
+/// Constrained generics slice 2: whether a `Map` key / `Set` element of this
+/// static type is a JS primitive (`string`, `number`, `boolean`), so the plain
+/// `Map`/`Set` compares it by value. Every other `Key` type (`Bytes`, `Option`,
+/// `List`, a record, a sum, a type parameter) takes the keyed helpers in
+/// `keys.ts`; a plain-keyed site emits exactly what it did before.
+fn key_is_plain(ty: TyId, tys: &Types) -> bool {
+    match &*tys.get(ty) {
+        Ty::Base(b) => !matches!(b, BaseType::Bytes),
+        Ty::Named {
+            kind: NamedKind::Refined(b) | NamedKind::Opaque(b),
+            ..
+        } => !matches!(b, BaseType::Bytes),
+        _ => false,
+    }
+}
+
+/// The result type of a function-typed argument (a kernel's key function).
+fn key_fn_ret(key: &Expr, cx: &LowerCtx) -> Option<TyId> {
+    let tys = cx.commons().tys();
+    let fn_ty = cx.commons().expr_types.get(&key.id)?.ty;
+    match &*tys.get(fn_ty) {
+        Ty::Fn { ret, .. } => Some(*ret),
+        _ => None,
+    }
+}
+
+/// Whether a kernel keyed by the result of `key` hashes through the plain
+/// `String(key)` path. An unknown type takes the helpers, which are correct for
+/// every key.
+fn key_fn_is_plain(key: &Expr, cx: &LowerCtx) -> bool {
+    key_fn_ret(key, cx).is_some_and(|t| key_is_plain(t, cx.commons().tys()))
 }
 
 /// Bind comparator expression `cmp` as `__c` around `body`. A bare identifier (a

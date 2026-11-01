@@ -1,0 +1,14 @@
+context a
+
+// #2684 DECISION F: `Key` is the one bound a capability operation may carry. It
+// is witness-free, so it adds no hidden argument to the operation's ABI; without
+// it an operation over `Map[K, _]` could not be written.
+capability Registry {
+  fn snapshot[K: Key](keys: Set[K]) -> Effect[Map[K, String]]
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

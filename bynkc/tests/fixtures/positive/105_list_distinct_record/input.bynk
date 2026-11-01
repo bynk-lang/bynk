@@ -1,0 +1,8 @@
+commons keyed {
+  type Item = {
+    id: Int,
+  }
+  fn dedup(items: List[Item]) -> List[Item] {
+    items.distinct()
+  }
+}

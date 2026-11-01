@@ -1,0 +1,2 @@
+bynk.generics.missing_key_bound
+type parameter `K` has no `Key` bound

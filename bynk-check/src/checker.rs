@@ -41,6 +41,7 @@ pub use bynk_syntax::ast::ExprId;
 mod calls;
 mod d1;
 pub(crate) mod equality;
+pub mod keying;
 pub mod ordering;
 use equality::EqScope;
 mod expressions;

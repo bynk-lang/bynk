@@ -126,6 +126,10 @@
           {
             "label": "Understand ordering your own types",
             "link": "/book/guides/type-system/ordering-your-own-types/"
+          },
+          {
+            "label": "Key a map by a record",
+            "link": "/book/guides/type-system/key-a-map-by-a-record/"
           }
         ]
       },
@@ -639,6 +643,10 @@
       {
         "label": "bynk.generics.missing_eq_bound",
         "link": "/book/troubleshooting/generics-missing-eq-bound/"
+      },
+      {
+        "label": "bynk.generics.missing_key_bound",
+        "link": "/book/troubleshooting/generics-missing-key-bound/"
       },
       {
         "label": "bynk.generics.missing_ord_bound",

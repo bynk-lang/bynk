@@ -1,0 +1,8 @@
+commons keyed
+
+// v0.110 (ADR 0142 D7) refused a `Bytes` key; #2684 admits it: `Bytes` is `Key`,
+// held by content under the canonical key encoding.
+
+fn count(m: Map[Bytes, Int]) -> Int {
+  m.length()
+}

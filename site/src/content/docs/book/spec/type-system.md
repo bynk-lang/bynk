@@ -140,11 +140,10 @@ surface.
   **deprecated** (`bynk.list.deprecated_function`, v0.91) — they still work.
 - **`Map[K, V]`** (v0.20b) — an **immutable**, insertion-ordered key→value
   map, constructed by `Map.empty()` and grown with `insert`; updating an
-  existing key keeps its position. The key type is confined to
-  **value-keyable** types: `String`, `Int`, or a refined/opaque type over them
-  (`bynk.types.unkeyable_map_key` otherwise). A type parameter is admitted in
-  key position — it can only ever be instantiated through a concrete
-  `Map[K, V]` reference elsewhere, and that site is checked.
+  existing key keeps its position. The key type is
+  confined to the **`Key`** types ([§6.2.1](/book/spec/type-system/#621-the-key-constraint),
+  `bynk.types.not_keyable` otherwise). A type parameter in key position MUST be
+  declared `K: Key` (`bynk.generics.missing_key_bound`).
 - **`Stream[T]`** (v0.100) — a **lazy, pull-shaped sequence of values produced
   over time**, distinct from `Effect[T]` (resolves once) and `Query[T]` (a
   snapshot read). Built with `Stream.of(xs)`, transformed lazily (`map`/`take`),
@@ -181,6 +180,36 @@ shape; neither error builtin passes through the JSON codec itself
 > The `Ok` and `Err` constructors are shared between `Result` and `HttpResult`;
 > where the target is ambiguous a program must qualify the constructor
 > ([§5.2](/book/spec/static-semantics/#52-well-typedness)). This note is informative.
+
+
+### 6.2.1 The `Key` constraint
+
+*(constrained-generics slice 2, #2684)* `Key` admits a type as a `Map` key, a
+`Set` member, and the key of `distinct`, `distinctBy`, `groupBy` and the joins of a
+`List`. It is automatic, never derived. A type is `Key` when it is:
+
+- `String`, `Int`, `Bool`, `Instant`, `Duration` or `Bytes`, or a refined or opaque
+  type over one of them;
+- `Option[T]` or `List[T]` with `T` `Key`;
+- a record, sum or enum whose every field and payload is `Key`; a generic one is
+  `Key` at an instantiation whose arguments are;
+- a type parameter declared `K: Key`.
+
+A `Float` is never `Key`, at any depth, because `NaN` is not equal to itself.
+`Map`, `Set`, functions, `Effect`, `Query`, streams, held resources, actors and
+the boundary-only types are not `Key`. Anything else used as a key is
+`bynk.types.not_keyable`. `Key` implies `Eq` (`T: Eq + Key` is the warning
+`bynk.generics.redundant_eq_bound`); `Ord` does not imply `Key`, and `Float` is
+`Ord` but not `Key`, so `T: Ord + Key` is a real pair. `Key` needs no witness
+(§6.2.2): it adds no hidden argument to a generic. It is the one constraint a
+capability operation's type parameter may carry.
+
+Two keys of one `Key` type are the same key exactly when they are `==`. A `Map`
+or `Set` MUST agree with `==`, so an implementation holds a composite key under a
+canonical encoding that is injective per type (§7.4.4). A store `Map`/`Set`/`Cache`
+key and an `@indexed` key keep the narrower `String`/`Int` rule
+(`bynk.store.unkeyable_key`, `bynk.index.unkeyable_key`): they persist as JSON
+object keys. So do a `Query`'s `distinct`, `groupBy` and join keys.
 
 ## §6.3 Refinement predicates
 

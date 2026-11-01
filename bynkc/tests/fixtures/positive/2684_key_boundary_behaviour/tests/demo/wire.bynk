@@ -1,0 +1,41 @@
+---
+#2684: the decoded `Map` and `Set` are keyed by value, so they compare and look up
+like the originals; a duplicate set member on the wire is a decode error.
+---
+suite demo.wire
+
+case "a record-keyed map round-trips" {
+  let l = sample()
+  match Json.decode[Ledger](Json.encode(l)) {
+    Ok(back) => expect back == l
+    Err(_) => expect false
+  }
+}
+
+case "a decoded map looks up by value" {
+  match Json.decode[Ledger](Json.encode(sample())) {
+    Ok(back) => expect back.totals.get(OrderId { n: 7, region: "eu" }) == Some(3)
+    Err(_) => expect false
+  }
+}
+
+case "a decoded set is keyed by value" {
+  match Json.decode[Ledger](Json.encode(sample())) {
+    Ok(back) => expect back.seen.contains(Shipped)
+    Err(_) => expect false
+  }
+}
+
+case "a repeated set member is rejected" {
+  match Json.decode[Set[Status]](Json.encode([Open, Open])) {
+    Ok(_) => expect false
+    Err(_) => expect true
+  }
+}
+
+case "a distinct set decodes" {
+  match Json.decode[Set[Status]](Json.encode([Open, Shipped])) {
+    Ok(s) => expect s.length() == 2
+    Err(_) => expect false
+  }
+}

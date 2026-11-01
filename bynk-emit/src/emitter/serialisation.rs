@@ -2478,6 +2478,21 @@ pub(crate) use bynk_check::wire::collect_codec_closure;
 
 /// v0.22b: an expression-form serialise for a codec target — the same
 /// dispatch as a record field's serialisation.
+/// Constrained generics slice 2: whether a `Map` key / `Set` element declared as
+/// `t` is a JS primitive, so a plain `Map`/`Set` compares it by value. Every
+/// other `Key` type decodes into the keyed collections (`keys.ts`).
+fn is_plain_key_ref(t: &TypeRef, types: &std::collections::HashMap<String, Arc<TypeDecl>>) -> bool {
+    match t {
+        TypeRef::Base(b, _) => !matches!(b, BaseType::Bytes),
+        TypeRef::Named(id) => matches!(
+            types.get(&id.name).map(|d| &d.body),
+            Some(TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. })
+                if !matches!(base, BaseType::Bytes)
+        ),
+        _ => false,
+    }
+}
+
 pub(crate) fn serialise_expr(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
     serialise_field_expr(t, value, None, ru)
 }
@@ -3773,10 +3788,17 @@ pub(crate) fn emit_generic_helpers_qualified(
                 let elem_ts = inner_ts_name(elem);
                 let elem_ty = TsType::named(bynk_ts::print_type(&qualified_ts_type(elem, qual)));
                 let set_ty = TsType::named_with_args("ReadonlySet", vec![elem_ty.clone()]);
-                let set_ctor = bynk_ts::print_type(&TsType::named_with_args(
-                    "globalThis.Set",
-                    vec![elem_ty.clone()],
-                ));
+                // Slice 2 (DECISION H): a composite element decodes into the keyed
+                // set, whose `has` is value equality, so a wire duplicate is
+                // rejected whatever the element's shape.
+                let set_ctor = if is_plain_key_ref(elem, types) {
+                    "globalThis.Set"
+                } else {
+                    ru.note_key("__BynkKeySet");
+                    "__BynkKeySet"
+                };
+                let set_ctor =
+                    bynk_ts::print_type(&TsType::named_with_args(set_ctor, vec![elem_ty.clone()]));
 
                 let serialise = TsDecl::Export(Box::new(TsDecl::Function {
                     name: format!("__serialise_Set_{elem_ts}"),
@@ -3888,8 +3910,14 @@ pub(crate) fn emit_generic_helpers_qualified(
                 // already reuses that variant as a raw-text callee slot
                 // elsewhere in this file (`emit_field_deserialise_wire`'s
                 // own `Named`/`Inst` arm).
+                let map_ctor = if is_plain_key_ref(key, types) {
+                    "globalThis.Map"
+                } else {
+                    ru.note_key("__BynkKeyMap");
+                    "__BynkKeyMap"
+                };
                 let map_ctor = bynk_ts::print_type(&TsType::named_with_args(
-                    "globalThis.Map",
+                    map_ctor,
                     vec![key_ty.clone(), val_ty.clone()],
                 ));
 

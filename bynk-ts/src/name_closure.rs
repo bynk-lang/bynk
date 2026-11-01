@@ -424,6 +424,10 @@ impl Walk {
     }
 
     fn use_value(&mut self, text: &str) {
+        // A pre-rendered construction (`new globalThis.Map<K, V>()`, a state
+        // initialiser) uses the constructor, not the `new` keyword.
+        let text = text.trim_start();
+        let text = text.strip_prefix("new ").unwrap_or(text);
         if let Some(ident) = leading_ident(text) {
             self.used_values.insert(ident.to_string());
         }

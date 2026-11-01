@@ -1,0 +1,6 @@
+context a
+
+// `Key` alone is allowed on a capability op; any other bound is not (slice 2).
+capability Registry {
+  fn lookup[K: Key + Ord](key: K) -> Effect[Option[String]]
+}

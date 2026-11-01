@@ -166,6 +166,32 @@ queue handler returns `Effect[QueueResult]`; the runtime routes `Ack` →
 |---|---|
 | `QueueResult` | the verdict type and its `Ack` / `Retry(reason)` constructor namespace |
 
+## §7.4.3a Composite keys
+
+*(constrained-generics slice 2, #2684)* A value `Map` or `Set` whose key type is a
+`Key` type other than a primitive holds its keys under a **canonical encoding**.
+This is internal to the runtime and not part of the published ABI.
+
+- A collection whose keys are all primitive (`string`, `number`, `boolean`) is a
+  plain `Map`/`Set`, and every site that is statically primitive-keyed emits what
+  it always did.
+- A collection that meets its first composite key is promoted to a subclass of
+  `Map`/`Set` that keeps the original keys, so iteration returns real keys, in
+  insertion order, and indexes them by `__bynkKeyEncode(k)`.
+- `__bynkKeyEncode(v)` is `JSON.stringify` of a canonical tree: strings, numbers
+  and booleans as themselves, a `Uint8Array` as its lowercase hex string, an array
+  element-wise, any other object as its own keys sorted, each mapped recursively.
+  For two values of **one** `Key` type the encodings are equal exactly when the
+  values are `==` (injectivity); `-0` and `0` encode alike, and a `Float` never
+  reaches the encoder. A sum's `tag` takes part, so payloads of different variants
+  never collide.
+- `__bynkEq` compares the subclasses structurally through `has`/`get`.
+- The set decoder rejects a repeated member by value. The map decoder keeps
+  last-entry-wins.
+
+`serialiseAgentKey` (§7.4.4) is a separate function and unchanged: it addresses
+stored durable objects.
+
 ## §7.4.4 Agent state
 
 Agent classes consume a Durable-Object-shaped state surface. In `bundle` mode and
