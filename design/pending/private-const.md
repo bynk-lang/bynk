@@ -8,17 +8,16 @@ title: `private` extends to named constants
 summary: `private const` hides a constant from importers exactly as `private` hides a function, and a public constant may not be typed with a private type
 
 **Context.** Named constants (ADR 0678, #2617) and private declarations
-(#2618, recorded in `design/pending/private-declarations.md` until it is
-stamped) were built in parallel. Neither could cover the other, so the
-private-declarations record named the gap as its decision N: whichever of
+(ADR 0683, #2618) were built in parallel. Neither could cover the other, so
+ADR 0683 named the gap as its decision N: whichever of
 the two merged second would extend `private` to `const`. Constants merged
 first. Until now a constant was the one kind of commons value declaration a
 library could not keep to itself: a tuning value such as a retry step became
 API as soon as it was declared.
 
 **Decision.** `private` applies to `const` in a commons or context, with the
-same meaning it has on `fn`, `type`, `asset` and `embed`. Each rule of the
-private-declarations record carries over unchanged:
+same meaning it has on `fn`, `type`, `asset` and `embed`. Each rule of ADR
+0683 carries over unchanged:
 
 - **Visibility (its decisions B and F).** A private constant is visible across
   all of its unit's files. An importer does not see it at all: it is left out
