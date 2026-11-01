@@ -1,0 +1,42 @@
+suite shop.orders {
+  case "shorthand, renamed and wildcard fields" {
+    let item = Item { sku: "bolt", qty: 4, note: "x" }
+    expect label(item) == "bolt x4"
+    expect renamed(item) == 8
+    expect parenthesised(item) == "bolt"
+  }
+
+  case "a nested record pattern" {
+    let o = Order {
+      id: "o1",
+      status: Paid,
+      total: 30,
+      customer: Customer { name: "Ada", email: "ada@example.com" },
+    }
+    expect contact(o) == "ada@example.com: 30"
+  }
+
+  case "a refutable record pattern takes its else" {
+    let paid = Order { id: "a", status: Paid, total: 9, customer: Customer { name: "A", email: "a@x" } }
+    let open = Order { id: "b", status: Pending, total: 9, customer: Customer { name: "B", email: "b@x" } }
+    expect paidTotal(paid) == 9
+    expect paidTotal(open) == 0
+  }
+
+  case "the destructured name shadows an earlier one" {
+    expect shadow(Item { sku: "s", qty: 6, note: "" }) == 7
+  }
+
+  case "an effectful let destructures what the call returns" {
+    let r <- basket.call("b1")
+    expect r == "widget:3"
+  }
+
+  case "a destructuring let in a test body" {
+    let Item { sku, qty, .. } = Item { sku: "nut", qty: 2, note: "" }
+    expect sku == "nut"
+    expect qty == 2
+    let Item { sku: s2, .. } <- Basket("b2").current()
+    expect s2 == "widget"
+  }
+}

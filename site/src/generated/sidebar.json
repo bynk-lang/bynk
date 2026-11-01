@@ -108,6 +108,10 @@
             "link": "/book/guides/type-system/match-on-a-records-fields/"
           },
           {
+            "label": "Destructure a record with let",
+            "link": "/book/guides/type-system/destructure-a-record-with-let/"
+          },
+          {
             "label": "Narrow and bind with is",
             "link": "/book/guides/type-system/narrow-with-is/"
           },

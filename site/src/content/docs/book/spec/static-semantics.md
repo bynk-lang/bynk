@@ -1197,7 +1197,15 @@ for `let P <- e else E`, where `v` is a name the program cannot write; for
   includes an arm `P` already covers (`bynk.types.unreachable_arm`,
   `bynk.types.duplicate_variant_arm`).
 - If `P` matches every value of `e`'s type, the `else` can never run, which is
-  `bynk.types.unreachable_arm`. Bind the value with a plain `let` instead.
+  `bynk.types.unreachable_arm`. Bind the value with a plain `let` instead; for a
+  record pattern, drop the `else` (the diagnostic offers that fix).
+- A `let` whose pattern is an irrefutable record pattern may omit the `else`
+  (#2654, [§4.8.4a](/book/spec/syntactic-grammar/#484a-let_else_stmt-2010)):
+  `let T { f, .. } = e` means `match v { T { f, .. } => { S… t } }`, a
+  one-arm `match` with no fallback, whose coverage is the record-pattern
+  coverage rule above. It adds no type rule: the pattern's type checks,
+  visibility (`bynk.context.opaque_inspection`) and binding scopes are those of
+  the `match` arm.
 - `<-` follows the `effect_let_stmt` rules (§5.5): the body MUST be effectful,
   and `P` matches the `Effect`'s payload.
 

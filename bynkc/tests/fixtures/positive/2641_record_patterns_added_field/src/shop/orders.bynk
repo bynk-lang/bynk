@@ -42,4 +42,10 @@ commons shop.orders {
       Page { count, .. } => count
     }
   }
+
+  // #2654: a destructuring `let` is open too, so it also survives the added field.
+  fn summary(o: Order) -> String {
+    let Order { id, total, .. } = o
+    "\(id): \(total)"
+  }
 }
