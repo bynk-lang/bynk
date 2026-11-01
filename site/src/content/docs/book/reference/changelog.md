@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.469**.
+written against **v0.470**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.470.0** | "`e.within(d)` (the unit `consumes bynk { TimedOut }`): a general timeout on any `Effect[T]` yielding `Effect[Result[T, TimedOut]]`; the abandoned effect is handed to `waitUntil`, not cancelled; service handlers only; tests drive it on virtual time with `stub … returns v after d` and `stub … never` (concurrent effects, slice 3, [#2683](https://github.com/bynk-lang/bynk/issues/2683))" |
 | **v0.469.0** | "`private` now applies to `const`: a `private const` is visible across its own unit's files and to its suites, never through `uses`. A reference from another unit is `bynk.visibility.private_item` (\"a private constant\"), and a public constant whose type annotation names a private type of its unit is `bynk.visibility.private_in_public`" |
 | **v0.468.0** | "List patterns: `[]`, `[p, …]`, `[p, …, ..]` and `[p, …, ..rest]` match a `List` by its length and elements in a `match`, an or-pattern, after `is` and in `let … else`. Exhaustiveness is by length, so `[]` and `[x, ..rest]` need no `_`, and a missing length is reported as a pattern (`[_, _, ..]`). `..rest` binds the remaining elements (a copy, unless the rest is the whole list). A `..` followed by a literal is reserved for range patterns (patterns track slice 4, [#2680](https://github.com/bynk-lang/bynk/issues/2680)). New diagnostics: `bynk.parse.list_rest_not_last`, `bynk.parse.range_pattern_unsupported` and `bynk.types.list_pattern_on_non_list`" |
 | **v0.467.1** | "A boundary codec bounds the nesting of a recursive type at 256 levels: decoding a value nested more deeply is a `StructuralMismatch` (an HTTP `400`, an `Err` from `Json.decode`) instead of a stack overflow the Worker answered as a fault, and encoding one faults ([#2656](https://github.com/bynk-lang/bynk/issues/2656))" |

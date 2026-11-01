@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`e.within(d)` (the unit `consumes bynk { TimedOut }`): a general timeout on any `Effect[T]` yielding `Effect[Result[T, TimedOut]]`; the abandoned effect is handed to `waitUntil`, not cancelled; service handlers only; tests drive it on virtual time with `stub … returns v after d` and `stub … never` (concurrent effects, slice 3, [#2683](https://github.com/bynk-lang/bynk/issues/2683))"
----
+# 0687 — `e.within(d)` bounds an effect's time, hands the abandoned effect to `waitUntil`, and tests drive it on virtual time
 
-## ADR: effect-within-timeout
-title: `e.within(d)` bounds an effect's time, hands the abandoned effect to `waitUntil`, and tests drive it on virtual time
-summary: `within(d: Duration) -> Effect[Result[T, TimedOut]]` is a method of every `Effect[T]`, legal only in a service handler's body (lambdas included), lowered to `__bynkWithin(e, ms, deps.__exec)`; a timed-out effect is never cancelled; the test clock gains a timer queue, `stub … returns v after d` and `stub … never`, and guarded auto-advance
+- **Status:** Accepted (v0.470)
 
 **Context.** A handler that fronts a slow dependency had no way to bound its own
 latency; the only timeout in the language was `FetchOptions.timeout`, honoured by
