@@ -1,9 +1,10 @@
 # Concurrent effect composition — joining different effects, timeouts and races
 
-- **Status:** Draft (settling). Direction not yet merged; no slice authorised.
-  Spine [#2615](https://github.com/bynk-lang/bynk/issues/2615). The questions in
-  §5 carry *draft* recommendations for the settling review; none is settled
-  until this PR is marked ready and merged.
+- **Status:** Settled (#2635, merged 2026-11-01). Every question in §5 is
+  closed; the maintainer confirmed the adopted answers on 2026-11-01. Q1 adopted
+  the concurrent binding block, so the language gains no tuple type. Slicing
+  next: no slice is authorised until its proposal is accepted. Spine
+  [#2615](https://github.com/bynk-lang/bynk/issues/2615).
 - **Realises:** the effect model of `design/bynk-design-notes.md` (an `Effect` is
   the only way a program reaches the outside world), extending the
   effectful-iteration matrix of ADRs 0170–0174 from *one effect per element of a
@@ -91,7 +92,7 @@ language is `FetchOptions.timeout` on `Fetch.sendWith` (standard-library K5a).
   `parTraverseAll` gathers every `Result` in input order, and `parTraverseTry`
   awaits every element and *then* returns the first `Err` in input order. Its
   name suggests it short-circuits, but it does not stop waiting early. That is
-  the precedent for Q2's draft.
+  the precedent for Q2's adopted answer.
 - **`~>` is fire-and-forget.** It lowers to `waitUntil(<effect>)`, is not
   awaited, and is not retracted by a later fault (ADR 0106, ADR 0109 D4).
 - **Handler atomicity is per effect class** (ADR 0109 D4). `store` writes are
@@ -125,8 +126,9 @@ language is `FetchOptions.timeout` on `Fetch.sendWith` (standard-library K5a).
 
 ## 5. Open design questions
 
-Each question has options, prior art, and a **draft recommendation** for the
-settling review to test.
+Each question has options, prior art, and the **adopted** answer. Where an
+answer leaves a fact to verify against the code or the platform, the proposal
+for the slice that depends on it must do so before that slice is accepted.
 
 ### Q1 — What does a join look like, and what carries the results?
 
@@ -155,7 +157,7 @@ settling review to test.
   No new type is needed, each binding reads exactly as it does today, and the
   block makes the overlap and the single wait point visible.
 
-**Draft recommendation: (c).** It is the only option that adds no type-system
+**Adopted: (c).** It is the only option that adds no type-system
 feature, keeps each call written exactly as a sequential `<-` would be, and
 puts the wait at a visible closing brace. Rules for the block:
 
@@ -171,7 +173,8 @@ puts the wait at a visible closing brace. Rules for the block:
 - it is legal only in an effectful context, like any `<-`;
 - names bound inside are in scope after the block, not inside it.
 
-The keyword (`par`, `concurrently`, `together`) is open. If the patterns track
+The keyword (`par`, `concurrently`, `together`) is chosen in slice 0's
+proposal; `par` is the working name. If the patterns track
 later adopts tuples for other reasons, (a) can be added as a library-level
 convenience over the same runtime helper, but the track should not depend on it.
 
@@ -186,7 +189,7 @@ returns `Effect[Result[User, NotFound]]`), and may apply `?`.
   `Err` *in source order* propagates, whichever finished first.
 - **(c) Forbid `?` inside a join.** The author matches afterwards.
 
-**Draft recommendation: (b).** It follows the determinism constraint (§4) and
+**Adopted: (b).** It follows the determinism constraint (§4) and
 matches how `parTraverseAll` reports outcomes in input order. The cost is that a
 fast `Err` waits for a slow sibling; that is the price of the determinism and of
 §4's "no work outlives the handler" rule (Q3).
@@ -203,14 +206,14 @@ unobserved.
   the first fault in source order (a later fault is logged with it). Nothing
   started by the join is still running when the join completes.
 
-**Draft recommendation: (b).** It is deterministic, and it keeps every effect
+**Adopted: (b).** It is deterministic, and it keeps every effect
 the join awaits inside the handler's lifetime (§4). ADR 0109 D4 is unchanged:
 cross-agent calls that completed before the fault still stand, and `store`
 writes are still staged and discarded.
 
 This **differs from today's `parTraverse` family**, which is option (a) (§3), so
 it also breaks §4 today. Two forms with different fault semantics for the same
-idea would be a trap. **Draft:** move `parTraverse`, `parTraverseAll` and
+idea would be a trap. **Adopted:** move `parTraverse`, `parTraverseAll` and
 `parTraverseTry` (on `List`, `Map` and `Query`) to settle-all as well, in their
 own slice (§6, slice 0b). The change is visible only when an element faults:
 the fan-out then waits for its siblings before raising, and raises the first
@@ -233,10 +236,10 @@ fault in input order rather than the first to arrive.
   other request can run, and code can rely on that gap (read a value, then decide
   what to issue next). A join removes that gap while keeping the overall
   gate-open period. Q1's sibling-name rule already stops one binding from using
-  another's result, so nothing *inside* a join can rely on the gap. The settling
-  review should confirm the rest against current Durable Object input-gate
+  another's result, so nothing *inside* a join can rely on the gap. Slice 0's
+  proposal must confirm the rest against current Durable Object input-gate
   behaviour, including for `store` reads.
-- **Draft:** joins are legal in agent handlers with the rules above. Calling the
+- **Adopted:** joins are legal in agent handlers with the rules above. Calling the
   agent's own handlers from inside a join (re-entrancy) stays exactly as legal or
   illegal as it is sequentially.
 
@@ -251,13 +254,13 @@ issue order is deterministic even though completion order is not.
   user function that makes several calls), its later calls are issued when the
   earlier ones complete, so their order against another binding's calls follows
   completion and microtask order, not source order.
-- **Draft:** keep recording at issue time and document that `expect A.op before
+- **Adopted:** keep recording at issue time and document that `expect A.op before
   B.op` compares **issue** order. Between the *first* calls of two bindings it
   is source order; for any later call it is whatever order the calls were
   actually made in. Neither is evidence that `A` finished first. Restricting each
   binding to a single direct capability call would make the stronger guarantee
-  hold, but would rule out ordinary helper functions, so the draft does not
-  recommend it. A test that needs completion order is testing a race and should
+  hold, but would rule out ordinary helper functions, so it is not
+  adopted. A test that needs completion order is testing a race and should
   be written against a stub that controls it.
 - Stubs resolve deterministically in a test, so a join's result in a test does
   not depend on timing. Combined with Q2 and Q3, a join is reproducible under
@@ -273,7 +276,7 @@ issue order is deterministic even though completion order is not.
 A general timeout cannot stop the work it abandons (Q7). If `e` is a
 cross-agent call, the remote handler still runs and commits.
 
-- **Draft:** (b), shipped after the join, with the abandoned effect handed to
+- **Adopted:** (b), shipped after the join, with the abandoned effect handed to
   `waitUntil` so it is allowed to finish rather than being cut off mid-write when
   the response returns. This is the one **deliberate exception** to Q3's "nothing
   the join started is still running": in `par { let x <- e.within(d) }`, the join
@@ -298,14 +301,14 @@ take an `AbortSignal`. Nothing else in Bynk's capability layer can be aborted.
   binding so a loser can be stopped. A large change across the stdlib and every
   adapter, and only some platform operations can honour it.
 
-**Draft recommendation: (a) for this track, with (b) named as a possible later
+**Adopted: (a) for this track, with (b) named as a possible later
 slice and (c) a non-goal.** The motivating case is latency for independent work
 (Q1); racing alternatives is rarer, and without cancellation it hides side
 effects behind a construct that reads as if the loser did nothing.
 
 ## 6. Candidate slice decomposition
 
-Provisional until this doc settles. Each becomes an increment proposal opened as
+Each becomes an increment proposal opened as
 a sub-issue of #2615.
 
 - **Slice 0 — The concurrent binding block.** Grammar, the independence check,
@@ -315,12 +318,13 @@ a sub-issue of #2615.
   semantics with the join's (Q3). A behaviour change only when an element
   faults.
 - **Slice 1 — `Result` and `?` in a join**, with Q2's source-order rule.
-- **Slice 2 — Agent handlers**, if the settling review finds rules beyond
-  Q4's draft that need their own increment. Otherwise folded into slice 0.
+- **Slice 2 — Agent handlers**, only if slice 0's proposal finds rules beyond
+  Q4's adopted answer that need their own increment. Otherwise folded into
+  slice 0.
 - **Slice 3 — A general timeout**, `within(d)`, with harness-clock support and
   the `waitUntil` handover for abandoned work.
-- **Slice 4 — Race (loser runs to completion)**, only if the settling review keeps
-  Q7 (b).
+- **Slice 4 — Race (loser runs to completion)**, not planned. Q7 adopted no
+  general race for this track; this stays as a possible later slice.
 
 ## 7. Front-loaded ADR candidates
 
@@ -366,7 +370,7 @@ To land with, or just before, slice 0:
 - [ ] Slice 1 — `Result` and `?` in a join
 - [ ] Slice 2 — agent handlers (may fold into slice 0)
 - [ ] Slice 3 — general timeout
-- [ ] Slice 4 — race (conditional)
+- [ ] Slice 4 — race (not planned; possible later slice)
 
 ## 10. Non-goals
 

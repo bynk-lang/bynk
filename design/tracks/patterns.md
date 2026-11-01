@@ -1,9 +1,11 @@
 # Destructuring and richer patterns — record, list and range patterns
 
-- **Status:** Draft (settling). Direction not yet merged; no slice authorised.
-  Spine [#2616](https://github.com/bynk-lang/bynk/issues/2616). The questions in
-  §5 carry *draft* recommendations for the settling review; none is settled
-  until this PR is marked ready and merged.
+- **Status:** Settled (#2637, merged 2026-11-01). Every question in §5 is
+  closed; the maintainer confirmed the adopted answers on 2026-11-01. Q1 adopted
+  open record patterns with a required `..`; Q8's tuple slice is dropped because
+  #2615 adopted the binding block. Slicing next: no slice is authorised until
+  its proposal is accepted. Spine
+  [#2616](https://github.com/bynk-lang/bynk/issues/2616).
 - **Realises:** the pattern grammar of `design/bynk-type-system.md` §2.3.4, and
   the next slice [ADR 0169](../decisions/0169-nested-payload-patterns-and-match-arm-guards.md)
   F names: "Field patterns on a record type (`Status { name, ok }`) are a
@@ -118,8 +120,9 @@ brought refutable patterns to `let`. What is missing:
 
 ## 5. Open design questions
 
-Each question has options, prior art, and a **draft recommendation** for the
-settling review to test.
+Each question has options, prior art, and the **adopted** answer. Where an
+answer leaves a fact to verify against the code or the platform, the proposal
+for the slice that depends on it must do so before that slice is accepted.
 
 ### Q1 — Open or closed record patterns, and the `..` marker
 
@@ -130,7 +133,7 @@ settling review to test.
 - **(c) Always open, `..` required.** Every record pattern ends with `..`, as an
   event payload pattern already must.
 
-**Draft recommendation: (c).** It keeps the #2607 property by construction (no
+**Adopted: (c).** It keeps the #2607 property by construction (no
 record pattern can ever be closed), it makes the "and the rest" visible at every
 site, and it is the rule Bynk already applies to the only record-shaped pattern
 it has. The cost is two characters on a pattern that happens to list every
@@ -164,11 +167,11 @@ spelling of the same pattern, and inconsistent with events.
     in `..`);
   - keep record patterns out of `is` altogether.
 
-  **Draft:** require the parentheses after `is`, and nowhere else. It is one
+  **Adopted:** require the parentheses after `is`, and nowhere else. It is one
   simple, local rule; it needs no unbounded lookahead; and it leaves `match`
   arms and `let` patterns unparenthesised. The `let … else` opener is
   unambiguous without them, because the pattern ends at `=`, not at a block.
-- **Draft:** as above. The settling review should confirm both positions against
+- **Adopted:** as above. Slice 1's proposal must confirm both positions against
   the tree-sitter grammar and the hand-written parser.
 
 ### Q3 — Visibility
@@ -179,7 +182,7 @@ spelling of the same pattern, and inconsistent with events.
   the only way in, inside the defining `commons`.
 - **The unnamed case.** A type the consumer cannot *name* but may read
   ("transparent but unnamed", §6.5) cannot appear in a pattern under Q2's
-  type-name-required rule. **Draft:** accept that limitation. Such values are
+  type-name-required rule. **Adopted:** accept that limitation. Such values are
   still read with `.field`, and allowing an unnamed form would reopen Q2's
   ambiguity question.
 
@@ -192,7 +195,7 @@ spelling of the same pattern, and inconsistent with events.
   Maranget's "Warnings for pattern matching", used by Rust, OCaml and others) for
   record, variant-payload, list and range patterns together.
 
-**Draft recommendation: (a) in slice 1, then (b) as its own slice.** (a) is
+**Adopted: (a) in slice 1, then (b) as its own slice.** (a) is
 sound and lets record patterns ship without touching the existing checker; (b)
 then improves *every* multi-field case, including today's variant payloads, and
 makes list and range exhaustiveness possible. (b) also feeds the existing
@@ -209,7 +212,7 @@ arms.
   `map`/`filter`. It needs an irrefutable pattern and a known parameter type.
 - **Function parameters.** Destructuring in `fn` signatures would put patterns
   into signatures, hover, signature help and the cross-context contract.
-- **Draft:** `let` in slice 2; lambda parameters as an optional later slice if
+- **Adopted:** `let` in slice 2; lambda parameters as an optional later slice if
   usage asks for it; function parameters a non-goal, so a signature's parameters
   stay plain names.
 
@@ -226,7 +229,7 @@ arms.
 - **Recursion:** list patterns invite recursive processing (`[x, ..rest] =>
   f(rest)`), which the spec does not yet specify (#2612). The kernel folds remain
   the recommended iteration; the reference should say so.
-- **Draft:** as above, in a slice after Q4 (b).
+- **Adopted:** as above, in a slice after Q4 (b).
 
 ### Q7 — Range patterns
 
@@ -256,18 +259,17 @@ arms.
   (§10); a plain binding with a guard covers that case. The refined form stays
   for predicates that are not ranges.
 - **Exhaustiveness:** interval coverage over `Int`, once Q4 (b) exists.
-- **Draft:** as above, cut jointly with #990 so both use one production.
+- **Adopted:** as above, cut jointly with #990 so both use one production.
 
 ### Q8 — Tuple patterns
 
-The concurrent-effects track (#2615) recommends a binding block rather than
-tuples for joining effects. If that holds, nothing in the language needs tuples
-and this slice is dropped. **Draft:** keep it listed as conditional and drop it
-when #2615 settles Q1.
+The concurrent-effects track (#2615) adopted a binding block rather than tuples
+for joining effects, so nothing in the language needs tuples. **Adopted:** the
+tuple-pattern slice is dropped.
 
 ## 6. Candidate slice decomposition
 
-Provisional until this doc settles. Each becomes an increment proposal opened as
+Each becomes an increment proposal opened as
 a sub-issue of #2616.
 
 - **Slice 1 — Record patterns in `match` and `is`.** Q1–Q3; conservative
@@ -278,7 +280,8 @@ a sub-issue of #2616.
 - **Slice 4 — List patterns.** Q6, on top of slice 3.
 - **Slice 5 — Range patterns.** Q7, jointly with #990.
 - **Slice 6 — Lambda-parameter destructuring**, only if usage asks for it.
-- **Slice 7 — Tuple patterns**, only if #2615 adopts tuples.
+- **Slice 7 — Tuple patterns.** Dropped: #2615 adopted the binding block, so
+  the language has no tuples to match.
 
 ## 7. Front-loaded ADR candidates
 
@@ -308,7 +311,7 @@ context.
 - [ ] Slice 4 — list patterns
 - [ ] Slice 5 — range patterns (with #990)
 - [ ] Slice 6 — lambda-parameter destructuring (conditional)
-- [ ] Slice 7 — tuple patterns (conditional)
+- Slice 7 — tuple patterns: **dropped** (#2615 adopted the binding block, not tuples)
 
 ## 10. Non-goals
 
