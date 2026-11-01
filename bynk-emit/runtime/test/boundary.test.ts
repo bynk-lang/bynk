@@ -522,7 +522,10 @@ test("verifyCall: refuses a key held for another edge, and fails closed with non
 test("verifyCall: refuses a stale or future timestamp", async () => {
   const realNow = Date.now;
   try {
-    for (const skew of [-301_000, 301_000]) {
+    // Signing floors the timestamp to the second, so a request signed
+    // 301s ahead can be barely 300s ahead by the time it is verified,
+    // inside the window. 302s clears it whatever the clock's fraction.
+    for (const skew of [-302_000, 302_000]) {
       Date.now = () => realNow() + skew;
       const req = await signedRequest();
       Date.now = realNow;
