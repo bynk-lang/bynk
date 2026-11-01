@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, ast_importers, ts_writes, ts_any
-changelog: "**Ordering your own types** (constrained-generics slice 1): `type Priority = enum { Low, Medium, High } derives Ord` opts a record, sum, enum or opaque type into an order by declaration order, and `Ord` is a bound (`fn top[T: Ord](xs: List[T])`; `Ord` implies `Eq`). `< <= > >=` accept any `Ord` type, `List` `sortBy`/`min`/`max` accept any `Ord` key, and `bynk.list` gains `sort`/`min`/`max`. **`Bytes` is now `Ord`** (unsigned lexicographic), and **`Float` keys of the ordering kernels use a total order** (`NaN` last and equal to itself, `-0` equal to `0`; the operators keep IEEE), so a `NaN` no longer makes a sort inconsistent. New diagnostics: `bynk.generics.missing_ord_bound` (machine-applicable fix), `bynk.generics.redundant_eq_bound`, `bynk.generics.ambiguous_instantiation`, `bynk.types.not_orderable`, `bynk.types.derives_field_not_orderable`, `bynk.types.derives_automatic`; a bounded generic takes hidden comparator arguments (internal, not ABI)"
----
+# 0681 — Ordering is declared with `derives Ord` and bounded with `T: Ord`, and a bounded generic takes comparator witnesses
 
-## ADR: ord-derives-and-comparator-witnesses
-title: Ordering is declared with `derives Ord` and bounded with `T: Ord`, and a bounded generic takes comparator witnesses
-summary: `derives Ord`, the `Ord` constraint, structural orderability, hidden comparator arguments for `Ord`-bounded parameters, and the `Float` total order for ordering kernels (constrained-generics slice 1)
+- **Status:** Accepted (v0.465)
 
 **Context.** Orderability was a fixed list of five base types, in the `List`/`Query`
 `sortBy`/`min`/`max` key rule and again in the comparison operators. A generic
