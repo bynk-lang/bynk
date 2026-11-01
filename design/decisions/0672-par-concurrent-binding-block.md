@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`par { let a <- e1  let b <- e2 }`: a concurrent binding block that issues every effect, in source order, before awaiting any of them, and completes when all have settled; the first fault in source order is raised after the rest have settled (concurrent effects, slice 0, [#2640](https://github.com/bynk-lang/bynk/issues/2640))"
----
+# 0672 — A `par { … }` block joins independent effects, settle-all, with faults raised in source order
 
-## ADR: par-concurrent-binding-block
-title: A `par { … }` block joins independent effects, settle-all, with faults raised in source order
-summary: `par` is a contextual keyword opening a statement of `let x <- e` and `do e`; every effect is issued in source order before any is awaited, the block completes when all have settled and raises the first fault in source order, with no sibling reads, no `?`, no `store` writes and no nesting, lowered to `await __bynkSettleAll([…])`
+- **Status:** Accepted (v0.457)
 
 **Context.** Every `<-` awaits, so two independent effects cost the sum of their
 latencies, and an unawaited `Effect` is an error (`bynk.effect.unbound_effect`,
