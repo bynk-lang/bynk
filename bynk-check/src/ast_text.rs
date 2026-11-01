@@ -42,6 +42,18 @@ pub fn pattern_summary(pattern: &Pattern) -> String {
             None => variant.name.clone(),
         },
         Pattern::Record { type_name, .. } => format!("{} {{ .. }}", type_name.name),
+        Pattern::List { elems, rest, .. } => format!(
+            "[{}]",
+            elems
+                .iter()
+                .map(pattern_summary)
+                .chain(rest.iter().map(|r| match &r.binder {
+                    Some(b) => format!("..{}", b.name),
+                    None => "..".to_string(),
+                }))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Pattern::Refined { inner, .. } => pattern_summary(inner),
         Pattern::Or(patterns, _) => patterns
             .iter()

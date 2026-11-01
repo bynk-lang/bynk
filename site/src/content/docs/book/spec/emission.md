@@ -59,6 +59,16 @@ structurally validated as it crosses ([§6.5](/book/spec/type-system/#65-type-co
   language there is no excuse for fractional `Int`s, and codec and `.of`
   agree (as 0040 aligned them for `Float`).
 
+**Recursive types at boundaries** (#2656). The codecs of a type on a type
+cycle, and the container and generic-instantiation codecs the cycle passes
+through, take a trailing `depth: number = 0` and are bounded at 256 levels
+([§6.5](/book/spec/type-system/#65-type-compatibility--boundaries)). A record's
+or sum's codec counts one level and passes `depth + 1` on; a container's passes
+`depth` through. `__deserialise_` past the bound returns a `StructuralMismatch`
+expecting `a value nested at most 256 levels deep`; `__serialise_` past it
+**throws**, as for a non-finite `Float`. The codecs of every other type, and
+every call from outside a cycle, are emitted without the parameter.
+
 ## §7.3 Construct emission
 
 ### §7.3.1 Types
@@ -168,7 +178,8 @@ declares no constant emits exactly as before.
 |---|---|
 | `if … else …` | a conditional / `if` |
 | `match` | a `switch` on `.tag`, payload fields bound as `const` |
-| `match` with a record pattern, a guard, or a nested refutable pattern | a sequence of `if` blocks, one per arm: each tests its refutable sub-patterns (a record pattern tests each refutable field against `scrutinee.field`), binds names as `const`, then runs the guard and body; a record pattern adds no tag test |
+| `match` with a record pattern, a list pattern, a guard, or a nested refutable pattern | a sequence of `if` blocks, one per arm: each tests its refutable sub-patterns (a record pattern tests each refutable field against `scrutinee.field`; a list pattern tests `scrutinee.length === n`, or `scrutinee.length >= n` with a rest marker, then each refutable element against `scrutinee[i]`), binds names as `const`, then runs the guard and body; a record pattern adds no tag test, and `[..]` adds no test at all |
+| a list pattern's `..rest` | `const rest = scrutinee.slice(n);` after the *n* elements before it. Binding it **copies** the remaining elements, so it costs O(length − *n*) per match: a recursive `[x, ..rest] => f(rest)` is O(length²) overall, and the kernel folds are the way to iterate. `[..rest]` binds the scrutinee itself with no copy, which is unobservable because no list is ever mutated in place; a bare `..` copies nothing |
 | admitted literal | an inline brand cast `(literal as T)` ([§6.4](/book/spec/type-system/#64-admission--construction); ADR 0182) |
 | float literal | the source **lexeme** verbatim (`1e10` does not normalise) |
 | interpolated string | a **template literal**: chunks as escaped text (backslash, backtick, and `$` escaped), each `\(e)` hole as `${String(<e>)}` (ADR 0075) |
@@ -470,6 +481,11 @@ left to be discovered: the **runtime-owned error types** (`ValidationError`,
 by the runtime rather than by a type declaration the emitter can walk, so there is
 no helper to generate; their JSON shape is fixed by the runtime, so the
 pass-through is unchecked rather than wrong.
+
+A recursive type's codec is **depth-bounded** on both sides (#2656, §7.2): a
+callee refuses an argument nested past the bound with a `400`
+`StructuralMismatch`, and a caller or callee that would encode one faults
+instead of sending it, so a value one side rejects is never on the wire.
 
 ### §7.3.4c The contract seam (v0.177)
 

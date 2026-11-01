@@ -52,6 +52,7 @@ module.exports = grammar({
     // end of the statement (an `else` or none) says whether the record
     // pattern stood alone.
     [$._pattern, $._let_paren_record_pattern],
+    [$._primary, $.call],
     // `match e { … }` / `if e { … }`: after a bare identifier `e`,
     // the `{` is ambiguous between opening the match/if body and opening a
     // record construction/spread `e { … }`. Keep all parses alive; the body
@@ -1473,6 +1474,7 @@ module.exports = grammar({
       choice(
         $.literal_pattern,
         $.paren_pattern,
+        $.list_pattern,
         alias($._let_variant_pattern, $.variant_pattern),
       ),
     // `let Ok(x) | Err(x) = …`: an or-chain whose first alternative opens a
@@ -1711,6 +1713,7 @@ module.exports = grammar({
         $.literal_pattern,
         $.variant_pattern,
         $.record_pattern,
+        $.list_pattern,
         $.or_pattern,
         $.paren_pattern,
       ),
@@ -1728,6 +1731,19 @@ module.exports = grammar({
         "..",
         "}",
       ),
+    // #2680 (patterns track, slice 4): `[]`, `[p, …]`, `[p, …, ..]`,
+    // `[p, …, ..rest]`. The rest marker is last and at most once; `..` takes a
+    // name or nothing (a literal after it is reserved for range patterns, and
+    // the compiler reports it). It needs no parentheses after `is`, where the
+    // pattern closes at `]`.
+    list_pattern: ($) =>
+      seq(
+        "[",
+        repeat(seq($._pattern, ",")),
+        optional(choice($._pattern, seq($.list_rest, optional(",")))),
+        "]",
+      ),
+    list_rest: ($) => seq("..", optional(field("name", $.identifier))),
     record_pattern_field: ($) =>
       choice(
         seq(field("name", $.identifier), ":", field("pattern", $._pattern)),
@@ -1742,6 +1758,7 @@ module.exports = grammar({
         $.wildcard_pattern,
         $.literal_pattern,
         $.variant_pattern,
+        $.list_pattern,
         $.paren_pattern,
       ),
     _is_pattern: ($) =>
@@ -1918,12 +1935,26 @@ module.exports = grammar({
       ),
 
     call: ($) =>
-      prec.left(
-        PREC.postfix,
+      choice(
+        prec.left(
+          PREC.postfix,
+          seq(
+            field("name", choice($.identifier, $._contextual_identifier)),
+            "(",
+            optional(sep1(field("arg", $._expression), ",")),
+            optional(","),
+            ")",
+          ),
+        ),
+        // v0.20a: explicit type arguments — `name[T, U](…)`. Not given the
+        // postfix precedence, so that the `[` stays ambiguous with a list-pattern
+        // arm that follows a bare-identifier arm body on the next line (#2680);
+        // the conflict below keeps both parses and only one completes.
         seq(
           field("name", choice($.identifier, $._contextual_identifier)),
-          // v0.20a: optional explicit type arguments — `name[T, U](…)`.
-          optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
+          "[",
+          sep1(field("type_arg", $._type_ref), ","),
+          "]",
           "(",
           optional(sep1(field("arg", $._expression), ",")),
           optional(","),

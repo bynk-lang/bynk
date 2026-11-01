@@ -1,0 +1,8 @@
+commons demo
+
+fn f(xs: List[Option[Int]]) -> Int {
+  match xs {
+    [] => 0
+    [Some(n), ..] => n
+  }
+}

@@ -1,0 +1,62 @@
+==========================
+list pattern — match arms with lengths, rest and nesting
+==========================
+
+commons d {
+	fn f(xs: List[Option[Int]]) -> Int {
+		match xs {
+			[] => 0
+			[Some(n)] => n
+			[None, ..] => 1
+			[a, ..rest] => 2
+			[..] => 3
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (generic_type_ref
+            (builtin_type)
+            (base_type))))
+      (base_type)
+      (block
+        (match_expr
+          (identifier)
+          (match_arm
+            (list_pattern)
+            (number_literal))
+          (match_arm
+            (list_pattern
+              (variant_pattern
+                (identifier)
+                (variant_pattern
+                  (identifier))))
+            (identifier))
+          (match_arm
+            (list_pattern
+              (variant_pattern
+                (identifier))
+              (list_rest))
+            (number_literal))
+          (match_arm
+            (list_pattern
+              (variant_pattern
+                (identifier))
+              (list_rest
+                (identifier)))
+            (number_literal))
+          (match_arm
+            (list_pattern
+              (list_rest))
+            (number_literal)))))))

@@ -3435,6 +3435,10 @@ enum MatchKind {
     /// `match_non_sum_discriminant` error. Coverage is the shared usefulness
     /// engine's, as for every other kind (#2665).
     Record,
+    /// #2680: a `List` scrutinee, matched by list patterns. Only taken when an
+    /// arm has a list pattern; a `match` on a list with none keeps its
+    /// `match_non_sum_discriminant` error.
+    List,
 }
 
 /// The literal-matchable base of a scrutinee type, if any: a bare `Int`/
@@ -3548,8 +3552,29 @@ pub(crate) fn check_match(
             .any(|p| matches!(p, Pattern::Record { .. }))
     }) {
         MatchKind::Record
+    } else if matches!(&*tys.get(disc_ty), Ty::List(_))
+        && arms.iter().any(|a| {
+            pattern_alternatives(&a.pattern)
+                .iter()
+                .any(|p| matches!(p, Pattern::List { .. }))
+        })
+    {
+        MatchKind::List
     } else if plain_let {
         check_pattern(&arms[0].pattern, disc_ty, ctx);
+        return None;
+    } else if arms.iter().any(|a| {
+        pattern_alternatives(&a.pattern)
+            .iter()
+            .any(|p| matches!(p, Pattern::List { .. }))
+    }) {
+        // #2680: a list pattern on a value that is not a list (a record, a
+        // `Set`, a function) is that pattern's error, not the scrutinee's.
+        for arm in arms {
+            ctx.push_scope();
+            check_pattern(&arm.pattern, disc_ty, ctx);
+            ctx.pop_scope();
+        }
         return None;
     } else {
         ctx.errors.push(CompileError::new(
@@ -3593,7 +3618,10 @@ pub(crate) fn check_match(
         // `1 | 2 => …` followed by a later `2 => …` is caught too.
         if arm.guard.is_none() && !arm.pattern.is_irrefutable() {
             for cand in pattern_alternatives(&arm.pattern) {
-                if cand.is_irrefutable() {
+                // A list pattern's overlap with another is the usefulness
+                // engine's to judge (`unreachable_arm`): `[x, ..]` after
+                // `[_, ..]` is not a mere duplicate.
+                if cand.is_irrefutable() || matches!(cand, Pattern::List { .. }) {
                     continue;
                 }
                 if seen.iter().any(|p| patterns_equal(p, cand)) {
@@ -3778,7 +3806,12 @@ pub(crate) fn check_match(
                 ));
                 continue;
             }
-            if let_else && matches!(kind, MatchKind::Variant | MatchKind::Record) {
+            if let_else
+                && matches!(
+                    kind,
+                    MatchKind::Variant | MatchKind::Record | MatchKind::List
+                )
+            {
                 ctx.errors.push(with_more(
                     CompileError::new(
                         "bynk.types.non_exhaustive_match",
@@ -3804,6 +3837,15 @@ pub(crate) fn check_match(
                 )
                 .with_note("add a match arm for this variant, or use a wildcard `_` arm"),
                 MatchKind::Record => CompileError::new(
+                    "bynk.types.non_exhaustive_match",
+                    span,
+                    format!(
+                        "non-exhaustive `match` on `{}` — `{witness}` is not covered",
+                        disc_ty.display(tys)
+                    ),
+                )
+                .with_note("add a match arm for it, or use a wildcard `_` arm"),
+                MatchKind::List => CompileError::new(
                     "bynk.types.non_exhaustive_match",
                     span,
                     format!(
@@ -3956,10 +3998,10 @@ fn record_let_else_bindings(arm: &MatchArm, ctx: &mut Ctx) {
     }
 }
 
-/// #2641: the names a record pattern binds are locals of the arm — hover shows
-/// their type and semantic tokens colour them as variables, as for a `let`.
-/// Only names under a record pattern are recorded; the other pattern forms'
-/// bindings are unchanged.
+/// #2641, #2680: the names a record or list pattern binds are locals of the arm
+/// — hover shows their type and semantic tokens colour them as variables, as
+/// for a `let`. Only names under a record or list pattern are recorded; the
+/// other pattern forms' bindings are unchanged.
 fn record_record_pattern_locals(arm: &MatchArm, ctx: &mut Ctx) {
     fn collect<'p>(p: &'p Pattern, under_record: bool, out: &mut Vec<&'p Ident>) {
         match p {
@@ -3971,6 +4013,12 @@ fn record_record_pattern_locals(arm: &MatchArm, ctx: &mut Ctx) {
                         None => out.push(name),
                     }
                 }
+            }
+            Pattern::List { elems, rest, .. } => {
+                for e in elems {
+                    collect(e, true, out);
+                }
+                out.extend(rest.iter().filter_map(|r| r.binder.as_ref()));
             }
             Pattern::Variant { bindings, .. } => {
                 for b in bindings {
@@ -4223,6 +4271,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             }
         }
         Pattern::Record { .. } => check_record_pattern(pat, ty, ctx),
+        Pattern::List { .. } => check_list_pattern(pat, ty, ctx),
         // #474: an or-pattern. Each alternative is checked against the same
         // `ty` in turn — this reuses every existing per-kind check above
         // (including nested payloads) and populates `ctx.expr_types`/binds
@@ -4344,6 +4393,49 @@ fn check_record_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                 ctx.bind(name.name.clone(), field_ty);
             }
         }
+    }
+}
+
+/// #2680: a list pattern `[p₁, …, pₙ]` / `[p₁, …, ..rest]` against scrutinee
+/// type `ty`, which must be a `List[T]` (a record, sum, base type, `Set` or
+/// `Map` is not a list). Each element is checked at `T`; `rest` binds a
+/// `List[T]`, the scrutinee's own type.
+fn check_list_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
+    let tys = ctx.tys;
+    let Pattern::List { elems, rest, .. } = pat else {
+        return;
+    };
+    let elem_ty = match &*tys.get(ty) {
+        Ty::List(elem) => *elem,
+        // Already reported where the type went wrong.
+        Ty::Error => {
+            bind_as_error(pat, ctx);
+            return;
+        }
+        _ => {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.types.list_pattern_on_non_list",
+                    pat.span(),
+                    format!(
+                        "a list pattern cannot match a value of type `{}`",
+                        ty.display(tys)
+                    ),
+                )
+                .with_note(
+                    "list patterns match a `List[T]`; a `Set` or `Map` is not a list, and a record or sum is matched by its own pattern",
+                ),
+            );
+            bind_as_error(pat, ctx);
+            return;
+        }
+    };
+    for e in elems {
+        check_pattern(e, elem_ty, ctx);
+    }
+    if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
+        ctx.pattern_binding_types.insert(binder.span, ty);
+        ctx.bind(binder.name.clone(), ty);
     }
 }
 
@@ -4530,6 +4622,16 @@ fn describe_pattern(pat: &Pattern) -> String {
                 .collect();
             parts.push("..".to_string());
             format!("{} {{ {} }}", type_name.name, parts.join(", "))
+        }
+        Pattern::List { elems, rest, .. } => {
+            let mut parts: Vec<String> = elems.iter().map(describe_pattern).collect();
+            if let Some(r) = rest {
+                parts.push(match &r.binder {
+                    Some(b) => format!("..{}", b.name),
+                    None => "..".to_string(),
+                });
+            }
+            format!("[{}]", parts.join(", "))
         }
         Pattern::Or(alts, _) => alts
             .iter()
@@ -4812,7 +4914,7 @@ fn check_is_pattern(
         // #2641: a record pattern after `is` (parenthesised in source) is
         // checked like a `match` arm's, in a scratch scope: its depth-1 names
         // are collected separately by `gather_pattern_bindings`.
-        Pattern::Record { .. } => {
+        Pattern::Record { .. } | Pattern::List { .. } => {
             ctx.push_scope();
             check_pattern(pattern, value_ty, ctx);
             ctx.pop_scope();
@@ -4879,7 +4981,7 @@ fn check_is_pattern(
 fn validate_is_pattern(pattern: &Pattern, ty: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
     // #2641: a nested record pattern is checked in full, in a scratch scope.
-    if let Pattern::Record { .. } = pattern {
+    if let Pattern::Record { .. } | Pattern::List { .. } = pattern {
         ctx.push_scope();
         check_pattern(pattern, ty, ctx);
         ctx.pop_scope();
@@ -4937,7 +5039,7 @@ fn validate_is_nested_payloads(
         let sub = b.pattern();
         // A record pattern with only irrefutable fields is irrefutable, but
         // its field names still need checking (#2641).
-        if sub.is_irrefutable() && !matches!(sub, Pattern::Record { .. }) {
+        if sub.is_irrefutable() && !matches!(sub, Pattern::Record { .. } | Pattern::List { .. }) {
             continue;
         }
         let field_ty = match &b.kind {
@@ -5099,6 +5201,24 @@ fn gather_pattern_bindings(
                 })
                 .unwrap_or(error);
             out.push((bound.name.clone(), ty));
+        }
+        return;
+    }
+    // #2680: a list pattern binds its depth-1 element names at the element
+    // type, and `..rest` at the list's own type.
+    if let Pattern::List { elems, rest, .. } = pattern {
+        let error = tys.intern(Ty::Error);
+        let elem_ty = match &*tys.get(value_ty) {
+            Ty::List(elem) => Some(*elem),
+            _ => None,
+        };
+        for e in elems {
+            if let Pattern::Binding(n) = e {
+                out.push((n.name.clone(), elem_ty.unwrap_or(error)));
+            }
+        }
+        if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
+            out.push((binder.name.clone(), elem_ty.map_or(error, |_| value_ty)));
         }
         return;
     }

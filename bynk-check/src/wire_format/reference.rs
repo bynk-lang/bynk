@@ -25,7 +25,9 @@ use super::{
 };
 use crate::contract::{FNV1A64_OFFSET, FNV1A64_PRIME, contract_hash, service_normal_form};
 use crate::resolver::cross_context_service_for;
-use crate::wire::{BaseGuard, JsonKind, WIRE_DISCRIMINANT, field_base_guards, json_kind_of};
+use crate::wire::{
+    BaseGuard, JsonKind, MAX_RECURSIVE_NESTING, WIRE_DISCRIMINANT, field_base_guards, json_kind_of,
+};
 
 /// The context the page's examples and worked hash are computed on.
 pub const EXAMPLE_SOURCE: &str = r#"context wire.sample
@@ -549,6 +551,16 @@ on the wire, so every JSON parser reads them exactly.
 
 The in-memory discriminant of a Bynk sum is `tag`; on the wire it is
 `"{WIRE_DISCRIMINANT}"`. The encoding never depends on the in-memory layout.
+
+**Recursive types.** A type that contains itself, directly or through other
+types, `Option`, `List` or `Map` (`type Tree = | Leaf | Node(left: Tree,
+right: Tree)`), has its declaration's encoding at every level. Nesting is
+bounded: each value of a recursive type on the way down from the outermost one
+is one level (a value of a non-recursive type is not counted, and below one the
+count starts again), and a value nested more than {MAX_RECURSIVE_NESTING} levels deep is refused with
+`StructuralMismatch` at the path where it crosses the bound, with
+`expected: "a value nested at most {MAX_RECURSIVE_NESTING} levels deep"`. A Bynk sender throws
+rather than encode such a value, so it never sends one.
 
 ### Examples
 

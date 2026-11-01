@@ -1,0 +1,6 @@
+commons demo
+
+fn f(xs: List[Int]) -> Int {
+  let [head, ..] = xs
+  head
+}

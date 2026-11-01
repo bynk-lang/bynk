@@ -3831,6 +3831,18 @@ fn pattern_to_string(p: &Pattern) -> String {
             parts.push("..".to_string());
             format!("{} {{ {} }}", type_name.name, parts.join(", "))
         }
+        // #2680: a list pattern renders like a list literal, with the rest
+        // marker last.
+        Pattern::List { elems, rest, .. } => {
+            let mut parts: Vec<String> = elems.iter().map(pattern_to_string).collect();
+            if let Some(r) = rest {
+                parts.push(match &r.binder {
+                    Some(b) => format!("..{}", b.name),
+                    None => "..".to_string(),
+                });
+            }
+            format!("[{}]", parts.join(", "))
+        }
         // #474: an or-pattern renders as its alternatives joined by `|`.
         Pattern::Or(alts, _) => alts
             .iter()

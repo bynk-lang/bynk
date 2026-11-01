@@ -1252,6 +1252,38 @@ An unparenthesised one is `bynk.parse.record_pattern_in_is_unparenthesised`. A
 record pattern inside a delimiter — a variant payload (`x is Some(T { f, .. })`)
 or parentheses — needs nothing more. Well-formedness: §5.6.
 
+### §4.7.12 list_pattern {#4712-list_pattern}
+
+{{#grammar list_pattern}}
+
+{{#grammar list_rest}}
+
+`[]`, `[p₁, …, pₙ]`, `[p₁, …, pₙ, ..]` and `[p₁, …, pₙ, ..rest]` (patterns
+track, slice 4, #2680) — match a `List` by its length and elements. Without a
+rest marker the pattern matches a list of exactly *n* elements, element *i*
+against `pᵢ`. With the rest marker `..` it matches *n* or more elements; a name
+after it (`..rest`) binds the elements from the *n*th on, and `..` alone binds
+nothing. *n* may be 0: `[..]` matches every list, and `[..rest]` binds the whole
+list. An element is any pattern, so list patterns nest (`Some([x, ..])`,
+`[[a, ..], ..]`).
+
+The rest marker `..` is the rule it is in a record pattern, with one more case,
+reserved for range patterns (patterns track, Q7). After `..` the next token
+decides:
+
+- a lowercase name, `,` before the closing `]`, or `]` makes it a **rest marker**;
+  a capitalised name is rejected, since it would be a named constant bounding a
+  range (`..MAX`);
+- a literal, including a negative one (`..9`, `..-1`), is the upper bound of a
+  range pattern, which is not available yet: `bynk.parse.range_pattern_unsupported`.
+
+The rest marker MUST be the final element, and appears at most once; a `..` with
+anything after it is `bynk.parse.list_rest_not_last` (suffix patterns such as
+`[.., last]` are not available). `.._` is not a form, because a bare `..` already
+binds nothing. A `[` begins no other pattern, so a list pattern needs no
+parentheses anywhere, after `is` included: the pattern closes at the `]`. It may
+begin a `let` (§4.8.4a). Well-formedness: §5.6.
+
 ## §4.8 Statements
 
 A block is a sequence of statements ending in an optional value expression.
@@ -1300,7 +1332,8 @@ below):
 The pattern MUST open as a pattern rather than a name: with a literal, with `(`,
 with `Ok`/`Err`/`Some`/`None`, with a variant name followed by `(` or `.`
 (`Shipped(at)`, `Status.Done`), or with a capitalised name followed by `{`, which
-opens a record pattern ([§4.7.11](#4711-record_pattern); #2654):
+opens a record pattern ([§4.7.11](#4711-record_pattern); #2654), or with `[`, which
+opens a list pattern ([§4.7.12](#4712-list_pattern); #2680):
 
 {{#grammar _let_pattern}}
 

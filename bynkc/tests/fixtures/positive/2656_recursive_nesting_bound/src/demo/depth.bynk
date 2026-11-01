@@ -1,0 +1,129 @@
+---
+#2656: a recursive type's boundary codec bounds its nesting at 256 levels. A
+value at the bound round-trips; one level deeper is a `StructuralMismatch` when
+decoded and a fault when encoded, never a stack overflow.
+---
+commons demo.depth
+
+// A linked list: legitimately deep data, recursing through an `Option`.
+type Chain = { value: Int, next: Option[Chain] }
+
+// A sum recursing directly.
+type Tree =
+  | Leaf
+  | Node(left: Tree, value: Int, right: Tree)
+
+// A record recursing through a `Map`.
+type Index = { entries: Map[String, Index] }
+
+// Two sums recursing through each other: an `Expr` and a `Stmt` each count a
+// level.
+type Expr =
+  | Lit(value: Int)
+  | Block(stmts: List[Stmt])
+
+type Stmt =
+  | Eval(expr: Expr)
+
+// A chain of `n` levels.
+fn chain(n: Int) -> Chain {
+  if n <= 1 {
+    Chain { value: 1, next: None }
+  } else {
+    Chain { value: n, next: Some(chain(n - 1)) }
+  }
+}
+
+// A tree of `n` levels down its left spine.
+fn tree(n: Int) -> Tree {
+  if n <= 1 { Leaf } else { Node(tree(n - 1), n, Leaf) }
+}
+
+// An index of `n` levels.
+fn index(n: Int) -> Index {
+  let empty: Map[String, Index] = Map.empty()
+  if n <= 1 {
+    Index { entries: empty }
+  } else {
+    Index { entries: empty.insert("k", index(n - 1)) }
+  }
+}
+
+// An expression of `n` levels, alternating `Expr` and `Stmt`, for an odd `n`.
+fn expr(n: Int) -> Expr {
+  if n <= 1 { Lit(1) } else { Block([Eval(expr(n - 2))]) }
+}
+
+// `s` repeated `n` times.
+fn repeat(s: String, n: Int) -> String {
+  if n <= 0 { "" } else { s.concat(repeat(s, n - 1)) }
+}
+
+// The JSON text of a chain of `n` levels, written by hand rather than by the
+// encoder, so a decoder can be given a value the encoder would refuse.
+fn chainJson(n: Int) -> String {
+  if n <= 1 {
+    "{\"value\": 1, \"next\": null}"
+  } else {
+    "{\"value\": 1, \"next\": ".concat(chainJson(n - 1)).concat("}")
+  }
+}
+
+// Effectful, so a case can claim that encoding faults.
+fn encodeChain(c: Chain) -> Effect[String] {
+  Effect.pure(Json.encode(c))
+}
+
+fn encodeTree(t: Tree) -> Effect[String] {
+  Effect.pure(Json.encode(t))
+}
+
+fn encodeIndex(i: Index) -> Effect[String] {
+  Effect.pure(Json.encode(i))
+}
+
+fn encodeExpr(e: Expr) -> Effect[String] {
+  Effect.pure(Json.encode(e))
+}
+
+fn indexRoundTrips(i: Index) -> Bool {
+  match Json.decode[Index](Json.encode(i)) {
+    Ok(d) => d == i
+    Err(_) => false
+  }
+}
+
+fn exprRoundTrips(e: Expr) -> Bool {
+  match Json.decode[Expr](Json.encode(e)) {
+    Ok(d) => d == e
+    Err(_) => false
+  }
+}
+
+fn chainRoundTrips(c: Chain) -> Bool {
+  match Json.decode[Chain](Json.encode(c)) {
+    Ok(d) => d == c
+    Err(_) => false
+  }
+}
+
+fn treeRoundTrips(t: Tree) -> Bool {
+  match Json.decode[Tree](Json.encode(t)) {
+    Ok(d) => d == t
+    Err(_) => false
+  }
+}
+
+fn decodesChain(s: String) -> Bool {
+  match Json.decode[Chain](s) {
+    Ok(_) => true
+    Err(_) => false
+  }
+}
+
+fn chainError(s: String) -> String {
+  match Json.decode[Chain](s) {
+    Ok(_) => "decoded"
+    Err(e) => e.kind.concat(" at ").concat(e.path).concat(": ").concat(e.message)
+  }
+}

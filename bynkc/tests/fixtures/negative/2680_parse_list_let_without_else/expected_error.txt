@@ -1,0 +1,2 @@
+bynk.parse.let_pattern_without_else a `let` with a pattern needs an `else` for the values the pattern does not match @ 4:3
+# exact

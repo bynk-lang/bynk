@@ -1,0 +1,2 @@
+bynk.types.non_exhaustive_match non-exhaustive `match` on `List[Option[Int]]` — `[None, ..]` is not covered @ 4:3
+# exact
