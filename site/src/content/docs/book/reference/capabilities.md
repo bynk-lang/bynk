@@ -102,8 +102,7 @@ keep their effects, exactly as in a sequence of `<-`s. See
 `Effect[T]`, `d` is a `Duration`, and the result is `Effect[Result[T, TimedOut]]`:
 
 ```bynk,fragment
-consumes bynk { TimedOut }
-
+// the unit has: consumes bynk { TimedOut }
 let r <- Pricing.quote(id).within(2.seconds)
 match r {
   Ok(q) => Effect.pure("quoted \(q)")
