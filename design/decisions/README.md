@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0684](0684-recursive-nesting-bound.md) | **A boundary codec bounds recursive nesting at 256 levels** (v0.467.1) — The codecs of a recursive type thread a depth; past 256 levels decoding is a `StructuralMismatch` and encoding throws, and every other codec is unchanged | Accepted (v0.467.1) |
 | [0683](0683-private-declarations.md) | **Private declarations, a unit-local visibility for commons and context items** (v0.467) — `private` hides a `fn`, `type`, `messages`, `asset` or `embed` from importers; importers do not see private names at all, a unit suite sees its target's, a public signature may not name a private type, and emission is unchanged | Accepted (v0.467) |
 | [0682](0682-agent-schema-additive-defaulted-fields.md) | **The agent schema lock records each stored value's positions, and a record field added with a default is additive** (v0.466) — Nested defaulted additions to stored state need no migrate step; the lock gains per-position shapes | Accepted (v0.466) |
 | [0681](0681-ord-derives-and-comparator-witnesses.md) | **Ordering is declared with `derives Ord` and bounded with `T: Ord`, and a bounded generic takes comparator witnesses** (v0.465) — `derives Ord`, the `Ord` constraint, structural orderability, hidden comparator arguments for `Ord`-bounded parameters, and the `Float` total order for ordering kernels (constrained-generics slice 1) | Accepted (v0.465) |
