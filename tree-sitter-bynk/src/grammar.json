@@ -6409,6 +6409,10 @@
           "name": "advance_stmt"
         },
         {
+          "type": "SYMBOL",
+          "name": "par_stmt"
+        },
+        {
           "type": "PREC",
           "value": 1,
           "content": {
@@ -7041,6 +7045,71 @@
           "content": {
             "type": "SYMBOL",
             "name": "_expression"
+          }
+        }
+      ]
+    },
+    "par_stmt": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "par"
+        },
+        {
+          "type": "STRING",
+          "value": "{"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_par_statement"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "}"
+        }
+      ]
+    },
+    "_par_statement": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "let_stmt"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "effect_let_stmt"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "effect_send_stmt"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "do_stmt"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "assign_stmt"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "advance_stmt"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "par_stmt"
+        },
+        {
+          "type": "PREC",
+          "value": 1,
+          "content": {
+            "type": "SYMBOL",
+            "name": "expect_expr"
           }
         }
       ]
@@ -8301,6 +8370,10 @@
           {
             "type": "STRING",
             "value": "advance"
+          },
+          {
+            "type": "STRING",
+            "value": "par"
           }
         ]
       },

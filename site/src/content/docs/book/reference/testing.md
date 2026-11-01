@@ -1114,6 +1114,14 @@ The subject is a **`Cap.op` reference** — the capability and one of its operat
 | `expect Cap.op called <n> times with <pred>` | exactly `<n>` calls, and they match |
 | `expect A.op before B.op` | both occurred, and the first `A.op` precedes the first `B.op` |
 
+`before` compares the order calls were **issued** in, not the order they finished.
+Inside a [`par` block](/book/reference/capabilities/#par) the first call of each
+binding is issued in source order, so between two bindings' first calls it is
+source order; a later call inside a composite binding (a function that makes
+several calls) is issued when its earlier ones complete, so it follows completion
+order. Neither is evidence that one effect finished first, and a test that needs
+completion order is testing a race: write it against a stub that controls it.
+
 A **`with` predicate** is the ordinary predicate surface with the operation's
 parameters in scope by their declared names (`Logger.log(msg: String)` → `msg`), so
 `with msg == "…"` reads directly; it must be pure `Bool`.

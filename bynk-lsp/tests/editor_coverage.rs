@@ -68,6 +68,15 @@ fn every_contextual_keyword_has_a_hover_path() {
             "advance: no hover path — describe_advance_at returned None"
         );
     }
+    // #2640: `par` is a keyword only before `{` of a `par { … }` block.
+    let block = "context Scaffold\n\nservice s {\n  on call() -> Effect[Int] {\n    par {\n      let a <- f()\n      let b <- g()\n    }\n    Effect.pure(a + b)\n  }\n}\n";
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "par") {
+        let offset = block.find(kw.word).expect("`par` is in the fixture");
+        assert!(
+            symbols::describe_par_at(block, offset).is_some(),
+            "par: no hover path — describe_par_at returned None"
+        );
+    }
     // #2618: `private` is a keyword only before a declaration keyword.
     let modifier = "commons Scaffold\n\nprivate fn f() -> Int { 0 }\n";
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "private") {
@@ -79,7 +88,7 @@ fn every_contextual_keyword_has_a_hover_path() {
     }
     for kw in CONTEXTUAL_KEYWORDS
         .iter()
-        .filter(|k| k.word != "advance" && k.word != "private")
+        .filter(|k| k.word != "advance" && k.word != "par" && k.word != "private")
     {
         let offset = source
             .find(kw.word)

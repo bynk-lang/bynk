@@ -238,6 +238,10 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
         "An agent's migration step: carries a stored record from an older schema version to the current shape (`migrate from 1 (old: CartV1) { … }`).",
     ),
     k(
+        "par",
+        "Opens a concurrent binding block (`par { let a <- e1  let b <- e2 }`): every effect is issued before any is awaited, and the block completes when all have settled.",
+    ),
+    k(
         "private",
         "Before a `fn`, `type`, `messages`, `asset` or `embed` declaration in a commons or context: visible only within its own unit (and that unit's suites), never through `uses` (`private fn helper(…)`).",
     ),

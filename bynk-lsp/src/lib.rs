@@ -3592,6 +3592,16 @@ impl LanguageServer for Backend {
         {
             return Ok(None);
         }
+        // #2640: directly inside a `par { … }` block, only its two statement forms.
+        if completion::in_par_block_position(&text, offset)
+            && completion::is_keyword_position(&line_prefix)
+        {
+            let items = completion::par_block_candidates()
+                .into_iter()
+                .map(to_completion_item)
+                .collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
         let files = self.project_content(&uri).await;
         // #2134: inside a suite's or case's `env { }` block, at a name position,
         // offer the secret names actors declare and the `Secrets.get` literals.
@@ -3662,6 +3672,12 @@ impl LanguageServer for Backend {
         // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
         // item start, offer the `@raw` snippet.
         items.extend(raw_completions(&text, offset, &line_prefix));
+        // #2640: at statement position in an effectful body, the `par` block.
+        if completion::is_keyword_position(&line_prefix)
+            && completion::in_effectful_body_position(&text, offset)
+        {
+            items.push(to_completion_item(completion::par_snippet()));
+        }
         // P3 (#2342): on a `capability X = …` line, the instantiable bases and
         // then a base's required options.
         items.extend(

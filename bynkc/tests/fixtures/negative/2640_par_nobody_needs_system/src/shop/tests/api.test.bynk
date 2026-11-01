@@ -1,0 +1,11 @@
+// #2640: a `by Nobody` inside a `par` block is the same credential-less call as
+// one written outside it, so the tier rule sees it.
+suite shop.api as system {
+  case "two calls together, one with no credential" as unit {
+    par {
+      let a <- api.POST("/cart", Item { sku: "widget" }) by Nobody
+      let b <- api.POST("/reject", Item { sku: "widget" }) by Nobody
+    }
+    expect a is Rejected(Unauthorized)
+  }
+}

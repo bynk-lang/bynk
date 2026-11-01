@@ -211,6 +211,11 @@
           "match": "\\badvance\\b(?=\\s+[A-Za-z_][A-Za-z0-9_]*\\s+by\\b)"
         },
         {
+          "comment": "#2640: `par` is a CONTEXTUAL keyword opening a `par { … }` binding block — highlighted only before `{`, so it stays an ordinary identifier elsewhere.",
+          "name": "keyword.control.bynk",
+          "match": "\\bpar\\b(?=\\s*\\{)"
+        },
+        {
           "comment": "v0.131: `cors` is a CONTEXTUAL keyword introducing a `from http` service's CORS policy — highlighted only in `cors {` position, so it stays an ordinary identifier elsewhere.",
           "name": "keyword.declaration.bynk",
           "match": "\\bcors\\b(?=\\s*\\{)"

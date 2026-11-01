@@ -389,39 +389,46 @@ impl<'a> Builder<'a> {
         // A `let` binds for the rest of its own block only.
         let scope = self.bound.len();
         for stmt in &block.statements {
-            match stmt {
-                Statement::EffectLet(l) => {
-                    self.walk_value(&l.value, current_block, depth, Some(Arrow::Awaited), false);
-                    self.bound.push(l.name.name.clone());
-                }
-                Statement::Do(d) => {
-                    self.walk_value(&d.value, current_block, depth, Some(Arrow::Awaited), false)
-                }
-                Statement::Send(s) => self.walk_value(
-                    &s.value,
-                    current_block,
-                    depth,
-                    Some(Arrow::FireAndForget),
-                    false,
-                ),
-                Statement::Let(l) => {
-                    self.walk_value(&l.value, current_block, depth, None, false);
-                    self.bound.push(l.name.name.clone());
-                }
-                Statement::Expect(e) => {
-                    self.walk_value(&e.value, current_block, depth, None, false)
-                }
-                Statement::Assign(a) => {
-                    self.walk_value(&a.value, current_block, depth, None, false);
-                    self.emit_assign(a, current_block);
-                }
-                Statement::Advance(a) => {
-                    self.walk_value(&a.amount, current_block, depth, None, false)
-                }
-            }
+            self.walk_stmt(stmt, current_block, depth);
         }
         self.walk_value(&block.tail, current_block, depth, None, ret);
         self.bound.truncate(scope);
+    }
+
+    /// One statement of a block. A `par` block (#2640) walks its bindings in
+    /// source order, the order their effects are issued in.
+    fn walk_stmt(&mut self, stmt: &Statement, current_block: Option<BlockCtx>, depth: u32) {
+        match stmt {
+            Statement::EffectLet(l) => {
+                self.walk_value(&l.value, current_block, depth, Some(Arrow::Awaited), false);
+                self.bound.push(l.name.name.clone());
+            }
+            Statement::Do(d) => {
+                self.walk_value(&d.value, current_block, depth, Some(Arrow::Awaited), false)
+            }
+            Statement::Send(s) => self.walk_value(
+                &s.value,
+                current_block,
+                depth,
+                Some(Arrow::FireAndForget),
+                false,
+            ),
+            Statement::Let(l) => {
+                self.walk_value(&l.value, current_block, depth, None, false);
+                self.bound.push(l.name.name.clone());
+            }
+            Statement::Expect(e) => self.walk_value(&e.value, current_block, depth, None, false),
+            Statement::Assign(a) => {
+                self.walk_value(&a.value, current_block, depth, None, false);
+                self.emit_assign(a, current_block);
+            }
+            Statement::Advance(a) => self.walk_value(&a.amount, current_block, depth, None, false),
+            Statement::Par(p) => {
+                for inner in &p.statements {
+                    self.walk_stmt(inner, current_block, depth);
+                }
+            }
+        }
     }
 
     /// Classify one expression reached directly under a statement (or a

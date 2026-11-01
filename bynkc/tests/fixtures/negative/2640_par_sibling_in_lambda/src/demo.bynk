@@ -1,0 +1,22 @@
+context demo
+
+// #2640: a lambda captures the sibling's name just as a direct mention does, and
+// would read it before it is bound. The rule reaches into lambda bodies.
+
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+}
+
+service dash {
+  on call(id: Int) -> Effect[Int] given Users, Orders {
+    par {
+      let user <- Users.get(id)
+      let n <- Orders.forUser([1, 2].map((x) => user.length() + x).length())
+    }
+    Effect.pure(n)
+  }
+}

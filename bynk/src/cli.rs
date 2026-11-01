@@ -19,10 +19,73 @@ pub struct Cli {
     pub command: Command,
 }
 
+/// The headings `bynk --help` sorts its subcommands under, in order. clap has
+/// no subcommand headings of its own, so [`command`] renders this listing into
+/// the help template; every visible subcommand must appear exactly once.
+pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
+    (
+        "Project",
+        &["new", "check", "fmt", "test", "compile", "openapi"],
+    ),
+    ("Run and deploy", &["dev", "deploy", "tail", "migrate"]),
+    (
+        "Dependencies",
+        &["add", "deps", "fetch", "update", "search", "approve"],
+    ),
+    (
+        "Publishing",
+        &["publish", "yank", "login", "logout", "org", "registry"],
+    ),
+    (
+        "Help and tooling",
+        &["doctor", "explain", "book", "mcp", "help"],
+    ),
+];
+
+/// The driver's clap command: [`Cli`]'s, with the top-level subcommands listed
+/// under [`COMMAND_GROUPS`] instead of in one flat block.
+pub fn command() -> clap::Command {
+    use clap::CommandFactory;
+
+    // Build first, so clap's implicit `help` subcommand is there to list.
+    let mut cmd = Cli::command();
+    cmd.build();
+    let styles = cmd.get_styles();
+    let (header, literal) = (*styles.get_header(), *styles.get_literal());
+    let width = COMMAND_GROUPS
+        .iter()
+        .flat_map(|(_, names)| names.iter())
+        .map(|name| name.len())
+        .max()
+        .unwrap_or(0);
+
+    let mut listing = String::new();
+    for (heading, names) in COMMAND_GROUPS {
+        listing.push_str(&format!("{header}{heading}:{header:#}\n"));
+        for name in *names {
+            let about = cmd
+                .find_subcommand(name)
+                .and_then(clap::Command::get_about)
+                .map(ToString::to_string)
+                .unwrap_or_default();
+            let pad = " ".repeat(width - name.len());
+            listing.push_str(&format!("  {literal}{name}{literal:#}{pad}  {about}\n"));
+        }
+        listing.push('\n');
+    }
+
+    cmd.help_template(format!(
+        "{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n{listing}\
+         {header}Options:{header:#}\n{{options}}{{after-help}}"
+    ))
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Check whether your machine is ready to compile, test, and deploy Bynk —
-    /// and print the exact remedy for anything missing.
+    /// Check this machine has the tools Bynk needs.
+    ///
+    /// Surveys what compiling, testing, and deploying need, and prints the
+    /// exact remedy for anything missing.
     ///
     /// Bare `bynk doctor` is informational: it surveys every capability and
     /// exits 0 unless `bynkc` itself is unusable. `--only <capability>` gates on
@@ -45,9 +108,9 @@ pub enum Command {
         #[arg(long, value_enum, default_value = "human")]
         format: FormatArg,
     },
-    /// Build the project and serve it locally with `wrangler dev`, rebuilding
-    /// on save — one step in place of the manual compile + `cd` + `wrangler
-    /// dev` recipe.
+    /// Build and serve the project locally, rebuilding on save.
+    ///
+    /// One step in place of the manual compile + `cd` + `wrangler dev` recipe.
     ///
     /// Compiles into a managed `.bynk/dev/` build dir and runs one `wrangler
     /// dev` per context from inside its worker dir, in local mode (Miniflare) —
@@ -127,11 +190,12 @@ pub enum Command {
         #[arg(last = true)]
         wrangler_args: Vec<String>,
     },
-    /// Stream a deployed Worker's logs (`wrangler tail`) with stack frames
-    /// rewritten to `.bynk` locations, as `bynk dev` does for the local
-    /// server (#2546). The project is compiled so the frames can be mapped
-    /// through the emitter's source maps, but nothing is deployed or
-    /// provisioned. Everything after `--` is forwarded to `wrangler tail`.
+    /// Stream a deployed Worker's logs, mapped to `.bynk` sources.
+    ///
+    /// Runs `wrangler tail` with stack frames rewritten to `.bynk` locations,
+    /// as `bynk dev` does for the local server (#2546). The project is
+    /// compiled so the frames can be mapped through the emitter's source maps,
+    /// but nothing is deployed or provisioned. Everything after `--` is forwarded to `wrangler tail`.
     Tail {
         /// Project directory (anywhere inside the project). Defaults to `.`.
         #[arg(default_value = ".")]
@@ -150,8 +214,10 @@ pub enum Command {
         #[arg(last = true)]
         wrangler_args: Vec<String>,
     },
-    /// Provision each context's Cloudflare resources and deploy its Worker.
-    /// The whole project ships in one command, in Service-Binding dependency
+    /// Provision Cloudflare resources and deploy every Worker.
+    ///
+    /// Each context's resources are provisioned and its Worker deployed; the
+    /// whole project ships in one command, in Service-Binding dependency
     /// order — Cloudflare rejects a Worker uploaded before a Worker it binds
     /// to. The generated configuration remains disposable: Cloudflare ids live
     /// in the committed `bynk.deploy.lock`.
@@ -225,8 +291,10 @@ pub enum Command {
         #[arg(last = true)]
         wrangler_args: Vec<String>,
     },
-    /// Scaffold a new project: a complete, runnable single-context HTTP service
-    /// you can serve immediately with `bynk dev`.
+    /// Scaffold a new project.
+    ///
+    /// The project is a complete, runnable single-context HTTP service you can
+    /// serve immediately with `bynk dev`.
     ///
     /// Writes a `bynk.toml`, a `.gitignore`, and `src/<name>.bynk` into a new
     /// directory. Pure offline file-writing — it shells nothing and needs no
@@ -242,8 +310,10 @@ pub enum Command {
         #[arg(long)]
         name: Option<String>,
     },
-    /// Type-check a `.bynk` file or project without writing output — the
-    /// `bynkc check` behaviour through the driver's compiler resolution (v0.138).
+    /// Type-check a file or project.
+    ///
+    /// Writes no output — the `bynkc check` behaviour through the driver's
+    /// compiler resolution (v0.138).
     ///
     /// Runs the compiler pipeline in-process (no `bynkc` binary required); with
     /// `BYNK_BYNKC` set, the pinned compiler is shelled instead so an
@@ -261,11 +331,21 @@ pub enum Command {
         /// it), the same path `fmt` reports.
         #[arg(long, value_enum, default_value = "rich")]
         format: CheckFormatArg,
+        /// Apply the machine-applicable fix suggestions to the sources, in
+        /// place, before checking (#2642): the same fixes the editor's
+        /// "fix all" applies, repeated until none remain. Writes only files
+        /// that change, does not format, and writes nothing if applying the
+        /// fixes would leave a problem that needs a human. What remains is
+        /// reported as usual.
+        #[arg(long)]
+        fix: bool,
         #[command(flatten)]
         lock: LockArgs,
     },
-    /// Compile a project to TypeScript in a directory — the `bynkc compile`
-    /// behaviour through the driver's compiler resolution (#2471).
+    /// Compile a project to TypeScript.
+    ///
+    /// The `bynkc compile` behaviour through the driver's compiler resolution
+    /// (#2471).
     ///
     /// Delegates to the `bynkc` the driver resolves, like `bynk test`, so an
     /// editor inherits that resolution. With `--sources-stdin` it compiles
@@ -290,9 +370,11 @@ pub enum Command {
         #[arg(long)]
         allow_skew: bool,
     },
-    /// Write an OpenAPI 3.1 document for the project's `from http` services
-    /// (#856): paths and methods from the routes, parameters and request bodies
-    /// from the handler params, and responses keyed by the exact status codes
+    /// Write an OpenAPI document for the project's HTTP services.
+    ///
+    /// An OpenAPI 3.1 document for every `from http` service (#856): paths
+    /// and methods from the routes, parameters and request bodies from the
+    /// handler params, and responses keyed by the exact status codes
     /// the handlers can return — the 2xx body and each error variant a handler
     /// constructs, plus the `400` the boundary itself answers.
     ///
@@ -320,8 +402,10 @@ pub enum Command {
         #[command(flatten)]
         lock: LockArgs,
     },
-    /// Format `.bynk` source files in place — the `bynkc fmt` behaviour through
-    /// the driver (v0.138). Passing `-` reads from stdin and writes to stdout.
+    /// Format `.bynk` source files.
+    ///
+    /// Formats in place — the `bynkc fmt` behaviour through the driver
+    /// (v0.138). Passing `-` reads from stdin and writes to stdout.
     ///
     /// Runs the formatter in-process (no `bynkc` binary required); with
     /// `BYNK_BYNKC` set, the pinned compiler is shelled instead — the style
@@ -334,8 +418,10 @@ pub enum Command {
         #[command(flatten)]
         args: bynk_driver::FmtArgs,
     },
-    /// Discover and run test declarations in a project — the `bynkc test`
-    /// behaviour through the driver (v0.138).
+    /// Run the project's tests.
+    ///
+    /// Discovers and runs test declarations — the `bynkc test` behaviour
+    /// through the driver (v0.138).
     ///
     /// Delegates to the `bynkc` the driver resolves (`BYNK_BYNKC` → PATH →
     /// sibling-of-`bynk`), so an editor or developer inherits the driver's
@@ -352,8 +438,10 @@ pub enum Command {
         #[arg(long)]
         allow_skew: bool,
     },
-    /// Resolve the project's dependencies, fetch the git ones missing from the
-    /// store, and write `bynk.lock` (#2240). `check`, `test`, `dev` and
+    /// Fetch dependencies and write `bynk.lock`.
+    ///
+    /// Resolves the project's dependencies, fetches the git ones missing from
+    /// the store, and writes `bynk.lock` (#2240). `check`, `test`, `dev` and
     /// `deploy` do this first anyway; `fetch` does only this — warm the store
     /// before an `--offline` CI step, or after editing `[dependencies]`.
     Fetch {
@@ -366,8 +454,10 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         format: DeployFormatArg,
     },
-    /// Re-resolve git dependencies' revisions — a branch that moved upstream —
-    /// and rewrite `bynk.lock` (#2240). Name aliases or packages to update only
+    /// Move git dependencies to their latest revisions.
+    ///
+    /// Re-resolves git dependencies' revisions — a branch that moved upstream
+    /// — and rewrites `bynk.lock` (#2240). Name aliases or packages to update only
     /// those; with none, every git dependency is re-resolved.
     Update {
         /// The aliases or `org/package` names to update. All when omitted.
@@ -377,15 +467,19 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
-    /// Where each agent class's stored state stands, and the sweep that
+    /// Inspect and migrate agents' stored state.
+    ///
+    /// `status` reports where each agent class's stored state stands; `sweep`
     /// migrates every stored instance so old `migrate` steps can retire.
     Migrate {
         #[command(subcommand)]
         command: MigrateCommand,
     },
-    /// Add a registry dependency to `bynk.toml` (#2274): the highest version
-    /// its registry offers (or one matching `@<range>`), written as
-    /// `<alias> = { package = "…", version = "^…" }`, then resolved and locked.
+    /// Add a registry dependency to `bynk.toml`.
+    ///
+    /// Adds (#2274) the highest version its registry offers (or one matching
+    /// `@<range>`), written as `<alias> = { package = "…", version = "^…" }`,
+    /// then resolved and locked.
     Add {
         /// `org/package`, optionally `@<range>` (`acme/money@^1.4`).
         #[arg(value_name = "PACKAGE")]
@@ -400,9 +494,11 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         format: DeployFormatArg,
     },
-    /// Look a package up on the registry its organisation routes to (#2472):
-    /// every version its index lists, with the newest usable one. An exact
-    /// `org/package` lookup — a registry's index has no free-text search.
+    /// Look up a package's versions on its registry.
+    ///
+    /// Asks the registry its organisation routes to (#2472) for every version
+    /// its index lists, with the newest usable one. An exact `org/package`
+    /// lookup — a registry's index has no free-text search.
     Search {
         /// `org/package`.
         #[arg(value_name = "PACKAGE")]
@@ -414,8 +510,10 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         format: DeployFormatArg,
     },
-    /// List the project's dependencies and what `bynk.lock` resolved each to
-    /// (#2472). Offline.
+    /// List dependencies and their locked versions.
+    ///
+    /// What `bynk.lock` resolved each of the project's dependencies to (#2472).
+    /// Offline.
     Deps {
         /// Project directory.
         #[arg(long, default_value = ".")]
@@ -424,9 +522,11 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         format: DeployFormatArg,
     },
-    /// Publish this package to the registry its organisation routes to
-    /// (#2287): check it, pack it, upload it through the registry's publish
-    /// API, and verify the signed line the registry returns.
+    /// Publish this package to its registry.
+    ///
+    /// Publishes to the registry its organisation routes to (#2287): check it,
+    /// pack it, upload it through the registry's publish API, and verify the
+    /// signed line the registry returns.
     Publish {
         /// The package directory.
         #[arg(long, default_value = ".")]
@@ -444,8 +544,10 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         format: DeployFormatArg,
     },
-    /// Yank a published version through its registry's publish API (#2287):
-    /// kept for locked builds, never newly chosen.
+    /// Yank a published version.
+    ///
+    /// Yanks through the registry's publish API (#2287): the version is kept
+    /// for locked builds, but never newly chosen.
     Yank {
         /// `org/package`.
         package: String,
@@ -458,24 +560,32 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
-    /// Sign in to a registry's accounts (#2378) through GitHub's device flow,
-    /// and keep the account token in the credentials file.
+    /// Sign in to a registry.
+    ///
+    /// Signs in to a registry's accounts (#2378) through GitHub's device flow,
+    /// and keeps the account token in the credentials file.
     Login {
         #[command(flatten)]
         target: AccountTarget,
     },
-    /// Sign out of a registry's accounts (#2378), here and on the server.
+    /// Sign out of a registry.
+    ///
+    /// Signs out of a registry's accounts (#2378), here and on the server.
     Logout {
         #[command(flatten)]
         target: AccountTarget,
     },
-    /// Manage an organisation on a registry with accounts (#2378): claim and
-    /// block it, add and remove members, mint and revoke publish tokens.
+    /// Manage a registry organisation, its members and tokens.
+    ///
+    /// For a registry with accounts (#2378): claim and block an organisation,
+    /// add and remove members, mint and revoke publish tokens.
     Org {
         #[command(subcommand)]
         command: OrgCommand,
     },
-    /// Review and approve the npm packages that git and registry
+    /// Approve the npm packages that dependencies bring in.
+    ///
+    /// Reviews and approves the npm packages that git and registry
     /// dependencies' adapters bring into the build (#2296), recording each
     /// approval in `bynk.lock`. With no package, asks about each pending one.
     Approve {
@@ -496,14 +606,18 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
-    /// Build and maintain a static package registry in a directory (#2274) —
-    /// served by any static host, or read as a `file://` index.
+    /// Build and maintain a static package registry.
+    ///
+    /// The registry lives in a directory (#2274), served by any static host
+    /// or read as a `file://` index.
     Registry {
         #[command(subcommand)]
         command: RegistryCommand,
     },
-    /// Explain a diagnostic code — the longer-form "what the rule is, why it
-    /// exists, and how to fix it" behind a `bynk.*` error code (#853).
+    /// Explain a diagnostic code.
+    ///
+    /// Prints the longer-form "what the rule is, why it exists, and how to fix
+    /// it" behind a `bynk.*` error code (#853).
     ///
     /// Prints a curated blurb, a minimal before/after example, and a link to
     /// the relevant Book concept page. The blurb is offline-complete, so the
@@ -515,8 +629,10 @@ pub enum Command {
         #[arg(value_name = "CODE")]
         code: String,
     },
-    /// Serve the toolchain's read-only answers to an AI agent over the Model
-    /// Context Protocol (#2466), on stdin/stdout.
+    /// Serve toolchain answers to an AI agent over MCP.
+    ///
+    /// Read-only answers over the Model Context Protocol (#2466), on
+    /// stdin/stdout.
     ///
     /// Eight tools: diagnostics, a symbol's type and definition, a unit's
     /// documentation, the project's architecture, a handler's wire contract,
@@ -529,10 +645,10 @@ pub enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
-    /// Print or search the Bynk Book as this toolchain documents it (#2463).
+    /// Print or search the Bynk Book.
     ///
-    /// The whole Book, every page in reading order, is embedded in this build,
-    /// so it matches the `bynk` you run and works offline. With no arguments it
+    /// The whole Book, every page in reading order, is embedded in this build
+    /// (#2463), so it matches the `bynk` you run and works offline. With no arguments it
     /// prints the Book, its first line naming the toolchain version. With
     /// `--search <QUERY>` it prints the best-matching sections instead, each
     /// with its page link. Used by the editor's `bynk_search_book`
@@ -1030,4 +1146,63 @@ pub enum BookFormat {
     Text,
     /// A JSON document: `version`, `query` and `results`.
     Json,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A subcommand left out of `COMMAND_GROUPS` would vanish from
+    /// `bynk --help`; one listed twice, or not at all, is a typo.
+    #[test]
+    fn every_subcommand_is_grouped_once() {
+        let mut cmd = command();
+        cmd.build();
+        let mut grouped: Vec<&str> = COMMAND_GROUPS
+            .iter()
+            .flat_map(|(_, names)| names.iter().copied())
+            .collect();
+        grouped.sort_unstable();
+        let mut visible: Vec<&str> = cmd
+            .get_subcommands()
+            .filter(|sub| !sub.is_hide_set())
+            .map(clap::Command::get_name)
+            .collect();
+        visible.sort_unstable();
+        assert_eq!(grouped, visible);
+    }
+
+    /// The rendered help keeps clap's own parts around the groups, so a typo in
+    /// a template tag (`{usage-heading}` and the like) shows up here.
+    #[test]
+    fn help_renders_groups_between_usage_and_options() {
+        let help = command().render_help().to_string();
+        let usage = help.find("Usage: bynk <COMMAND>").expect("usage line");
+        let options = help.find("Options:\n  -h, --help").expect("options");
+        let mut at = usage;
+        for (heading, names) in COMMAND_GROUPS {
+            let found = help[at..].find(&format!("\n{heading}:\n"));
+            at += found.unwrap_or_else(|| panic!("heading {heading:?} out of order"));
+            for name in *names {
+                assert!(help.contains(&format!("\n  {name} ")), "{name} listed");
+            }
+        }
+        assert!(at < options, "groups precede Options:");
+        assert!(help.starts_with("The Bynk driver\n"));
+        assert!(!help.contains('{'), "an unexpanded template tag:\n{help}");
+    }
+
+    /// The top-level listing stays scannable: each summary fits on one line,
+    /// with the detail left to `bynk <command> --help`.
+    #[test]
+    fn subcommand_summaries_are_short() {
+        for sub in command().get_subcommands() {
+            let about = sub.get_about().map(ToString::to_string).unwrap_or_default();
+            assert!(
+                !about.is_empty() && about.len() <= 60 && !about.contains('\n'),
+                "`bynk {}` summary should be one line of at most 60 chars: {about:?}",
+                sub.get_name()
+            );
+        }
+    }
 }

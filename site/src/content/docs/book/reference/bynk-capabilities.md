@@ -825,8 +825,8 @@ default, deploy, and only drop what the old code read in a later migration
 In tests each instance is a real SQLite database in memory (Node's built-in
 `node:sqlite`, so Node 22.13 or later), so statements run as they do on D1.
 `stub Orders.all(_, _)` and `expect Orders.run called` work as for any
-capability. `D1` is experimental: list `"bynk.cloudflare.D1"` under
-`[unstable] allow`. `bynk deploy` creates each database and records its id.
+capability. `D1` is stable, so it needs no `[unstable] allow`. `bynk deploy`
+creates each database and records its id.
 
 ### Edge caching: `EdgeCache`
 
@@ -1010,9 +1010,12 @@ operation, is **stable** or **experimental**.
   [`[unstable] allow`](/docs/manifest/#unstable) in `bynk.toml`.
 
 The experimental items today are `bynk.cloudflare`'s `Service`, `R2`,
-`RateLimit`, `EdgeCache` and `D1`, and the
-whole of `bynk.crypto`, which graduates once the first-party registry has signed
-with it in production. New platform capabilities may arrive experimental first.
+`RateLimit`, `EdgeCache`, `Queue` and `Analytics`, and `Kv`'s `getWith`,
+`putWith`, `getBytes`, `putBytes` and `listPage`; `bynk`'s `Fetch.sendWith`,
+`receiveBytes`, `sendBytes`, `receiveStream` and `sendStream`, and
+`Logger.log`; and the whole of `bynk.crypto`, which graduates once the
+first-party registry has signed with it in production. New platform
+capabilities may arrive experimental first, as `D1` did.
 
 ### Extensible enums
 

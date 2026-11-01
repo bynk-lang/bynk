@@ -474,6 +474,7 @@ pub fn body_writes_state(body: &Block, program: &TypedCommons) -> bool {
             Statement::Send(s) => expr(&s.value, program),
             Statement::Do(d) => expr(&d.value, program),
             Statement::Advance(a) => expr(&a.amount, program),
+            Statement::Par(p) => p.statements.iter().any(|s| stmt(s, program)),
         }
     }
     fn expr(e: &Expr, program: &TypedCommons) -> bool {
