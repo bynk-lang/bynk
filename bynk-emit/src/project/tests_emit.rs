@@ -920,18 +920,18 @@ fn emit_integration_module(
         // body's lowering renames a `let` that would redeclare one.
         let mut harness_bound: HashSet<String> = HashSet::from(["deps".to_string()]);
         // Bring `uses` commons names into scope for argument construction.
+        // #2618: a used commons' `private` declarations stay in it, as the
+        // checker's harness view leaves them out (`integration_view`).
         for u in uses_targets {
             let ns = test_ns(u);
             if let Some(table) = unit_tables.get(u) {
-                let mut names: Vec<String> = table
-                    .types
-                    .keys()
-                    .chain(table.fns.keys())
+                let mut names: Vec<String> = public_types(table)
+                    .chain(public_fns(table))
                     .cloned()
                     .collect();
                 names.sort();
                 names.dedup();
-                let type_names = aliased_types(table, |_| true);
+                let type_names = aliased_types(table, |n| is_public_type(table, n));
                 harness_bound.extend(names.iter().cloned());
                 crate::emitter::extend_printed_at(
                     &mut case_out,
@@ -6094,6 +6094,29 @@ fn emit_ns_destructure(
 
 /// #1703: the types of `table` that `keep` admits, each with its type
 /// parameters, sorted by name: the `type_names` [`emit_ns_destructure`] aliases.
+/// #2618: the names of `table`'s types not marked `private`.
+fn public_types(table: &UnitTable) -> impl Iterator<Item = &String> {
+    table
+        .types
+        .iter()
+        .filter(|(_, d)| d.private.is_none())
+        .map(|(n, _)| n)
+}
+
+/// #2618: the names of `table`'s functions not marked `private`.
+fn public_fns(table: &UnitTable) -> impl Iterator<Item = &String> {
+    table
+        .fns
+        .iter()
+        .filter(|(_, d)| d.private.is_none())
+        .map(|(n, _)| n)
+}
+
+/// #2618: whether `name` is a type of `table` not marked `private`.
+fn is_public_type(table: &UnitTable, name: &str) -> bool {
+    table.types.get(name).is_some_and(|d| d.private.is_none())
+}
+
 fn aliased_types(table: &UnitTable, keep: impl Fn(&String) -> bool) -> Vec<(String, Vec<String>)> {
     let mut types: Vec<(String, Vec<String>)> = table
         .types
@@ -6395,19 +6418,32 @@ fn emit_test_scope_setup(
         for u in used {
             let ns = test_ns(u);
             if let Some(table) = unit_tables.get(u) {
-                let assets = table.assets.keys().filter(|n| seen_assets.insert(*n));
-                let mut names: Vec<String> = table
-                    .types
-                    .keys()
-                    .chain(table.fns.keys())
+                // #2618: a used commons' `private` declarations stay in it, as
+                // the checker's suite view leaves them out; destructuring one
+                // would redeclare a public name another used commons binds.
+                let assets = table
+                    .assets
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n)
+                    .filter(|n| seen_assets.insert(*n));
+                let embeds = table
+                    .embeds
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n);
+                let mut names: Vec<String> = public_types(table)
+                    .chain(public_fns(table))
                     .chain(assets)
-                    .chain(table.embeds.keys())
+                    .chain(embeds)
                     .filter(|n| !target_values.contains(n))
                     .cloned()
                     .collect();
                 names.sort();
                 names.dedup();
-                let type_names = aliased_types(table, |n| !target_local.contains(n));
+                let type_names = aliased_types(table, |n| {
+                    !target_local.contains(n) && is_public_type(table, n)
+                });
                 bound.extend(names.iter().cloned());
                 crate::emitter::extend_printed_at(
                     out,

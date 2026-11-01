@@ -1,0 +1,14 @@
+adapter tokens {
+  binding "./tokens.binding.ts"
+
+  exports capability { Jwt }
+
+  // #2618: `private` does not apply in an adapter, even before a `type`.
+  private type Claims = { sub: String }
+
+  capability Jwt {
+    fn sign(claims: Claims) -> Effect[String]
+  }
+
+  provides Jwt = JoseJwt
+}

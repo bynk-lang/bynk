@@ -584,7 +584,9 @@ policy): `bynk check` warns `bynk.parse.orphan_doc_block`, and the formatter
 keeps the block where it is, so formatting never attaches it. Remove the blank
 line to attach it, or make it a `//` comment. A `//` comment on the same line as
 an opening `{` moves onto its own line under the brace, and one on the `=` line
-of a sum type moves onto its own line above the first variant.
+of a sum type moves onto its own line above the first variant. A comment
+between `private` and the keyword it modifies (`private // why` above `fn`) has
+nowhere to go, so the file is refused; put the comment above `private` instead.
 
 **Where the style comes from** — three layers, each overriding the one before:
 the canonical defaults, then the project's `[fmt]` section in

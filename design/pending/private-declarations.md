@@ -68,7 +68,10 @@ The choices the proposal left open:
   `export`. Omitting it is not trivially safe: a unit suite's scaffold and
   the hidden-type closure (#1807) import from the declaring module, and the
   context rebrand forwards attached methods. Every existing golden is
-  byte-identical.
+  byte-identical. A generated test module, unit or `system` tier, does not
+  bring a used commons' private functions, types, assets or embeds into a
+  case's scope, matching the checker's suite view; otherwise one would
+  redeclare a public name of the same spelling from another used commons.
 - **K. `private` is contextual, not reserved.** It is the modifier only as an
   identifier immediately followed by `fn`, `type`, `messages`, `asset` or
   `embed` (or, for a precise rejection, `service`, `agent`, `capability`,
