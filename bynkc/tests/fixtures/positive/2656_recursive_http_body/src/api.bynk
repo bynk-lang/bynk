@@ -1,0 +1,21 @@
+context api
+
+// #2656: an HTTP request body of a recursive type is decoded with the nesting
+// bound, so a body nested too deeply is a `400`, not a stack overflow that the
+// Worker answers as a fault. The route is open to any visitor, which is what
+// made the overflow reachable without credentials. Drives the
+// `http_recursive_body_behaviour` end-to-end test.
+type Chain = { value: Int, next: Option[Chain] }
+
+fn length(c: Chain) -> Int {
+  match c.next {
+    Some(n) => 1 + length(n)
+    None => 1
+  }
+}
+
+service chains from http {
+  on POST("/chains") (body: Chain) -> Effect[HttpResult[Int]] by v: Visitor {
+    Created(length(body))
+  }
+}

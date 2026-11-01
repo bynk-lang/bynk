@@ -156,6 +156,16 @@ on the wire, so every JSON parser reads them exactly.
 The in-memory discriminant of a Bynk sum is `tag`; on the wire it is
 `"kind"`. The encoding never depends on the in-memory layout.
 
+**Recursive types.** A type that contains itself, directly or through other
+types, `Option`, `List` or `Map` (`type Tree = | Leaf | Node(left: Tree,
+right: Tree)`), has its declaration's encoding at every level. Nesting is
+bounded: each value of a recursive type on the way down from the outermost one
+is one level (a value of a non-recursive type is not counted, and below one the
+count starts again), and a value nested more than 256 levels deep is refused with
+`StructuralMismatch` at the path where it crosses the bound, with
+`expected: "a value nested at most 256 levels deep"`. A Bynk sender throws
+rather than encode such a value, so it never sends one.
+
 ### Examples
 
 Each row is decoded by the codec the compiler generates for `wire.sample`

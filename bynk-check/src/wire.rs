@@ -747,6 +747,231 @@ pub fn codec_suffix(t: &TypeRef) -> String {
     }
 }
 
+/// #2656: the most levels of recursive-type nesting a boundary codec accepts.
+/// A value of a recursive type is one level; each value of a recursive type
+/// nested inside it, through any fields, variants or containers, is one more.
+/// A value of a non-recursive type is not counted and, as its codec carries no
+/// depth, the count starts again below it; such a type occurs a fixed number of
+/// times on any path, so the total stays bounded.
+/// Decoding a value nested deeper is a `StructuralMismatch` at the path where
+/// the bound is crossed; encoding one throws, as a non-finite `Float` does.
+///
+/// Measured on Node 22 against the emitted `workers` codecs before the bound
+/// existed (cold code, one fresh process per probe), the shallowest overflow of
+/// the four reference shapes was a record recursing through a `Map`, at 1,394
+/// levels when decoding. The bound is a quarter of that or less, because the
+/// Workers runtime's stack can be smaller than Node's, and no less than 256,
+/// so that legitimately deep data (a long linked list) still crosses. The
+/// measurements are recorded in the ADR for #2656, and the bound in the
+/// specification (§6.5); changing it changes which values cross a boundary.
+pub const MAX_RECURSIVE_NESTING: u32 = 256;
+
+/// #2656: the codec suffixes ([`codec_suffix`]) whose codecs can call
+/// themselves, directly or through other codecs: the named types that take
+/// part in a type cycle, and the container and generic-instantiation codecs
+/// the cycle passes through (`List_Dir` for `type Dir = { children:
+/// List[Dir] }`). Only these codecs carry a nesting depth, because only a
+/// recursive type can nest without a bound the program text sets. A codec
+/// that merely reaches a cycle without being on one (a non-recursive record
+/// with a `Dir` field) is not included: it adds a fixed number of frames.
+///
+/// The graph's nodes are codec suffixes, its edges the codec calls each codec
+/// makes; a node is recursive when it lies on a cycle (a strongly connected
+/// component with more than one node, or a self-call). Every non-generic
+/// declaration in `types` is a root, so the answer does not depend on which
+/// declarations a module happens to emit. A recursive *generic* declaration
+/// is never expanded: it has no finite codec set and is rejected at the
+/// boundary (§6.5).
+pub fn recursive_codec_suffixes(
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> std::collections::HashSet<String> {
+    let recursive_generics = recursive_generic_names(types);
+    // Adjacency by suffix, built by a worklist over the reachable codecs.
+    let mut edges: HashMap<String, Vec<String>> = HashMap::new();
+    let mut work: Vec<(String, Vec<TypeRef>)> = Vec::new();
+    let mut roots: Vec<&String> = types
+        .iter()
+        .filter(|(_, d)| d.type_params.is_empty())
+        .map(|(n, _)| n)
+        .collect();
+    roots.sort();
+    for name in roots {
+        work.push((name.clone(), named_codec_children(name, types)));
+    }
+    while let Some((suffix, children)) = work.pop() {
+        if edges.contains_key(&suffix) {
+            continue;
+        }
+        let mut out = Vec::new();
+        for c in children {
+            if !has_codec(&c) {
+                continue;
+            }
+            let s = codec_suffix(&c);
+            if !edges.contains_key(&s) {
+                work.push((
+                    s.clone(),
+                    ref_codec_children(&c, types, &recursive_generics),
+                ));
+            }
+            out.push(s);
+        }
+        edges.insert(suffix, out);
+    }
+    nodes_on_cycles(&edges)
+}
+
+/// The type references a named, non-generic declaration's codec delegates
+/// to: its record fields, or its sum variants' payload fields.
+fn named_codec_children(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> Vec<TypeRef> {
+    let Some(decl) = types.get(name) else {
+        return Vec::new();
+    };
+    if !decl.type_params.is_empty() {
+        return Vec::new();
+    }
+    match &decl.body {
+        TypeBody::Record(r) => r.fields.iter().map(|f| f.type_ref.clone()).collect(),
+        TypeBody::Sum(s) => s
+            .variants
+            .iter()
+            .flat_map(|v| v.payload.iter().map(|p| p.type_ref.clone()))
+            .collect(),
+        TypeBody::Refined { .. } | TypeBody::Opaque { .. } => Vec::new(),
+    }
+}
+
+/// The type references the codec for `t` delegates to.
+fn ref_codec_children(
+    t: &TypeRef,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    recursive_generics: &std::collections::HashSet<String>,
+) -> Vec<TypeRef> {
+    match t {
+        TypeRef::Named(id) => named_codec_children(&id.name, types),
+        TypeRef::App { name, args, .. } => {
+            if recursive_generics.contains(&name.name) {
+                return Vec::new();
+            }
+            if let Some(fields) = record_inst_fields(&name.name, args, types) {
+                fields.into_iter().map(|(_, t)| t).collect()
+            } else if let Some(variants) = sum_inst_variants(&name.name, args, types) {
+                variants
+                    .into_iter()
+                    .flat_map(|(_, payload)| payload.into_iter().map(|(_, t)| t))
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        }
+        TypeRef::Option(a, _) | TypeRef::List(a, _) | TypeRef::Set(a, _) => vec![(**a).clone()],
+        TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => vec![(**a).clone(), (**b).clone()],
+        _ => Vec::new(),
+    }
+}
+
+/// Whether `t` has a generated codec of its own that another codec calls by
+/// name: a named type, a generic instantiation or a container, none of which
+/// holds a type with no wire form ([`codec_suffix`] refuses those). A type in
+/// a non-boundary declaration may hold one; it is never a codec.
+fn has_codec(t: &TypeRef) -> bool {
+    fn encodable(t: &TypeRef) -> bool {
+        match t {
+            TypeRef::Fn(..)
+            | TypeRef::Query(..)
+            | TypeRef::Stream(..)
+            | TypeRef::Connection(..)
+            | TypeRef::History(..) => false,
+            TypeRef::Option(a, _)
+            | TypeRef::List(a, _)
+            | TypeRef::Set(a, _)
+            | TypeRef::Effect(a, _)
+            | TypeRef::HttpResult(a, _) => encodable(a),
+            TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => encodable(a) && encodable(b),
+            TypeRef::App { args, .. } => args.iter().all(encodable),
+            _ => true,
+        }
+    }
+    matches!(
+        t,
+        TypeRef::Named(_)
+            | TypeRef::App { .. }
+            | TypeRef::Option(..)
+            | TypeRef::List(..)
+            | TypeRef::Set(..)
+            | TypeRef::Result(..)
+            | TypeRef::Map(..)
+    ) && encodable(t)
+}
+
+/// The nodes of `edges` that lie on a cycle, by Tarjan's strongly connected
+/// components: a node is on a cycle when its component has more than one
+/// node, or when it has an edge to itself.
+fn nodes_on_cycles(edges: &HashMap<String, Vec<String>>) -> std::collections::HashSet<String> {
+    struct State<'a> {
+        edges: &'a HashMap<String, Vec<String>>,
+        index: HashMap<&'a str, usize>,
+        low: HashMap<&'a str, usize>,
+        stack: Vec<&'a str>,
+        on_stack: std::collections::HashSet<&'a str>,
+        next: usize,
+        out: std::collections::HashSet<String>,
+    }
+    fn connect<'a>(s: &mut State<'a>, v: &'a str) {
+        s.index.insert(v, s.next);
+        s.low.insert(v, s.next);
+        s.next += 1;
+        s.stack.push(v);
+        s.on_stack.insert(v);
+        let edges = s.edges;
+        for w in edges.get(v).map(Vec::as_slice).unwrap_or(&[]) {
+            let w = w.as_str();
+            if !s.index.contains_key(w) {
+                connect(s, w);
+                let lw = s.low[w];
+                let lv = s.low.get_mut(v).expect("visited");
+                *lv = (*lv).min(lw);
+            } else if s.on_stack.contains(w) {
+                let iw = s.index[w];
+                let lv = s.low.get_mut(v).expect("visited");
+                *lv = (*lv).min(iw);
+            }
+        }
+        if s.low[v] == s.index[v] {
+            let mut component = Vec::new();
+            loop {
+                let w = s.stack.pop().expect("component member");
+                s.on_stack.remove(w);
+                component.push(w);
+                if w == v {
+                    break;
+                }
+            }
+            let self_call = edges.get(v).is_some_and(|ws| ws.iter().any(|w| w == v));
+            if component.len() > 1 || self_call {
+                s.out.extend(component.into_iter().map(str::to_string));
+            }
+        }
+    }
+    let mut s = State {
+        edges,
+        index: HashMap::new(),
+        low: HashMap::new(),
+        stack: Vec::new(),
+        on_stack: std::collections::HashSet::new(),
+        next: 0,
+        out: std::collections::HashSet::new(),
+    };
+    let mut nodes: Vec<&String> = edges.keys().collect();
+    nodes.sort();
+    for v in nodes {
+        if !s.index.contains_key(v.as_str()) {
+            connect(&mut s, v);
+        }
+    }
+    s.out
+}
+
 /// v0.22b: the codec closure for a set of `Json.encode`/`Json.decode[T]`
 /// target type-refs — the named types needing per-type helpers (transitively
 /// through record fields and sum payloads) plus the generic instantiations
@@ -1430,6 +1655,41 @@ mod tests {
             }
         }
         (types, services)
+    }
+
+    /// #2656: only the codecs on a type cycle carry a depth: the recursive
+    /// types and the containers their cycles pass through, not a type that
+    /// merely holds a recursive one, nor a container off the cycle.
+    #[test]
+    fn recursive_codec_suffixes_are_the_codecs_on_a_cycle() {
+        let types = types_of(
+            "commons x\n\n\
+             type Tree =\n  | Leaf\n  | Node(left: Tree, right: Tree)\n\n\
+             type Dir = { name: String, children: List[Dir], tags: List[String] }\n\n\
+             type Chain = { value: Int, next: Option[Chain] }\n\n\
+             type Index = { entries: Map[String, Index] }\n\n\
+             type Expr =\n  | Lit(value: Int)\n  | Block(stmts: List[Stmt])\n\n\
+             type Stmt =\n  | Eval(expr: Expr)\n\n\
+             type Holder = { tree: Tree, dirs: List[Dir], maybe: Option[Tree] }\n\n\
+             type Flat = { n: Int, names: List[String] }\n",
+        );
+        let mut got: Vec<String> = recursive_codec_suffixes(&types).into_iter().collect();
+        got.sort();
+        assert_eq!(
+            got,
+            [
+                "Chain",
+                "Dir",
+                "Expr",
+                "Index",
+                "List_Dir",
+                "List_Stmt",
+                "Map_String_Index",
+                "Option_Chain",
+                "Stmt",
+                "Tree",
+            ]
+        );
     }
 
     #[test]

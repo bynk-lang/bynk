@@ -370,10 +370,20 @@ generic type crosses through a codec monomorphised per instantiation (ADR 0197,
 0237), and a recursive instantiation has no finite set of them. It remains
 usable inside a context.
 
-Decoding recurses once per level of nesting, so the depth of value it accepts
-is host-defined. At present a value nested beyond the host's stack faults
-rather than being rejected as a boundary error; #2656 tracks bounding the
-depth so that such input is refused with a `400`.
+**Nesting is bounded** (#2656). A boundary codec accepts a value of a
+recursive type nested at most **256 levels** deep. The outermost value of a
+recursive type is one level, and each value of a recursive type nested inside
+it, through fields, variants, `Option`, collections or other recursive types, is
+one more. A value of a non-recursive type is not counted, and below one the
+count starts again; such a type occurs only a fixed number of times on any path
+through a value, so the total nesting stays bounded. Decoding a value nested more deeply MUST fail as a
+`StructuralMismatch` at the path where the bound is crossed, with `expected`
+`a value nested at most 256 levels deep`, so a request body is refused with a
+`400` and `Json.decode` returns an `Err`, rather than the decoder exhausting the
+host's stack. Encoding such a value is a contract violation and MUST fault, as
+encoding a non-finite `Float` does
+([§7.2](/book/spec/emission/#72-targets)), so a context never sends or stores a
+value its peer, or its own rehydration, would refuse.
 
 **Collections are covariant in their element and value positions** (v0.20b):
 a `List[T]` is usable where a `List[U]` is expected iff `T` is usable where

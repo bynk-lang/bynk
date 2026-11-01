@@ -174,6 +174,8 @@ mod http_option_body_behaviour;
 mod http_raw_body_behaviour;
 #[path = "http_raw_caching_behaviour.rs"]
 mod http_raw_caching_behaviour;
+#[path = "http_recursive_body_behaviour.rs"]
+mod http_recursive_body_behaviour;
 #[path = "http_security_behaviour.rs"]
 mod http_security_behaviour;
 #[path = "implementation_index.rs"]
