@@ -2201,10 +2201,11 @@ fn called_consumed_services(
 /// own), so a consumed `Batch` in a handler's parameters must be a member of
 /// `handlers` too (a consumed *adapter's* type — `R2Upload` — likewise, #2647:
 /// it is imported from the adapter's module by the same statement), the way a
-/// `uses`d commons type is through its rebrand alias. Type-only (`export { type Batch }`): `compose.ts` uses the name in
-/// type position only, a consumed refined alias has no value to re-export
-/// (TS1205 under `isolatedModules`), and a value re-export would deepen the
-/// caller's dependency on the callee's module. Only names the module imports
+/// `uses`d commons type is through its rebrand alias. Type-only
+/// (`export { type Batch }`): `compose.ts` uses the name in type position
+/// only, a consumed refined alias has no value to re-export (TS1205 under
+/// `isolatedModules`), and a value re-export would deepen the caller's
+/// dependency on the callee's module. Only names the module imports
 /// are re-exported, so each is bound here.
 fn emit_consumed_type_reexports(
     refs: &ExternalReferences,
