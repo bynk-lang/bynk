@@ -12,7 +12,7 @@
 //! - a record, sum or enum whose every field and payload is `Key`, and, when it is
 //!   generic, whose type arguments are `Key`;
 //! - a type parameter declared `K: Key` (checked separately: see
-//!   [`super::equality::require_key_vars`]).
+//!   `super::equality::require_key_vars`).
 //!
 //! `Float` is not `Key` at any depth (`NaN` is not equal to itself), nor are
 //! `Map` and `Set` (an order-independent encoding is possible but nothing needs
