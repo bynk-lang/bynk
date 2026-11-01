@@ -130,6 +130,20 @@ export const FetchOptions = {
 };
 
 /**
+ * Why an `e.within(d)` produced no value: the deadline `after` passed first.
+ * The abandoned effect is **not** cancelled. It is handed to the platform's
+ * `waitUntil` and may still complete after the handler has returned, so its
+ * side effects (a write, a commit in another agent) can still happen. Use
+ * `FetchOptions.timeout` when the work must actually stop.
+ */
+export interface TimedOut {
+  readonly after: number;
+}
+
+export const TimedOut = {
+};
+
+/**
  * The level of a `Logger.log` record.
  */
 export type LogLevel =
@@ -642,6 +656,27 @@ export function __deserialise_Response(json: __JsonValue, path: string = "$"): R
   }
   const __body = obj["body"];
   return Ok({ status: __status, headers: __headers, body: __body } as Response);
+}
+
+export function __serialise_TimedOut(value: TimedOut): __JsonValue {
+  return {
+    after: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.after),
+  };
+}
+
+export function __deserialise_TimedOut(json: __JsonValue, path: string = "$"): Result<TimedOut, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["after"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.after`, expected: "number", actual: typeof obj["after"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["after"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.after`, expected: "safe integer", actual: String(obj["after"]) });
+  }
+  const __after = obj["after"];
+  return Ok({ after: __after } as TimedOut);
 }
 
 export function __serialise_Uuid(value: Uuid): __JsonValue {

@@ -66,7 +66,7 @@ Reserved everywhere — these **60** words can never be used as an identifier.
 | `requires` | Declare a function precondition — a pure `Bool` clause over the parameters (`requires <name>: <pred>`). |
 | `self` | The current agent instance, inside a handler. |
 | `service` | Declare a service (a group of handlers) in a context. |
-| `stub` | Stub a consumed capability operation at a test seam (`stub Cap.op(…) returns <v>` / `fails`). |
+| `stub` | Stub a consumed capability operation at a test seam (`stub Cap.op(…) returns <v>` / `returns <v> after <d>` / `fails` / `never`). |
 | `transition` | Declare an agent step invariant over the `old`/`new` state pair (`transition <name>: …`). |
 | `transparent` | Export a type with its structure visible (`exports transparent { … }`). |
 | `true` | The boolean literal `true`. |

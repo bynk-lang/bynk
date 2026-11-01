@@ -8,9 +8,11 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/)
 - [Synchronous and asynchronous sends](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/)
 - [What a join guarantees on failure](/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/)
+- [What a timeout stops](/book/guides/effects-and-capabilities/what-a-timeout-stops/)
 
 **Do**
 - [Run independent calls at the same time](/book/guides/effects-and-capabilities/run-independent-calls-at-the-same-time/)
+- [Bound how long a call may take](/book/guides/effects-and-capabilities/bound-how-long-a-call-may-take/)
 - [Compose a provider from other capabilities](/book/guides/effects-and-capabilities/compose-a-provider/)
 - [Share a capability across contexts](/book/guides/effects-and-capabilities/share-across-contexts/)
 - [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/)

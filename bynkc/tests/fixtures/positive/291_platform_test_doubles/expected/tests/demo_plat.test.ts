@@ -93,7 +93,7 @@ class __Stub_Fetch {
     return true;
   }
   async send(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk.FetchError>> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -104,6 +104,7 @@ class __Stub_Fetch {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -147,7 +148,7 @@ class __Stub_Kv {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<string>> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -158,6 +159,7 @@ class __Stub_Kv {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -407,7 +409,7 @@ async function test_the_clock_reads_the_epoch() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -418,6 +420,7 @@ async function test_the_clock_reads_the_epoch() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -461,7 +464,7 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -472,6 +475,7 @@ async function test_random_integers_come_from_a_fixed_seed() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -515,7 +519,7 @@ async function test_random_uuids_count_up() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -526,6 +530,7 @@ async function test_random_uuids_count_up() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -569,7 +574,7 @@ async function test_no_secret_is_set() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -580,6 +585,7 @@ async function test_no_secret_is_set() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -623,7 +629,7 @@ async function test_the_locale_is_en() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -634,6 +640,7 @@ async function test_the_locale_is_en() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -678,7 +685,7 @@ async function test_the_logger_records_without_printing() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -689,6 +696,7 @@ async function test_the_logger_records_without_printing() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -733,7 +741,7 @@ async function test_idempotency_remembers_within_a_case() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -744,6 +752,7 @@ async function test_idempotency_remembers_within_a_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -789,7 +798,7 @@ async function test_idempotency_is_fresh_per_case() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -800,6 +809,7 @@ async function test_idempotency_is_fresh_per_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -844,7 +854,7 @@ async function test_kv_is_in_memory() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -855,6 +865,7 @@ async function test_kv_is_in_memory() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -899,7 +910,7 @@ async function test_kv_is_fresh_per_case() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -910,6 +921,7 @@ async function test_kv_is_fresh_per_case() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -954,7 +966,7 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -965,6 +977,7 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -1010,7 +1023,7 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1021,6 +1034,7 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -1066,7 +1080,7 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1077,6 +1091,7 @@ async function test_a_fetch_double_sees_the_request_s_headers() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -1121,7 +1136,7 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1132,6 +1147,7 @@ async function test_an_unstubbed_fetch_faults_rather_than_reach_the_network() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
@@ -1175,7 +1191,7 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -1186,6 +1202,7 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;

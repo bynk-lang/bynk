@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "quotes": "538b7253fda6418f"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "quotes": "Svc(\"quotes\",P(\"id\",B(\"Int\")),Ret(B(\"String\")))"
+  }
+}

@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.469) rather than in large releases.
+steps (the book is written against v0.470) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -118,8 +118,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   `parTraverse`, `parTraverseAll` and `parTraverseTry` now wait for every
   element before they raise, the same way
   ([#2662](https://github.com/bynk-lang/bynk/issues/2662)). A `Result` bound in
-  the block is unwrapped with `?` after it, in source order. Next: a general
-  timeout ([#2615](https://github.com/bynk-lang/bynk/issues/2615)).
+  the block is unwrapped with `?` after it, in source order. `e.within(d)` now bounds
+  how long an effect may take, and tests drive it on virtual time
+  ([#2683](https://github.com/bynk-lang/bynk/issues/2683)); it is for service
+  handlers, and does not cancel the work it gives up on
+  ([#2615](https://github.com/bynk-lang/bynk/issues/2615)).
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 

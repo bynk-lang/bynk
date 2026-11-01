@@ -1,0 +1,10 @@
+context r
+
+consumes bynk
+
+// #2683: `within` needs an effectful body; a pure function is refused with the
+// same remedy as a `~>` send.
+fn bounded(e: Effect[Int]) -> Int {
+	let b = e.within(1.seconds)
+	0
+}

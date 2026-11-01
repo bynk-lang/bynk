@@ -698,6 +698,39 @@ stub Net.fetch(_)  returns each [fails, fails, ok(resp)] // fails twice, then su
   threaded cursor) exceeds a fixed sequence and is a reserved **virtual fixture** —
   a named follow-on, not shipped in v0.118.
 
+### Latency and virtual time — `after`, `never` {#stub-latency}
+
+A stub can take time, to test a [`within`](/book/reference/capabilities/#within):
+
+```bynk,fragment
+stub Pricing.quote(_) returns 7 after 3.seconds   // completes when the clock reaches 3s
+stub Pricing.quote(_) never                        // never completes
+```
+
+- `returns <value> after <d>`: the call completes once the case's harness clock has
+  advanced `d` from the call. `d` is a `Duration` (`bynk.stub.after_type`). `after`
+  goes on `returns` only. `never` is a right-hand side of its own.
+- A stub with neither resolves at once, as before.
+- **The harness clock has a timer queue.** `within` registers its deadline on it, in
+  place of the host's `setTimeout`, and so does an `after` stub. `advance Clock by d`
+  fires every timer due by then. A module whose target calls `within`, or whose stubs
+  take time, runs on this clock; any other keeps the plain counter, byte for byte.
+- **Auto-advance.** When an addressed call has not settled after the microtasks have
+  run, the harness moves the clock to the earliest timer, but only if every capability
+  call in flight is a stub waiting on `after` or `never`. A call into a real provider
+  holds the clock back, so a test never times out work that is simply doing I/O.
+  `within(2.seconds)` against a stub `after 3.seconds` therefore yields
+  `Err(TimedOut { after: 2.seconds })` every time, with no sleeping. **A tie goes to
+  the effect:** a stub that completes exactly at the deadline wins.
+- **Abandoned effects settle at the end of the call**, as `~>` sends do. An abandoned
+  `after` effect completes by moving the clock on; an abandoned `never` is left, since
+  nothing will ever finish it. A call that can never complete and has no `within` to
+  end it faults the case.
+- **Calls are recorded when they are issued,** so `expect Pricing.quote called once`
+  sees a call `within` gave up on, and `before` compares issue order.
+- Latency exists where `stub` does: `unit` and `integration`. At `system`, and under
+  `bynk test --against`, `within` reads real time; test the timeout path at `unit`.
+
 See [`bynk.stub.*` errors](/book/troubleshooting/integration-errors/).
 
 ## Configuring a suite — `env { … }` {#env}

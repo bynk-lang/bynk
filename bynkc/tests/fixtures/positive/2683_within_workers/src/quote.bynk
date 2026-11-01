@@ -1,0 +1,35 @@
+context quote
+
+consumes bynk
+
+// #2683 on the Workers target: `within` hands its abandoned effect to the
+// request's `ctx.waitUntil`, through `deps.__exec`, in an `on call` handler and
+// an http handler alike.
+
+capability Pricing {
+	fn quote(id: Int) -> Effect[Int]
+}
+
+provides Pricing = FixedPricing {
+	fn quote(id: Int) -> Effect[Int] { id }
+}
+
+service quotes {
+	on call(id: Int) -> Effect[String] given Pricing {
+		let r <- Pricing.quote(id).within(2.seconds)
+		match r {
+			Ok(q) => Effect.pure("quoted \(q)")
+			Err(TimedOut { after, .. }) => Effect.pure("late")
+		}
+	}
+}
+
+service api from http {
+	on GET("/") () -> Effect[HttpResult[String]] by Visitor given Pricing {
+		let r <- Pricing.quote(1).within(2.seconds)
+		match r {
+			Ok(q) => Effect.pure(Ok("quoted"))
+			Err(TimedOut { after, .. }) => Effect.pure(Ok("late"))
+		}
+	}
+}

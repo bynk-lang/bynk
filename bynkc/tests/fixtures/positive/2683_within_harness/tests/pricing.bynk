@@ -1,0 +1,96 @@
+// #2683: virtual time. `within` registers its deadline on the harness clock; a
+// stub can take time (`after`) or never finish (`never`); when every call in
+// flight is such a stub, the harness advances to the earliest deadline.
+
+suite shop.pricing {
+  case "a stub slower than the deadline times out" {
+    stub Pricing.quote(_) returns 7 after 3.seconds
+    let r <- quotes.call(1)
+    expect r == "timed out after 2000"
+  }
+
+  case "a stub faster than the deadline is Ok" {
+    stub Pricing.quote(_) returns 7 after 1.seconds
+    let r <- quotes.call(1)
+    expect r == "quoted 7"
+  }
+
+  case "a tie goes to the effect" {
+    stub Pricing.quote(_) returns 7 after 2.seconds
+    let r <- quotes.call(1)
+    expect r == "quoted 7"
+  }
+
+  case "a stub that never finishes times out" {
+    stub Pricing.quote(_) never
+    let r <- quotes.call(1)
+    expect r == "timed out after 2000"
+  }
+
+  case "a stub with no latency resolves at once" {
+    stub Pricing.quote(_) returns 9
+    let r <- quotes.call(1)
+    expect r == "quoted 9"
+  }
+
+  case "the abandoned call is observed once the case settles" {
+    stub Pricing.quote(_) returns 7 after 5.seconds
+    let r <- quotes.call(4)
+    expect r == "timed out after 2000"
+    expect Pricing.quote called once
+    expect Pricing.quote called with id == 4
+  }
+
+  case "the abandoned effect still ran: the clock reached its completion" {
+    stub Ledger.book(_) returns () after 4.seconds
+    let r <- booking.call(1)
+    expect r == false
+    expect Ledger.book called once
+  }
+
+  case "a fast effect still gives the Ok branch" {
+    stub Ledger.book(_) returns () after 500.milliseconds
+    let r <- booking.call(1)
+    expect r == true
+  }
+
+  case "a lambda in the handler bounds each call alone" {
+    stub Pricing.quote(1) returns 1 after 1.seconds
+    stub Pricing.quote(2) returns 2 after 9.seconds
+    let n <- many.call([1, 2])
+    expect n == 2
+    expect Pricing.quote called 2 times
+  }
+
+  case "advance Clock fires nothing when no timer is due" {
+    stub Pricing.quote(_) returns 7 after 1.seconds
+    advance Clock by 10.seconds
+    let r <- quotes.call(1)
+    expect r == "quoted 7"
+  }
+
+  case "in a par block each within bounds its own effect" {
+    stub Pricing.quote(5) returns 1 after 1.seconds
+    stub Pricing.quote(6) returns 2 after 9.seconds
+    let r <- together.call(5)
+    expect r == "true false"
+    expect Pricing.quote called 2 times
+  }
+
+  case "a real provider call under within is not timed out" {
+    let r <- quotes.call(3)
+    expect r == "quoted 3"
+  }
+
+  case "a latency stub drives the same timeout at integration" as integration {
+    stub Pricing.quote(_) returns 7 after 3.seconds
+    let r <- quotes.call(1)
+    expect r == "timed out after 2000"
+  }
+
+  case "a latency stub that wins at integration is Ok" as integration {
+    stub Pricing.quote(_) returns 7 after 1.seconds
+    let r <- quotes.call(1)
+    expect r == "quoted 7"
+  }
+}

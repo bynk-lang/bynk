@@ -3480,6 +3480,28 @@ mod tests {
         assert!(find(&items, "trim", CompletionKind::Member).is_some());
     }
 
+    /// #2683: `within` is offered on every `Effect`, and beside the
+    /// `Effect[Result]` combinators on one that holds a `Result`.
+    #[test]
+    fn value_member_candidates_offers_within_on_any_effect() {
+        use bynk_syntax::ast::BaseType;
+        let int = TYS.intern(Ty::Base(BaseType::Int));
+        let plain = TYS.intern(Ty::Effect(int));
+        let items = value_member_candidates(plain, &TYS, "context a.b\n", None);
+        let within = find(&items, "within", CompletionKind::Member).expect("within is offered");
+        assert_eq!(
+            within.detail.as_deref(),
+            Some("within(d: Duration) -> Effect[Result[T, TimedOut]]")
+        );
+        assert!(find(&items, "mapOk", CompletionKind::Member).is_none());
+
+        let result = TYS.intern(Ty::Result(int, int));
+        let fallible = TYS.intern(Ty::Effect(result));
+        let items = value_member_candidates(fallible, &TYS, "context a.b\n", None);
+        assert!(find(&items, "within", CompletionKind::Member).is_some());
+        assert!(find(&items, "mapOk", CompletionKind::Member).is_some());
+    }
+
     #[test]
     fn value_member_candidates_lists_refined_inherited_kernel_methods() {
         // #561: a refined receiver offers its base type's read-only kernel

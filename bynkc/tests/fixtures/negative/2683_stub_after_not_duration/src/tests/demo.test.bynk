@@ -1,0 +1,9 @@
+suite demo {
+  // #2683: `after` takes a Duration.
+  stub Clock.now() returns 1 after 3
+
+  case "x" {
+    let t <- probe()
+    expect t == 1
+  }
+}
