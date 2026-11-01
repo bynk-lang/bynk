@@ -151,3 +151,89 @@ fn Box.both(self, x: A) -> Bool where A: Eq + Ord, A: Eq
             (self_expr)
             (identifier))
           (identifier))))))
+
+================================================================================
+derives clause (constrained generics, slice 1)
+================================================================================
+
+commons c
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+type Task = { due: Instant, priority: Priority } derives Ord
+
+type Pair[A, B] = { first: A, second: B } derives Ord + Eq
+
+type Shape =
+  | Circle(r: Float)
+  | Square(s: Float)
+  derives Ord
+
+type Age = Int where NonNegative derives Ord
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (type_decl
+      (identifier)
+      (enum_type
+        (constant_name)
+        (constant_name)
+        (constant_name))
+      (constraint
+        (identifier)))
+    (type_decl
+      (identifier)
+      (record_type
+        (record_field
+          (identifier)
+          (base_type))
+        (record_field
+          (identifier)
+          (identifier)))
+      (constraint
+        (identifier)))
+    (type_decl
+      (identifier)
+      (type_param
+        (identifier))
+      (type_param
+        (identifier))
+      (record_type
+        (record_field
+          (identifier)
+          (identifier))
+        (record_field
+          (identifier)
+          (identifier)))
+      (constraint
+        (identifier))
+      (constraint
+        (identifier)))
+    (type_decl
+      (identifier)
+      (sum_type
+        (sum_variant
+          (constant_name)
+          (variant_payload_field
+            (identifier)
+            (base_type)))
+        (sum_variant
+          (constant_name)
+          (variant_payload_field
+            (identifier)
+            (base_type))))
+      (constraint
+        (identifier)))
+    (type_decl
+      (identifier)
+      (refined_type
+        (base_type)
+        (refinement
+          (pred_atom
+            (predicate_name))))
+      (constraint
+        (identifier)))))

@@ -1,0 +1,12 @@
+commons shop
+
+uses limits
+uses labels
+
+// `shop` uses two commons that both declare `Step`, but `limits`'s is
+// private, so it is neither a name conflict nor a `private_item`: `Step` here
+// is `labels`'s public one, although `limits` is used first.
+
+fn budget() -> Int {
+  retries() + Step
+}

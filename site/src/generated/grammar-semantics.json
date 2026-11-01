@@ -648,12 +648,24 @@
   ],
   "fn_decl": [
     {
+      "code": "bynk.generics.ambiguous_instantiation",
+      "summary": "A generic function with an `Ord` bound is used as a value, and its type arguments cannot be determined from the type expected at that reference; annotate the expected type (constrained-generics slice 1)."
+    },
+    {
       "code": "bynk.generics.method_on_generic_type",
       "summary": "A *static* method is attached to a generic type; static methods on generic types are deferred (they have no receiver to supply the type's parameters). Instance methods on generic types are supported (#594)."
     },
     {
       "code": "bynk.generics.missing_eq_bound",
       "summary": "A type parameter is compared with `==`/`!=`, or passed to an `Eq`-bounded parameter of another generic, but is not declared `Eq` (`[T: Eq]`, or `where A: Eq` for a receiver type's parameter). The diagnostic carries a machine-applicable fix (ADR 0430, amended by constrained-generics slice 0)."
+    },
+    {
+      "code": "bynk.generics.missing_ord_bound",
+      "summary": "A type parameter is ordered (`<`, `<=`, `>`, `>=`, an ordering kernel key), or passed to an `Ord`-bounded parameter of another generic, but is not declared `Ord` (`[T: Ord]`, or `where A: Ord` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Ord`, replacing an existing `Eq`, which `Ord` implies (constrained-generics slice 1)."
+    },
+    {
+      "code": "bynk.generics.redundant_eq_bound",
+      "summary": "A type parameter is declared both `Eq` and `Ord`; `Ord` implies `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slice 1, warning)."
     },
     {
       "code": "bynk.resolve.duplicate_fn",
@@ -886,6 +898,20 @@
       "summary": "An empty `[]` (or `List.empty()` / `Map.empty()`) has no expected type to infer its element type from."
     }
   ],
+  "list_pattern": [
+    {
+      "code": "bynk.parse.list_rest_not_last",
+      "summary": "A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available."
+    },
+    {
+      "code": "bynk.parse.range_pattern_unsupported",
+      "summary": "A `..` in a list pattern is followed by a literal; range patterns are not available yet."
+    },
+    {
+      "code": "bynk.types.list_pattern_on_non_list",
+      "summary": "A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`)."
+    }
+  ],
   "match_arm": [
     {
       "code": "bynk.types.duplicate_literal_arm",
@@ -927,7 +953,7 @@
     },
     {
       "code": "bynk.types.non_exhaustive_match",
-      "summary": "A `match` does not cover every variant."
+      "summary": "A `match` does not cover every value."
     }
   ],
   "method_call": [
@@ -985,7 +1011,7 @@
     },
     {
       "code": "bynk.par.question_in_join",
-      "summary": "A `?` appears inside a `par { … }` binding. Propagating a failure in source order across a join is a later increment, so the block takes no `?` yet; match on the result after the block."
+      "summary": "A `?` appears inside a `par { … }` binding. `?` takes a `Result` value, not an effect, so a binding's own result is unwrapped after the block (`let user = userR?`), where the `?` lines run in source order; a `?` on an argument is computed before the block."
     },
     {
       "code": "bynk.par.sibling_name",
@@ -1384,6 +1410,14 @@
     {
       "code": "bynk.resolve.reserved_host_name",
       "summary": "A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals."
+    },
+    {
+      "code": "bynk.types.derives_automatic",
+      "summary": "A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1)."
+    },
+    {
+      "code": "bynk.types.derives_field_not_orderable",
+      "summary": "A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1)."
     }
   ],
   "type_param": [
@@ -1468,6 +1502,24 @@
     {
       "code": "bynk.types.unknown_variant_in_pattern",
       "summary": "A pattern names a variant the sum type does not have."
+    }
+  ],
+  "visibility_modifier": [
+    {
+      "code": "bynk.visibility.private_in_public",
+      "summary": "A public declaration's signature names a `private` type of its own unit, which an importer could neither name nor build."
+    },
+    {
+      "code": "bynk.visibility.private_item",
+      "summary": "A reference from another unit names a `private` declaration, which is visible only within its own unit and that unit's suites."
+    },
+    {
+      "code": "bynk.visibility.private_messages",
+      "summary": "A `messages` block in a commons is `private`. A bundle whose `@reference` block is private is never negotiated by a context that uses the commons, and `private` on another block of a bundle whose reference is public has no effect (warning)."
+    },
+    {
+      "code": "bynk.visibility.private_not_allowed",
+      "summary": "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset`, `embed` or `const` in a commons or context."
     }
   ],
   "where_clause": [

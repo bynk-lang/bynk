@@ -123,8 +123,9 @@ which compares in constant time.
 `==`/`!=` compare **by content**, byte for byte — so two independently-built
 `Bytes` with the same octets are equal (unlike the number-erased base types, a
 `Bytes` is not compared by host reference). Equality is structural throughout,
-so a record carrying a `Bytes` field compares that field by content too. `Bytes` is **not orderable** (no `<` / `sortBy` key; use
-`b.compare(other)`) and **not `Map`-keyable** — key on `b.toBase64()` (a
+so a record carrying a `Bytes` field compares that field by content too. `Bytes` is **orderable**, unsigned lexicographic by octet with a proper prefix
+first, so `<` and a `sortBy` key work on it (`b.compare(other)` returns the same
+order as an `Int`). It is **not `Map`-keyable** — key on `b.toBase64()` (a
 `String`) instead. It has no arithmetic.
 
 On the wire a `Bytes` **serialises as a base64 JSON string** (and deserialising
@@ -300,9 +301,10 @@ fn withTotal(ns: List[Int]) -> List[Int] {
 **Terminals**: `count`, `any`, `all`, `first`, `firstOrElse`, `sum`, `min`, `max`,
 `average`.
 
-Ordering keys (`sortBy`/`min`/`max`) come from the closed orderable base set —
-`Int`/`Float`/`String`/`Duration`/`Instant`, refined types widening, opaque keys
-rejected (`bynk.types.key_not_orderable`). Numeric keys (`sum`/`average`) are
+Ordering keys (`sortBy`/`min`/`max`) on a `List` are any [`Ord` type](#ordering-your-own-types)
+(`bynk.types.key_not_orderable` otherwise). On a lazy storage `Query` the key is
+still one of `Int`/`Float`/`String`/`Duration`/`Instant`, refined types widening,
+opaque keys rejected. Numeric keys (`sum`/`average`) are
 `Int`/`Float`/`Duration` (`bynk.query.sum_needs_numeric`), with `average -> Float`.
 **Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
 `sum` the zero. The first-party `bynk.list` free functions are the deprecated
@@ -716,6 +718,73 @@ type OrderId = opaque String
   (`bynk.resolve.opaque_record_construction`).
 - Construction and inspection are confined to the defining module/context.
 - Opaque types are **excluded** from [literal admission](/book/reference/refined-types/).
+- An opaque type is not [`Ord`](#ordering-your-own-types) outside its defining
+  unit unless it says `derives Ord`.
+
+## Ordering your own types
+
+`Ord` is the set of types with a total order: what `<` `<=` `>` `>=`, the
+`sortBy`/`min`/`max` keys on a `List`, `bynk.list`'s `sort`/`min`/`max` and a
+`T: Ord` [bound](/book/reference/generics/) accept. It is opt-in for your own types:
+end the declaration with `derives Ord`.
+
+```bynk
+commons demo.ordering
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+type Task = { priority: Priority, due: Instant, title: String } derives Ord
+
+type Maybe[T] =
+  | Missing
+  | Present(item: T)
+  derives Ord
+
+fn urgent(a: Task, b: Task) -> Bool { a.priority > b.priority }
+```
+
+`derives` is a contextual word that only means something after a type body, so it
+stays a valid identifier elsewhere. `derives Ord + …` is the list form; `Eq`,
+`Key` and `Codable` are derived automatically, so naming one is
+`bynk.types.derives_automatic` (a fix removes it). Any other name is
+`bynk.generics.unknown_constraint`.
+
+**Which types are `Ord`.** `Int`, `Float`, `String`, `Duration`, `Instant` and
+`Bytes`; a refined type over one of them; `Option[T]` and `List[T]` where `T` is
+`Ord`; a record, sum, enum or opaque type that `derives Ord`; and a type parameter
+declared `T: Ord`. `Bool`, `Result`, `Map`, `Set`, functions and held resources
+are not. A generic type that derives `Ord` is `Ord` at an instantiation whose
+arguments are (`Maybe[Int]`, not `Maybe[Bool]`). Every field and payload type of a
+type that derives `Ord` must be `Ord`, else
+`bynk.types.derives_field_not_orderable` names the field.
+
+**The order.**
+
+| Type | Order |
+|---|---|
+| `Int`, `Duration`, `Instant` | numeric |
+| `String` | UTF-16 code unit, element by element (not code point, not locale) |
+| `Bytes` | unsigned octets, lexicographic |
+| `Float` | total: `NaN` last and equal to itself, `-0` equal to `0` |
+| `Option[T]` | `None` first, then `Some` by payload |
+| `List[T]` | lexicographic, a proper prefix first |
+| record | by field, in declaration order |
+| sum, enum | by variant declaration order, then by payload |
+
+The `Float` total order applies to the ordering kernels and `Ord` witnesses. The
+operators keep IEEE behaviour on a `Float`: `NaN < x` is `false`, and `==` is
+unchanged.
+
+**Reordering changes the order.** A `derives Ord` type sorts by declaration
+order, so moving a field, or a variant, changes how its values sort. The wire
+contract hash ignores field and variant order, so the change does not appear as
+a contract change and `bynk` raises no diagnostic for it. Treat the declaration
+order of such a type as meaningful.
+
+**Not ordered by accident.** A type without `derives Ord` is never ordered
+implicitly. Using `<` or a sort key on one is `bynk.types.not_orderable`, whose
+"add `derives Ord`" suggestion is never applied by `bynk check --fix` or
+**Fix all**, because opting in is a decision about what the order is.
 
 ## Refined types
 
@@ -798,6 +867,106 @@ A narrower arm may precede a wider one (`Some(Red)` then `Some(_)`), and a
 guarded arm never counts as covering, because its guard may fail. So an
 unguarded arm with the same pattern can always follow it.
 
+### Exhaustiveness and reachability
+
+Both checks are one rule (patterns track, slice 3, #2665): an arm is reachable
+when it matches some value the unguarded arms before it do not, and a `match` is
+exhaustive when nothing is left over. It applies at any depth, so a payload with
+several fields, a record, or a nested pattern needs no wildcard once its arms
+cover every case:
+
+```bynk,fragment
+match pair {
+  Pair(true, _) => "left"
+  Pair(false, true) => "right"
+  Pair(false, false) => "neither"
+}
+```
+
+```bynk,fragment
+match order {
+  Order { status: Paid, .. } => 1
+  Order { status: Pending, .. } => 2
+  Order { status: Cancelled, .. } => 3
+  Order { total, .. } => total   // bynk.types.unreachable_arm
+}
+```
+
+A list is covered by length: `[]` and `[x, ..rest]` together cover every list, and
+`[_]` and `[_, _]` alone leave `[_, _, ..]` uncovered (see
+[List patterns](#list-patterns)). Redundancy is found across several earlier
+arms, not only one at a time. A
+guarded arm, and a refined pattern (`_ where …`), cover nothing, because the
+guard or predicate may fail. `Int` and `String` literals never complete their
+type, so those matches end in `_` or a name.
+
+A missing case is reported as a pattern you can paste as an arm:
+`variant Pair(false, false) of Pair is not covered`, or
+`Order { status: Cancelled, .. } is not covered`, where `_` stands for a field the
+missing values leave open. The editor's *add missing arms* fix inserts every
+reported pattern. At most eight are reported at once, with a count of the rest. A
+`match` too tangled to decide within the compiler's step budget is reported as
+non-exhaustive, with a note asking for a `_` arm; it is never accepted unproved.
+
+### List patterns
+
+A `List` is matched by its length and elements with a list pattern (patterns
+track, slice 4, #2680):
+
+```bynk,fragment
+match items {
+  [] => "empty"
+  [only] => only.sku
+  [first, _, ..] => first.sku
+}
+```
+
+```bynk,fragment
+match xs {
+  [] => 0
+  [x, ..rest] => x + sum(rest)
+}
+```
+
+| Pattern | Matches |
+| --- | --- |
+| `[]` | the empty list |
+| `[p₁, …, pₙ]` | exactly *n* elements, element *i* against `pᵢ` |
+| `[p₁, …, pₙ, ..]` | *n* or more elements; the rest is not bound |
+| `[p₁, …, pₙ, ..rest]` | *n* or more; `rest` is a `List[T]` of the remaining elements |
+
+*n* may be 0: `[..]` matches any list and `[..rest]` binds the whole list.
+
+- Each element is any pattern, and list patterns nest (`Some([x, ..])`,
+  `[[a, ..], ..]`). They work in `match`, in or-pattern alternatives, after `is`
+  (no parentheses: the pattern closes at `]`) and in `let … else`.
+- The `..` is the **last** element, and there is at most one
+  (`bynk.parse.list_rest_not_last`); patterns for the end of a list, such as
+  `[.., last]`, are not available. `..rest` names the rest, and `.._` is not a
+  form, because a bare `..` already binds nothing. A `..` followed by a literal
+  (`[..9]`) is reserved for range patterns
+  (`bynk.parse.range_pattern_unsupported`).
+- The value must be a `List[T]`; a `Set`, a `Map`, a record or any other type is
+  `bynk.types.list_pattern_on_non_list`. Each element is checked at `T`.
+- **Exhaustiveness is by length.** `[]` and `[x, ..rest]` cover every list, with
+  no `_` arm. A missing length is reported as a pattern, `[]`, `[_]` or
+  `[_, _, ..]`, with an element pattern where the missing lists need one
+  (`[None, ..]`). An arm the earlier ones cover is `bynk.types.unreachable_arm`
+  (`[x, ..]` after `[_, ..]`). See
+  [Exhaustiveness and reachability](#exhaustiveness-and-reachability).
+- Or-pattern alternatives bind the same names at the same types, so `[x] | [x, ..]`
+  is legal and `[x] | []` is not.
+- **Binding `..rest` copies** the remaining elements, which costs time in
+  proportion to the list's length (O(length − *n*)) on each match. A recursive
+  `[x, ..rest] => f(rest)` is therefore quadratic overall. The kernel folds
+  (`fold`, `map`, `filter`) are the recommended way to visit every element. `..`
+  with no name, and `[..rest]` (which binds the list itself), copy nothing.
+
+In a `let`, a list pattern needs an `else` (`let [head, ..] = jobs else { 0 }`),
+since a list can be shorter than the pattern. `[..]` and `[..rest]` cannot fail,
+so an `else` on one is `bynk.types.unreachable_arm`; write `let rest = xs`. See
+[Match on a list's shape](/book/guides/type-system/match-on-a-lists-shape/).
+
 ### Record patterns
 
 A record is matched by its fields with a record pattern, `TypeName { f1, f2: pattern, .. }`
@@ -833,10 +1002,10 @@ if o is (Order { status: Cancelled, .. }) { "cancelled" } else { "live" }
   taken from the matched value and are never written.
 - A record pattern reads fields as `.field` does, so it is refused on another
   context's `exports opaque` type (`bynk.context.opaque_inspection`).
-- **Exhaustiveness is conservative.** A record pattern covers its type only when
-  every field is matched by a name or `_`; one with a literal or variant field
-  is partial, so end the `match` with a `_` arm. Precise coverage across several
-  arms is a later increment.
+- **Exhaustiveness is precise.** Arms cover a record between them, so a `match`
+  on `Order { status: Paid, .. }`, `Order { status: Pending, .. }` and
+  `Order { status: Cancelled, .. }` needs no `_` arm. See
+  [Exhaustiveness and reachability](#exhaustiveness-and-reachability).
 
 A record pattern also destructures in a `let` (#2654):
 

@@ -1,0 +1,3 @@
+bynk.visibility.private_item `Tally.zero` is a private method of `pricing`
+bynk.visibility.private_item `Tally.mean` is a private method of `pricing`
+# exact

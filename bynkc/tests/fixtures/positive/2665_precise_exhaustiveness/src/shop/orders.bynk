@@ -1,0 +1,43 @@
+commons shop.orders {
+  type Status = enum { Pending, Paid, Cancelled }
+  type Order = { id: String, status: Status, total: Int }
+  type Pair = | Pair(left: Bool, right: Bool)
+  type Shape = | Circle(r: Int) | Rect(w: Int, h: Int)
+
+  // #2665: every (Bool, Bool) pair is covered between the arms, with no `_`.
+  fn pairName(p: Pair) -> String {
+    match p {
+      Pair(true, _) => "left"
+      Pair(false, true) => "right"
+      Pair(false, false) => "neither"
+    }
+  }
+
+  // Every status has an arm, so the match needs no `_`.
+  fn statusCode(o: Order) -> Int {
+    match o {
+      Order { status: Paid, .. } => 1
+      Order { status: Pending, .. } => 2
+      Order { status: Cancelled, .. } => 3
+    }
+  }
+
+  // A refutable field in a multi-field payload, covered across arms.
+  fn area(s: Shape) -> Int {
+    match s {
+      Circle(r) => r * r * 3
+      Rect(0, _) => 0
+      Rect(w, h) => w * h
+    }
+  }
+
+  // A record nested in a variant payload.
+  fn billed(o: Option[Order]) -> Int {
+    match o {
+      Some(Order { status: Paid, total, .. }) => total
+      Some(Order { status: Pending, .. }) => 0
+      Some(Order { status: Cancelled, .. }) => 0
+      None => 0
+    }
+  }
+}

@@ -1419,6 +1419,10 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &a.documentation {
             self.emit_doc(doc);
         }
+        // #2618: the unit-private modifier.
+        if a.private.is_some() {
+            self.push("private ");
+        }
         self.push(&format!(
             "asset {} = \"{}\"",
             a.name.name,
@@ -1436,6 +1440,10 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &e.documentation {
             self.emit_doc(doc);
         }
+        // #2618: the unit-private modifier.
+        if e.private.is_some() {
+            self.push("private ");
+        }
         self.push(&format!(
             "embed {} = \"{}\"",
             e.name.name,
@@ -1450,6 +1458,10 @@ impl<'a> Formatter<'a> {
         self.emit_leading_comments(&c.trivia.leading);
         if let Some(doc) = &c.documentation {
             self.emit_doc(doc);
+        }
+        // The unit-private modifier.
+        if c.private.is_some() {
+            self.push("private ");
         }
         self.push("const ");
         self.push(&c.name.name);
@@ -1482,6 +1494,10 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &m.documentation {
             self.emit_doc(doc);
         }
+        // #2618: the unit-private modifier.
+        if m.private.is_some() {
+            self.push("private ");
+        }
         self.push(&format!("messages \"{}\"", escape_string(&m.tag)));
         for ann in &m.annotations {
             self.push(" ");
@@ -1513,6 +1529,10 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &t.documentation {
             self.emit_doc(doc);
         }
+        // #2618: the unit-private modifier.
+        if t.private.is_some() {
+            self.push("private ");
+        }
         // v0.157 (ADR 0183): `[A, B]` type parameters, spelled as on a function.
         let params = if t.type_params.is_empty() {
             String::new()
@@ -1522,6 +1542,21 @@ impl<'a> Formatter<'a> {
         };
         self.push(&format!("type {}{} = ", t.name.name, params));
         self.format_type_body(&t.body);
+        if !t.derives.is_empty() {
+            let names: Vec<&str> = t.derives.iter().map(|d| d.name.as_str()).collect();
+            let clause = format!("derives {}", names.join(" + "));
+            // A pipe-form sum ends on its last variant's line, which may carry
+            // a comment, so the clause takes its own line under the variants.
+            if matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| !v.payload.is_empty()))
+            {
+                self.indented(|f| {
+                    f.newline();
+                    f.push(&clause);
+                });
+            } else {
+                self.push(&format!(" {clause}"));
+            }
+        }
         self.emit_trailing_comment_or_newline(t.trivia.trailing.as_deref());
     }
 
@@ -1750,6 +1785,10 @@ impl<'a> Formatter<'a> {
         self.emit_leading_comments(&f.trivia.leading);
         if let Some(doc) = &f.documentation {
             self.emit_doc(doc);
+        }
+        // #2618: the unit-private modifier.
+        if f.private.is_some() {
+            self.push("private ");
         }
         self.push("fn ");
         self.push(&f.name.display());
@@ -3791,6 +3830,18 @@ fn pattern_to_string(p: &Pattern) -> String {
                 .collect();
             parts.push("..".to_string());
             format!("{} {{ {} }}", type_name.name, parts.join(", "))
+        }
+        // #2680: a list pattern renders like a list literal, with the rest
+        // marker last.
+        Pattern::List { elems, rest, .. } => {
+            let mut parts: Vec<String> = elems.iter().map(pattern_to_string).collect();
+            if let Some(r) = rest {
+                parts.push(match &r.binder {
+                    Some(b) => format!("..{}", b.name),
+                    None => "..".to_string(),
+                });
+            }
+            format!("[{}]", parts.join(", "))
         }
         // #474: an or-pattern renders as its alternatives joined by `|`.
         Pattern::Or(alts, _) => alts

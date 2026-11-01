@@ -1,0 +1,16 @@
+commons app.quiet
+
+uses bynk.locale
+uses bynk.locale.types
+
+// #2618 review: the `@reference` block is private, so no context that uses
+// `app.quiet` negotiates its locale against this bundle
+// (`bynk.visibility.private_messages`). The commons' own `render` still
+// reads every block.
+private messages "en" @reference {
+  "greeting" => "Hello, {name}!"
+}
+
+messages "fr" {
+  "greeting" => "Bonjour, {name}!"
+}

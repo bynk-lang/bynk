@@ -1,0 +1,16 @@
+commons pricing
+
+private fn lineTotal(i: Item) -> Int {
+  i.price * i.qty
+}
+
+private type Tally = { lines: Int, sum: Int }
+
+private fn tally(items: List[Item]) -> Tally {
+  Tally { lines: items.length(), sum: total(items) }
+}
+
+// A private method on a public type: `Item` stays public, the helper does not.
+private fn Item.discounted(self) -> Int {
+  if self.qty >= 10 { lineTotal(self) - self.price } else { lineTotal(self) }
+}

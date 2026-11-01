@@ -1,0 +1,1 @@
+bynk.visibility.private_item `Tally` is a private type of `pricing`

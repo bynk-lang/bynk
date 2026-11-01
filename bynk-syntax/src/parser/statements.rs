@@ -91,6 +91,7 @@ impl<'a> Parser<'a> {
             documentation: None,
             span,
             trivia: Trivia::default(),
+            private: None,
         })
     }
 
@@ -255,7 +256,9 @@ impl<'a> Parser<'a> {
                 | TokenKind::StrLit
                 | TokenKind::True
                 | TokenKind::False
-                | TokenKind::LParen,
+                | TokenKind::LParen
+                // #2680: a list pattern.
+                | TokenKind::LBracket,
             ) => true,
             Some(TokenKind::Minus) => at(2) == Some(TokenKind::IntLit),
             Some(TokenKind::Ident) => match at(2) {

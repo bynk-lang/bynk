@@ -1,0 +1,35 @@
+---
+#2660: bounded methods. A method's hidden comparators cover its own type
+parameters and the receiver type's, the receiver's first; a bound the receiver type
+declares holds in its methods with no `where` clause.
+---
+commons demo.ranked
+
+type Level = enum { Lo, Mid, Hi } derives Ord
+
+type Bag[A] = { items: List[A] }
+
+fn Bag.largest(self) -> Option[A] where A: Ord { self.items.max((x) => x) }
+
+fn Bag.countAbove(self, floor: A) -> Int where A: Ord {
+  self.items.filter((x) => x > floor).count()
+}
+
+fn Bag.pickBigger[B](self, other: B, ok: Bool) -> Bool where A: Ord, B: Ord {
+  ok
+}
+
+type Sorted[T: Ord] = { items: List[T] }
+
+fn Sorted.smallest(self) -> Option[T] { self.items.min((x) => x) }
+
+fn Sorted.isBelow(self, x: T) -> Bool {
+  match self.items.min((y) => y) {
+    Some(m) => m < x,
+    None => false,
+  }
+}
+
+fn Bag.biggerOf[B](self, a: B, b: B) -> B where B: Ord {
+  if a > b { a } else { b }
+}

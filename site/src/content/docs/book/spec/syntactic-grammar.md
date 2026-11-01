@@ -148,6 +148,20 @@ name's case, the closed set of initialisers and the cycle rule are
 well-formedness: §5.12b. `const` is a contextual keyword, so it remains usable
 as an ordinary identifier elsewhere.
 
+### §4.1.12d visibility_modifier {#4112d-visibility_modifier}
+
+{{#grammar visibility_modifier}}
+
+`private`, written immediately before a `type`, `fn` (a free function or a
+method), `messages`, `asset`, `embed` or `const` declaration, makes that
+declaration unit-private. `private` is a contextual keyword (§3): it is the modifier only
+in that position and an ordinary identifier everywhere else, so
+`@cache(scope: private)` and a binding named `private` are unaffected. The
+compiler also recognises `private` before a `service`, `agent`, `capability`,
+`provides`, `actor` or `event` declaration, and in an adapter, in order to
+reject it precisely (`bynk.visibility.private_not_allowed`). Visibility is
+well-formedness: §5.1.
+
 ### §4.1.13 messages_decl (v0.228) {#4113-messages_decl}
 
 {{#grammar messages_decl}}
@@ -225,9 +239,16 @@ Type declarations and the type references that appear in signatures.
 {{#grammar type_decl}}
 
 `type`, a name, an optional `[A, B]` **type-parameter list** (v0.157 — only a
-record body may be generic; a parameter is an unconstrained, bound-free name
-scoped to the declaration), `=`, and a type body. Well-formedness: §5; the type
-system: §6.
+record or sum body may be generic; a parameter is a name, optionally bounded
+(§4.3.1b), scoped to the declaration), `=`, a type body, and an optional
+trailing **`derives` clause** (constrained generics, slice 1): `derives Ord`, or
+`derives Ord + C` for a list. `derives` is a contextual keyword, recognised only
+after a type body. The grammar admits any constraint name; the checker admits
+only `Ord`. `Eq`, `Key` and `Codable` are derived automatically, so naming one is
+`bynk.types.derives_automatic` (its fix removes it), and any other name is
+`bynk.generics.unknown_constraint`. Every field and payload type of a type that
+derives `Ord` MUST be `Ord` (`bynk.types.derives_field_not_orderable`).
+Well-formedness: §5; the type system: §6.
 
 ### §4.2.2 type_body
 
@@ -422,7 +443,7 @@ number of **contract clauses** (v0.115), and a block body. Well-formedness: §5.
 A type parameter: a name, optionally followed by `:` and one or more
 **constraint** names joined by `+` (`T`, `T: Eq`, `T: Eq + C`). The same form
 appears on `fn`, `type` and capability-operation type-parameter lists. The
-grammar admits any constraint name; the checker admits only `Eq`
+grammar admits any constraint name; the checker admits `Eq` and `Ord`
 (`bynk.generics.unknown_constraint`), and rejects a bound on a capability
 operation (`bynk.generics.bound_on_capability_op`). Well-formedness: §5.2.
 
@@ -1231,6 +1252,38 @@ An unparenthesised one is `bynk.parse.record_pattern_in_is_unparenthesised`. A
 record pattern inside a delimiter — a variant payload (`x is Some(T { f, .. })`)
 or parentheses — needs nothing more. Well-formedness: §5.6.
 
+### §4.7.12 list_pattern {#4712-list_pattern}
+
+{{#grammar list_pattern}}
+
+{{#grammar list_rest}}
+
+`[]`, `[p₁, …, pₙ]`, `[p₁, …, pₙ, ..]` and `[p₁, …, pₙ, ..rest]` (patterns
+track, slice 4, #2680) — match a `List` by its length and elements. Without a
+rest marker the pattern matches a list of exactly *n* elements, element *i*
+against `pᵢ`. With the rest marker `..` it matches *n* or more elements; a name
+after it (`..rest`) binds the elements from the *n*th on, and `..` alone binds
+nothing. *n* may be 0: `[..]` matches every list, and `[..rest]` binds the whole
+list. An element is any pattern, so list patterns nest (`Some([x, ..])`,
+`[[a, ..], ..]`).
+
+The rest marker `..` is the rule it is in a record pattern, with one more case,
+reserved for range patterns (patterns track, Q7). After `..` the next token
+decides:
+
+- a lowercase name, `,` before the closing `]`, or `]` makes it a **rest marker**;
+  a capitalised name is rejected, since it would be a named constant bounding a
+  range (`..MAX`);
+- a literal, including a negative one (`..9`, `..-1`), is the upper bound of a
+  range pattern, which is not available yet: `bynk.parse.range_pattern_unsupported`.
+
+The rest marker MUST be the final element, and appears at most once; a `..` with
+anything after it is `bynk.parse.list_rest_not_last` (suffix patterns such as
+`[.., last]` are not available). `.._` is not a form, because a bare `..` already
+binds nothing. A `[` begins no other pattern, so a list pattern needs no
+parentheses anywhere, after `is` included: the pattern closes at the `]`. It may
+begin a `let` (§4.8.4a). Well-formedness: §5.6.
+
 ## §4.8 Statements
 
 A block is a sequence of statements ending in an optional value expression.
@@ -1279,7 +1332,8 @@ below):
 The pattern MUST open as a pattern rather than a name: with a literal, with `(`,
 with `Ok`/`Err`/`Some`/`None`, with a variant name followed by `(` or `.`
 (`Shipped(at)`, `Status.Done`), or with a capitalised name followed by `{`, which
-opens a record pattern ([§4.7.11](#4711-record_pattern); #2654):
+opens a record pattern ([§4.7.11](#4711-record_pattern); #2654), or with `[`, which
+opens a list pattern ([§4.7.12](#4712-list_pattern); #2680):
 
 {{#grammar _let_pattern}}
 

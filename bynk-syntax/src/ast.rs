@@ -708,6 +708,31 @@ impl CommonsItem {
         }
     }
 
+    /// #2618: the span of the item's `private` modifier, when it has one.
+    /// Only the kinds that may carry the modifier (`fn`, `type`, `messages`,
+    /// `asset`, `embed`, `const`) ever answer `Some`.
+    pub fn private_span(&self) -> Option<Span> {
+        match self {
+            CommonsItem::Type(t) => t.private,
+            CommonsItem::Fn(f) => f.private,
+            CommonsItem::Messages(m) => m.private,
+            CommonsItem::Asset(a) => a.private,
+            CommonsItem::Embed(e) => e.private,
+            CommonsItem::Const(c) => c.private,
+            CommonsItem::Capability(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Service(_)
+            | CommonsItem::Agent(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Event(_) => None,
+        }
+    }
+
+    /// #2618: is the item unit-private?
+    pub fn is_private(&self) -> bool {
+        self.private_span().is_some()
+    }
+
     /// The whole declaration's span, from its first token to its last.
     pub fn span(&self) -> Span {
         match self {
@@ -748,6 +773,10 @@ pub struct AssetDecl {
     /// content-hashed path under `/_assets/`. With its span, for diagnostics.
     pub at: Option<(String, Span)>,
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -767,6 +796,10 @@ pub struct EmbedDecl {
     pub path: String,
     pub path_span: Span,
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -785,6 +818,10 @@ pub struct ConstDecl {
     pub ty: TypeRef,
     pub init: Expr,
     pub documentation: Option<Doc>,
+    /// The span of a leading `private` modifier, when the constant is
+    /// unit-private: visible across its own unit's files (and to that unit's
+    /// suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -805,6 +842,10 @@ pub struct MessagesDecl {
     pub annotations: Vec<Annotation>,
     pub entries: Vec<MessageEntry>,
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -2062,8 +2103,18 @@ pub struct TypeDecl {
     /// opaque / sum bodies. Mirrors [`FnDecl::type_params`].
     pub type_params: Vec<TypeParam>,
     pub body: TypeBody,
+    /// `derives Ord` (constrained-generics slice 1): the constraints the type
+    /// opts into, in source order. Empty when there is no clause. `Eq`, `Key` and
+    /// `Codable` are automatic, so `Ord` is the only name the checker admits.
+    pub derives: Vec<Ident>,
+    /// The span of the `derives` keyword, when there is a clause.
+    pub derives_kw: Option<Span>,
     /// Documentation block attached to this declaration (v0.3).
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -2114,12 +2165,15 @@ impl EventDecl {
     /// directly off the real declaration instead.
     pub fn as_type_decl(&self) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: self.name.clone(),
             type_params: Vec::new(),
             body: TypeBody::Record(self.body.clone()),
             documentation: self.documentation.clone(),
             span: self.span,
             trivia: self.trivia.clone(),
+            private: None,
         }
     }
 
@@ -2606,6 +2660,10 @@ pub struct FnDecl {
     pub has_self: bool,
     /// Documentation block attached to this declaration (v0.3).
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -3716,6 +3774,15 @@ pub enum Pattern {
         rest_span: Span,
         span: Span,
     },
+    /// `[p₁, …, pₙ]` or `[p₁, …, pₙ, ..]` / `[p₁, …, pₙ, ..rest]` — a list
+    /// pattern (patterns track, slice 4, #2680). Without `rest` it matches a
+    /// list of exactly `n` elements, element `i` against `pᵢ`; with `rest` it
+    /// matches `n` or more, and a named rest binds the remaining elements.
+    List {
+        elems: Vec<Pattern>,
+        rest: Option<ListRest>,
+        span: Span,
+    },
     /// `p 'where' refinement-predicate` — a refinement guard on a pattern
     /// (#472). Matches when `inner` matches *and* the scrutinee satisfies
     /// `predicate` at runtime. v1 admits only `Wildcard` as `inner` (no
@@ -3736,6 +3803,15 @@ pub enum Pattern {
     /// (including refinement) in each, and every alternative matches the same
     /// value type.
     Or(Vec<Pattern>, Span),
+}
+
+/// The trailing `..` of a list pattern, with the optional name that binds the
+/// remaining elements (`..rest`).
+#[derive(Debug, Clone)]
+pub struct ListRest {
+    pub binder: Option<Ident>,
+    /// The span of the `..` token.
+    pub span: Span,
 }
 
 /// The value carried by a [`Pattern::Literal`]. A closed set (ADR 0001):
@@ -3768,6 +3844,7 @@ impl Pattern {
             Pattern::Literal { span, .. } => *span,
             Pattern::Variant { span, .. } => *span,
             Pattern::Record { span, .. } => *span,
+            Pattern::List { span, .. } => *span,
             Pattern::Refined { span, .. } => *span,
             Pattern::Or(_, span) => *span,
         }
@@ -3796,6 +3873,11 @@ impl Pattern {
                     None => vec![name],
                 })
                 .collect(),
+            Pattern::List { elems, rest, .. } => elems
+                .iter()
+                .flat_map(Pattern::bound_names)
+                .chain(rest.iter().filter_map(|r| r.binder.as_ref()))
+                .collect(),
             Pattern::Refined { inner, .. } => inner.bound_names(),
             Pattern::Or(alts, _) => alts.first().map(Pattern::bound_names).unwrap_or_default(),
         }
@@ -3819,6 +3901,8 @@ impl Pattern {
             Pattern::Record { fields, .. } => fields
                 .iter()
                 .all(|(_, sub)| sub.as_ref().is_none_or(Pattern::is_irrefutable)),
+            // `[..]` and `[..rest]` match every list; any fixed length does not.
+            Pattern::List { elems, rest, .. } => elems.is_empty() && rest.is_some(),
             _ => false,
         }
     }

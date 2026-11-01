@@ -1,0 +1,13 @@
+commons limits
+
+private type Window = { size: Int, offset: Int }
+
+// A public constant may not be typed with a private type.
+const Default: Window = Window { size: 10, offset: 0 }
+
+// A private one may.
+private const Narrow: Window = Window { size: 2, offset: 0 }
+
+fn narrowSize() -> Int {
+  Narrow.size
+}

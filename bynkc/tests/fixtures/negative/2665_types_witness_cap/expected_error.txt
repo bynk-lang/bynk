@@ -1,0 +1,9 @@
+# exact
+bynk.types.non_exhaustive_match non-exhaustive `match` — variant `V2` of `Big` is not covered @ 6:3
+bynk.types.non_exhaustive_match non-exhaustive `match` — variant `V3` of `Big` is not covered @ 6:3
+bynk.types.non_exhaustive_match non-exhaustive `match` — variant `V4` of `Big` is not covered @ 6:3
+bynk.types.non_exhaustive_match non-exhaustive `match` — variant `V5` of `Big` is not covered @ 6:3
+bynk.types.non_exhaustive_match non-exhaustive `match` — variant `V6` of `Big` is not covered @ 6:3
+bynk.types.non_exhaustive_match non-exhaustive `match` — variant `V7` of `Big` is not covered @ 6:3
+bynk.types.non_exhaustive_match non-exhaustive `match` — variant `V8` of `Big` is not covered @ 6:3
+bynk.types.non_exhaustive_match non-exhaustive `match` — variant `V9` of `Big` is not covered @ 6:3

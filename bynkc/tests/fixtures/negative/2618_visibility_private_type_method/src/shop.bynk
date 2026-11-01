@@ -1,0 +1,19 @@
+commons shop
+
+uses pricing
+uses ledger
+
+// #2618 (Decision G): `Tally` here is `ledger`'s, the only one `shop` sees.
+// `pricing`'s `Tally` is private, and its methods are hidden with it although
+// neither is marked `private`, so neither reaches `shop`.
+fn start() -> Tally {
+  Tally.zero()
+}
+
+fn average(t: Tally) -> Int {
+  t.mean()
+}
+
+fn overall() -> Int {
+  emptyMean()
+}

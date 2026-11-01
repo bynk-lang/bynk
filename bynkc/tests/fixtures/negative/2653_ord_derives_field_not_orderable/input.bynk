@@ -1,0 +1,4 @@
+commons demo
+
+// #2660: every field of a `derives Ord` record must itself be orderable.
+type Index = { entries: Map[String, Int] } derives Ord

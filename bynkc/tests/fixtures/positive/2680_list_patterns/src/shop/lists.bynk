@@ -1,0 +1,129 @@
+commons shop.lists {
+  type Item = { sku: String, qty: Int }
+  type Segment = { name: String }
+
+  // `[]` plus `[x, ..rest]` is exhaustive with no `_`.
+  fn sum(xs: List[Int]) -> Int {
+    match xs {
+      [] => 0
+      [x, ..rest] => x + sum(rest)
+    }
+  }
+
+  // Exact lengths, then "two or more" with an unnamed rest.
+  fn describe(items: List[Item]) -> String {
+    match items {
+      [] => "empty"
+      [only] => only.sku,
+      [first, _, ..] => first.sku
+    }
+  }
+
+  // Every length is covered: 0, 1, 2 and "three or more".
+  fn count(xs: List[Int]) -> Int {
+    match xs {
+      [] => 0
+      [_] => 1
+      [_, _] => 2
+      [_, _, _, ..] => 3
+    }
+  }
+
+  // `[..rest]` binds the whole list.
+  fn whole(xs: List[Int]) -> Int {
+    match xs {
+      [..rest] => rest.length()
+    }
+  }
+
+  // Nested element patterns, in a variant payload and a list of lists.
+  fn firstSome(xs: List[Option[Int]]) -> Int {
+    match xs {
+      [Some(n), ..] => n
+      [None, ..] => -1
+      [] => 0
+    }
+  }
+
+  fn headOfHeads(xss: List[List[Int]]) -> Int {
+    match xss {
+      [[a, ..], ..] => a
+      [[], ..] => -1
+      [] => -2
+    }
+  }
+
+  fn viaOption(o: Option[List[Int]]) -> Int {
+    match o {
+      Some([x, ..]) => x
+      Some([]) => -1
+      None => -2
+    }
+  }
+
+  // A record pattern inside a list pattern, and a literal element.
+  fn isApi(path: List[Segment]) -> Bool {
+    path is [Segment { name: "api", .. }, ..]
+  }
+
+  fn startsWithZero(xs: List[Int]) -> Bool {
+    match xs {
+      [0, ..] => true
+      _ => false
+    }
+  }
+
+  // An or-pattern binds the same name in each alternative.
+  fn headOr(xs: List[Int]) -> Int {
+    match xs {
+      [x] | [x, _] => x
+      _ => 0
+    }
+  }
+
+  // `is` binds the elements and the rest in the `if`.
+  fn tailLength(xs: List[Int]) -> Int {
+    if xs is [_, ..rest] {
+      rest.length()
+    } else {
+      -1
+    }
+  }
+
+  fn secondOf(xs: List[Int]) -> Int {
+    if xs is [_, b, ..] {
+      b
+    } else {
+      0
+    }
+  }
+
+  // An `is` or-pattern of lists binds the same name from each alternative.
+  fn pick(xs: List[Int]) -> Int {
+    if xs is [x] | [_, x] {
+      x
+    } else {
+      0
+    }
+  }
+
+  // A guard falls through to the next arm.
+  fn big(xs: List[Int]) -> String {
+    match xs {
+      [x, ..] if x > 10 => "big"
+      [_, ..] => "small"
+      [] => "none"
+    }
+  }
+
+  // `let … else` takes a list apart.
+  fn headOrZero(jobs: List[Int]) -> Int {
+    let [head, ..] = jobs else { 0 }
+    head
+  }
+
+  fn pairSum(xs: List[Int]) -> Int {
+    let [a, b] = xs else { -1 }
+    a + b
+  }
+}

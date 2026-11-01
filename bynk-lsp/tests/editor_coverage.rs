@@ -77,9 +77,28 @@ fn every_contextual_keyword_has_a_hover_path() {
             "par: no hover path — describe_par_at returned None"
         );
     }
+    // #2618: `private` is a keyword only before a declaration keyword.
+    let modifier = "commons Scaffold\n\nprivate fn f() -> Int { 0 }\n";
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "private") {
+        let offset = modifier.find(kw.word).expect("`private` is in the fixture");
+        assert!(
+            symbols::describe_private_at(modifier, offset).is_some(),
+            "private: no hover path — describe_private_at returned None"
+        );
+    }
+    // Constrained generics slice 1: `derives` is a keyword only in a type
+    // declaration's trailing `derives Ord` clause.
+    let derives = "context Scaffold\n\ntype Priority = enum { Low, High } derives Ord\n";
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "derives") {
+        let offset = derives.find(kw.word).expect("`derives` is in the fixture");
+        assert!(
+            symbols::describe_derives_at(derives, offset).is_some(),
+            "derives: no hover path — describe_derives_at returned None"
+        );
+    }
     for kw in CONTEXTUAL_KEYWORDS
         .iter()
-        .filter(|k| k.word != "advance" && k.word != "par")
+        .filter(|k| !matches!(k.word, "advance" | "par" | "derives" | "private"))
     {
         let offset = source
             .find(kw.word)

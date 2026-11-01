@@ -1,0 +1,9 @@
+commons lib
+
+fn double(n: Int) -> Int {
+  twice(n)
+}
+
+private fn twice(n: Int) -> Int {
+  n * 2
+}

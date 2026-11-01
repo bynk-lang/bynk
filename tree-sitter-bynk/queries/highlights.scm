@@ -56,6 +56,7 @@
   "migrate"
   "drop"
   "replaces"
+  "derives"
   "removed"
   "requires"
   "ensures"
@@ -210,6 +211,8 @@
 ; `positional_binding` capture now that the payload position is a full pattern.
 ((variant_pattern variant: (identifier) @variable)
  (#match? @variable "^[a-z_]"))
+; #2680: the name a list pattern's `..rest` binds.
+(list_rest name: (identifier) @variable)
 ; Events track slice 1 (spine #936): a subscription pattern's variant value
 ; (`region: Region.Domestic` / bare `Domestic`) — always a nullary reference
 ; (the checker rejects a payload-carrying variant), so unlike
@@ -244,6 +247,7 @@
   "==" "!=" "<" "<=" ">" ">="
   "&&" "||" "!"
   "<-" "~>" ":=" "->" "=" "?"
+  ".."
 ] @operator
 
 [

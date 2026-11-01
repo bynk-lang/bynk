@@ -339,6 +339,11 @@ fn opaque_record_patterns(
                 }
             }
         }
+        Pattern::List { elems, .. } => {
+            for e in elems {
+                opaque_record_patterns(e, consumed, true, errors);
+            }
+        }
         Pattern::Variant { bindings, .. } => {
             for b in bindings {
                 opaque_record_patterns(b.pattern(), consumed, true, errors);
@@ -3508,6 +3513,8 @@ fn check_agent_decls(
         // Build a synthetic Record TypeDecl and stuff it into a *clone* of
         // the resolved types so handler bodies see it.
         let synthetic_state = TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: agent_state_name.clone(),
                 span: agent.span,
@@ -3521,6 +3528,7 @@ fn check_agent_decls(
             documentation: None,
             span: agent.span,
             trivia: Trivia::default(),
+            private: None,
         };
         let mut types_for_handler = typed.types.clone();
         types_for_handler.insert(agent_state_name.clone(), Arc::new(synthetic_state.clone()));
@@ -3603,6 +3611,8 @@ fn check_agent_decls(
         // Ident("self"), so `self` is given a one-off synthetic record type.
         let agent_self_name = format!("__{}Self", agent.name.name);
         let self_decl = TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: agent_self_name.clone(),
                 span: agent.span,
@@ -3627,6 +3637,7 @@ fn check_agent_decls(
             documentation: None,
             span: agent.span,
             trivia: Trivia::default(),
+            private: None,
         };
         let mut types_for_handler = resolved_for_handler.types.clone();
         types_for_handler.insert(agent_self_name.clone(), Arc::new(self_decl.clone()));

@@ -474,7 +474,9 @@ fn receiver_segment_at(text: &str, member_span: Span) -> Option<(&str, usize)> {
 /// True when the identifier starting at `start` is itself the member of a
 /// further access (the `items` of `p.items`) rather than a bare name.
 pub(crate) fn is_dot_preceded(text: &str, start: usize) -> bool {
-    text[..start].ends_with('.')
+    // A `..` is a rest marker (`[x, ..rest]`, `T { f, .. }`), not a member
+    // access, so the name after it is a fresh binding.
+    text[..start].ends_with('.') && !text[..start].ends_with("..")
 }
 
 /// #596: the storage-kind vocabulary a bare receiver is eligible for at
@@ -586,6 +588,53 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
     )
 }
 
+/// Constrained generics slice 1 (ADR 0156): hover for the contextual `derives`
+/// keyword of a type declaration's `derives Ord` clause. `None` anywhere else,
+/// so an ordinary identifier named `derives` keeps its own hover.
+pub fn describe_derives_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let items: &[CommonsItem] = match unit.as_ref()? {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => return None,
+    };
+    items.iter().find_map(|item| match item {
+        CommonsItem::Type(t) if t.derives_kw.is_some_and(|k| k.start <= offset && offset < k.end) => {
+            Some(
+                "```bynk\ntype Priority = enum { Low, High } derives Ord\n```\n\nOpts the type into a constraint. `derives Ord` orders the type by declaration order: a record compares field by field, then a sum by variant, so reordering the declaration changes the order. Every field must itself be orderable. `Eq`, `Key` and `Codable` are automatic and are not derived."
+                    .to_string(),
+            )
+        }
+        _ => None,
+    })
+}
+
+/// The doc for a constraint name (`Eq`, `Ord`), shown on hover wherever one
+/// appears in a bound or a `derives` clause.
+fn constraint_doc(name: &str) -> Option<&'static str> {
+    match name {
+        "Eq" => Some(
+            "```bynk\nconstraint Eq\n```\n\nValues of the type compare with `==` and `!=`. Declare it on a type parameter (`T: Eq`) to compare its values inside the function. Every type that can be compared is `Eq` automatically.",
+        ),
+        "Ord" => Some(
+            "```bynk\nconstraint Ord\n```\n\nValues of the type are ordered: they compare with `<`, `<=`, `>` and `>=`, and can be sorted. Declare it on a type parameter (`T: Ord`) to order its values inside the function; `Ord` implies `Eq`. A type opts in with `derives Ord`, which orders it by declaration order.",
+        ),
+        _ => None,
+    }
+}
+
+/// Constrained generics slice 1: hover for a constraint name in a bound
+/// (`T: Ord`, `where A: Eq`) or a `derives` clause. `None` for any other
+/// identifier, so a type that happens to be named `Ord` keeps its own hover.
+pub fn describe_constraint_at(source: &str, offset: usize) -> Option<String> {
+    let span = constraint_token_spans(source)
+        .into_iter()
+        .find(|s| s.start <= offset && offset < s.end)?;
+    constraint_doc(&source[span.start..span.end]).map(str::to_string)
+}
+
 /// #2640 (ADR 0156): hover for the contextual `par` keyword of a `par { … }`
 /// binding block. `None` anywhere else, so an ordinary identifier named `par`
 /// keeps its own hover.
@@ -602,6 +651,41 @@ pub fn describe_par_at(source: &str, offset: usize) -> Option<String> {
         "```bynk\npar {\n  let a <- first()\n  let b <- second()\n}\n```\n\nIssues every effect in the block, in source order, before awaiting any of them, and completes when all have settled. The names bound inside are in scope after the closing brace; no binding may mention a name a sibling binds. If any effect faults, the block waits for the rest, then raises the first fault in source order. Holds only `let x <- e` and `do e`."
             .to_string(),
     )
+}
+
+/// #2618: a hover for the contextual `private` modifier under the cursor:
+/// an identifier spelled `private` immediately before a `fn`, `type`,
+/// `messages`, `asset`, `embed` or `const` keyword, the one position the parser reads
+/// it as the modifier. `None` anywhere else, where `private` is an ordinary
+/// name.
+pub fn describe_private_at(source: &str, offset: usize) -> Option<String> {
+    use bynk_syntax::lexer::TokenKind;
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let t = tokens.get(idx)?;
+    if t.kind != TokenKind::Ident || &source[t.span.start..t.span.end] != "private" {
+        return None;
+    }
+    let next = tokens.get(idx + 1)?.kind;
+    if !matches!(
+        next,
+        TokenKind::Fn
+            | TokenKind::Type
+            | TokenKind::Messages
+            | TokenKind::Asset
+            | TokenKind::Embed
+            | TokenKind::Const
+    ) {
+        return None;
+    }
+    let doc = bynk_syntax::keywords::CONTEXTUAL_KEYWORDS
+        .iter()
+        .find(|k| k.word == "private")
+        .map(|k| k.meaning)
+        .unwrap_or_default();
+    Some(format!("```bynk\nprivate\n```\n\n{doc}"))
 }
 
 /// #2138: the doc `run.id` shows on hover and in completion.
@@ -892,6 +976,27 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
     spans
 }
 
+/// #2618: the span of every `private` modifier on the unit's declarations,
+/// for the `keyword` semantic token. `private` is contextual, so an editor
+/// grammar that matches keywords by spelling cannot tell the modifier from a
+/// binding named `private`; the parse can.
+pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
+    let Ok(tokens) = tokenize(source) else {
+        return Vec::new();
+    };
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let Some(unit) = unit else {
+        return Vec::new();
+    };
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    items.iter().filter_map(CommonsItem::private_span).collect()
+}
+
 /// Constrained generics slice 0: the span of every constraint name in a bound
 /// — a type parameter's (`T: Eq` on a `fn`, `type` or capability operation)
 /// and a method's `where A: Eq` entries — so the editor can classify them as
@@ -919,7 +1024,11 @@ pub fn constraint_token_spans(source: &str) -> Vec<Span> {
     for item in items {
         match item {
             CommonsItem::Fn(f) => params(&f.type_params, &mut spans),
-            CommonsItem::Type(t) => params(&t.type_params, &mut spans),
+            CommonsItem::Type(t) => {
+                params(&t.type_params, &mut spans);
+                // Constrained generics slice 1: `derives Ord` names constraints too.
+                spans.extend(t.derives.iter().map(|d| d.span));
+            }
             CommonsItem::Capability(c) => {
                 for op in &c.ops {
                     params(&op.type_params, &mut spans);
@@ -2004,6 +2113,10 @@ pub(crate) fn describe_type(t: &TypeDecl) -> String {
             .collect();
         format!("[{}]", names.join(", "))
     };
+    // #2618: the unit-private modifier, as written.
+    if t.private.is_some() {
+        out.push_str("private ");
+    }
     out.push_str(&format!("type {}{} = ", t.name.name, params));
     match &t.body {
         // v0.123 (slice 2): render the refined/opaque `where` predicate (was
@@ -2063,6 +2176,11 @@ pub(crate) fn describe_type(t: &TypeDecl) -> String {
             }
             out.push('}');
         }
+    }
+    // Constrained generics slice 1: the `derives` clause, after the body.
+    if !t.derives.is_empty() {
+        let names: Vec<&str> = t.derives.iter().map(|d| d.name.as_str()).collect();
+        out.push_str(&format!(" derives {}", names.join(" + ")));
     }
     out.push_str("\n```\n");
     if let Some(doc) = &t.documentation {
@@ -2133,6 +2251,10 @@ fn bound_str(name: &str, bounds: &[Ident]) -> String {
 pub(crate) fn describe_fn(f: &FnDecl) -> String {
     let mut out = String::new();
     out.push_str("```bynk\n");
+    // #2618: the unit-private modifier, as written.
+    if f.private.is_some() {
+        out.push_str("private ");
+    }
     out.push_str("fn ");
     out.push_str(&f.name.display());
     out.push_str(&fn_type_params_str(f));
@@ -2314,7 +2436,12 @@ pub(crate) fn describe_derived_capability(
 /// concern, not hover's), and its declared codes.
 pub(crate) fn describe_messages(m: &MessagesDecl) -> String {
     let mut out = String::new();
-    out.push_str("```bynk\nmessages ");
+    out.push_str("```bynk\n");
+    // #2618: the unit-private modifier, as written.
+    if m.private.is_some() {
+        out.push_str("private ");
+    }
+    out.push_str("messages ");
     out.push('"');
     out.push_str(&m.tag);
     out.push('"');
@@ -2359,7 +2486,8 @@ pub(crate) fn describe_messages(m: &MessagesDecl) -> String {
 /// text is compiled into the code as a `String`, never served.
 pub(crate) fn describe_embed(e: &EmbedDecl) -> String {
     let mut out = format!(
-        "```bynk\nembed {} = \"{}\"\n```\n\nPrivate: the file's text, compiled into the code as a `String`; never served.\n",
+        "```bynk\n{}embed {} = \"{}\"\n```\n\nPrivate: the file's text, compiled into the code as a `String`; never served.\n",
+        if e.private.is_some() { "private " } else { "" },
         e.name.name,
         bynk_fmt::escape_string(&e.path)
     );
@@ -2375,7 +2503,9 @@ pub(crate) fn describe_embed(e: &EmbedDecl) -> String {
 /// and initialiser), then its doc.
 pub(crate) fn describe_const(c: &ConstDecl) -> String {
     let mut out = format!(
-        "```bynk\nconst {}: {} = {}\n```\n",
+        "```bynk\n{}const {}: {} = {}\n```\n",
+        // The unit-private modifier, as written.
+        if c.private.is_some() { "private " } else { "" },
         c.name.name,
         type_ref_str(&c.ty),
         bynk_fmt::expr_to_string(&c.init)
@@ -2408,7 +2538,8 @@ pub(crate) fn describe_asset(a: &AssetDecl) -> String {
         ),
     };
     let mut out = format!(
-        "```bynk\nasset {} = \"{}\"{at}\n```\n\n{served} Public: served by the platform, never by the Worker.\n",
+        "```bynk\n{}asset {} = \"{}\"{at}\n```\n\n{served} Public: served by the platform, never by the Worker.\n",
+        if a.private.is_some() { "private " } else { "" },
         a.name.name,
         bynk_fmt::escape_string(&a.path)
     );
@@ -2716,6 +2847,25 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// A constant's hover shows its `private` modifier as written, and the
+    /// modifier itself hovers before `const` as before the other kinds.
+    #[test]
+    fn private_const_hover_shows_the_modifier() {
+        let src = "commons m\n\nprivate const MaxRetries: Int = 3\n\nconst Shown: Int = 1\n";
+        let tokens = tokenize(src).unwrap();
+        let (Some(SourceUnit::Commons(c)), _) = parse_unit_with_recovery(&tokens, src) else {
+            panic!("a commons");
+        };
+        let hidden = describe_item(&c.items[0], "MaxRetries").unwrap();
+        assert!(
+            hidden.starts_with("```bynk\nprivate const MaxRetries: Int = 3\n"),
+            "{hidden}"
+        );
+        let shown = describe_item(&c.items[1], "Shown").unwrap();
+        assert!(shown.starts_with("```bynk\nconst Shown"), "{shown}");
+        assert!(describe_private_at(src, src.find("private").unwrap()).is_some());
+    }
+
     /// #2640: `par` hovers only as the head of a `par { … }` block.
     #[test]
     fn par_hover_is_for_the_block_keyword_only() {
@@ -3299,6 +3449,91 @@ mod tests {
             .collect();
         assert_eq!(names, ["Eq", "Eq", "Eq", "Eq"]);
         assert!(constraint_token_spans("commons m\n\nfn f[T](a: T) -> T { a }\n").is_empty());
+    }
+
+    // Constrained generics slice 1: a type's hover shows its `derives` clause,
+    // a generic's signature its `Ord` bounds.
+    #[test]
+    fn describe_renders_derives_and_ord_bounds() {
+        let src = "commons demo.m\n\ntype Priority = enum { Low, High } derives Ord\n\ntype Row = { a: Int } derives Ord\n\nfn top[T: Ord](xs: List[T]) -> Option[T] { None }\n\nfn both[T: Eq + Ord](a: T) -> T { a }\n\nfn Box.big(self, x: A) -> Bool where A: Ord { true }\n";
+        let p = describe_symbol(src, "Priority").unwrap();
+        assert!(p.contains("} derives Ord\n```"), "{p}");
+        assert!(
+            describe_symbol(src, "Row")
+                .unwrap()
+                .contains("} derives Ord")
+        );
+        assert!(
+            describe_symbol(src, "top")
+                .unwrap()
+                .contains("fn top[T: Ord](xs: List[T]) -> Option[T]")
+        );
+        assert!(
+            describe_symbol(src, "both")
+                .unwrap()
+                .contains("fn both[T: Eq + Ord](a: T)")
+        );
+        assert!(
+            describe_symbol(src, "Box.big")
+                .unwrap()
+                .contains("-> Bool where A: Ord")
+        );
+        // No clause, no `derives`.
+        let plain = describe_symbol("commons demo.m\n\ntype R = { a: Int }\n", "R").unwrap();
+        assert!(!plain.contains("derives"), "{plain}");
+    }
+
+    // Constrained generics slice 1: `derives` hovers as a keyword only in a
+    // type's clause; a name that merely reads `derives` does not.
+    #[test]
+    fn describe_derives_at_is_the_clause_only() {
+        let src =
+            "commons demo.m\n\ntype P = Int derives Ord\n\nfn f(derives: Int) -> Int { derives }\n";
+        let at = src.find("derives").unwrap();
+        let doc = describe_derives_at(src, at).expect("hover on `derives`");
+        assert!(
+            doc.contains("derives Ord") && doc.contains("declaration order"),
+            "{doc}"
+        );
+        assert!(describe_derives_at(src, at + 2).is_some());
+        assert!(describe_derives_at(src, src.find("Ord").unwrap()).is_none());
+        assert!(describe_derives_at(src, src.rfind("derives").unwrap()).is_none());
+        assert!(describe_derives_at(src, src.find("(derives").unwrap() + 1).is_none());
+    }
+
+    // Constrained generics slice 1: hover on a constraint name in a bound or a
+    // `derives` clause explains it; a lookalike elsewhere does not.
+    #[test]
+    fn describe_constraint_at_explains_bounds_and_derives() {
+        let src = "commons demo.m\n\ntype P = Int derives Ord\n\nfn f[T: Eq + Ord](a: T) -> T { a }\n\nfn Box.g(self, x: A) -> Bool where A: Ord { true }\n";
+        let eq = describe_constraint_at(src, src.find("Eq").unwrap()).unwrap();
+        assert!(eq.contains("constraint Eq") && eq.contains("=="), "{eq}");
+        for (i, _) in src.match_indices("Ord") {
+            let ord = describe_constraint_at(src, i + 1).expect("Ord hover");
+            assert!(
+                ord.contains("constraint Ord") && ord.contains("implies `Eq`"),
+                "{ord}"
+            );
+        }
+        assert!(describe_constraint_at(src, src.find("Int").unwrap()).is_none());
+        assert!(describe_constraint_at(src, src.find("fn f").unwrap()).is_none());
+    }
+
+    // Constrained generics slice 1: `derives Ord` names are constraint tokens.
+    #[test]
+    fn constraint_token_spans_cover_derives() {
+        let src =
+            "commons demo.m\n\ntype P = Int derives Ord\n\ntype Q[T: Ord] = { a: T } derives Ord\n";
+        let names: Vec<&str> = constraint_token_spans(src)
+            .into_iter()
+            .map(|s| &src[s.start..s.end])
+            .collect();
+        assert_eq!(names, ["Ord", "Ord", "Ord"]);
+        let first = constraint_token_spans(src)[0];
+        assert!(
+            src[..first.start].ends_with("derives "),
+            "derives clause is the first span"
+        );
     }
 
     // v0.123 (slice 2): a service renders its protocol header and route lines.

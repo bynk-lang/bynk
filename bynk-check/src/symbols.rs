@@ -422,6 +422,97 @@ pub struct UnitTable {
     pub derived: HashMap<String, DerivedInstance>,
 }
 
+impl UnitTable {
+    /// #2618: does this unit declare anything `private`?
+    pub fn has_private(&self) -> bool {
+        self.types.values().any(|d| d.private.is_some())
+            || self.fns.values().any(|d| d.private.is_some())
+            || self.assets.values().any(|d| d.private.is_some())
+            || self.embeds.values().any(|d| d.private.is_some())
+            || self.consts.values().any(|d| d.private.is_some())
+            || self.methods.values().any(|mt| {
+                mt.instance
+                    .values()
+                    .chain(mt.statics.values())
+                    .any(|d| d.private.is_some())
+            })
+    }
+
+    /// #2618: the table as a unit that `uses` this one sees it — without its
+    /// `private` declarations. A private type's methods go with it, public or
+    /// not: an importer can neither name the type nor reach a value of it.
+    ///
+    /// Borrowed when the unit declares nothing private (every unit before
+    /// #2618), so an import costs no copy. The unit itself, and its suites,
+    /// read the full table instead.
+    pub fn importable(&self) -> std::borrow::Cow<'_, UnitTable> {
+        if !self.has_private() {
+            return std::borrow::Cow::Borrowed(self);
+        }
+        let mut t = self.clone();
+        let private_types: std::collections::HashSet<String> = t
+            .types
+            .iter()
+            .filter(|(_, d)| d.private.is_some())
+            .map(|(n, _)| n.clone())
+            .collect();
+        t.types.retain(|n, _| !private_types.contains(n));
+        t.fns.retain(|_, d| d.private.is_none());
+        t.assets.retain(|_, d| d.private.is_none());
+        t.embeds.retain(|_, d| d.private.is_none());
+        t.consts.retain(|_, d| d.private.is_none());
+        t.methods.retain(|n, _| !private_types.contains(n));
+        for mt in t.methods.values_mut() {
+            mt.instance.retain(|_, d| d.private.is_none());
+            mt.statics.retain(|_, d| d.private.is_none());
+        }
+        std::borrow::Cow::Owned(t)
+    }
+
+    /// #2618: the declarations this unit makes `private`, each keyed by the
+    /// subject an unknown-name diagnostic names it by (`f`, `T`, or a method
+    /// as `T.m`), with its kind. A reference from an importing unit that
+    /// meets one is `bynk.visibility.private_item`
+    /// ([`crate::resolver::rewrite_private_references`]).
+    pub fn private_subjects(&self) -> Vec<(String, &'static str)> {
+        let mut out: Vec<(String, &'static str)> = Vec::new();
+        for (n, d) in &self.types {
+            if d.private.is_some() {
+                out.push((n.clone(), "type"));
+            }
+        }
+        for (n, d) in &self.fns {
+            if d.private.is_some() {
+                out.push((n.clone(), "function"));
+            }
+        }
+        for (n, d) in &self.assets {
+            if d.private.is_some() {
+                out.push((n.clone(), "asset"));
+            }
+        }
+        for (n, d) in &self.embeds {
+            if d.private.is_some() {
+                out.push((n.clone(), "embed"));
+            }
+        }
+        for (n, d) in &self.consts {
+            if d.private.is_some() {
+                out.push((n.clone(), "constant"));
+            }
+        }
+        for (ty, mt) in &self.methods {
+            let type_private = self.types.get(ty).is_some_and(|d| d.private.is_some());
+            for (m, d) in mt.instance.iter().chain(mt.statics.iter()) {
+                if d.private.is_some() || type_private {
+                    out.push((format!("{ty}.{m}"), "method"));
+                }
+            }
+        }
+        out
+    }
+}
+
 /// S4a (#1966): a resolved derived capability: a distinct instance of a
 /// platform capability, provided by that platform's own provider bound to this
 /// instance's Worker binding.
@@ -1227,6 +1318,7 @@ fn synthetic_render_fn() -> FnDecl {
         documentation: None,
         span,
         trivia: Trivia::default(),
+        private: None,
     }
 }
 
@@ -2119,7 +2211,8 @@ pub fn detect_context_message_bundle(
         };
         for &i in indices {
             let has_reference = parsed[i].items().iter().any(|item| {
-                matches!(item, CommonsItem::Messages(m) if m.annotations.iter().any(|a| a.name.name == "reference"))
+                // #2618: a `private` bundle stays in its commons.
+                matches!(item, CommonsItem::Messages(m) if m.private.is_none() && m.annotations.iter().any(|a| a.name.name == "reference"))
             });
             if has_reference {
                 found.push(MessageBundleInfo {
@@ -2181,6 +2274,7 @@ mod detect_context_message_bundle_tests {
             documentation: None,
             span: Span::default(),
             trivia: Trivia::default(),
+            private: None,
         };
         ParsedFile::new(
             PathBuf::from(format!("{}.bynk", name.replace('.', "/"))),

@@ -174,6 +174,8 @@ mod http_option_body_behaviour;
 mod http_raw_body_behaviour;
 #[path = "http_raw_caching_behaviour.rs"]
 mod http_raw_caching_behaviour;
+#[path = "http_recursive_body_behaviour.rs"]
+mod http_recursive_body_behaviour;
 #[path = "http_security_behaviour.rs"]
 mod http_security_behaviour;
 #[path = "implementation_index.rs"]
@@ -212,6 +214,8 @@ mod multi_file_commons_barrel;
 mod observation_behaviour;
 #[path = "oidc_auth.rs"]
 mod oidc_auth;
+#[path = "ord_bound_fixes.rs"]
+mod ord_bound_fixes;
 #[path = "package_dependencies.rs"]
 mod package_dependencies;
 #[path = "package_exports.rs"]
@@ -220,6 +224,8 @@ mod package_exports;
 mod par_behaviour;
 #[path = "par_gate_workerd.rs"]
 mod par_gate_workerd;
+#[path = "par_traverse_behaviour.rs"]
+mod par_traverse_behaviour;
 #[path = "property_behaviour.rs"]
 mod property_behaviour;
 #[path = "provider_agent_cross_context_target.rs"]

@@ -1,0 +1,6 @@
+commons demo
+
+fn pick[T: Ord](a: T, b: T) -> T { if a < b { a } else { b } }
+
+// #2660: passing an unbounded parameter to an `Ord`-bounded callee.
+fn outer[U](a: U, b: U) -> U { pick(a, b) }

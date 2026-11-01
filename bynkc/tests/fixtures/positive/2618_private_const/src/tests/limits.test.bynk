@@ -1,0 +1,12 @@
+suite limits {
+  // A unit suite sees its target's private constants.
+  case "the private constants" {
+    expect Step == 5
+    expect Narrow.size == 2
+  }
+
+  case "the public surface built on them" {
+    expect retries() == 10
+    expect span() == 3
+  }
+}

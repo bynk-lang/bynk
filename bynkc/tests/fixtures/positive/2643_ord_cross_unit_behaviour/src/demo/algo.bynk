@@ -1,0 +1,17 @@
+---
+#2660: bounded generics in their own unit. Each takes a hidden comparator for `T`,
+which a caller in another unit builds from a type declared in a third.
+---
+commons demo.algo
+
+fn smaller[T: Ord](a: T, b: T) -> T {
+  if a < b { a } else { b }
+}
+
+fn rankOf[T: Ord](x: T, xs: List[T]) -> Int {
+  xs.filter((y) => y < x).count()
+}
+
+fn twiceSmaller[T: Ord](a: T, b: T, c: T) -> T {
+  smaller(smaller(a, b), c)
+}

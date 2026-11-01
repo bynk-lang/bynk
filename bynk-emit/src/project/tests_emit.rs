@@ -920,18 +920,18 @@ fn emit_integration_module(
         // body's lowering renames a `let` that would redeclare one.
         let mut harness_bound: HashSet<String> = HashSet::from(["deps".to_string()]);
         // Bring `uses` commons names into scope for argument construction.
+        // #2618: a used commons' `private` declarations stay in it, as the
+        // checker's harness view leaves them out (`integration_view`).
         for u in uses_targets {
             let ns = test_ns(u);
             if let Some(table) = unit_tables.get(u) {
-                let mut names: Vec<String> = table
-                    .types
-                    .keys()
-                    .chain(table.fns.keys())
+                let mut names: Vec<String> = public_types(table)
+                    .chain(public_fns(table))
                     .cloned()
                     .collect();
                 names.sort();
                 names.dedup();
-                let type_names = aliased_types(table, |_| true);
+                let type_names = aliased_types(table, |n| is_public_type(table, n));
                 harness_bound.extend(names.iter().cloned());
                 crate::emitter::extend_printed_at(
                     &mut case_out,
@@ -1124,6 +1124,7 @@ fn emit_integration_module(
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }
+    append_missing_bindings(&mut runtime_names, &runtime_use.cmp_imports());
     stmts.splice(
         import_idx..import_idx,
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
@@ -3958,6 +3959,7 @@ fn emit_test_module(
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }
+    append_missing_bindings(&mut runtime_names, &runtime_use.cmp_imports());
     stmts.splice(
         import_idx..import_idx,
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
@@ -6096,6 +6098,29 @@ fn emit_ns_destructure(
 
 /// #1703: the types of `table` that `keep` admits, each with its type
 /// parameters, sorted by name: the `type_names` [`emit_ns_destructure`] aliases.
+/// #2618: the names of `table`'s types not marked `private`.
+fn public_types(table: &UnitTable) -> impl Iterator<Item = &String> {
+    table
+        .types
+        .iter()
+        .filter(|(_, d)| d.private.is_none())
+        .map(|(n, _)| n)
+}
+
+/// #2618: the names of `table`'s functions not marked `private`.
+fn public_fns(table: &UnitTable) -> impl Iterator<Item = &String> {
+    table
+        .fns
+        .iter()
+        .filter(|(_, d)| d.private.is_none())
+        .map(|(n, _)| n)
+}
+
+/// #2618: whether `name` is a type of `table` not marked `private`.
+fn is_public_type(table: &UnitTable, name: &str) -> bool {
+    table.types.get(name).is_some_and(|d| d.private.is_none())
+}
+
 fn aliased_types(table: &UnitTable, keep: impl Fn(&String) -> bool) -> Vec<(String, Vec<String>)> {
     let mut types: Vec<(String, Vec<String>)> = table
         .types
@@ -6399,20 +6424,38 @@ fn emit_test_scope_setup(
         for u in used {
             let ns = test_ns(u);
             if let Some(table) = unit_tables.get(u) {
-                let assets = table.assets.keys().filter(|n| seen_assets.insert(*n));
-                let mut names: Vec<String> = table
-                    .types
-                    .keys()
-                    .chain(table.fns.keys())
+                // #2618: a used commons' `private` declarations stay in it, as
+                // the checker's suite view leaves them out; destructuring one
+                // would redeclare a public name another used commons binds.
+                let assets = table
+                    .assets
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n)
+                    .filter(|n| seen_assets.insert(*n));
+                let embeds = table
+                    .embeds
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n);
+                let consts = table
+                    .consts
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n);
+                let mut names: Vec<String> = public_types(table)
+                    .chain(public_fns(table))
                     .chain(assets)
-                    .chain(table.embeds.keys())
-                    .chain(table.consts.keys())
+                    .chain(embeds)
+                    .chain(consts)
                     .filter(|n| !target_values.contains(n))
                     .cloned()
                     .collect();
                 names.sort();
                 names.dedup();
-                let type_names = aliased_types(table, |n| !target_local.contains(n));
+                let type_names = aliased_types(table, |n| {
+                    !target_local.contains(n) && is_public_type(table, n)
+                });
                 bound.extend(names.iter().cloned());
                 crate::emitter::extend_printed_at(
                     out,
@@ -6960,16 +7003,11 @@ fn base_canon(base: BaseType) -> String {
     }
 }
 
-/// A TypeScript expression that draws a random inhabitant of `base` (refined by
-/// `refinement`), branded to `<name>` — via `<name>.unsafe(...)` for an opaque
-/// type, or an inline `as` cast for a refined/alias type (ADR 0182).
-fn refined_gen_ts(
-    name: &str,
-    base: BaseType,
-    refinement: Option<&Refinement>,
-    is_opaque: bool,
-) -> TsExpr {
-    let draw = match base {
+/// A TypeScript expression drawing a random inhabitant of `base` within
+/// `refinement`'s domain, unbranded — the draw [`refined_gen_ts`] brands, and
+/// the draw a record field with an inline `where` uses as is.
+fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> TsExpr {
+    match base {
         BaseType::Int => {
             let (lo, hi, _) = int_bounds(refinement);
             method_call(
@@ -6996,7 +7034,40 @@ fn refined_gen_ts(
         }
         BaseType::Bool => method_call(ident("rng"), "bool", vec![]),
         _ => ident(base_canon(base)),
-    };
+    }
+}
+
+/// The canonical (boundary) inhabitant of `base` within `refinement`'s domain,
+/// unbranded: the refinement's floor, or a string of its minimum length.
+fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> TsExpr {
+    match base {
+        BaseType::Int => {
+            let (lo, _, _) = int_bounds(refinement);
+            num_lit(format!("{lo}n"))
+        }
+        BaseType::Float => {
+            let (lo, _) = float_bounds(refinement);
+            num_lit(lo.to_string())
+        }
+        BaseType::String => {
+            let min = str_min(refinement);
+            str_lit("x".repeat(min.max(0) as usize))
+        }
+        BaseType::Bool => TsExpr::Lit(TsLit::Bool(true)),
+        other => ident(base_canon(other)),
+    }
+}
+
+/// A TypeScript expression that draws a random inhabitant of `base` (refined by
+/// `refinement`), branded to `<name>` — via `<name>.unsafe(...)` for an opaque
+/// type, or an inline `as` cast for a refined/alias type (ADR 0182).
+fn refined_gen_ts(
+    name: &str,
+    base: BaseType,
+    refinement: Option<&Refinement>,
+    is_opaque: bool,
+) -> TsExpr {
+    let draw = base_draw_ts(base, refinement);
     // `unchecked_construct_test` is also called from `lower.rs`'s own
     // permanently-excluded general expression lowering (Third correction) and
     // must keep its exact `-> String` signature — its own branching (a real
@@ -7321,12 +7392,16 @@ fn gen_ts_for_ty(
                         .map(|f| {
                             let g = checker::resolve_type_ref(&f.type_ref, types, tys)
                                 .map(|t| {
-                                    coerce_int_field(
-                                        t,
-                                        types,
-                                        tys,
-                                        gen_ts_for_ty(t, types, depth - 1, tys),
-                                    )
+                                    let v = match (&*tys.get(t), f.refinement.as_ref()) {
+                                        // #2667: an inline `where` on a base-typed
+                                        // field draws from its own domain, as a
+                                        // declared refined type over that base does.
+                                        (checker::Ty::Base(b), Some(r)) => {
+                                            base_draw_ts(*b, Some(r))
+                                        }
+                                        _ => gen_ts_for_ty(t, types, depth - 1, tys),
+                                    };
+                                    coerce_int_field(t, types, tys, v)
                                 })
                                 .unwrap_or_else(|| ident("undefined"));
                             (f.name.name.clone(), g)
@@ -7382,22 +7457,7 @@ fn canon_ts_for_ty(
                 | TypeBody::Opaque {
                     base, refinement, ..
                 } => {
-                    let lit = match base {
-                        BaseType::Int => {
-                            let (lo, _, _) = int_bounds(refinement.as_ref());
-                            num_lit(format!("{lo}n"))
-                        }
-                        BaseType::Float => {
-                            let (lo, _) = float_bounds(refinement.as_ref());
-                            num_lit(lo.to_string())
-                        }
-                        BaseType::String => {
-                            let min = str_min(refinement.as_ref());
-                            str_lit("x".repeat(min.max(0) as usize))
-                        }
-                        BaseType::Bool => TsExpr::Lit(TsLit::Bool(true)),
-                        other => ident(base_canon(*other)),
-                    };
+                    let lit = base_canon_ts(*base, refinement.as_ref());
                     ident(emitter::unchecked_construct_test(
                         name,
                         &bynk_ts::print_expr(&lit),
@@ -7434,12 +7494,16 @@ fn canon_ts_for_ty(
                         .map(|f| {
                             let g = checker::resolve_type_ref(&f.type_ref, types, tys)
                                 .map(|t| {
-                                    coerce_int_field(
-                                        t,
-                                        types,
-                                        tys,
-                                        canon_ts_for_ty(t, types, depth - 1, tys),
-                                    )
+                                    let v = match (&*tys.get(t), f.refinement.as_ref()) {
+                                        // #2667: an inline `where` on a base-typed
+                                        // field draws from its own domain, as a
+                                        // declared refined type over that base does.
+                                        (checker::Ty::Base(b), Some(r)) => {
+                                            base_canon_ts(*b, Some(r))
+                                        }
+                                        _ => canon_ts_for_ty(t, types, depth - 1, tys),
+                                    };
+                                    coerce_int_field(t, types, tys, v)
                                 })
                                 .unwrap_or_else(|| ident("undefined"));
                             (f.name.name.clone(), g)
@@ -10314,6 +10378,8 @@ mod tests {
 
     fn refined_int_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: name.to_string(),
                 span: Span::default(),
@@ -10327,11 +10393,14 @@ mod tests {
             documentation: None,
             span: Span::default(),
             trivia: Trivia::default(),
+            private: None,
         }
     }
 
     fn opaque_int_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: name.to_string(),
                 span: Span::default(),
@@ -10345,6 +10414,7 @@ mod tests {
             documentation: None,
             span: Span::default(),
             trivia: Trivia::default(),
+            private: None,
         }
     }
 
@@ -10435,6 +10505,8 @@ mod tests {
 
     fn sum_decl(name: &str, variants: Vec<(&str, Vec<(&str, TypeRef)>)>) -> TypeDecl {
         TypeDecl {
+            derives: Vec::new(),
+            derives_kw: None,
             name: Ident {
                 name: name.to_string(),
                 span: Span::default(),
@@ -10472,6 +10544,7 @@ mod tests {
             documentation: None,
             span: Span::default(),
             trivia: Trivia::default(),
+            private: None,
         }
     }
 

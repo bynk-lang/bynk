@@ -791,3 +791,173 @@ fn a_mistyped_replaces_after_a_rename_is_still_refused() {
     )]));
     assert!(err.contains("bynk.agent.replaces_unknown"), "{err}");
 }
+
+// ---------------------------------------------------------------------------
+// #2676: a record field added with a default inside stored state is additive.
+// ---------------------------------------------------------------------------
+
+/// `type Prefs = …` and a `Cart` holding it in every value position.
+fn prefs_cart(prefs: &str) -> String {
+    with_decl(
+        prefs,
+        &cart(
+            "  store one: Cell[Prefs] = Prefs { theme: \"light\" }\n  store byId: Map[String, Prefs]\n  store many: Cell[List[Prefs]] = []\n  store log: Log[Prefs]",
+        ),
+    )
+}
+
+/// The lock with every recorded path removed, as a toolchain before #2676
+/// wrote it.
+fn without_paths(lock: &str) -> String {
+    let mut out = Vec::new();
+    let mut skipping = false;
+    for line in lock.lines() {
+        if line.ends_with(".shapes.fields.paths]]") {
+            skipping = true;
+            continue;
+        }
+        if skipping && line.starts_with('[') {
+            skipping = false;
+        }
+        if !skipping {
+            out.push(line);
+        }
+    }
+    out.join("\n") + "\n"
+}
+
+#[test]
+fn a_record_field_added_with_a_default_is_additive_in_every_value_position() {
+    let p = Project::new("nested-default");
+    p.build_ok(&prefs_cart("type Prefs = { theme: String }"));
+    assert!(p.lock().contains("path = \"one.theme\""), "{}", p.lock());
+
+    p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12 }",
+    ));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "{lock}");
+    assert!(lock.contains("additive = true"), "{lock}");
+    for path in ["one.size", "byId#1.size", "many[].size", "log.size"] {
+        assert!(
+            lock.contains(&format!("path = \"{path}\"")),
+            "{path}:\n{lock}"
+        );
+    }
+
+    // A defaulted record field brings its own fields with it.
+    p.build_ok(&with_decl(
+        "type Extra = { note: String }",
+        &prefs_cart(
+            "type Prefs = { theme: String, size: Int = 12, extra: Extra = Extra { note: \"\" } }",
+        ),
+    ));
+    assert_eq!(agent_version(&p.lock()), "3", "{}", p.lock());
+}
+
+#[test]
+fn a_nested_change_that_is_not_a_defaulted_addition_names_its_path() {
+    let p = Project::new("nested-refused");
+    p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12 }",
+    ));
+    let before = p.lock();
+
+    let err = p.build_err(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12, dark: Bool }",
+    ));
+    assert!(
+        err.contains("bynk.agent.non_additive_state_change"),
+        "{err}"
+    );
+    assert!(
+        err.contains("one (one.dark added without a default)"),
+        "{err}"
+    );
+
+    let err = p.build_err(&prefs_cart("type Prefs = { size: Int = 12 }"));
+    assert!(err.contains("one.theme removed"), "{err}");
+
+    let err = p.build_err(&prefs_cart(
+        "type Prefs = { theme: String, size: String = \"12\" }",
+    ));
+    assert!(err.contains("one.size retyped"), "{err}");
+
+    let err = p.build_err(&prefs_cart("type Prefs = { theme: String, size: Int }"));
+    assert!(err.contains("one.size lost its default"), "{err}");
+
+    assert_eq!(p.lock(), before, "a refused build must not touch the lock");
+}
+
+#[test]
+fn a_new_variant_in_stored_state_stays_non_additive() {
+    let p = Project::new("nested-variant");
+    let with_sum = |sum: &str| with_decl(sum, &cart("  store last: Cell[Option[Event]]"));
+    p.build_ok(&with_sum("type Event = | Added(sku: String) | Cleared"));
+    let err = p.build_err(&with_sum(
+        "type Event = | Added(sku: String) | Cleared | Paused",
+    ));
+    assert!(err.contains("last?|Paused variant added"), "{err}");
+}
+
+#[test]
+fn a_lock_without_paths_is_backfilled_by_an_unchanged_build() {
+    let p = Project::new("backfill");
+    let base = prefs_cart("type Prefs = { theme: String }");
+    p.build_ok(&base);
+    let legacy = without_paths(&p.lock());
+    assert!(!legacy.contains("paths"), "{legacy}");
+    fs::write(p.lock_path(), &legacy).unwrap();
+
+    // Against a snapshot with no paths, a nested change is judged as before
+    // #2676, and the note says how to get past it.
+    let err = p.build_err(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12 }",
+    ));
+    assert!(
+        err.contains("field(s) retyped: byId, log, many, one"),
+        "{err}"
+    );
+    assert!(err.contains("predates per-path shapes"), "{err}");
+
+    // An unchanged build fills the paths in without a version bump...
+    p.build_ok(&base);
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "1", "{lock}");
+    assert!(lock.contains("path = \"one.theme\""), "{lock}");
+
+    // ...after which the same change is additive.
+    p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12 }",
+    ));
+    assert_eq!(agent_version(&p.lock()), "2", "{}", p.lock());
+}
+
+/// #2676: with paths recorded, a refinement change is read position by
+/// position, so a record gaining a defaulted field is not mistaken for one,
+/// and a narrowed predicate inside a record still warns.
+#[test]
+fn a_refinement_inside_a_record_is_read_position_by_position() {
+    let p = Project::new("nested-refine");
+    p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String where MaxLength(20) }",
+    ));
+
+    let warnings = p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String where MaxLength(20), size: Int = 12 }",
+    ));
+    assert!(
+        !warnings.contains("bynk.agent.refinement_changed"),
+        "{warnings}"
+    );
+    assert_eq!(agent_version(&p.lock()), "2", "{}", p.lock());
+
+    let warnings = p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String where MaxLength(10), size: Int = 12 }",
+    ));
+    assert!(
+        warnings.contains("bynk.agent.refinement_changed"),
+        "{warnings}"
+    );
+    assert_eq!(agent_version(&p.lock()), "3", "{}", p.lock());
+}

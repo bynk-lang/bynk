@@ -1,0 +1,9 @@
+commons limits
+
+fn retries() -> Int {
+  Step * 2
+}
+
+fn span() -> Int {
+  Narrow.size + Narrow.offset
+}

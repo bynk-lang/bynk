@@ -230,6 +230,10 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
         "Move the test harness's clock forward in a `case` (`advance Clock by 15.minutes`).",
     ),
     k(
+        "derives",
+        "After a type declaration's body, opts the type into a constraint (`type Priority = enum { Low, High } derives Ord`): the type is then ordered by declaration order.",
+    ),
+    k(
         "drop",
         "Inside a `migrate` step, discard a stored field's value on purpose (`drop owner`).",
     ),
@@ -244,6 +248,10 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
     k(
         "par",
         "Opens a concurrent binding block (`par { let a <- e1  let b <- e2 }`): every effect is issued before any is awaited, and the block completes when all have settled.",
+    ),
+    k(
+        "private",
+        "Before a `fn`, `type`, `messages`, `asset`, `embed` or `const` declaration in a commons or context: visible only within its own unit (and that unit's suites), never through `uses` (`private fn helper(…)`).",
     ),
     k(
         "removed",

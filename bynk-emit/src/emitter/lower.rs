@@ -2078,6 +2078,7 @@ fn lower_method_call(
             // **resolved** connections (the present ones — a connId whose socket has
             // closed drops out).
             _ => {
+                note_par_fan_out(cx, method);
                 let other_elem_ts = args
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
@@ -2196,6 +2197,7 @@ fn lower_method_call(
                     .agent_store_map_value_ts(&id.name)
                     .cloned()
                     .unwrap_or_else(|| "unknown".to_string());
+                note_par_fan_out(cx, method);
                 let other_elem_ts = args
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
@@ -2349,6 +2351,7 @@ fn lower_method_call(
                     .agent_store_log_value_ts(&id.name)
                     .cloned()
                     .unwrap_or_else(|| "unknown".to_string());
+                note_par_fan_out(cx, method);
                 let other_elem_ts = args
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
@@ -3259,6 +3262,7 @@ fn lower_method_call(
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
                 let result_ty = cx.commons().expr_types.get(&e.id).map(|te| te.ty);
+                note_par_fan_out(cx, method);
                 let other_elem_ts = args
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
@@ -3441,6 +3445,11 @@ fn lower_method_call(
     let mut all = vec![recv];
     for a in args {
         all.push(pre.lower(a, cx));
+    }
+    // Constrained generics slice 1: the call's comparator witnesses follow the
+    // ordinary arguments.
+    if let Some(Callee::Method(_, witnesses)) = cx.commons().callees.get(&e.id) {
+        all.extend(witnesses.iter().map(|w| cx.comparator(*w)));
     }
     pre.finish(format!("{ns}.{}({})", method.name, all.join(", ")))
 }
@@ -3896,6 +3905,21 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                 out.push(format!("const {local} = {value_text}.{};", fname.name));
             }
         }
+        // #2680: a list pattern's depth-1 names — bare-name elements and a
+        // named rest.
+        if let Pattern::List { elems, rest, .. } = pattern.as_ref() {
+            for (i, sub) in elems.iter().enumerate() {
+                if let Pattern::Binding(n) = sub {
+                    let local = cx.bind_local_name(&n.name);
+                    out.push(format!("const {local} = {value_text}[{i}];"));
+                }
+            }
+            if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
+                let local = cx.bind_local_name(&binder.name);
+                let value = list_rest_expr(&value_text, elems.len());
+                out.push(format!("const {local} = {value};"));
+            }
+        }
         // #474 §2.3.6: an or-pattern's shared names can live at different
         // structural paths per alternative (`Held`'s field 2 vs
         // `Confirmed`'s field 4), so — like the `match` if-chain's
@@ -3917,6 +3941,33 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
             let last = alts.len() - 1;
             for (i, alt) in alts.iter().enumerate() {
                 let (tag, pairs) = match alt {
+                    // #2680: a list alternative is told apart by its length,
+                    // so its dispatch condition is its whole structural test.
+                    Pattern::List { elems, rest, .. } => {
+                        let mut pairs = Vec::new();
+                        for (j, sub) in elems.iter().enumerate() {
+                            if let Pattern::Binding(n) = sub {
+                                let local = cx
+                                    .resolved_local_name(&n.name)
+                                    .unwrap_or_else(|| ts_ident(&n.name));
+                                pairs.push((local, format!("{value_text}[{j}]")));
+                            }
+                        }
+                        if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
+                            let local = cx
+                                .resolved_local_name(&binder.name)
+                                .unwrap_or_else(|| ts_ident(&binder.name));
+                            pairs.push((local, list_rest_expr(&value_text, elems.len())));
+                        }
+                        let mut tests = Vec::new();
+                        pattern_match_tests(&value_text, disc_ty, alt, cx, &mut tests);
+                        let cond = if tests.is_empty() {
+                            "true".to_string()
+                        } else {
+                            tests.join(" && ")
+                        };
+                        (Some(cond), pairs)
+                    }
                     Pattern::Variant {
                         variant, bindings, ..
                     } => {
@@ -3946,7 +3997,10 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                             );
                             pairs.push((local, payload + "." + &field));
                         }
-                        (Some(variant.name.clone()), pairs)
+                        (
+                            Some(format!("{value_text}.tag === \"{}\"", variant.name)),
+                            pairs,
+                        )
                     }
                     // #2641: a record alternative has no tag to test; its
                     // depth-1 names read straight off the receiver.
@@ -3970,10 +4024,7 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                 if i == last {
                     out.push("} else {".to_string());
                 } else {
-                    let cond = tag
-                        .as_ref()
-                        .map(|t| format!("{value_text}.tag === \"{t}\""))
-                        .unwrap_or_else(|| "true".to_string());
+                    let cond = tag.unwrap_or_else(|| "true".to_string());
                     let kw = if i == 0 { "if" } else { "} else if" };
                     out.push(format!("{kw} ({cond}) {{"));
                 }
@@ -4147,10 +4198,11 @@ fn lower_list_kernel(
         // not head-of-line-block the rest. The eager `List` analogue of the
         // `Query.parTraverse` terminal, emitted inline.
         (PAR_TRAVERSE, [f]) => {
+            cx.note_settle_all();
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => {{ await globalThis.Promise.all(__xs.map((__x: {elem_ts}) => ({f})(__x))); }})({recv})"
+                "(async (__xs: readonly {elem_el}[]) => {{ await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))); }})({recv})"
             ))
         }
         // v0.148 (ADR 0172): the collect-all iterators — every element's
@@ -4181,10 +4233,11 @@ fn lower_list_kernel(
             ))
         }
         (PAR_TRAVERSE_ALL, [f]) => {
+            cx.note_settle_all();
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => await globalThis.Promise.all(__xs.map((__x: {elem_ts}) => ({f})(__x))))({recv})"
+                "(async (__xs: readonly {elem_el}[]) => await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))))({recv})"
             ))
         }
         // v0.150 (ADR 0174): the short-circuit collect iterators — stop at the
@@ -4201,12 +4254,13 @@ fn lower_list_kernel(
             ))
         }
         (PAR_TRAVERSE_TRY, [f]) => {
+            cx.note_settle_all();
             let u_ts = list_ok_elem_ts(cx.commons().expr_types.get(&e.id).map(|te| te.ty), tys);
             let u_el = ts_array_elem(&u_ts);
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!(
-                "(async (__xs: readonly {elem_el}[]) => {{ const __rs = await globalThis.Promise.all(__xs.map((__x: {elem_ts}) => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})({recv})"
+                "(async (__xs: readonly {elem_el}[]) => {{ const __rs = await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})({recv})"
             ))
         }
         // v0.88 (ADR 0116): the eager builder/terminal vocabulary. Most lower
@@ -4279,11 +4333,25 @@ fn lower_list_kernel(
         // `<`/`>` works for the numeric- and string-erased orderable keys
         // alike, so no key-type branch is needed (except average's rounding).
         ("sortBy", [key]) => {
+            let cmp = kernel_key_comparator(&args[0], cx);
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
-            Some(format!(
-                "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
-            ))
+            Some(match cmp {
+                // A plain base key: the bare operators, as before.
+                None => format!(
+                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
+                ),
+                // Constrained generics slice 1 (DECISION H): `Float` (total
+                // order, DECISION G), `Bytes`, and every other `Ord` key.
+                // `recv` is an argument, not part of the arrow's body, so it
+                // lowers exactly where it did before.
+                Some(cmp) if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') => format!(
+                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp}(({key})(__a), ({key})(__b)))"
+                ),
+                Some(cmp) => format!(
+                    "((__c, __r: readonly {elem_el}[]) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})(__a), ({key})(__b))))({cmp}, {recv})"
+                ),
+            })
         }
         ("distinct", []) => {
             let recv = pre.lower(receiver, cx);
@@ -4305,11 +4373,19 @@ fn lower_list_kernel(
         }
         ("min" | "max", [key]) => {
             let cmp = if method.name == "min" { "<" } else { ">" };
+            let key_cmp = kernel_key_comparator(&args[0], cx);
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
-            Some(format!(
-                "((__xs: readonly {elem_el}[]) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if (__k {cmp} __m) __m = __k; }} return Some(__m); }})({recv})"
-            ))
+            Some(match key_cmp {
+                None => format!(
+                    "((__xs: readonly {elem_el}[]) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if (__k {cmp} __m) __m = __k; }} return Some(__m); }})({recv})"
+                ),
+                Some(key_cmp) => with_comparator(&key_cmp, |c| {
+                    format!(
+                        "((__xs: readonly {elem_el}[]) => {{ if (__xs.length === 0) return None; let __m = ({key})(__xs[0]); for (const __x of __xs) {{ const __k = ({key})(__x); if ({c}(__k, __m) {cmp} 0) __m = __k; }} return Some(__m); }})({recv})"
+                    )
+                }),
+            })
         }
         ("average", [key]) => {
             // D3: Duration averages round to integer millis; Int/Float -> Float.
@@ -4381,6 +4457,18 @@ fn lower_list_kernel(
         _ => None,
     };
     text.map(|expr| pre.finish(expr))
+}
+
+/// Slice 0b (#2662): the `parTraverse` family joins through `__bynkSettleAll`,
+/// so a module using it needs the import even with no `par` block.
+/// `lower_query_method` has no `cx`, so its callers note it here.
+fn note_par_fan_out(cx: &LowerCtx, method: &Ident) {
+    if matches!(
+        method.name.as_str(),
+        "parTraverse" | "parTraverseAll" | "parTraverseTry"
+    ) {
+        cx.note_settle_all();
+    }
 }
 
 /// v0.94 (ADR 0120): the TS element type of a join's `other` collection (its
@@ -4575,7 +4663,7 @@ fn lower_query_method(
         // does not head-of-line-block the rest.
         ("parTraverse", [f]) => {
             format!(
-                "(async () => {{ await globalThis.Promise.all({source}.map((__x) => ({f})(__x))); }})()"
+                "(async () => {{ await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); }})()"
             )
         }
         // v0.149 (ADR 0173): the collect-all terminals over a query/broadcast —
@@ -4595,7 +4683,7 @@ fn lower_query_method(
         }
         ("parTraverseAll", [f]) => {
             format!(
-                "(async () => await globalThis.Promise.all({source}.map((__x) => ({f})(__x))))()"
+                "(async () => await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))))()"
             )
         }
         // v0.150 (ADR 0174): the short-circuit collect terminals — stop at the
@@ -4611,7 +4699,7 @@ fn lower_query_method(
             let u_ts = list_ok_elem_ts(result_ty, tys);
             let u_el = ts_array_elem(&u_ts);
             format!(
-                "(async () => {{ const __rs = await globalThis.Promise.all({source}.map((__x) => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})()"
+                "(async () => {{ const __rs = await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})()"
             )
         }
         _ => return None,
@@ -5694,6 +5782,10 @@ fn pattern_is_has_bindings(pattern: &Pattern, value: &Expr, cx: &LowerCtx) -> bo
             sub.as_ref()
                 .is_none_or(|p| matches!(p, Pattern::Binding(_)))
         }),
+        Pattern::List { elems, rest, .. } => {
+            elems.iter().any(|p| matches!(p, Pattern::Binding(_)))
+                || rest.as_ref().is_some_and(|r| r.binder.is_some())
+        }
         // #474: Rule 1 guarantees every alternative binds the same names, so
         // any one alternative having bindings means the whole pattern does.
         Pattern::Or(alts, _) => alts
@@ -5748,6 +5840,36 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     // checker has already ruled out a local or any other meaning of the name.
     if let Some(name) = cx.const_ref(e) {
         return format!("{}()", ts_ident(name));
+    }
+    // Constrained generics slice 1 (DECISION E): a generic function with `Ord`
+    // bounds used as a value is instantiated at the reference, as a closure that
+    // captures the comparator witnesses.
+    if let Some(Callee::FnValue(decl, witnesses)) = cx.commons().callee(e.id) {
+        let tys = cx.commons().tys();
+        let params: Vec<String> = match cx
+            .commons()
+            .expr_types
+            .get(&e.id)
+            .map(|te| (*tys.get(te.ty)).clone())
+        {
+            Some(Ty::Fn { params, .. }) => params
+                .iter()
+                .enumerate()
+                .map(|(i, p)| format!("__a{i}: {}", ts_ty(*p, tys)))
+                .collect(),
+            _ => (0..decl.params.len())
+                .map(|i| format!("__a{i}: any"))
+                .collect(),
+        };
+        let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
+        let mut args = names.clone();
+        args.extend(witnesses.iter().map(|w| cx.comparator(*w)));
+        return format!(
+            "(({}) => {}({}))",
+            params.join(", "),
+            ts_ident(&id.name),
+            args.join(", ")
+        );
     }
     // v0.116: inside a `transition` predicate, the contextual `old`/`new` idents
     // are the pre-/post-commit state records, lowered to their JS names (`new` is
@@ -5995,6 +6117,12 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             tag,
             args_lowered.join(", ")
         ));
+    }
+    // Constrained generics slice 1: the call's comparator witnesses follow the
+    // ordinary arguments (an `Ord`-bounded callee's hidden trailing parameters).
+    let mut args_lowered = args_lowered;
+    if let Some(Callee::Fn(_, witnesses)) = cx.commons().callee(e.id) {
+        args_lowered.extend(witnesses.iter().map(|w| cx.comparator(*w)));
     }
     pre.finish(format!(
         "{}({})",
@@ -6260,10 +6388,67 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         } else {
             format!("!{call}")
         }
+    } else if let Some(operand) = matches!(op, BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq)
+        .then(|| cx.commons().expr_types.get(&lhs.id).map(|te| te.ty))
+        .flatten()
+        .filter(|t| !is_bare_ordered(*t, tys))
+    {
+        // Constrained generics slice 1 (DECISION F): an `Ord` type that is not
+        // a plain base compares through its comparator. A base type keeps the
+        // bare JS operator (and so `Float` keeps its IEEE meaning, `NaN < x` is
+        // `false`).
+        let cmp = cx.comparator(operand);
+        format!("{cmp}({l}, {r}) {} 0", ts_binop(op))
     } else {
         format!("{l} {} {r}", ts_binop(op))
     };
     pre.finish(text)
+}
+
+/// The comparator an ordering kernel (`sortBy`/`min`/`max`) needs for its key
+/// function's result type, or `None` when the key is a plain base type that keeps
+/// the bare `<`/`>` (constrained-generics slice 1, DECISION H). `Float` is not
+/// plain: the kernels use its total order (DECISION G), so `NaN` sorts last
+/// instead of making the sort inconsistent. A key type the checker did not record
+/// keeps the bare operators.
+fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<String> {
+    let tys = cx.commons().tys();
+    let fn_ty = cx.commons().expr_types.get(&key.id)?.ty;
+    let Ty::Fn { ret, .. } = &*tys.get(fn_ty) else {
+        return None;
+    };
+    let plain = matches!(
+        ret.base(tys),
+        Some(BaseType::Int | BaseType::String | BaseType::Duration | BaseType::Instant)
+    );
+    (!plain).then(|| cx.comparator(*ret))
+}
+
+/// Bind comparator expression `cmp` as `__c` around `body`. A bare identifier (a
+/// runtime comparator or an in-scope witness) is substituted directly; a built
+/// comparator is evaluated once, outside the loop that calls it.
+fn with_comparator(cmp: &str, body: impl FnOnce(&str) -> String) -> String {
+    if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        body(cmp)
+    } else {
+        format!("((__c) => {})({cmp})", body("__c"))
+    }
+}
+
+/// Whether a key or operand of this type orders with the bare JS `<`/`>`: a base
+/// type other than `Bytes` (a `Uint8Array`), or a refined type over one. Every
+/// other `Ord` type goes through a comparator.
+fn is_bare_ordered(ty: TyId, tys: &Types) -> bool {
+    matches!(
+        ty.base(tys),
+        Some(
+            BaseType::Int
+                | BaseType::Float
+                | BaseType::String
+                | BaseType::Duration
+                | BaseType::Instant
+        )
+    )
 }
 
 /// How `==`/`!=` lowers for an operand of a given type. #1652 (runtime-semantics
@@ -7146,6 +7331,9 @@ fn emit_match_case(
         Pattern::Record { .. } => {
             unreachable!("a Pattern::Record arm always routes through emit_match_if_chain")
         }
+        Pattern::List { .. } => {
+            unreachable!("a Pattern::List arm always routes through emit_match_if_chain")
+        }
         Pattern::Variant {
             variant, bindings, ..
         } => {
@@ -7203,6 +7391,9 @@ fn emit_match_case(
                     Pattern::Or(..) => unreachable!("an Or's alternatives are always leaves"),
                     Pattern::Record { .. } => {
                         unreachable!("a record alternative routes through emit_match_if_chain")
+                    }
+                    Pattern::List { .. } => {
+                        unreachable!("a list alternative routes through emit_match_if_chain")
                     }
                     // #472/#474: the parser only ever wraps a *whole*,
                     // already-folded `|`-chain in `Refined` (never the other
@@ -7270,6 +7461,26 @@ fn record_field_ty(path_ty: Option<TyId>, field: &str, cx: &LowerCtx) -> Option<
     bynk_check::checker::instantiate_field_ty(decl, args, &f.type_ref, types, tys)
 }
 
+/// #2680: the element type of the list at static type `path_ty`.
+fn list_elem_ty(path_ty: Option<TyId>, cx: &LowerCtx) -> Option<TyId> {
+    match &*cx.commons().tys().get(path_ty?) {
+        Ty::List(elem) => Some(*elem),
+        _ => None,
+    }
+}
+
+/// #2680: the expression a list pattern's `..rest` binds, given the list at
+/// `path` and the `n` elements before it. `[..rest]` binds the list itself:
+/// lists are never mutated in place, so sharing it is unobservable. Any other
+/// rest copies the remaining elements, O(length - n).
+fn list_rest_expr(path: &str, n: usize) -> String {
+    if n == 0 {
+        path.to_string()
+    } else {
+        format!("{path}.slice({n})")
+    }
+}
+
 /// Emit the boolean tests that must hold for `pattern` to match the value at
 /// runtime `path` (static type `path_ty`). Irrefutable patterns add nothing;
 /// nested variant/literal payloads recurse into `path.<field>`.
@@ -7309,6 +7520,22 @@ fn pattern_match_tests(
                     )
                 });
             tests.push(refined_check_as_bool(path, base, Some(predicate)));
+        }
+        // #2680: a length test (none for `[..]`, which matches every list),
+        // then each refutable element against `path[i]`.
+        Pattern::List { elems, rest, .. } => {
+            match (rest.is_some(), elems.len()) {
+                (true, 0) => {}
+                (true, n) => tests.push(format!("{path}.length >= {n}")),
+                (false, n) => tests.push(format!("{path}.length === {n}")),
+            }
+            let elem_ty = list_elem_ty(path_ty, cx);
+            for (i, sub) in elems.iter().enumerate() {
+                if sub.is_irrefutable() {
+                    continue;
+                }
+                pattern_match_tests(&format!("{path}[{i}]"), elem_ty, sub, cx, tests);
+            }
         }
         // #2641: test each refutable field sub-pattern against `path.field`;
         // there is no tag test, since the checker proved the scrutinee is this
@@ -7479,6 +7706,19 @@ fn emit_pattern_bindings(
         Pattern::Refined { inner, .. } => {
             emit_pattern_bindings(out, indent, path, path_ty, inner, cx);
         }
+        // #2680: each element binds from `path[i]`; a named rest from the
+        // remaining elements.
+        Pattern::List { elems, rest, .. } => {
+            let elem_ty = list_elem_ty(path_ty, cx);
+            for (i, sub) in elems.iter().enumerate() {
+                emit_pattern_bindings(out, indent, &format!("{path}[{i}]"), elem_ty, sub, cx);
+            }
+            if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
+                let local = cx.bind_local_name(&binder.name);
+                let value = list_rest_expr(path, elems.len());
+                write_line(out, indent, &format!("const {local} = {value};"));
+            }
+        }
         // #2641: a shorthand field binds a local of its own name; `f: p`
         // recurses into `path.f`.
         Pattern::Record { fields, .. } => {
@@ -7607,6 +7847,15 @@ fn pattern_binding_paths(
         // nothing today) — same recursion as `emit_pattern_bindings`'s
         // `Refined` arm.
         Pattern::Refined { inner, .. } => pattern_binding_paths(path, path_ty, inner, cx, out),
+        Pattern::List { elems, rest, .. } => {
+            let elem_ty = list_elem_ty(path_ty, cx);
+            for (i, sub) in elems.iter().enumerate() {
+                pattern_binding_paths(&format!("{path}[{i}]"), elem_ty, sub, cx, out);
+            }
+            if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
+                out.push((binder.name.clone(), list_rest_expr(path, elems.len())));
+            }
+        }
         Pattern::Record { fields, .. } => {
             for (name, sub) in fields {
                 let field_path = format!("{path}.{}", name.name);
@@ -7765,7 +8014,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
         // `{ tag, value }` shape, so the nested test lands without a static type.
         // #2641: a record pattern is its fields' tests, `true` when every
         // field is irrefutable.
-        Pattern::Record { .. } => {
+        Pattern::Record { .. } | Pattern::List { .. } => {
             let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
             let mut tests = Vec::new();
             pattern_match_tests(&v, scrut_ty, pattern, cx, &mut tests);

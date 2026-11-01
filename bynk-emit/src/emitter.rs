@@ -64,6 +64,7 @@ pub(crate) use workers::emit_worker_compose;
 pub(crate) use workers_entry::emit_worker_entry;
 pub(crate) use wrangler::{ClassTombstones, emit_wrangler_toml};
 
+mod cmp;
 mod lower;
 pub(crate) mod runtime_use;
 pub(crate) use lower::*;
@@ -4002,7 +4003,14 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
-        let names: Vec<String> = parts.into_iter().map(str::to_string).collect();
+        let mut names: Vec<String> = parts.into_iter().map(str::to_string).collect();
+        names.extend(
+            ctx.runtime_use
+                .cmp_imports()
+                .split(", ")
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+        );
         stmts.extend(runtime_files::runtime_import_stmts(
             false,
             &names,
@@ -4103,6 +4111,8 @@ fn write_header_single(
         } else {
             ""
         };
+        // Constrained generics slice 1: the comparator helpers behind `Ord`.
+        let cmp_imports = runtime_use.cmp_imports();
         // v0.153 (ADR 0177): `HttpResult` is a value (its variant namespace) and
         // a type, so it imports without a `type` prefix — one binding serves
         // both `HttpResult.NotFound` and the `HttpResult<T>` annotation.
@@ -4117,7 +4127,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{url_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{url_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4772,6 +4782,10 @@ pub(crate) struct LowerCtx<'a> {
     /// the `?`'s own `return` still exits the enclosing function. Every arrow
     /// and function boundary resets it to `None` for its own body.
     pub(crate) tail_slot: Option<TailSlot>,
+    /// Constrained generics slice 1: the in-scope comparator witnesses of the
+    /// function being emitted, by type-parameter name (`T` -> `__cmp_T`). Empty
+    /// outside an `Ord`-bounded generic.
+    pub(crate) cmp_scope: HashMap<String, String>,
 }
 
 /// #1750: the slot and label a statement-form value expression's tails assign
@@ -4820,7 +4834,34 @@ impl<'a> LowerCtx<'a> {
             emitted_await: false,
             emitted_early_return: false,
             tail_slot: None,
+            cmp_scope: HashMap::new(),
         }
+    }
+
+    /// Constrained generics slice 1: bring `f`'s comparator witnesses into scope
+    /// (one per `Ord`-bounded type parameter, [`cmp::witness_ident`]) and return
+    /// the trailing parameters that declare them.
+    pub(crate) fn declare_witnesses(&mut self, f: &FnDecl) -> Vec<bynk_ts::TsParam> {
+        bynk_check::checker::ordering::witness_params(f, &self.commons().types)
+            .into_iter()
+            .map(|p| {
+                let ident = cmp::witness_ident(&p);
+                self.cmp_scope.insert(p.clone(), ident.clone());
+                bynk_ts::TsParam {
+                    name: ident,
+                    ty: Some(bynk_ts::TsType::named(format!(
+                        "(a: {p}, b: {p}) => number"
+                    ))),
+                    optional: false,
+                }
+            })
+            .collect()
+    }
+
+    /// The comparator expression for `ty`: the witness of a type parameter in
+    /// scope, a runtime comparator, or one built from a `derives Ord` declaration.
+    pub(crate) fn comparator(&self, ty: bynk_check::checker::TyId) -> String {
+        cmp::CmpGen::new(self.commons(), self.runtime_use(), &self.cmp_scope).for_ty(ty)
     }
 
     // ---- `ModuleCtx` passthroughs -----------------------------------------

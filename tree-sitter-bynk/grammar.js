@@ -52,6 +52,7 @@ module.exports = grammar({
     // end of the statement (an `else` or none) says whether the record
     // pattern stood alone.
     [$._pattern, $._let_paren_record_pattern],
+    [$._primary, $.call],
     // `match e { … }` / `if e { … }`: after a bare identifier `e`,
     // the `{` is ambiguous between opening the match/if body and opening a
     // record construction/spread `e { … }`. Keep all parses alive; the body
@@ -353,8 +354,17 @@ module.exports = grammar({
 
     // -- Type declarations --
 
+    // #2618: `private` before a `fn`, `type`, `messages`, `asset`, `embed` or
+    // `const` declaration makes it unit-private. The word is contextual: with
+    // `word` set to `identifier`, it lexes as a keyword only where a
+    // declaration may start, so `@cache(scope: private)` and a binding named
+    // `private` keep parsing as identifiers. Placement (a commons or context, never an
+    // adapter) is the compiler's call (`bynk.visibility.private_not_allowed`).
+    visibility_modifier: ($) => "private",
+
     type_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "type",
         field("name", $.identifier),
         // v0.157 (ADR 0183): optional `[A, B]` type parameters — only a record
@@ -362,6 +372,9 @@ module.exports = grammar({
         optional(seq("[", sep1(field("type_param", $.type_param), ","), "]")),
         "=",
         field("body", $._type_body),
+        // Constrained generics slice 1: a trailing `derives Ord` clause, `+`
+        // separated like a bound list. `derives` is a contextual word.
+        optional(seq("derives", sep1(field("derive", $.constraint), "+"))),
       ),
 
     _type_body: ($) =>
@@ -431,6 +444,7 @@ module.exports = grammar({
     // (`bynk.asset.outside_context_or_commons` rejects it in an adapter).
     asset_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "asset",
         field("name", $.identifier),
         "=",
@@ -446,6 +460,7 @@ module.exports = grammar({
     // rejects it in an adapter).
     embed_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "embed",
         field("name", $.identifier),
         "=",
@@ -458,8 +473,10 @@ module.exports = grammar({
     // (`bynk.resolve.const_name_case`, upper-camel like `constant_name`) and
     // the initialiser's static-ness are checker concerns. The name is an
     // `identifier` because `word` unifies every word-shaped lexeme to it.
+    // A leading `private` makes it unit-private, as on `embed`.
     const_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "const",
         field("name", $.identifier),
         ":",
@@ -660,6 +677,7 @@ module.exports = grammar({
 
     fn_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "fn",
         field("name", choice($.method_name, $.identifier)),
         // v0.20a: optional `[A, B]` type parameters (functions only).
@@ -747,6 +765,7 @@ module.exports = grammar({
     // mirroring `service_decl`/`agent_decl`'s existing permissive placement.
     messages_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "messages",
         field("tag", $.string_literal),
         repeat(field("annotation", $.store_annotation)),
@@ -1455,6 +1474,7 @@ module.exports = grammar({
       choice(
         $.literal_pattern,
         $.paren_pattern,
+        $.list_pattern,
         alias($._let_variant_pattern, $.variant_pattern),
       ),
     // `let Ok(x) | Err(x) = …`: an or-chain whose first alternative opens a
@@ -1693,6 +1713,7 @@ module.exports = grammar({
         $.literal_pattern,
         $.variant_pattern,
         $.record_pattern,
+        $.list_pattern,
         $.or_pattern,
         $.paren_pattern,
       ),
@@ -1710,6 +1731,19 @@ module.exports = grammar({
         "..",
         "}",
       ),
+    // #2680 (patterns track, slice 4): `[]`, `[p, …]`, `[p, …, ..]`,
+    // `[p, …, ..rest]`. The rest marker is last and at most once; `..` takes a
+    // name or nothing (a literal after it is reserved for range patterns, and
+    // the compiler reports it). It needs no parentheses after `is`, where the
+    // pattern closes at `]`.
+    list_pattern: ($) =>
+      seq(
+        "[",
+        repeat(seq($._pattern, ",")),
+        optional(choice($._pattern, seq($.list_rest, optional(",")))),
+        "]",
+      ),
+    list_rest: ($) => seq("..", optional(field("name", $.identifier))),
     record_pattern_field: ($) =>
       choice(
         seq(field("name", $.identifier), ":", field("pattern", $._pattern)),
@@ -1724,6 +1758,7 @@ module.exports = grammar({
         $.wildcard_pattern,
         $.literal_pattern,
         $.variant_pattern,
+        $.list_pattern,
         $.paren_pattern,
       ),
     _is_pattern: ($) =>
@@ -1900,12 +1935,26 @@ module.exports = grammar({
       ),
 
     call: ($) =>
-      prec.left(
-        PREC.postfix,
+      choice(
+        prec.left(
+          PREC.postfix,
+          seq(
+            field("name", choice($.identifier, $._contextual_identifier)),
+            "(",
+            optional(sep1(field("arg", $._expression), ",")),
+            optional(","),
+            ")",
+          ),
+        ),
+        // v0.20a: explicit type arguments — `name[T, U](…)`. Not given the
+        // postfix precedence, so that the `[` stays ambiguous with a list-pattern
+        // arm that follows a bare-identifier arm body on the next line (#2680);
+        // the conflict below keeps both parses and only one completes.
         seq(
           field("name", choice($.identifier, $._contextual_identifier)),
-          // v0.20a: optional explicit type arguments — `name[T, U](…)`.
-          optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
+          "[",
+          sep1(field("type_arg", $._type_ref), ","),
+          "]",
           "(",
           optional(sep1(field("arg", $._expression), ",")),
           optional(","),

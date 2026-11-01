@@ -1,0 +1,10 @@
+suite shop {
+  // #2618: the reference resolves to the public `label` of `labels`.
+  case "the public label" {
+    expect heading("Basket") == "[Basket]"
+  }
+
+  case "the private label stays behind the public surface" {
+    expect line(Item { name: "tea", price: 3 }) == "[tea: 3]"
+  }
+}

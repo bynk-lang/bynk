@@ -3,6 +3,7 @@
 //! Split out of `checker.rs` (v0.29.10) verbatim; the parent module
 //! re-exports these via `use expressions::*`.
 
+use super::usefulness::{Coverage, FUTURE_VARIANT_CLOSE, FUTURE_VARIANT_OPEN};
 use super::*;
 
 /// v0.26 (ADR 0054): the deletion span for `given` entry `i`, list-aware so
@@ -44,6 +45,103 @@ pub(crate) fn given_insertion_edit(
 
 // -- type-declaration validation --
 
+/// [`check_ident`] for the identifier expression `expr_id`: a generic function
+/// with `Ord` bounds used as a value is instantiated at the reference, and the
+/// comparator witnesses it resolved are recorded on the expression.
+pub(crate) fn check_ident_at(
+    expr_id: ExprId,
+    id: &Ident,
+    expected: Option<TyId>,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let ty = check_ident(expr_id, id, expected, ctx);
+    if let Some(witnesses) = ctx.last_witness.take()
+        && let Some(decl) = ctx.input.fns.get(&id.name)
+    {
+        ctx.callees
+            .insert(expr_id, Callee::FnValue(Arc::clone(decl), witnesses));
+    }
+    ty
+}
+
+/// Constrained generics slice 1 (DECISION E): a generic function with `Ord`
+/// bounds named where a function type is expected is instantiated at the
+/// reference. Its type arguments come from unifying its parameter types with the
+/// expected function's; any left unresolved is
+/// `bynk.generics.ambiguous_instantiation`. The returned function type is the
+/// instantiation, and `ctx.last_witness` carries the comparator witnesses.
+fn instantiate_bounded_value(
+    id: &Ident,
+    fn_decl: &FnDecl,
+    expected: TyId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let vars: HashSet<String> = fn_decl
+        .type_params
+        .iter()
+        .map(|tp| tp.name.name.clone())
+        .collect();
+    let Ty::Fn {
+        params: want_params,
+        ret: want_ret,
+    } = (*tys.get(expected)).clone()
+    else {
+        return None;
+    };
+    let patterns: Option<Vec<TyId>> = fn_decl
+        .params
+        .iter()
+        .map(|p| resolve_type_ref_in(&p.type_ref, &ctx.input.types, &vars, tys))
+        .collect();
+    let patterns = patterns?;
+    let ret_pattern = resolve_type_ref_in(&fn_decl.return_type, &ctx.input.types, &vars, tys)?;
+    let mut subst: HashMap<String, TyId> = HashMap::new();
+    if patterns.len() == want_params.len() {
+        for (pat, want) in patterns.iter().zip(&want_params) {
+            if !contains_var(*want, tys) {
+                unify(*pat, *want, &mut subst, tys);
+            }
+        }
+        if !contains_var(want_ret, tys) {
+            unify(ret_pattern, want_ret, &mut subst, tys);
+        }
+    }
+    if let Some(unresolved) = fn_decl
+        .type_params
+        .iter()
+        .find(|tp| !subst.contains_key(&tp.name.name))
+    {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.generics.ambiguous_instantiation",
+                id.span,
+                format!(
+                    "cannot determine type parameter `{}` of `{}` from where it is used",
+                    unresolved.name.name, id.name
+                ),
+            )
+            .with_note(format!(
+                "annotate the expected function type, or wrap it in a lambda: `(x) => {}(x)`",
+                id.name
+            )),
+        );
+        return None;
+    }
+    let ord_names = super::ordering::witness_params(fn_decl, &ctx.input.types);
+    let witnesses =
+        super::ordering::check_declared_ord_args(&id.name, id.span, &ord_names, &subst, ctx)?;
+    ctx.last_witness = Some(witnesses);
+    let params: Vec<TyId> = patterns
+        .iter()
+        .map(|p| substitute(*p, &subst, tys))
+        .collect();
+    let ret = substitute(ret_pattern, &subst, tys);
+    Some(tys.intern(Ty::Fn { params, ret }))
+}
+
+/// `expr_id` is the identifier expression's, so a name resolving to a
+/// constant can be recorded as `Callee::Const` for the lowering (#2617).
 pub(crate) fn check_ident(
     expr_id: ExprId,
     id: &Ident,
@@ -118,6 +216,12 @@ pub(crate) fn check_ident(
             ctx.refs.record(id.span, SymbolKind::Fn, &id.name);
             // S3 (#1963): a function passed as a value is a use too.
             super::calls::refuse_experimental_import(id, ctx);
+            if !fn_decl.type_params.is_empty()
+                && !super::ordering::witness_params(&fn_decl, &ctx.input.types).is_empty()
+                && let Some(e) = expected
+            {
+                return instantiate_bounded_value(id, &fn_decl, e, ctx);
+            }
             if !fn_decl.type_params.is_empty() {
                 ctx.errors.push(
                     CompileError::new(
@@ -896,7 +1000,10 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
     // (`q == 0` against `Int where Positive` would become a
     // `literal_violates` error), a new rejection this does not intend (review
     // of #1696).
-    let eq = matches!(op, BinOp::Eq | BinOp::NotEq);
+    let eq = matches!(
+        op,
+        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq
+    );
     let (lt, rt) = if eq && needs_expected_type(lhs) && !needs_expected_type(rhs) {
         let rt = type_of(rhs, None, ctx);
         let lt = type_of(lhs, rt, ctx);
@@ -995,41 +1102,57 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
             }
         }
         BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
-            if lt_base != rt_base || lt_base.is_none() {
+            // Constrained generics slice 1: the operators order any `Ord` type
+            // (both operands the same). A base-typed pair keeps the original
+            // rule and its diagnostics; `Bytes`, `Bool` and every non-base
+            // operand take the `Ord` path below.
+            let plain_pair = lt_base.is_some()
+                && lt_base == rt_base
+                && lt_base != Some(BaseType::Bytes)
+                && lt_base != Some(BaseType::Bool);
+            if !plain_pair {
                 if numeric_mix(lt_base, rt_base) {
                     push_no_numeric_coercion(op, span, lt, rt, ctx);
                     return None;
                 }
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.type_mismatch",
+                if lt_base == Some(BaseType::Bool) && rt_base == Some(BaseType::Bool) {
+                    ctx.errors.push(CompileError::new(
+                        "bynk.types.type_mismatch",
+                        span,
+                        format!(
+                            "operator `{}` is only defined on `Ord` types, not `{}`",
+                            op.name(),
+                            lt.display(tys)
+                        ),
+                    ));
+                    return None;
+                }
+                if !compatible(lt, rt, tys) && !compatible(rt, lt, tys) {
+                    let same = if lt_base.is_some() && rt_base.is_some() {
+                        "base type"
+                    } else {
+                        "type"
+                    };
+                    ctx.errors.push(CompileError::new(
+                        "bynk.types.type_mismatch",
+                        span,
+                        format!(
+                            "operator `{}` requires both operands to have the same {same}; got `{}` and `{}`",
+                            op.name(),
+                            lt.display(tys),
+                            rt.display(tys)
+                        ),
+                    ));
+                    return None;
+                }
+                if !super::ordering::check_ord(
+                    ctx,
+                    lt,
                     span,
-                    format!(
-                        "operator `{}` requires both operands to have the same base type; got `{}` and `{}`",
-                        op.name(),
-                        lt.display(tys),
-                        rt.display(tys)
-                    ),
-                ));
-                return None;
-            }
-            if !matches!(
-                lt_base,
-                Some(BaseType::Int)
-                    | Some(BaseType::String)
-                    | Some(BaseType::Float)
-                    | Some(BaseType::Duration)
-                    | Some(BaseType::Instant)
-            ) {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.type_mismatch",
-                    span,
-                    format!(
-                        "operator `{}` is only defined on `Int`, `Float`, `Duration`, `Instant`, and `String`, not `{}`",
-                        op.name(),
-                        lt.display(tys)
-                    ),
-                ));
-                return None;
+                    &super::ordering::OrdSite::Operator(op.name()),
+                ) {
+                    return None;
+                }
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }
@@ -3307,6 +3430,9 @@ fn ambiguous_type_error(span: Span, message: String, name: &str) -> CompileError
     ))
 }
 
+/// Most uncovered patterns one `match` reports; the rest are summarised.
+const MAX_WITNESSES: usize = 8;
+
 /// What a `match` ranges over (v0.130, DECISION D). A discriminant is either
 /// variant-kind (a sum / `Result` / `Option`, carrying its variants) or
 /// literal-kind (a primitive `Int`/`String`/`Bool`, or a refinement over one).
@@ -3315,15 +3441,20 @@ enum MatchKind {
     Literal(BaseType),
     /// #2641: a record scrutinee, matched by record patterns. Only taken when
     /// an arm has a record pattern; a `match` on a record with none keeps its
-    /// `match_non_sum_discriminant` error.
+    /// `match_non_sum_discriminant` error. Coverage is the shared usefulness
+    /// engine's, as for every other kind (#2665).
     Record,
+    /// #2680: a `List` scrutinee, matched by list patterns. Only taken when an
+    /// arm has a list pattern; a `match` on a list with none keeps its
+    /// `match_non_sum_discriminant` error.
+    List,
 }
 
 /// The literal-matchable base of a scrutinee type, if any: a bare `Int`/
 /// `String`/`Bool`, or a refined type over one of those bases (which widens to
 /// its base — ADR 0001 / `NamedKind::Refined`). Opaque types do *not* widen, so
 /// they are not literal-matchable.
-fn literal_base_of(ty: TyId, tys: &Types) -> Option<BaseType> {
+pub(super) fn literal_base_of(ty: TyId, tys: &Types) -> Option<BaseType> {
     let base = match &*tys.get(ty) {
         Ty::Base(b) => *b,
         Ty::Named {
@@ -3430,8 +3561,29 @@ pub(crate) fn check_match(
             .any(|p| matches!(p, Pattern::Record { .. }))
     }) {
         MatchKind::Record
+    } else if matches!(&*tys.get(disc_ty), Ty::List(_))
+        && arms.iter().any(|a| {
+            pattern_alternatives(&a.pattern)
+                .iter()
+                .any(|p| matches!(p, Pattern::List { .. }))
+        })
+    {
+        MatchKind::List
     } else if plain_let {
         check_pattern(&arms[0].pattern, disc_ty, ctx);
+        return None;
+    } else if arms.iter().any(|a| {
+        pattern_alternatives(&a.pattern)
+            .iter()
+            .any(|p| matches!(p, Pattern::List { .. }))
+    }) {
+        // #2680: a list pattern on a value that is not a list (a record, a
+        // `Set`, a function) is that pattern's error, not the scrutinee's.
+        for arm in arms {
+            ctx.push_scope();
+            check_pattern(&arm.pattern, disc_ty, ctx);
+            ctx.pop_scope();
+        }
         return None;
     } else {
         ctx.errors.push(CompileError::new(
@@ -3450,9 +3602,9 @@ pub(crate) fn check_match(
     // detection (ADR 0169: `Err(A)` and `Err(B)` are distinct, so a duplicate
     // keys on pattern *shape*, not the outer variant name).
     let mut seen: Vec<&Pattern> = Vec::new();
-    // #1656: every earlier unguarded arm's pattern, for the usefulness check.
-    // A guarded arm never covers (its guard may fail), so it is not recorded.
-    let mut covering: Vec<&Pattern> = Vec::new();
+    // #1656, #2665: the earlier unguarded arms' patterns, for the usefulness
+    // check. A guarded arm never covers (its guard may fail), so it is not a row.
+    let mut cov = Coverage::new(disc_ty);
     for (index, arm) in arms.iter().enumerate() {
         ctx.push_scope();
         // Validate the pattern against the scrutinee and bind its names,
@@ -3475,7 +3627,10 @@ pub(crate) fn check_match(
         // `1 | 2 => …` followed by a later `2 => …` is caught too.
         if arm.guard.is_none() && !arm.pattern.is_irrefutable() {
             for cand in pattern_alternatives(&arm.pattern) {
-                if cand.is_irrefutable() {
+                // A list pattern's overlap with another is the usefulness
+                // engine's to judge (`unreachable_arm`): `[x, ..]` after
+                // `[_, ..]` is not a mere duplicate.
+                if cand.is_irrefutable() || matches!(cand, Pattern::List { .. }) {
                     continue;
                 }
                 if seen.iter().any(|p| patterns_equal(p, cand)) {
@@ -3500,10 +3655,7 @@ pub(crate) fn check_match(
         // unreachable when every value its pattern matches is already matched
         // by an earlier unguarded arm. A duplicate is the simplest case and
         // already has its own report; an ill-typed pattern has one too.
-        if pattern_ok
-            && !duplicate_reported
-            && pattern_covered(&covering, &arm.pattern, disc_ty, ctx)
-        {
+        if pattern_ok && !duplicate_reported && !cov.is_useful(&arm.pattern, ctx) {
             ctx.errors.push(if let_else {
                 let_else_unreachable(arms, index, disc_ty, removal, ctx)
             } else if saw_wildcard {
@@ -3531,8 +3683,8 @@ pub(crate) fn check_match(
         }
         // An ill-typed pattern (reported above) covers nothing: a record
         // pattern that names the wrong type is irrefutable only on paper.
-        if arm.guard.is_none() && pattern_ok {
-            covering.push(&arm.pattern);
+        if arm.guard.is_none() {
+            cov.push(&arm.pattern, pattern_ok, ctx);
         }
         // Guard (ADR 0169): must be `Bool`; a guarded arm never covers.
         if let Some(guard) = &arm.guard
@@ -3575,7 +3727,7 @@ pub(crate) fn check_match(
     let fill_anchor = arms.last().map(|a| a.span.end);
     let with_fill = |err: CompileError, witness: &str| -> CompileError {
         match (&fill_body, fill_anchor) {
-            (Some(body), Some(at)) if !witness.contains('…') => err.with_suggestion(
+            (Some(body), Some(at)) => err.with_suggestion(
                 format!("add a match arm for `{witness}`"),
                 vec![(Span::new(at, at), format!("\n{witness} => {body}"))],
                 Applicability::HasPlaceholders,
@@ -3583,116 +3735,153 @@ pub(crate) fn check_match(
             _ => err,
         }
     };
-    // Exhaustiveness (ADR 0169: bounded structural coverage; guarded arms are
-    // excluded because a guard may fail at runtime).
+    // Exhaustiveness (#2665): the values no unguarded arm matches, each as a
+    // pattern the author can paste as an arm. A guarded arm is not a row,
+    // because its guard may fail at runtime.
     if !saw_wildcard && !plain_let {
-        let unguarded: Vec<&Pattern> = arms
+        let (witnesses, too_complex) = match cov.uncovered(ctx) {
+            Ok(ws) => (ws, false),
+            // Sound fallback: unable to prove the match exhaustive, ask for `_`.
+            Err(_) => (vec!["_".to_string()], true),
+        };
+        // An extensible enum's wildcard request is a different diagnostic, so
+        // it is always reported and does not count against the cap.
+        let (future, witnesses): (Vec<String>, Vec<String>) = witnesses
+            .into_iter()
+            .partition(|w| future_variant_witness(w).is_some());
+        let hidden = witnesses.len().saturating_sub(MAX_WITNESSES);
+        // A fill that adds only some of the arms would leave the match
+        // non-exhaustive, so a capped list offers none.
+        let with_fill = |err: CompileError, witness: &str| -> CompileError {
+            if hidden > 0 {
+                err
+            } else {
+                with_fill(err, witness)
+            }
+        };
+        for (i, witness) in witnesses
             .iter()
-            .filter(|a| a.guard.is_none())
-            .map(|a| &a.pattern)
-            .collect();
-        match &kind {
-            MatchKind::Variant => {
-                for witness in missing_patterns(disc_ty, &unguarded, ctx) {
-                    if let Some((name, shown)) = future_variant_witness(&witness) {
-                        // #2100 slice 3: the wildcard arm it asks for is
-                        // fillable like any other missing arm.
-                        ctx.errors.push(with_fill(
-                            CompileError::new(
-                                "bynk.types.extensible_match_needs_wildcard",
-                                span,
-                                format!(
-                                    "`{name}` may gain variants in a minor release, so this \
-                                     `match` must cover them — `{shown}` is not covered"
-                                ),
-                            )
-                            .with_note(format!(
-                                "add a wildcard arm for `{shown}`: listing every variant `{name}` has today is not enough"
-                            )),
-                            &shown,
-                        ));
-                        continue;
-                    }
-                    if let_else {
-                        ctx.errors.push(
-                            CompileError::new(
-                                "bynk.types.non_exhaustive_match",
-                                let_else_arms_span(arms).unwrap_or(span),
-                                format!(
-                                    "this `else match` does not cover `{}` — the `let` pattern does not match it either",
-                                    witness
-                                ),
-                            )
-                            .with_note("add an arm for it to the `else match`, or end it with a wildcard `_` arm"),
-                        );
-                        continue;
-                    }
-                    ctx.errors.push(with_fill(
-                        CompileError::new(
-                            "bynk.types.non_exhaustive_match",
-                            span,
-                            format!(
-                                "non-exhaustive `match` — variant `{}` of `{}` is not covered",
-                                witness,
-                                disc_ty.display(tys)
-                            ),
-                        )
-                        .with_note("add a match arm for this variant, or use a wildcard `_` arm"),
-                        &witness,
-                    ));
-                }
+            .take(MAX_WITNESSES)
+            .chain(&future)
+            .enumerate()
+        {
+            let more = (hidden > 0 && i + 1 == MAX_WITNESSES.min(witnesses.len())).then(|| {
+                format!(
+                    "and {hidden} more uncovered pattern{}; add a wildcard `_` arm to cover the rest",
+                    if hidden == 1 { "" } else { "s" }
+                )
+            });
+            let with_more = |err: CompileError| match &more {
+                Some(note) => err.with_note(note.clone()),
+                None => err,
+            };
+            if let Some((name, shown)) = future_variant_witness(witness) {
+                // #2100 slice 3: the wildcard arm it asks for is fillable like
+                // any other missing arm.
+                ctx.errors.push(with_more(with_fill(
+                    CompileError::new(
+                        "bynk.types.extensible_match_needs_wildcard",
+                        span,
+                        format!(
+                            "`{name}` may gain variants in a minor release, so this \
+                             `match` must cover them — `{shown}` is not covered"
+                        ),
+                    )
+                    .with_note(format!(
+                        "add a wildcard arm for `{shown}`: listing every variant `{name}` has today is not enough"
+                    )),
+                    &shown,
+                )));
+                continue;
             }
-            // v0.130 (DECISION B): `Bool` is exhausted by `true` + `false`;
-            // `Int`/`String` are unbounded and always need a wildcard.
-            MatchKind::Literal(BaseType::Bool) => {
-                for witness in missing_patterns(disc_ty, &unguarded, ctx) {
-                    ctx.errors.push(with_fill(
-                        CompileError::new(
-                            "bynk.types.non_exhaustive_match",
-                            span,
-                            format!(
-                                "non-exhaustive `match` on `Bool` — `{witness}` is not covered"
-                            ),
-                        )
-                        .with_note("add the missing arm, or use a wildcard `_` arm"),
-                        &witness,
-                    ));
-                }
-            }
-            // #2641 (conservative, ADR 0169 D extended to records): a record
-            // pattern covers its type only when every field sub-pattern is
-            // irrefutable, and such an arm sets `saw_wildcard`. Reaching here
-            // means no arm did.
-            MatchKind::Record => {
+            if too_complex {
                 ctx.errors.push(with_fill(
                     CompileError::new(
                         "bynk.types.non_exhaustive_match",
-                        span,
+                        if let_else {
+                            let_else_arms_span(arms).unwrap_or(span)
+                        } else {
+                            span
+                        },
                         format!(
-                            "non-exhaustive `match` on `{}` — no arm matches every value",
+                            "cannot prove this `match` on `{}` exhaustive",
                             disc_ty.display(tys)
                         ),
                     )
                     .with_note(
-                        "a record pattern covers its type only when every field is matched irrefutably (a name or `_`); add a wildcard `_` arm for the rest",
+                        "this match is too complex to check precisely; add a wildcard `_` arm",
                     ),
-                    "_",
+                    witness,
                 ));
+                continue;
             }
-            MatchKind::Literal(_) => {
-                ctx.errors.push(with_fill(
+            if let_else
+                && matches!(
+                    kind,
+                    MatchKind::Variant | MatchKind::Record | MatchKind::List
+                )
+            {
+                ctx.errors.push(with_more(
                     CompileError::new(
                         "bynk.types.non_exhaustive_match",
-                        span,
+                        let_else_arms_span(arms).unwrap_or(span),
                         format!(
-                            "non-exhaustive `match` on `{}` — a literal match over an unbounded type can never be complete",
-                            disc_ty.display(tys)
+                            "this `else match` does not cover `{}` — the `let` pattern does not match it either",
+                            witness
                         ),
                     )
-                    .with_note("add a wildcard `_` arm to cover the remaining values"),
-                    "_",
+                    .with_note("add an arm for it to the `else match`, or end it with a wildcard `_` arm"),
                 ));
+                continue;
             }
+            let err = match &kind {
+                MatchKind::Variant => CompileError::new(
+                    "bynk.types.non_exhaustive_match",
+                    span,
+                    format!(
+                        "non-exhaustive `match` — variant `{}` of `{}` is not covered",
+                        witness,
+                        disc_ty.display(tys)
+                    ),
+                )
+                .with_note("add a match arm for this variant, or use a wildcard `_` arm"),
+                MatchKind::Record => CompileError::new(
+                    "bynk.types.non_exhaustive_match",
+                    span,
+                    format!(
+                        "non-exhaustive `match` on `{}` — `{witness}` is not covered",
+                        disc_ty.display(tys)
+                    ),
+                )
+                .with_note("add a match arm for it, or use a wildcard `_` arm"),
+                MatchKind::List => CompileError::new(
+                    "bynk.types.non_exhaustive_match",
+                    span,
+                    format!(
+                        "non-exhaustive `match` on `{}` — `{witness}` is not covered",
+                        disc_ty.display(tys)
+                    ),
+                )
+                .with_note("add a match arm for it, or use a wildcard `_` arm"),
+                // v0.130 (DECISION B): `Bool` is exhausted by `true` + `false`.
+                MatchKind::Literal(BaseType::Bool) => CompileError::new(
+                    "bynk.types.non_exhaustive_match",
+                    span,
+                    format!("non-exhaustive `match` on `Bool` — `{witness}` is not covered"),
+                )
+                .with_note("add the missing arm, or use a wildcard `_` arm"),
+                // `Int`/`String` are unbounded and always need a wildcard.
+                MatchKind::Literal(_) => CompileError::new(
+                    "bynk.types.non_exhaustive_match",
+                    span,
+                    format!(
+                        "non-exhaustive `match` on `{}` — a literal match over an unbounded type can never be complete",
+                        disc_ty.display(tys)
+                    ),
+                )
+                .with_note("add a wildcard `_` arm to cover the remaining values"),
+            };
+            ctx.errors.push(with_more(with_fill(err, witness)));
         }
     }
     // All arm bodies must agree.
@@ -3762,9 +3951,12 @@ fn let_else_unreachable(
                 disc_ty.display(ctx.tys)
             ),
         );
-        if matches!(arms[0].pattern, Pattern::Record { .. }) {
+        if matches!(arms[0].pattern, Pattern::Record { .. }) && arms[0].pattern.is_irrefutable() {
             // #2654: an irrefutable record pattern has a `let` form with no
-            // `else`, so the fix is to delete it (and any parentheses).
+            // `else`, so the fix is to delete it (and any parentheses). It is
+            // gated on syntactic irrefutability, not on coverage (#2665): a
+            // pattern coverage proves total, such as a field typed as a
+            // single-variant sum, still needs its `else` to parse.
             let edits = removal
                 .cloned()
                 .unwrap_or_else(|| vec![arm.span])
@@ -3773,6 +3965,10 @@ fn let_else_unreachable(
                 .collect();
             err.with_note("a record pattern that cannot fail needs no `else`: drop it")
                 .with_suggestion("remove the `else`", edits, Applicability::MachineApplicable)
+        } else if matches!(arms[0].pattern, Pattern::Record { .. }) {
+            err.with_note(
+                "the fields' patterns cover every value, but a `let` drops its `else` only when each field is a name or `_`; match them with names, then drop the `else`",
+            )
         } else {
             err.with_note(
                 "bind the value with a plain `let` instead, or check the pattern is the one you meant",
@@ -3811,10 +4007,10 @@ fn record_let_else_bindings(arm: &MatchArm, ctx: &mut Ctx) {
     }
 }
 
-/// #2641: the names a record pattern binds are locals of the arm — hover shows
-/// their type and semantic tokens colour them as variables, as for a `let`.
-/// Only names under a record pattern are recorded; the other pattern forms'
-/// bindings are unchanged.
+/// #2641, #2680: the names a record or list pattern binds are locals of the arm
+/// — hover shows their type and semantic tokens colour them as variables, as
+/// for a `let`. Only names under a record or list pattern are recorded; the
+/// other pattern forms' bindings are unchanged.
 fn record_record_pattern_locals(arm: &MatchArm, ctx: &mut Ctx) {
     fn collect<'p>(p: &'p Pattern, under_record: bool, out: &mut Vec<&'p Ident>) {
         match p {
@@ -3826,6 +4022,12 @@ fn record_record_pattern_locals(arm: &MatchArm, ctx: &mut Ctx) {
                         None => out.push(name),
                     }
                 }
+            }
+            Pattern::List { elems, rest, .. } => {
+                for e in elems {
+                    collect(e, true, out);
+                }
+                out.extend(rest.iter().filter_map(|r| r.binder.as_ref()));
             }
             Pattern::Variant { bindings, .. } => {
                 for b in bindings {
@@ -4078,6 +4280,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             }
         }
         Pattern::Record { .. } => check_record_pattern(pat, ty, ctx),
+        Pattern::List { .. } => check_list_pattern(pat, ty, ctx),
         // #474: an or-pattern. Each alternative is checked against the same
         // `ty` in turn — this reuses every existing per-kind check above
         // (including nested payloads) and populates `ctx.expr_types`/binds
@@ -4199,6 +4402,49 @@ fn check_record_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                 ctx.bind(name.name.clone(), field_ty);
             }
         }
+    }
+}
+
+/// #2680: a list pattern `[p₁, …, pₙ]` / `[p₁, …, ..rest]` against scrutinee
+/// type `ty`, which must be a `List[T]` (a record, sum, base type, `Set` or
+/// `Map` is not a list). Each element is checked at `T`; `rest` binds a
+/// `List[T]`, the scrutinee's own type.
+fn check_list_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
+    let tys = ctx.tys;
+    let Pattern::List { elems, rest, .. } = pat else {
+        return;
+    };
+    let elem_ty = match &*tys.get(ty) {
+        Ty::List(elem) => *elem,
+        // Already reported where the type went wrong.
+        Ty::Error => {
+            bind_as_error(pat, ctx);
+            return;
+        }
+        _ => {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.types.list_pattern_on_non_list",
+                    pat.span(),
+                    format!(
+                        "a list pattern cannot match a value of type `{}`",
+                        ty.display(tys)
+                    ),
+                )
+                .with_note(
+                    "list patterns match a `List[T]`; a `Set` or `Map` is not a list, and a record or sum is matched by its own pattern",
+                ),
+            );
+            bind_as_error(pat, ctx);
+            return;
+        }
+    };
+    for e in elems {
+        check_pattern(e, elem_ty, ctx);
+    }
+    if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
+        ctx.pattern_binding_types.insert(binder.span, ty);
+        ctx.bind(binder.name.clone(), ty);
     }
 }
 
@@ -4386,6 +4632,16 @@ fn describe_pattern(pat: &Pattern) -> String {
             parts.push("..".to_string());
             format!("{} {{ {} }}", type_name.name, parts.join(", "))
         }
+        Pattern::List { elems, rest, .. } => {
+            let mut parts: Vec<String> = elems.iter().map(describe_pattern).collect();
+            if let Some(r) = rest {
+                parts.push(match &r.binder {
+                    Some(b) => format!("..{}", b.name),
+                    None => "..".to_string(),
+                });
+            }
+            format!("[{}]", parts.join(", "))
+        }
         Pattern::Or(alts, _) => alts
             .iter()
             .map(describe_pattern)
@@ -4394,192 +4650,12 @@ fn describe_pattern(pat: &Pattern) -> String {
     }
 }
 
-/// #1656: whether every value `pat` matches is already matched by one of
-/// `prior` (the earlier unguarded arms' patterns), i.e. `pat` is not useful
-/// after them. Sound but bounded, like [`missing_patterns`]:
-///
-/// - an or-pattern is covered when each alternative is;
-/// - a refined pattern is covered when its inner pattern is (it matches a
-///   subset of it), while a refined *prior* never covers — its predicate may
-///   fail, exactly as a guard may;
-/// - an irrefutable pattern is covered when the priors are exhaustive;
-/// - a variant pattern is covered by a prior of the same variant whose payload
-///   patterns are all irrefutable, by recursion on a single-field payload, or,
-///   for a multi-field payload, by one prior that covers it field by field.
-///
-/// Anything this cannot decide counts as *not* covered, so an arm is only ever
-/// reported when it is certainly unreachable.
-fn pattern_covered(prior: &[&Pattern], pat: &Pattern, ty: TyId, ctx: &Ctx) -> bool {
-    let prior: Vec<&Pattern> = prior
-        .iter()
-        .copied()
-        .flat_map(pattern_alternatives)
-        .collect();
-    if prior.iter().any(|p| p.is_irrefutable()) {
-        return true;
-    }
-    match pat {
-        Pattern::Or(alts, _) => alts.iter().all(|a| pattern_covered(&prior, a, ty, ctx)),
-        Pattern::Refined { inner, .. } => pattern_covered(&prior, inner, ty, ctx),
-        Pattern::Wildcard(_) | Pattern::Binding(_) => missing_patterns(ty, &prior, ctx).is_empty(),
-        Pattern::Literal { value, .. } => prior
-            .iter()
-            .any(|p| matches!(p, Pattern::Literal { value: v, .. } if v == value)),
-        // #2641: covered by a single prior record pattern of the same type
-        // that constrains no field `pat` does not constrain at least as
-        // tightly. (Several priors jointly covering `pat` is slice 3.)
-        Pattern::Record {
-            type_name, fields, ..
-        } => {
-            let Some(field_tys) = record_field_tys(ty, type_name, ctx) else {
-                return false;
-            };
-            prior.iter().any(|p| {
-                let Pattern::Record {
-                    type_name: pt,
-                    fields: pf,
-                    ..
-                } = p
-                else {
-                    return false;
-                };
-                pt.name == type_name.name
-                    && pf.iter().all(|(n, psub)| match psub {
-                        None => true,
-                        Some(psub) if psub.is_irrefutable() => true,
-                        Some(psub) => {
-                            let qsub = fields
-                                .iter()
-                                .find(|(qn, _)| qn.name == n.name)
-                                .and_then(|(_, q)| q.as_ref());
-                            let fty = field_tys.iter().find(|(fname, _)| *fname == n.name);
-                            match (qsub, fty) {
-                                (Some(q), Some((_, fty))) => pattern_covered(&[psub], q, *fty, ctx),
-                                _ => false,
-                            }
-                        }
-                    })
-            })
-        }
-        Pattern::Variant { variant, .. } => {
-            let Some(info) = variants_of(ty, &ctx.input.types, ctx.tys)
-                .and_then(|vs| vs.into_iter().find(|v| v.name == variant.name))
-            else {
-                return false;
-            };
-            let Some(fields) = payload_patterns(pat, &info) else {
-                return false;
-            };
-            let matching: Vec<Vec<Option<&Pattern>>> = prior
-                .iter()
-                .filter_map(|p| payload_patterns(p, &info))
-                .collect();
-            // A prior that binds every payload field irrefutably (or binds none)
-            // matches the whole variant.
-            if matching
-                .iter()
-                .any(|m| m.iter().all(|f| f.is_none_or(Pattern::is_irrefutable)))
-            {
-                return true;
-            }
-            if info.payload.len() == 1 {
-                let sub: Vec<&Pattern> = matching.iter().filter_map(|m| m[0]).collect();
-                return fields[0].is_some_and(|q| pattern_covered(&sub, q, info.payload[0].1, ctx));
-            }
-            matching.iter().any(|m| {
-                m.iter()
-                    .zip(&fields)
-                    .zip(&info.payload)
-                    .all(|((p, q), (_, fty))| match (p, q) {
-                        (None, _) => true,
-                        (Some(p), Some(q)) => pattern_covered(&[p], q, *fty, ctx),
-                        (Some(p), None) => p.is_irrefutable(),
-                    })
-            })
-        }
-    }
-}
-
-/// #2641: the field types of record `ty` as `type_name` names it, at `ty`'s
-/// type arguments. `None` unless `ty` is that record.
-fn record_field_tys(ty: TyId, type_name: &Ident, ctx: &Ctx) -> Option<Vec<(String, TyId)>> {
-    let tys = ctx.tys;
-    let Ty::Named {
-        name,
-        kind: NamedKind::Record,
-        args,
-    } = &*tys.get(ty)
-    else {
-        return None;
-    };
-    if *name != type_name.name {
-        return None;
-    }
-    let decl = ctx.input.types.get(name)?;
-    let TypeBody::Record(r) = &decl.body else {
-        return None;
-    };
-    r.fields
-        .iter()
-        .map(|f| {
-            instantiate_field_ty(decl, args, &f.type_ref, &ctx.input.types, tys)
-                .map(|t| (f.name.name.clone(), t))
-        })
-        .collect()
-}
-
-/// #1656: a variant pattern's payload sub-patterns in declared field order —
-/// `None` for a field the pattern leaves unbound (a nullary-form pattern, or a
-/// named pattern omitting it), which matches anything. `None` overall when
-/// `pat` is not a well-formed pattern for `info`'s variant.
-fn payload_patterns<'p>(pat: &'p Pattern, info: &VariantInfo) -> Option<Vec<Option<&'p Pattern>>> {
-    let Pattern::Variant {
-        variant, bindings, ..
-    } = pat
-    else {
-        return None;
-    };
-    if variant.name != info.name {
-        return None;
-    }
-    let mut fields = vec![None; info.payload.len()];
-    if bindings.is_empty() {
-        return Some(fields);
-    }
-    if bindings
-        .iter()
-        .any(|b| matches!(b.kind, PatternBindingKind::Named { .. }))
-    {
-        for b in bindings {
-            let PatternBindingKind::Named { field, pattern } = &b.kind else {
-                return None;
-            };
-            let i = info.payload.iter().position(|(n, _)| n == &field.name)?;
-            fields[i] = Some(pattern);
-        }
-    } else {
-        if bindings.len() != fields.len() {
-            return None;
-        }
-        for (slot, b) in fields.iter_mut().zip(bindings) {
-            *slot = Some(b.pattern());
-        }
-    }
-    Some(fields)
-}
-
-/// Opens and closes the witness [`missing_patterns`] gives for an extensible
-/// enum's future variant (standard-library S3, #1963): `\u{1}FetchError\u{2}`.
-/// Control characters, so no real variant or pattern text can collide with it.
-const FUTURE_VARIANT_OPEN: char = '\u{1}';
-const FUTURE_VARIANT_CLOSE: char = '\u{2}';
-
 /// The extensible enum a first-party unit exports that `ty` is, if any. Types
 /// carry no owning unit, so whether a name is one comes from
 /// [`crate::resolver::ResolvedCommons::extensible_enums`], decided once per unit
 /// from its provenance. A user's own enum of the same name is never imported
 /// from a first-party unit (the two would conflict, `bynk.consumes.name_conflict`).
-fn extensible_enum(ty: TyId, ctx: &Ctx) -> Option<String> {
+pub(super) fn extensible_enum(ty: TyId, ctx: &Ctx) -> Option<String> {
     match &*ctx.tys.get(ty) {
         Ty::Named {
             kind: NamedKind::Sum,
@@ -4601,11 +4677,21 @@ fn future_variant_witness(witness: &str) -> Option<(String, String)> {
     let start = witness.find(FUTURE_VARIANT_OPEN)?;
     let len = witness[start..].find(FUTURE_VARIANT_CLOSE)?;
     let name = witness[start + 1..start + len].to_string();
-    let shown = format!(
-        "{}_{}",
-        &witness[..start],
-        &witness[start + len + FUTURE_VARIANT_CLOSE.len_utf8()..]
-    );
+    // A multi-field witness can hold several (`Pair(<future>, <future>)`): all
+    // are shown as `_`, and the first names the enum.
+    let mut shown = String::new();
+    let mut in_marker = false;
+    for c in witness.chars() {
+        match c {
+            FUTURE_VARIANT_OPEN => {
+                in_marker = true;
+                shown.push('_');
+            }
+            FUTURE_VARIANT_CLOSE => in_marker = false,
+            _ if !in_marker => shown.push(c),
+            _ => {}
+        }
+    }
     Some((name, shown))
 }
 
@@ -4641,96 +4727,6 @@ fn fill_arm_default(
         None => plain(first_arm?, tys),
     };
     body.map(str::to_string)
-}
-
-/// Value shapes of `ty` NOT covered by the sibling patterns `pats` (empty ⇒
-/// exhaustive). An extensible enum (S3, #1963) has one more shape than its
-/// declared variants, a future variant, which only an irrefutable pattern
-/// covers. Bounded by declared sum arity (ADR 0169 DECISION D): a
-/// single-field payload recurses; a multi-field refutable payload is
-/// conservatively reported uncovered unless a full (all-irrefutable) arm exists.
-fn missing_patterns(ty: TyId, pats: &[&Pattern], ctx: &Ctx) -> Vec<String> {
-    let tys = ctx.tys;
-    // #474: an or-pattern covers all its alternatives — flatten one level
-    // before computing coverage, so `Held(...) | Confirmed(...)` contributes
-    // as two separate witnesses. Applied here (rather than only at the
-    // top-level `check_match` call site) so the recursive calls below, over a
-    // matching variant's single-field payload, also see or-aware coverage for
-    // a nested `Some(1 | 2)`.
-    let flat: Vec<&Pattern> = pats
-        .iter()
-        .copied()
-        .flat_map(pattern_alternatives)
-        .collect();
-    let pats = &flat[..];
-    if pats.iter().any(|p| p.is_irrefutable()) {
-        return Vec::new();
-    }
-    if let Some(variants) = variants_of(ty, &ctx.input.types, tys) {
-        let mut missing = Vec::new();
-        for v in &variants {
-            let matching: Vec<&Pattern> = pats
-                .iter()
-                .copied()
-                .filter(|p| matches!(p, Pattern::Variant { variant, .. } if variant.name == v.name))
-                .collect();
-            if matching.is_empty() {
-                // One `_` per payload field, so the witness is a pattern that
-                // could be written as an arm (#2100).
-                missing.push(if v.payload.is_empty() {
-                    v.name.clone()
-                } else {
-                    format!("{}({})", v.name, vec!["_"; v.payload.len()].join(", "))
-                });
-                continue;
-            }
-            if v.payload.is_empty() {
-                continue;
-            }
-            let has_full = matching.iter().any(|p| {
-                matches!(p, Pattern::Variant { bindings, .. }
-                    if bindings.is_empty() || bindings.iter().all(|b| b.pattern().is_irrefutable()))
-            });
-            if has_full {
-                continue;
-            }
-            if v.payload.len() == 1 {
-                let field_ty = &v.payload[0].1;
-                let sub: Vec<&Pattern> = matching
-                    .iter()
-                    .filter_map(|p| match p {
-                        Pattern::Variant { bindings, .. } if bindings.len() == 1 => {
-                            Some(bindings[0].pattern())
-                        }
-                        _ => None,
-                    })
-                    .collect();
-                for inner in missing_patterns(*field_ty, &sub, ctx) {
-                    missing.push(format!("{}({})", v.name, inner));
-                }
-                continue;
-            }
-            // Multi-field refutable nesting: needs a full arm (conservative).
-            missing.push(format!("{}(…)", v.name));
-        }
-        if let Some(name) = extensible_enum(ty, ctx) {
-            missing.push(format!("{FUTURE_VARIANT_OPEN}{name}{FUTURE_VARIANT_CLOSE}"));
-        }
-        return missing;
-    }
-    if matches!(literal_base_of(ty, tys), Some(BaseType::Bool)) {
-        let mut missing = Vec::new();
-        for b in [true, false] {
-            if !pats.iter().any(
-                |p| matches!(p, Pattern::Literal { value: LiteralValue::Bool(x), .. } if *x == b),
-            ) {
-                missing.push(b.to_string());
-            }
-        }
-        return missing;
-    }
-    // Unbounded (`Int`/`String`): only an irrefutable pattern covers.
-    vec!["_".to_string()]
 }
 
 pub(crate) fn check_is(
@@ -4927,7 +4923,7 @@ fn check_is_pattern(
         // #2641: a record pattern after `is` (parenthesised in source) is
         // checked like a `match` arm's, in a scratch scope: its depth-1 names
         // are collected separately by `gather_pattern_bindings`.
-        Pattern::Record { .. } => {
+        Pattern::Record { .. } | Pattern::List { .. } => {
             ctx.push_scope();
             check_pattern(pattern, value_ty, ctx);
             ctx.pop_scope();
@@ -4994,7 +4990,7 @@ fn check_is_pattern(
 fn validate_is_pattern(pattern: &Pattern, ty: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
     // #2641: a nested record pattern is checked in full, in a scratch scope.
-    if let Pattern::Record { .. } = pattern {
+    if let Pattern::Record { .. } | Pattern::List { .. } = pattern {
         ctx.push_scope();
         check_pattern(pattern, ty, ctx);
         ctx.pop_scope();
@@ -5052,7 +5048,7 @@ fn validate_is_nested_payloads(
         let sub = b.pattern();
         // A record pattern with only irrefutable fields is irrefutable, but
         // its field names still need checking (#2641).
-        if sub.is_irrefutable() && !matches!(sub, Pattern::Record { .. }) {
+        if sub.is_irrefutable() && !matches!(sub, Pattern::Record { .. } | Pattern::List { .. }) {
             continue;
         }
         let field_ty = match &b.kind {
@@ -5217,6 +5213,24 @@ fn gather_pattern_bindings(
         }
         return;
     }
+    // #2680: a list pattern binds its depth-1 element names at the element
+    // type, and `..rest` at the list's own type.
+    if let Pattern::List { elems, rest, .. } = pattern {
+        let error = tys.intern(Ty::Error);
+        let elem_ty = match &*tys.get(value_ty) {
+            Ty::List(elem) => Some(*elem),
+            _ => None,
+        };
+        for e in elems {
+            if let Pattern::Binding(n) = e {
+                out.push((n.name.clone(), elem_ty.unwrap_or(error)));
+            }
+        }
+        if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
+            out.push((binder.name.clone(), elem_ty.map_or(error, |_| value_ty)));
+        }
+        return;
+    }
     let Pattern::Variant {
         variant, bindings, ..
     } = pattern
@@ -5320,5 +5334,26 @@ mod join_ty_tests {
         assert!(join_ty(string, int, tys).is_none());
         let email = refined(tys, "Email", BaseType::String);
         assert!(join_ty(email, int, tys).is_none());
+    }
+}
+
+#[cfg(test)]
+mod future_witness_tests {
+    use super::*;
+
+    /// #2665: a multi-field witness can hold several future variants; every
+    /// marker is shown as `_`, so none leaks into a message or a fill-in arm.
+    #[test]
+    fn every_future_marker_is_shown_as_a_wildcard() {
+        let witness = format!(
+            "Pair({o}FetchError{c}, {o}Method{c})",
+            o = FUTURE_VARIANT_OPEN,
+            c = FUTURE_VARIANT_CLOSE
+        );
+        assert_eq!(
+            future_variant_witness(&witness),
+            Some(("FetchError".to_string(), "Pair(_, _)".to_string()))
+        );
+        assert_eq!(future_variant_witness("Pair(_, _)"), None);
     }
 }

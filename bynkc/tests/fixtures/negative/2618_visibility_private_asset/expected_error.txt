@@ -1,0 +1,5 @@
+bynk.visibility.private_item `logo` is a private asset of `t.brand`
+bynk.visibility.private_item `shell` is a private embed of `t.brand`
+bynk.visibility.private_item `logo` is a private asset of `t.brand`
+bynk.visibility.private_item `shell` is a private embed of `t.brand`
+# exact

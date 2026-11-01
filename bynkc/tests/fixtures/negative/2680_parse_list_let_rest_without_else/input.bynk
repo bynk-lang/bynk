@@ -1,0 +1,7 @@
+commons demo
+
+// Slice 2's `else`-less `let` stays record-only, even for the irrefutable `[..rest]`.
+fn f(xs: List[Int]) -> Int {
+  let [..rest] = xs
+  rest.length()
+}

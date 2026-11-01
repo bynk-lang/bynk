@@ -1,0 +1,16 @@
+commons demo
+
+type E = enum { A, B, C, D, E, F, G, H, I, J }
+type Big = { f0: E, f1: E, f2: E, f3: E, f4: E, f5: E, f6: E }
+
+fn f(b: Big) -> Int {
+  match b {
+    Big { f0: A, .. } => 0
+    Big { f1: A, .. } => 1
+    Big { f2: A, .. } => 2
+    Big { f3: A, .. } => 3
+    Big { f4: A, .. } => 4
+    Big { f5: A, .. } => 5
+    Big { f6: A, .. } => 6
+  }
+}

@@ -642,6 +642,13 @@ type Order = { id: String, status: Status, total: Int }
             "fn f(o: Order) -> Int {\n  let ((Order { total, .. })) = o else match {\n    _ => 0\n  }\n  total\n}\n",
             "fn f(o: Order) -> Int {\n  let Order { total, .. } = o\n  total\n}\n",
         ),
+        // #2680: a `..` followed only by wildcards moves to the end.
+        (
+            "bynk.parse.list_rest_not_last",
+            "move the `..` to the end",
+            "fn f(xs: List[Int]) -> Int {\n  match xs {\n    [a, .., _, _] => a\n    _ => 0\n  }\n}\n",
+            "fn f(xs: List[Int]) -> Int {\n  match xs {\n    [a, _, _, ..] => a\n    _ => 0\n  }\n}\n",
+        ),
     ];
     for (n, (code, title, body, fixed_body)) in cases.into_iter().enumerate() {
         let src = format!("{PRELUDE}{body}");
@@ -683,4 +690,178 @@ type Order = { id: String, status: Status, total: Int }
             "{code}: the applied fix re-diagnoses clean"
         );
     }
+}
+
+/// #2665 (DECISION G): precise coverage proves a refutable-looking record
+/// `let … else` total, so its `else` is `unreachable_arm`, but the pattern
+/// still needs the `else` to parse, so no machine-applicable "remove the
+/// `else`" fix is offered.
+#[test]
+fn a_covering_but_refutable_record_let_else_offers_no_removal_fix() {
+    const SRC: &str = "\
+commons shop
+
+type Only = enum { One }
+type Holder = { only: Only, n: Int }
+
+fn f(h: Holder) -> Int {
+  let Holder { only: One, n, .. } = h else { 0 }
+  n
+}
+";
+    let root = setup_project("record-let-covering-else", &[("shop.bynk", SRC)]);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let result = bynk_ide::diagnose_project(&root, &sources);
+    let file = result
+        .files
+        .iter()
+        .find(|f| f.source_path == Path::new("shop.bynk"))
+        .expect("file analysed");
+    let diag = file
+        .diagnostics
+        .iter()
+        .find(|d| d.error.category == "bynk.types.unreachable_arm")
+        .expect("the `else` is unreachable");
+    assert!(
+        diag.error.suggestions.is_empty(),
+        "no fix: {:?}",
+        diag.error.suggestions
+    );
+    let uri = Url::from_file_path(root.join("shop.bynk")).unwrap();
+    let actions =
+        code_actions::quick_fixes(&file.text, &file.diagnostics, diag.error.span, &uri, None);
+    assert!(actions.is_empty(), "no quick fix is offered");
+}
+
+/// #2680: a non-exhaustive `match` on a list names its missing lengths as list
+/// patterns, each carrying a fill-arm suggestion.
+#[test]
+fn list_witnesses_carry_fill_arm_suggestions() {
+    const SRC: &str = "\
+commons shop
+
+fn count(xs: List[Int]) -> Int {
+  match xs {
+    [x] => x
+  }
+}
+
+fn heads(xs: List[Option[Int]]) -> Int {
+  match xs {
+    [] => 0
+    [Some(n), ..] => n
+  }
+}
+";
+    let root = setup_project("fill-arm-list-witnesses", &[("shop.bynk", SRC)]);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let result = bynk_ide::diagnose_project(&root, &sources);
+    let file = result
+        .files
+        .iter()
+        .find(|f| f.source_path == Path::new("shop.bynk"))
+        .expect("file analysed");
+    let arms: Vec<String> = file
+        .diagnostics
+        .iter()
+        .filter(|d| d.error.category == "bynk.types.non_exhaustive_match")
+        .flat_map(|d| d.error.suggestions.iter())
+        .flat_map(|s| s.edits.iter().map(|(_, text)| text.trim().to_string()))
+        .collect();
+    for want in ["[] => 0", "[_, _, ..] => 0", "[None, ..] => 0"] {
+        assert!(arms.contains(&want.to_string()), "{want}: {arms:?}");
+    }
+}
+
+/// #2665: a non-exhaustive multi-field or record `match` names concrete
+/// witnesses, each carrying a fill-arm suggestion; a match with more than the
+/// cap reports a count of the rest and offers none, since filling some of the
+/// arms would leave it non-exhaustive.
+#[test]
+fn concrete_witnesses_carry_fill_arm_suggestions_until_capped() {
+    let variants: Vec<String> = (1..=12).map(|i| format!("V{i}")).collect();
+    let src = format!(
+        "\
+commons shop
+
+type Pair = | Pair(left: Bool, right: Bool)
+type Status = enum {{ Open, Paid, Cancelled }}
+type Order = {{ id: String, status: Status, total: Int }}
+type Big = enum {{ {} }}
+
+fn pair(p: Pair) -> Int {{
+  match p {{
+    Pair(true, _) => 1
+    Pair(false, true) => 2
+  }}
+}}
+
+fn order(o: Order) -> Int {{
+  match o {{
+    Order {{ status: Open, .. }} => 1
+  }}
+}}
+
+fn big(b: Big) -> Int {{
+  match b {{
+    V1 => 1
+  }}
+}}
+",
+        variants.join(", ")
+    );
+    let root = setup_project("fill-arm-witnesses", &[("shop.bynk", &src)]);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let result = bynk_ide::diagnose_project(&root, &sources);
+    let file = result
+        .files
+        .iter()
+        .find(|f| f.source_path == Path::new("shop.bynk"))
+        .expect("file analysed");
+    let missing: Vec<_> = file
+        .diagnostics
+        .iter()
+        .filter(|d| d.error.category == "bynk.types.non_exhaustive_match")
+        .collect();
+    let fills = |d: &&bynk_ide::Diagnostic| -> Vec<String> {
+        d.error
+            .suggestions
+            .iter()
+            .flat_map(|s| s.edits.iter().map(|(_, text)| text.trim().to_string()))
+            .collect()
+    };
+    let arms: Vec<String> = missing.iter().flat_map(fills).collect();
+    assert!(
+        arms.contains(&"Pair(false, false) => 0".to_string()),
+        "{arms:?}"
+    );
+    assert!(
+        arms.contains(&"Order { status: Paid, .. } => 0".to_string()),
+        "{arms:?}"
+    );
+    assert!(
+        arms.contains(&"Order { status: Cancelled, .. } => 0".to_string()),
+        "{arms:?}"
+    );
+    // Eleven variants are missing: eight are reported, with no fill, and the
+    // last carries the count of the three left out.
+    let big: Vec<_> = missing
+        .iter()
+        .filter(|d| d.error.message.contains("of `Big`"))
+        .collect();
+    assert_eq!(big.len(), 8);
+    assert!(big.iter().all(|d| d.error.suggestions.is_empty()));
+    assert!(
+        big.last()
+            .unwrap()
+            .error
+            .notes
+            .iter()
+            .any(|n| n.contains("and 3 more uncovered patterns")),
+        "{:?}",
+        big.last().unwrap().error.notes
+    );
 }

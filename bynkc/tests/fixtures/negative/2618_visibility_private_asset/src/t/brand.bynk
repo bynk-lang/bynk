@@ -1,0 +1,15 @@
+commons t.brand
+
+// #2618: a private asset and a private embed. `t.brand`'s own functions use
+// them; a unit that `uses` it does not see them.
+private asset logo = "assets/logo.svg"
+
+private embed shell = "embeds/shell.html"
+
+fn badge() -> String {
+  "<img src=\"\(logo.url)\">"
+}
+
+fn page(content: String) -> String {
+  shell.replace("{{content}}", content)
+}

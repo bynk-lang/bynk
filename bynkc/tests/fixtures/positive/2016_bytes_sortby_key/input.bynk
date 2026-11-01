@@ -1,0 +1,7 @@
+commons frames
+
+// #2016, flipped by #2660 (constrained-generics slice 1, DECISION B): `Bytes` is
+// `Ord` (unsigned lexicographic, matching `compare`), so it is a `sortBy` key.
+fn sorted(xs: List[Bytes]) -> List[Bytes] {
+  xs.sortBy((b) => b)
+}

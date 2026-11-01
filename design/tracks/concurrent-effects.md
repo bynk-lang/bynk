@@ -4,8 +4,10 @@
   closed; the maintainer confirmed the adopted answers on 2026-11-01. Q1 adopted
   the concurrent binding block, so the language gains no tuple type. Slicing:
   slice 0 shipped in #2646 (ADR 0672), with slice 2 folded into it; slice 0b
-  is proposed in [#2662](https://github.com/bynk-lang/bynk/issues/2662). No
-  slice is authorised until its proposal is accepted. Spine
+  shipped in #2669 ([#2662](https://github.com/bynk-lang/bynk/issues/2662));
+  slice 1 was dropped (Q2). Slice 3, the timeout, is proposed in
+  [#2683](https://github.com/bynk-lang/bynk/issues/2683). No slice is
+  authorised until its proposal is accepted. Spine
   [#2615](https://github.com/bynk-lang/bynk/issues/2615).
 - **Realises:** the effect model of `design/bynk-design-notes.md` (an `Effect` is
   the only way a program reaches the outside world), extending the
@@ -196,6 +198,32 @@ matches how `parTraverseAll` reports outcomes in input order. The cost is that a
 fast `Err` waits for a slow sibling; that is the price of the determinism and of
 §4's "no work outlives the handler" rule (Q3).
 
+**Revisited after slice 0 (2026-11-01): slice 1 dropped.** The question
+assumed a binding could apply `?` to its own effect. It cannot: `?` takes a
+`Result` value, never an `Effect`, so `let user <- Users.get(id)?` is
+`bynk.types.question_on_non_result` sequentially as well. A binding that
+yields a `Result` is unwrapped after the block, and (b) then holds with no
+language change:
+
+```bynk
+par {
+  let userR <- Users.get(id)
+  let ordersR <- Orders.forUser(id)
+}
+let user = userR?
+let orders = ordersR?
+```
+
+The block has waited for both bindings, and the `?` lines run in source order,
+so the first `Err` in source order propagates. The only `?` the block refuses
+(`bynk.par.question_in_join`) is one on a pure sub-expression of a binding, such
+as an argument, which can be computed before the block. Allowing it would mean
+routing the early return out of the binding's thunk and past the join, for a
+case the hoist already covers. The refusal is therefore permanent. Its
+diagnostic shows both patterns. A shorthand that binds and unwraps an
+`Effect[Result]` in one step would be new surface for sequential code too, so it
+belongs to its own proposal, not to this track.
+
 ### Q3 — Faults inside a join
 
 `Promise.all` rejects as soon as one promise rejects and leaves the rest running
@@ -320,11 +348,17 @@ a sub-issue of #2615.
   semantics with the join's (Q3). A behaviour change only when an element
   faults.
 - **Slice 1 — `Result` and `?` in a join**, with Q2's source-order rule.
+  **Dropped** (Q2): the block already delivers the rule with no language
+  change.
 - **Slice 2 — Agent handlers**, only if slice 0's proposal finds rules beyond
   Q4's adopted answer that need their own increment. Otherwise folded into
   slice 0.
 - **Slice 3 — A general timeout**, `within(d)`, with harness-clock support and
-  the `waitUntil` handover for abandoned work.
+  the `waitUntil` handover for abandoned work. Proposed in
+  [#2683](https://github.com/bynk-lang/bynk/issues/2683). It refuses `within`
+  in an effectful `fn` until
+  [#2682](https://github.com/bynk-lang/bynk/issues/2682) (`~>` in a function
+  has no execution context) is resolved.
 - **Slice 4 — Race (loser runs to completion)**, not planned. Q7 adopted no
   general race for this track; this stays as a possible later slice.
 
@@ -368,11 +402,12 @@ To land with, or just before, slice 0:
 ## 9. Slice status
 
 - [x] Slice 0 — concurrent binding block (#2640, shipped in #2646, ADR 0672)
-- [ ] Slice 0b — settle-all for the `parTraverse` family (#2662)
-- [ ] Slice 1 — `Result` and `?` in a join
+- [x] Slice 0b — settle-all for the `parTraverse` family (#2662)
+- [x] Slice 1 — `Result` and `?` in a join (dropped: the block already gives
+  Q2's source-order rule; see Q2)
 - [x] Slice 2 — agent handlers (folded into slice 0: the workerd gate test in
   #2646 found no new interleaving, so `par` stays legal in agent handlers)
-- [ ] Slice 3 — general timeout
+- [ ] Slice 3 — general timeout (#2683)
 - [ ] Slice 4 — race (not planned; possible later slice)
 
 ## 10. Non-goals

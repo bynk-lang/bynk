@@ -306,9 +306,9 @@ context.
 ## 9. Slice status
 
 - [x] Slice 1 — record patterns in `match` and `is` (#2641, #2644)
-- [ ] Slice 2 — `let` destructuring (#2654, in review)
-- [ ] Slice 3 — precise exhaustiveness
-- [ ] Slice 4 — list patterns
+- [x] Slice 2 — `let` destructuring (#2654, #2659)
+- [x] Slice 3 — precise exhaustiveness (#2665)
+- [x] Slice 4 — list patterns (#2680)
 - [ ] Slice 5 — range patterns (with #990)
 - [ ] Slice 6 — lambda-parameter destructuring (conditional)
 - Slice 7 — tuple patterns: **dropped** (#2615 adopted the binding block, not tuples)

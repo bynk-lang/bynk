@@ -1,0 +1,17 @@
+commons pricing
+
+type Item = { price: Int, qty: Int }
+
+private type Tally = { lines: Int, sum: Int }
+
+fn total(items: List[Item]) -> Int {
+  items.fold(0, (acc, i) => acc + lineTotal(i))
+}
+
+private fn lineTotal(i: Item) -> Int {
+  i.price * i.qty
+}
+
+private fn Item.discounted(self) -> Int {
+  lineTotal(self) - self.price
+}

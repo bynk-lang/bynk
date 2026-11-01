@@ -112,6 +112,10 @@ pub(crate) struct RuntimeUse {
     /// #1657: the module references the `Int` domain traps (`__bynkIntDiv`,
     /// `__bynkToInt`).
     int: Cell<bool>,
+    /// Constrained generics slice 1: the comparator helpers (`__bynkCmpInt`,
+    /// `__bynkCmpRecord`, …) the module's witnesses, ordering operators and
+    /// ordering kernels reference.
+    cmp: RefCell<std::collections::BTreeSet<&'static str>>,
     icu: Cell<bool>,
     boundary_codec: Cell<bool>,
     json_codec: Cell<bool>,
@@ -221,6 +225,22 @@ impl RuntimeUse {
     /// (`__bynkIntDiv`) or a Float→`Int` conversion (`__bynkToInt`), #1657.
     pub fn note_int(&self) {
         self.int.set(true);
+    }
+
+    /// Record that the module references the comparator helper `name`
+    /// (`compare.ts`; constrained-generics slice 1).
+    pub fn note_cmp(&self, name: &'static str) {
+        self.cmp.borrow_mut().insert(name);
+    }
+
+    /// The comparator helpers to import, as a `", a, b"` run (empty when the
+    /// module uses none), in the shape the other conditional groups take.
+    pub fn cmp_imports(&self) -> String {
+        self.cmp
+            .borrow()
+            .iter()
+            .map(|n| format!(", {n}"))
+            .collect::<String>()
     }
 
     /// Record that the module references the ICU formatting helpers.

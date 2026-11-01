@@ -52,7 +52,9 @@ type ExportOptions = {
 
 Every existing `ExportOptions { … }` literal still compiles, and so does every
 stored or sent `ExportOptions` that predates the field: a body without the
-`header` key decodes as `None`.
+`header` key decodes as `None`. If an agent keeps an `ExportOptions` in its state,
+`bynk.schema.lock` counts the new defaulted field as an additive change, so no
+migration step is needed.
 
 A field added **without** a default is a breaking change: every literal must
 now give it (`bynk.resolve.missing_field`). Leave a field undefaulted only when

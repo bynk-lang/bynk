@@ -1,0 +1,1 @@
+bynk.types.derives_automatic `Eq` holds for `Pt` automatically

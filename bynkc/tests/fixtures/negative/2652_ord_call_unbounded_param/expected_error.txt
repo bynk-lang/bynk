@@ -1,0 +1,1 @@
+bynk.generics.missing_ord_bound `pick` requires `T: Ord`, but type parameter `U` has no `Ord` bound

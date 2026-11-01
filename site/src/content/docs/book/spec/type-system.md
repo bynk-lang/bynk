@@ -55,7 +55,8 @@ through its API — `.of`, or `.unsafe` within the defining `commons`
 ([§6.4](#64-admission--construction)) — never with record syntax. The base value
 is recoverable only through `.raw`, and only within the defining `commons`. An
 opaque type MAY also carry a `where` refinement. Opaque types are **excluded**
-from literal admission.
+from literal admission. An opaque type is not `Ord` outside its defining unit
+unless its declaration says `derives Ord` (§5.2).
 
 ### §6.1.4 Sum types
 
@@ -66,6 +67,22 @@ naming a variant (with its payload arguments, if any) and is consumed by `match`
 ([§4.6.5](/book/spec/syntactic-grammar/#465-is_expr)). A sum type is represented as a
 discriminated union over a tag.
 
+A sum type MAY be **recursive** (#2613): a variant's payload may have the sum's
+own type, directly, through another sum or record, or inside an `Option`,
+`List` or `Map`, and declarations may recurse mutually:
+
+```bynk
+commons trees {
+  type Tree =
+    | Leaf
+    | Node(left: Tree, value: Int, right: Tree)
+}
+```
+
+A recursive sum with no variant that ends the recursion
+(`type Loop = | Again(next: Loop)`) is accepted, but it has no values: it can
+never be constructed.
+
 ### §6.1.5 Record types
 
 A record type ([§4.2.5](/book/spec/syntactic-grammar/#425-record_type)) is a product of
@@ -73,7 +90,26 @@ named, immutable fields. A value is constructed by giving every field
 ([§4.6.11](/book/spec/syntactic-grammar/#4611-record_construction)), read by field access
 ([§4.6.9](/book/spec/syntactic-grammar/#469-field_access)), and updated by the spread form
 ([§4.6.13](/book/spec/syntactic-grammar/#4613-record_spread)), which copies and overrides.
-A record field MUST NOT directly have the record's own type.
+A record MUST NOT contain itself through record fields alone: a field whose
+type is the record, or a chain of fields through other records that leads back
+to it (`type A = { b: B }` with `type B = { a: A }`), is
+`bynk.resolve.recursive_record_field`, reported on each field in the cycle. A
+value of such a type could never be built, and the compiler could not
+synthesise the default value it needs for one (for a `store` field, say). A
+cycle that passes through an `Option`, `List` or `Map`, or through a sum type,
+is permitted, because that position can hold a value that ends the chain
+(#2613):
+
+```bynk
+commons files {
+  type Dir = { name: String, children: List[Dir] }
+  type Chain = { value: Int, next: Option[Chain] }
+}
+```
+
+A record, sum or enum declaration MAY end with `derives Ord` ([§4.2.1](/book/spec/syntactic-grammar/#421-type_decl)),
+which makes the type `Ord`: its values are ordered by field, or by variant, in
+declaration order ([§5.2](/book/spec/static-semantics/#52-well-typedness)).
 
 ### §6.1.6 Enum types
 
@@ -242,7 +278,7 @@ returns, and locals; everywhere a value would serialise, persist, or cross a
 boundary they are rejected ([§5.8](/book/spec/static-semantics/#58-boundaries--cross-context),
 `bynk.types.function_at_boundary`). A generic function's type parameters are
 type variables, instantiated per call site and erased at emission — unconstrained
-unless they declare an `Eq` bound (§5.2); they never appear in a checked program's expression types outside
+unless they declare an `Eq` or `Ord` bound (§5.2); they never appear in a checked program's expression types outside
 the generic function's own body.
 
 ## §6.5 Type compatibility & boundaries
@@ -322,6 +358,32 @@ built by the binding under the same emitted-constructors convention
 ([§7.3.6](/book/spec/emission/#736-adapters)). This requirement on bindings is a
 convention enforced by review and the emitted constructors' shapes, not by a
 `bynk.*` diagnostic — the binding is, by design, beyond the compiler's reach.
+
+**Recursive types at boundaries** (#2613). A non-generic recursive type — a
+recursive sum, or a record that recurses through an `Option`, a collection or a
+sum (§6.1.4, §6.1.5) — is an ordinary boundary-legal type. It MAY cross a
+context boundary, be a `store` field, be a field of an event payload, and pass
+through `Json.encode` and `Json.decode`; its codec is recursive. A **generic**
+recursive type (`type Node[T] = { value: T, next: Option[Node[T]] }`) is
+rejected at a boundary (`bynk.generics.recursive_generic_at_boundary`): a
+generic type crosses through a codec monomorphised per instantiation (ADR 0197,
+0237), and a recursive instantiation has no finite set of them. It remains
+usable inside a context.
+
+**Nesting is bounded** (#2656). A boundary codec accepts a value of a
+recursive type nested at most **256 levels** deep. The outermost value of a
+recursive type is one level, and each value of a recursive type nested inside
+it, through fields, variants, `Option`, collections or other recursive types, is
+one more. A value of a non-recursive type is not counted, and below one the
+count starts again; such a type occurs only a fixed number of times on any path
+through a value, so the total nesting stays bounded. Decoding a value nested more deeply MUST fail as a
+`StructuralMismatch` at the path where the bound is crossed, with `expected`
+`a value nested at most 256 levels deep`, so a request body is refused with a
+`400` and `Json.decode` returns an `Err`, rather than the decoder exhausting the
+host's stack. Encoding such a value is a contract violation and MUST fault, as
+encoding a non-finite `Float` does
+([§7.2](/book/spec/emission/#72-targets)), so a context never sends or stores a
+value its peer, or its own rehydration, would refuse.
 
 **Collections are covariant in their element and value positions** (v0.20b):
 a `List[T]` is usable where a `List[U]` is expected iff `T` is usable where

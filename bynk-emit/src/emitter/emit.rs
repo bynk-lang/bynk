@@ -850,6 +850,9 @@ fn emit_method(
         ModuleCtx::new(commons, &empty, runtime_use),
         BodyMode::Method,
     );
+    // Constrained generics slice 1: one trailing comparator parameter per
+    // `Ord`-bounded type parameter (the receiver type's first).
+    params.extend(cx.declare_witnesses(f));
     // Methods are emitted as plain (non-async) members on an object literal;
     // any `Effect.pure(...)` in tail position must still wrap as
     // `Promise.resolve(...)` because there's no surrounding `async` to absorb
@@ -934,7 +937,7 @@ pub(crate) fn emit_free_fn(
     if let Some(doc) = f.documentation.as_deref() {
         stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
     }
-    let params: Vec<bynk_ts::TsParam> = f
+    let mut params: Vec<bynk_ts::TsParam> = f
         .params
         .iter()
         .map(|p| bynk_ts::TsParam {
@@ -959,6 +962,9 @@ pub(crate) fn emit_free_fn(
         BodyMode::FreeFn,
     )
     .with_source_map(Some(&body_smb));
+    // Constrained generics slice 1: one trailing comparator parameter per
+    // `Ord`-bounded type parameter.
+    params.extend(cx.declare_witnesses(f));
     let async_tail = is_effectful_return(&f.return_type);
     let guarded = contracts && (!f.requires.is_empty() || !f.ensures.is_empty());
     // #1653: parameters are bindings of the body's own scope, so a `let` that

@@ -403,7 +403,13 @@ pub fn compose_unit_embeds(
         let Some(used_info) = unit_info.get(used) else {
             continue;
         };
-        for (embed_name, decl) in &used_info.table.embeds {
+        // #2618: a used commons' `private` embeds stay in it.
+        for (embed_name, decl) in used_info
+            .table
+            .embeds
+            .iter()
+            .filter(|(_, d)| d.private.is_none())
+        {
             if crate::symbols::local_value_kind(&info.table, embed_name).is_some() {
                 continue;
             }

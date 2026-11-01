@@ -1,0 +1,8 @@
+commons demo
+
+// #2660 review: a recursive reference with different arguments would need a
+// comparator per nesting depth, so a type that derives `Ord` may not have one.
+type Nest[T] =
+  | Nil
+  | Cons(head: T, rest: Nest[List[T]])
+  derives Ord

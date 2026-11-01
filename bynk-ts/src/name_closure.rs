@@ -889,7 +889,13 @@ impl Walk {
                     match e {
                         TsObjectEntry::Prop(_, v) | TsObjectEntry::Spread(v) => self.expr(v),
                         TsObjectEntry::Shorthand(name) => self.use_value(name),
-                        TsObjectEntry::Method { params, body, .. } => {
+                        TsObjectEntry::Method {
+                            generics,
+                            params,
+                            body,
+                            ..
+                        } => {
+                            self.bind_all(generics);
                             self.params(params);
                             self.stmts(body);
                         }

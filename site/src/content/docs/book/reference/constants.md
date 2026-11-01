@@ -42,6 +42,12 @@ fn attempts() -> Int {
   constants and those of each commons it `uses`, like functions, and a sibling
   file of the same unit sees them too. A `let` binding or parameter of the same
   name shadows a constant.
+- **Visibility:** public by default. `private const` keeps a constant within
+  its own unit: its files and its suites see it, a unit that `uses` the
+  commons does not (a reference from one is `bynk.visibility.private_item`).
+  A public constant may not be typed with a private type of its unit
+  (`bynk.visibility.private_in_public`). See
+  [Design a library's public surface](/book/guides/program-structure/design-a-public-surface/).
 
 ## What an initialiser may be
 
@@ -100,4 +106,6 @@ a `uses`-ing unit imports it by name like any other function. Because a function
 declaration is hoisted, a constant can be read whichever order the modules of a
 unit load in, even when its files import each other. Constants are emitted
 after the module's types and before its functions. A unit-tier `suite` case can
-name its target's constants, and those of the commons the target `uses`.
+name its target's constants, private ones included, and the public constants of
+the commons the target `uses`. `private` changes nothing in the emitted module:
+it is a naming rule only.

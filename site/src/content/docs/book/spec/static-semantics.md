@@ -145,6 +145,58 @@ is rejected (`bynk.lex.legacy_comment`, `bynk.lex.legacy_doc_line`,
 still read as a comment, so no unmigrated source is accepted with another
 meaning.
 
+### §5.1c Unit-private declarations {#private-declarations}
+
+A `type`, `fn` (a free function or a method), `messages`, `asset`, `embed` or
+`const` declaration in a `commons` or `context` MAY carry the `private` modifier
+([§4.1.12d](/book/spec/syntactic-grammar/#4112d-visibility_modifier)). A
+declaration without it is public, as every declaration was before the modifier
+existed. A private declaration is visible throughout its own unit, across all
+of the unit's files, and to the unit's suites (§5.9). It is never visible
+through `uses`.
+
+- A unit that `uses` a commons does not see that commons' private
+  declarations at all: they are not imported, and so they never conflict with
+  the unit's own declarations or with another import of the same name
+  (`bynk.uses.name_conflict` does not apply to them). A reference from such a
+  unit that resolves to nothing but a private declaration (a call, a type
+  reference, a static or instance method call, an asset, embed or constant
+  name) is rejected (`bynk.visibility.private_item`), naming the declaration and its
+  unit. A reference the unit's own declaration answers is the unit's own.
+- A private type's methods are out of an importer's reach with the type,
+  whether or not they are marked `private`. A private method of a public type
+  hides only that method.
+- A public declaration MUST NOT name a private type of its own unit in its
+  signature: a public function's or method's parameter and return types, a
+  public type's record field types and variant payloads, a public constant's
+  type annotation, and a context's `exports` list
+  (`bynk.visibility.private_in_public`). A method of a private
+  type is exempt. Signatures of services, agents, capabilities, providers,
+  actors and events are not constrained by this rule: how far they reach is
+  governed by `exports` and `consumes` (§5.8), and the cross-context
+  structural rule of §6.5 is unchanged.
+- `private` MUST NOT modify a `service`, `agent`, `capability`, `provides`,
+  `actor` or `event` declaration, nor any declaration in an `adapter`
+  (`bynk.visibility.private_not_allowed`).
+- A context negotiates its locale (`Locale.current()`) against the bundle of
+  a commons it `uses` only when that bundle's `@reference` block is public. A
+  private `@reference` block keeps the whole bundle out of every such
+  context; the commons' own `render` still reads every block. `private` on a
+  `messages` block warns (`bynk.visibility.private_messages`): on the
+  `@reference` block because no context will negotiate against the bundle,
+  and on any other block of a bundle whose reference is public because it
+  has no effect.
+- A `system` suite (§5.9) may name every type a participant context
+  declares, its private types included, although a context that `consumes`
+  the participant may not: a harness test often needs to build or inspect a
+  value the system keeps to itself. The suite's own `uses` commons keep their
+  private declarations, as in any other unit.
+
+Visibility is a naming rule only. It does not change what a declaration
+means, how it is checked within its own unit, or what is emitted for it. A
+private `asset` is still served publicly by the platform, since that is what
+an asset is: the modifier hides its *name* from importers, not its file.
+
 ## §5.2 Well-typedness
 
 Every expression MUST have the type its position requires. A function or method
@@ -220,9 +272,52 @@ defined on `Int` operands (yielding `Int`) and on `Float` operands
 (yielding `Float`). They MUST NOT mix the two: an `Int` and a `Float`
 operand in the same operation is `bynk.types.no_numeric_coercion` — there
 is **no implicit numeric coercion** in either direction. The same rule
-applies to the comparison operators `< <= > >=` (defined on `Int`,
-`Float`, and `String`, same-typed) and to `==`/`!=`. Refined numeric
-types widen to their base in operator positions, as before.
+applies to the comparison operators `< <= > >=` and to `==`/`!=`. Refined
+numeric types widen to their base in operator positions, as before.
+
+**Ordering** (constrained generics, slice 1). `< <= > >=` accept two operands
+of the **same `Ord` type**; a type that is not `Ord` is
+`bynk.types.not_orderable`. A type is `Ord` when it is one of:
+
+- `Int`, `Float`, `String`, `Duration`, `Instant` or `Bytes`, or a refined type
+  over one of them;
+- `Option[T]` or `List[T]` where `T` is `Ord`;
+- a record, sum, enum or opaque type that declares `derives Ord` (§4.2.1),
+  provided every field and payload type is `Ord`
+  (`bynk.types.derives_field_not_orderable` otherwise). A generic one is `Ord`
+  at an instantiation whose type arguments are;
+- a type parameter declared `T: Ord`.
+
+`Bool`, `Result`, `Map`, `Set`, function types and held resources are not `Ord`,
+and an opaque type is `Ord` outside its defining unit only if it declares
+`derives Ord`. A type with no `derives Ord` is never ordered implicitly, because
+opting in makes declaration order significant.
+
+Every `Ord` type has a **total order**, and an implementation MUST compute it as
+follows:
+
+- `Int`, `Duration` and `Instant` order numerically; a refined type orders as
+  its base.
+- `String` orders by **UTF-16 code unit**, element by element, a proper prefix
+  first. This is not Unicode code-point or locale order.
+- `Bytes` orders **lexicographically over unsigned octets**, a proper prefix
+  first.
+- `Float` orders as a **total order**: `NaN` sorts after every other value and
+  equals itself, and `-0.0` equals `0.0`. This applies wherever the order is
+  used as an order, that is the ordering kernels (`sortBy`, `min`, `max`),
+  `bynk.list.sort`/`min`/`max`, and every `T: Ord` witness. The operators
+  `< <= > >=` on `Float` keep the IEEE meaning (`NaN < x` is `false`), and
+  `==` is unchanged.
+- `Option` orders `None` before every `Some`, and `Some` by payload.
+- `List` orders lexicographically by element, a proper prefix first.
+- A record orders by its fields in **declaration order**, the first differing
+  field deciding.
+- A sum or enum orders by **variant declaration order**, then by payload (fields
+  in declaration order) between two values of the same variant.
+
+Reordering the fields or variants of a `derives Ord` declaration therefore
+changes how its values sort. The contract hash ignores field and variant
+order, so the change is not a contract change.
 
 **Equality is structural** (#1652). `==`/`!=` compare **values**, not
 references. Two records are equal when every field is equal; two sum values when
@@ -236,7 +331,7 @@ container element, or a generic argument written in the type, such as
 (`bynk.types.not_comparable`, `bynk.types.stream_not_comparable`,
 `bynk.types.held_not_comparable`). Inside a generic function or method, `==` on
 a type that mentions a type parameter is accepted only when that parameter is
-**declared `Eq`**: by a `T: Eq` bound on the function, a `where A: Eq` entry on
+**declared `Eq`** (or `Ord`, which implies it): by a `T: Eq` bound on the function, a `where A: Eq` entry on
 a method (for its receiver type's parameter), or a bound its receiver type
 declares; otherwise it is `bynk.generics.missing_eq_bound`. Passing a type
 parameter to an `Eq`-bounded parameter of another generic is the same rule,
@@ -540,14 +635,31 @@ no constraint on expression checking.
 
 **Bounds** (constrained generics, slice 0). A type parameter MAY carry bounds,
 `T: Eq` or `T: C1 + C2`, on a `fn`, a `type` declaration or — as a `where`
-clause — a method (§4.3.1b). `Eq` is the only constraint; any other name is
-`bynk.generics.unknown_constraint`. A bound on a generic capability operation's
+clause — a method (§4.3.1b). The constraints are `Eq` and, from slice 1, `Ord`;
+any other name is `bynk.generics.unknown_constraint`. **`Ord` implies `Eq`**: a
+`T: Ord` parameter may be compared with `==`, and `T: Eq + Ord` is the warning
+`bynk.generics.redundant_eq_bound`, whose fix removes `Eq`.
+
+A parameter that a body orders must be declared `Ord`: `<`, `<=`, `>`, `>=`,
+an ordering kernel key, or passing it to an `Ord`-bounded parameter of another
+generic, on a `T` without the bound is `bynk.generics.missing_ord_bound`, with a
+machine-applicable fix that declares `: Ord` (replacing an existing `Eq`). Each
+call MUST instantiate an `Ord`-bounded parameter with an `Ord` type
+(`bynk.types.not_orderable`). A bounded generic named as a value, such as
+`xs.map(top)`, is instantiated at the reference from its expected function type;
+if the type arguments cannot be resolved there it is
+`bynk.generics.ambiguous_instantiation`.
+
+A bound on a generic capability operation's
 type parameter is `bynk.generics.bound_on_capability_op`, and a `where` entry
 that names no type parameter of the method or its receiver type is
 `bynk.generics.unknown_where_param`. A bound on a type declaration is checked
 where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
-`Set2[(Int) -> Int]` with the equality diagnostics below. Bounds are erased; they
-add nothing to emission.
+`Set2[(Int) -> Int]` with the equality diagnostics below. An `Eq` bound adds nothing to emission. An
+`Ord` bound adds one hidden trailing comparator parameter to the emitted
+function (the receiver type's parameters first, then the method's own, in
+declaration order), which the caller builds from the concrete type; it is
+internal and not part of the published ABI.
 
 {{#grammar-semantics if_expr}}
 
@@ -845,12 +957,31 @@ stored: the commit faults and nothing persists.
 against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
 shape is its storage kind and its value types, expanded structurally (record
 fields, sum variants and variant payload fields by name; type names do not
-appear, since stored bytes carry none), with and without refinements. A new class is recorded at version 1.
-An unchanged shape keeps its version. Adding a field, or changing only a
-refinement, increments it; the latter also warns (`bynk.agent.refinement_changed`),
-since a narrowing faults on load as above. Removing a field, changing its value
-types, or changing its storage kind is `bynk.agent.non_additive_state_change`,
-and so is renaming one, which is a removal plus an addition. A recorded class no
+appear, since stored bytes carry none), with and without refinements, and as the
+list of positions in the stored value (each record field, variant and container
+element by path, with whether a record field declares a default). A new class is
+recorded at version 1. An unchanged shape keeps its version. These changes
+increment it:
+- adding a `store` field;
+- adding a record field **with a default** anywhere inside a stored value, together
+  with whatever lies beneath it, since every record stored before decodes it as its
+  default ([§5.2b](#field-defaults));
+- a record field gaining a default;
+- changing only a refinement, which also warns (`bynk.agent.refinement_changed`),
+  since a narrowing faults on load as above.
+
+Any other change is `bynk.agent.non_additive_state_change`, and the diagnostic
+names each position that broke:
+- removing a `store` field, or a record field inside a stored value;
+- changing a position's type, or a field's storage kind;
+- adding a record field without a default;
+- a record field losing its default;
+- adding a sum variant.
+
+Renaming a field is a removal plus an addition. A shape recorded before positions
+were (an older lock) has none: an unchanged build fills them in without changing
+the version, and until then a change inside a stored value is judged as a change of
+the field's value types. A recorded class no
 longer declared is `bynk.agent.class_removed`. As for events, `bynkc check` and
 `bynkc test` reconcile without writing the lock, and only a build records a new
 version.
@@ -972,8 +1103,10 @@ pattern and an `else`, a plain `let` (it has no effect to overlap), `~>` (a
 fire-and-forget send has nothing to join), `:=` or a mutating `store` operation
 (`store` writes stay sequential), `expect`, `advance`, a nested `par`, and an
 empty block. A `?` in a binding is `bynk.par.question_in_join` (a `?` inside a
-lambda belongs to the lambda); propagating the first `Err` in source order across a
-join is a later increment. The bindings run together, so **no binding may mention
+lambda belongs to the lambda). This is permanent: `?` takes a `Result` value, not
+an effect, so a binding's `Result` is bound in the block and unwrapped after it
+(`let user = userR?`). The block has waited for every binding, so those `?` lines
+propagate the first `Err` in source order. The bindings run together, so **no binding may mention
 a name another binding of the block binds, and no two bind one name**
 (`bynk.par.sibling_name`) — even where the name would also resolve to a binding from
 before the block, so a stale value is never picked up silently. A binding's own name
@@ -1135,8 +1268,8 @@ operation of the same capability is unaffected.
 
 ## §5.6 Pattern matching
 
-A `match` MUST be **exhaustive** — every variant of the scrutinised sum,
-`Result`, or `Option` covered (`bynk.types.non_exhaustive_match`) — and its
+A `match` MUST be **exhaustive** — every value of the scrutinee covered by some
+unguarded arm (`bynk.types.non_exhaustive_match`) — and its
 scrutinee MUST be a sum type, a primitive, or a record matched by record
 patterns (`bynk.types.match_non_sum_discriminant`). Its arms
 MUST **join** to a common result type — their least upper bound, so a refined
@@ -1146,6 +1279,41 @@ variant (`bynk.types.duplicate_variant_arm`), and MUST NOT be unreachable
 (`bynk.types.unreachable_arm`): every arm MUST match some value that no earlier
 unguarded arm matches. A guarded arm or a refined pattern (`n where P`) never
 covers a later arm, since its guard or predicate may fail.
+
+**Coverage is usefulness** (patterns track, slice 3, #2665). Both rules are one
+question about a matrix whose rows are the earlier unguarded arms' patterns. A
+pattern is *useful* after those rows when it matches some value none of them
+does; a `match` is exhaustive exactly when `_` is not useful after all of its
+unguarded arms, and an arm is unreachable exactly when its pattern is not useful
+after the unguarded arms before it. The values a type has are its constructors:
+
+- a sum, `Result` or `Option` has its declared variants, whose payload fields are
+  its columns in declared order (named and positional bindings are the same
+  columns);
+- a record has one constructor whose columns are all its fields in declared
+  order, and a field a record pattern does not list matches anything;
+- `Bool` has `true` and `false`;
+- a `List[T]` has one constructor per length, set out below;
+- `Int` and `String` have a literal for every value, so no finite set of literals
+  is complete and only an irrefutable pattern covers them; a refined type has
+  its base's constructors, and an opaque type has no patterns.
+
+An or-pattern, at any depth, stands for each of its alternatives. A guarded arm
+contributes no row. A refined pattern contributes no row, and as the arm under
+test it is tested as the pattern it refines. So `Pair(true, _)`,
+`Pair(false, true)` and `Pair(false, false)` cover a `Pair(Bool, Bool)` with no
+wildcard, and the arms of `Order { status: Paid, .. }`, `Order { status: Pending, .. }`
+and `Order { status: Cancelled, .. }` cover an `Order` between them, after which
+an `Order { total, .. }` arm is `bynk.types.unreachable_arm`. Redundancy may be
+spread across several earlier arms.
+
+Each value no arm covers is reported as a pattern that can be written as an arm:
+`Pair(false, false)`, `Order { status: Cancelled, .. }`, or `_` for an unbounded
+type, with `_` standing for a field the uncovered values leave unconstrained. At
+most eight are reported for one `match`, followed by a count of the rest. A
+checker MAY bound the work it does: when a `match` is too complex to decide, it
+MUST report `bynk.types.non_exhaustive_match` (asking for a wildcard arm) rather
+than accept it, and MUST NOT report an arm unreachable.
 
 **Extensible enums** (standard-library S3, #1963). A standard-library enum
 marked extensible in the first-party registry (`FetchError`, `Method`) may gain
@@ -1176,14 +1344,35 @@ In `T { f, g: p, .. }`:
   NOT name a type the unit may not inspect, such as another context's
   `exports opaque` type (`bynk.context.opaque_inspection`, reported at the
   pattern).
-- **Coverage is conservative.** A record pattern covers its type only when every
-  field sub-pattern is irrefutable (a name or `_`); otherwise it is partial,
-  and a later irrefutable arm is needed for the `match` to be exhaustive
-  (`bynk.types.non_exhaustive_match`). An arm is `bynk.types.unreachable_arm`
-  when an earlier unguarded arm's record pattern is no more specific on any
-  field. Precise multi-field coverage is a later increment.
+- **Coverage is precise.** A record pattern is one constructor over the record's
+  fields, so several arms cover a record between them, as stated above.
 - After `is`, the names bound by a record pattern in scope are its flat fields:
   bare `f` and `f: name`, like a variant's flat payload bindings.
+
+**List patterns** (patterns track, slice 4, #2680, [§4.7.12](/book/spec/syntactic-grammar/#4712-list_pattern)).
+In `[p₁, …, pₙ]` and `[p₁, …, pₙ, ..]` / `[p₁, …, pₙ, ..rest]`:
+
+- The matched value MUST be a `List[T]`. A record, a sum, a base type, a `Set`
+  or a `Map` is not a list (`bynk.types.list_pattern_on_non_list`). A `match`
+  whose scrutinee is a `List` and whose arms include a list pattern is a `match`
+  on a list; one with no list pattern still is not
+  (`bynk.types.match_non_sum_discriminant`).
+- Each `pᵢ` is checked at `T`, and `rest` has type `List[T]`. Under an
+  or-pattern the alternatives MUST bind the same names at the same types, as for
+  any pattern, so `[x] | [x, _]` is well-typed and `[x] | []` is not.
+- **Coverage is by length.** The constructors of a list column are the lengths
+  the column's patterns spell out. With *L* the longest prefix any pattern in the
+  column writes, they are the exact lengths `0` to *L* and "*L* + 1 or more"; a
+  pattern with a rest marker covers every length from its prefix up. So `[]` and
+  `[x, ..rest]` cover every list with no wildcard, and `[_]`, `[_, _]` cover only
+  the lists of one or two elements. The split is linear in *L*. An uncovered
+  length is reported as a pattern: `[]`, `[_]`, `[_, _, ..]`, with an element
+  pattern where the uncovered lists constrain one (`[None, ..]`). A list arm is
+  `bynk.types.unreachable_arm` when the earlier arms cover every list it matches
+  (`[x, ..]` after `[_, ..]`, `[a, b]` after `[_, _]`).
+- A list pattern is irrefutable exactly when it is `[..]` or `[..rest]`.
+- After `is`, the names bound by a list pattern in scope are its elements that
+  are bare names and the named rest, like a variant's flat payload bindings.
 
 A pattern MUST name a real variant (`bynk.types.unknown_variant_in_pattern`) and
 real payload fields (`bynk.types.unknown_pattern_field`), bind the right number
@@ -1240,6 +1429,12 @@ for `let P <- e else E`, where `v` is a name the program cannot write; for
 - If `P` matches every value of `e`'s type, the `else` can never run, which is
   `bynk.types.unreachable_arm`. Bind the value with a plain `let` instead; for a
   record pattern, drop the `else` (the diagnostic offers that fix).
+- A list pattern opens a `let … else` (`let [head, ..] = jobs else { 0 }`, #2680).
+  Every list pattern but `[..]` and `[..rest]` can fail, so it needs the `else`.
+  `[..]` and `[..rest]` match every list, which makes their `else` unreachable
+  (`bynk.types.unreachable_arm`); the `else`-less form stays record-only
+  (`bynk.parse.let_pattern_without_else`), since `let rest = xs` already binds
+  the whole list.
 - A `let` whose pattern is an irrefutable record pattern may omit the `else`
   (#2654, [§4.8.4a](/book/spec/syntactic-grammar/#484a-let_else_stmt-2010)):
   `let T { f, .. } = e` means `match v { T { f, .. } => { S… t } }`, a
@@ -1754,6 +1949,15 @@ predicate surface as `invariant`/`ensures` (one predicate surface, ADR 0144). A
 `suite` MUST target an existing unit and MUST NOT duplicate a case description
 (`bynk.suite.unknown_target`, `bynk.suite.duplicate_case_name`).
 
+A suite below `system` sees its target as the target sees itself, so the
+target's private declarations (§5.1c) are in scope in its cases, stubs and
+properties: tests routinely exercise helpers. The exception covers the target
+alone. A commons that the target, or the suite, `uses` keeps its own private
+declarations, and a reference to one is `bynk.visibility.private_item` as it
+would be in any other unit.
+A `system` suite may instead name every type a participant context declares,
+its private types included (§5.1c).
+
 `Val[T]` (v0.114, retiring `Mock[T]`) MUST occur only in a test body
 (`bynk.val.outside_test`), name a resolvable type (`bynk.val.unknown_type`), and
 receive pins that are compile-time literals of the right arity satisfying the
@@ -2129,7 +2333,16 @@ slow element does not head-of-line-block the rest; the order in which side
 effects interleave is unspecified. Unlike the sequential `forEach` (which
 short-circuits on the first failure and never issues the rest), a rejecting
 element does **not** cancel siblings already issued — every element's effect is
-in flight before the first failure surfaces, and each runs to completion.
+issued, in input order, before any is awaited. The fan-out has **settle-all**
+fault semantics, as a `par` block does (§4.8.7b): when any element faults it waits
+for **every** element to settle, then raises the **first fault in input order**
+(not the first in time), so no element's work outlives the call and the fault a
+program sees does not depend on timing. Later faults ride on the raised one as
+`suppressed` and are not catchable separately. A fast fault therefore waits for a
+slow sibling. A synchronous throw from `f` is a fault of that element only: the
+elements before and after it are still issued and awaited. The same holds for
+`parTraverseAll` and `parTraverseTry` and for the `Query`/`Map` broadcast forms
+([#2662](https://github.com/bynk-lang/bynk/issues/2662)).
 
 The **collect-all** pair `traverseAll` / `parTraverseAll` (v0.148,
 [ADR 0172](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0172-list-collect-all-iterators.md))
@@ -2155,8 +2368,9 @@ take the same `f: T -> Effect[Result[U, E]]` but **stop at the first `Err`**,
 returning `Effect[Result[List[U], E]]` — `Ok` of the collected values, or the
 first `Err` encountered. `traverseTry` awaits each element in order and bails on
 the first `Err` (later elements never run); `parTraverseTry` issues all at once,
-awaits them, then returns the first `Err` in input order (in-flight calls are not
-cancelled). They are the fault-**propagating** counterpart to the fault-gathering
+awaits them all, then returns the first `Err` in input order — unless an element
+faulted, in which case the fault (first in input order) is raised instead, whatever
+the `Err` positions. They are the fault-**propagating** counterpart to the fault-gathering
 `traverseAll`/`parTraverseAll`, and likewise apply over the `Query`/`Map`
 broadcast.
 
@@ -2164,9 +2378,11 @@ broadcast.
 The builder/terminal rows above are the **eager in-memory half** of the query
 algebra ([design notes §11](https://github.com/bynk-lang/bynk/blob/main/design/bynk-design-notes.md)) —
 the same combinator names a lazy storage `Query[T]` will carry. **Ordering keys**
-(`sortBy`/`min`/`max`) are drawn from the closed orderable base set — `Int`,
-`Float`, `String`, `Duration`, `Instant` (refined types widening; an opaque key
-is **not** orderable) — else `bynk.types.key_not_orderable`. **Numeric keys**
+(`sortBy`/`min`/`max`) on a `List` are any `Ord` type (§5.2) — else
+`bynk.types.key_not_orderable`. On a storage `Query` the key is still drawn from
+the closed base set — `Int`, `Float`, `String`, `Duration`, `Instant` (refined
+types widening; an opaque key is **not** orderable) — because a user-type
+comparator has no storage lowering; the same code is reported. **Numeric keys**
 (`sum`/`average`) are `Int`/`Float`/`Duration` (not `Instant` — instants are not
 summable), else `bynk.query.sum_needs_numeric`;
 `average` of a `Duration` is a `Duration` (integer-rounded millis), otherwise a

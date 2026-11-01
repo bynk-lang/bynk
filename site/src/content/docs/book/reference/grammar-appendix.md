@@ -30,16 +30,17 @@ exports_decl ::= "exports" ("opaque" | "transparent" | "capability") "{" (identi
 type_param ::= identifier (":" identifier ("+" identifier)*)?
 where_clause ::= "where" where_bound ("," where_bound)*
 where_bound ::= identifier ":" identifier ("+" identifier)*
-type_decl ::= "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body
+visibility_modifier ::= "private"
+type_decl ::= visibility_modifier? "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body ("derives" identifier ("+" identifier)*)?
 type_body ::= opaque_type | refined_type | record_type | sum_type | enum_type
 opaque_type ::= "opaque" base_type ("where" refinement)?
 refined_type ::= base_type ("where" refinement)?
 record_type ::= "{" (record_field ("," record_field)*)? ","? "}"
 record_field ::= identifier ":" type_ref ("where" refinement)? ("=" expression)?
 event_decl ::= "event" identifier store_annotation* "=" record_type
-asset_decl ::= "asset" identifier "=" string_literal ("at" string_literal)?
-embed_decl ::= "embed" identifier "=" string_literal
-const_decl ::= "const" identifier ":" type_ref "=" expression
+asset_decl ::= visibility_modifier? "asset" identifier "=" string_literal ("at" string_literal)?
+embed_decl ::= visibility_modifier? "embed" identifier "=" string_literal
+const_decl ::= visibility_modifier? "const" identifier ":" type_ref "=" expression
 sum_type ::= sum_variant+ ("embeds" type_ref "as" constant_name ("," type_ref "as" constant_name)*)?
 sum_variant ::= "|" constant_name ("(" (variant_payload_field ("," variant_payload_field)*)? ","? ")")?
 variant_payload_field ::= identifier ":" type_ref
@@ -56,7 +57,7 @@ function_type_ref ::= (base_type | unit_type | validation_error_type | generic_t
 unit_type ::= "(" ")"
 validation_error_type ::= "ValidationError"
 generic_type_ref ::= ("Option" | "Effect" | "HttpResult" | "List" | "Set" | "Stream" | "Query" | "Connection" | "History") "[" type_ref "]" | ("Result" | "Map") "[" type_ref "," type_ref "]"
-fn_decl ::= "fn" (method_name | identifier) ("[" type_param ("," type_param)* "]")? "(" params? ")" "->" type_ref where_clause? requires_clause* ensures_clause* block
+fn_decl ::= visibility_modifier? "fn" (method_name | identifier) ("[" type_param ("," type_param)* "]")? "(" params? ")" "->" type_ref where_clause? requires_clause* ensures_clause* block
 method_name ::= identifier "." identifier
 requires_clause ::= "requires" identifier ":" expression
 ensures_clause ::= "ensures" identifier ":" expression
@@ -65,7 +66,7 @@ self_param ::= "self"
 param ::= identifier ":" type_ref
 capability_decl ::= "capability" identifier ("{" capability_op* "}" | "=" identifier store_annotation*)
 capability_op ::= "fn" identifier ("[" type_param ("," type_param)* "]")? "(" (param ("," param)*)? ","? ")" "->" type_ref
-messages_decl ::= "messages" string_literal store_annotation* "{" message_entry* "}"
+messages_decl ::= visibility_modifier? "messages" string_literal store_annotation* "{" message_entry* "}"
 message_entry ::= string_literal "=>" string_literal ","?
 provider_decl ::= "provides" identifier "=" identifier given_clause? ("{" provider_op* "}")?
 provider_op ::= "fn" identifier "(" (param ("," param)*)? ","? ")" "->" type_ref block
@@ -121,7 +122,7 @@ let_stmt ::= "let" binding_name (":" type_ref)? "=" expression
 effect_let_stmt ::= "let" binding_name (":" type_ref)? "<-" expression call_site_actor?
 let_else_stmt ::= "let" (let_pattern | let_or_pattern) ("=" | "<-") expression call_site_actor? "else" (block | let_else_match) | "let" (record_pattern | let_paren_record_pattern) ("=" | "<-") expression call_site_actor? ("else" (block | let_else_match))?
 let_paren_record_pattern ::= "(" record_pattern ")"
-let_pattern ::= literal_pattern | paren_pattern | let_variant_pattern
+let_pattern ::= literal_pattern | paren_pattern | list_pattern | let_variant_pattern
 let_or_pattern ::= (let_pattern | record_pattern) "|" pattern
 let_variant_pattern ::= identifier "." identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")? | identifier "(" (pattern_binding ("," pattern_binding)*)? ","? ")"
 let_else_match ::= "match" "{" match_arm* "}"
@@ -142,10 +143,12 @@ if_expr ::= "if" expression block ("else" (if_expr | block))?
 match_expr ::= "match" expression "{" match_arm* "}"
 match_arm ::= (pattern | refined_pattern) ("if" expression)? "=>" expression ","?
 refined_pattern ::= wildcard_pattern "where" refinement
-pattern ::= wildcard_pattern | literal_pattern | variant_pattern | record_pattern | or_pattern | paren_pattern
+pattern ::= wildcard_pattern | literal_pattern | variant_pattern | record_pattern | list_pattern | or_pattern | paren_pattern
 record_pattern ::= identifier "{" (record_pattern_field ",")* ".." "}"
+list_pattern ::= "[" (pattern ",")* (pattern | list_rest ","?)? "]"
+list_rest ::= ".." identifier?
 record_pattern_field ::= identifier ":" pattern | identifier
-is_base_pattern ::= wildcard_pattern | literal_pattern | variant_pattern | paren_pattern
+is_base_pattern ::= wildcard_pattern | literal_pattern | variant_pattern | list_pattern | paren_pattern
 is_pattern ::= is_base_pattern | is_or_pattern
 is_or_pattern ::= is_pattern "|" is_base_pattern
 or_pattern ::= pattern "|" pattern
@@ -165,7 +168,7 @@ lambda_param ::= (identifier | contextual_identifier) (":" type_ref)?
 paren_expr ::= "(" expression ")"
 method_call ::= primary "." identifier ("[" type_ref ("," type_ref)* "]")? "(" (expression ("," expression)*)? ","? ")"
 field_access ::= primary "." identifier
-call ::= (identifier | contextual_identifier) ("[" type_ref ("," type_ref)* "]")? "(" (expression ("," expression)*)? ","? ")"
+call ::= (identifier | contextual_identifier) "(" (expression ("," expression)*)? ","? ")" | (identifier | contextual_identifier) "[" type_ref ("," type_ref)* "]" "(" (expression ("," expression)*)? ","? ")"
 list_literal ::= "[" (expression ("," expression)* ","?)? "]"
 record_construction ::= identifier "{" (field_init ("," field_init)*)? ","? "}"
 field_init ::= identifier ":" expression | identifier
