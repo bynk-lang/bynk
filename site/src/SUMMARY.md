@@ -51,6 +51,7 @@
     - [What a timeout stops](guides/effects-and-capabilities/what-a-timeout-stops.md)
     - [Run independent calls at the same time](guides/effects-and-capabilities/run-independent-calls-at-the-same-time.md)
     - [Bound how long a call may take](guides/effects-and-capabilities/bound-how-long-a-call-may-take.md)
+    - [Ask two sources and take the first answer](guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer.md)
     - [Compose a provider from other capabilities](guides/effects-and-capabilities/compose-a-provider.md)
     - [Share a capability across contexts](guides/effects-and-capabilities/share-across-contexts.md)
     - [Wrap a library as an adapter](guides/effects-and-capabilities/wrap-a-library.md)

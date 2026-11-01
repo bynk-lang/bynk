@@ -147,6 +147,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__bynkIntRem", "int"),
     ("__bynkPercentDecode", "url"),
     ("__bynkPercentEncode", "url"),
+    ("__bynkRace", "settle"),
     ("__bynkSettleAll", "settle"),
     ("__bynkToInt", "int"),
     ("__bynkWithin", "settle"),

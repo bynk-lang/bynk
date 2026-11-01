@@ -111,3 +111,61 @@ export async function __bynkWithin<T>(
   }
   return Ok(winner);
 }
+
+// Concurrent effects, slice 4 (#2711): `a.race(b)`.
+//
+// Resolves with the FIRST effect to succeed, in time; a tie (two effects that
+// settle in the same turn) goes to the earlier one in source order, because each
+// is subscribed in that order. A fast fault does not win: it waits to see whether
+// a slower side succeeds. If EVERY effect faults, it raises the first fault in
+// source order (not the first in time) with the rest attached as `suppressed`,
+// as `__bynkSettleAll` does.
+//
+// Every effect that did not win is handed, UNCANCELLED, to the execution
+// context's `waitUntil`, so it runs to completion and its side effects still
+// happen; a fault in it is the platform's to log, not the handler's. Nothing is
+// cancelled (track Q7): `race` is for idempotent work, and
+// `FetchOptions.timeout` is the tool when the work must stop. A chain
+// `a.race(b).race(c)` lowers to one call over `[a, b, c]`. Not part of ADR
+// 0310's published ABI: it is codegen.
+export function __bynkRace<T>(
+  promises: readonly Promise<T>[],
+  exec: { waitUntil(promise: Promise<unknown>): void },
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const faults: unknown[] = new Array(promises.length);
+    let faulted = 0;
+    let decided = false;
+    promises.forEach((promise, i) => {
+      Promise.resolve(promise).then(
+        (value) => {
+          if (decided) return;
+          decided = true;
+          promises.forEach((other, j) => {
+            if (j !== i) exec.waitUntil(other);
+          });
+          resolve(value);
+        },
+        (fault) => {
+          faults[i] = fault;
+          faulted += 1;
+          if (decided || faulted < promises.length) return;
+          decided = true;
+          const [first, ...rest] = faults;
+          if (rest.length > 0 && typeof first === "object" && first !== null) {
+            try {
+              Object.defineProperty(first, "suppressed", {
+                value: rest,
+                configurable: true,
+                writable: true,
+              });
+            } catch {
+              // A frozen reason cannot carry them; the first fault still stands.
+            }
+          }
+          reject(first);
+        },
+      );
+    });
+  });
+}

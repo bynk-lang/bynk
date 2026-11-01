@@ -968,6 +968,18 @@
   ],
   "method_call": [
     {
+      "code": "bynk.race.in_agent_handler",
+      "summary": "`a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to."
+    },
+    {
+      "code": "bynk.race.in_pure_context",
+      "summary": "`a.race(b)` was used in a pure (non-effectful) context."
+    },
+    {
+      "code": "bynk.race.outside_handler",
+      "summary": "`a.race(b)` was used outside a service handler's body (in a function, a provider or a WebSocket handler), where no execution context exists."
+    },
+    {
       "code": "bynk.types.json_uncodable",
       "summary": "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, error builtins)."
     },

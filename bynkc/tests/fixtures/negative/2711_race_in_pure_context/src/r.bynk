@@ -1,0 +1,10 @@
+context r
+
+consumes bynk
+
+// #2711: `race` needs an effectful body; a pure function is refused with the
+// same remedy as `within`.
+fn pick(a: Effect[Int], b: Effect[Int]) -> Int {
+	let c = a.race(b)
+	0
+}

@@ -1,0 +1,9 @@
+context r
+
+consumes bynk
+
+// #2711: an effectful function has no execution context (see #2682), so it
+// cannot hand the loser to one.
+fn pick(a: Effect[Int], b: Effect[Int]) -> Effect[Int] {
+	a.race(b)
+}

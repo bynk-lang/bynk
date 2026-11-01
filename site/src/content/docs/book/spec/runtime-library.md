@@ -502,3 +502,28 @@ already running is not left unseen. The helper reads `exec.timers` (`set(fn, ms)
 virtual time that way, and no emitted handler does. Like `__bynkSettleAll`, it is
 codegen, not part of the published emit ABI (ADR 0310), and lives in the `settle`
 runtime module.
+
+## §7.4.15 The `race` helper (#2711)
+
+`__bynkRace(promises, exec)` is the runtime half of `a.race(b)` (§5.5). `promises` are
+the effects in source order, and `exec` the handler's execution context
+(`deps.__exec`).
+
+```typescript
+export function __bynkRace<T>(
+  promises: readonly Promise<T>[],
+  exec: { waitUntil(promise: Promise<unknown>): void },
+): Promise<T>;
+```
+
+The contract: it resolves with the first promise to **fulfil**. A tie, where promises
+settle in the same turn, goes to the earlier in `promises`, because each is subscribed
+in that order. A rejection does not decide the race while another promise may still
+fulfil. Once a promise has won, every other promise is handed to `exec.waitUntil` **as
+itself**: it is neither cancelled nor wrapped, so it runs to completion, and a fault in
+it is the platform's to report. If every promise rejects, it rejects with the first
+rejection **in source order**, with the rest attached as an array `suppressed`, as
+`__bynkSettleAll` does; none is handed to `waitUntil`, since none is left running. A
+chain `a.race(b).race(c)` lowers to one call over `[a, b, c]`, so a nested race cannot
+settle a microtask late and lose a tie. Like `__bynkSettleAll`, it is codegen, not part
+of the published emit ABI (ADR 0310), and lives in the `settle` runtime module.

@@ -2077,6 +2077,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["handler"],
     ),
     dg(
+        "bynk.race.in_agent_handler",
+        "`a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.race.in_pure_context",
+        "`a.race(b)` was used in a pure (non-effectful) context.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.race.outside_handler",
+        "`a.race(b)` was used outside a service handler's body (in a function, a provider or a WebSocket handler), where no execution context exists.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.record_spread.field_type_mismatch",
         "A record-spread override has the wrong type for the field.",
         &["record_spread"],

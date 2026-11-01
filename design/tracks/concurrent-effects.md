@@ -6,8 +6,10 @@
   slice 0 shipped in #2646 (ADR 0672), with slice 2 folded into it; slice 0b
   shipped in #2669 ([#2662](https://github.com/bynk-lang/bynk/issues/2662));
   slice 1 was dropped (Q2); slice 3, the timeout, shipped in #2693
-  ([#2683](https://github.com/bynk-lang/bynk/issues/2683), ADR 0687). Every
-  planned slice has shipped; slice 4 (race) is not planned. Spine
+  ([#2683](https://github.com/bynk-lang/bynk/issues/2683), ADR 0687); slice 4,
+  the race `a.race(b)`, is in review in
+  [#2711](https://github.com/bynk-lang/bynk/issues/2711) and reopens Q7 (see
+  its **[Amended]** answer). Spine
   [#2615](https://github.com/bynk-lang/bynk/issues/2615).
 - **Realises:** the effect model of `design/bynk-design-notes.md` (an `Effect` is
   the only way a program reaches the outside world), extending the
@@ -336,6 +338,18 @@ slice and (c) a non-goal.** The motivating case is latency for independent work
 (Q1); racing alternatives is rarer, and without cancellation it hides side
 effects behind a construct that reads as if the loser did nothing.
 
+**[Amended]** Slice 4
+([#2711](https://github.com/bynk-lang/bynk/issues/2711)) adopts (b), reopening
+the answer above. Slice 3 had by then built what (b) needs: a method table on
+every `Effect`, the `__exec` gate for service handlers, the `waitUntil` handover
+for abandoned work, and virtual time with latency stubs. The same stance that
+answered this objection for `within` answers it for a race: the loser is handed
+to `waitUntil` and runs to completion, the docs say so plainly, and `race` is
+for idempotent work such as a hedged read. `a.race(b)` takes the first effect to
+*succeed*; if every side faults, the first fault in source order is raised with
+the rest as `suppressed`. (c), real cancellation, stays a non-goal, and
+`FetchOptions.timeout` stays the tool when work must stop.
+
 ## 6. Candidate slice decomposition
 
 Each becomes an increment proposal opened as
@@ -361,8 +375,12 @@ a sub-issue of #2615.
   execution context to hand the abandoned work to. The `fn` refusal can lift once
   [#2682](https://github.com/bynk-lang/bynk/issues/2682) (`~>` in a function)
   is resolved.
-- **Slice 4 — Race (loser runs to completion)**, not planned. Q7 adopted no
-  general race for this track; this stays as a possible later slice.
+- **Slice 4 — Race (loser runs to completion)**,
+  [#2711](https://github.com/bynk-lang/bynk/issues/2711). Q7 first adopted no
+  general race and named (b) as a possible later slice; slice 4 adopts (b) (Q7,
+  **[Amended]**). `a.race(b)` is a method of every `Effect[T]`, legal exactly
+  where `within` is, lowered to `__bynkRace`; the loser is handed to `waitUntil`
+  uncancelled. (c) stays a non-goal.
 
 ## 7. Front-loaded ADR candidates
 
@@ -388,8 +406,8 @@ To land with, or just before, slice 0:
   - Work keeps running after the handler replies, or is cut off half-done when
     the platform cancels it. Mitigation: settle-all (Q3) for joins and, after
     slice 0b, for the `parTraverse` family; an explicit `waitUntil` handover for
-    anything a timeout abandons (Q6), which is the only work allowed to outlive
-    a join.
+    anything a timeout abandons (Q6) or a race loses (Q7, amended), which is the
+    only work allowed to outlive a join.
   - A handler reports a different error or fault depending on timing, which
     makes failures hard to reproduce and lets an attacker who can slow one
     dependency choose which error a caller sees. Mitigation: source-order
@@ -410,7 +428,7 @@ To land with, or just before, slice 0:
 - [x] Slice 2 — agent handlers (folded into slice 0: the workerd gate test in
   #2646 found no new interleaving, so `par` stays legal in agent handlers)
 - [x] Slice 3 — general timeout (#2683, shipped in #2693, ADR 0687)
-- [ ] Slice 4 — race (not planned; possible later slice)
+- [ ] Slice 4 — race (#2711; adopts Q7 (b))
 
 ## 10. Non-goals
 

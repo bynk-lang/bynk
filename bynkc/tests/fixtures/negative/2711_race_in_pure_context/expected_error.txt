@@ -1,0 +1,1 @@
+bynk.race.in_pure_context `race` can only be used inside an effectful body

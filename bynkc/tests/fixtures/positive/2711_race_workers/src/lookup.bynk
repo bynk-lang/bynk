@@ -1,0 +1,28 @@
+context lookup
+
+consumes bynk
+
+// #2711 on the Workers target: `race` hands the losing effect to the request's
+// `ctx.waitUntil`, through `deps.__exec`, in an `on call` handler and an http
+// handler alike.
+
+capability Prices {
+	fn get(region: String, sku: Int) -> Effect[Int]
+}
+
+provides Prices = FixedPrices {
+	fn get(region: String, sku: Int) -> Effect[Int] { sku }
+}
+
+service prices {
+	on call(sku: Int) -> Effect[Int] given Prices {
+		Prices.get("east", sku).race(Prices.get("west", sku))
+	}
+}
+
+service api from http {
+	on GET("/") () -> Effect[HttpResult[String]] by Visitor given Prices {
+		let p <- Prices.get("east", 1).race(Prices.get("west", 1))
+		Effect.pure(Ok("priced"))
+	}
+}

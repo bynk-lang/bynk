@@ -194,6 +194,10 @@
             "link": "/book/guides/effects-and-capabilities/bound-how-long-a-call-may-take/"
           },
           {
+            "label": "Ask two sources and take the first answer",
+            "link": "/book/guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer/"
+          },
+          {
             "label": "Compose a provider from other capabilities",
             "link": "/book/guides/effects-and-capabilities/compose-a-provider/"
           },

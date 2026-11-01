@@ -200,6 +200,7 @@ A module that declares no constant emits exactly as before.
 | `<-` | `await` |
 | `~>` | `ctx.__exec.waitUntil(<effect>)` — dispatched, not awaited |
 | `e.within(d)` | `__bynkWithin(<e>, <ms>, deps.__exec)` — races the effect against a timer and yields `Ok(value)` or `Err({ after })`; the handler receives `__exec` when its body calls `within`, as it does for `~>` (§7.4.14) |
+| `a.race(b)` | `__bynkRace([<a>, <b>], deps.__exec)` — resolves with the first effect to succeed and hands the others to `waitUntil`; a chain `a.race(b).race(c)` is one call over `[a, b, c]`; the handler receives `__exec` when its body calls `race`, as for `within` (§7.4.15) |
 | `par { let a <- e1  let b <- e2 }` | `const [a, b] = await __bynkSettleAll([() => e1, () => e2]);` — the join calls the thunks in source order, issuing each effect before either is awaited; a `do` binding takes a hole in the pattern (§7.4.13) |
 
 An `Effect[T]` is realised as a `Promise<T>`; it has no runtime constructor.

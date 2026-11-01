@@ -128,6 +128,36 @@ actually stop. An effect that already returns a `Result` gains a second layer.
 A deadline that is not over zero and at most 2,147,483,647 ms faults the call. See
 [bound how long a call may take](/book/guides/effects-and-capabilities/bound-how-long-a-call-may-take/).
 
+## Racing two effects — `race` {#race}
+
+`a.race(b)` takes whichever of two effects succeeds first. It is a method of every
+`Effect[T]`, `b` is an `Effect[T]` too, and the result is `Effect[T]`. It chains:
+`a.race(b).race(c)` is the first of three.
+
+```bynk,fragment
+let p <- Prices.get("east", sku).race(Prices.get("west", sku))
+```
+
+- **First to succeed.** A side that faults does not win while another may still
+  succeed. If every side faults, the first fault in source order is raised, with the
+  others attached as `suppressed`. An `Err` returned by an `Effect[Result[T, E]]` is a
+  value, so it is a success and can win.
+- **A tie goes to the receiver:** the side written first.
+- **The loser is not cancelled.** It is handed to the platform's `waitUntil` and runs to
+  completion, so its side effects still happen. `race` is for idempotent work, and the
+  work is done twice. `FetchOptions.timeout` is the tool when the work must stop.
+- A mismatched `T` is an ordinary type error; map each side into a shared type first.
+
+It is legal exactly where [`within`](#within) is, and refused in the same places:
+
+| Where | Code | Why |
+|---|---|---|
+| an agent handler, a lambda in one included | `bynk.race.in_agent_handler` | no execution context to hand the loser to |
+| an effectful `fn`, a provider operation or a WebSocket handler | `bynk.race.outside_handler` | none of them has an execution context (#2682) |
+| a pure body | `bynk.race.in_pure_context` | it needs an effectful body |
+
+See [ask two sources and take the first answer](/book/guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer/).
+
 ## Generic operations
 
 A capability operation may declare its own type parameter (v0.235, ADR 0281) —

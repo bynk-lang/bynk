@@ -20,6 +20,13 @@ halfway through a write. Dropping the abandoned effect would turn a slow call in
 half-finished one. Handing it to `waitUntil` lets it finish, and the cost is that you
 cannot assume it did not.
 
+## A race does not stop the loser either
+
+[`a.race(b)`](/book/guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer/)
+works the same way. The first effect to succeed wins, and the other is handed to
+`waitUntil` and runs to completion, so its side effects still happen. Race work that is
+safe to do twice.
+
 ## When the work must stop
 
 Use the capability's own limit. `Fetch` has one: `FetchOptions.timeout` aborts the

@@ -216,8 +216,13 @@ const WITHIN: KernelMethod = m(
     "within(d: Duration) -> Effect[Result[T, TimedOut]]",
 );
 
-/// The methods of every `Effect[T]` (#2683): `within`.
-pub const EFFECT_METHODS: &[KernelMethod] = &[WITHIN];
+/// #2711: `a.race(b)`, on every `Effect[T]`. The first side to succeed wins; the
+/// other is handed, uncancelled, to the execution context's `waitUntil`, so its
+/// side effects still happen. Meant for idempotent work.
+const RACE: KernelMethod = m("race", "race(other: Effect[T]) -> Effect[T]");
+
+/// The methods of every `Effect[T]` (#2683, #2711): `within` and `race`.
+pub const EFFECT_METHODS: &[KernelMethod] = &[WITHIN, RACE];
 
 /// The `Effect[Result[T, E]]` combinators (v0.152, ADR 0176 — design doc
 /// §2.8.3): the compiler-synthesised methods on the universal cross-context
@@ -226,8 +231,9 @@ pub const EFFECT_METHODS: &[KernelMethod] = &[WITHIN];
 /// recovery.
 pub const EFFECT_RESULT_METHODS: &[KernelMethod] = &[
     // #2683: `within` is on every `Effect[T]` (see [`EFFECT_METHODS`]), so an
-    // `Effect[Result]` offers it alongside the combinators.
+    // `Effect[Result]` offers it, and `race` (#2711), alongside the combinators.
     WITHIN,
+    RACE,
     m("mapOk", "mapOk(f: T -> U) -> Effect[Result[U, E]]"),
     m("mapErr", "mapErr(f: E -> F) -> Effect[Result[T, F]]"),
     m(
@@ -385,7 +391,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::Option(_) => OPTION_METHODS,
         Ty::Result(_, _) => RESULT_METHODS,
         // §2.8.3: an `Effect[Result[T, E]]` receiver offers the cross-context
-        // combinators (and `within`); any other `Effect[_]` offers `within` alone.
+        // combinators (and `within`, `race`); any other `Effect[_]` offers those two alone.
         Ty::Effect(inner) if matches!(&*tys.get(*inner), Ty::Result(_, _)) => EFFECT_RESULT_METHODS,
         Ty::Effect(_) => EFFECT_METHODS,
         // #561: a refined receiver inherits its base type's read-only kernel
