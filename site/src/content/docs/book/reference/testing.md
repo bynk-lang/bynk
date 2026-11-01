@@ -728,6 +728,13 @@ stub Pricing.quote(_) never                        // never completes
   end it faults the case.
 - **Calls are recorded when they are issued,** so `expect Pricing.quote called once`
   sees a call `within` gave up on, and `before` compares issue order.
+- **A race ([`race`](/book/reference/capabilities/#race)) is decided by the same
+  stubs.** `stub Prices.get("east", _) returns 1 after 2.seconds` against
+  `stub Prices.get("west", _) returns 2 after 1.seconds` makes the west mirror win. Stubs
+  match by argument. **A same-instant tie goes to the receiver:** stubs are scheduled in
+  issue order, and the earlier side wins. The loser is recorded and settles at the end of
+  the call, like an abandoned `within`. A race between two *contexts* runs at
+  `integration`, since stubs replace capabilities only. At `system`, `race` is real time.
 - Latency exists where `stub` does: `unit` and `integration`. At `system`, and under
   `bynk test --against`, `within` reads real time; test the timeout path at `unit`.
 

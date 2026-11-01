@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "prices": "867700724243e676"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "prices": "Svc(\"prices\",P(\"sku\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
+}

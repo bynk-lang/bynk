@@ -1837,6 +1837,9 @@ pub(crate) fn emit_worker_entry(
     if runtime_use.within() {
         append_missing_bindings(&mut imports, crate::emitter::WITHIN_RUNTIME_IMPORTS);
     }
+    if runtime_use.race() {
+        append_missing_bindings(&mut imports, crate::emitter::RACE_RUNTIME_IMPORTS);
+    }
     if runtime_use.url_ops() {
         append_missing_bindings(&mut imports, crate::emitter::URL_OPS_RUNTIME_IMPORTS);
     }

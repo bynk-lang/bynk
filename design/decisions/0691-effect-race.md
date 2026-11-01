@@ -1,0 +1,75 @@
+# 0691 — `a.race(b)` takes the first effect to succeed and hands the loser to `waitUntil`, never cancelled
+
+- **Status:** Accepted (v0.473)
+
+**Context.** A hedged read asks the same idempotent question of two sources and takes
+whichever answers first: `Promise.any` in TypeScript. Bynk could not write it: `<-`
+awaits one effect, and `par` waits for every binding. The concurrent-effects track
+(spine #2615) adopted no general race in Q7 and named a race whose loser runs to
+completion under `waitUntil`, option (b), as a possible later slice; real
+cancellation, option (c), is a non-goal. Q7's objection to (b) was that without
+cancellation a race reads as if the loser did nothing. Slice 3 (ADR 0687) answered
+the same objection for `within`, and built everything (b) needs: a method table on
+every `Effect`, the `__exec` gate for service handlers, the `waitUntil` handover, and
+virtual time with latency stubs. This record carries the decisions slice 4 (#2711)
+fixed, and amends Q7's adopted answer in place, marked **[Amended]**.
+
+**Decision.**
+
+- **A. Surface.** A method, `a.race(b)`, with both sides `Effect[T]` and the result
+  `Effect[T]`; it chains, and composes with `within`. **Rejected:** a `race { … }`
+  block like `par`, whose result would need a sum type over the bindings (Q1 rejected
+  tuples for the same reason); a function over `List[Effect[T]]`, because an `Effect`
+  in a list element is refused as running unawaited (#1658). A `raceAll` over the
+  `parTraverse` shape is a possible follow-up.
+- **B. What wins.** The first to *succeed*. If every side faults, the first fault in
+  source order is raised, with the rest attached as `suppressed`, as `par` does.
+  **Rejected:** first to *settle* (`Promise.race`), where a fast fault would discard a
+  slower good answer, the opposite of hedging. A `Result` is a value, so an `Err`
+  returned by an `Effect[Result[T, E]]` is a success and can win; as with `within` B,
+  there is no flattening variant.
+- **C. The loser.** Handed to the execution context's `waitUntil`, never cancelled, so
+  its side effects still happen. A loser that faults afterwards is the platform's to
+  log. This is ADR 0687 C. The reference says plainly that `race` is for idempotent
+  work, and points to `FetchOptions.timeout` when work must stop.
+- **D. Agent handlers.** Refused, `bynk.race.in_agent_handler`, as ADR 0687 D: an agent
+  handler has no execution context. If the `state.waitUntil` follow-up for `within`
+  lands, it lifts both refusals together.
+- **E. Where the execution context comes from.** Exactly where `within` is legal. The
+  `__exec` gate (`block_uses_send`, `block_uses_within`) widens to a body that calls
+  `race`. Service-handler bodies, lambdas written there, and event, cron and queue
+  handlers are legal; a WebSocket handler, a provider operation and every `fn` are
+  `bynk.race.outside_handler`; a pure body is `bynk.race.in_pure_context`. The `fn`
+  refusal lifts with #2682, together with `within`'s. The context check is shared with
+  `within`, not duplicated.
+- **F. Production helper.** `__bynkRace(promises, exec)` in the `settle` module, outside
+  ADR 0310's ABI. A chain `a.race(b).race(c)` lowers to a single
+  `__bynkRace([a, b, c], …)` rather than a nested call: a nested race settles a
+  microtask later than its inner race, so `c` would beat `a` in a same-instant tie,
+  against the rule in G.
+- **G. Testing.** No new harness surface. Slice 3's latency stubs decide the winner
+  (stubs match by argument). Ties go to source order, the receiver before the argument:
+  stubs are scheduled in issue order and `__bynkTakeTimer` breaks a tie on `seq`.
+  Losers settle at the end of the addressed call, as abandoned `within` effects do. A
+  race between two contexts runs at `integration` or `system`, since stubs override
+  capabilities only. At `system` and under `--against`, `race` runs in real time.
+- **H. Observation.** Unchanged. Both calls are recorded when issued; `expect`
+  ordering compares issue order (track Q5), not which one won.
+- **I. The argument is consumed.** `race` is the first kernel method to take an
+  `Effect` as an argument. The unawaited-effect check (#1658) does not descend into
+  call arguments, so the argument counts as consumed; a fixture pins it. A mismatched
+  `T` is an ordinary type error, with a note suggesting `.map` into a shared type.
+
+**Consequences.**
+
+- Every construct that does not call `race` emits as before: the helper is imported
+  only by a module that uses it, and the `__exec` gate is syntactic, so a user method
+  named `race` with one argument would thread an `__exec` its handler never reads,
+  as `within` does.
+- A race does the work twice, and the loser's writes happen. The spec, the reference
+  and a guide say so; no lint is possible, because the checker cannot tell a read from
+  a write.
+- Q7 is reopened. The track doc amends its adopted answer to say (b) was adopted by
+  slice 4; (c) stays a non-goal.
+- Hover, completion and signature help are changed: `race` is on every `Effect` and its
+  docs carry the loser caveat.

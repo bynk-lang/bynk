@@ -1,0 +1,24 @@
+context r
+
+consumes bynk
+
+capability Pricing {
+	fn quote(id: Int) -> Effect[Int]
+}
+
+provides Pricing = FixedPricing {
+	fn quote(id: Int) -> Effect[Int] { id }
+}
+
+agent Counter {
+	key id: String
+	store count: Cell[Int] = 0
+
+	// #2711: an agent handler has no execution context to hand the loser to, so
+	// `race` is refused in the whole body, a closure included.
+	on call bump(ids: List[Int]) -> Effect[()] given Pricing {
+		let p <- Pricing.quote(1).race(Pricing.quote(2))
+		let _ <- ids.forEach((id) => { let q <- Pricing.quote(id).race(Pricing.quote(id + 1)) })
+		do count.update((n) => n + 1)
+	}
+}

@@ -759,8 +759,8 @@ pub(crate) fn emit_project(
 }
 
 /// v0.79: does this block contain a `~>` send (or, since #2683, an
-/// `e.within(d)` call, which hands its abandoned effect to the same execution
-/// context) anywhere — including nested
+/// `e.within(d)` or `a.race(b)` call, which hands its abandoned effect to the
+/// same execution context) anywhere — including nested
 /// branches, match arms, and lambdas? Gates execution-context threading
 /// (`deps.__exec`) so a context that never sends keeps byte-identical output.
 ///
@@ -788,29 +788,30 @@ pub(crate) fn block_uses_send(b: &Block) -> bool {
     block_needs_exec(b, true)
 }
 
-/// #2683: whether a service's `on call` handler calls `within`, so the Bundle
+/// #2683, #2711: whether a service's `on call` handler calls `within` or `race`, so the Bundle
 /// target's `__makeSurface` deps must carry the execution context
-/// (`deps.__exec`) it forwards to the handler. Only `within` counts, not `~>`:
+/// (`deps.__exec`) it forwards to the handler. Only `within` and `race` count, not `~>`:
 /// a `~>` in a bundle `on call` handler is a separate, existing gap, left as
 /// it was so that no other construct's output changes.
 pub(crate) fn call_handler_needs_exec(h: &bynk_syntax::ast::Handler) -> bool {
     matches!(h.kind, bynk_syntax::ast::HandlerKind::Call) && block_uses_within(&h.body)
 }
 
-/// #2683: does this block call `e.within(d)` anywhere, lambdas included? The
-/// race hands the abandoned effect to `deps.__exec`, so a handler that does
+/// #2683, #2711: does this block call `e.within(d)` or `a.race(b)` anywhere,
+/// lambdas included? The race hands the abandoned effect to `deps.__exec`, so a handler that does
 /// receives the execution context exactly as a `~>`-sending one does. The test
 /// is syntactic, like [`block_uses_send`]'s: a user type's own one-argument
 /// `within` method matches too. That threads an `__exec` its handler never
 /// reads, and takes that target's test modules onto virtual time, which a
-/// module with no `within` or timed stub would not see; neither changes what
+/// module with no `within`, `race` or timed stub would not see; neither changes what
 /// the program does.
 pub(crate) fn block_uses_within(b: &Block) -> bool {
     block_needs_exec(b, false)
 }
 
 /// The shared walk behind [`block_uses_send`] (which counts a `~>` send, or a
-/// `within` call) and [`block_uses_within`] (a `within` call alone).
+/// `within` or `race` call) and [`block_uses_within`] (a `within` or `race` call
+/// alone).
 fn block_needs_exec(b: &Block, sends: bool) -> bool {
     fn stmt(s: &Statement, sends: bool) -> bool {
         match s {
@@ -825,9 +826,10 @@ fn block_needs_exec(b: &Block, sends: bool) -> bool {
     }
     fn expr(e: &Expr, sends: bool) -> bool {
         match &e.kind {
-            // #2683: `e.within(d)` hands its abandoned effect to `deps.__exec`.
+            // #2683, #2711: `e.within(d)` and `a.race(b)` hand their abandoned
+            // effect to `deps.__exec`.
             ExprKind::MethodCall { method, args, .. }
-                if method.name == "within" && args.len() == 1 =>
+                if (method.name == "within" || method.name == "race") && args.len() == 1 =>
             {
                 true
             }
@@ -4022,6 +4024,9 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         if ctx.runtime_use.within() {
             parts.extend(WITHIN_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
+        if ctx.runtime_use.race() {
+            parts.extend(RACE_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
+        }
         if ctx.runtime_use.url_ops() {
             parts.extend(URL_OPS_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
@@ -4138,6 +4143,12 @@ fn write_header_single(
         } else {
             ""
         };
+        // #2711: `a.race(b)`'s helper, imported only when a body uses it.
+        let race_imports = if runtime_use.race() {
+            RACE_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #2341 (L4): the `RequestHeaders` constructor, imported only when a
         // body built one (`RequestHeaders.of`/`empty`).
         let request_headers_imports = if runtime_use.request_headers() {
@@ -4175,7 +4186,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{within_imports}{url_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{within_imports}{race_imports}{url_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4202,6 +4213,9 @@ pub(crate) const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkI
 pub(crate) const SETTLE_ALL_RUNTIME_IMPORTS: &str = ", __bynkSettleAll";
 /// #2683: the `within` race.
 pub(crate) const WITHIN_RUNTIME_IMPORTS: &str = ", __bynkWithin";
+
+/// #2711: the `race` helper.
+pub(crate) const RACE_RUNTIME_IMPORTS: &str = ", __bynkRace";
 
 /// K2 (#2594): the percent-encoding helpers (`percentEncode`,
 /// `percentDecode`), appended only when the body calls one.
@@ -5488,6 +5502,11 @@ impl<'a> LowerCtx<'a> {
     /// Record that this lowering emitted a `within` race (#2683).
     fn note_within(&self) {
         self.runtime_use().note_within();
+    }
+
+    /// Record that this lowering emitted a `race` (#2711).
+    fn note_race(&self) {
+        self.runtime_use().note_race();
     }
 
     /// Record that this lowering emitted a `par` join (#2640).
