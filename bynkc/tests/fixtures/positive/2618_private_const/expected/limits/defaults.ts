@@ -15,3 +15,5 @@ export const Window = {
 export const Step: number = 5;
 
 export const Narrow: Window = { size: 2, offset: 1 };
+
+export const Retries: number = Step;

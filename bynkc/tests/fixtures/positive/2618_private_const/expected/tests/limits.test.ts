@@ -40,7 +40,7 @@ function __makeTestDeps() {
 async function test_the_private_constants() {
   try {
     const deps = {};
-    const { Narrow, Step, Window, retries, span } = __ns_limits;
+    const { Narrow, Retries, Step, Window, retries, span } = __ns_limits;
     type Window = __ns_limits.Window;
     if (!(Step === 5)) { throw __bynkExpectFailure("tests/limits.test.bynk:4:12", 114, 123, "expect Step == 5\n  expected: Step == 5\n  actual:   " + __bynkShow((Step)) + " == " + __bynkShow((5))); }
     if (!(Narrow.size === 2)) { throw __bynkExpectFailure("tests/limits.test.bynk:5:12", 135, 151, "expect Narrow.size == 2\n  expected: Narrow.size == 2\n  actual:   " + __bynkShow((Narrow.size)) + " == " + __bynkShow((2))); }
@@ -57,7 +57,7 @@ async function test_the_private_constants() {
 async function test_the_public_surface_built_on_them() {
   try {
     const deps = {};
-    const { Narrow, Step, Window, retries, span } = __ns_limits;
+    const { Narrow, Retries, Step, Window, retries, span } = __ns_limits;
     type Window = __ns_limits.Window;
     if (!(retries() === 10)) { throw __bynkExpectFailure("tests/limits.test.bynk:9:12", 212, 227, "expect retries() == 10\n  expected: retries() == 10\n  actual:   " + __bynkShow((retries())) + " == " + __bynkShow((10))); }
     if (!(span() === 3)) { throw __bynkExpectFailure("tests/limits.test.bynk:10:12", 239, 250, "expect span() == 3\n  expected: span() == 3\n  actual:   " + __bynkShow((span())) + " == " + __bynkShow((3))); }

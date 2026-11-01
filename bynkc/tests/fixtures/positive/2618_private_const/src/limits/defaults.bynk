@@ -9,3 +9,6 @@ private const Step: Int = 5
 private type Window = { size: Int, offset: Int }
 
 private const Narrow: Window = Window { size: 2, offset: 1 }
+
+// A public constant whose initialiser names the private `Step`.
+const Retries: Int = Step

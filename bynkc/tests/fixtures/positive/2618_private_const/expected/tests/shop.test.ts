@@ -43,7 +43,7 @@ async function test_the_public_constant() {
   try {
     const deps = {};
     const { budget } = __ns_shop;
-    const { retries, span } = __ns_limits;
+    const { Retries, retries, span } = __ns_limits;
     const { Step } = __ns_labels;
     if (!(Step === 100)) { throw __bynkExpectFailure("tests/shop.test.bynk:5:12", 159, 170, "expect Step == 100\n  expected: Step == 100\n  actual:   " + __bynkShow((Step)) + " == " + __bynkShow((100))); }
     if (!(budget() === 110)) { throw __bynkExpectFailure("tests/shop.test.bynk:6:12", 182, 197, "expect budget() == 110\n  expected: budget() == 110\n  actual:   " + __bynkShow((budget())) + " == " + __bynkShow((110))); }
