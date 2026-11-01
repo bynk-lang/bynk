@@ -1,0 +1,22 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+// #2628: SQL text is a literal; data goes in as bound `SqlValue`s.
+service probe {
+  on call(id: String, q: String) -> Effect[Bool] given Orders {
+    let _ <- Orders.all("SELECT * FROM t WHERE id = '\(id)'", [])
+    let _ <- Orders.first(q, [])
+    let _ <- Orders.run(q.trim(), [])
+    let sql = q
+    let a = SqlStatement { sql: q, params: [] }
+    let b = SqlStatement { sql, params: [] }
+    let c = SqlStatement { sql: "SELECT 1", params: [Text(id)] }
+    let d = SqlStatement { ...c, sql: "SELECT \(id)" }
+    let e = SqlStatement { ...c, params: [] }
+    let _ <- Orders.batch([a, b, c, d, e])
+    true
+  }
+}

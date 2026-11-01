@@ -1167,7 +1167,7 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                 return;
             }
             match op.as_str() {
-                "decode" => {
+                "decode" | "decodeSql" => {
                     if let Some(Ty::Result(t, _)) = commons.expr_ty(e.id).as_deref()
                         && let Some(tr) = ty_to_type_ref(*t, tys)
                     {

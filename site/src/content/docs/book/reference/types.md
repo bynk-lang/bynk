@@ -402,12 +402,13 @@ hibernation and is restored on rehydration.
 
 ## The JSON codec
 
-Two compiler-backed statics decode and encode JSON at a typed boundary:
+Three compiler-backed statics decode and encode JSON at a typed boundary:
 
 | Form | Type | Purpose |
 |---|---|---|
 | `Json.encode(v)` | `String` | serialise a checked value to a JSON string |
 | `Json.decode[T](s)` | `Result[T, JsonError]` | parse a JSON string into `T`, validating structure (and any refinements) |
+| `Json.decodeSql[T](s)` | `Result[T, JsonError]` | `decode` for a `D1` row or list of rows, which also reads `0`/`1` as a `Bool` ([SQL databases](/book/reference/bynk-capabilities/#sql-databases-d1)) |
 
 `Json.decode[T]` takes an explicit type argument and validates the decoded value
 against `T` — including refined-type predicates — so untrusted JSON enters the

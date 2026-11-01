@@ -1,0 +1,37 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+// #2628: a `SqlStatement` from outside would carry SQL that was never a
+// literal, so it never crosses a boundary or is stored.
+type Job = { statement: SqlStatement }
+
+service exec {
+  on call(s: SqlStatement) -> Effect[Result[List[SqlRun], SqlError]] given Orders {
+    Orders.batch([s])
+  }
+}
+
+type Pending = | Queued(statement: SqlStatement) | Idle
+
+event Prepared = {
+  statement: SqlStatement,
+}
+
+service prepare {
+  on call() -> Effect[Option[SqlStatement]] {
+    Effect.pure(None)
+  }
+}
+
+agent Keeper {
+  key id: String
+
+  store last: Cell[Option[SqlStatement]]
+
+  on call() -> Effect[Int] {
+    Effect.pure(1)
+  }
+}
