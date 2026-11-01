@@ -1,0 +1,6 @@
+commons b
+
+uses a
+
+// #2617: a constant typed by a type of a commons `b` uses.
+const Origin: Pt = Pt { x: 1, y: 2 }

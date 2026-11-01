@@ -68,6 +68,12 @@ pub enum TokenKind {
     // for the same reason as `asset`: `embed` is a likely local name.
     #[token("embed")]
     Embed,
+    // #2617 (named constants): `const Name: Type = <static expression>` — a
+    // context or commons item naming a value. RESERVED_CONTEXTUAL, for the
+    // same reason as `embed`: `const` is a plausible local or field name, and
+    // it was a free identifier before this keyword existed.
+    #[token("const")]
+    Const,
     #[token("fn")]
     Fn,
     #[token("where")]
@@ -412,6 +418,7 @@ impl TokenKind {
             Event => "`event`",
             Asset => "`asset`",
             Embed => "`embed`",
+            Const => "`const`",
             Fn => "`fn`",
             Where => "`where`",
             True => "`true`",

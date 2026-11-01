@@ -73,6 +73,34 @@ pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> 
         ctx.refs.record(id.span, SymbolKind::Embed, &id.name);
         return Some(tys.intern(Ty::Base(BaseType::String)));
     }
+    // #2617: a `const` name is a value of its annotated type, resolved here.
+    // Locals shadow it (checked above); it never shares a name with a
+    // function, type or variant in scope (`bynk.resolve.name_conflict`).
+    if let Some(c) = ctx.input.consts.get(&id.name) {
+        ctx.refs.record(id.span, SymbolKind::Const, &id.name);
+        let ty = resolve_type_ref(&c.ty, &ctx.input.types, tys);
+        // A unit's table holds every type its constants' annotations reach
+        // (`project_model::used_const_seeds`), and an annotation that does
+        // not resolve in its own unit is the resolver's to report. A suite's
+        // view is closed over its imported functions and types only, so a
+        // constant whose type it lacks is reported here rather than typed as
+        // unknown.
+        if ty.is_none() && ctx.in_test_body {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.resolve.unknown_type",
+                    id.span,
+                    format!(
+                        "the type of constant `{}`, `{}`, is not in scope here",
+                        id.name,
+                        crate::context_checks::type_ref_to_display(&c.ty)
+                    ),
+                )
+                .with_note("`uses` the commons that declares the type to name the constant here"),
+            );
+        }
+        return ty;
+    }
     // v0.20a: a named function referenced as a *value* where a function type
     // is expected (the contextual relaxation of `bynk.resolve.fn_without_call`,
     // relocated here from the resolver). A Var-bearing expected (generic

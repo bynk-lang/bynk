@@ -1,0 +1,4 @@
+commons limits
+
+// #2617 (decision D): a constant is named in upper-camel case.
+const maxRetries: Int = 3

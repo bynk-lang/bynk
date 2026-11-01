@@ -1657,6 +1657,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["par_stmt"],
     )),
     dg(
+        "bynk.parse.const_missing_type",
+        "A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`).",
+        &["const_decl"],
+    ),
+    dg(
         "bynk.parse.consumes_after_decls",
         "`consumes` appears after other declarations.",
         &["consumes_decl"],
@@ -2140,6 +2145,31 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A function was called with the wrong number of arguments.",
         &["call"],
     ),
+    dg(
+        "bynk.resolve.bad_const_initialiser",
+        "A `const` initialiser is not a static value of the declared type: only literals, constructors over static values, `T.unsafe(lit)`, `List.empty()`/`Map.empty()`/`Set.empty()`, `Duration` literals and references to other constants are allowed.",
+        &["const_decl"],
+    ),
+    dg(
+        "bynk.resolve.const_cycle",
+        "Constants refer to each other in a cycle, so none of them has a value.",
+        &["const_decl"],
+    ),
+    dg(
+        "bynk.resolve.const_file_cycle",
+        "Constants in different files of one unit refer to each other in a cycle of files, so the files' modules would import each other and one would read a constant before it is defined.",
+        &["const_decl"],
+    ),
+    dg(
+        "bynk.resolve.const_name_case",
+        "A constant's name is not upper-camel case (`MaxRetries`, not `maxRetries`).",
+        &["const_decl"],
+    ),
+    dg(
+        "bynk.resolve.const_outside_context_or_commons",
+        "A `const` declaration appears outside a context or commons.",
+        &["const_decl"],
+    ),
     d("bynk.resolve.duplicate_actor", "Two actors share a name."),
     dg(
         "bynk.resolve.duplicate_agent",
@@ -2150,6 +2180,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.resolve.duplicate_capability",
         "Two capabilities share a name.",
         &["capability_decl"],
+    ),
+    dg(
+        "bynk.resolve.duplicate_const",
+        "Two constants share a name.",
+        &["const_decl"],
     ),
     dg(
         "bynk.resolve.duplicate_field",

@@ -51,6 +51,10 @@ embed banner = "embeds/banner.txt"
 
 fn bannerText() -> String { banner }
 
+const MaxTodos: Int = 10
+
+fn limit() -> Int { MaxTodos }
+
 fn Stored.retitle(self, t: Title) -> Stored {
   Stored { title: t }
 }
@@ -129,13 +133,15 @@ fn declared_name(kind: SymbolKind) -> &'static str {
         SymbolKind::Asset => "logo",
         // #2387: an embed, keyed by its name.
         SymbolKind::Embed => "banner",
+        // #2617: a constant, keyed by its name.
+        SymbolKind::Const => "MaxTodos",
     }
 }
 
 /// Every variant, so the fixture's coverage is asserted rather than assumed.
 /// `declared_name`'s exhaustive `match` is what forces this list to be extended
 /// in practice: a new kind fails to compile there first.
-const ALL_KINDS: [SymbolKind; 14] = [
+const ALL_KINDS: [SymbolKind; 15] = [
     SymbolKind::Type,
     SymbolKind::Fn,
     SymbolKind::Capability,
@@ -150,6 +156,7 @@ const ALL_KINDS: [SymbolKind; 14] = [
     SymbolKind::Messages,
     SymbolKind::Asset,
     SymbolKind::Embed,
+    SymbolKind::Const,
 ];
 
 /// [`EVERY_KIND`] analysed under its own root. `test_name` is what keeps the

@@ -1,0 +1,41 @@
+---
+#2617: the constants' values, proved at run time.
+---
+suite lim.limits
+
+case "scalar constants hold their literals" {
+  expect MaxRetries == 3
+  expect Greeting == "hello"
+  expect Ratio == 0.5
+  expect Enabled
+  expect Floor == -10
+  expect Timeout == 30.seconds
+}
+
+case "a constant may refer to another" {
+  expect DefaultPage == Page { size: 50, offset: 0 }
+  expect DefaultPage.size == PageSize
+  expect Steps == [1, 2, 3]
+  expect Fallback == Some(3)
+}
+
+case "constructed constants" {
+  expect Primary == Red
+  expect Unit == Circle(1)
+  expect Missing == None
+  expect Outcome == Ok(200)
+  expect NoTags.length() == 0
+  expect DefaultPort == 8080
+}
+
+case "functions read constants" {
+  expect attempts() == 4
+  expect greet("Ada") == "hello, Ada"
+  expect pageEnd() == 50
+  expect adminName() == "admin"
+}
+
+case "a local shadows a constant" {
+  expect shadowed() == 7
+  expect MaxRetries == 3
+}

@@ -497,6 +497,10 @@
         "link": "/book/reference/embeds/"
       },
       {
+        "label": "Named constants",
+        "link": "/book/reference/constants/"
+      },
+      {
         "label": "Actors",
         "link": "/book/reference/actors/"
       },

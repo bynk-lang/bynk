@@ -1,0 +1,1 @@
+bynk.resolve.const_name_case constant `maxRetries` must be named in upper-camel case

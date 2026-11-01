@@ -56,6 +56,8 @@ fn token_type_index(kind: SymbolKind) -> u32 {
         SymbolKind::Asset => 13,
         // #2387: embed names append `embed` at 14.
         SymbolKind::Embed => 14,
+        // #2617: constant names append `constant` at 16.
+        SymbolKind::Const => 16,
     }
 }
 
@@ -241,6 +243,7 @@ mod tests {
                 "asset",     // #1883: static asset names — appended
                 "embed",     // #2387: embedded-text names — appended
                 "interface", // constrained generics slice 0: constraint names — appended
+                "constant",  // #2617: named constants — appended
             ]
         );
         let modifiers: Vec<&str> = legend.token_modifiers.iter().map(|m| m.as_str()).collect();

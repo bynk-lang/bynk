@@ -144,6 +144,24 @@ that no Bynk name can collide with it. The emitted code MUST compile under
   runs the `tsc`-built JavaScript (`out-js`, outside the output root) with
   plain `node` needs `"type": "module"` in a `package.json` above it.
 
+### §7.3.1a Named constants {#731a-named-constants}
+
+A constant (`const Name: T = e`, [§5.12b](/book/spec/static-semantics/#constants))
+emits as an exported TypeScript `const` of its declaring module, typed by its
+annotation and initialised with `e` lowered as an ordinary expression:
+
+```typescript
+export const MaxRetries: number = 3;
+export const DefaultPage: Page = { size: PageSize, offset: 0 };
+export const Port: Port = (8080 as Port);
+```
+
+A module's constants come after its types, so an initialiser may construct
+one, and before its functions. Among themselves they are ordered so each comes
+after every constant of the same file its initialiser names; a constant of a
+sibling file or a used commons is imported, as a function is. A module that
+declares no constant emits exactly as before.
+
 ### §7.3.2 Expressions
 
 | Construct | Emits |

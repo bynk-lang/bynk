@@ -81,6 +81,10 @@ pub const KEYWORDS: &[KeywordInfo] = &[
         "Declare a pure, stateless module of types and functions.",
     ),
     k(
+        "const",
+        "Declare a named constant — a static value of a declared type, in a context or commons (`const MaxRetries: Int = 3`).",
+    ),
+    k(
         "consumes",
         "Declare a dependency on another context's services.",
     ),
@@ -264,8 +268,9 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
 /// [`is_reserved_contextual`]) and the
 /// `is_reserved_keyword_covers_every_lexer_keyword` drift guard both defer to
 /// this list, so adding a word here is enough to make the parser admit it.
-pub const RESERVED_CONTEXTUAL: &[&str] =
-    &["asset", "case", "embed", "event", "messages", "on", "suite"];
+pub const RESERVED_CONTEXTUAL: &[&str] = &[
+    "asset", "case", "const", "embed", "event", "messages", "on", "suite",
+];
 
 /// True when `word` is a [reserved contextual keyword](RESERVED_CONTEXTUAL) —
 /// a reserved token `expect_ident` re-admits as an identifier. Because each of

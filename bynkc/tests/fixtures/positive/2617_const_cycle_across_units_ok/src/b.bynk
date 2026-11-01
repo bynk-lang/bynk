@@ -1,0 +1,7 @@
+commons b
+
+uses a
+
+const Y: Int = X
+
+fn y() -> Int { Y }
