@@ -684,8 +684,9 @@ fn lambda_param_position(head: &str) -> bool {
     current
         && segments.iter().all(|seg| {
             let seg = seg.trim();
+            let name = seg.split(':').next().unwrap_or("").trim();
             seg.ends_with('}')
-                || (!seg.is_empty() && seg.chars().all(|c| c.is_alphanumeric() || c == '_'))
+                || (!name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_'))
         })
 }
 
@@ -3722,6 +3723,7 @@ mod tests {
             "  items.map((Order { id, ",
             "  items.fold(0, (total, Order { ",
             "  items.fold(0, (total, Order { id, ",
+            "  items.fold(0, (total: Int, Order { ",
         ] {
             let got = labels(prefix, doc);
             assert!(got.contains(&"..".to_string()), "{prefix}: {got:?}");
