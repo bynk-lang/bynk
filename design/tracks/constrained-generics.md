@@ -268,12 +268,11 @@ canonical encoding, so that semantically equal values index identically.
   - `Bytes` falls into the generic-object branch and encodes as index→byte
     pairs sorted as strings (`"10"` before `"2"`). That is deterministic but
     large and slow; a dedicated `Bytes` form (hex or base64) is better.
-- Open: whether widening keys changes the **stored-state encoding** of
-  `Map`-typed `store` fields. Primitive-keyed maps must keep their encoding
-  exactly, and a non-primitive-keyed map is new, so this should be additive.
-  Slice 2's proposal must confirm it against ADR 0538.
-- Open: iteration order. Insertion order is unchanged, which this track
-  recommends keeping.
+- **To verify in slice 2's proposal:** whether widening keys changes the
+  **stored-state encoding** of `Map`-typed `store` fields. Primitive-keyed maps
+  must keep their encoding exactly, and a non-primitive-keyed map is new, so
+  this should be additive; the proposal must confirm it against ADR 0538.
+- **Adopted:** iteration order stays insertion order.
 
 ### Q7 — `Codable`, and generic capability operations
 
