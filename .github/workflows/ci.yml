@@ -1020,6 +1020,10 @@ jobs:
       # llms.txt is hand-authored; verify its /book/ links still resolve.
       - name: Check llms.txt links resolve
         run: node scripts/check-llms-links.mjs
+      # Spec sections are cited by number; a number used by two headings makes a
+      # citation ambiguous and can hide a contradictory copy (#2610).
+      - name: Check spec section numbers are unique
+        run: node scripts/check-spec-sections.mjs
       # US spellings in the Book's prose (code fences, inline code and the
       # changelog are exempt).
       - name: British-English lint
