@@ -156,13 +156,37 @@ const readStream = (res: globalThis.Response): AsyncIterable<Uint8Array> => {
 
 // K5c (#2627): `source`, noting a throw from it before passing it on, so
 // `sendStream` can fault with the caller's own error where `fetch` would
-// reject and it would read as `Err(Network)`.
-async function* watched(source: AsyncIterable<Uint8Array>, failed: (e: unknown) => void): AsyncIterable<Uint8Array> {
+// reject and it would read as `Err(Network)`. Hand-written, as `readStream`
+// is: a `return()` reaches the source even before the first pull (a fetch
+// that fails to connect, or a head timeout), so a piped `receiveStream` body
+// releases its connection.
+function watched(source: AsyncIterable<Uint8Array>, failed: (e: unknown) => void): AsyncIterable<Uint8Array> {
+  const inner = source[Symbol.asyncIterator]();
+  const iterator = {
+    async next() {
+      try {
+        return await inner.next();
+      } catch (e) {
+        failed(e);
+        throw e;
+      }
+    },
+    async return() {
+      release(inner);
+      return { done: true as const, value: undefined };
+    },
+  };
+  return { [Symbol.asyncIterator]: () => iterator };
+}
+
+// K5c (#2627): stops a handed-over stream without waiting, so a piped
+// `receiveStream` body lets its connection go. A source that can't stop, or
+// throws on stopping, is left as it is.
+function release(it: { return?: () => unknown }): void {
   try {
-    yield* source;
-  } catch (e) {
-    failed(e);
-    throw e;
+    Promise.resolve(it.return?.()).catch(() => {});
+  } catch {
+    // Nothing more to release.
   }
 }
 
@@ -201,7 +225,20 @@ export class FetchProvider implements Fetch {
     options: FetchOptions,
   ): Promise<Result<StreamResponse, FetchError>> {
     claimStream(body);
-    return this.exchange(req, body, timeoutOf("sendStream", options), "manual", readStream, true);
+    // Claimed, the stream can't be released by its caller, so a call that
+    // doesn't send it — a refused body or header, a bad timeout, a failed
+    // fetch — releases it here.
+    let result: Result<StreamResponse, FetchError>;
+    try {
+      result = await this.exchange(req, body, timeoutOf("sendStream", options), "manual", readStream, true);
+    } catch (e) {
+      release(body[Symbol.asyncIterator]());
+      throw e;
+    }
+    if (result.tag === "Err") {
+      release(body[Symbol.asyncIterator]());
+    }
+    return result;
   }
 
   private async exchange<B>(

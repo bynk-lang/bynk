@@ -109,6 +109,23 @@ async function drain(stream) {
 
 /** Whether a stream carries the single-pass mark (`claimStream`). */
 const claimed = (stream) => stream[Symbol.for("bynk.stream.read")] === true;
+// K5c (#2627): a one-chunk byte stream that notes when it is stopped, as a
+// piped `receiveStream` body would release its connection.
+const tracked = () => {
+  const source = { released: false, pulled: 0 };
+  const iterator = {
+    async next() {
+      source.pulled++;
+      return source.pulled === 1 ? { done: false, value: new Uint8Array([1, 2, 3]) } : { done: true, value: undefined };
+    },
+    async return() {
+      source.released = true;
+      return { done: true, value: undefined };
+    },
+  };
+  source[Symbol.asyncIterator] = () => iterator;
+  return source;
+};
 
 /** Set `process.env[name]` for the duration of `body`. */
 async function withProcessEnv(name, value, body) {
@@ -682,11 +699,46 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
             defaults,
           );
           assert.equal(header.error.tag, "InvalidHeader");
+          // Refused, the stream is released, since its caller no longer can.
+          for (const [r, what] of [
+            [request({ method: bynk.Method.Post, body: Some("x") }), "two bodies"],
+            [request({ method: bynk.Method.Get }), "Get"],
+            [request({ method: bynk.Method.Post, headers: new Map([["host", "x"]]) }), "bad header"],
+          ]) {
+            const source = tracked();
+            await p.sendStream(r, source, defaults);
+            await sleep(0);
+            assert.equal(source.released, true, what);
+          }
+          const badTimeout = tracked();
+          await assert.rejects(
+            p.sendStream(request({ method: bynk.Method.Post }), badTimeout, { timeout: Some(0), redirect: bynk.Redirect.Follow }),
+            /timeout/,
+          );
+          await sleep(0);
+          assert.equal(badTimeout.released, true, "bad timeout");
           // Handed over once, a stream can't be handed over again.
           await assert.rejects(p.sendStream(request({ method: bynk.Method.Post }), twoBodies, defaults), /read only once/);
           assert.equal(calls.length, 0);
         },
       );
+    });
+
+    t("FetchProvider.sendStream: a fetch that can't connect is Err(Network) and releases the stream", async () => {
+      // A port that was just listening and is now closed refuses the connection.
+      let closed = "";
+      await withServer(
+        (_req, res) => res.end(),
+        async (url) => {
+          closed = url;
+        },
+      );
+      const source = tracked();
+      const res = await new b.FetchProvider().sendStream(request({ url: closed, method: bynk.Method.Post }), source, defaults);
+      assert.equal(res.tag, "Err");
+      assert.equal(res.error.tag, "Network");
+      await sleep(0);
+      assert.equal(source.released, true);
     });
 
     t("FetchProvider.send: a body on Get or Head is Err(InvalidBody), not Err(Network), and nothing is sent", async () => {

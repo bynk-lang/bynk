@@ -49,7 +49,11 @@ stream: every stream in its tests was a `Stream.of` from Bynk.
 - **D. The request stream is claimed on entry,** before any check. Handing a
   stream over consumes it whatever the outcome, as `RawStreamed` does. A throw
   from the caller's stream while it is sent faults `sendStream` with that
-  error, rather than reading as `Err(Network)`. The body rules are K5b's
+  error, rather than reading as `Err(Network)`. Once the response head has
+  arrived (a server answering early, say with a 413), the response stands and
+  a later throw from the stream isn't reported. A call that doesn't send the
+  stream (a refused body or header, a bad timeout, a failed fetch) releases
+  it, since its caller no longer can. The body rules are K5b's
   (`InvalidBody` for two bodies, or one on `Get`/`Head`). The upload is
   chunked, with no `content-length`. Node needs `duplex: "half"`, and workerd
   accepts it.
