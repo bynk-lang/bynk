@@ -153,8 +153,8 @@ as an ordinary identifier elsewhere.
 {{#grammar visibility_modifier}}
 
 `private`, written immediately before a `type`, `fn` (a free function or a
-method), `messages`, `asset` or `embed` declaration, makes that declaration
-unit-private. `private` is a contextual keyword (§3): it is the modifier only
+method), `messages`, `asset`, `embed` or `const` declaration, makes that
+declaration unit-private. `private` is a contextual keyword (§3): it is the modifier only
 in that position and an ordinary identifier everywhere else, so
 `@cache(scope: private)` and a binding named `private` are unaffected. The
 compiler also recognises `private` before a `service`, `agent`, `capability`,

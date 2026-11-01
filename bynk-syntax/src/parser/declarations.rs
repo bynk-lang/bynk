@@ -357,6 +357,10 @@ impl<'a> Parser<'a> {
                     match self.parse_const_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -1505,6 +1509,10 @@ impl<'a> Parser<'a> {
                     match self.parse_const_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -1883,6 +1891,10 @@ impl<'a> Parser<'a> {
                     match self.parse_const_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -3798,6 +3810,7 @@ impl<'a> Parser<'a> {
             ty,
             init,
             documentation: None,
+            private: None,
             span,
             trivia: Trivia::default(),
         })

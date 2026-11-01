@@ -90,3 +90,29 @@ fn f(private: Int) -> Int { private }
       (base_type)
       (block
         (identifier)))))
+
+==========================
+private const in a commons
+==========================
+
+commons limits
+
+private const MaxRetries: Int = 3
+
+const Retries: Int = MaxRetries
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (const_decl
+      (visibility_modifier)
+      (identifier)
+      (base_type)
+      (number_literal))
+    (const_decl
+      (identifier)
+      (base_type)
+      (identifier))))

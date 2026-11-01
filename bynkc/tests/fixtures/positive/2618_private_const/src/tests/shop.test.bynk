@@ -1,0 +1,8 @@
+suite shop {
+  // `Step` is `labels`'s public constant; `limits`'s private one stays out of
+  // this suite's scope.
+  case "the public constant" {
+    expect Step == 100
+    expect budget() == 110
+  }
+}

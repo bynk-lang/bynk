@@ -147,8 +147,8 @@ meaning.
 
 ### §5.1c Unit-private declarations {#private-declarations}
 
-A `type`, `fn` (a free function or a method), `messages`, `asset` or `embed`
-declaration in a `commons` or `context` MAY carry the `private` modifier
+A `type`, `fn` (a free function or a method), `messages`, `asset`, `embed` or
+`const` declaration in a `commons` or `context` MAY carry the `private` modifier
 ([§4.1.12d](/book/spec/syntactic-grammar/#4112d-visibility_modifier)). A
 declaration without it is public, as every declaration was before the modifier
 existed. A private declaration is visible throughout its own unit, across all
@@ -160,16 +160,17 @@ through `uses`.
   the unit's own declarations or with another import of the same name
   (`bynk.uses.name_conflict` does not apply to them). A reference from such a
   unit that resolves to nothing but a private declaration (a call, a type
-  reference, a static or instance method call, an asset or embed name) is
-  rejected (`bynk.visibility.private_item`), naming the declaration and its
+  reference, a static or instance method call, an asset, embed or constant
+  name) is rejected (`bynk.visibility.private_item`), naming the declaration and its
   unit. A reference the unit's own declaration answers is the unit's own.
 - A private type's methods are out of an importer's reach with the type,
   whether or not they are marked `private`. A private method of a public type
   hides only that method.
 - A public declaration MUST NOT name a private type of its own unit in its
   signature: a public function's or method's parameter and return types, a
-  public type's record field types and variant payloads, and a context's
-  `exports` list (`bynk.visibility.private_in_public`). A method of a private
+  public type's record field types and variant payloads, a public constant's
+  type annotation, and a context's `exports` list
+  (`bynk.visibility.private_in_public`). A method of a private
   type is exempt. Signatures of services, agents, capabilities, providers,
   actors and events are not constrained by this rule: how far they reach is
   governed by `exports` and `consumes` (§5.8), and the cross-context

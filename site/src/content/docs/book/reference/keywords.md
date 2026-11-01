@@ -101,7 +101,7 @@ Not lexer keywords: the lexer treats these as ordinary identifiers, and they car
 | `key` | The agent's identity field — one per agent; keys the store. |
 | `migrate` | An agent's migration step: carries a stored record from an older schema version to the current shape (`migrate from 1 (old: CartV1) { … }`). |
 | `par` | Opens a concurrent binding block (`par { let a <- e1  let b <- e2 }`): every effect is issued before any is awaited, and the block completes when all have settled. |
-| `private` | Before a `fn`, `type`, `messages`, `asset` or `embed` declaration in a commons or context: visible only within its own unit (and that unit's suites), never through `uses` (`private fn helper(…)`). |
+| `private` | Before a `fn`, `type`, `messages`, `asset`, `embed` or `const` declaration in a commons or context: visible only within its own unit (and that unit's suites), never through `uses` (`private fn helper(…)`). |
 | `removed` | Declares an agent class gone (`removed agent Old`): its stored data is deleted at the next deploy, after a named confirmation. |
 | `replaces` | Renames an agent class (`agent New replaces Old`): the old class's stored data and schema history move to the new one. |
 | `store` | A persisted agent-state field. |

@@ -354,11 +354,11 @@ module.exports = grammar({
 
     // -- Type declarations --
 
-    // #2618: `private` before a `fn`, `type`, `messages`, `asset` or `embed`
-    // declaration makes it unit-private. The word is contextual: with `word`
-    // set to `identifier`, it lexes as a keyword only where a declaration may
-    // start, so `@cache(scope: private)` and a binding named `private` keep
-    // parsing as identifiers. Placement (a commons or context, never an
+    // #2618: `private` before a `fn`, `type`, `messages`, `asset`, `embed` or
+    // `const` declaration makes it unit-private. The word is contextual: with
+    // `word` set to `identifier`, it lexes as a keyword only where a
+    // declaration may start, so `@cache(scope: private)` and a binding named
+    // `private` keep parsing as identifiers. Placement (a commons or context, never an
     // adapter) is the compiler's call (`bynk.visibility.private_not_allowed`).
     visibility_modifier: ($) => "private",
 
@@ -473,8 +473,10 @@ module.exports = grammar({
     // (`bynk.resolve.const_name_case`, upper-camel like `constant_name`) and
     // the initialiser's static-ness are checker concerns. The name is an
     // `identifier` because `word` unifies every word-shaped lexeme to it.
+    // A leading `private` makes it unit-private, as on `embed`.
     const_decl: ($) =>
       seq(
+        optional(field("visibility", $.visibility_modifier)),
         "const",
         field("name", $.identifier),
         ":",

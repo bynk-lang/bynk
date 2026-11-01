@@ -37,6 +37,9 @@ unit's files, and to the unit's suites. It is never visible through `uses`.
 - **Assets and embeds.** `private asset` and `private embed` hide the
   declaration's *name* from importers. A private asset is still served by the
   platform: `private` is about names, not about who can fetch the file.
+- **Constants.** `private const Step: Int = 5` keeps a tuning value to the
+  unit, so an importer can't come to depend on it. An importer may declare,
+  or import from another commons, a public constant of the same name.
 - **Message bundles.** `private` on a bundle's `@reference` block keeps the
   bundle out of every context that uses the commons, so no context
   negotiates its locale against it; the commons' own `render` still reads it.
@@ -61,8 +64,8 @@ fn cost(i: Item) -> Int {
 
 ## Keep private types out of public signatures
 
-A public function, method, record field or variant payload can't mention a
-private type of its own unit, since an importer could neither name nor build a
+A public function, method, record field, variant payload or constant's type
+can't mention a private type of its own unit, since an importer could neither name nor build a
 value of it (`bynk.visibility.private_in_public`). Either make the type public,
 or make the declaration that mentions it private too:
 
@@ -108,8 +111,8 @@ the system keeps to itself.
 
 ## Where `private` doesn't apply
 
-`private` modifies a `fn`, `type`, `messages`, `asset` or `embed` declaration
-in a commons or a context. Services, agents, capabilities, providers, actors
+`private` modifies a `fn`, `type`, `messages`, `asset`, `embed` or `const`
+declaration in a commons or a context. Services, agents, capabilities, providers, actors
 and events can't be private (`bynk.visibility.private_not_allowed`): a
 context's [`exports` and `consumes`](/book/guides/program-structure/consume-services/)
 govern how far they reach.

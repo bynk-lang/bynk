@@ -1459,6 +1459,10 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &c.documentation {
             self.emit_doc(doc);
         }
+        // The unit-private modifier.
+        if c.private.is_some() {
+            self.push("private ");
+        }
         self.push("const ");
         self.push(&c.name.name);
         self.push(": ");

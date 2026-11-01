@@ -973,8 +973,8 @@ impl<'a> Parser<'a> {
     /// declaration keyword, so `@cache(scope: private)` and a binding named
     /// `private` keep their meaning.
     ///
-    /// The modifier applies to `fn`, `type`, `messages`, `asset` and `embed`
-    /// in a commons or context (`allowed`). On any other declaration, or in an
+    /// The modifier applies to `fn`, `type`, `messages`, `asset`, `embed` and
+    /// `const` in a commons or context (`allowed`). On any other declaration, or in an
     /// adapter, it is `bynk.visibility.private_not_allowed`: an error in
     /// recovery mode that leaves the declaration to parse as if unmodified,
     /// and the parse's error otherwise.
@@ -995,6 +995,7 @@ impl<'a> Parser<'a> {
                 | TokenKind::Messages
                 | TokenKind::Asset
                 | TokenKind::Embed
+                | TokenKind::Const
         );
         let declaration = modifiable
             || matches!(
@@ -1021,7 +1022,7 @@ impl<'a> Parser<'a> {
                 format!("`private` does not apply to `{what}` declarations"),
             )
             .with_note(
-                "`private` applies to `fn`, `type`, `messages`, `asset` and `embed`; a context's `exports` and `consumes` govern how far its services, agents, capabilities, providers, actors and events reach",
+                "`private` applies to `fn`, `type`, `messages`, `asset`, `embed` and `const`; a context's `exports` and `consumes` govern how far its services, agents, capabilities, providers, actors and events reach",
             )
         } else {
             CompileError::new(
@@ -3863,6 +3864,24 @@ mod tests {
         assert_eq!(doc_of(&t.documentation), Some(("Hidden.", DocForm::Lines)));
         assert!(c.items[1].is_private());
         assert!(!c.items[2].is_private());
+    }
+
+    /// `private` before `const` is the modifier too, its span folded into the
+    /// constant's.
+    #[test]
+    fn private_modifier_on_a_constant() {
+        let src = "commons m\n\nprivate const Max: Int = 3\n\nconst Min: Int = 1\n";
+        let c = parse_str(src).unwrap();
+        let CommonsItem::Const(k) = &c.items[0] else {
+            panic!("a constant");
+        };
+        assert_eq!(
+            k.private.map(|s| s.start),
+            Some(src.find("private").unwrap())
+        );
+        assert_eq!(k.span.start, src.find("private").unwrap());
+        assert!(c.items[0].is_private());
+        assert!(!c.items[1].is_private());
     }
 
     /// #2618: `private` on a declaration it does not apply to is rejected.

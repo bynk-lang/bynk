@@ -1,0 +1,8 @@
+commons shop
+
+uses limits
+
+// `Step` is private to `limits`.
+fn budget() -> Int {
+  retries() + Step
+}

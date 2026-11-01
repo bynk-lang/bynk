@@ -6438,11 +6438,16 @@ fn emit_test_scope_setup(
                     .iter()
                     .filter(|(_, d)| d.private.is_none())
                     .map(|(n, _)| n);
+                let consts = table
+                    .consts
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n);
                 let mut names: Vec<String> = public_types(table)
                     .chain(public_fns(table))
                     .chain(assets)
                     .chain(embeds)
-                    .chain(table.consts.keys())
+                    .chain(consts)
                     .filter(|n| !target_values.contains(n))
                     .cloned()
                     .collect();
