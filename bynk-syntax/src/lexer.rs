@@ -1217,10 +1217,13 @@ fn lex_multiline(
                 boundary_span(source, file, ls, le),
                 "a line of this multi-line string is indented less than its closing `\"\"\"`",
             )
-            .with_note(
+            .with_note(if line.len() >= indent.len() {
+                "the indentation must match the closing delimiter's character for character: \
+                 a tab does not match a space, so mixed tabs and spaces fail here"
+            } else {
                 "every non-blank line must start with the closing delimiter's indentation, \
-                 which is stripped from the value",
-            ));
+                 which is stripped from the value"
+            }));
         };
         if open.raw {
             let text = &source[content..le];
@@ -2388,6 +2391,39 @@ mod tests {
     fn multiline_with_a_hole_is_an_interpolated_string() {
         use TokenKind::*;
         assert_eq!(kinds("\"\"\"\n  hi \\(name)\n  \"\"\""), vec![InterpStr]);
+    }
+
+    /// Pinned by review of #2619: edge cases of the multi-line rules.
+    #[test]
+    fn multiline_edge_cases() {
+        // A hole at the start of an indented line: the margin is stripped
+        // first, never inside the hole.
+        let src = "\"\"\"\n    \\(a)\n      \\(b) x\n    \"\"\"";
+        let toks = tokenize(src).unwrap();
+        assert_eq!(toks[0].kind, TokenKind::InterpStr);
+        let segs = split_interp(src, toks[0].span).unwrap();
+        let shape: Vec<String> = segs
+            .iter()
+            .map(|s| match s {
+                InterpSegment::Chunk(c) => format!("{c:?}"),
+                InterpSegment::Hole(h) => src[h.range()].to_string(),
+            })
+            .collect();
+        assert_eq!(shape, ["a", "\"\\n  \"", "b", "\" x\""]);
+        // A whitespace-only line shallower than the margin is empty.
+        assert_eq!(string_value("\"\"\"\n    a\n  \n    b\n    \"\"\""), "a\n\nb");
+        // Mixed tabs and spaces that do not match the margin exactly.
+        let err = tokenize("\"\"\"\n\t  a\n    \"\"\"").unwrap_err();
+        assert_eq!(err.category, "bynk.lex.multiline_indent");
+        assert!(err.notes[0].contains("character for character"));
+        // CRLF inside a raw multi-line string; a lone CR is not a line break.
+        assert_eq!(string_value("r\"\"\"\r\n  a\\\r\n  b\r\n  \"\"\""), "a\\\nb");
+        assert_eq!(string_value("\"\"\"\n  a\rb\n  \"\"\""), "a\rb");
+        // The raw form holds `"` and `""` but not `"""`.
+        assert_eq!(string_value("r\"\"\"\n  \"a\"\" b\n  \"\"\""), "\"a\"\" b");
+        // Empty `\u{}` and an eight-digit escape.
+        assert!(tokenize(r#""\u{}""#).is_err());
+        assert!(tokenize(r#""\u{00000041}""#).is_err());
     }
 
     #[test]

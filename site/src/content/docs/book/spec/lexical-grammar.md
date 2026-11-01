@@ -113,7 +113,18 @@ delimiter has a line of its own (`bynk.lex.multiline_close_not_own_line` when a
   and a `\r\n` in a literal is written explicitly;
 - the ordinary form takes the same escapes and interpolation holes as `"…"` (an
   interpolation hole closes on the line it opens on); the raw form takes neither.
-  A `"` or `""` may appear in the text; a `"""` is written `\"""`.
+  A `"` or `""` may appear in the text; in the ordinary form a `"""` is written
+  `\"""`, and a raw multi-line literal cannot hold a `"""` at all.
+- the indentation must match the closing delimiter's **character for
+  character**: a tab is not a space, and a line that mixes them differently is
+  `bynk.lex.multiline_indent`, whose note says so;
+- indentation is removed from each physical line *before* interpolation holes
+  are found, and never inside a hole; the newline right after the opening
+  delimiter is not part of the value; a lone `\r` is not a line break.
+
+Design choices (#2619): the closing delimiter has a line to itself, a
+single-line raw literal cannot span lines, and `#` delimiters belong to the
+single-line raw form only (there is no `r#"""`).
 
 Indentation is removed *before* escapes are read, so `\t` is a tab in the value
 whatever the margin.
