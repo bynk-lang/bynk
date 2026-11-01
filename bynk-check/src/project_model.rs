@@ -6187,12 +6187,15 @@ mod firstparty_injection_tests {
     /// A consumer resolves an exported capability's operations against the
     /// unit's exported types only, so an operation naming a type the unit
     /// declares but does not export types as `()` there, with no diagnostic
-    /// at the cause. Every local type an exported capability's signatures name
-    /// is therefore in an `exports` clause.
+    /// at the cause (#2634). Every local type an exported capability's
+    /// signatures name is therefore in an `exports` clause, as is every one a
+    /// transparent export reached that way carries in a field or variant.
     #[test]
     fn exported_capability_signatures_name_only_exported_types() {
-        use bynk_syntax::ast::{CommonsItem, ExportKind, SourceUnit};
-        use std::collections::HashSet;
+        use bynk_syntax::ast::{
+            CommonsItem, ExportKind, RecordField, SourceUnit, TypeBody, Visibility,
+        };
+        use std::collections::{HashMap, HashSet};
         let mut missing = Vec::new();
         for unit in firstparty::UNITS
             .iter()
@@ -6213,13 +6216,44 @@ mod firstparty_injection_tests {
                     .collect()
             };
             let types = exported(|k| matches!(k, ExportKind::Type(_)));
+            let transparent = exported(|k| matches!(k, ExportKind::Type(Visibility::Transparent)));
             let capabilities = exported(|k| matches!(k, ExportKind::Capability));
-            let local: HashSet<&str> = adapter
+            // Each local type with the names its fields and variants carry:
+            // a consumer reads those through a transparent export, so they
+            // must resolve there too.
+            let fields = |fs: &[RecordField], vars: &HashSet<&str>| {
+                let mut out = Vec::new();
+                for f in fs {
+                    super::type_ref_names(&f.type_ref, vars, &mut out);
+                }
+                out
+            };
+            let local: HashMap<&str, Vec<String>> = adapter
                 .items
                 .iter()
                 .filter_map(|item| match item {
-                    CommonsItem::Type(t) => Some(t.name.name.as_str()),
-                    CommonsItem::Event(e) => Some(e.name.name.as_str()),
+                    CommonsItem::Type(t) => {
+                        let vars = t.type_params.iter().map(|p| p.name.name.as_str()).collect();
+                        let inner = match &t.body {
+                            TypeBody::Record(r) => fields(&r.fields, &vars),
+                            TypeBody::Sum(s) => {
+                                let mut out = Vec::new();
+                                for f in s.variants.iter().flat_map(|v| &v.payload) {
+                                    super::type_ref_names(&f.type_ref, &vars, &mut out);
+                                }
+                                for e in &s.embeds {
+                                    super::type_ref_names(&e.source_type, &vars, &mut out);
+                                }
+                                out
+                            }
+                            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => Vec::new(),
+                        };
+                        Some((t.name.name.as_str(), inner))
+                    }
+                    CommonsItem::Event(e) => Some((
+                        e.name.name.as_str(),
+                        fields(&e.body.fields, &HashSet::new()),
+                    )),
                     _ => None,
                 })
                 .collect();
@@ -6241,17 +6275,40 @@ mod firstparty_injection_tests {
                         super::type_ref_names(&p.type_ref, &vars, &mut names);
                     }
                     super::type_ref_names(&op.return_type, &vars, &mut names);
-                    for name in names {
-                        if local.contains(name.as_str()) && !types.contains(name.as_str()) {
+                    // Walk on through transparent exports, keeping the path
+                    // (`Fetch.send` → `Response` → `Body`) for the message.
+                    let mut work: Vec<(String, String)> = names
+                        .into_iter()
+                        .map(|n| {
+                            (
+                                n.clone(),
+                                format!("`{}.{}` → `{n}`", cap.name.name, op.name.name),
+                            )
+                        })
+                        .collect();
+                    let mut seen = HashSet::new();
+                    while let Some((name, path)) = work.pop() {
+                        let Some(inner) = local.get(name.as_str()) else {
+                            continue;
+                        };
+                        if !seen.insert(name.clone()) {
+                            continue;
+                        }
+                        if !types.contains(name.as_str()) {
                             missing.push(format!(
-                                "{}: `{}.{}` names `{name}`, which is not in an `exports` clause",
-                                unit.name, cap.name.name, op.name.name
+                                "{}: {path}, which is not in an `exports` clause",
+                                unit.name
                             ));
+                        } else if transparent.contains(name.as_str()) {
+                            work.extend(
+                                inner.iter().map(|n| (n.clone(), format!("{path} → `{n}`"))),
+                            );
                         }
                     }
                 }
             }
         }
+        missing.sort();
         missing.dedup();
         assert!(missing.is_empty(), "{}", missing.join("\n"));
     }
