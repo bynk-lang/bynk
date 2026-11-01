@@ -38,6 +38,7 @@ pub fn build_capability_op_info(
         param_names: op.params.iter().map(|p| p.name.name.clone()).collect(),
         return_ty: checker::resolve_type_ref_in(&op.return_type, types, &vars, tys)
             .unwrap_or_else(|| tys.intern(Ty::Unit)),
+        codable_params: checker::codable::codable_op_params(op),
     }
 }
 
@@ -522,6 +523,7 @@ pub fn check_context_declarations(
                         tys,
                     )
                     .unwrap_or_else(|| tys.intern(Ty::Unit)),
+                    codable_params: op.codable_params.clone(),
                 }
             })
             .collect();

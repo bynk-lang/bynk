@@ -134,6 +134,10 @@
           {
             "label": "Key a map by a record",
             "link": "/book/guides/type-system/key-a-map-by-a-record/"
+          },
+          {
+            "label": "Generic code that crosses the boundary",
+            "link": "/book/guides/type-system/generic-code-that-crosses-the-boundary/"
           }
         ]
       },
@@ -659,6 +663,10 @@
       {
         "label": "bynk.generics.missing_eq_bound",
         "link": "/book/troubleshooting/generics-missing-eq-bound/"
+      },
+      {
+        "label": "bynk.generics.missing_codable_bound",
+        "link": "/book/troubleshooting/generics-missing-codable-bound/"
       },
       {
         "label": "bynk.generics.missing_key_bound",

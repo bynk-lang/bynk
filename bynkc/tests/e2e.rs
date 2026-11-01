@@ -932,3 +932,53 @@ fn negative_fixtures() {
         panic!("negative fixtures failed:\n{}", failures.join("\n"));
     }
 }
+
+/// Constrained generics slice 3 (#2715, DECISION D): a `Codable` capability
+/// parameter is encoded at the call site, so no codec witness ever reaches a
+/// provider. No emitted capability interface in any blessed output may name one.
+#[test]
+fn no_codec_witness_in_a_capability_interface() {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "ts") {
+                out.push(p);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    for dir in fixture_dirs("positive") {
+        walk(&dir, &mut files);
+    }
+    let mut checked = 0;
+    let mut offenders = Vec::new();
+    for f in files {
+        let Ok(text) = fs::read_to_string(&f) else {
+            continue;
+        };
+        // An interface body runs from `export interface X {` to the first line
+        // that is just `}`.
+        let mut in_interface = false;
+        for line in text.lines() {
+            if line.starts_with("export interface ") && line.ends_with('{') {
+                in_interface = true;
+                checked += 1;
+            } else if in_interface && line == "}" {
+                in_interface = false;
+            } else if in_interface && line.contains("__codec_") {
+                offenders.push(format!("{}: {line}", f.display()));
+            }
+        }
+    }
+    assert!(checked > 0, "no emitted interface was inspected");
+    assert!(
+        offenders.is_empty(),
+        "a codec witness leaked into a capability interface:\n{}",
+        offenders.join("\n")
+    );
+}

@@ -1,0 +1,98 @@
+---
+#2715: each generic codec path is compared with the concrete one on the same
+value, for the encoding and for the decode result, errors included.
+---
+suite demo.gen
+
+case "a record round-trips through a generic function" {
+  let p = P { x: 1, y: 2 }
+  expect roundTrip(p) == Ok(p)
+  expect viaTwo(p) == Ok(p)
+  expect enc(p) == Json.encode(p)
+}
+
+case "a sum and a refined type" {
+  expect roundTrip(Str("a")) == Ok(Str("a"))
+  expect roundTrip(Num(3)) == Ok(Num(3))
+  expect enc(Num(3)) == Json.encode(Num(3))
+}
+
+case "a refined type is revalidated through the witness" {
+  let bad: Result[Email, JsonError] = dec[Email]("\"ab\"")
+  expect bad == Json.decode[Email]("\"ab\"")
+  expect !bad.isOk()
+  expect dec[Email]("\"abc\"").isOk()
+}
+
+case "base types and Bytes" {
+  expect roundTrip(7) == Ok(7)
+  expect roundTrip("s") == Ok("s")
+  expect roundTrip(true) == Ok(true)
+  expect enc(Bytes.fromUtf8("hi")) == Json.encode(Bytes.fromUtf8("hi"))
+  expect dec[Int]("\"no\"").isOk() == false
+  expect dec[Int]("5") == Ok(5)
+}
+
+case "a list agrees with the monomorphised codec" {
+  let xs = [P { x: 1, y: 2 }, P { x: 3, y: 4 }]
+  expect encList(xs) == Json.encode(xs)
+  expect decList[P](Json.encode(xs)) == Json.decode[List[P]](Json.encode(xs))
+  expect decList[P]("[{\"x\":1}]") == Json.decode[List[P]]("[{\"x\":1}]")
+  expect decList[Int]("{}") == Json.decode[List[Int]]("{}")
+}
+
+case "an option agrees, including its lenient forms" {
+  let some: Option[P] = Some(P { x: 1, y: 2 })
+  let none: Option[P] = None
+  expect encOpt(some) == Json.encode(some)
+  expect encOpt(none) == Json.encode(none)
+  expect ["null", "{\"kind\":\"None\"}", "{\"x\":1,\"y\":2}", "{\"kind\":\"Some\",\"value\":{\"x\":1,\"y\":2}}", "{\"kind\":\"Some\",\"value\":3}", "7", "[]"].all((s) => decOpt[P](s) == Json.decode[Option[P]](s))
+  expect ["null", "5", "\"x\"", "{\"kind\":\"Some\",\"value\":5}"].all((s) => decOpt[Int](s) == Json.decode[Option[Int]](s))
+}
+
+case "a result agrees" {
+  let ok: Result[P, String] = Ok(P { x: 1, y: 2 })
+  let err: Result[P, String] = Err("no")
+  expect encRes(ok) == Json.encode(ok)
+  expect encRes(err) == Json.encode(err)
+  expect ["{\"kind\":\"Ok\",\"value\":{\"x\":1,\"y\":2}}", "{\"kind\":\"Err\",\"error\":\"e\"}", "{\"kind\":\"Err\",\"error\":4}", "{\"kind\":\"Maybe\"}", "3"].all((s) => decRes[P, String](s) == Json.decode[Result[P, String]](s))
+}
+
+case "a set with a composite element agrees, duplicates included" {
+  let s: Set[P] = Set.of([P { x: 1, y: 1 }, P { x: 2, y: 2 }])
+  expect encSet(s) == Json.encode(s)
+  expect ["[{\"x\":1,\"y\":1},{\"x\":2,\"y\":2}]", "[{\"x\":1,\"y\":1},{\"x\":1,\"y\":1}]", "[]", "{}", "[{\"x\":1}]"].all((t) => decSet[P](t) == Json.decode[Set[P]](t))
+  expect decSet[P]("[{\"x\":1,\"y\":1},{\"x\":1,\"y\":1}]").isOk() == false
+  let plain: Set[Int] = Set.of([1, 2, 3])
+  expect encSet(plain) == Json.encode(plain)
+  expect decSet[Int]("[1,2,2]") == Json.decode[Set[Int]]("[1,2,2]")
+  expect decSet[Int]("[3,1]") == Json.decode[Set[Int]]("[3,1]")
+  expect decSet[Tagged]("[{\"tag\":\"Num\",\"n\":1},{\"tag\":\"Str\",\"s\":\"1\"}]") == Json.decode[Set[Tagged]]("[{\"tag\":\"Num\",\"n\":1},{\"tag\":\"Str\",\"s\":\"1\"}]")
+}
+
+case "a map with a composite key agrees" {
+  let m: Map[P, Int] = Map.empty().insert(P { x: 1, y: 1 }, 10).insert(P { x: 2, y: 2 }, 20)
+  expect encMap(m) == Json.encode(m)
+  expect ["[[{\"x\":1,\"y\":1},10]]", "[[{\"x\":1,\"y\":1},10],[{\"x\":1,\"y\":1},11]]", "[[1,2,3]]", "[[{\"x\":1,\"y\":1},\"no\"]]", "[]", "5"].all((t) => decMap[P, Int](t) == Json.decode[Map[P, Int]](t))
+  let sm: Map[String, Int] = Map.empty().insert("a", 1).insert("b", 2)
+  expect encMap(sm) == Json.encode(sm)
+  expect decMap[String, Int]("[[\"a\",1],[\"b\",2]]") == Json.decode[Map[String, Int]]("[[\"a\",1],[\"b\",2]]")
+  expect decMap[String, Int]("[[\"a\",\"x\"]]") == Json.decode[Map[String, Int]]("[[\"a\",\"x\"]]")
+}
+
+case "a nested container agrees" {
+  let v: Option[List[P]] = Some([P { x: 1, y: 2 }])
+  expect nested(v) == Json.encode(v)
+  expect decNested[P]("[{\"x\":1,\"y\":2}]") == Json.decode[Option[List[P]]]("[{\"x\":1,\"y\":2}]")
+  expect decNested[P]("[{\"x\":\"a\"}]") == Json.decode[Option[List[P]]]("[{\"x\":\"a\"}]")
+}
+
+case "a comparator and a codec witness are both passed" {
+  expect ordered(2, 1) == "1"
+  expect ordered("a", "b") == "\"a\""
+}
+
+case "a generic function used as a value captures its witness" {
+  let out = mapped([P { x: 1, y: 2 }])
+  expect out == [Ok(P { x: 1, y: 2 })]
+}

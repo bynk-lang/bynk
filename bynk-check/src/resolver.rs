@@ -314,6 +314,8 @@ pub struct CrossContextCapabilityOp {
     pub type_params: Vec<String>,
     pub params: Vec<(String, TypeRef)>,
     pub return_type: TypeRef,
+    /// Slice 3: the op's type parameters declared `Codable`.
+    pub codable_params: Vec<String>,
 }
 
 /// Snapshot of one service in a consumed context, as needed for v0.6
@@ -1228,12 +1230,16 @@ fn check_signature_refs(
         CommonsItem::Capability(c) => {
             for op in &c.ops {
                 // A generic operation has no body for a bound to serve, so
-                // slice 0 rejects one (Codable is where op bounds will earn it).
-                // `Key` alone is allowed (slice 2): it needs no witness, so it
-                // adds nothing to the operation's ABI, and without it an
-                // operation over `Map[K, _]` could not be written.
+                // slice 0 rejects one. `Key` (slice 2) and `Codable` (slice 3)
+                // are allowed: `Key` needs no witness, and a `Codable`
+                // argument is encoded at the call site, so the provider
+                // receives plain JSON and the operation's ABI does not grow.
                 for tp in op.type_params.iter() {
-                    let Some(bound) = tp.bounds.iter().find(|b| b.name != "Key") else {
+                    let Some(bound) = tp
+                        .bounds
+                        .iter()
+                        .find(|b| !matches!(b.name.as_str(), "Key" | "Codable"))
+                    else {
                         continue;
                     };
                     sinks.push(
@@ -1246,7 +1252,26 @@ fn check_signature_refs(
                             ),
                         )
                         .with_note(
-                            "capability operations take only `Key` bounds yet; remove the `: …`",
+                            "capability operations take only `Key` and `Codable` bounds; remove the `: …`",
+                        ),
+                    );
+                }
+                // Decoding a provider's reply raises a question this slice does
+                // not answer (what a failed decode of stored data means), so a
+                // `Codable` parameter may not appear in the return type.
+                let codable = crate::checker::codable::codable_op_params(op);
+                if crate::checker::codable::mentions_any(&op.return_type, &codable) {
+                    sinks.push(
+                        CompileError::new(
+                            "bynk.generics.codable_op_return",
+                            op.return_type.span(),
+                            format!(
+                                "the return type of capability operation `{}` mentions a `Codable` type parameter",
+                                op.name.name
+                            ),
+                        )
+                        .with_note(
+                            "a `Codable` parameter is encoded at the call site; decoding a provider's reply is not supported yet — return `String` or `Json`-free data and decode at the call site with `Json.decode`",
                         ),
                     );
                 }

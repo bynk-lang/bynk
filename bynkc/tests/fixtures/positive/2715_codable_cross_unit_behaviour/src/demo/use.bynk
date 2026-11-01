@@ -1,0 +1,16 @@
+---
+#2715: a unit that uses both: a codec for an imported record and enum, an order for
+another imported type, and a generic type's method.
+---
+commons demo.use
+
+uses demo.shapes
+uses demo.algo
+
+fn label(c: Card, a: Rank, b: Rank) -> String { tagged(c, a, b) }
+
+fn viaForward(c: Card, a: Rank, b: Rank) -> String { forwards(c, a, b) }
+
+fn smallest(a: Rank, b: Rank) -> String { both(a, b) }
+
+fn shown(c: Card) -> String { Box { value: c }.show() }

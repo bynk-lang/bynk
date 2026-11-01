@@ -540,7 +540,7 @@ pub fn block_uses_emit(b: &Block, callees: &HashMap<ExprId, bynk_check::checker:
         if !found
             && matches!(
                 callees.get(&e.id),
-                Some(bynk_check::checker::Callee::Capability { cap, op })
+                Some(bynk_check::checker::Callee::Capability { cap, op, .. })
                     if cap == "Events" && op == "emit"
             )
         {

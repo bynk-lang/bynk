@@ -128,9 +128,13 @@ fn instantiate_bounded_value(
         );
         return None;
     }
-    let ord_names = super::ordering::witness_params(fn_decl, &ctx.input.types);
-    let witnesses =
-        super::ordering::check_declared_ord_args(&id.name, id.span, &ord_names, &subst, ctx)?;
+    let witnesses = super::codable::check_declared_witness_args(
+        &id.name,
+        id.span,
+        &super::codable::witness_list(fn_decl, &ctx.input.types),
+        &subst,
+        ctx,
+    )?;
     let key_names = super::keying::key_params(fn_decl, &ctx.input.types);
     if !super::keying::check_declared_key_args(&id.name, id.span, &key_names, &subst, ctx) {
         return None;
@@ -221,7 +225,7 @@ pub(crate) fn check_ident(
             // S3 (#1963): a function passed as a value is a use too.
             super::calls::refuse_experimental_import(id, ctx);
             if !fn_decl.type_params.is_empty()
-                && !super::ordering::witness_params(&fn_decl, &ctx.input.types).is_empty()
+                && !super::codable::witness_list(&fn_decl, &ctx.input.types).is_empty()
                 && let Some(e) = expected
             {
                 return instantiate_bounded_value(id, &fn_decl, e, ctx);

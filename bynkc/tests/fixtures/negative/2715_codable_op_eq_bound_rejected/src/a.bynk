@@ -1,0 +1,6 @@
+context a
+
+// `Key` and `Codable` are the bounds a capability op may carry; `Eq` is not.
+capability Audit {
+  fn put[T: Eq + Codable](event: T) -> Effect[()]
+}

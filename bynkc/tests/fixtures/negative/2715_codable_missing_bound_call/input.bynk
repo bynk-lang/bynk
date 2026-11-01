@@ -1,0 +1,5 @@
+commons c
+
+fn id[T: Codable](v: T) -> T { v }
+
+fn bad[T](v: T) -> T { id(v) }

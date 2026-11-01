@@ -1,0 +1,10 @@
+---
+#2715: the types live here, apart from the bounded generics and their callers.
+---
+commons demo.shapes
+
+type Rank = enum { Two, Three, Jack } derives Ord
+
+type Card = { rank: Rank, name: String }
+
+type Slug = String where MinLength(2)

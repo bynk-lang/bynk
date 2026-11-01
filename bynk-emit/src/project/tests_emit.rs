@@ -5612,6 +5612,9 @@ const QUEUE_DOUBLE_BODY: &str = r#"  const json = (body: string) => {
     async sendBatch(bodies) {
       for (const b of bodies) json(b);
     },
+    async sendValue(message) {
+      json(globalThis.JSON.stringify(message));
+    },
   };
 "#;
 

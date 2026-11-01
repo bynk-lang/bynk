@@ -363,7 +363,7 @@ the resource-instance model (PR-2).
 | Secrets | S (`bynk.Secrets`) | L2 | | |
 | KV | P (`get`/`put`/`putTtl`/`delete`/`list` over text; several namespaces as derived capabilities, S4; P1 #2590, experimental: `getWith`/`putWith` with metadata, an expiry and `cacheTtl`, `getBytes`/`putBytes`, paged `listPage`) | L3 | **yes** | Bulk reads, streamed values (K-streams) |
 | Environment variables | A | L2 | | §6.1 Config |
-| Queues (producer) | P (shipped, experimental: `send`/`sendWith`/`sendBatch` over JSON text from `Json.encode`; instance-only `Queue @name("…")`; P2 #2578) | L3 `Queue` | yes | Consumer side shipped as protocol. A typed `send[T]`, and checking a producer's message against the consumer's, wait for a codec-carrying generic op |
+| Queues (producer) | P (shipped, experimental: `send`/`sendWith`/`sendBatch` over JSON text from `Json.encode`; instance-only `Queue @name("…")`; P2 #2578) | L3 `Queue` | yes | Consumer side shipped as protocol. `sendValue[T: Codable]` shipped (#2715, constrained-generics slice 3): the call site encodes, the provider gets plain JSON. Checking a producer's message against the consumer's is still open; a typed `Analytics.write[T]` waits on its record-to-blobs mapping |
 | D1 | S (stable since P4d #2652: `all`/`first`/`run`/`batch` over positional `SqlValue` parameters, rows as JSON text with blobs as base64, `SqlError` values; instance-only `D1`; ledger-provisioned; P4a #2602; schema migrations from `migrations/<database>/`, P4b #2608; `Json.decodeSql` reads `0`/`1` flags as `Bool`, SQL literal-only and `SqlStatement` non-boundary, P4c #2628) | L3 `D1` | **yes** | Shipped experimental in P4a; graduated by its own gate (ADR 0664 G, met by P4c), not the registry bar |
 | R2 | P (shipped, experimental: `get`/`head`/`put`/`putWith`/`delete`/`list` over whole `Bytes` objects; instance-only; P5 #2323. Streamed `getStream`/`putStream`/`putStreamWith` with a declared size, and multipart uploads with a plain `R2Upload` handle, P5b #2626) | L3 `R2` | **yes** | Ranged and conditional reads, streamed parts, further conditions, typed multipart errors |
 | Rate Limiting | P (shipped, experimental: `allow(key) -> Effect[Bool]`; instance-only `RateLimit @limit(n) @period(10.seconds \| 60.seconds)`; P3 #2342) | L3 `RateLimit` | **yes** | `namespace_id` allocated in the ledger, unique across its environments; a listing API to detect ids used outside Bynk |
@@ -583,6 +583,16 @@ ADR.
     JSON codecs don't represent.
   - A codec-carrying generic op (`Orders.all[Row](…)`) stays available as a
     later, Tier 2 ergonomic upgrade once a second consumer proves the shape.
+  - **Amended by constrained-generics slice 3 (#2715).** The write half moved: a
+    `Codable` bound declared in an operation's own signature is encoded at the
+    call site with the boundary codec, which Part 14 clause (iv) no longer counts
+    as a compiler-synthesised argument. A `Codable` op is **not Tier 2**:
+    `Queue.sendValue[T: Codable]` ships as a pure adapter. Generic code can now
+    wrap `Json.encode` and `Json.decode[T]` (`fn f[T: Codable]`), so the first cost
+    above no longer holds. The *read* half stands: a `Codable` parameter in an
+    operation's return type is rejected (`bynk.generics.codable_op_return`), and
+    D4's "second consumer" condition for typed reads (`query[T]`, a typed
+    `Kv.get[T]`) stays in force.
 - **D5 — Crypto is effectful. SETTLED 2026-10-14.** Hashing, HMAC,
   signing/verification and key import return `Effect`, implemented over the
   platform's Web Crypto (`crypto.subtle`), as the runtime's own verifiers in

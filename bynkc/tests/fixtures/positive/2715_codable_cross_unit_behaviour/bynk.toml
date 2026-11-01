@@ -1,0 +1,6 @@
+[project]
+name = "codable-cross-unit-behaviour"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

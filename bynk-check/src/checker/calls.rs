@@ -3,6 +3,7 @@
 //! Split out of `checker.rs` (v0.29.10) verbatim; the parent module
 //! re-exports these via `use calls::*`.
 
+use super::codable::{check_op_codable_args, op_encoding};
 use super::*;
 
 /// v0.39 (ADR 0072): record a parameter-name inlay hint for one call argument,
@@ -1095,8 +1096,13 @@ fn check_generic_call(
     }
     // Slice 1: each `Ord`-bounded type parameter takes an orderable type, and
     // the call carries a comparator witness for it.
-    let witnesses =
-        super::ordering::check_declared_ord_args(&name.name, name.span, &ord_names, &subst, ctx)?;
+    let witnesses = super::codable::check_declared_witness_args(
+        &name.name,
+        name.span,
+        &super::codable::witness_list(fn_decl, &ctx.input.types),
+        &subst,
+        ctx,
+    )?;
     // Slice 2: each `Key`-bounded type parameter takes a key type. `Key` is
     // witness-free: nothing is recorded on the call.
     if !super::keying::check_declared_key_args(&name.name, name.span, &key_names, &subst, ctx) {
@@ -1216,6 +1222,31 @@ fn check_call_against_fn(
     resolve_type_ref(&fn_decl.return_type, &ctx.input.types, tys)
 }
 
+/// Slice 3: infer the type arguments of a capability operation from its
+/// arguments, when they determine every type parameter. Returns the inference
+/// (if complete) and the arguments' own types, which the caller reuses so no
+/// argument is checked twice.
+fn infer_op_type_args(
+    op: &CapabilityOpInfo,
+    args: &[Expr],
+    ctx: &mut Ctx,
+) -> (Option<HashMap<String, TyId>>, Vec<Option<TyId>>) {
+    let tys = ctx.tys;
+    let mut subst: HashMap<String, TyId> = HashMap::new();
+    let mut typed = Vec::with_capacity(args.len());
+    let mut ok = true;
+    for (pattern, arg) in op.params.iter().zip(args) {
+        let t = type_of(arg, None, ctx);
+        match t {
+            Some(t) => ok &= unify(*pattern, t, &mut subst, tys),
+            None => ok = false,
+        }
+        typed.push(t);
+    }
+    let complete = ok && op.type_params.iter().all(|tp| subst.contains_key(tp));
+    (complete.then_some(subst), typed)
+}
+
 /// Type-check a kernel-method argument against its expected type, with the
 /// expected type propagated in (so lambdas and literals type contextually).
 pub(crate) fn check_arg(arg: &Expr, expected: TyId, what: &str, ctx: &mut Ctx) {
@@ -1282,6 +1313,7 @@ pub(crate) fn check_static_call(
             Callee::Capability {
                 cap: type_name.name.clone(),
                 op: method.name.clone(),
+                wire: None,
             },
         );
         let mut err = CompileError::new(
@@ -1348,6 +1380,7 @@ pub(crate) fn check_static_call(
             Callee::Capability {
                 cap: type_name.name.clone(),
                 op: method.name.clone(),
+                wire: None,
             },
         );
         if !ctx.effectful {
@@ -1443,8 +1476,18 @@ pub(crate) fn check_static_call(
         // half applies here, since a capability op has no argument-driven
         // inference pass.
         let mut subst: HashMap<String, TyId> = HashMap::new();
+        // Slice 3: an operation with `Codable` parameters infers its type
+        // arguments from the arguments, when they determine every one.
+        let mut arg_tys: Option<Vec<Option<TyId>>> = None;
+        if type_args.is_empty() && !op_clone.codable_params.is_empty() {
+            let (inferred, typed) = infer_op_type_args(&op_clone, args, ctx);
+            arg_tys = Some(typed);
+            if let Some(found) = inferred {
+                subst = found;
+            }
+        }
         if !op_clone.type_params.is_empty() || !type_args.is_empty() {
-            if type_args.is_empty() {
+            if type_args.is_empty() && subst.len() < op_clone.type_params.len() {
                 ctx.errors.push(
                     CompileError::new(
                         "bynk.generics.uninferable_type_arg",
@@ -1459,12 +1502,14 @@ pub(crate) fn check_static_call(
                         type_name.name, method.name
                     )),
                 );
-                for a in args {
-                    let _ = type_of(a, None, ctx);
+                if arg_tys.is_none() {
+                    for a in args {
+                        let _ = type_of(a, None, ctx);
+                    }
                 }
                 return None;
             }
-            if type_args.len() != op_clone.type_params.len() {
+            if !type_args.is_empty() && type_args.len() != op_clone.type_params.len() {
                 ctx.errors.push(CompileError::new(
                     "bynk.generics.type_arg_mismatch",
                     span,
@@ -1553,9 +1598,45 @@ pub(crate) fn check_static_call(
                 subst.insert(tp.clone(), ty);
             }
         }
+        // Slice 3: each `Codable` type parameter takes a codable type, and the
+        // call records how it encodes the parameters that mention one.
+        if !check_op_codable_args(
+            &format!("{}.{}", type_name.name, method.name),
+            span,
+            &op_clone.codable_params,
+            &subst,
+            ctx,
+        ) {
+            if arg_tys.is_none() {
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+            }
+            return None;
+        }
+        if let Some(wire) = op_encoding(
+            &op_clone.type_params,
+            &op_clone.codable_params,
+            &op_clone.params,
+            op_clone.return_ty,
+            &subst,
+            tys,
+        ) {
+            ctx.callees.insert(
+                expr_id,
+                Callee::Capability {
+                    cap: type_name.name.clone(),
+                    op: method.name.clone(),
+                    wire: Some(wire),
+                },
+            );
+        }
         for (i, (param_ty, arg)) in op_clone.params.iter().zip(args.iter()).enumerate() {
             let param_ty = substitute(*param_ty, &subst, tys);
-            let arg_ty = type_of(arg, Some(param_ty), ctx);
+            let arg_ty = match &arg_tys {
+                Some(cached) => cached[i],
+                None => type_of(arg, Some(param_ty), ctx),
+            };
             if let Some(actual) = arg_ty
                 && !compatible(actual, param_ty, tys)
             {
@@ -3336,10 +3417,10 @@ fn check_generic_method_call(
     if !super::equality::check_declared_eq_args(&callee, method.span, &eq_params, &subst, ctx) {
         return None;
     }
-    let witnesses = super::ordering::check_declared_ord_args(
+    let witnesses = super::codable::check_declared_witness_args(
         &callee,
         method.span,
-        &super::ordering::witness_params(method_decl, &ctx.input.types),
+        &super::codable::witness_list(method_decl, &ctx.input.types),
         &subst,
         ctx,
     )?;
@@ -4708,6 +4789,7 @@ fn check_cross_context_capability_call(
             unit: consumed.to_string(),
             cap: cap.to_string(),
             op: method.name.clone(),
+            wire: None,
         },
     );
     // Capability calls require an effectful body (same rule as local ones).
@@ -4853,6 +4935,49 @@ fn check_cross_context_capability_call(
         for (tp, ta) in op.type_params.iter().zip(type_args) {
             let ty = resolve_expr_type_ref(ta, ctx)?;
             subst.insert(tp.clone(), ty);
+        }
+    }
+    // Slice 3: each `Codable` type parameter takes a codable type, and the call
+    // records how it encodes the parameters that mention one.
+    if !op.codable_params.is_empty() {
+        if !check_op_codable_args(
+            &format!("{consumed}.{cap}.{}", method.name),
+            method.span,
+            &op.codable_params,
+            &subst,
+            ctx,
+        ) {
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+        let patterns: Vec<TyId> = op
+            .params
+            .iter()
+            .map(|(_, tr)| {
+                resolve_type_ref_in(tr, &consumed_types, &vars, tys).unwrap_or(tys.intern(Ty::Unit))
+            })
+            .collect();
+        let ret_pattern = resolve_type_ref_in(&op.return_type, &consumed_types, &vars, tys)
+            .unwrap_or(tys.intern(Ty::Unit));
+        if let Some(wire) = op_encoding(
+            &op.type_params,
+            &op.codable_params,
+            &patterns,
+            ret_pattern,
+            &subst,
+            tys,
+        ) {
+            ctx.callees.insert(
+                expr_id,
+                Callee::CrossCap {
+                    unit: consumed.to_string(),
+                    cap: cap.to_string(),
+                    op: method.name.clone(),
+                    wire: Some(wire),
+                },
+            );
         }
     }
     // #1941: a value this caller holds may be of a consumed context's

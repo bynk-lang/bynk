@@ -1,0 +1,2 @@
+bynk.generics.missing_codable_bound
+type parameter `T` has no `Codable` bound

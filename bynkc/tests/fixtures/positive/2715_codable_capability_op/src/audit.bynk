@@ -1,0 +1,14 @@
+adapter audit {
+  binding "./audit.binding.ts"
+
+  exports capability { Audit }
+
+  capability Audit {
+    fn append[T: Codable](id: String, event: T) -> Effect[()]
+    fn appendAll[T: Codable](events: List[T]) -> Effect[()]
+    fn appendKeyed[K: Key + Codable, V: Codable](entries: Map[K, V]) -> Effect[()]
+    fn note(text: String) -> Effect[()]
+  }
+
+  provides Audit = MemoAudit
+}

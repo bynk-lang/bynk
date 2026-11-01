@@ -2231,7 +2231,7 @@ fn check_unit_files(
         unit_callees.extend(program.program().callees.iter().filter_map(|(id, c)| {
             let keep = match c {
                 bynk_check::checker::Callee::Cross { .. } => true,
-                bynk_check::checker::Callee::Capability { cap, op } => {
+                bynk_check::checker::Callee::Capability { cap, op, .. } => {
                     cap == "Events" && op == "emit"
                 }
                 _ => false,
@@ -4728,7 +4728,7 @@ pub(crate) fn unit_table_uses_emit(
         if !found
             && matches!(
                 callees.get(&e.id),
-                Some(bynk_check::checker::Callee::Capability { cap, op })
+                Some(bynk_check::checker::Callee::Capability { cap, op, .. })
                     if cap == "Events" && op == "emit"
             )
         {

@@ -1,0 +1,20 @@
+---
+#2715: the witnesses reach a callee in another unit in the order it declares them.
+---
+suite demo.use
+
+case "a codec for an imported record and a comparator for an imported enum" {
+  let c = Card { rank: Jack, name: "j" }
+  expect label(c, Two, Three) == Json.encode(c)
+  expect label(c, Three, Two) == ""
+  expect viaForward(c, Two, Jack) == Json.encode(c)
+}
+
+case "one parameter with both bounds" {
+  expect smallest(Jack, Three) == Json.encode(Three)
+  expect smallest(Two, Jack) == Json.encode(Two)
+}
+
+case "a method of a generic type with a receiver bound" {
+  expect shown(Card { rank: Two, name: "t" }) == Json.encode(Card { rank: Two, name: "t" })
+}

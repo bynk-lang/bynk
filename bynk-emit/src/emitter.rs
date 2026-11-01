@@ -65,6 +65,7 @@ pub(crate) use workers_entry::emit_worker_entry;
 pub(crate) use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod cmp;
+mod codec;
 mod lower;
 pub(crate) mod runtime_use;
 pub(crate) use lower::*;
@@ -1203,11 +1204,57 @@ pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
 /// misread as a real `Json.encode`/`decode` call; `Callee::Intrinsic`'s own
 /// presence is exactly the checker's already-verified "no, this really is
 /// the builtin" answer.
+/// Whether the module needs the JSON-codec imports: it has a codec root, or it
+/// declares a `Codable` witness, whose parameter type names `__JsonValue` and
+/// `__BoundaryError` whether or not the body encodes anything.
+fn uses_json_codec(commons: &TypedCommons) -> bool {
+    !collect_json_codec_roots(commons).is_empty()
+        || commons.commons.items.iter().any(|item| match item {
+            CommonsItem::Fn(f) => bynk_check::checker::codable::witness_list(f, &commons.types)
+                .iter()
+                .any(|w| w.kind == bynk_check::checker::codable::WitnessKind::Codec),
+            _ => false,
+        })
+}
+
 fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
     let tys = commons.tys();
     let mut roots: Vec<TypeRef> = Vec::new();
     {
+        let push_ground = |t: TyId, roots: &mut Vec<TypeRef>| {
+            let mut parts = Vec::new();
+            codec::ground_parts(t, commons, &mut parts);
+            roots.extend(parts.into_iter().filter_map(|p| ty_to_type_ref(p, tys)));
+        };
         let mut visit = |e: &Expr| {
+            // Constrained generics slice 3: every concrete type that fills a
+            // `Codable` witness or a `Codable` capability argument is a root,
+            // as are the concrete parts of one that mentions a type parameter.
+            match commons.callees.get(&e.id) {
+                Some(
+                    bynk_check::checker::Callee::Fn(decl, ws)
+                    | bynk_check::checker::Callee::FnValue(decl, ws)
+                    | bynk_check::checker::Callee::Method(decl, ws),
+                ) => {
+                    for (w, ty) in bynk_check::checker::codable::witness_list(decl, &commons.types)
+                        .iter()
+                        .zip(ws)
+                    {
+                        if w.kind == bynk_check::checker::codable::WitnessKind::Codec {
+                            push_ground(*ty, &mut roots);
+                        }
+                    }
+                }
+                Some(
+                    bynk_check::checker::Callee::Capability { wire: Some(w), .. }
+                    | bynk_check::checker::Callee::CrossCap { wire: Some(w), .. },
+                ) => {
+                    for ty in w.encode.iter().flatten() {
+                        push_ground(*ty, &mut roots);
+                    }
+                }
+                _ => {}
+            }
             let ExprKind::MethodCall { args, .. } = &e.kind else {
                 return;
             };
@@ -1221,18 +1268,15 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
             }
             match op.as_str() {
                 "decode" | "decodeSql" => {
-                    if let Some(Ty::Result(t, _)) = commons.expr_ty(e.id).as_deref()
-                        && let Some(tr) = ty_to_type_ref(*t, tys)
-                    {
-                        roots.push(tr);
+                    if let Some(Ty::Result(t, _)) = commons.expr_ty(e.id).as_deref() {
+                        push_ground(*t, &mut roots);
                     }
                 }
                 "encode" => {
                     if let Some(a) = args.first()
                         && let Some(t) = commons.expr_types.get(&a.id).map(|te| te.ty)
-                        && let Some(tr) = ty_to_type_ref(t, tys)
                     {
-                        roots.push(tr);
+                        push_ground(t, &mut roots);
                     }
                 }
                 _ => {}
@@ -3783,7 +3827,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         // v0.22b: the codec types are imported only when the file uses the
         // `Json` codec (or names `JsonError` in a signature) — keeping every
         // non-codec module's header byte-identical to v0.22a.
-        let uses_codec = !collect_json_codec_roots(commons).is_empty();
+        let uses_codec = uses_json_codec(commons);
         let mentions_json_error = file_mentions_json_error(commons);
         if uses_codec || mentions_json_error {
             parts.push("type JsonError");
@@ -4098,7 +4142,7 @@ fn write_header_single(
     writeln!(out).unwrap();
     if !commons.commons.items.is_empty() {
         // v0.22b: codec imports only when the file uses the `Json` codec.
-        let uses_codec = !collect_json_codec_roots(commons).is_empty();
+        let uses_codec = uses_json_codec(commons);
         let codec_imports = if uses_codec {
             ", type JsonError, type __JsonValue, type __BoundaryError"
         } else if file_mentions_json_error(commons) {
@@ -4850,6 +4894,9 @@ pub(crate) struct LowerCtx<'a> {
     /// function being emitted, by type-parameter name (`T` -> `__cmp_T`). Empty
     /// outside an `Ord`-bounded generic.
     pub(crate) cmp_scope: HashMap<String, String>,
+    /// Constrained generics slice 3: the in-scope codec witnesses, by
+    /// type-parameter name (`T` -> `__codec_T`). Empty outside a `Codable` generic.
+    pub(crate) codec_scope: HashMap<String, String>,
 }
 
 /// #1750: the slot and label a statement-form value expression's tails assign
@@ -4899,27 +4946,92 @@ impl<'a> LowerCtx<'a> {
             emitted_early_return: false,
             tail_slot: None,
             cmp_scope: HashMap::new(),
+            codec_scope: HashMap::new(),
         }
     }
 
-    /// Constrained generics slice 1: bring `f`'s comparator witnesses into scope
-    /// (one per `Ord`-bounded type parameter, [`cmp::witness_ident`]) and return
-    /// the trailing parameters that declare them.
+    /// Constrained generics slices 1 and 3: bring `f`'s witnesses into scope (a
+    /// comparator per `Ord`-bounded and a codec per `Codable`-bounded type
+    /// parameter, [`cmp::witness_ident`] / [`codec::witness_ident`]) and return
+    /// the trailing parameters that declare them, in witness order.
     pub(crate) fn declare_witnesses(&mut self, f: &FnDecl) -> Vec<bynk_ts::TsParam> {
-        bynk_check::checker::ordering::witness_params(f, &self.commons().types)
-            .into_iter()
-            .map(|p| {
-                let ident = cmp::witness_ident(&p);
-                self.cmp_scope.insert(p.clone(), ident.clone());
-                bynk_ts::TsParam {
-                    name: ident,
-                    ty: Some(bynk_ts::TsType::named(format!(
-                        "(a: {p}, b: {p}) => number"
-                    ))),
-                    optional: false,
+        use bynk_check::checker::codable::{WitnessKind, witness_list};
+        let list = witness_list(f, &self.commons().types);
+        if list.iter().any(|w| w.kind == WitnessKind::Codec) {
+            // The witness type names these, whether or not the body encodes.
+            self.runtime_use().note_json_codec();
+        }
+        list.into_iter()
+            .map(|w| {
+                let p = w.param;
+                match w.kind {
+                    WitnessKind::Cmp => {
+                        let ident = cmp::witness_ident(&p);
+                        self.cmp_scope.insert(p.clone(), ident.clone());
+                        bynk_ts::TsParam {
+                            name: ident,
+                            ty: Some(bynk_ts::TsType::named(format!(
+                                "(a: {p}, b: {p}) => number"
+                            ))),
+                            optional: false,
+                        }
+                    }
+                    WitnessKind::Codec => {
+                        let ident = codec::witness_ident(&p);
+                        self.codec_scope.insert(p.clone(), ident.clone());
+                        bynk_ts::TsParam {
+                            name: ident,
+                            ty: Some(bynk_ts::TsType::named(format!(
+                                "{{ encode: (v: {p}) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<{p}, __BoundaryError> }}"
+                            ))),
+                            optional: false,
+                        }
+                    }
                 }
             })
             .collect()
+    }
+
+    /// The witness arguments of a call to `decl`, in witness order: `witnesses`
+    /// (the call's instantiations, recorded by the checker) built as comparators
+    /// or codecs according to what `decl` declares.
+    pub(crate) fn witness_args(
+        &self,
+        decl: &FnDecl,
+        witnesses: &[bynk_check::checker::TyId],
+    ) -> Vec<String> {
+        use bynk_check::checker::codable::{WitnessKind, witness_list};
+        witness_list(decl, &self.commons().types)
+            .iter()
+            .zip(witnesses)
+            .map(|(w, ty)| match w.kind {
+                WitnessKind::Cmp => self.comparator(*ty),
+                WitnessKind::Codec => self.codec(*ty),
+            })
+            .collect()
+    }
+
+    /// `value` encoded with the codec of `ty`: the generated `__serialise_X` for a
+    /// variable-free type, the witness (or a combinator over witnesses) otherwise.
+    pub(crate) fn encode_call(&self, ty: bynk_check::checker::TyId, value: &str) -> String {
+        let commons = self.commons();
+        if !codec::has_var(ty, commons)
+            && let Some(tref) = ty_to_type_ref(ty, commons.tys())
+        {
+            return bynk_ts::print_expr(&serialisation::serialise_expr(
+                &tref,
+                value,
+                self.runtime_use(),
+            ));
+        }
+        format!("{}.encode({value})", self.codec(ty))
+    }
+
+    /// The codec witness for `ty`: the witness of a type parameter in scope, a
+    /// runtime combinator over such witnesses, or the generated pair for a
+    /// variable-free type.
+    pub(crate) fn codec(&self, ty: bynk_check::checker::TyId) -> String {
+        codec::CodecGen::new(self.commons(), self.runtime_use(), &self.codec_scope).for_ty(ty)
     }
 
     /// The comparator expression for `ty`: the witness of a type parameter in

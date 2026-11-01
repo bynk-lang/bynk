@@ -1,5 +1,5 @@
 commons bad
 
-fn sort_of[A: Codable](x: A) -> A {
+fn sort_of[A: Hashable](x: A) -> A {
   x
 }
