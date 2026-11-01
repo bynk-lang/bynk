@@ -237,6 +237,7 @@ mod tests {
                 "comment",   // #1888: `--|` doc lines — appended
                 "asset",     // #1883: static asset names — appended
                 "embed",     // #2387: embedded-text names — appended
+                "constant",  // #2617: named constants — appended
             ]
         );
         let modifiers: Vec<&str> = legend.token_modifiers.iter().map(|m| m.as_str()).collect();
