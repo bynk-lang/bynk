@@ -850,7 +850,9 @@ match items {
   [only] => only.sku
   [first, _, ..] => first.sku
 }
+```
 
+```bynk,fragment
 match xs {
   [] => 0
   [x, ..rest] => x + sum(rest)
