@@ -34,7 +34,9 @@ export async function __bynkSettleAll<const T extends readonly (() => unknown)[]
     if (r.status === "rejected") failures.push(r.reason);
   }
   if (failures.length > 0) {
-    const [first, ...rest] = failures;
+    const [first, ...others] = failures;
+    // The same reason raised twice must not become its own `suppressed`.
+    const rest = others.filter((f) => f !== first);
     if (rest.length > 0 && typeof first === "object" && first !== null) {
       try {
         Object.defineProperty(first, "suppressed", {
@@ -141,17 +143,25 @@ export function __bynkRace<T>(
         (value) => {
           if (decided) return;
           decided = true;
-          promises.forEach((other, j) => {
-            if (j !== i) exec.waitUntil(other);
-          });
+          // Settle first: a `waitUntil` that throws must not leave the race pending.
           resolve(value);
+          promises.forEach((other, j) => {
+            if (j === i) return;
+            try {
+              exec.waitUntil(other);
+            } catch {
+              // The race is decided; a host that refuses `waitUntil` cannot undo it.
+            }
+          });
         },
         (fault) => {
           faults[i] = fault;
           faulted += 1;
           if (decided || faulted < promises.length) return;
           decided = true;
-          const [first, ...rest] = faults;
+          const [first, ...others] = faults;
+          // The same reason raised twice must not become its own `suppressed`.
+          const rest = others.filter((f) => f !== first);
           if (rest.length > 0 && typeof first === "object" && first !== null) {
             try {
               Object.defineProperty(first, "suppressed", {

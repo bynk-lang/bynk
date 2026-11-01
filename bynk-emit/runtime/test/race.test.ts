@@ -65,9 +65,21 @@ test("when every side faults, the first fault in source order is raised with the
   assert.equal(e.kept.length, 0);
 });
 
-test("a single fault with no siblings left carries no suppressed", async () => {
+test("the same fault raised twice is not its own suppressed", async () => {
   const boom = new Error("boom");
-  await assert.rejects(__bynkRace([Promise.reject(boom), Promise.reject(boom)], exec()), (x) => x === boom);
+  await assert.rejects(
+    __bynkRace([Promise.reject(boom), Promise.reject(boom)], exec()),
+    (x) => x === boom && !("suppressed" in boom),
+  );
+});
+
+test("a waitUntil that throws does not leave the race pending", async () => {
+  const throwing = {
+    waitUntil(): void {
+      throw new Error("no execution context");
+    },
+  };
+  assert.equal(await __bynkRace([later(2, "fast"), later(20, "slow")], throwing), "fast");
 });
 
 test("a tie goes to the earlier side in source order", async () => {

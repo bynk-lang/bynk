@@ -790,7 +790,7 @@ pub(crate) fn block_uses_send(b: &Block) -> bool {
 
 /// #2683, #2711: whether a service's `on call` handler calls `within` or `race`, so the Bundle
 /// target's `__makeSurface` deps must carry the execution context
-/// (`deps.__exec`) it forwards to the handler. Only `within` counts, not `~>`:
+/// (`deps.__exec`) it forwards to the handler. Only `within` and `race` count, not `~>`:
 /// a `~>` in a bundle `on call` handler is a separate, existing gap, left as
 /// it was so that no other construct's output changes.
 pub(crate) fn call_handler_needs_exec(h: &bynk_syntax::ast::Handler) -> bool {
