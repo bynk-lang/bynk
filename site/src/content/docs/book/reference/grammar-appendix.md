@@ -18,9 +18,9 @@ context_decl ::= "context" qualified_name ("{" context_body_item* "}" | context_
 adapter_decl ::= "adapter" qualified_name ("{" adapter_body_item* "}" | adapter_body_item*)
 suite_decl ::= "suite" qualified_name ("as" ("unit" | "integration" | "system"))? ("{" test_body_item* "}" | test_body_item*)
 qualified_name ::= identifier ("." identifier)*
-commons_body_item ::= uses_decl | type_decl | fn_decl | messages_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | event_decl | asset_decl | embed_decl
-context_body_item ::= uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl | embed_decl | removed_agent_decl
-adapter_body_item ::= binding_decl | uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl | embed_decl
+commons_body_item ::= uses_decl | type_decl | fn_decl | messages_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | event_decl | asset_decl | embed_decl | const_decl
+context_body_item ::= uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl | embed_decl | const_decl | removed_agent_decl
+adapter_body_item ::= binding_decl | uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl | embed_decl | const_decl
 test_body_item ::= uses_decl | consumes_decl | env_clause | stub_clause | case | property_decl
 uses_decl ::= "uses" qualified_name
 consumes_decl ::= "consumes" qualified_name ("as" identifier | "{" (identifier ("," identifier)*)? ","? "}")?
@@ -36,6 +36,7 @@ record_field ::= identifier ":" type_ref ("where" refinement)? ("=" expression)?
 event_decl ::= "event" identifier store_annotation* "=" record_type
 asset_decl ::= "asset" identifier "=" string_literal ("at" string_literal)?
 embed_decl ::= "embed" identifier "=" string_literal
+const_decl ::= "const" identifier ":" type_ref "=" expression
 sum_type ::= sum_variant+ ("embeds" type_ref "as" constant_name ("," type_ref "as" constant_name)*)?
 sum_variant ::= "|" constant_name ("(" (variant_payload_field ("," variant_payload_field)*)? ","? ")")?
 variant_payload_field ::= identifier ":" type_ref

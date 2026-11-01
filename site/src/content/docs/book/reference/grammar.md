@@ -791,6 +791,20 @@ not grammar ones: this rule is admitted in every body, like `asset_decl`.
 `embed` is a contextual keyword, so it remains usable as an ordinary
 identifier elsewhere. This slice checks an embed but does not yet build one.
 
+### const_decl {#rule-const_decl}
+
+{{#grammar const_decl}}
+
+`const Name: Type = <expr>` (#2617) — a named constant of the declared type,
+usable wherever an expression of that type is. The type annotation is
+required. The grammar admits any expression as the initialiser and a `const` in
+every body, like `embed_decl`; placement (a context or commons, never an
+adapter), the upper-camel name, the closed set of static initialisers and the
+cycle rule are checker concerns. `const` is a contextual keyword, so it remains
+usable as an ordinary identifier elsewhere.
+
+{{#grammar-semantics const_decl}}
+
 ### provider_decl {#rule-provider_decl}
 
 {{#grammar provider_decl}}

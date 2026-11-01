@@ -17,6 +17,7 @@ the `bynk.toml` manifest, emission, and the editor tooling — see the
 - [HTTP](/book/reference/http/) — HTTP handlers and `HttpResult`.
 - [Static assets](/book/reference/assets/) — `asset` declarations: files served beside a Worker.
 - [Embedded text](/book/reference/embeds/) — `embed` declarations: a project file's text as a `String`.
+- [Named constants](/book/reference/constants/) — `const` declarations: a fixed value of a declared type.
 - [Testing](/book/reference/testing/) — `suite`/`case`, `expect`, `property`, `as <tier>`, `stub`, `Val[T]`.
 
 ## Project & output

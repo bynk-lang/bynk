@@ -1,0 +1,1 @@
+bynk.uses.name_conflict constant `Origin` from `b` gives `a`'s `Pt`, but `Pt` in `c` names `c`'s type

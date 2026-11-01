@@ -1,0 +1,77 @@
+==========================
+const declarations in a commons and a context (#2617)
+==========================
+
+commons app.limits
+
+---
+The most attempts.
+---
+const MaxRetries: Int = 3
+const DefaultPage: Page = Page { size: 50, offset: 0 }
+const Fallback: Option[Int] = Some(MaxRetries)
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier)
+      (identifier))
+    (doc_block)
+    (const_decl
+      name: (identifier)
+      type: (base_type)
+      value: (number_literal))
+    (const_decl
+      name: (identifier)
+      type: (identifier)
+      value: (record_construction
+        type: (identifier)
+        (field_init
+          name: (identifier)
+          value: (number_literal))
+        (field_init
+          name: (identifier)
+          value: (number_literal))))
+    (const_decl
+      name: (identifier)
+      type: (generic_type_ref
+        name: (builtin_type)
+        arg: (base_type))
+      value: (some_expr
+        (identifier)))))
+
+==========================
+const as an ordinary identifier outside its declaration position
+==========================
+
+context app.board {
+  const Timeout: Duration = 30.seconds
+
+  fn f(const: Int) -> Int {
+    const
+  }
+}
+
+--------------------------
+
+(source_file
+  (context_decl
+    name: (qualified_name
+      (identifier)
+      (identifier))
+    (const_decl
+      name: (identifier)
+      type: (base_type)
+      value: (field_access
+        receiver: (number_literal)
+        field: (identifier)))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (base_type))
+      return_type: (base_type)
+      body: (block
+        tail: (identifier)))))

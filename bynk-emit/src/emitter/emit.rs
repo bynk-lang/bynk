@@ -1029,15 +1029,15 @@ pub(crate) fn emit_consts(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<b
         module.consumed_type_ns = consumed_type_ns(ctx);
         module.consumed_context_types = ctx.consumed_context_types();
         let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
-        let expr = pre.lower(&c.init, &mut icx);
-        // A static initialiser lowers to a pure expression; should the
-        // lowering ever hoist setup statements, wrap them in an IIFE, as the
-        // agent field initialiser does.
-        let init = if pre.is_empty() {
-            expr
-        } else {
-            format!("(() => {{ {} return {expr}; }})()", pre.stmts().join(" "))
-        };
+        let init = pre.lower(&c.init, &mut icx);
+        // The closed static set (`consts::static_error`) holds no `if`,
+        // `match`, block or `?`, the only shapes the lowering hoists setup
+        // statements for, so an initialiser lowers to one expression.
+        assert!(
+            pre.is_empty(),
+            "bynk internal error: constant `{}`'s static initialiser hoisted statements",
+            c.name.name
+        );
         if let Some(doc) = c.documentation.as_deref() {
             stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
         }

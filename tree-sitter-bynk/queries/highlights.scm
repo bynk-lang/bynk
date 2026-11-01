@@ -64,6 +64,7 @@
   "rejected"
   "asset"
   "embed"
+  "const"
 ] @keyword.declaration
 
 [

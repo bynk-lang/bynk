@@ -4631,7 +4631,10 @@ pub fn close_reachable_types(
 ) -> ReachedTypes {
     let mut conflicted: HashSet<String> = HashSet::new();
     let mut shadowed = ShadowedReaches::default();
-    let consumed_signatures = consumed_service_seeds(name, unit_info);
+    let mut consumed_signatures = consumed_service_seeds(name, unit_info);
+    // #2617: a used commons' constant names its annotation's types in the
+    // commons' scope, as an imported function's signature does.
+    consumed_signatures.extend(used_const_seeds(name, unit_info));
     let hidden = close_imported(
         unit_info,
         combined_types,
@@ -4880,6 +4883,35 @@ fn consumed_service_seeds(name: &str, unit_info: &BTreeMap<String, UnitInfo>) ->
                 type_ref_names(&h.return_type, &HashSet::new(), &mut names);
                 push_refs_with(names, t, t, true, &mut out);
             }
+        }
+    }
+    out
+}
+
+/// #2617: the type names the constants of every commons `name` uses name in
+/// their annotations, resolved in that commons' scope, in a stable order. A
+/// constant the unit hides behind a local declaration is not imported, so it
+/// reaches nothing.
+fn used_const_seeds(name: &str, unit_info: &BTreeMap<String, UnitInfo>) -> Vec<Reached> {
+    let mut out = Vec::new();
+    let Some(info) = unit_info.get(name) else {
+        return out;
+    };
+    for t in &info.uses {
+        let Some(used) = unit_info.get(t) else {
+            continue;
+        };
+        let mut consts: Vec<&ConstDecl> = used
+            .table
+            .consts
+            .values()
+            .filter(|c| crate::symbols::local_value_kind(&info.table, &c.name.name).is_none())
+            .collect();
+        consts.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+        for c in consts {
+            let mut names = Vec::new();
+            type_ref_names(&c.ty, &HashSet::new(), &mut names);
+            push_refs(names, t, t, &mut out);
         }
     }
     out

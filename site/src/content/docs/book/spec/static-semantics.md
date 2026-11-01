@@ -40,11 +40,12 @@ with each occurrence free to change type. The emitter gives a re-bound name
 its own emitted identifier so each `let` still lowers to a distinct binding.
 
 A unit's top-level declarations share one namespace, except capabilities and
-actors, which each keep their own. A function, an asset, a type or event, a
-service, an agent and a provider with a body (by its implementation name,
-`provides Cap = Name`) MUST NOT share a name, across all of the unit's files
-(`bynk.resolve.name_conflict`; two types, or a type and an event, are
-`bynk.resolve.duplicate_type`). They are all one scope of the emitted module.
+actors, which each keep their own. A function, an asset, an embed, a constant,
+a type or event, a service, an agent and a provider with a body (by its
+implementation name, `provides Cap = Name`) MUST NOT share a name, across all
+of the unit's files (`bynk.resolve.name_conflict`; two types, or a type and an
+event, are `bynk.resolve.duplicate_type`; two constants are
+`bynk.resolve.duplicate_const`). They are all one scope of the emitted module.
 
 A bare reference to a **named function** is a value only where a function
 type is expected (v0.20a); elsewhere it MUST be called
@@ -88,8 +89,8 @@ types is not a crossing. If `t.app` declares `type Repo = Int` beside `uses
 t.core` and `uses t.model`, then `Run { repo: first(r) }` is legal in `t.app`,
 and `Run { repo: 42 }` and `r.repo + 1` are not.
 
-A unit's own declaration also shadows a function or asset of the same name
-from a commons it `uses`, whatever the local declaration's kind, as in the
+A unit's own declaration also shadows a function, asset, embed or constant of
+the same name from a commons it `uses`, whatever the local declaration's kind, as in the
 emitted module: the import is not in scope. Where the local declaration cannot
 answer a reference (a call to a type or service, a bare event name, an asset
 used as a function), the reference is `bynk.uses.name_conflict`, naming both
@@ -2313,3 +2314,61 @@ drops one that nothing references. A unit-tier `suite` case names the embeds of
 its target and of the commons the target `uses`. A single file has no project
 root to find `embeds/` under, so building one that declares an embed is
 `bynk.embed.needs_project`; checking it is unaffected.
+
+## §5.12b Named constants {#constants}
+
+A **constant** declaration, `const Name: T = e`
+([§4.1.12c](/book/spec/syntactic-grammar/#4112c-const_decl)), names a value of
+type `T`. In an expression, `Name` has type `T` and its value is `e`'s.
+
+- A `const` MUST be declared in a context or a commons
+  (`bynk.resolve.const_outside_context_or_commons`).
+- Its name MUST be upper-camel, a
+  [`constant_name`](/book/spec/lexical-grammar/#312-constant_name)
+  (`/[A-Z][A-Za-z0-9_]*/`; `bynk.resolve.const_name_case`).
+- Its name MUST NOT be declared twice in one unit
+  (`bynk.resolve.duplicate_const`), and MUST NOT equal the name of another
+  declaration in the unit's namespace ([§5.1](#51-name-resolution--visibility)):
+  a function, an asset, an embed, a type, an event, a service, an agent or a
+  provider (`bynk.resolve.name_conflict`). Nor may it equal a built-in type name
+  (`List`, `Map`) or the name of a variant of a sum type in scope, including a
+  predeclared `HttpResult` variant, since a bare reference would then read as
+  either (`bynk.resolve.name_conflict`).
+- A unit sees its own constants and those of each commons it `uses`, one level,
+  as with functions; a local declaration wins. Two used commons that declare
+  the same name are `bynk.uses.name_conflict`. A `let` binding or parameter
+  shadows a constant of the same name.
+
+The initialiser `e` MUST be a **static expression** (ADR 0004) or a reference
+to another constant (`bynk.resolve.bad_const_initialiser`). The closed set is:
+
+- an `Int`, `Float`, `Bool` or unit literal, a negative numeric literal, or a
+  plain string literal with no interpolation hole;
+- a `Duration` literal (`30.seconds`);
+- a parenthesised static expression;
+- a list literal, a record construction with every field given (no spread, no
+  shorthand), a sum-variant construction (a bare or qualified nullary variant,
+  or a variant call), or `Some`/`None`/`Ok`/`Err`, each over static values;
+- `T.unsafe(lit)` for an opaque type `T`, `lit` a literal (confined to the
+  defining commons as anywhere else, [§6.4](/book/spec/type-system/#64-admission--construction));
+- `List.empty()`, `Map.empty()` or `Set.empty()`;
+- the name of another constant in scope.
+
+Anything else is refused: a function or method call, an operator, a field
+access, `self`, a capability, a bind, an interpolated string, a lambda or a
+control-flow expression. `e` is then checked against `T` in an empty, pure
+scope, as an agent state initialiser is ([§5.4](#54-agents--state)): a literal
+is admitted to a refined `T` only when it satisfies the refinement
+(`bynk.refine.literal_violates`), and a value of another type is
+`bynk.resolve.bad_const_initialiser`.
+
+Constants MAY refer to one another, across the files of a unit and to the
+constants of a commons the unit `uses`, but MUST NOT do so in a cycle
+(`bynk.resolve.const_cycle`, reported once per cycle, naming its members in
+order). A constant MAY NOT yet appear in a compile-time position, such as a
+refinement bound (`InRange(1, MaxQty)`) or an annotation argument.
+
+A constant is emitted as an exported `const` of the declaring module
+([§7.3.1a](/book/spec/emission/#731a-named-constants)), imported like a function by a
+sibling file or a unit that `uses` it. A unit-tier `suite` case names the
+constants of its target and of the commons the target `uses`.
