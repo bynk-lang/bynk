@@ -116,6 +116,10 @@
             "link": "/book/guides/type-system/match-on-a-lists-shape/"
           },
           {
+            "label": "Match on a range of numbers",
+            "link": "/book/guides/type-system/match-on-a-range-of-numbers/"
+          },
+          {
             "label": "Narrow and bind with is",
             "link": "/book/guides/type-system/narrow-with-is/"
           },

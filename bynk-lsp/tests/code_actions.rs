@@ -649,6 +649,13 @@ type Order = { id: String, status: Status, total: Int }
             "fn f(xs: List[Int]) -> Int {\n  match xs {\n    [a, .., _, _] => a\n    _ => 0\n  }\n}\n",
             "fn f(xs: List[Int]) -> Int {\n  match xs {\n    [a, _, _, ..] => a\n    _ => 0\n  }\n}\n",
         ),
+        // #2699: an inverted range offers to swap its bounds (`MaybeIncorrect`).
+        (
+            "bynk.types.empty_range_pattern",
+            "swap the bounds",
+            "fn f(n: Int) -> Int {\n  match n {\n    9..3 => 1\n    _ => 0\n  }\n}\n",
+            "fn f(n: Int) -> Int {\n  match n {\n    3..9 => 1\n    _ => 0\n  }\n}\n",
+        ),
     ];
     for (n, (code, title, body, fixed_body)) in cases.into_iter().enumerate() {
         let src = format!("{PRELUDE}{body}");
@@ -773,6 +780,44 @@ fn heads(xs: List[Option[Int]]) -> Int {
     for want in ["[] => 0", "[_, _, ..] => 0", "[None, ..] => 0"] {
         assert!(arms.contains(&want.to_string()), "{want}: {arms:?}");
     }
+}
+
+/// #2699: a non-exhaustive `Int` `match` names the interval it misses, as a
+/// range pattern carrying a fill-arm suggestion; single-value gaps are literals.
+#[test]
+fn range_witnesses_carry_fill_arm_suggestions() {
+    const SRC: &str = "\
+commons shop
+
+fn bucket(age: Int) -> Int {
+  match age {
+    ..-1 => 0
+    0..12 => 1
+    18.. => 2
+    14 => 3
+  }
+}
+";
+    let root = setup_project("fill-arm-range-witnesses", &[("shop.bynk", SRC)]);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let result = bynk_ide::diagnose_project(&root, &sources);
+    let file = result
+        .files
+        .iter()
+        .find(|f| f.source_path == Path::new("shop.bynk"))
+        .expect("file analysed");
+    let arms: Vec<String> = file
+        .diagnostics
+        .iter()
+        .filter(|d| d.error.category == "bynk.types.non_exhaustive_match")
+        .flat_map(|d| d.error.suggestions.iter())
+        .flat_map(|s| s.edits.iter().map(|(_, text)| text.trim().to_string()))
+        .collect();
+    for want in ["13 => 0", "15..17 => 0"] {
+        assert!(arms.contains(&want.to_string()), "{want}: {arms:?}");
+    }
+    assert_eq!(arms.len(), 2, "{arms:?}");
 }
 
 /// #2665: a non-exhaustive multi-field or record `match` names concrete

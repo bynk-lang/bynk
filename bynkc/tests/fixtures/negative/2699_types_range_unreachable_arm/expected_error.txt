@@ -1,0 +1,3 @@
+bynk.types.unreachable_arm this match arm is unreachable — every value `3..5` matches is already matched by an earlier arm @ 7:5
+# exact
+bynk.types.unreachable_arm this match arm is unreachable — every value `7` matches is already matched by an earlier arm @ 16:5

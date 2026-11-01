@@ -1,0 +1,14 @@
+context commerce.order
+
+exports transparent { PaymentConfirmed }
+
+event PaymentConfirmed = {
+  orderId: String,
+}
+
+// #990: `lo > hi` can never match.
+service OnPayment from Events(PaymentConfirmed) via schema(5..2) {
+  on event(e: PaymentConfirmed) -> Effect[()] {
+    Effect.pure(())
+  }
+}

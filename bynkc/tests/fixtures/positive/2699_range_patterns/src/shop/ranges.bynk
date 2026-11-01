@@ -1,0 +1,92 @@
+commons shop.ranges {
+  type Reading = { value: Int, unit: String }
+
+  // `..-1`, `0..` split the integers in two: exhaustive with no `_`.
+  fn sign(n: Int) -> String {
+    match n {
+      ..-1 => "negative"
+      0.. => "non-negative"
+    }
+  }
+
+  // Closed, open-below and open-above ranges, and negative bounds.
+  fn bucket(age: Int) -> String {
+    match age {
+      ..-1 => "invalid"
+      0..12 => "child"
+      13..17 => "teen"
+      18.. => "adult"
+    }
+  }
+
+  fn temperature(t: Int) -> String {
+    match t {
+      ..-10 => "freezing"
+      -9..-1 => "cold"
+      0 => "zero"
+      1..25 => "mild"
+      26.. => "hot"
+    }
+  }
+
+  // A range inside a variant payload, and an or-pattern of ranges.
+  fn edge(reading: Option[Int]) -> String {
+    match reading {
+      Some(0..9 | 90..99) => "edge"
+      Some(n) => "ok"
+      None => "missing"
+    }
+  }
+
+  // A range inside a record pattern.
+  fn warm(r: Reading) -> Bool {
+    match r {
+      Reading { value: 20..30, .. } => true
+      _ => false
+    }
+  }
+
+  // A range as a list element, beside a literal and a rest.
+  fn small(xs: List[Int]) -> String {
+    match xs {
+      [] => "empty"
+      [..9] => "one, at most nine"
+      [..-1, ..] => "starts negative"
+      [_, ..] => "other"
+    }
+  }
+
+  // A range arm that is partly covered by an earlier one is legal.
+  fn overlap(n: Int) -> Int {
+    match n {
+      0..9 => 1
+      5..15 => 2
+      _ => 3
+    }
+  }
+
+  // A range over a refined `Int`, with a guard.
+  type Score = Int where InRange(0, 100)
+
+  fn grade(s: Score) -> String {
+    match s {
+      90.. => "A"
+      70..89 if s != 75 => "B"
+      ..89 => "C"
+    }
+  }
+
+  // A single-value range is the literal.
+  fn exactly(n: Int) -> Bool {
+    match n {
+      7..7 => true
+      _ => false
+    }
+  }
+
+  // `let … else` with a range.
+  fn digit(n: Int) -> Int {
+    let 0..9 = n else { -1 }
+    n
+  }
+}

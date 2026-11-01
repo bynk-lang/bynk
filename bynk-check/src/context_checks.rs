@@ -355,7 +355,10 @@ fn opaque_record_patterns(
             }
         }
         Pattern::Refined { inner, .. } => opaque_record_patterns(inner, consumed, top, errors),
-        Pattern::Wildcard(_) | Pattern::Binding(_) | Pattern::Literal { .. } => {}
+        Pattern::Wildcard(_)
+        | Pattern::Binding(_)
+        | Pattern::Literal { .. }
+        | Pattern::Range(_) => {}
     }
 }
 

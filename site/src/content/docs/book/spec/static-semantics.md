@@ -1294,9 +1294,11 @@ after the unguarded arms before it. The values a type has are its constructors:
   order, and a field a record pattern does not list matches anything;
 - `Bool` has `true` and `false`;
 - a `List[T]` has one constructor per length, set out below;
-- `Int` and `String` have a literal for every value, so no finite set of literals
-  is complete and only an irrefutable pattern covers them; a refined type has
-  its base's constructors, and an opaque type has no patterns.
+- `String` has a literal for every value, so no finite set of literals is
+  complete and only an irrefutable pattern covers it;
+- `Int` has the safe integers `-(2^53 − 1)` to `2^53 − 1`, whose constructors are
+  intervals, set out below (#2699). A literal is the interval of one value;
+- a refined type has its base's constructors, and an opaque type has no patterns.
 
 An or-pattern, at any depth, stands for each of its alternatives. A guarded arm
 contributes no row. A refined pattern contributes no row, and as the arm under
@@ -1373,6 +1375,33 @@ In `[p₁, …, pₙ]` and `[p₁, …, pₙ, ..]` / `[p₁, …, pₙ, ..rest]`
 - A list pattern is irrefutable exactly when it is `[..]` or `[..rest]`.
 - After `is`, the names bound by a list pattern in scope are its elements that
   are bare names and the named rest, like a variant's flat payload bindings.
+
+**Range patterns** (patterns track, slice 5, #2699, [§4.7.13](/book/spec/syntactic-grammar/#4713-int_range)).
+In `lo..hi`, `lo..` and `..hi`:
+
+- The matched value MUST be an `Int`, or a refinement of one
+  (`bynk.types.range_pattern_on_non_int`). `Float`, `String` and every other type
+  have no range patterns. A refined type is matched as its base: its own bounds
+  are not interpreted, so `Age = Int where InRange(0, 150)` still needs all of
+  `Int` covered.
+- The bounds are inclusive. A closed range MUST have `lo <= hi`
+  (`bynk.types.empty_range_pattern`); `lo..lo` is the literal. A bound outside the
+  `Int` range is the integer-literal error of the lexer.
+- A range binds nothing and is refutable. Under an or-pattern it contributes no
+  names, so `0..9 | 90..99` is well-typed.
+- **Coverage is by interval.** The constructors of an `Int` column are the
+  disjoint intervals the column's patterns cut the safe integers into: a cut at
+  each range's low bound and just after each high bound. Every pattern then covers
+  whole intervals, and the split is linear in the number of distinct endpoints. A
+  column whose patterns are all single values is not split, so literals alone
+  still need a wildcard and report `_`. An uncovered interval is reported as a
+  pattern: `13..17`, `101..`, `..-1`, or the single value when the gap is one
+  number; adjacent uncovered intervals are reported as one. `..-1` and `0..`
+  cover every `Int`. An arm whose range the earlier unguarded arms wholly cover is
+  `bynk.types.unreachable_arm`; a partly covered range is legal.
+- After `is`, a range directly after the keyword MUST NOT be written
+  (`bynk.types.is_range_pattern`), as for a literal
+  (`bynk.types.is_literal_pattern`).
 
 A pattern MUST name a real variant (`bynk.types.unknown_variant_in_pattern`) and
 real payload fields (`bynk.types.unknown_pattern_field`), bind the right number
@@ -1822,9 +1851,13 @@ is `bynk.event.bad_params`. It MUST return `Effect[()]`
 type (`bynk.event.pattern_type_mismatch`); a variant value MUST exist on the
 field's sum type (`bynk.event.pattern_unknown_variant`) and carry no payload
 (`bynk.event.pattern_variant_payload`). Listed fields combine with AND. A
-`via schema(N)` clause MUST give a single positive `Int` literal
-(`bynk.event.bad_schema_dispatch`) and matches an emission whose envelope
-`schemaVersion` equals `N`. Both filters are **deliver-and-filter**: every
+`via schema(...)` clause MUST give a positive `Int` literal `N`, a range of
+positive `Int` literals (`N..M`, `N..`, `..M`) or `_` (events slice 4b, #990;
+`bynk.event.bad_schema_dispatch` for a non-positive bound). A literal matches an
+emission whose envelope `schemaVersion` equals `N`; a range matches one within it,
+both bounds inclusive; `_` matches every version, as no clause does. `N..M` MUST
+have `N <= M` (`bynk.types.empty_range_pattern`). The range is the production of a
+`match` range pattern (§4.7.13). Both filters are **deliver-and-filter**: every
 emission of `E` is delivered to every subscriber of `E`, and each subscriber
 evaluates its own filters as a guard on entry, running its body only on a
 match. A filter does not narrow the handler parameter's type, and two

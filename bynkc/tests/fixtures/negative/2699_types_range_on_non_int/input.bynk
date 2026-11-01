@@ -1,0 +1,16 @@
+commons demo
+
+// #2699: a range pattern matches an `Int` only.
+fn f(s: String) -> Int {
+  match s {
+    1..3 => 1
+    _ => 0
+  }
+}
+
+fn g(x: Float) -> Int {
+  match x {
+    1..3 => 1
+    _ => 0
+  }
+}

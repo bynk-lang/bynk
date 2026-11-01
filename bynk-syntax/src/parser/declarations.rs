@@ -3165,30 +3165,37 @@ impl<'a> Parser<'a> {
             .with_note("`via` clauses are a closed set; only `via schema(...)` exists today"));
         }
         self.expect(TokenKind::LParen, "expected `(N)` after `via schema`")?;
-        let neg = self.eat(TokenKind::Minus);
-        let num_tok = self.expect(
-            TokenKind::IntLit,
-            "expected an `Int` literal as the `via schema(...)` version",
-        )?;
-        let slice = self.slice(num_tok.span);
-        let mut version: i64 = crate::lexer::strip_digit_separators(slice)
-            .parse()
-            .map_err(|_| {
-                CompileError::new(
-                    "bynk.lex.integer_overflow",
-                    num_tok.span,
-                    format!("integer literal `{slice}` out of 64-bit range"),
-                )
-            })?;
-        if neg.is_some() {
-            version = -version;
-        }
+        // The version is a literal, an integer range (the production a match
+        // pattern shares, #2699) or `_` (#990). A non-positive bound is a
+        // checker error, not a parse error.
+        let pattern = if self.eat(TokenKind::Underscore).is_some() {
+            SchemaVersionPattern::Wildcard
+        } else if self.int_range_ahead() {
+            SchemaVersionPattern::Range(self.parse_int_range()?)
+        } else {
+            let neg = self.eat(TokenKind::Minus);
+            let num_tok = self.expect(
+                TokenKind::IntLit,
+                "expected an `Int` literal, a range or `_` as the `via schema(...)` version",
+            )?;
+            let slice = self.slice(num_tok.span);
+            let mut version: i64 = crate::lexer::strip_digit_separators(slice)
+                .parse()
+                .map_err(|_| {
+                    CompileError::new(
+                        "bynk.lex.integer_overflow",
+                        num_tok.span,
+                        format!("integer literal `{slice}` out of 64-bit range"),
+                    )
+                })?;
+            if neg.is_some() {
+                version = -version;
+            }
+            SchemaVersionPattern::Literal(version)
+        };
         let close = self.expect(TokenKind::RParen, "to close `via schema(...)`")?;
         let span = via_tok.span.merge(close.span);
-        Ok(Some(SchemaDispatch {
-            pattern: SchemaVersionPattern::Literal(version),
-            span,
-        }))
+        Ok(Some(SchemaDispatch { pattern, span }))
     }
 
     fn parse_agent_decl(&mut self) -> Result<AgentDecl, CompileError> {

@@ -1464,6 +1464,12 @@ impl<'a> Parser<'a> {
             // Literal patterns (v0.130 §2.3.4): `31`, `"english"`, `true`, and a
             // leading unary minus on an integer literal (`-1`). A closed set
             // (ADR 0001) — no `Float`, no `()`.
+            // An integer range (#2699): `lo..hi`, `lo..`, `..hi`. Tried first,
+            // since a range opens like the literal or the list's `..` it
+            // contains.
+            if self.int_range_ahead() {
+                return Ok(Pattern::Range(self.parse_int_range()?));
+            }
             match t.kind {
                 TokenKind::IntLit | TokenKind::StrLit | TokenKind::True | TokenKind::False => {
                     return self.parse_literal_pattern();
@@ -1607,8 +1613,8 @@ impl<'a> Parser<'a> {
 
     /// Parse a list pattern (#2680): `[]`, `[p, …]`, `[p, …, ..]` or
     /// `[p, …, ..rest]`; the cursor is on the `[`. The `..` is the final
-    /// element, at most once, and followed by a name or nothing — a literal
-    /// after it is reserved for range patterns (patterns track, Q7).
+    /// element, at most once, and followed by a name or nothing; `..` followed
+    /// by an integer is a range element instead (#2699, patterns track Q7).
     fn parse_list_pattern(&mut self) -> Result<Pattern, CompileError> {
         let open = self.expect(TokenKind::LBracket, "to open a list pattern")?;
         let mut elems = Vec::new();
@@ -1616,7 +1622,9 @@ impl<'a> Parser<'a> {
         loop {
             match self.peek_kind() {
                 Some(TokenKind::RBracket) => break,
-                Some(TokenKind::DotDot) => {
+                // `..9` is a range element (#2699); `..` then a name or nothing
+                // is the rest marker.
+                Some(TokenKind::DotDot) if !self.int_range_ahead() => {
                     rest = Some(self.parse_list_rest()?);
                     // A trailing comma after the rest is as harmless as in a list literal.
                     self.eat(TokenKind::Comma);
@@ -1645,7 +1653,10 @@ impl<'a> Parser<'a> {
         match self.peek_kind() {
             Some(TokenKind::Ident) => {
                 let t = self.peek().expect("peeked identifier");
-                if self.slice(t.span).starts_with(|c: char| c.is_ascii_uppercase()) {
+                if self
+                    .slice(t.span)
+                    .starts_with(|c: char| c.is_ascii_uppercase())
+                {
                     return Err(CompileError::new(
                         "bynk.parse.expected_token",
                         t.span,
@@ -1680,21 +1691,17 @@ impl<'a> Parser<'a> {
                 }
                 Err(self.list_rest_not_last(dots.span, None))
             }
-            Some(
-                TokenKind::IntLit
-                | TokenKind::StrLit
-                | TokenKind::True
-                | TokenKind::False
-                | TokenKind::Minus,
-            ) => Err(CompileError::new(
-                "bynk.parse.range_pattern_unsupported",
-                dots.span.merge(self.peek().expect("peeked literal").span),
-                "a `..` followed by a literal would be a range pattern, which is not available yet",
-            )
-            .with_note(
-                "in a list pattern `..` is the rest marker and takes a name or nothing: `[x, ..]` or `[x, ..rest]`; \
-                 range patterns are planned (patterns track, slice 5)",
-            )),
+            Some(TokenKind::StrLit | TokenKind::True | TokenKind::False | TokenKind::Minus) => {
+                Err(CompileError::new(
+                    "bynk.parse.expected_token",
+                    dots.span.merge(self.peek().expect("peeked literal").span),
+                    "a `..` in a list pattern takes a name, an integer bound, or nothing",
+                )
+                .with_note(
+                    "`..rest` binds the remaining elements and `..9` is an integer range; \
+                     only `Int` ranges exist",
+                ))
+            }
             Some(TokenKind::Underscore) => Err(CompileError::new(
                 "bynk.parse.expected_token",
                 self.peek().expect("peeked `_`").span,
@@ -1852,6 +1859,61 @@ impl<'a> Parser<'a> {
     /// Parse a literal pattern (v0.130 §2.3.4): `31`, `-1`, `"english"`,
     /// `true`/`false`. The caller has already confirmed the leading token is one
     /// of these forms.
+    /// Whether the cursor is on an integer range (#2699): `lo..`, `lo..hi` or
+    /// `..hi`, each bound an optionally negative `IntLit`. The one test every
+    /// range position shares (a match pattern, a `let` pattern, a list element,
+    /// `via schema(...)`). A `..` followed by anything else is the rest marker.
+    pub(crate) fn int_range_ahead(&self) -> bool {
+        let at = |k: usize| self.tokens.get(self.pos + k).map(|t| t.kind);
+        // How many tokens a bound takes from `k`: `5` or `-5`, else none.
+        let bound = |k: usize| match at(k) {
+            Some(TokenKind::IntLit) => Some(1),
+            Some(TokenKind::Minus) if at(k + 1) == Some(TokenKind::IntLit) => Some(2),
+            _ => None,
+        };
+        match at(0) {
+            Some(TokenKind::DotDot) => bound(1).is_some(),
+            _ => bound(0).is_some_and(|n| at(n) == Some(TokenKind::DotDot)),
+        }
+    }
+
+    /// Parse an integer range, with [`Parser::int_range_ahead`] true: the one
+    /// production behind a range pattern and `via schema(...)`'s range (#2699,
+    /// #990). The high bound is read greedily, so `5.. -1` is the range
+    /// `5..-1`. Bounds are parsed permissively: whether they fit an `Int` and
+    /// whether `lo <= hi` are the checker's.
+    pub(crate) fn parse_int_range(&mut self) -> Result<IntRange, CompileError> {
+        let bound_ahead = |p: &Self| {
+            matches!(p.peek_kind(), Some(TokenKind::IntLit))
+                || (p.peek_kind() == Some(TokenKind::Minus)
+                    && p.tokens.get(p.pos + 1).map(|t| t.kind) == Some(TokenKind::IntLit))
+        };
+        let int_bound = |p: &mut Self| -> Result<(i64, Span), CompileError> {
+            match p.parse_literal_value()? {
+                (LiteralValue::Int(n), span) => Ok((n, span)),
+                _ => unreachable!("an `IntLit` bound parses to an `Int`"),
+            }
+        };
+        let start = self.peek().expect("a range has a first token").span;
+        let lo = if bound_ahead(self) {
+            Some(int_bound(self)?.0)
+        } else {
+            None
+        };
+        let dots = self.expect(TokenKind::DotDot, "in an integer range")?.span;
+        let (hi, end) = if bound_ahead(self) {
+            let (n, span) = int_bound(self)?;
+            (Some(n), span)
+        } else {
+            (None, dots)
+        };
+        Ok(IntRange {
+            lo,
+            hi,
+            span: start.merge(end),
+        })
+    }
+
     fn parse_literal_pattern(&mut self) -> Result<Pattern, CompileError> {
         let (value, span) = self.parse_literal_value()?;
         Ok(Pattern::Literal { value, span })

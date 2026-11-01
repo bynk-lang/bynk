@@ -1,0 +1,9 @@
+commons demo
+
+// #2699: `lo > hi` can never match.
+fn f(n: Int) -> Int {
+  match n {
+    9..3 => 1
+    _ => 0
+  }
+}

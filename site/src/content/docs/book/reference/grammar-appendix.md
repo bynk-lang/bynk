@@ -79,7 +79,7 @@ limits_policy ::= "limits" "{" (limits_field ","?)* "}"
 limits_field ::= identifier ":" expression
 service_protocol ::= "from" ("http" | "cron" | "queue" "(" string_literal ")" | "websocket" "(" "in" ":" type_ref "," "out" ":" type_ref ","? ")" | "Events" "(" type_ref event_pattern? ")" schema_dispatch_clause?)
 event_pattern ::= "{" (event_pattern_field ",")* ".." "}"
-schema_dispatch_clause ::= "via" "schema" "(" "-"? number_literal ")"
+schema_dispatch_clause ::= "via" "schema" "(" (int_range | "-"? number_literal | wildcard_pattern) ")"
 event_pattern_field ::= identifier ":" event_pattern_value
 event_pattern_value ::= "-"? number_literal | string_literal | boolean_literal | (identifier ".")? identifier
 agent_decl ::= "agent" identifier ("replaces" identifier)? "{" key_decl store_field* (invariant_decl | transition_decl | migrate_decl)* (store_annotation* call_handler)* "}"
@@ -122,7 +122,7 @@ let_stmt ::= "let" binding_name (":" type_ref)? "=" expression
 effect_let_stmt ::= "let" binding_name (":" type_ref)? "<-" expression call_site_actor?
 let_else_stmt ::= "let" (let_pattern | let_or_pattern) ("=" | "<-") expression call_site_actor? "else" (block | let_else_match) | "let" (record_pattern | let_paren_record_pattern) ("=" | "<-") expression call_site_actor? ("else" (block | let_else_match))?
 let_paren_record_pattern ::= "(" record_pattern ")"
-let_pattern ::= literal_pattern | paren_pattern | list_pattern | let_variant_pattern
+let_pattern ::= int_range | literal_pattern | paren_pattern | list_pattern | let_variant_pattern
 let_or_pattern ::= (let_pattern | record_pattern) "|" pattern
 let_variant_pattern ::= identifier "." identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")? | identifier "(" (pattern_binding ("," pattern_binding)*)? ","? ")"
 let_else_match ::= "match" "{" match_arm* "}"
@@ -143,7 +143,7 @@ if_expr ::= "if" expression block ("else" (if_expr | block))?
 match_expr ::= "match" expression "{" match_arm* "}"
 match_arm ::= (pattern | refined_pattern) ("if" expression)? "=>" expression ","?
 refined_pattern ::= wildcard_pattern "where" refinement
-pattern ::= wildcard_pattern | literal_pattern | variant_pattern | record_pattern | list_pattern | or_pattern | paren_pattern
+pattern ::= wildcard_pattern | int_range | literal_pattern | variant_pattern | record_pattern | list_pattern | or_pattern | paren_pattern
 record_pattern ::= identifier "{" (record_pattern_field ",")* ".." "}"
 list_pattern ::= "[" (pattern ",")* (pattern | list_rest ","?)? "]"
 list_rest ::= ".." identifier?
@@ -154,6 +154,7 @@ is_or_pattern ::= is_pattern "|" is_base_pattern
 or_pattern ::= pattern "|" pattern
 paren_pattern ::= "(" pattern ")"
 wildcard_pattern ::= "_"
+int_range ::= "-"? number_literal ".." ("-"? number_literal)? | ".." "-"? number_literal
 literal_pattern ::= "-"? number_literal | string_literal | boolean_literal
 variant_pattern ::= (identifier ".")? identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")?
 pattern_binding ::= named_binding | pattern

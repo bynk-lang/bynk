@@ -3566,10 +3566,11 @@ pub(crate) fn check_match(
     } else if arms.iter().any(|a| {
         pattern_alternatives(&a.pattern)
             .iter()
-            .any(|p| matches!(p, Pattern::List { .. }))
+            .any(|p| matches!(p, Pattern::List { .. } | Pattern::Range(_)))
     }) {
-        // #2680: a list pattern on a value that is not a list (a record, a
-        // `Set`, a function) is that pattern's error, not the scrutinee's.
+        // #2680, #2699: a list or range pattern on a value that is not a list
+        // or an `Int` (a record, a `Set`, a `Float`, a function) is that
+        // pattern's error, not the scrutinee's.
         for arm in arms {
             ctx.push_scope();
             check_pattern(&arm.pattern, disc_ty, ctx);
@@ -3618,10 +3619,11 @@ pub(crate) fn check_match(
         // `1 | 2 => …` followed by a later `2 => …` is caught too.
         if arm.guard.is_none() && !arm.pattern.is_irrefutable() {
             for cand in pattern_alternatives(&arm.pattern) {
-                // A list pattern's overlap with another is the usefulness
-                // engine's to judge (`unreachable_arm`): `[x, ..]` after
-                // `[_, ..]` is not a mere duplicate.
-                if cand.is_irrefutable() || matches!(cand, Pattern::List { .. }) {
+                // A list or range pattern's overlap with another is the
+                // usefulness engine's to judge (`unreachable_arm`): `[x, ..]`
+                // after `[_, ..]`, or `0..5` after `0..9`, is not a mere duplicate.
+                if cand.is_irrefutable() || matches!(cand, Pattern::List { .. } | Pattern::Range(_))
+                {
                     continue;
                 }
                 if seen.iter().any(|p| patterns_equal(p, cand)) {
@@ -3861,6 +3863,16 @@ pub(crate) fn check_match(
                     format!("non-exhaustive `match` on `Bool` — `{witness}` is not covered"),
                 )
                 .with_note("add the missing arm, or use a wildcard `_` arm"),
+                // #2699: an `Int` match with ranges names the interval it misses.
+                MatchKind::Literal(BaseType::Int) if witness != "_" => CompileError::new(
+                    "bynk.types.non_exhaustive_match",
+                    span,
+                    format!(
+                        "non-exhaustive `match` on `{}` — `{witness}` is not covered",
+                        disc_ty.display(tys)
+                    ),
+                )
+                .with_note("add a match arm for it, or use a wildcard `_` arm"),
                 // `Int`/`String` are unbounded and always need a wildcard.
                 MatchKind::Literal(_) => CompileError::new(
                     "bynk.types.non_exhaustive_match",
@@ -4118,6 +4130,29 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                         ty.display(tys)
                     ),
                 ));
+            }
+        }
+        // #2699: an integer range matches an `Int` (or a refinement of one) by
+        // comparison; its bounds are literals the lexer already bounded.
+        Pattern::Range(r) => {
+            if literal_base_of(ty, tys) != Some(BaseType::Int) {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.types.range_pattern_on_non_int",
+                        r.span,
+                        format!(
+                            "range pattern `{}` cannot match a value of type `{}` — range patterns match `Int` scrutinees",
+                            r.describe(),
+                            ty.display(tys)
+                        ),
+                    )
+                    .with_note(
+                        "ranges over `Float` (NaN, representation) and `String` are deliberately not part of the language; \
+                         compare with `<`/`>=` in a guard instead",
+                    ),
+                );
+            } else if let Some(err) = empty_range_error(r, "this range pattern") {
+                ctx.errors.push(err);
             }
         }
         // #472: `p where predicate` — check the inner pattern as usual, then
@@ -4514,6 +4549,43 @@ fn pattern_alternatives(pat: &Pattern) -> Vec<&Pattern> {
     }
 }
 
+/// `bynk.types.empty_range_pattern` for a range whose bounds are inverted
+/// (`lo > hi`), or `None` for a well-formed one (#2699, D). Shared by a match
+/// pattern and `via schema(...)` (#990), so both reject the same mistake with
+/// the same fix: swap the bounds. The fix is `MaybeIncorrect`: a swap is the
+/// likeliest intent but the author may have written the wrong number.
+pub(crate) fn empty_range_error(r: &IntRange, what: &str) -> Option<CompileError> {
+    let (Some(lo), Some(hi)) = (r.lo, r.hi) else {
+        return None;
+    };
+    if lo <= hi {
+        return None;
+    }
+    let swapped = IntRange {
+        lo: Some(hi),
+        hi: Some(lo),
+        span: r.span,
+    };
+    Some(
+        CompileError::new(
+            "bynk.types.empty_range_pattern",
+            r.span,
+            format!(
+                "{what} `{}` is empty: its low bound {lo} is greater than its high bound {hi}",
+                r.describe()
+            ),
+        )
+        .with_note(
+            "bounds are inclusive and the low bound comes first, so `lo..hi` needs `lo <= hi`",
+        )
+        .with_suggestion(
+            "swap the bounds",
+            vec![(r.span, swapped.describe())],
+            Applicability::MaybeIncorrect,
+        ),
+    )
+}
+
 /// Structural equivalence for duplicate-arm detection: two patterns matching
 /// exactly the same set of values. Irrefutable sub-patterns (`_`, name
 /// bindings) are all equivalent, and binding *names* do not matter.
@@ -4580,6 +4652,7 @@ fn describe_pattern(pat: &Pattern) -> String {
     match pat {
         Pattern::Wildcard(_) | Pattern::Binding(_) => "_".to_string(),
         Pattern::Literal { value, .. } => value.describe(),
+        Pattern::Range(r) => r.describe(),
         Pattern::Refined {
             inner, predicate, ..
         } => format!(
@@ -4784,6 +4857,22 @@ fn check_is_pattern(
                 .with_note(format!(
                     "to compare by value, use `== {}` instead",
                     value.describe()
+                )),
+            );
+        }
+        // #2699 (DECISION G): a range after `is` reads as a type test but would
+        // mean a value comparison, as a literal does; steer to `match`, a
+        // guard, or `InRange`.
+        Pattern::Range(r) => {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.types.is_range_pattern",
+                    pattern.span(),
+                    "the `is` operator tests a value's type or refinement, not membership in a range",
+                )
+                .with_note(format!(
+                    "use a `match` arm `{}`, a guard, or a refinement with `InRange`",
+                    r.describe()
                 )),
             );
         }

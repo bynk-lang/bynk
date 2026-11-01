@@ -1,0 +1,74 @@
+suite shop.ranges {
+  case "sign splits the integers" {
+    expect sign(-5) == "negative"
+    expect sign(-1) == "negative"
+    expect sign(0) == "non-negative"
+    expect sign(9007199254740991) == "non-negative"
+    expect sign(-9007199254740991) == "negative"
+  }
+
+  case "bounds are inclusive" {
+    expect bucket(-1) == "invalid"
+    expect bucket(0) == "child"
+    expect bucket(12) == "child"
+    expect bucket(13) == "teen"
+    expect bucket(17) == "teen"
+    expect bucket(18) == "adult"
+    expect bucket(120) == "adult"
+  }
+
+  case "negative bounds and a literal between ranges" {
+    expect temperature(-11) == "freezing"
+    expect temperature(-10) == "freezing"
+    expect temperature(-9) == "cold"
+    expect temperature(-1) == "cold"
+    expect temperature(0) == "zero"
+    expect temperature(1) == "mild"
+    expect temperature(25) == "mild"
+    expect temperature(26) == "hot"
+  }
+
+  case "ranges nest in variants and or-patterns" {
+    expect edge(Some(0)) == "edge"
+    expect edge(Some(9)) == "edge"
+    expect edge(Some(10)) == "ok"
+    expect edge(Some(89)) == "ok"
+    expect edge(Some(90)) == "edge"
+    expect edge(Some(99)) == "edge"
+    expect edge(Some(100)) == "ok"
+    expect edge(None) == "missing"
+  }
+
+  case "ranges nest in records and lists" {
+    expect warm(Reading { value: 20, unit: "C" })
+    expect warm(Reading { value: 30, unit: "C" })
+    expect !warm(Reading { value: 31, unit: "C" })
+    expect !warm(Reading { value: 19, unit: "C" })
+    expect small([]) == "empty"
+    expect small([4]) == "one, at most nine"
+    expect small([-3]) == "one, at most nine"
+    expect small([10]) == "other"
+    expect small([-3, 1, 2]) == "starts negative"
+    expect small([4, 1]) == "other"
+  }
+
+  case "a partly covered range keeps the rest" {
+    expect overlap(0) == 1
+    expect overlap(9) == 1
+    expect overlap(10) == 2
+    expect overlap(15) == 2
+    expect overlap(16) == 3
+    expect overlap(-1) == 3
+  }
+
+  case "a refined Int, a guard, a single-value range and let-else" {
+    expect grade(95) == "A"
+    expect grade(80) == "B"
+    expect grade(75) == "C"
+    expect grade(10) == "C"
+    expect exactly(7)
+    expect !exactly(8)
+    expect digit(4) == 4
+    expect digit(12) == -1
+  }
+}

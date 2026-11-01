@@ -1,9 +1,0 @@
-commons demo
-
-// #2680: `..` followed by a literal is reserved for range patterns.
-fn f(xs: List[Int]) -> Int {
-  match xs {
-    [..9] => 1
-    _ => 0
-  }
-}

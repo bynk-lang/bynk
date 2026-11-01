@@ -35,6 +35,7 @@ pub fn pattern_summary(pattern: &Pattern) -> String {
         Pattern::Wildcard(_) => "_".to_string(),
         Pattern::Binding(b) => b.name.clone(),
         Pattern::Literal { value, .. } => value.describe(),
+        Pattern::Range(r) => r.describe(),
         Pattern::Variant {
             type_name, variant, ..
         } => match type_name {

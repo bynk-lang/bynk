@@ -1,0 +1,3 @@
+bynk.types.non_exhaustive_match non-exhaustive `match` on `Int` — `13..17` is not covered @ 5:3
+# exact
+bynk.types.non_exhaustive_match non-exhaustive `match` on `Int` — `100` is not covered @ 13:3

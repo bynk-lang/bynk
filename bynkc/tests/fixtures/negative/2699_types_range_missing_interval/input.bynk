@@ -1,0 +1,17 @@
+commons demo
+
+// #2699: the uncovered interval is named.
+fn f(age: Int) -> String {
+  match age {
+    ..-1 => "invalid"
+    0..12 => "child"
+    18.. => "adult"
+  }
+}
+
+fn g(code: Int) -> String {
+  match code {
+    ..99 => "low"
+    101.. => "high"
+  }
+}
