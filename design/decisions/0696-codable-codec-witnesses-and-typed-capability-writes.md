@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, ts_writes, ast_importers
-changelog: "**`Codable`: generic code that crosses the boundary, and typed capability writes** (constrained-generics slice 3): `fn roundTrip[T: Codable](v: T) -> Result[T, JsonError] { Json.decode[T](Json.encode(v)) }`. `Codable` is automatic and means exactly what `Json.decode` accepts. A `Codable` type parameter takes a hidden codec witness built at the call site from the concrete type's generated codecs, so refinements are re-validated as at any boundary. `List`, `Option`, `Set`, `Map` and `Result` over a type parameter work; a user generic type over one is `bynk.generics.codec_generic_at_rigid`. A capability operation may take `Codable` parameters: the call site encodes them, so a provider receives plain JSON and the ABI does not grow (a `Codable` type parameter in a return type is `bynk.generics.codable_op_return`). `Json.encode`/`Json.decode[T]` on an unbounded type parameter is now `bynk.generics.missing_codable_bound` (machine-applicable, `bynk check --fix`) instead of `bynk.types.json_uncodable`. New `bynk.types.not_codable`. `bynk.cloudflare` gains `Queue.sendValue`, which sends the same message as `send(Json.encode(v))`. Unbounded code is emitted unchanged"
----
+# 0696 — `Codable` gives generic code the boundary codec through a hidden witness, and capability operations take `Codable` parameters encoded at the call site
 
-## ADR: codable-codec-witnesses-and-typed-capability-writes
-title: `Codable` gives generic code the boundary codec through a hidden witness, and capability operations take `Codable` parameters encoded at the call site
-summary: the `Codable` constraint, `__codec_T` witnesses, container combinators, `Codable` capability-operation parameters encoded at the call site, `Queue.sendValue`, and the amendment of Part 14 clause (iv) and standard-library D4 (constrained-generics slice 3)
+- **Status:** Accepted (v0.478)
 
 **Context.** Only the compiler knows how a type crosses the boundary: it generates
 and validates the codecs per type, refinements included. Bynk generics are erased, so
