@@ -97,6 +97,12 @@ function __bynkTakeTimer(upTo: number): __BynkTimer | undefined {
   }
   return best < 0 ? undefined : __bynkTimerQueue.splice(best, 1)[0];
 }
+// Fires every due timer in one synchronous loop, so an effect's completion and a
+// `within` deadline due at the same instant would race through microtasks, and the
+// deadline could win. That cannot happen today: `advance` runs between settled
+// addressed calls, when every deadline has been cleared and abandoned sleepers have
+// drained. Auto-advance (`__bynkDriveUntil`) is the path that runs while a call is
+// in flight, and it yields a macrotask between firings, so ties go to the effect.
 function __bynkAdvanceClock(by: number): void {
   if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
   const target = __bynkClockNow + by;

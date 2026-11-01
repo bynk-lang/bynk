@@ -623,6 +623,8 @@ fn pattern_has_nested_test(pat: &Pattern) -> bool {
         // the scrutinee (`.field`), so a record pattern always needs the
         // if-chain.
         Pattern::Record { .. } => true,
+        // #2680: a list is tested by its length and indexed, never switched on.
+        Pattern::List { .. } => true,
         // #472: a refined pattern is never a top-level irrefutable/nested
         // payload today (the parser admits only `_` as `inner`, and only at a
         // match arm's top level), but keep this exhaustive and correct for

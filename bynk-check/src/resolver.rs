@@ -951,7 +951,8 @@ pub fn split_broken_decl_echoes(
 pub struct PrivateImport {
     /// The commons that declares it.
     pub unit: String,
-    /// `"function"`, `"type"`, `"method"`, `"asset"` or `"embed"`.
+    /// `"function"`, `"type"`, `"method"`, `"asset"`, `"embed"` or
+    /// `"constant"`.
     pub kind: &'static str,
 }
 
@@ -1891,6 +1892,11 @@ impl Gate<'_> {
                     if let Some(sub) = sub {
                         self.pattern(sub);
                     }
+                }
+            }
+            Pattern::List { elems, .. } => {
+                for e in elems {
+                    self.pattern(e);
                 }
             }
             Pattern::Refined { inner, .. } => self.pattern(inner),
@@ -3573,6 +3579,17 @@ fn collect_is_pattern_binding_names(pattern: &Pattern, into: &mut HashMap<String
                     }
                     Some(_) => {}
                 }
+            }
+        }
+        // #2680: a list pattern's elements that are bare names, and its `..rest`.
+        Pattern::List { elems, rest, .. } => {
+            for e in elems {
+                if let Pattern::Binding(n) = e {
+                    into.insert(n.name.clone(), ());
+                }
+            }
+            if let Some(b) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
+                into.insert(b.name.clone(), ());
             }
         }
         Pattern::Or(alts, _) => {

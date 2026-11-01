@@ -1147,8 +1147,10 @@ fn pattern_sets(pattern: &Pattern, states: &[String]) -> PatternStates {
             }
             out
         }
-        // A record never matches a state sum.
-        Pattern::Literal { .. } | Pattern::Record { .. } => PatternStates::default(),
+        // A record or a list never matches a state sum.
+        Pattern::Literal { .. } | Pattern::Record { .. } | Pattern::List { .. } => {
+            PatternStates::default()
+        }
     }
 }
 

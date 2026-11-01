@@ -357,6 +357,10 @@ impl<'a> Parser<'a> {
                     match self.parse_const_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -858,7 +862,9 @@ impl<'a> Parser<'a> {
         let rhs = self.parse_stub_rhs()?;
         // #2683: `returns <v> after <d>`. `after` is a contextual word; an
         // expression is never followed by a bare identifier, so seeing one
-        // here is unambiguous.
+        // here is unambiguous. (A case body has no bare expression statements,
+        // so a next-line identifier `after` cannot begin a statement; revisit if
+        // that ever changes.)
         let after = if matches!(rhs, StubRhs::Returns(_))
             && self.peek_kind() == Some(TokenKind::Ident)
             && self.nth_text(0) == "after"
@@ -1521,6 +1527,10 @@ impl<'a> Parser<'a> {
                     match self.parse_const_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -1899,6 +1909,10 @@ impl<'a> Parser<'a> {
                     match self.parse_const_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -3814,6 +3828,7 @@ impl<'a> Parser<'a> {
             ty,
             init,
             documentation: None,
+            private: None,
             span,
             trivia: Trivia::default(),
         })

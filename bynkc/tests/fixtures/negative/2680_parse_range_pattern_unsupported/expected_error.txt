@@ -1,0 +1,2 @@
+bynk.parse.range_pattern_unsupported a `..` followed by a literal would be a range pattern, which is not available yet @ 6:6
+# exact

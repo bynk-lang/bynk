@@ -1,0 +1,9 @@
+suite ops {
+  // `Retries` is `limits`'s public constant, built on its private `Step`;
+  // `Step` here is `ops`'s own.
+  case "a public constant over a private one, beside a local of the same name" {
+    expect Retries == 5
+    expect Step == 7
+    expect plan() == 12
+  }
+}

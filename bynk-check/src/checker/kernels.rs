@@ -2044,7 +2044,7 @@ pub(crate) fn check_effect_within_method(
                 "`within` can only be used in a service handler's body: a function, a provider operation or a WebSocket handler has no execution context to hand the abandoned effect to",
             )
             .with_note(
-                "a function has no execution context (#2682), and a WebSocket handler runs in the connection's Durable Object, which has none either; call the `within` from a service handler (not a WebSocket one) that uses this function, and pass the function the bounded effect, not the work",
+                "a test `case` body is not a service handler either: address a service whose handler calls `within`, and test it with `stub … after`. A function has no execution context (#2682), and a WebSocket handler runs in the connection's Durable Object, which has none either; call the `within` from a service handler (not a WebSocket one) that uses this function, and pass the function the bounded effect, not the work",
             ),
         );
     }

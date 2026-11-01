@@ -201,9 +201,9 @@
           "match": "\\bmigrate\\b(?=\\s+from\\b)|^\\s*\\bdrop\\b(?=\\s+[A-Za-z][A-Za-z0-9_]*\\s*$)"
         },
         {
-          "comment": "#2618: `private` is a CONTEXTUAL modifier on a `fn`, `type`, `messages`, `asset` or `embed` declaration — highlighted only immediately before one of those words, so `@cache(scope: private)` and a binding named `private` stay ordinary identifiers.",
+          "comment": "#2618: `private` is a CONTEXTUAL modifier on a `fn`, `type`, `messages`, `asset`, `embed` or `const` declaration — highlighted only immediately before one of those words, so `@cache(scope: private)` and a binding named `private` stay ordinary identifiers.",
           "name": "storage.modifier.bynk",
-          "match": "\\bprivate\\b(?=\\s+(?:fn|type|messages|asset|embed)\\b)"
+          "match": "\\bprivate\\b(?=\\s+(?:fn|type|messages|asset|embed|const)\\b)"
         },
         {
           "comment": "#2137: `advance` is a CONTEXTUAL keyword opening a test case's `advance Clock by <Duration>` statement — highlighted only before `<Cap> by`, so it stays an ordinary identifier elsewhere.",

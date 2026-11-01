@@ -973,8 +973,8 @@ impl<'a> Parser<'a> {
     /// declaration keyword, so `@cache(scope: private)` and a binding named
     /// `private` keep their meaning.
     ///
-    /// The modifier applies to `fn`, `type`, `messages`, `asset` and `embed`
-    /// in a commons or context (`allowed`). On any other declaration, or in an
+    /// The modifier applies to `fn`, `type`, `messages`, `asset`, `embed` and
+    /// `const` in a commons or context (`allowed`). On any other declaration, or in an
     /// adapter, it is `bynk.visibility.private_not_allowed`: an error in
     /// recovery mode that leaves the declaration to parse as if unmodified,
     /// and the parse's error otherwise.
@@ -995,6 +995,7 @@ impl<'a> Parser<'a> {
                 | TokenKind::Messages
                 | TokenKind::Asset
                 | TokenKind::Embed
+                | TokenKind::Const
         );
         let declaration = modifiable
             || matches!(
@@ -1021,7 +1022,7 @@ impl<'a> Parser<'a> {
                 format!("`private` does not apply to `{what}` declarations"),
             )
             .with_note(
-                "`private` applies to `fn`, `type`, `messages`, `asset` and `embed`; a context's `exports` and `consumes` govern how far its services, agents, capabilities, providers, actors and events reach",
+                "`private` applies to `fn`, `type`, `messages`, `asset`, `embed` and `const`; a context's `exports` and `consumes` govern how far its services, agents, capabilities, providers, actors and events reach",
             )
         } else {
             CompileError::new(
@@ -2910,6 +2911,107 @@ mod tests {
         out
     }
 
+    // ---- #2680: list patterns ----
+
+    #[test]
+    fn list_patterns_parse_in_every_shape() {
+        let ExprKind::Match { arms, .. } = body_tail(
+            "match xs { [] => 0\n [a] => 1\n [a, b, ..] => 2\n [a, ..rest] => 3\n [..all] => 4\n [..] => 5\n [a, ..,] => 6\n Some([x, ..]) => 7 }",
+        ) else {
+            panic!("expected Match");
+        };
+        let shape = |i: usize| match &arms[i].pattern {
+            Pattern::List { elems, rest, .. } => (
+                elems.len(),
+                rest.as_ref()
+                    .map(|r| r.binder.as_ref().map(|b| b.name.clone())),
+            ),
+            other => panic!("arm {i}: expected a list pattern, got {other:?}"),
+        };
+        assert_eq!(shape(0), (0, None));
+        assert_eq!(shape(1), (1, None));
+        assert_eq!(shape(2), (2, Some(None)));
+        assert_eq!(shape(3), (1, Some(Some("rest".to_string()))));
+        assert_eq!(shape(4), (0, Some(Some("all".to_string()))));
+        assert_eq!(shape(5), (0, Some(None)));
+        assert_eq!(shape(6), (1, Some(None)));
+        assert!(matches!(&arms[7].pattern, Pattern::Variant { bindings, .. }
+            if matches!(bindings[0].pattern(), Pattern::List { .. })));
+        // Only `[..]` and `[..rest]` match every list.
+        assert!(!arms[0].pattern.is_irrefutable());
+        assert!(!arms[2].pattern.is_irrefutable());
+        assert!(arms[4].pattern.is_irrefutable());
+        assert!(arms[5].pattern.is_irrefutable());
+    }
+
+    #[test]
+    fn list_pattern_after_is_closes_at_the_bracket() {
+        for body in [
+            "if xs is [_, ..] { 1 } else { 2 }",
+            "if xs is [] { 1 } else { 2 }",
+            "if xs is [a, ..rest] { 1 } else { 2 }",
+            "if xs is [S { n: 1, .. }, ..] { 1 } else { 2 }",
+            "if xs is [] | [_] { 1 } else { 2 }",
+        ] {
+            let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
+            parse_str(&src).unwrap_or_else(|e| panic!("{body:?}: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn list_rest_must_be_last() {
+        for body in [
+            "match xs { [.., last] => 1 }",
+            "match xs { [..r, last] => 1 }",
+            "match xs { [.., ..] => 1 }",
+            "match xs { [a, .., b, c] => 1 }",
+        ] {
+            let errs = body_err(body);
+            assert_eq!(errs[0].category, "bynk.parse.list_rest_not_last", "{body}");
+            assert!(
+                errs[0].suggestions.is_empty(),
+                "{body}: only trailing wildcards earn a fix"
+            );
+        }
+    }
+
+    #[test]
+    fn list_rest_followed_by_wildcards_has_a_fix() {
+        for (body, fixed) in [
+            ("match xs { [.., _] => 1 }", "match xs { [_, ..] => 1 }"),
+            (
+                "match xs { [a, .., _, _] => 1 }",
+                "match xs { [a, _, _, ..] => 1 }",
+            ),
+        ] {
+            let errs = body_err(body);
+            assert_eq!(errs[0].category, "bynk.parse.list_rest_not_last");
+            let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
+            let got = apply_fix(&src, &errs[0]);
+            assert!(got.contains(fixed), "{body}: fixed to {got:?}");
+            parse_str(&got).unwrap_or_else(|e| panic!("{body:?} fixed to {got:?}: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn list_rest_followed_by_a_literal_is_reserved_for_ranges() {
+        for body in [
+            "match xs { [..9] => 1 }",
+            "match xs { [a, ..-1] => 1 }",
+            "match xs { [..\"a\"] => 1 }",
+            "match xs { [..true] => 1 }",
+        ] {
+            let errs = body_err(body);
+            assert_eq!(
+                errs[0].category, "bynk.parse.range_pattern_unsupported",
+                "{body}"
+            );
+        }
+        // And `.._` is not a form.
+        let errs = body_err("match xs { [a, .._] => 1 }");
+        assert_eq!(errs[0].category, "bynk.parse.expected_token");
+    }
+
     #[test]
     fn record_pattern_parses_in_a_match_arm_and_nested() {
         let ExprKind::Match { arms, .. } = body_tail(
@@ -3762,6 +3864,24 @@ mod tests {
         assert_eq!(doc_of(&t.documentation), Some(("Hidden.", DocForm::Lines)));
         assert!(c.items[1].is_private());
         assert!(!c.items[2].is_private());
+    }
+
+    /// `private` before `const` is the modifier too, its span folded into the
+    /// constant's.
+    #[test]
+    fn private_modifier_on_a_constant() {
+        let src = "commons m\n\nprivate const Max: Int = 3\n\nconst Min: Int = 1\n";
+        let c = parse_str(src).unwrap();
+        let CommonsItem::Const(k) = &c.items[0] else {
+            panic!("a constant");
+        };
+        assert_eq!(
+            k.private.map(|s| s.start),
+            Some(src.find("private").unwrap())
+        );
+        assert_eq!(k.span.start, src.find("private").unwrap());
+        assert!(c.items[0].is_private());
+        assert!(!c.items[1].is_private());
     }
 
     /// #2618: `private` on a declaration it does not apply to is rejected.

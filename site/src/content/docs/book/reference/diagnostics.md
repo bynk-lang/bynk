@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **681** codes in total.
+There are **684** codes in total.
 
 ## Agents
 
@@ -490,7 +490,7 @@ There are **681** codes in total.
 | `bynk.visibility.private_in_public` | A public declaration's signature names a `private` type of its own unit, which an importer could neither name nor build. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
 | `bynk.visibility.private_item` | A reference from another unit names a `private` declaration, which is visible only within its own unit and that unit's suites. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
 | `bynk.visibility.private_messages` | A `messages` block in a commons is `private`. A bundle whose `@reference` block is private is never negotiated by a context that uses the commons, and `private` on another block of a bundle whose reference is public has no effect (warning). | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | Warning |
-| `bynk.visibility.private_not_allowed` | `private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset` or `embed` in a commons or context. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
+| `bynk.visibility.private_not_allowed` | `private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset`, `embed` or `const` in a commons or context. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
 | `bynk.wasm.panic` | The in-browser compiler panicked internally (a compiler bug, reported as a diagnostic instead of crashing the page). |  | — |
 | `bynk.wasm.strip_failed` | The in-browser compiler could not strip the emitted TypeScript to JavaScript. |  | — |
 | `bynk.within.in_agent_handler` | `e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
@@ -541,6 +541,7 @@ There are **681** codes in total.
 | `bynk.parse.let_else_on_binding` | An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt), [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
 | `bynk.parse.let_pattern_annotation` | A `let` with a pattern carries a type annotation; the pattern's names take their types from the value. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
 | `bynk.parse.let_pattern_without_else` | A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
+| `bynk.parse.list_rest_not_last` | A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available. | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
 | `bynk.parse.malformed_float_literal` | A float literal is missing a digit on one side of the `.` (`1.`, `.5`). | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
 | `bynk.parse.migrate_after_handler` | A `migrate` step is declared after an agent handler; migration steps precede the handlers. |  | — |
 | `bynk.parse.migrate_item` | A `migrate` step's body holds something other than `field := value`, `let` or `drop field`. |  | — |
@@ -549,6 +550,7 @@ There are **681** codes in total.
 | `bynk.parse.non_associative` | A non-associative operator was chained (e.g. `a == b == c`). | [`binary_expr`](/book/reference/grammar/#rule-binary_expr) | — |
 | `bynk.parse.orphan_doc_block` | A documentation block is not attached to a declaration (warning). |  | Warning |
 | `bynk.parse.policy_order` | A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| `bynk.parse.range_pattern_unsupported` | A `..` in a list pattern is followed by a literal; range patterns are not available yet. | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
 | `bynk.parse.record_pattern_in_is_unparenthesised` | A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | `bynk.parse.record_pattern_without_rest` | A record pattern does not end with `..`; every record pattern is open. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | `bynk.parse.refined_pattern_inner` | A refined pattern's inner form is something other than `_`. | [`refined_pattern`](/book/reference/grammar/#rule-refined_pattern) | — |
@@ -792,6 +794,7 @@ There are **681** codes in total.
 | `bynk.types.lambda_mismatch` | A lambda's parameter count, parameter annotations, or body type do not match the expected function type. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
 | `bynk.types.let_annotation_mismatch` | A `let` value does not match its type annotation. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
 | `bynk.types.list_element_mismatch` | A list-literal element has a different type from the list's element type. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |
+| `bynk.types.list_pattern_on_non_list` | A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`). | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
 | `bynk.types.match_arm_mismatch` | A `match` arm has a different type from the others. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | `bynk.types.match_non_sum_discriminant` | `match` was applied to a value that is not a sum type. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
 | `bynk.types.method_arity` | A method was called with the wrong number of arguments. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |

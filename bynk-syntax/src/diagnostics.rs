@@ -1818,6 +1818,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["let_else_stmt"],
     ),
     dg(
+        "bynk.parse.list_rest_not_last",
+        "A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available.",
+        &["list_pattern"],
+    ),
+    dg(
         "bynk.parse.malformed_float_literal",
         "A float literal is missing a digit on one side of the `.` (`1.`, `.5`).",
         &["float_literal"],
@@ -1851,6 +1856,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.policy_order",
         "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`.",
         &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.range_pattern_unsupported",
+        "A `..` in a list pattern is followed by a literal; range patterns are not available yet.",
+        &["list_pattern"],
     ),
     dg(
         "bynk.parse.record_pattern_in_is_unparenthesised",
@@ -2984,6 +2994,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["list_literal"],
     ),
     dg(
+        "bynk.types.list_pattern_on_non_list",
+        "A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`).",
+        &["list_pattern"],
+    ),
+    dg(
         "bynk.types.match_arm_mismatch",
         "A `match` arm has a different type from the others.",
         &["match_arm"],
@@ -3298,7 +3313,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     dg(
         "bynk.visibility.private_not_allowed",
-        "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset` or `embed` in a commons or context.",
+        "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset`, `embed` or `const` in a commons or context.",
         &["visibility_modifier"],
     ),
     d(

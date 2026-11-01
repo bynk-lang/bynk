@@ -1,0 +1,7 @@
+commons limits
+
+private const Step: Int = 5
+
+fn retries() -> Int {
+  Step * 2
+}

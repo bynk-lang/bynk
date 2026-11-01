@@ -112,6 +112,10 @@
             "link": "/book/guides/type-system/destructure-a-record-with-let/"
           },
           {
+            "label": "Match on a list's shape",
+            "link": "/book/guides/type-system/match-on-a-lists-shape/"
+          },
+          {
             "label": "Narrow and bind with is",
             "link": "/book/guides/type-system/narrow-with-is/"
           },

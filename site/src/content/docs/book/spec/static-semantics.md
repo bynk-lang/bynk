@@ -147,8 +147,8 @@ meaning.
 
 ### §5.1c Unit-private declarations {#private-declarations}
 
-A `type`, `fn` (a free function or a method), `messages`, `asset` or `embed`
-declaration in a `commons` or `context` MAY carry the `private` modifier
+A `type`, `fn` (a free function or a method), `messages`, `asset`, `embed` or
+`const` declaration in a `commons` or `context` MAY carry the `private` modifier
 ([§4.1.12d](/book/spec/syntactic-grammar/#4112d-visibility_modifier)). A
 declaration without it is public, as every declaration was before the modifier
 existed. A private declaration is visible throughout its own unit, across all
@@ -160,16 +160,17 @@ through `uses`.
   the unit's own declarations or with another import of the same name
   (`bynk.uses.name_conflict` does not apply to them). A reference from such a
   unit that resolves to nothing but a private declaration (a call, a type
-  reference, a static or instance method call, an asset or embed name) is
-  rejected (`bynk.visibility.private_item`), naming the declaration and its
+  reference, a static or instance method call, an asset, embed or constant
+  name) is rejected (`bynk.visibility.private_item`), naming the declaration and its
   unit. A reference the unit's own declaration answers is the unit's own.
 - A private type's methods are out of an importer's reach with the type,
   whether or not they are marked `private`. A private method of a public type
   hides only that method.
 - A public declaration MUST NOT name a private type of its own unit in its
   signature: a public function's or method's parameter and return types, a
-  public type's record field types and variant payloads, and a context's
-  `exports` list (`bynk.visibility.private_in_public`). A method of a private
+  public type's record field types and variant payloads, a public constant's
+  type annotation, and a context's `exports` list
+  (`bynk.visibility.private_in_public`). A method of a private
   type is exempt. Signatures of services, agents, capabilities, providers,
   actors and events are not constrained by this rule: how far they reach is
   governed by `exports` and `consumes` (§5.8), and the cross-context
@@ -1326,6 +1327,7 @@ after the unguarded arms before it. The values a type has are its constructors:
 - a record has one constructor whose columns are all its fields in declared
   order, and a field a record pattern does not list matches anything;
 - `Bool` has `true` and `false`;
+- a `List[T]` has one constructor per length, set out below;
 - `Int` and `String` have a literal for every value, so no finite set of literals
   is complete and only an irrefutable pattern covers them; a refined type has
   its base's constructors, and an opaque type has no patterns.
@@ -1380,6 +1382,31 @@ In `T { f, g: p, .. }`:
   fields, so several arms cover a record between them, as stated above.
 - After `is`, the names bound by a record pattern in scope are its flat fields:
   bare `f` and `f: name`, like a variant's flat payload bindings.
+
+**List patterns** (patterns track, slice 4, #2680, [§4.7.12](/book/spec/syntactic-grammar/#4712-list_pattern)).
+In `[p₁, …, pₙ]` and `[p₁, …, pₙ, ..]` / `[p₁, …, pₙ, ..rest]`:
+
+- The matched value MUST be a `List[T]`. A record, a sum, a base type, a `Set`
+  or a `Map` is not a list (`bynk.types.list_pattern_on_non_list`). A `match`
+  whose scrutinee is a `List` and whose arms include a list pattern is a `match`
+  on a list; one with no list pattern still is not
+  (`bynk.types.match_non_sum_discriminant`).
+- Each `pᵢ` is checked at `T`, and `rest` has type `List[T]`. Under an
+  or-pattern the alternatives MUST bind the same names at the same types, as for
+  any pattern, so `[x] | [x, _]` is well-typed and `[x] | []` is not.
+- **Coverage is by length.** The constructors of a list column are the lengths
+  the column's patterns spell out. With *L* the longest prefix any pattern in the
+  column writes, they are the exact lengths `0` to *L* and "*L* + 1 or more"; a
+  pattern with a rest marker covers every length from its prefix up. So `[]` and
+  `[x, ..rest]` cover every list with no wildcard, and `[_]`, `[_, _]` cover only
+  the lists of one or two elements. The split is linear in *L*. An uncovered
+  length is reported as a pattern: `[]`, `[_]`, `[_, _, ..]`, with an element
+  pattern where the uncovered lists constrain one (`[None, ..]`). A list arm is
+  `bynk.types.unreachable_arm` when the earlier arms cover every list it matches
+  (`[x, ..]` after `[_, ..]`, `[a, b]` after `[_, _]`).
+- A list pattern is irrefutable exactly when it is `[..]` or `[..rest]`.
+- After `is`, the names bound by a list pattern in scope are its elements that
+  are bare names and the named rest, like a variant's flat payload bindings.
 
 A pattern MUST name a real variant (`bynk.types.unknown_variant_in_pattern`) and
 real payload fields (`bynk.types.unknown_pattern_field`), bind the right number
@@ -1436,6 +1463,12 @@ for `let P <- e else E`, where `v` is a name the program cannot write; for
 - If `P` matches every value of `e`'s type, the `else` can never run, which is
   `bynk.types.unreachable_arm`. Bind the value with a plain `let` instead; for a
   record pattern, drop the `else` (the diagnostic offers that fix).
+- A list pattern opens a `let … else` (`let [head, ..] = jobs else { 0 }`, #2680).
+  Every list pattern but `[..]` and `[..rest]` can fail, so it needs the `else`.
+  `[..]` and `[..rest]` match every list, which makes their `else` unreachable
+  (`bynk.types.unreachable_arm`); the `else`-less form stays record-only
+  (`bynk.parse.let_pattern_without_else`), since `let rest = xs` already binds
+  the whole list.
 - A `let` whose pattern is an irrefutable record pattern may omit the `else`
   (#2654, [§4.8.4a](/book/spec/syntactic-grammar/#484a-let_else_stmt-2010)):
   `let T { f, .. } = e` means `match v { T { f, .. } => { S… t } }`, a

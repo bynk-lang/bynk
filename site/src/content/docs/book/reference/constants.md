@@ -42,6 +42,12 @@ fn attempts() -> Int {
   constants and those of each commons it `uses`, like functions, and a sibling
   file of the same unit sees them too. A `let` binding or parameter of the same
   name shadows a constant.
+- **Visibility:** public by default. `private const` keeps a constant within
+  its own unit: its files and its suites see it, a unit that `uses` the
+  commons does not (a reference from one is `bynk.visibility.private_item`).
+  A public constant may not be typed with a private type of its unit
+  (`bynk.visibility.private_in_public`). See
+  [Design a library's public surface](/book/guides/program-structure/design-a-public-surface/).
 
 ## What an initialiser may be
 
@@ -92,5 +98,6 @@ bound (`InRange(1, MaxQty)`) or an annotation argument.
 A constant is an exported TypeScript `const` of the declaring module, typed by
 its annotation, emitted after the module's types and before its functions, and
 imported by name like a function wherever a sibling file or a `uses`-ing unit
-names it. A unit-tier `suite` case can name its target's constants, and those of
-the commons the target `uses`.
+names it. A unit-tier `suite` case can name its target's constants, private ones
+included, and the public constants of the commons the target `uses`. `private`
+changes nothing in the emitted module: it is a naming rule only.

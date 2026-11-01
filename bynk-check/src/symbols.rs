@@ -429,6 +429,7 @@ impl UnitTable {
             || self.fns.values().any(|d| d.private.is_some())
             || self.assets.values().any(|d| d.private.is_some())
             || self.embeds.values().any(|d| d.private.is_some())
+            || self.consts.values().any(|d| d.private.is_some())
             || self.methods.values().any(|mt| {
                 mt.instance
                     .values()
@@ -459,6 +460,7 @@ impl UnitTable {
         t.fns.retain(|_, d| d.private.is_none());
         t.assets.retain(|_, d| d.private.is_none());
         t.embeds.retain(|_, d| d.private.is_none());
+        t.consts.retain(|_, d| d.private.is_none());
         t.methods.retain(|n, _| !private_types.contains(n));
         for mt in t.methods.values_mut() {
             mt.instance.retain(|_, d| d.private.is_none());
@@ -492,6 +494,11 @@ impl UnitTable {
         for (n, d) in &self.embeds {
             if d.private.is_some() {
                 out.push((n.clone(), "embed"));
+            }
+        }
+        for (n, d) in &self.consts {
+            if d.private.is_some() {
+                out.push((n.clone(), "constant"));
             }
         }
         for (ty, mt) in &self.methods {

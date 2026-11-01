@@ -2086,8 +2086,7 @@ fn free_function_candidates(
                         crate::symbols::type_ref_str(&c.ty)
                     ),
                     c.documentation.as_deref().map(str::to_string),
-                    // A constant cannot be `private` yet (#2618 decision N).
-                    false,
+                    c.private.is_some(),
                 )),
                 _ => None,
             })
@@ -3029,13 +3028,14 @@ mod tests {
 
     #[test]
     fn another_units_private_items_are_not_offered() {
-        // #2618: a used commons' `private` fns, assets and types are not in
-        // scope here, so completion leaves them out; the unit's own are.
+        // #2618: a used commons' `private` fns, assets, types and constants
+        // are not in scope here, so completion leaves them out; the unit's own
+        // are.
         let doc = "commons app {\n  uses lib\n  private fn mine() -> Int { 1 }\n}\n";
         let mut files = HashMap::new();
         files.insert(
             PathBuf::from("/p/lib.bynk"),
-            "commons lib {\n  fn open() -> Int { 1 }\n  private fn hidden() -> Int { 2 }\n  private asset secret = \"s.css\"\n  type Shown = Int\n  private type Kept = Int\n}\n"
+            "commons lib {\n  fn open() -> Int { 1 }\n  private fn hidden() -> Int { 2 }\n  private asset secret = \"s.css\"\n  type Shown = Int\n  private type Kept = Int\n  private const Limit: Int = 3\n  const Cap: Int = 4\n}\n"
                 .to_string(),
         );
         let items = complete("  let y = ", doc, Some(&files));
@@ -3055,7 +3055,8 @@ mod tests {
             "{:?}",
             labels()
         );
-        for hidden in ["hidden", "secret", "Kept"] {
+        assert!(items.iter().any(|i| i.label == "Cap"), "{:?}", labels());
+        for hidden in ["hidden", "secret", "Kept", "Limit"] {
             assert!(
                 !items.iter().any(|i| i.label == hidden),
                 "a used unit's private `{hidden}` leaked: {:?}",

@@ -1,0 +1,2 @@
+bynk.visibility.private_in_public public constant `Default` names `Window`, a private type of `limits`
+# exact

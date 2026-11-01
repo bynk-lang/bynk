@@ -11,9 +11,10 @@
 //!
 //! Patterns are first lowered to a small internal form (`Pat`) over
 //! [`Constructor`]s. Everything type-specific lives in [`Space`], the
-//! constructor set of one column's type, so a later pattern form (list
-//! lengths, integer ranges) adds a `Constructor` and teaches `Space` to split
-//! it, rather than adding a second algorithm.
+//! constructor set of one column's type, so a later pattern form (integer
+//! ranges) adds a `Constructor` and teaches `Space` to split it, rather than
+//! adding a second algorithm. List lengths (#2680) were the first: a list
+//! column's constructors depend on the rows, as set out on [`Space::List`].
 //!
 //! Guards and refinement predicates are not understood: a guarded arm is never
 //! a row, and a refined pattern as a *prior* matches nothing (its predicate may
@@ -35,8 +36,8 @@ pub(super) const STEP_BUDGET: usize = 200_000;
 #[derive(Debug)]
 pub(super) struct TooComplex;
 
-/// A way of building a value of a type. The extension point: list patterns add
-/// a length, range patterns an interval.
+/// A way of building a value of a type. The extension point: range patterns add
+/// an interval.
 #[derive(Clone, PartialEq)]
 enum Constructor {
     /// The `i`th declared variant of a sum, `Result` or `Option`.
@@ -47,6 +48,11 @@ enum Constructor {
     Bool(bool),
     /// An `Int` or `String` literal. No finite set of these is complete.
     Literal(LiteralValue),
+    /// A list of exactly this many elements; its columns are the elements.
+    List(usize),
+    /// A list of at least this many elements. Only its first `n` elements are
+    /// columns; the tail is not inspected.
+    ListAtLeast(usize),
 }
 
 /// The constructors of one column's type.
@@ -62,6 +68,14 @@ enum Space {
         fields: Vec<(String, TyId)>,
     },
     Bool,
+    /// A `List[elem]`. Its constructors are lengths, and no finite set of
+    /// lengths is complete, so they are split by the rows: with `L` the longest
+    /// prefix any pattern in the column spells out, the column's constructors
+    /// are the lengths `0..=L` and "`L + 1` or more". Every pattern then covers
+    /// whole constructors, and the split is linear in `L`.
+    List {
+        elem: TyId,
+    },
     /// `Int`, `String` and anything without patterns of its own: only a
     /// wildcard completes it.
     Infinite,
@@ -70,14 +84,49 @@ enum Space {
 impl Space {
     /// The declared constructors, in the order witnesses list them; `None`
     /// when no finite set completes the type.
-    fn constructors(&self) -> Option<Vec<Constructor>> {
+    fn constructors(&self, rows: &[Row]) -> Option<Vec<Constructor>> {
         match self {
+            Space::List { .. } => Some(Self::list_split(Self::longest_prefix(rows))),
             Space::Variants { variants, .. } => {
                 Some((0..variants.len()).map(Constructor::Variant).collect())
             }
             Space::Record { .. } => Some(vec![Constructor::Record]),
             Space::Bool => Some(vec![Constructor::Bool(true), Constructor::Bool(false)]),
             Space::Infinite => None,
+        }
+    }
+
+    /// The longest prefix a list pattern in the first column spells out.
+    fn longest_prefix(rows: &[Row]) -> usize {
+        rows.iter()
+            .filter_map(|row| match &row[0] {
+                Pat::Ctor(Constructor::List(n) | Constructor::ListAtLeast(n), _) => Some(*n),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// The list constructors for a column whose longest prefix is `longest`.
+    fn list_split(longest: usize) -> Vec<Constructor> {
+        (0..=longest)
+            .map(Constructor::List)
+            .chain(std::iter::once(Constructor::ListAtLeast(longest + 1)))
+            .collect()
+    }
+
+    /// The constructors a query pattern `c` stands for against `rows`: itself,
+    /// except that a list "`n` or more" splits along the column's lengths.
+    fn split_query(&self, c: &Constructor, rows: &[Row]) -> Vec<Constructor> {
+        match (self, c) {
+            (Space::List { .. }, Constructor::ListAtLeast(n)) => {
+                let longest = Self::longest_prefix(rows).max(*n);
+                (*n..=longest)
+                    .map(Constructor::List)
+                    .chain(std::iter::once(Constructor::ListAtLeast(longest + 1)))
+                    .collect()
+            }
+            _ => vec![c.clone()],
         }
     }
 
@@ -89,6 +138,9 @@ impl Space {
             }
             (Space::Record { fields, .. }, Constructor::Record) => {
                 fields.iter().map(|(_, t)| *t).collect()
+            }
+            (Space::List { elem }, Constructor::List(n) | Constructor::ListAtLeast(n)) => {
+                vec![*elem; *n]
             }
             _ => Vec::new(),
         }
@@ -104,6 +156,14 @@ impl Space {
             (Space::Record { name, fields }, Constructor::Record) => Wit::Record {
                 name: name.clone(),
                 fields: fields.iter().map(|(n, _)| n.clone()).zip(args).collect(),
+            },
+            (Space::List { .. }, Constructor::List(_)) => Wit::List {
+                elems: args,
+                open: false,
+            },
+            (Space::List { .. }, Constructor::ListAtLeast(_)) => Wit::List {
+                elems: args,
+                open: true,
             },
             (_, Constructor::Bool(b)) => Wit::Lit(b.to_string()),
             (_, Constructor::Literal(v)) => Wit::Lit(v.describe()),
@@ -138,6 +198,11 @@ enum Wit {
         name: String,
         fields: Vec<(String, Wit)>,
     },
+    /// A list of these elements, with `..` when it may be longer.
+    List {
+        elems: Vec<Wit>,
+        open: bool,
+    },
 }
 
 /// Opens and closes the witness for an extensible enum's future variant
@@ -157,6 +222,13 @@ impl Wit {
                 "{name}({})",
                 args.iter().map(Wit::render).collect::<Vec<_>>().join(", ")
             ),
+            Wit::List { elems, open } => {
+                let mut parts: Vec<String> = elems.iter().map(Wit::render).collect();
+                if *open {
+                    parts.push("..".to_string());
+                }
+                format!("[{}]", parts.join(", "))
+            }
             Wit::Record { name, fields } => {
                 let mut parts: Vec<String> = fields
                     .iter()
@@ -301,6 +373,23 @@ impl Lowering<'_, '_> {
                     .collect::<Option<Vec<_>>>()?;
                 Some(Pat::Ctor(Constructor::Variant(i), args))
             }
+            Pattern::List { elems, rest, .. } => {
+                let Space::List { elem } = space_of(ty, self.ctx) else {
+                    return None;
+                };
+                let args = elems
+                    .iter()
+                    .map(|e| self.lower(e, elem, prior))
+                    .collect::<Option<Vec<_>>>()?;
+                Some(Pat::Ctor(
+                    if rest.is_some() {
+                        Constructor::ListAtLeast(args.len())
+                    } else {
+                        Constructor::List(args.len())
+                    },
+                    args,
+                ))
+            }
             Pattern::Record {
                 type_name, fields, ..
             } => {
@@ -354,6 +443,9 @@ fn space_of(ty: TyId, ctx: &Ctx) -> Space {
                 fields,
             };
         }
+    }
+    if let Ty::List(elem) = &*tys.get(ty) {
+        return Space::List { elem: *elem };
     }
     match literal_base_of(ty, tys) {
         Some(BaseType::Bool) => Space::Bool,
@@ -413,14 +505,40 @@ impl Engine<'_, '_> {
                     r.extend_from_slice(&row[1..]);
                     Some(r)
                 }
-                Pat::Ctor(rc, args) if rc == c => {
-                    let mut r = args.clone();
+                Pat::Ctor(rc, args) => {
+                    let mut r = Self::args_for(rc, args, c)?;
                     r.extend_from_slice(&row[1..]);
                     Some(r)
                 }
                 _ => None,
             })
             .collect()
+    }
+
+    /// Whether a row's constructor `rc` matches every value `c` builds. They
+    /// are the same constructor, or `rc` is a list "`n` or more" and `c` is a
+    /// list of at least `n`.
+    fn covers(rc: &Constructor, c: &Constructor) -> bool {
+        match (rc, c) {
+            (Constructor::ListAtLeast(n), Constructor::List(k) | Constructor::ListAtLeast(k)) => {
+                n <= k
+            }
+            _ => rc == c,
+        }
+    }
+
+    /// The columns a row's `rc` applied to `args` leaves once the column is
+    /// known to be built by `c`; `None` when it does not cover `c`. A list
+    /// prefix is padded with wildcards for the elements `c` has beyond it.
+    fn args_for(rc: &Constructor, args: &[Pat], c: &Constructor) -> Option<Vec<Pat>> {
+        if !Self::covers(rc, c) {
+            return None;
+        }
+        let mut out = args.to_vec();
+        if let Constructor::List(k) | Constructor::ListAtLeast(k) = c {
+            out.resize(*k, Pat::Wild);
+        }
+        Some(out)
     }
 
     /// The rows whose first pattern matches any value, without that column.
@@ -433,7 +551,7 @@ impl Engine<'_, '_> {
 
     fn present(rows: &[Row], c: &Constructor) -> bool {
         rows.iter()
-            .any(|row| matches!(&row[0], Pat::Ctor(rc, _) if rc == c))
+            .any(|row| matches!(&row[0], Pat::Ctor(rc, _) if Self::covers(rc, c)))
     }
 
     /// Whether some value of the column types, matched by `q`, is matched by
@@ -457,17 +575,26 @@ impl Engine<'_, '_> {
             }
             Pat::Ctor(c, args) => {
                 let space = space_of(tys[0], self.ctx);
-                let rows = Self::specialize(&Self::expand(rows), c, args.len());
-                let mut q = args.clone();
-                q.extend_from_slice(rest);
-                let mut tys_after = space.arg_tys(c);
-                tys_after.extend_from_slice(&tys[1..]);
-                self.useful(rows, q, tys_after)
+                let rows = Self::expand(rows);
+                // A list "`n` or more" is useful when any length it covers is.
+                for c in space.split_query(c, &rows) {
+                    let arg_tys = space.arg_tys(&c);
+                    let spec = Self::specialize(&rows, &c, arg_tys.len());
+                    let mut q = args.clone();
+                    q.resize(arg_tys.len().max(args.len()), Pat::Wild);
+                    q.extend_from_slice(rest);
+                    let mut tys_after = arg_tys;
+                    tys_after.extend_from_slice(&tys[1..]);
+                    if self.useful(spec, q, tys_after)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
             }
             Pat::Wild => {
                 let rows = Self::expand(rows);
                 let space = space_of(tys[0], self.ctx);
-                let complete = match (&space, space.constructors()) {
+                let complete = match (&space, space.constructors(&rows)) {
                     (
                         Space::Variants {
                             future: Some(_), ..
@@ -507,6 +634,19 @@ impl Engine<'_, '_> {
         tys: Vec<TyId>,
         top: bool,
     ) -> Result<Vec<Vec<Wit>>, TooComplex> {
+        let is_list = tys
+            .first()
+            .is_some_and(|t| matches!(space_of(*t, self.ctx), Space::List { .. }));
+        let out = self.missing_split(rows, tys, top)?;
+        Ok(if is_list { merge_open_lists(out) } else { out })
+    }
+
+    fn missing_split(
+        &mut self,
+        rows: Vec<Row>,
+        tys: Vec<TyId>,
+        top: bool,
+    ) -> Result<Vec<Vec<Wit>>, TooComplex> {
         self.tick(rows.len())?;
         if tys.is_empty() {
             return Ok(if rows.is_empty() {
@@ -524,7 +664,7 @@ impl Engine<'_, '_> {
             w.extend(tail);
             w
         };
-        let Some(ctors) = space.constructors() else {
+        let Some(ctors) = space.constructors(&rows) else {
             // Unbounded: only a wildcard row completes it.
             let ws = self.missing(Self::default_rows(&rows), rest_tys.to_vec(), false)?;
             return Ok(ws.into_iter().map(|w| with_rest(Wit::Wild, w)).collect());
@@ -606,4 +746,37 @@ impl Engine<'_, '_> {
         }
         Ok(out)
     }
+}
+
+/// A list column's split can leave `[a, b]` and `[a, b, _, ..]` both uncovered
+/// with the same other columns: one gap, written `[a, b, ..]`.
+fn merge_open_lists(mut ws: Vec<Vec<Wit>>) -> Vec<Vec<Wit>> {
+    let render = |w: &[Wit]| w.iter().map(Wit::render).collect::<Vec<_>>();
+    let mut i = 0;
+    while i < ws.len() {
+        let merged = match &ws[i][0] {
+            Wit::List { elems, open: true } if matches!(elems.last(), Some(Wit::Wild)) => {
+                let prefix = render(&elems[..elems.len() - 1]);
+                let tail = render(&ws[i][1..]);
+                ws.iter().position(|other| {
+                    matches!(&other[0], Wit::List { elems: e, open: false }
+                        if render(e) == prefix)
+                        && render(&other[1..]) == tail
+                })
+            }
+            _ => None,
+        };
+        let Some(j) = merged else {
+            i += 1;
+            continue;
+        };
+        if let Wit::List { elems, .. } = &mut ws[i][0] {
+            elems.pop();
+        }
+        ws.remove(j);
+        if j < i {
+            i -= 1;
+        }
+    }
+    ws
 }

@@ -902,6 +902,20 @@
       "summary": "An empty `[]` (or `List.empty()` / `Map.empty()`) has no expected type to infer its element type from."
     }
   ],
+  "list_pattern": [
+    {
+      "code": "bynk.parse.list_rest_not_last",
+      "summary": "A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available."
+    },
+    {
+      "code": "bynk.parse.range_pattern_unsupported",
+      "summary": "A `..` in a list pattern is followed by a literal; range patterns are not available yet."
+    },
+    {
+      "code": "bynk.types.list_pattern_on_non_list",
+      "summary": "A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`)."
+    }
+  ],
   "match_arm": [
     {
       "code": "bynk.types.duplicate_literal_arm",
@@ -1525,7 +1539,7 @@
     },
     {
       "code": "bynk.visibility.private_not_allowed",
-      "summary": "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset` or `embed` in a commons or context."
+      "summary": "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset`, `embed` or `const` in a commons or context."
     }
   ],
   "where_clause": [

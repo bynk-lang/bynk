@@ -1,0 +1,14 @@
+commons ops
+
+uses limits
+
+// `ops` declares its own `Step` beside `limits`'s public `Retries`, whose
+// initialiser names `limits`'s private `Step`. That is neither a name conflict
+// nor a constant cycle: the cycle walk follows only this unit's constants, and
+// `Retries` is imported by name, not inlined.
+
+const Step: Int = 7
+
+fn plan() -> Int {
+  Retries + Step
+}

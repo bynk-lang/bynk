@@ -5,7 +5,8 @@
   the concurrent binding block, so the language gains no tuple type. Slicing:
   slice 0 shipped in #2646 (ADR 0672), with slice 2 folded into it; slice 0b
   shipped in #2669 ([#2662](https://github.com/bynk-lang/bynk/issues/2662));
-  slice 1 was dropped (Q2). Slice 3, the timeout, is next. No slice is
+  slice 1 was dropped (Q2). Slice 3, the timeout, is proposed in
+  [#2683](https://github.com/bynk-lang/bynk/issues/2683). No slice is
   authorised until its proposal is accepted. Spine
   [#2615](https://github.com/bynk-lang/bynk/issues/2615).
 - **Realises:** the effect model of `design/bynk-design-notes.md` (an `Effect` is
@@ -353,7 +354,11 @@ a sub-issue of #2615.
   Q4's adopted answer that need their own increment. Otherwise folded into
   slice 0.
 - **Slice 3 — A general timeout**, `within(d)`, with harness-clock support and
-  the `waitUntil` handover for abandoned work.
+  the `waitUntil` handover for abandoned work. Proposed in
+  [#2683](https://github.com/bynk-lang/bynk/issues/2683). It refuses `within`
+  in an effectful `fn` until
+  [#2682](https://github.com/bynk-lang/bynk/issues/2682) (`~>` in a function
+  has no execution context) is resolved.
 - **Slice 4 — Race (loser runs to completion)**, not planned. Q7 adopted no
   general race for this track; this stays as a possible later slice.
 
@@ -402,7 +407,7 @@ To land with, or just before, slice 0:
   Q2's source-order rule; see Q2)
 - [x] Slice 2 — agent handlers (folded into slice 0: the workerd gate test in
   #2646 found no new interleaving, so `par` stays legal in agent handlers)
-- [ ] Slice 3 — general timeout
+- [ ] Slice 3 — general timeout (#2683)
 - [ ] Slice 4 — race (not planned; possible later slice)
 
 ## 10. Non-goals

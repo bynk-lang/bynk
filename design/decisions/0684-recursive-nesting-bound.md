@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: "A boundary codec bounds the nesting of a recursive type at 256 levels: decoding a value nested more deeply is a `StructuralMismatch` (an HTTP `400`, an `Err` from `Json.decode`) instead of a stack overflow the Worker answered as a fault, and encoding one faults ([#2656](https://github.com/bynk-lang/bynk/issues/2656))"
----
+# 0684 — A boundary codec bounds recursive nesting at 256 levels
 
-## ADR: recursive-nesting-bound
-title: A boundary codec bounds recursive nesting at 256 levels
-summary: The codecs of a recursive type thread a depth; past 256 levels decoding is a `StructuralMismatch` and encoding throws, and every other codec is unchanged
+- **Status:** Accepted (v0.467.1)
 
 **Context.** A non-generic recursive type is boundary-legal (§6.5), and its
 generated `__deserialise_<T>(json, path)` calls itself once per level of
