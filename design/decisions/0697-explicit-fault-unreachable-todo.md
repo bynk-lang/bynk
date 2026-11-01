@@ -1,12 +1,6 @@
----
-level: minor
-changelog: "`unreachable(message)` and `todo(message)` fault deliberately: ambient built-ins of a bottom type that fits any position; `todo` warns with `bynk.fault.todo`"
-probes: diagnostic_coverage, emit_diagnostics, ts_writes
----
+# 0697 — A program can fault deliberately — `unreachable` and `todo`, with a bottom type
 
-## ADR: explicit-fault-unreachable-todo
-title: A program can fault deliberately — `unreachable` and `todo`, with a bottom type
-summary: Two ambient built-ins of an internal bottom type raise a runtime fault; `todo` warns
+- **Status:** Accepted (v0.479)
 
 **Context.** Faults were first-class (ADR 0444 — a fault is claimed, not caught; the
 `expect … faults` claim) but only the runtime could raise one: division by zero, an
