@@ -194,7 +194,7 @@ pub const KEYWORDS: &[KeywordInfo] = &[
     ),
     k(
         "stub",
-        "Stub a consumed capability operation at a test seam (`stub Cap.op(…) returns <v>` / `fails`).",
+        "Stub a consumed capability operation at a test seam (`stub Cap.op(…) returns <v>` / `returns <v> after <d>` / `fails` / `never`).",
     ),
     k(
         "suite",

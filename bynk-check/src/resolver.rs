@@ -2279,7 +2279,10 @@ fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
                     }
                 }
             }
-            StubRhs::Fails(_) => {}
+            StubRhs::Fails(_) | StubRhs::Never(_) => {}
+        }
+        if let Some(a) = &s.after {
+            g.expr(a);
         }
     };
     for s in &suite.stubs {

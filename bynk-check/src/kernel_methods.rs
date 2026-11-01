@@ -208,12 +208,26 @@ pub const RESULT_METHODS: &[KernelMethod] = &[
     m("getOrElse", "getOrElse(default: T) -> T"),
     m("isOk", "isOk() -> Bool"),
 ];
+/// #2683: `e.within(d)`, on every `Effect[T]`. It races `e` against a deadline
+/// and hands the abandoned effect to the execution context's `waitUntil`; it is
+/// never cancelled, so a `TimedOut` does not mean the work did not happen.
+const WITHIN: KernelMethod = m(
+    "within",
+    "within(d: Duration) -> Effect[Result[T, TimedOut]]",
+);
+
+/// The methods of every `Effect[T]` (#2683): `within`.
+pub const EFFECT_METHODS: &[KernelMethod] = &[WITHIN];
+
 /// The `Effect[Result[T, E]]` combinators (v0.152, ADR 0176 — design doc
 /// §2.8.3): the compiler-synthesised methods on the universal cross-context
 /// shape. `mapOk`/`mapErr` transform the success/error value; `flatMapOk`
 /// chains a further effectful-fallible step; `flatMapErr` attempts an effectful
 /// recovery.
 pub const EFFECT_RESULT_METHODS: &[KernelMethod] = &[
+    // #2683: `within` is on every `Effect[T]` (see [`EFFECT_METHODS`]), so an
+    // `Effect[Result]` offers it alongside the combinators.
+    WITHIN,
     m("mapOk", "mapOk(f: T -> U) -> Effect[Result[U, E]]"),
     m("mapErr", "mapErr(f: E -> F) -> Effect[Result[T, F]]"),
     m(
@@ -371,8 +385,9 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::Option(_) => OPTION_METHODS,
         Ty::Result(_, _) => RESULT_METHODS,
         // §2.8.3: an `Effect[Result[T, E]]` receiver offers the cross-context
-        // combinators; any other `Effect[_]` has no kernel methods.
+        // combinators (and `within`); any other `Effect[_]` offers `within` alone.
         Ty::Effect(inner) if matches!(&*tys.get(*inner), Ty::Result(_, _)) => EFFECT_RESULT_METHODS,
+        Ty::Effect(_) => EFFECT_METHODS,
         // #561: a refined receiver inherits its base type's read-only kernel
         // methods (after its own declared methods, which the completion layer
         // merges in), so `.`-member completion offers them. `Bool` has no

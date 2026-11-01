@@ -37,7 +37,7 @@ function __bynkShow(v: unknown): string {
 
 class __Stub_Locale {
   async current(): globalThis.Promise<__ns_bynk_locale_types.LocaleTag> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -48,6 +48,7 @@ class __Stub_Locale {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     if (true) {
       return ("en" as any);
@@ -98,7 +99,7 @@ async function test_renders_the_bundle_s_greeting_through_the_wrapper() {
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
     const { greet, render } = __ns_app_bundle;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -109,6 +110,7 @@ async function test_renders_the_bundle_s_greeting_through_the_wrapper() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const g = await greeting.call(deps);
     if (!(g === "Hello")) { throw __bynkExpectFailure("tests/web.test.bynk:13:12", 498, 510, "expect g == \"Hello\"\n  expected: g == \"Hello\"\n  actual:   " + __bynkShow((g)) + " == " + __bynkShow(("Hello"))); }

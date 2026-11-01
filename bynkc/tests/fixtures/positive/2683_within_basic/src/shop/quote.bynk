@@ -1,0 +1,67 @@
+context shop.quote
+
+consumes bynk
+
+// #2683: `e.within(d)` bounds how long a call may take. It yields
+// `Effect[Result[T, TimedOut]]`; a timed-out effect is handed to `waitUntil`,
+// not cancelled.
+
+capability Pricing {
+	fn quote(id: Int) -> Effect[Int]
+	fn tryQuote(id: Int) -> Effect[Result[Int, String]]
+}
+
+capability Audit {
+	fn note(id: Int) -> Effect[()]
+}
+
+provides Pricing = FixedPricing {
+	fn quote(id: Int) -> Effect[Int] { id }
+	fn tryQuote(id: Int) -> Effect[Result[Int, String]] { Ok(id) }
+}
+
+provides Audit = NoAudit {
+	fn note(id: Int) -> Effect[()] { () }
+}
+
+// The plain form: match the Result.
+service quotes {
+	on call(id: Int) -> Effect[String] given Pricing {
+		let r <- Pricing.quote(id).within(2.seconds)
+		match r {
+			Ok(q) => Effect.pure("quoted \(q)")
+			Err(TimedOut { after, .. }) => Effect.pure("late")
+		}
+	}
+}
+
+// In a lambda written in the handler: it closes over the handler's deps.
+service many {
+	on call(ids: List[Int]) -> Effect[List[Result[Int, TimedOut]]] given Pricing {
+		ids.parTraverseAll((id) => Pricing.quote(id).within(1.seconds))
+	}
+}
+
+// An effect that already returns a Result gains a second layer (no special case).
+service nested {
+	on call(id: Int) -> Effect[Bool] given Pricing {
+		let r <- Pricing.tryQuote(id).within(3.seconds)
+		match r {
+			Ok(Ok(q)) => Effect.pure(true)
+			Ok(Err(why)) => Effect.pure(false)
+			Err(late) => Effect.pure(false)
+		}
+	}
+}
+
+// Inside a `par` binding, as each binding alone would.
+service both {
+	on call(id: Int) -> Effect[Int] given Pricing, Audit {
+		par {
+			let a <- Pricing.quote(id).within(2.seconds)
+			let b <- Pricing.quote(id + 1).within(2.seconds)
+			do Audit.note(id)
+		}
+		Effect.pure(id)
+	}
+}

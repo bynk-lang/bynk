@@ -2489,6 +2489,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.store.unknown_op",
         "A storage-`Map`/`Set` operation is not a recognised entry/membership method.",
     ),
+    d(
+        "bynk.stub.after_type",
+        "A test `stub … returns <value> after <d>` latency is not a `Duration`.",
+    ),
     dg(
         "bynk.stub.at_system",
         "A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override.",
@@ -3314,6 +3318,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.wasm.strip_failed",
         "The in-browser compiler could not strip the emitted TypeScript to JavaScript.",
+    ),
+    dg(
+        "bynk.within.in_agent_handler",
+        "`e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.within.in_pure_context",
+        "`e.within(d)` was used in a pure (non-effectful) context.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.within.outside_handler",
+        "`e.within(d)` was used outside a service handler's body (in a function or provider), where no execution context exists.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.within.timed_out_not_in_scope",
+        "`e.within(d)` yields `Result[_, TimedOut]`, but the unit does not consume `bynk`, so `TimedOut` is not in scope.",
+        &["method_call"],
     ),
     d(
         "bynk.ws.message_frame_param",

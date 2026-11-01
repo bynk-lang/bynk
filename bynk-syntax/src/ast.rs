@@ -459,8 +459,11 @@ pub struct StubClause {
     pub method: Ident,
     /// One argument pattern per parameter (`_` or a value the arg must equal).
     pub args: Vec<ArgPattern>,
-    /// The provision: a value, a fault, or a per-call sequence.
+    /// The provision: a value, a fault, a per-call sequence, or none at all.
     pub rhs: StubRhs,
+    /// #2683: `returns <v> after <d>` — the call completes only once the
+    /// harness clock has advanced by `d` from the call. Only on `returns`.
+    pub after: Option<Expr>,
     pub documentation: Option<Doc>,
     pub span: Span,
     pub trivia: Trivia,
@@ -507,6 +510,9 @@ pub enum StubRhs {
     /// `returns each [<outcome>, …]` — one outcome per call, in order; the last
     /// outcome repeats once the sequence is exhausted (DECISION V).
     ReturnsEach(Vec<SeqOutcome>, Span),
+    /// #2683: `never` — the call never completes. It exists to test a
+    /// `within` against an effect that does not finish.
+    Never(Span),
 }
 
 impl StubRhs {
@@ -515,6 +521,7 @@ impl StubRhs {
             StubRhs::Returns(e) => e.span,
             StubRhs::Fails(s) => *s,
             StubRhs::ReturnsEach(_, s) => *s,
+            StubRhs::Never(s) => *s,
         }
     }
 }

@@ -1,0 +1,24 @@
+context r
+
+consumes bynk
+
+capability Pricing {
+	fn quote(id: Int) -> Effect[Int]
+}
+
+provides Pricing = FixedPricing {
+	fn quote(id: Int) -> Effect[Int] { id }
+}
+
+agent Counter {
+	key id: String
+	store count: Cell[Int] = 0
+
+	// #2683: an agent handler has no execution context to hand an abandoned
+	// effect to, so `within` is refused in the whole body, a closure included.
+	on call bump(ids: List[Int]) -> Effect[()] given Pricing {
+		let r <- Pricing.quote(1).within(2.seconds)
+		let _ <- ids.forEach((id) => { let q <- Pricing.quote(id).within(1.seconds) })
+		do count.update((n) => n + 1)
+	}
+}

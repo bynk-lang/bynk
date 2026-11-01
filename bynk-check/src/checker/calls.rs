@@ -169,6 +169,7 @@ pub(crate) fn check_fn(
         last_witness: None,
         store_fields: HashMap::new(),
         in_agent_handler: false,
+        in_service_handler: false,
     };
     let Some(body_ty) = type_of_block(&f.body, Some(return_ty), &mut ctx) else {
         return;
@@ -321,6 +322,7 @@ fn type_static_initialiser(
             last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
+            in_service_handler: false,
         };
         type_of(init, Some(field_ty), &mut ctx)
     };
@@ -2791,6 +2793,19 @@ pub(crate) fn check_method_call(
         // `Effect` wrapping a `Result` has methods; any other `Effect[_]` falls
         // through to the "no methods" error below.
         Ty::Effect(inner) => {
+            // #2683: `within` is on every `Effect[T]`, and wins over the
+            // `Effect[Result]` combinators (it is not one of them), so
+            // `Effect[Result[T, E]].within(d)` is the plain nested case.
+            if method.name == "within" {
+                ctx.callees.insert(
+                    expr_id,
+                    Callee::Kernel {
+                        recv: recv_ty,
+                        op: method.name.clone(),
+                    },
+                );
+                return check_effect_within_method(method, args, *inner, span, ctx);
+            }
             if let Ty::Result(ok, err) = &*tys.get(*inner) {
                 ctx.callees.insert(
                     expr_id,

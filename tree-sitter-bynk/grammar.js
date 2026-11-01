@@ -1304,8 +1304,9 @@ module.exports = grammar({
     // v0.118 (testing track slice 6): a test-scope stub for one capability
     // operation — `stub Cap.op(<arg pattern>, …) <rhs>`. Only admitted inside a
     // suite/case body. An arg pattern is `_` (any) or a value expression; the
-    // right-hand side is `returns <expr>`, `returns each [ <outcome>, … ]` (a
-    // scripted sequence, where an outcome is `fails` or an expr), or `fails`.
+    // right-hand side is `returns <expr> [after <expr>]`, `returns each [ <outcome>, … ]`
+    // (a scripted sequence, where an outcome is `fails` or an expr), `fails`, or
+    // `never`.
     // `returns`/`each`/`fails` are contextual words. Keyword `stub` since the
     // keyword-hygiene batch (#548); formerly a pun on `provides`.
     stub_clause: ($) =>
@@ -1335,8 +1336,16 @@ module.exports = grammar({
             ),
             "]",
           ),
-          seq("returns", field("value", $._expression)),
+          // #2683: `returns <v> after <d>` completes on the test clock once
+          // `d` has passed; `never` does not complete. `after` and `never` are
+          // contextual words.
+          seq(
+            "returns",
+            field("value", $._expression),
+            optional(seq("after", field("after", $._expression))),
+          ),
           "fails",
+          "never",
         ),
       ),
     // #2134: a suite- or case-scoped `env { NAME = "value" … }` clause — the

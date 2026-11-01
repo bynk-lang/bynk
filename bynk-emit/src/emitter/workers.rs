@@ -846,6 +846,9 @@ pub(crate) fn emit_worker_compose(
             crate::emitter::SETTLE_ALL_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.within() {
+        append_missing_bindings(&mut runtime_imports, crate::emitter::WITHIN_RUNTIME_IMPORTS);
+    }
     if runtime_use.url_ops() {
         append_missing_bindings(
             &mut runtime_imports,

@@ -1102,6 +1102,9 @@ fn emit_integration_module(
     if runtime_use.settle_all() {
         append_missing_bindings(&mut runtime_names, emitter::SETTLE_ALL_RUNTIME_IMPORTS);
     }
+    if runtime_use.within() {
+        append_missing_bindings(&mut runtime_names, emitter::WITHIN_RUNTIME_IMPORTS);
+    }
     if runtime_use.url_ops() {
         append_missing_bindings(&mut runtime_names, emitter::URL_OPS_RUNTIME_IMPORTS);
     }
@@ -3384,9 +3387,16 @@ fn emit_test_module(
     }) {
         stmts.push(TsStmt::raw(run_id_helper(false), None));
     }
-    if uses_advance {
+    // #2683: a module on virtual time takes the timer-queue clock; the plain
+    // counter clock is only for one that `advance`s and has no timers.
+    let virtual_time = module_is_virtual_time(target_name, target_kind, stubs, unit_tables);
+    if virtual_time {
+        runtime_use.note_virtual_time();
+        stmts.push(TsStmt::raw(virtual_time_runtime_helpers(), None));
+    } else if uses_advance {
         stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
     }
+    let uses_advance = uses_advance || virtual_time;
     let mut suppress_next_blank = true;
 
     // v0.115: the target unit's contracted free functions the runner can attack
@@ -3937,6 +3947,9 @@ fn emit_test_module(
     if runtime_use.settle_all() {
         append_missing_bindings(&mut runtime_names, emitter::SETTLE_ALL_RUNTIME_IMPORTS);
     }
+    if runtime_use.within() {
+        append_missing_bindings(&mut runtime_names, emitter::WITHIN_RUNTIME_IMPORTS);
+    }
     if runtime_use.url_ops() {
         append_missing_bindings(&mut runtime_names, emitter::URL_OPS_RUNTIME_IMPORTS);
     }
@@ -4416,6 +4429,15 @@ fn clock_runtime_helpers() -> String {
     include_str!("../emitter/test_runtime/clock.ts").to_string()
 }
 
+/// #2683: the harness clock on virtual time — the same `__bynkClockNow` and
+/// `__bynkAdvanceClock` (which now also fires the timers that fall due), plus
+/// the timer queue `within` registers its deadline on, the `after`/`never`
+/// stub waits, the in-flight count, and the auto-advance that drives a case's
+/// addressed calls. Source lives at `emitter/test_runtime/virtual_time.ts`.
+fn virtual_time_runtime_helpers() -> String {
+    include_str!("../emitter/test_runtime/virtual_time.ts").to_string()
+}
+
 /// #2138: `__bynkRunId`, the value `run.id` reads. A remote build's `system`
 /// module reads `BYNK_TEST_RUN_ID` (the runner sets a fresh one); every
 /// in-process module is the fixed `"local"`, even when the variable is set
@@ -4499,6 +4521,46 @@ fn target_uses_send(
                     .any(|h| crate::emitter::block_uses_send(&h.body))
             })
         })
+}
+
+/// #2683: whether a context target has a service handler that calls
+/// `e.within(d)`, so its `deps` carry an execution context whose timers the
+/// harness supplies.
+fn target_uses_within(
+    target_name: &str,
+    target_kind: UnitKind,
+    unit_tables: &HashMap<String, UnitTable>,
+) -> bool {
+    target_kind == UnitKind::Context
+        && unit_tables.get(target_name).is_some_and(|t| {
+            t.services.values().any(|s| {
+                s.handlers
+                    .iter()
+                    .any(|h| crate::emitter::block_uses_within(&h.body))
+            })
+        })
+}
+
+/// #2683: whether a `stub` takes virtual time: `returns <v> after <d>`, or
+/// `never`.
+fn stub_takes_time(c: &StubClause) -> bool {
+    c.after.is_some() || matches!(c.rhs, StubRhs::Never(_))
+}
+
+/// #2683: whether a test module runs on virtual time (a timer queue on the
+/// harness clock, and auto-advance) rather than the plain counter clock: its
+/// target calls `within`, or one of its `stub`s takes time. Any other module
+/// keeps its output byte for byte.
+fn module_is_virtual_time(
+    target_name: &str,
+    target_kind: UnitKind,
+    stubs: &HashMap<String, ResolvedStub>,
+    unit_tables: &HashMap<String, UnitTable>,
+) -> bool {
+    target_uses_within(target_name, target_kind, unit_tables)
+        || stubs
+            .values()
+            .any(|rp| rp.clauses.iter().any(stub_takes_time))
 }
 
 /// #2050: whether a context target has a handler — a service's or an agent's
@@ -4880,7 +4942,34 @@ fn emit_stub_rhs(
         )
     };
     match &clause.rhs {
-        StubRhs::Returns(e) => lower(e),
+        StubRhs::Returns(e) => match &clause.after {
+            // #2683: `returns <v> after <d>` — the call completes only once the
+            // harness clock has reached `d` from the call.
+            Some(after) => {
+                let ms = lower_stub_value_block(
+                    after,
+                    &TypeRef::Base(BaseType::Duration, after.span),
+                    &[],
+                    target_name,
+                    unit_tables,
+                    unit_uses,
+                    unit_consumes,
+                    unit_consumes_aliases,
+                    runtime_use,
+                    hidden,
+                    tys,
+                );
+                let mut out = format!("const __after_{clause_idx} = await (async () => {{\n");
+                out.push_str(&reindent_by(&ms, "  "));
+                out.push_str("})();\n");
+                out.push_str(&format!("await __bynkSleep(__after_{clause_idx});\n"));
+                out.push_str(&lower(e));
+                out
+            }
+            None => lower(e),
+        },
+        // #2683: `never` — the call stays in flight for ever.
+        StubRhs::Never(_) => "return await __bynkNever();\n".to_string(),
         StubRhs::Fails(_) => bynk_ts::print_stmt(&stub_fault_stmt(), 0),
         StubRhs::ReturnsEach(outcomes, _) => {
             let n = outcomes.len();
@@ -5910,8 +5999,25 @@ fn emit_test_deps(
         entries.push(("surface".to_string(), TsExpr::object(surface_entries)));
     }
     // #1994: the execution context a `~>`-sending handler hands its promise to.
+    // #2683: on a virtual-time module the context also supplies the harness's
+    // timers, which `within` reads in place of `setTimeout`.
+    let virtual_time = module_is_virtual_time(target_name, target_kind, stubs, unit_tables);
     if target_uses_send(target_name, target_kind, unit_tables) {
-        entries.push(("__exec".to_string(), call(ident("__bynkExec"), Vec::new())));
+        let exec = call(ident("__bynkExec"), Vec::new());
+        entries.push((
+            "__exec".to_string(),
+            if virtual_time {
+                call(
+                    ident("globalThis.Object.assign"),
+                    vec![
+                        exec,
+                        TsExpr::object(vec![("timers".to_string(), ident("__bynkTimers"))]),
+                    ],
+                )
+            } else {
+                exec
+            },
+        ));
     }
     let mut entries: Vec<TsObjectEntry> = entries
         .into_iter()
@@ -5962,7 +6068,24 @@ fn emit_test_deps(
     } else {
         TsExpr::object_entries(entries)
     };
-    body.push(TsStmt::return_stmt(Some(return_value), None));
+    if virtual_time {
+        // #2683: each case builds its `deps` afresh, so this is where the
+        // virtual clock, its timers and the in-flight count start over, and
+        // where each capability call comes to be counted.
+        body.push(TsStmt::const_stmt(
+            TsBindingName::Ident("__deps".to_string()),
+            None,
+            return_value,
+            None,
+        ));
+        body.push(TsStmt::expr_stmt(
+            call(ident("__bynkTrackDeps"), vec![ident("__deps")]),
+            None,
+        ));
+        body.push(TsStmt::return_stmt(Some(ident("__deps")), None));
+    } else {
+        body.push(TsStmt::return_stmt(Some(return_value), None));
+    }
     doubles.extend(given_doubles.into_inner());
     let stmt = TsStmt::decl(
         TsDecl::Function {

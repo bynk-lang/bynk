@@ -3834,6 +3834,32 @@ fn emit_context_deps_interface(
             )),
         ));
     }
+    // #2683: a surface `on call` handler that calls `within` (or sends with
+    // `~>`) forwards `deps` to a handler that requires `__exec`, so the
+    // surface's `deps` carry it; the compose root supplies it.
+    if commons.commons.items.iter().any(|i| match i {
+        CommonsItem::Service(s) => s
+            .handlers
+            .iter()
+            .any(crate::emitter::call_handler_needs_exec),
+        _ => false,
+    }) {
+        members.push(bynk_ts::TsTypeMember::readonly_prop(
+            "__exec",
+            bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::method(
+                "waitUntil",
+                vec![bynk_ts::TsParam {
+                    name: "promise".to_string(),
+                    ty: Some(bynk_ts::TsType::named_with_args(
+                        "globalThis.Promise",
+                        vec![bynk_ts::TsType::named("unknown")],
+                    )),
+                    optional: false,
+                }],
+                bynk_ts::TsType::named("void"),
+            )]),
+        ));
+    }
     let interface_decl = bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::Interface {
             name: deps_name.clone(),

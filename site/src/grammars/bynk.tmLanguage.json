@@ -287,6 +287,19 @@
           "match": "\\b(returns|each|fails)\\b"
         },
         {
+          "comment": "#2683: the stub latency words — `stub Cap.op(…) returns v after d` and `stub Cap.op(…) never` — contextual, so only on a `stub` line (an `after` or `never` identifier elsewhere is left untouched).",
+          "match": "^\\s*stub\\b[^\\n]*?\\breturns\\b[^\\n]*?\\s(after)\\s",
+          "captures": {
+            "1": { "name": "keyword.operator.bynk" }
+          }
+        },
+        {
+          "match": "^\\s*stub\\b[^\\n]*\\)\\s+(never)\\b",
+          "captures": {
+            "1": { "name": "keyword.operator.bynk" }
+          }
+        },
+        {
           "comment": "v0.117: the `trace(Cap.op)` escape hatch — a test-only builtin, matched only in call position.",
           "name": "keyword.control.bynk",
           "match": "\\btrace\\b(?=\\s*\\()"
