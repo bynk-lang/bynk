@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "Record destructuring in `let`: `let Item { sku, qty, .. } = item` binds a record's fields for the rest of the block, with `=` or `<-`, and needs no `else` when every field is matched by a name, `_` or a nested pattern of the same kind; a refutable record pattern still takes its `else` (patterns track slice 2, [#2654](https://github.com/bynk-lang/bynk/issues/2654)). A record `let … else` that cannot fail now offers a one-click fix that removes its `else`"
----
+# 0675 — A `let` destructures a record, and omits `else` when the pattern cannot fail
 
-## ADR: record-destructuring-in-let
-title: A `let` destructures a record, and omits `else` when the pattern cannot fail
-summary: `let T { f, .. } = e` opens a record pattern in `let` (a capitalised name followed by `{`), and a `let` whose pattern is an irrefutable record pattern needs no `else`; it reuses the ADR 0484 one-arm `match` desugaring and adds no type rule; realises patterns-track slice 2
+- **Status:** Accepted (v0.460)
 
 **Context.** Slice 1 added record patterns to `match` and `is`, but a record
 still could not be destructured by `let`: `let_pattern_ahead` opens a pattern
