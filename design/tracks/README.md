@@ -80,6 +80,7 @@ each track's spine issue; this table is deliberately just the map.
 
 | Track doc | Spine issue | Phase | Theme |
 |---|---|---|---|
+| [`concurrent-effects.md`](concurrent-effects.md) | [#2615](https://github.com/bynk-lang/bynk/issues/2615) | Settling | Concurrent effect composition: a block that issues several independent effects and waits for them all, settle-all fault and source-order error semantics, joins in agent handlers and tests, and a general timeout; cancellation a non-goal |
 | [`constrained-generics.md`](constrained-generics.md) | [#2614](https://github.com/bynk-lang/bynk/issues/2614) | Settling | Constrained generics: declared bounds on type parameters — a closed constraint set (`Eq`, `Ord`, `Key`, `Codable`), how types satisfy it, witness passing under erasure, and what must land before the 1.0 freeze |
 | [`first-party-registry.md`](first-party-registry.md) | [#2308](https://github.com/bynk-lang/bynk/issues/2308) | Settled (#2309); slicing next — R0, L1, L2 and R5b can start at once | The first-party registry (packaging slice 4b): a hosted Bynk service written in Bynk, in this repo until go-live; its `bynk-std` prerequisites, accounts and organisations, key custody, conformance, and setting `FIRST_PARTY` |
 | [`idempotency-capability.md`](idempotency-capability.md) | [#921](https://github.com/accuser/bynk/issues/921) | Slicing (slice 0 shipped, #929; call-site key scoping follow-up shipped, #934) | The `Idempotency` capability: mechanical dedup for at-least-once delivery, per design notes §4, §12 |
