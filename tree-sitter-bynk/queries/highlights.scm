@@ -146,6 +146,7 @@
 (record_construction type: (identifier) @type)
 (record_spread type: (identifier) @type)
 (variant_pattern type: (identifier) @type)
+(record_pattern type: (identifier) @type)
 (key_decl type: (identifier) @type)
 
 ; -- Functions --
@@ -183,6 +184,8 @@
 (field_init name: (identifier) @field)
 (field_init shorthand: (identifier) @field)
 (named_binding field: (identifier) @field)
+; #2641: a record pattern's field name (the shorthand form also binds it).
+(record_pattern_field name: (identifier) @field)
 ; Events track slice 1 (spine #936): a subscription pattern's field name.
 (event_pattern_field name: (identifier) @field)
 
