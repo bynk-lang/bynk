@@ -2049,7 +2049,16 @@ slow element does not head-of-line-block the rest; the order in which side
 effects interleave is unspecified. Unlike the sequential `forEach` (which
 short-circuits on the first failure and never issues the rest), a rejecting
 element does **not** cancel siblings already issued — every element's effect is
-in flight before the first failure surfaces, and each runs to completion.
+issued, in input order, before any is awaited. The fan-out has **settle-all**
+fault semantics, as a `par` block does (§4.8.7b): when any element faults it waits
+for **every** element to settle, then raises the **first fault in input order**
+(not the first in time), so no element's work outlives the call and the fault a
+program sees does not depend on timing. Later faults ride on the raised one as
+`suppressed` and are not catchable separately. A fast fault therefore waits for a
+slow sibling. A synchronous throw from `f` is a fault of that element only: the
+elements before and after it are still issued and awaited. The same holds for
+`parTraverseAll` and `parTraverseTry` and for the `Query`/`Map` broadcast forms
+([#2662](https://github.com/bynk-lang/bynk/issues/2662)).
 
 The **collect-all** pair `traverseAll` / `parTraverseAll` (v0.148,
 [ADR 0172](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0172-list-collect-all-iterators.md))
@@ -2075,8 +2084,9 @@ take the same `f: T -> Effect[Result[U, E]]` but **stop at the first `Err`**,
 returning `Effect[Result[List[U], E]]` — `Ok` of the collected values, or the
 first `Err` encountered. `traverseTry` awaits each element in order and bails on
 the first `Err` (later elements never run); `parTraverseTry` issues all at once,
-awaits them, then returns the first `Err` in input order (in-flight calls are not
-cancelled). They are the fault-**propagating** counterpart to the fault-gathering
+awaits them all, then returns the first `Err` in input order — unless an element
+faulted, in which case the fault (first in input order) is raised instead, whatever
+the `Err` positions. They are the fault-**propagating** counterpart to the fault-gathering
 `traverseAll`/`parTraverseAll`, and likewise apply over the `Query`/`Map`
 broadcast.
 

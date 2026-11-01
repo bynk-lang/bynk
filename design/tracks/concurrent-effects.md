@@ -366,7 +366,7 @@ To land with, or just before, slice 0:
 ## 9. Slice status
 
 - [ ] Slice 0 — concurrent binding block
-- [ ] Slice 0b — settle-all for the `parTraverse` family
+- [x] Slice 0b — settle-all for the `parTraverse` family
 - [ ] Slice 1 — `Result` and `?` in a join
 - [ ] Slice 2 — agent handlers (may fold into slice 0)
 - [ ] Slice 3 — general timeout

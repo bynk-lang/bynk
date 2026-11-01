@@ -107,7 +107,7 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
 ```
 
 `parTraverse` sends to every connection **in parallel** (so one slow client cannot
-stall the room); `forEach` is the sequential sibling. In the broadcast closure each
+stall the room, and it waits for every send to settle before it raises a fault); `forEach` is the sequential sibling. In the broadcast closure each
 `c` is **borrowed** — you may `send` to it, but closing or transferring it is
 `bynk.held.consume_on_borrow`. To broadcast to everyone *but* the sender, filter on
 the sender's key (`u != sender`); a `Connection` cannot be compared with `==`

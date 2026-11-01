@@ -2,6 +2,7 @@
 // commons demo.collectall
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
+import { __bynkSettleAll } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export async function check(x: number): globalThis.Promise<Result<number, string>> {
@@ -13,5 +14,5 @@ export async function seqAll(xs: readonly number[]): globalThis.Promise<readonly
 }
 
 export async function parAll(xs: readonly number[]): globalThis.Promise<readonly Result<number, string>[]> {
-  return (async (__xs: readonly number[]) => await globalThis.Promise.all(__xs.map((__x: number) => (async (x: number) => check(x))(__x))))(xs);
+  return (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (x: number) => check(x))(__x))))(xs);
 }

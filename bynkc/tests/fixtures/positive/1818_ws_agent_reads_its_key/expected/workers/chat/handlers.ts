@@ -2,6 +2,7 @@
 // context chat
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkSettleAll } from "../../__bynk_runtime/settle.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
@@ -118,7 +119,7 @@ export class Room {
   async post(sender: UserId, text: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { await globalThis.Promise.all(globalThis.Object.values(__state.conns).flatMap((__cid) => { const __c = __resolveConnection<ServerFrame>(this.state, __cid); return __c.tag === "Some" ? [__c.value] : []; }).map((__x) => (async (c: Connection<ServerFrame>) => (c).send({ text: text }))(__x))); })();
+      const __r0 = await (async () => { await __bynkSettleAll(globalThis.Object.values(__state.conns).flatMap((__cid) => { const __c = __resolveConnection<ServerFrame>(this.state, __cid); return __c.tag === "Some" ? [__c.value] : []; }).map((__x) => () => (async (c: Connection<ServerFrame>) => (c).send({ text: text }))(__x))); })();
       __state.posted = Some(this.__key);
       return undefined;
     })();
