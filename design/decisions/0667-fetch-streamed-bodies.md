@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: "`bynk.Fetch` gains `receiveStream(req, options)` and `sendStream(req, body, options)`, which stream a body as `Stream[Bytes]` in a `StreamResponse` rather than buffering it, so a Worker can proxy or upload what doesn't fit in memory (both experimental). Their timeout bounds the response head only, and `sendStream` returns a redirect as it is (standard-library K5c, [#2627](https://github.com/bynk-lang/bynk/issues/2627))"
----
+# 0667 — Fetch streamed bodies, with a head-only timeout and no replayed redirects
 
-## ADR: fetch-streamed-bodies
-title: Fetch streamed bodies, with a head-only timeout and no replayed redirects
-summary: `Fetch.receiveStream` and `Fetch.sendStream` carry `Stream[Bytes]` bodies in a `StreamResponse`; the timeout bounds the response head only, the response stream is claimed on read and the request stream on entry, and `sendStream` returns every redirect as it is
+- **Status:** Accepted (v0.453)
 
 **Context.** `receiveBytes` and `sendBytes` (K5b) buffer both bodies. That
 caps a proxied download or an upload at a Worker's memory, and holds back the
