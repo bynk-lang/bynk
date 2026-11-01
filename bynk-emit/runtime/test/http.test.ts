@@ -644,8 +644,56 @@ test("responseToHttpResult: a 200 reads as Ok, whether or not its body is JSON",
   );
 });
 
+// #2658: a smoke run's strict decoding. A typed handler cannot answer a body
+// its own route's codec rejects, so only skew between a deployed build and the
+// test build reaches this; a fabricated `Response` stands in for one.
+async function withStrictWire(body: () => Promise<void>): Promise<void> {
+  const env = (globalThis as any).process.env;
+  const was = env.BYNK_TEST_STRICT_WIRE;
+  env.BYNK_TEST_STRICT_WIRE = "1";
+  try {
+    await body();
+  } finally {
+    if (was === undefined) delete env.BYNK_TEST_STRICT_WIRE;
+    else env.BYNK_TEST_STRICT_WIRE = was;
+  }
+}
+
+test("responseToHttpResult: strict, a JSON body that does not decode fails", async () => {
+  const asString = (j: JsonValue) =>
+    typeof j === "string" ? ({ tag: "Ok", value: j } as const) : ({ tag: "Err", error: { kind: "StructuralMismatch" } } as never);
+  const wrong = () =>
+    new Response("42", { status: 200, headers: { "content-type": "application/json" } });
+  // Not strict: the raw value, for the case's own `expect` to judge.
+  assert.deepEqual(await responseToHttpResult(wrong(), asString), { tag: "Ok", value: 42 });
+  await withStrictWire(async () => {
+    await assert.rejects(responseToHttpResult(wrong(), asString), /does not decode as the route's declared type/);
+    // A body that decodes, and a text body (a `Raw` answer), still read.
+    assert.deepEqual(
+      await responseToHttpResult(
+        new Response('"hi"', { status: 200, headers: { "content-type": "application/json" } }),
+        asString,
+      ),
+      { tag: "Ok", value: "hi" },
+    );
+    assert.deepEqual(
+      await responseToHttpResult(new Response("made", { status: 201, headers: { "content-type": "text/plain" } }), asString),
+      { tag: "Created", value: "made" },
+    );
+  });
+});
+
+test("responseToHttpResult: strict, a status no HttpResult carries fails", async () => {
+  const asString = (j: JsonValue) => ({ tag: "Ok", value: j }) as never;
+  const teapot = () => new Response("", { status: 418 });
+  assert.equal((await responseToHttpResult(teapot(), asString)).tag, "ServerError");
+  await withStrictWire(async () => {
+    await assert.rejects(responseToHttpResult(teapot(), asString), /status 418 is not one/);
+  });
+});
+
 // #2341 (decision C): a router rejection rendered through `on rejected`.
-const rawError = (status: number, text: string) =>
+const rawError =(status: number, text: string) =>
   HttpResult.RawError(status, new TextEncoder().encode(text), "text/plain");
 
 test("renderRejection: a RawError of the rejection's status replaces the body", async () => {
