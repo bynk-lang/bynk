@@ -44,8 +44,9 @@ fields therefore took three `let x = r.x` lines. The patterns track
   byte-identically.
 - **E. An irrefutable record `let … else` keeps `bynk.types.unreachable_arm`,**
   now with a machine-applicable "remove the `else`" fix. The fix deletes the
-  `else` clause; parentheses the author wrote around the pattern are left, since
-  they are valid and the AST does not retain them. Other patterns are unchanged.
+  `else` clause and any parentheses around the pattern (`LetElse::remove_else`,
+  recorded by the parser, since the AST does not retain the parentheses).
+  Other patterns are unchanged.
 - **F. The parenthesised form is accepted:** `let (T { … }) = e` is the same
   pattern, as `paren_pattern` is transparent everywhere.
 - **G. `<-` is supported,** with the optional call-site actor clause, as for
