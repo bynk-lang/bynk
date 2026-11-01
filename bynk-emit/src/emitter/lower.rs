@@ -5766,7 +5766,9 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
                 .enumerate()
                 .map(|(i, p)| format!("__a{i}: {}", ts_ty(*p, &tys)))
                 .collect(),
-            _ => (0..decl.params.len()).map(|i| format!("__a{i}: any")).collect(),
+            _ => (0..decl.params.len())
+                .map(|i| format!("__a{i}: any"))
+                .collect(),
         };
         let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
         let mut args = names.clone();
@@ -6295,13 +6297,10 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         } else {
             format!("!{call}")
         }
-    } else if let Some(operand) = matches!(
-        op,
-        BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq
-    )
-    .then(|| cx.commons().expr_types.get(&lhs.id).map(|te| te.ty))
-    .flatten()
-    .filter(|t| !is_bare_ordered(*t, tys))
+    } else if let Some(operand) = matches!(op, BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq)
+        .then(|| cx.commons().expr_types.get(&lhs.id).map(|te| te.ty))
+        .flatten()
+        .filter(|t| !is_bare_ordered(*t, tys))
     {
         // Constrained generics slice 1 (DECISION F): an `Ord` type that is not
         // a plain base compares through its comparator. A base type keeps the
@@ -6351,7 +6350,13 @@ fn with_comparator(cmp: &str, body: impl FnOnce(&str) -> String) -> String {
 fn is_bare_ordered(ty: TyId, tys: &Types) -> bool {
     matches!(
         ty.base(tys),
-        Some(BaseType::Int | BaseType::Float | BaseType::String | BaseType::Duration | BaseType::Instant)
+        Some(
+            BaseType::Int
+                | BaseType::Float
+                | BaseType::String
+                | BaseType::Duration
+                | BaseType::Instant
+        )
     )
 }
 

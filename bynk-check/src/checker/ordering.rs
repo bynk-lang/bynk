@@ -142,7 +142,10 @@ fn report_not_orderable(ctx: &mut Ctx, ty: TyId, span: Span, site: &OrdSite, blo
                 let end = decl.span.end;
                 err = err.with_suggestion(
                     format!("add `derives Ord` to `{}`", decl.name.name),
-                    vec![(Span::new_in(decl.span.file, end, end), " derives Ord".to_string())],
+                    vec![(
+                        Span::new_in(decl.span.file, end, end),
+                        " derives Ord".to_string(),
+                    )],
                     Applicability::MaybeIncorrect,
                 );
             }
@@ -173,7 +176,9 @@ pub(crate) fn typeref_not_ord(
         TypeRef::Option(a, _) | TypeRef::List(a, _) => typeref_not_ord(a, params, types, visited),
         TypeRef::Named(id) if params.contains(&id.name.as_str()) => None,
         TypeRef::Named(id) => named_not_ord(&id.name, &[], t, params, types, visited),
-        TypeRef::App { name, args, .. } => named_not_ord(&name.name, args, t, params, types, visited),
+        TypeRef::App { name, args, .. } => {
+            named_not_ord(&name.name, args, t, params, types, visited)
+        }
         _ => Some(super::equality::render(t)),
     }
 }
@@ -264,10 +269,12 @@ pub(crate) fn check_derives(
         TypeBody::Sum(s) => {
             for v in &s.variants {
                 for p in &v.payload {
-                    if let Some(part) = typeref_not_ord(&p.type_ref, &params, types, &mut visited)
-                    {
+                    if let Some(part) = typeref_not_ord(&p.type_ref, &params, types, &mut visited) {
                         fail(
-                            format!("`{}.{}`'s field `{}`", decl.name.name, v.name.name, p.name.name),
+                            format!(
+                                "`{}.{}`'s field `{}`",
+                                decl.name.name, v.name.name, p.name.name
+                            ),
                             part,
                             p.type_ref.span(),
                         );
@@ -275,9 +282,15 @@ pub(crate) fn check_derives(
                 }
             }
         }
-        TypeBody::Opaque { base, base_span, .. } => {
+        TypeBody::Opaque {
+            base, base_span, ..
+        } => {
             if !base_is_ord(*base) {
-                fail("its representation".to_string(), base.name().to_string(), *base_span);
+                fail(
+                    "its representation".to_string(),
+                    base.name().to_string(),
+                    *base_span,
+                );
             }
         }
         // A refined type is `Ord` over an orderable base without declaring it.
@@ -306,9 +319,15 @@ fn derives_automatic(decl: &TypeDecl, index: usize, d: &Ident) -> CompileError {
             String::new(),
         )
     } else if index + 1 < names.len() {
-        (Span::new_in(d.span.file, d.span.start, names[index + 1].span.start), String::new())
+        (
+            Span::new_in(d.span.file, d.span.start, names[index + 1].span.start),
+            String::new(),
+        )
     } else {
-        (Span::new_in(d.span.file, names[index - 1].span.end, d.span.end), String::new())
+        (
+            Span::new_in(d.span.file, names[index - 1].span.end, d.span.end),
+            String::new(),
+        )
     };
     err = err.with_suggestion(
         format!("remove `{}`", d.name),

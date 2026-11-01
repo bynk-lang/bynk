@@ -133,19 +133,16 @@ impl<'a> CmpGen<'a> {
     /// A record or sum's comparator, with `args` the comparators of its type
     /// arguments, in parameter order.
     fn derive(&self, name: &str, args: Vec<String>, stack: &mut Vec<Frame>) -> String {
-        if let Some(frame) = stack
-            .iter_mut()
-            .find(|f| f.name == name && f.args == args)
-        {
+        if let Some(frame) = stack.iter_mut().find(|f| f.name == name && f.args == args) {
             frame.used = true;
             return frame.self_ident.clone();
         }
         let Some(decl) = self.derive_source(name) else {
             // A refined or opaque type reached by name: its representation.
             return match self.commons.types.get(name).map(|d| &d.body) {
-                Some(
-                    TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. },
-                ) => self.for_base(*base),
+                Some(TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. }) => {
+                    self.for_base(*base)
+                }
                 _ => unreachable!("bynk internal error: no declaration for `{name}`"),
             };
         };

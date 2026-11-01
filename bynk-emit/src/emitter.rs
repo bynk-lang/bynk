@@ -4831,7 +4831,9 @@ impl<'a> LowerCtx<'a> {
                 self.cmp_scope.insert(p.clone(), ident.clone());
                 bynk_ts::TsParam {
                     name: ident,
-                    ty: Some(bynk_ts::TsType::named(format!("(a: {p}, b: {p}) => number"))),
+                    ty: Some(bynk_ts::TsType::named(format!(
+                        "(a: {p}, b: {p}) => number"
+                    ))),
                     optional: false,
                 }
             })

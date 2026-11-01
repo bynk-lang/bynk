@@ -128,13 +128,8 @@ fn instantiate_bounded_value(
         return None;
     }
     let ord_names = super::ordering::witness_params(fn_decl, &ctx.input.types);
-    let witnesses = super::ordering::check_declared_ord_args(
-        &id.name,
-        id.span,
-        &ord_names,
-        &subst,
-        ctx,
-    )?;
+    let witnesses =
+        super::ordering::check_declared_ord_args(&id.name, id.span, &ord_names, &subst, ctx)?;
     ctx.last_witness = Some(witnesses);
     let params: Vec<TyId> = patterns
         .iter()

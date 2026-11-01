@@ -984,13 +984,8 @@ fn check_generic_call(
     }
     // Slice 1: each `Ord`-bounded type parameter takes an orderable type, and
     // the call carries a comparator witness for it.
-    let witnesses = super::ordering::check_declared_ord_args(
-        &name.name,
-        name.span,
-        &ord_names,
-        &subst,
-        ctx,
-    )?;
+    let witnesses =
+        super::ordering::check_declared_ord_args(&name.name, name.span, &ord_names, &subst, ctx)?;
     // v0.39 (ADR 0072): when the user omitted the type arguments, show the
     // inferred ones as a `Type`-kind hint after the function name —
     // `identity` ⟨`[Int]`⟩ `(5)`. Declaration order; skipped if any var stayed
