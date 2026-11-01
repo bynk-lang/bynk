@@ -8,3 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 binding = "R2_VIDEOS"
 bucket_name = "media-store-videos"
 
+[[queues.consumers]]
+queue = "uploads"
+max_batch_size = 10
+

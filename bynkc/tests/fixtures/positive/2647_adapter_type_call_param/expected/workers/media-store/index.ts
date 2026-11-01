@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -19,6 +20,7 @@ export default {
     const path = url.pathname;
     const method = request.method;
     const surface = compose(env);
+    const __security_intake: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
     let __route: string = "request";
     try {
       if (path.startsWith("/_bynk/call/")) {
@@ -54,11 +56,53 @@ export default {
         }
       }
 
+      {
+        if (method === "POST" && path === "/uploads") {
+          __route = "POST /uploads";
+          let __body_json: __JsonValue;
+          try {
+            __body_json = (await request.json()) as __JsonValue;
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_intake);
+          }
+          const __r_body = handlers.__deserialise_R2Upload(__body_json, "$");
+          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_intake);
+          const body = __r_body.value;
+          const result = await surface.http_POST_uploads(body);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_intake);
+        }
+      }
+      if (path === "/uploads") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_intake);
+      }
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {
       globalThis.console.error(`media.store ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
       __bynkReportFault(ctx, e);
       return __faultResponse("media.store", __route);
+    }
+  },
+  async queue(batch: { readonly queue: string; readonly messages: ReadonlyArray<{ readonly body: unknown; ack(): void; retry(): void }> }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
+    const surface = compose(env);
+    switch (batch.queue) {
+      case "uploads": {
+        for (const msg of batch.messages) {
+          try {
+            const __r = handlers.__deserialise_R2Upload((msg.body as __JsonValue), "$");
+            if (__r.tag === "Err") { globalThis.console.error("queue uploads deserialise failed", __r.error); msg.retry(); continue; }
+            const result = await surface.queue_uploads_0(__r.value);
+            if (result.tag === "Ack") msg.ack();
+            else { globalThis.console.error("queue uploads retry", result.reason); msg.retry(); }
+          } catch (e) {
+            globalThis.console.error("queue uploads threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+          }
+        }
+        return;
+      }
+      default:
+        return;
     }
   },
 };

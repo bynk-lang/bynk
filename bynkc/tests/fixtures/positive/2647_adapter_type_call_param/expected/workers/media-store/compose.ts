@@ -17,5 +17,11 @@ export function compose(env: Env) {
     async abandon(upload: handlers.R2Upload) {
       return handlers.abandon.call(upload, deps);
     },
+    async http_POST_uploads(body: handlers.R2Upload) {
+      return handlers.intake.http_POST_uploads(body, deps);
+    },
+    async queue_uploads_0(m: handlers.R2Upload) {
+      return handlers.uploads.queue_uploads_0(m, deps);
+    },
   };
 }

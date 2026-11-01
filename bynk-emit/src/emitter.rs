@@ -2200,8 +2200,8 @@ fn called_consumed_services(
 /// wrapper's signature as `handlers.<Name>` (it imports no type names of its
 /// own), so a consumed `Batch` in a handler's parameters must be a member of
 /// `handlers` too (a consumed *adapter's* type — `R2Upload` — likewise, #2647:
-/// it is imported from the adapter's module by the same statement), the way a `uses`d commons type is through its rebrand
-/// alias. Type-only (`export { type Batch }`): `compose.ts` uses the name in
+/// it is imported from the adapter's module by the same statement), the way a
+/// `uses`d commons type is through its rebrand alias. Type-only (`export { type Batch }`): `compose.ts` uses the name in
 /// type position only, a consumed refined alias has no value to re-export
 /// (TS1205 under `isolatedModules`), and a value re-export would deepen the
 /// caller's dependency on the callee's module. Only names the module imports
@@ -2214,10 +2214,10 @@ fn emit_consumed_type_reexports(
     if ctx.target != BuildTarget::Workers {
         return Vec::new();
     }
-    // #2647: a consumed *adapter's* types are re-exported only when an `on call`
-    // parameter names them (the one place `compose.ts` spells a type). A
-    // consumed context's are re-exported whenever imported, as before.
-    let call_param_types: HashSet<String> = commons
+    // #2647: a consumed *adapter's* types are re-exported only when some
+    // service handler's parameter names them, in the handler kinds below. A consumed
+    // context's are re-exported whenever imported, as before.
+    let handler_param_types: HashSet<String> = commons
         .commons
         .items
         .iter()
@@ -2226,7 +2226,18 @@ fn emit_consumed_type_reexports(
             _ => None,
         })
         .flat_map(|s| s.handlers.iter())
-        .filter(|h| matches!(h.kind, bynk_syntax::ast::HandlerKind::Call))
+        // The kinds whose `compose.ts` wrapper types its parameters with
+        // `qualified_ts_type_ref` (call, cron, queue `message`, http); an
+        // `event` handler's other parameters never reach `compose.ts`.
+        .filter(|h| {
+            matches!(
+                h.kind,
+                bynk_syntax::ast::HandlerKind::Call
+                    | bynk_syntax::ast::HandlerKind::Http { .. }
+                    | bynk_syntax::ast::HandlerKind::Cron { .. }
+                    | bynk_syntax::ast::HandlerKind::Message
+            )
+        })
         .flat_map(|h| h.params.iter())
         .flat_map(|p| workers::named_types_in(&p.type_ref))
         .collect();
@@ -2235,9 +2246,9 @@ fn emit_consumed_type_reexports(
         .iter()
         .flat_map(|(unit, set)| {
             let adapter = ctx.consumed_adapters.contains(unit.as_str());
-            let call_param_types = &call_param_types;
+            let handler_param_types = &handler_param_types;
             set.iter()
-                .filter(move |n| !adapter || call_param_types.contains(n.as_str()))
+                .filter(move |n| !adapter || handler_param_types.contains(n.as_str()))
         })
         .filter(|n| ctx.imported_from_kind.get(n.as_str()) == Some(&UnitKind::Context))
         .map(|n| format!("type {}", ts_ident(n)))

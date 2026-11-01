@@ -4,6 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { QueueResult } from "../../__bynk_runtime/queue.js";
 
 import { R2Upload } from "../../bynk/cloudflare.js";
 
@@ -19,6 +21,19 @@ export const __VideosToken: symbol = globalThis.Symbol("Videos");
 export const abandon = {
   async call(upload: R2Upload, deps: { Videos: Videos }): globalThis.Promise<void> {
     return deps.Videos.abortUpload(upload);
+  },
+};
+
+export const uploads = {
+  async queue_uploads_0(m: R2Upload, deps: {}): globalThis.Promise<QueueResult> {
+    return QueueResult.Ack;
+  },
+};
+
+export const intake = {
+  async http_POST_uploads(body: R2Upload, deps: { Videos: Videos }): globalThis.Promise<HttpResult<string>> {
+    const __r0 = await deps.Videos.abortUpload(body);
+    return HttpResult.Created("aborted");
   },
 };
 
