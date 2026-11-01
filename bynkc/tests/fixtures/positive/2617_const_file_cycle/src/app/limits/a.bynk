@@ -1,0 +1,28 @@
+---
+#2617: the two files of one commons import each other, through constants
+(`C` names `b.bynk`'s `B`, which names `a.bynk`'s `A`) and through functions.
+Each constant emits as a hoisted, cached function, so whichever module
+evaluates first can still read the other's constants.
+---
+commons app.limits
+
+const A: Int = 1
+const C: Int = B
+const Maybe: Option[Int] = Some(A)
+
+// Calls `b.bynk`'s function, which reads this file's constants.
+fn total() -> Int {
+  fromB() + C
+}
+
+fn label() -> String {
+  "A is \(A), C is \(C)"
+}
+
+fn maybeOr(fallback: Int) -> Int {
+  if Maybe is Some(n) {
+    n
+  } else {
+    fallback
+  }
+}

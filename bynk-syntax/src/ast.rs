@@ -777,7 +777,8 @@ pub struct EmbedDecl {
 /// rejects anything else (`bynk.resolve.bad_const_initialiser`), a name that
 /// is not upper-camel (`bynk.resolve.const_name_case`) and constants whose
 /// initialisers refer to each other in a cycle (`bynk.resolve.const_cycle`).
-/// Emitted as an exported TypeScript `const`.
+/// Emitted as an exported, hoisted TypeScript function that caches the value;
+/// each reference is a call.
 #[derive(Debug, Clone)]
 pub struct ConstDecl {
     pub name: Ident,

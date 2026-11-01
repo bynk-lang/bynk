@@ -978,36 +978,6 @@ pub fn build_unit_table(
         }
         out.extend(errors.into_iter().map(|e| (parsed[i].identity_path(), e)));
     }
-    // #2617: constants that name each other across files make the files'
-    // modules import each other, so one would read a constant before it is
-    // defined. A unit's constants are complete here, after the pass above.
-    if indices.len() > 1 && !table.consts.is_empty() {
-        let files: Vec<(String, Vec<&ConstDecl>)> = indices
-            .iter()
-            .map(|&i| {
-                let consts = parsed[i]
-                    .items()
-                    .iter()
-                    .filter_map(|item| match item {
-                        CommonsItem::Const(c) => Some(c),
-                        _ => None,
-                    })
-                    .collect();
-                // Shown with `/` on every platform, so the diagnostic reads
-                // the same on Windows.
-                let shown = parsed[i]
-                    .source_path()
-                    .components()
-                    .map(|c| c.as_os_str().to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("/");
-                (shown, consts)
-            })
-            .collect();
-        for (k, err) in crate::consts::file_cycle_errors(&files, &table.consts) {
-            out.push((parsed[indices[k]].identity_path(), err));
-        }
-    }
     // #1925: a service, agent or provider shares one namespace with the
     // unit's functions, assets, types and events (and with each other) — they
     // are all one scope of the emitted TypeScript module, so a shared name
@@ -1368,7 +1338,7 @@ pub fn build_file_decl_index(indices: &[usize], parsed: &[ParsedFile]) -> FileDe
                         .entry(e.name.name.clone())
                         .or_insert_with(|| path.clone());
                 }
-                // #2617: a constant is an exported `const` of its file, in the
+                // #2617: a constant is an exported function of its file, in the
                 // function namespace, imported like an embed.
                 CommonsItem::Const(c) => {
                     idx.fns

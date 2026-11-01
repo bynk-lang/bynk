@@ -450,10 +450,9 @@ pub(crate) fn emit_project(
             ));
         }
     }
-    // #2617: each constant is an exported `const`, after the types (its
-    // initialiser may construct one) and before the functions, in dependency
-    // order. A unit that `uses` this one, or a sibling file, imports it like
-    // a function (`record_name_ref`).
+    // #2617: each constant is an exported, hoisted function, after the types
+    // and before the functions. A unit that `uses` this one, or a sibling
+    // file, imports it like a function (`record_name_ref`).
     body.extend(emit_consts(commons, ctx));
     for item in &commons.commons.items {
         if let CommonsItem::Fn(f) = item
@@ -5589,7 +5588,10 @@ impl<'a> LowerCtx<'a> {
         }
         let mut pre = Pre::new();
         let lowered = pre.lower(value, self);
-        if is_simple_is_receiver(value) {
+        // #2617: a chain rooted at a constant lowers to a call (`Name()`),
+        // which `value_text_for_is` cannot render, so it is lifted to a temp
+        // like any other complex receiver.
+        if is_simple_is_receiver(value) && !self.roots_at_const(value) {
             return pre.finish(lowered);
         }
         let tmp = self.fresh();
@@ -5667,6 +5669,26 @@ impl<'a> LowerCtx<'a> {
     /// and the value-position `if` IIFE guarantees the temp exists before this
     /// is called for complex receivers; `value_text_for_is` panics if it does
     /// not (#1668).
+    /// #2617: the constant `e` names, when the checker resolved this bare
+    /// name to one (`Callee::Const`) rather than to a local of the same name.
+    pub(crate) fn const_ref<'e>(&self, e: &'e Expr) -> Option<&'e str> {
+        match (&e.kind, self.commons().callee(e.id)) {
+            (ExprKind::Ident(id), Some(bynk_check::checker::Callee::Const(_))) => {
+                Some(id.name.as_str())
+            }
+            _ => None,
+        }
+    }
+    /// #2617: whether a simple `is` receiver (an ident or a field-access
+    /// chain ending at one) starts at a constant.
+    fn roots_at_const(&self, value: &Expr) -> bool {
+        match &value.kind {
+            ExprKind::Ident(_) => self.const_ref(value).is_some(),
+            ExprKind::FieldAccess { receiver, .. } => self.roots_at_const(receiver),
+            ExprKind::Paren(inner) => self.roots_at_const(inner),
+            _ => false,
+        }
+    }
     fn is_receiver_text(&self, value: &Expr) -> String {
         if let Some(t) = self.is_receiver_temps.get(&value.span) {
             return t.clone();

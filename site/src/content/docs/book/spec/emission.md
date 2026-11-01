@@ -147,20 +147,30 @@ that no Bynk name can collide with it. The emitted code MUST compile under
 ### §7.3.1a Named constants {#731a-named-constants}
 
 A constant (`const Name: T = e`, [§5.12b](/book/spec/static-semantics/#constants))
-emits as an exported TypeScript `const` of its declaring module, typed by its
-annotation and initialised with `e` lowered as an ordinary expression:
+emits as an exported, hoisted function of its declaring module that returns its
+value, typed by its annotation. The value is computed from `e`, lowered as an
+ordinary expression, on the first call and cached in a module-level `var`:
 
 ```typescript
-export const MaxRetries: number = 3;
-export const DefaultPage: Page = { size: PageSize, offset: 0 };
-export const Port: Port = (8080 as Port);
+var __const_MaxRetries: { v: number } | undefined;
+export function MaxRetries(): number { return (__const_MaxRetries ??= { v: 3 }).v; }
+
+var __const_DefaultPage: { v: Page } | undefined;
+export function DefaultPage(): Page { return (__const_DefaultPage ??= { v: { size: PageSize(), offset: 0 } }).v; }
 ```
 
-A module's constants come after its types, so an initialiser may construct
-one, and before its functions. Among themselves they are ordered so each comes
-after every constant of the same file its initialiser names; a constant of a
-sibling file or a used commons is imported, as a function is. A module that
-declares no constant emits exactly as before.
+Every reference to a constant is a call, `Name()`: in its own file, in a
+sibling file or a unit that `uses` it (which import it under the same name, as
+they import a function), in another constant's initialiser and in a `suite`
+case. The `{ v }` box keeps a value that is falsy or `null` cached, so `e` runs
+at most once.
+
+A function declaration and a `var` are both hoisted, so a constant can be read
+before its module has evaluated. When the files of a unit import each other in
+a cycle, through a constant, a function or a type, the order in which ES
+modules evaluate cannot reach a constant before it is initialised. A module's
+constants come after its types and before its functions, in declaration order.
+A module that declares no constant emits exactly as before.
 
 ### §7.3.2 Expressions
 

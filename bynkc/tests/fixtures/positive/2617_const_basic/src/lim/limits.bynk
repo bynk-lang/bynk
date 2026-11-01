@@ -1,7 +1,7 @@
 ---
 #2617: named constants of several kinds, one referring to another, used in
-functions. Each is emitted as an exported `const`, after the types and before
-the functions, in dependency order.
+functions. Each is emitted as a hoisted, cached function, after the types and
+before the functions, in declaration order; every reference is a call.
 ---
 commons lim.limits
 
@@ -12,7 +12,7 @@ const Ratio: Float = 0.5
 const Enabled: Bool = true
 const Floor: Int = -10
 const Timeout: Duration = 30.seconds
-// Refers to `PageSize`, declared below it: emitted after it.
+// Refers to `PageSize`, declared below it: order does not matter.
 const DefaultPage: Page = Page { size: PageSize, offset: 0 }
 const PageSize: Int = 50
 const Primary: Colour = Colour.Red

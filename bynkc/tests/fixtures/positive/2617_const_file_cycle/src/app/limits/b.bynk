@@ -1,0 +1,12 @@
+commons app.limits
+
+const B: Int = A
+// Falsy values stay cached: each is computed once, on its first read.
+const Zero: Int = 0
+const Off: Bool = false
+const Nothing: Option[Int] = None
+
+// Reads `a.bynk`'s constant and calls its function.
+fn fromB() -> Int {
+  A + B + maybeOr(Zero)
+}

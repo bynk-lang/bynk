@@ -437,6 +437,12 @@ pub(crate) enum TsStmtKind {
         name: TsBindingName,
         ty: Option<TsType>,
         init: Option<TsExpr>,
+        /// #2617: printed `var` rather than `let`. A module-level `var` is
+        /// hoisted and reads as `undefined` before its statement runs, where
+        /// a `let` would throw (its temporal dead zone), so a hoisted
+        /// function may read it while another module of an import cycle is
+        /// still evaluating. Set only by [`TsStmt::var_stmt`].
+        hoisted: bool,
     },
     /// An expression used as a whole statement (a bare call, e.g.).
     ExprStmt(TsExpr),
@@ -855,7 +861,32 @@ impl TsStmt {
         span: Option<Span>,
     ) -> Self {
         Self {
-            kind: TsStmtKind::Let { name, ty, init },
+            kind: TsStmtKind::Let {
+                name,
+                ty,
+                init,
+                hoisted: false,
+            },
+            span,
+            nested_map: None,
+            no_blank_before: false,
+            nested_map_source_id: 0,
+        }
+    }
+
+    /// #2617: `var name: ty;` — a hoisted binding with no initialiser, which
+    /// reads as `undefined` (rather than throwing) before its statement runs.
+    /// The cache behind each constant's function (`bynk-emit`'s
+    /// `emit_consts`), which an import cycle may call before the declaring
+    /// module has evaluated.
+    pub fn var_stmt(name: impl Into<String>, ty: TsType, span: Option<Span>) -> Self {
+        Self {
+            kind: TsStmtKind::Let {
+                name: TsBindingName::Ident(name.into()),
+                ty: Some(ty),
+                init: None,
+                hoisted: true,
+            },
             span,
             nested_map: None,
             no_blank_before: false,

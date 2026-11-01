@@ -633,6 +633,14 @@ pub enum Callee {
         op: String,
         role: QueryRole,
     },
+    /// #2617: a bare name that resolves to a `const` (one of this unit's, a
+    /// sibling file's or a `uses`d commons'), not a local of the same name.
+    /// Not call-shaped in the source, but emitted as one: each constant is a
+    /// hoisted, cached function (`Name()`), so the lowering must know which
+    /// idents name a constant, and only the checker's scope walk can tell a
+    /// constant from a local that shadows it. Recorded like the bare
+    /// `HttpResult` variant reference (`Callee::Intrinsic`).
+    Const(String),
 }
 
 /// Whether a [`Callee::Query`] call returns another `Query[T]` (chainable)
@@ -4346,7 +4354,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     );
                     check_http_variant(id.span, v, &[], expected, ctx)
                 } else {
-                    check_ident(id, expected, ctx)
+                    check_ident(expr.id, id, expected, ctx)
                 }
             } else if ctx.lookup(id.name.as_str()).is_none()
                 && let Some(qv) = queue_variant(&id.name)
@@ -4363,7 +4371,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 );
                 check_queue_variant(id.span, qv, &[], ctx)
             } else {
-                check_ident(id, expected, ctx)
+                check_ident(expr.id, id, expected, ctx)
             }
         }
         ExprKind::Paren(inner) => type_of(inner, expected, ctx),

@@ -21,19 +21,19 @@ export const Quantity = {
 
 export const api = {
   async http_GET_limit(deps: {}): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok(MaxItems);
+    return HttpResult.Ok(MaxItems());
   },
   async http_GET_greeting(deps: {}): globalThis.Promise<HttpResult<string>> {
-    return HttpResult.Ok(Welcome);
+    return HttpResult.Ok(Welcome());
   },
   async http_GET_pages(deps: {}): globalThis.Promise<HttpResult<number>> {
-    return HttpResult.Ok(pages() + DefaultPage.offset);
+    return HttpResult.Ok(pages() + DefaultPage().offset);
   },
   async http_GET_batch(deps: {}): globalThis.Promise<HttpResult<Quantity>> {
-    return HttpResult.Ok(SmallBatch);
+    return HttpResult.Ok(SmallBatch());
   },
   async http_GET_tier(deps: {}): globalThis.Promise<HttpResult<string>> {
-    switch (Preferred.tag) {
+    switch (Preferred().tag) {
       case "Gold": {
         return HttpResult.Ok("gold");
       }

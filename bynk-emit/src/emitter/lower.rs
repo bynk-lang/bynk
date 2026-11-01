@@ -5743,6 +5743,12 @@ fn emit_if_tail(
 }
 
 fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
+    // #2617: a constant is a hoisted, cached function (`emit_consts`), so a
+    // name the checker resolved to one reads it with a call. First, since the
+    // checker has already ruled out a local or any other meaning of the name.
+    if let Some(name) = cx.const_ref(e) {
+        return format!("{}()", ts_ident(name));
+    }
     // v0.116: inside a `transition` predicate, the contextual `old`/`new` idents
     // are the pre-/post-commit state records, lowered to their JS names (`new` is
     // reserved, so both are renamed). Field access `old.<f>` reads off the record.

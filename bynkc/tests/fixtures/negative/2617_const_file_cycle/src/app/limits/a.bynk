@@ -1,7 +1,0 @@
-commons app.limits
-
-// #2617: no constant depends on itself, but `a.bynk` names `b.bynk`'s
-// constant and `b.bynk` names `a.bynk`'s, so the two modules would import
-// each other.
-const A: Int = 1
-const C: Int = B
