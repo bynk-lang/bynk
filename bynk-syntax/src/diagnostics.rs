@@ -1114,6 +1114,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "The formatter's output does not re-parse to the same program, so it leaves the file unchanged.",
     ),
     dg(
+        "bynk.generics.ambiguous_instantiation",
+        "A generic function with an `Ord` bound is used as a value, and its type arguments cannot be determined from the type expected at that reference; annotate the expected type (constrained-generics slice 1).",
+        &["fn_decl"],
+    ),
+    dg(
         "bynk.generics.bound_on_capability_op",
         "A generic capability operation's type parameter carries a bound; operations take no bounds yet.",
         &["capability_op"],
@@ -1148,6 +1153,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A type parameter is compared with `==`/`!=`, or passed to an `Eq`-bounded parameter of another generic, but is not declared `Eq` (`[T: Eq]`, or `where A: Eq` for a receiver type's parameter). The diagnostic carries a machine-applicable fix (ADR 0430, amended by constrained-generics slice 0).",
         &["fn_decl"],
     ),
+    dg(
+        "bynk.generics.missing_ord_bound",
+        "A type parameter is ordered (`<`, `<=`, `>`, `>=`, an ordering kernel key), or passed to an `Ord`-bounded parameter of another generic, but is not declared `Ord` (`[T: Ord]`, or `where A: Ord` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Ord`, replacing an existing `Eq`, which `Ord` implies (constrained-generics slice 1).",
+        &["fn_decl"],
+    ),
+    warn(dg(
+        "bynk.generics.redundant_eq_bound",
+        "A type parameter is declared both `Eq` and `Ord`; `Ord` implies `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slice 1, warning).",
+        &["fn_decl"],
+    )),
     dg(
         "bynk.generics.recursive_generic_at_boundary",
         "A recursive generic record (one that transitively contains itself, through any wrapper or generic argument) appears at a boundary; it has no finite set of monomorphised codecs, so it is not yet boundary-serialisable (ADR 0197).",
@@ -2759,6 +2774,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `.of` constructor was given an argument of the wrong base type.",
     ),
     dg(
+        "bynk.types.derives_automatic",
+        "A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1).",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.types.derives_field_not_orderable",
+        "A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1).",
+        &["type_decl"],
+    ),
+    dg(
         "bynk.types.duplicate_literal_arm",
         "A `match` has two arms for the same literal value.",
         &["match_arm"],
@@ -2901,7 +2926,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.key_not_orderable",
-        "A `sortBy`/`min`/`max` key function does not return an orderable type (`Int`, `Float`, `String`, `Duration`, or `Instant`).",
+        "A `sortBy`/`min`/`max` key function does not return an orderable type. For a `List` that is any `Ord` type; a storage `Query` keeps `Int`, `Float`, `String`, `Duration`, `Instant` and refined types over them.",
         &[],
     ),
     dg(
@@ -2967,6 +2992,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.not_comparable",
         "A value compared with `==`/`!=` contains a function, `Effect`, or `Query` somewhere inside it — those have no value equality, so the type is not equality-supporting (type-system §2.3.5, #1652).",
+    ),
+    d(
+        "bynk.types.not_orderable",
+        "A value is ordered (`<`, `<=`, `>`, `>=`), or passed to an `Ord`-bounded parameter, but its type is not `Ord`. `Int`, `Float`, `String`, `Duration`, `Instant`, `Bytes`, `Option`/`List` of an orderable type, refined types over those, and types that declare `derives Ord` are; adding `derives Ord` is offered as a fix that is never applied automatically, because it makes declaration order significant (constrained-generics slice 1).",
     ),
     dg(
         "bynk.types.ok_value_mismatch",

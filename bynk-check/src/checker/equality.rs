@@ -65,13 +65,20 @@ use crate::locals::LocalsSink;
 use crate::requirements::RequirementSink;
 use crate::resolver::ResolvedCommons;
 
-/// The constraint names a bound may use. Slice 0 admits only `Eq`; later slices
-/// of the constrained-generics track add `Ord`, `Key` and `Codable`.
-pub(crate) const CONSTRAINTS: &[&str] = &["Eq"];
+/// The constraint names a bound may use. Slice 0 admitted only `Eq`; slice 1
+/// adds `Ord`, and later slices of the constrained-generics track add `Key` and
+/// `Codable`.
+pub(crate) const CONSTRAINTS: &[&str] = &["Eq", "Ord"];
 
-/// Whether `bounds` includes `Eq`.
+/// Whether `bounds` includes `Ord`.
+pub(crate) fn has_ord(bounds: &[Ident]) -> bool {
+    bounds.iter().any(|b| b.name == "Ord")
+}
+
+/// Whether `bounds` grants `Eq`: an explicit `Eq`, or `Ord`, which implies it
+/// (constrained-generics slice 1, DECISION C).
 pub(crate) fn has_eq(bounds: &[Ident]) -> bool {
-    bounds.iter().any(|b| b.name == "Eq")
+    bounds.iter().any(|b| b.name == "Eq" || b.name == "Ord")
 }
 
 /// Every bound name in `bounds` that is not a known constraint, as an
@@ -90,14 +97,42 @@ pub(crate) fn unknown_constraints(bounds: &[Ident], param: &str) -> Vec<CompileE
                 ),
             )
             .with_note(format!(
-                "the only constraint is `{}`",
+                "the constraints are `{}`",
                 CONSTRAINTS.join("`, `")
             ))
         })
         .collect()
 }
 
-/// Where a `missing_eq_bound` fix inserts its bound, for one function.
+/// `T: Eq + Ord`: `Ord` implies `Eq` (DECISION C), so the `Eq` is redundant. A
+/// warning whose fix removes it.
+pub(crate) fn redundant_eq(bounds: &[Ident], param: &str) -> Option<CompileError> {
+    if !has_ord(bounds) {
+        return None;
+    }
+    let i = bounds.iter().position(|b| b.name == "Eq")?;
+    let eq = &bounds[i];
+    let remove = if i + 1 < bounds.len() {
+        Span::new_in(eq.span.file, eq.span.start, bounds[i + 1].span.start)
+    } else {
+        Span::new_in(eq.span.file, bounds[i - 1].span.end, eq.span.end)
+    };
+    Some(
+        CompileError::new(
+            "bynk.generics.redundant_eq_bound",
+            eq.span,
+            format!("`{param}: Eq` is redundant: `Ord` implies `Eq`"),
+        )
+        .with_suggestion(
+            "remove `Eq`",
+            vec![(remove, String::new())],
+            Applicability::MachineApplicable,
+        ),
+    )
+}
+
+/// Where a `missing_eq_bound` / `missing_ord_bound` fix edits the bounds, for one
+/// function.
 #[derive(Default, Clone)]
 struct FixSite {
     /// An own type parameter: the end of its name, or of its last bound.
@@ -105,33 +140,47 @@ struct FixSite {
     /// A receiver parameter already named in the `where` clause: the end of its
     /// entry.
     where_entry: HashMap<String, Span>,
+    /// The span of an explicit `Eq` bound on a parameter (own or in a `where`
+    /// entry), which a missing `Ord` replaces (DECISION C: `Ord` implies `Eq`).
+    eq_bound: HashMap<String, Span>,
     /// The end of the last `where` entry, when there is a clause.
     where_end: Option<Span>,
     /// The end of the return type, where a new clause goes.
     ret_end: Option<Span>,
 }
 
-/// The equality bounds in scope while a body is checked: which type parameters
-/// are declared `Eq`, and where a missing one would be added. Empty outside a
-/// generic function.
+/// The constraint bounds in scope while a body is checked: which type parameters
+/// are declared `Eq` (or `Ord`, which implies it) and which `Ord`, and where a
+/// missing bound would be added. Empty outside a generic function.
 #[derive(Default, Clone)]
 pub(crate) struct EqScope {
+    /// Parameters that support `==`: declared `Eq` or `Ord`.
     declared: HashSet<String>,
+    /// Parameters declared `Ord`.
+    ord: HashSet<String>,
     /// Shared by every clone (a function's contract clauses and its body check
     /// in separate contexts), so a parameter is reported once per function.
     reported: Rc<RefCell<HashSet<String>>>,
+    reported_ord: Rc<RefCell<HashSet<String>>>,
     fix: FixSite,
 }
 
 impl EqScope {
-    /// The scope of `f`'s body: its own `T: Eq` bounds, `where A: Eq` entries,
-    /// and the bounds its receiver type declares on its own parameters.
+    /// The scope of `f`'s body: its own `T: Eq` / `T: Ord` bounds, `where A: C`
+    /// entries, and the bounds its receiver type declares on its own parameters.
     pub(crate) fn for_fn(f: &FnDecl, input: &ResolvedCommons) -> Self {
         let mut declared = HashSet::new();
+        let mut ord = HashSet::new();
         let mut fix = FixSite::default();
         for tp in &f.type_params {
             if has_eq(&tp.bounds) {
                 declared.insert(tp.name.name.clone());
+            }
+            if has_ord(&tp.bounds) {
+                ord.insert(tp.name.name.clone());
+            }
+            if let Some(eq) = tp.bounds.iter().find(|b| b.name == "Eq") {
+                fix.eq_bound.insert(tp.name.name.clone(), eq.span);
             }
             let end = tp.bounds.last().map_or(tp.name.span, |b| b.span);
             fix.own.insert(
@@ -145,6 +194,12 @@ impl EqScope {
         for wb in &f.where_bounds {
             if has_eq(&wb.bounds) {
                 declared.insert(wb.param.name.clone());
+            }
+            if has_ord(&wb.bounds) {
+                ord.insert(wb.param.name.clone());
+            }
+            if let Some(eq) = wb.bounds.iter().find(|b| b.name == "Eq") {
+                fix.eq_bound.insert(wb.param.name.clone(), eq.span);
             }
             let end = wb.span;
             fix.where_entry.insert(
@@ -164,30 +219,55 @@ impl EqScope {
                 if has_eq(&tp.bounds) {
                     declared.insert(tp.name.name.clone());
                 }
+                if has_ord(&tp.bounds) {
+                    ord.insert(tp.name.name.clone());
+                }
             }
         }
         EqScope {
             declared,
+            ord,
             reported: Rc::default(),
+            reported_ord: Rc::default(),
             fix,
         }
     }
 
-    /// The edit that declares `Eq` on `param`.
-    pub(crate) fn fix_for(&self, param: &str) -> Option<(String, Vec<(Span, String)>)> {
-        let msg = format!("declare `{param}: Eq`");
+    /// Whether `param` is declared `Ord` here.
+    pub(crate) fn is_ord(&self, param: &str) -> bool {
+        self.ord.contains(param)
+    }
+
+    /// The edit that declares `constraint` (`Eq` or `Ord`) on `param`. A missing
+    /// `Ord` on a parameter already declared `Eq` replaces the `Eq`, which `Ord`
+    /// implies.
+    pub(crate) fn fix_for(
+        &self,
+        param: &str,
+        constraint: &str,
+    ) -> Option<(String, Vec<(Span, String)>)> {
+        let msg = format!("declare `{param}: {constraint}`");
+        if constraint == "Ord"
+            && let Some(at) = self.fix.eq_bound.get(param)
+        {
+            return Some((msg, vec![(*at, "Ord".to_string())]));
+        }
         if let Some((at, bounded)) = self.fix.own.get(param) {
-            let text = if *bounded { " + Eq" } else { ": Eq" };
-            return Some((msg, vec![(*at, text.to_string())]));
+            let text = if *bounded {
+                format!(" + {constraint}")
+            } else {
+                format!(": {constraint}")
+            };
+            return Some((msg, vec![(*at, text)]));
         }
         if let Some(at) = self.fix.where_entry.get(param) {
-            return Some((msg, vec![(*at, " + Eq".to_string())]));
+            return Some((msg, vec![(*at, format!(" + {constraint}"))]));
         }
         if let Some(at) = self.fix.where_end {
-            return Some((msg, vec![(at, format!(", {param}: Eq"))]));
+            return Some((msg, vec![(at, format!(", {param}: {constraint}"))]));
         }
         let at = self.fix.ret_end?;
-        Some((msg, vec![(at, format!(" where {param}: Eq"))]))
+        Some((msg, vec![(at, format!(" where {param}: {constraint}"))]))
     }
 }
 
@@ -218,7 +298,43 @@ pub(crate) fn require_eq(ctx: &mut Ctx, ty: TyId, span: Span, site: &str) -> boo
         .with_note(format!(
             "a type parameter that is compared must say so: declare `{param}: Eq`"
         ));
-        if let Some((msg, edits)) = ctx.eq.fix_for(&param) {
+        if let Some((msg, edits)) = ctx.eq.fix_for(&param, "Eq") {
+            err = err.with_suggestion(msg, edits, Applicability::MachineApplicable);
+        }
+        ctx.errors.push(err);
+    }
+    false
+}
+
+/// Require `Ord` of every type parameter in `ty` that the enclosing function has
+/// not declared it for. Reports `bynk.generics.missing_ord_bound`, once per
+/// parameter per function, and returns `false` when any was missing. The
+/// structural half of the requirement (is the concrete part orderable?) is
+/// [`super::ordering::check_ord`].
+pub(crate) fn require_ord_vars(ctx: &mut Ctx, ty: TyId, span: Span, site: &str) -> bool {
+    let mut vars = HashSet::new();
+    collect_vars(ty, ctx.tys, &mut vars);
+    let mut missing: Vec<String> = vars
+        .into_iter()
+        .filter(|v| ctx.type_vars.contains(v) && !ctx.eq.ord.contains(v))
+        .collect();
+    if missing.is_empty() {
+        return true;
+    }
+    missing.sort();
+    for param in missing {
+        if !ctx.eq.reported_ord.borrow_mut().insert(param.clone()) {
+            continue;
+        }
+        let mut err = CompileError::new(
+            "bynk.generics.missing_ord_bound",
+            span,
+            format!("{site}, but type parameter `{param}` has no `Ord` bound"),
+        )
+        .with_note(format!(
+            "a type parameter that is ordered must say so: declare `{param}: Ord`"
+        ));
+        if let Some((msg, edits)) = ctx.eq.fix_for(&param, "Ord") {
             err = err.with_suggestion(msg, edits, Applicability::MachineApplicable);
         }
         ctx.errors.push(err);
@@ -258,7 +374,7 @@ pub(crate) fn record_compared(ty: TyId, tys: &Types) {
     });
 }
 
-fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
+pub(crate) fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
     match &*tys.get(ty) {
         Ty::Var(name) => {
             out.insert(name.clone());

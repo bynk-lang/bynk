@@ -2494,6 +2494,7 @@ pub fn register_call_record_types(
                 name.clone(),
                 Arc::new(TypeDecl {
                     derives: Vec::new(),
+                    derives_kw: None,
                     type_params: Vec::new(),
                     name: Ident {
                         name,
@@ -3481,6 +3482,7 @@ pub fn check_history_binding(
         state_name.clone(),
         Arc::new(TypeDecl {
             derives: Vec::new(),
+            derives_kw: None,
             type_params: Vec::new(),
             name: Ident {
                 name: state_name.clone(),
@@ -3528,6 +3530,7 @@ pub fn check_history_binding(
         call_name.clone(),
         Arc::new(TypeDecl {
             derives: Vec::new(),
+            derives_kw: None,
             type_params: Vec::new(),
             name: Ident {
                 name: call_name.clone(),
@@ -3610,6 +3613,7 @@ pub fn check_history_binding(
         step_name.clone(),
         Arc::new(TypeDecl {
             derives: Vec::new(),
+            derives_kw: None,
             type_params: Vec::new(),
             name: Ident {
                 name: step_name.clone(),

@@ -858,7 +858,10 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
     // (`q == 0` against `Int where Positive` would become a
     // `literal_violates` error), a new rejection this does not intend (review
     // of #1696).
-    let eq = matches!(op, BinOp::Eq | BinOp::NotEq);
+    let eq = matches!(
+        op,
+        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq
+    );
     let (lt, rt) = if eq && needs_expected_type(lhs) && !needs_expected_type(rhs) {
         let rt = type_of(rhs, None, ctx);
         let lt = type_of(lhs, rt, ctx);
@@ -957,41 +960,57 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
             }
         }
         BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
-            if lt_base != rt_base || lt_base.is_none() {
+            // Constrained generics slice 1: the operators order any `Ord` type
+            // (both operands the same). A base-typed pair keeps the original
+            // rule and its diagnostics; `Bytes`, `Bool` and every non-base
+            // operand take the `Ord` path below.
+            let plain_pair = lt_base.is_some()
+                && lt_base == rt_base
+                && lt_base != Some(BaseType::Bytes)
+                && lt_base != Some(BaseType::Bool);
+            if !plain_pair {
                 if numeric_mix(lt_base, rt_base) {
                     push_no_numeric_coercion(op, span, lt, rt, ctx);
                     return None;
                 }
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.type_mismatch",
+                if lt_base == Some(BaseType::Bool) && rt_base == Some(BaseType::Bool) {
+                    ctx.errors.push(CompileError::new(
+                        "bynk.types.type_mismatch",
+                        span,
+                        format!(
+                            "operator `{}` is only defined on `Ord` types, not `{}`",
+                            op.name(),
+                            lt.display(tys)
+                        ),
+                    ));
+                    return None;
+                }
+                if !compatible(lt, rt, tys) && !compatible(rt, lt, tys) {
+                    let same = if lt_base.is_some() && rt_base.is_some() {
+                        "base type"
+                    } else {
+                        "type"
+                    };
+                    ctx.errors.push(CompileError::new(
+                        "bynk.types.type_mismatch",
+                        span,
+                        format!(
+                            "operator `{}` requires both operands to have the same {same}; got `{}` and `{}`",
+                            op.name(),
+                            lt.display(tys),
+                            rt.display(tys)
+                        ),
+                    ));
+                    return None;
+                }
+                if !super::ordering::check_ord(
+                    ctx,
+                    lt,
                     span,
-                    format!(
-                        "operator `{}` requires both operands to have the same base type; got `{}` and `{}`",
-                        op.name(),
-                        lt.display(tys),
-                        rt.display(tys)
-                    ),
-                ));
-                return None;
-            }
-            if !matches!(
-                lt_base,
-                Some(BaseType::Int)
-                    | Some(BaseType::String)
-                    | Some(BaseType::Float)
-                    | Some(BaseType::Duration)
-                    | Some(BaseType::Instant)
-            ) {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.type_mismatch",
-                    span,
-                    format!(
-                        "operator `{}` is only defined on `Int`, `Float`, `Duration`, `Instant`, and `String`, not `{}`",
-                        op.name(),
-                        lt.display(tys)
-                    ),
-                ));
-                return None;
+                    &super::ordering::OrdSite::Operator(op.name()),
+                ) {
+                    return None;
+                }
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }

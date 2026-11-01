@@ -58,6 +58,10 @@ pub enum Applicability {
     /// The fix contains placeholder text a human must complete; never
     /// auto-applied.
     HasPlaceholders,
+    /// The fix is a complete edit but changes meaning the author must choose
+    /// (`derives Ord` makes declaration order significant): offered as a quick
+    /// fix, never taken by a fix-all or `--fix`.
+    MaybeIncorrect,
 }
 
 /// Severity classification for a [`CompileError`]. Mirrors LSP severity levels

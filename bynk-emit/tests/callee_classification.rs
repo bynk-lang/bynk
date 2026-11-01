@@ -77,7 +77,7 @@ commons demo {
     assert!(
         callees
             .iter()
-            .any(|c| matches!(c, Callee::Fn(f) if f.name.display() == "double")),
+            .any(|c| matches!(c, Callee::Fn(f, _) if f.name.display() == "double")),
         "expected a Callee::Fn(\"double\"), got {callees:?}"
     );
     let ts = emit(src);
@@ -245,7 +245,7 @@ commons demo {
     assert!(
         callees
             .iter()
-            .any(|c| matches!(c, Callee::Method(f) if f.name.display().ends_with("shiftX"))),
+            .any(|c| matches!(c, Callee::Method(f, _) if f.name.display().ends_with("shiftX"))),
         "expected a Callee::Method(\"Point.shiftX\"), got {callees:?}"
     );
     let ts = emit(src);

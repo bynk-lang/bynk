@@ -169,10 +169,11 @@ impl<'a> Parser<'a> {
         // is a contextual word (an ordinary identifier everywhere else), read
         // only here, after the body.
         let mut derives = Vec::new();
+        let mut derives_kw = None;
         let mut end_span = end_span;
         if matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "derives")
         {
-            self.bump();
+            derives_kw = self.bump().map(|t| t.span);
             derives = self.parse_derive_list()?;
             end_span = derives.last().map_or(end_span, |d| d.span);
         }
@@ -181,6 +182,7 @@ impl<'a> Parser<'a> {
             type_params,
             body,
             derives,
+            derives_kw,
             documentation: None,
             span: kw.span.merge(end_span),
             trivia: Trivia::default(),
