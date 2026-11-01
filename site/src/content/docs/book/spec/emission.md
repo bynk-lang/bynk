@@ -150,6 +150,7 @@ that no Bynk name can collide with it. The emitted code MUST compile under
 |---|---|
 | `if … else …` | a conditional / `if` |
 | `match` | a `switch` on `.tag`, payload fields bound as `const` |
+| `match` with a record pattern, a guard, or a nested refutable pattern | a sequence of `if` blocks, one per arm: each tests its refutable sub-patterns (a record pattern tests each refutable field against `scrutinee.field`), binds names as `const`, then runs the guard and body; a record pattern adds no tag test |
 | admitted literal | an inline brand cast `(literal as T)` ([§6.4](/book/spec/type-system/#64-admission--construction); ADR 0182) |
 | float literal | the source **lexeme** verbatim (`1e10` does not normalise) |
 | interpolated string | a **template literal**: chunks as escaped text (backslash, backtick, and `$` escaped), each `\(e)` hole as `${String(<e>)}` (ADR 0075) |

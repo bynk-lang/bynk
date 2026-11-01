@@ -3264,6 +3264,10 @@ fn ambiguous_type_error(span: Span, message: String, name: &str) -> CompileError
 enum MatchKind {
     Variant,
     Literal(BaseType),
+    /// #2641: a record scrutinee, matched by record patterns. Only taken when
+    /// an arm has a record pattern; a `match` on a record with none keeps its
+    /// `match_non_sum_discriminant` error.
+    Record,
 }
 
 /// The literal-matchable base of a scrutinee type, if any: a bare `Int`/
@@ -3349,6 +3353,18 @@ pub(crate) fn check_match(
         MatchKind::Variant
     } else if let Some(base) = literal_base_of(disc_ty, tys) {
         MatchKind::Literal(base)
+    } else if matches!(
+        &*tys.get(disc_ty),
+        Ty::Named {
+            kind: NamedKind::Record,
+            ..
+        }
+    ) && arms.iter().any(|a| {
+        pattern_alternatives(&a.pattern)
+            .iter()
+            .any(|p| matches!(p, Pattern::Record { .. }))
+    }) {
+        MatchKind::Record
     } else {
         ctx.errors.push(CompileError::new(
             "bynk.types.match_non_sum_discriminant",
@@ -3388,6 +3404,8 @@ pub(crate) fn check_match(
         // hints and locals entries a `let` gets (a `match` arm's do not).
         if let_else && index == 0 && pattern_ok {
             record_let_else_bindings(arm, ctx);
+        } else if pattern_ok {
+            record_record_pattern_locals(arm, ctx);
         }
         let mut duplicate_reported = false;
         // Structural duplicate detection over unguarded, refutable patterns —
@@ -3450,7 +3468,9 @@ pub(crate) fn check_match(
                 .with_note("remove the arm, or move it above the arm that covers it")
             });
         }
-        if arm.guard.is_none() {
+        // An ill-typed pattern (reported above) covers nothing: a record
+        // pattern that names the wrong type is irrefutable only on paper.
+        if arm.guard.is_none() && pattern_ok {
             covering.push(&arm.pattern);
         }
         // Guard (ADR 0169): must be `Bool`; a guarded arm never covers.
@@ -3476,7 +3496,7 @@ pub(crate) fn check_match(
             arm_types.push((t, arm.body.span()));
         }
         // An unguarded irrefutable pattern (`_` or a bare name) is a catch-all.
-        if arm.guard.is_none() && arm.pattern.is_irrefutable() {
+        if arm.guard.is_none() && arm.pattern.is_irrefutable() && pattern_ok {
             saw_wildcard = true;
         }
     }
@@ -3577,6 +3597,26 @@ pub(crate) fn check_match(
                         &witness,
                     ));
                 }
+            }
+            // #2641 (conservative, ADR 0169 D extended to records): a record
+            // pattern covers its type only when every field sub-pattern is
+            // irrefutable, and such an arm sets `saw_wildcard`. Reaching here
+            // means no arm did.
+            MatchKind::Record => {
+                ctx.errors.push(with_fill(
+                    CompileError::new(
+                        "bynk.types.non_exhaustive_match",
+                        span,
+                        format!(
+                            "non-exhaustive `match` on `{}` — no arm matches every value",
+                            disc_ty.display(tys)
+                        ),
+                    )
+                    .with_note(
+                        "a record pattern covers its type only when every field is matched irrefutably (a name or `_`); add a wildcard `_` arm for the rest",
+                    ),
+                    "_",
+                ));
             }
             MatchKind::Literal(_) => {
                 ctx.errors.push(with_fill(
@@ -3686,6 +3726,53 @@ fn record_let_else_bindings(arm: &MatchArm, ctx: &mut Ctx) {
             id.span,
             crate::locals::LocalKind::Let,
             shown,
+            arm.body.span(),
+        );
+    }
+}
+
+/// #2641: the names a record pattern binds are locals of the arm — hover shows
+/// their type and semantic tokens colour them as variables, as for a `let`.
+/// Only names under a record pattern are recorded; the other pattern forms'
+/// bindings are unchanged.
+fn record_record_pattern_locals(arm: &MatchArm, ctx: &mut Ctx) {
+    fn collect<'p>(p: &'p Pattern, under_record: bool, out: &mut Vec<&'p Ident>) {
+        match p {
+            Pattern::Binding(id) if under_record => out.push(id),
+            Pattern::Record { fields, .. } => {
+                for (name, sub) in fields {
+                    match sub {
+                        Some(sub) => collect(sub, true, out),
+                        None => out.push(name),
+                    }
+                }
+            }
+            Pattern::Variant { bindings, .. } => {
+                for b in bindings {
+                    collect(b.pattern(), under_record, out);
+                }
+            }
+            Pattern::Or(alts, _) => {
+                if let Some(first) = alts.first() {
+                    collect(first, under_record, out);
+                }
+            }
+            Pattern::Refined { inner, .. } => collect(inner, under_record, out),
+            _ => {}
+        }
+    }
+    let mut names = Vec::new();
+    collect(&arm.pattern, false, &mut names);
+    let tys = ctx.tys;
+    for id in names {
+        let Some(ty) = ctx.pattern_binding_types.get(&id.span).copied() else {
+            continue;
+        };
+        ctx.locals.record(
+            id.name.clone(),
+            id.span,
+            crate::locals::LocalKind::Let,
+            ty.display(tys),
             arm.body.span(),
         );
     }
@@ -3910,6 +3997,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                 }
             }
         }
+        Pattern::Record { .. } => check_record_pattern(pat, ty, ctx),
         // #474: an or-pattern. Each alternative is checked against the same
         // `ty` in turn — this reuses every existing per-kind check above
         // (including nested payloads) and populates `ctx.expr_types`/binds
@@ -3920,6 +4008,116 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                 check_pattern(alt, ty, ctx);
             }
             check_or_pattern_bindings(alts, ctx);
+        }
+    }
+}
+
+/// #2641: a record pattern `T { f, g: p, .. }` against scrutinee type `ty`.
+/// `T` must be a record type and the scrutinee must be that record (its type
+/// arguments, if `T` is generic, come from the scrutinee — a pattern never
+/// writes them); each listed field must exist, at most once. Shorthand fields
+/// bind a local of the field's type; `f: p` checks `p` against it.
+fn check_record_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
+    let tys = ctx.tys;
+    let Pattern::Record {
+        type_name, fields, ..
+    } = pat
+    else {
+        return;
+    };
+    let decl = ctx.input.types.get(&type_name.name).cloned();
+    let Some((decl, r)) = decl.as_ref().and_then(|d| match &d.body {
+        TypeBody::Record(r) => Some((d, r)),
+        _ => None,
+    }) else {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.types.record_pattern_on_non_record",
+                type_name.span,
+                format!(
+                    "`{}` is not a record type, so it has no record pattern",
+                    type_name.name
+                ),
+            )
+            .with_note(
+                "a record pattern names a record type; match a sum with its variants, and read an opaque or built-in value through its methods",
+            ),
+        );
+        bind_as_error(pat, ctx);
+        return;
+    };
+    ctx.refs
+        .record(type_name.span, SymbolKind::Type, &type_name.name);
+    let args = match &*tys.get(ty) {
+        Ty::Named {
+            name,
+            kind: NamedKind::Record,
+            args,
+        } if *name == type_name.name => args.clone(),
+        _ => {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.pattern_type_mismatch",
+                pat.span(),
+                format!(
+                    "record pattern `{} {{ .. }}` cannot match a value of type `{}`",
+                    type_name.name,
+                    ty.display(tys)
+                ),
+            ));
+            bind_as_error(pat, ctx);
+            return;
+        }
+    };
+    let mut seen: Vec<&str> = Vec::new();
+    for (name, sub) in fields {
+        let field_ty = r
+            .fields
+            .iter()
+            .find(|f| f.name.name == name.name)
+            .map(|f| instantiate_field_ty(decl, &args, &f.type_ref, &ctx.input.types, tys));
+        let Some(field_ty) = field_ty else {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.types.unknown_field",
+                    name.span,
+                    format!(
+                        "record type `{}` has no field `{}`",
+                        type_name.name, name.name
+                    ),
+                )
+                .with_note("type declared here"),
+            );
+            if let Some(p) = sub {
+                bind_as_error(p, ctx);
+            } else {
+                let error = tys.intern(Ty::Error);
+                ctx.bind(name.name.clone(), error);
+            }
+            continue;
+        };
+        if seen.contains(&name.name.as_str()) {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.duplicate_pattern_field",
+                name.span,
+                format!(
+                    "field `{}` appears more than once in this record pattern",
+                    name.name
+                ),
+            ));
+        }
+        seen.push(&name.name);
+        ctx.refs.record(
+            name.span,
+            SymbolKind::Field,
+            &format!("{}.{}", type_name.name, name.name),
+        );
+        let field_ty = field_ty.unwrap_or_else(|| tys.intern(Ty::Error));
+        match sub {
+            Some(p) => check_pattern(p, field_ty, ctx),
+            None => {
+                ctx.pattern_binding_types.insert(name.span, field_ty);
+                ctx.bind(name.name.clone(), field_ty);
+            }
         }
     }
 }
@@ -4026,6 +4224,35 @@ fn patterns_equal(a: &Pattern, b: &Pattern) -> bool {
                     binding_field(x) == binding_field(y) && patterns_equal(x.pattern(), y.pattern())
                 })
         }
+        // #2641: the same record type, and every field either matched by an
+        // equal sub-pattern or left unconstrained on both sides.
+        (
+            Pattern::Record {
+                type_name: ta,
+                fields: fa,
+                ..
+            },
+            Pattern::Record {
+                type_name: tb,
+                fields: fb,
+                ..
+            },
+        ) => {
+            let sub = |fields: &[(Ident, Option<Pattern>)], name: &str| -> Option<Pattern> {
+                fields
+                    .iter()
+                    .find(|(n, _)| n.name == name)
+                    .and_then(|(_, p)| p.clone())
+            };
+            ta.name == tb.name
+                && fa.iter().chain(fb.iter()).all(|(n, _)| {
+                    match (sub(fa, &n.name), sub(fb, &n.name)) {
+                        (None, None) => true,
+                        (Some(x), Some(y)) => patterns_equal(&x, &y),
+                        (Some(x), None) | (None, Some(x)) => x.is_irrefutable(),
+                    }
+                })
+        }
         _ => false,
     }
 }
@@ -4066,6 +4293,19 @@ fn describe_pattern(pat: &Pattern) -> String {
                 format!("{}({})", variant.name, inner.join(", "))
             }
         }
+        Pattern::Record {
+            type_name, fields, ..
+        } => {
+            let mut parts: Vec<String> = fields
+                .iter()
+                .map(|(n, sub)| match sub {
+                    Some(p) => format!("{}: {}", n.name, describe_pattern(p)),
+                    None => n.name.clone(),
+                })
+                .collect();
+            parts.push("..".to_string());
+            format!("{} {{ {} }}", type_name.name, parts.join(", "))
+        }
         Pattern::Or(alts, _) => alts
             .iter()
             .map(describe_pattern)
@@ -4105,6 +4345,42 @@ fn pattern_covered(prior: &[&Pattern], pat: &Pattern, ty: TyId, ctx: &Ctx) -> bo
         Pattern::Literal { value, .. } => prior
             .iter()
             .any(|p| matches!(p, Pattern::Literal { value: v, .. } if v == value)),
+        // #2641: covered by a single prior record pattern of the same type
+        // that constrains no field `pat` does not constrain at least as
+        // tightly. (Several priors jointly covering `pat` is slice 3.)
+        Pattern::Record {
+            type_name, fields, ..
+        } => {
+            let Some(field_tys) = record_field_tys(ty, type_name, ctx) else {
+                return false;
+            };
+            prior.iter().any(|p| {
+                let Pattern::Record {
+                    type_name: pt,
+                    fields: pf,
+                    ..
+                } = p
+                else {
+                    return false;
+                };
+                pt.name == type_name.name
+                    && pf.iter().all(|(n, psub)| match psub {
+                        None => true,
+                        Some(psub) if psub.is_irrefutable() => true,
+                        Some(psub) => {
+                            let qsub = fields
+                                .iter()
+                                .find(|(qn, _)| qn.name == n.name)
+                                .and_then(|(_, q)| q.as_ref());
+                            let fty = field_tys.iter().find(|(fname, _)| *fname == n.name);
+                            match (qsub, fty) {
+                                (Some(q), Some((_, fty))) => pattern_covered(&[psub], q, *fty, ctx),
+                                _ => false,
+                            }
+                        }
+                    })
+            })
+        }
         Pattern::Variant { variant, .. } => {
             let Some(info) = variants_of(ty, &ctx.input.types, ctx.tys)
                 .and_then(|vs| vs.into_iter().find(|v| v.name == variant.name))
@@ -4142,6 +4418,34 @@ fn pattern_covered(prior: &[&Pattern], pat: &Pattern, ty: TyId, ctx: &Ctx) -> bo
             })
         }
     }
+}
+
+/// #2641: the field types of record `ty` as `type_name` names it, at `ty`'s
+/// type arguments. `None` unless `ty` is that record.
+fn record_field_tys(ty: TyId, type_name: &Ident, ctx: &Ctx) -> Option<Vec<(String, TyId)>> {
+    let tys = ctx.tys;
+    let Ty::Named {
+        name,
+        kind: NamedKind::Record,
+        args,
+    } = &*tys.get(ty)
+    else {
+        return None;
+    };
+    if *name != type_name.name {
+        return None;
+    }
+    let decl = ctx.input.types.get(name)?;
+    let TypeBody::Record(r) = &decl.body else {
+        return None;
+    };
+    r.fields
+        .iter()
+        .map(|f| {
+            instantiate_field_ty(decl, args, &f.type_ref, &ctx.input.types, tys)
+                .map(|t| (f.name.name.clone(), t))
+        })
+        .collect()
 }
 
 /// #1656: a variant pattern's payload sub-patterns in declared field order —
@@ -4540,6 +4844,14 @@ fn check_is_pattern(
             let payload = info.payload.clone();
             validate_is_nested_payloads(bindings, &payload, ctx);
         }
+        // #2641: a record pattern after `is` (parenthesised in source) is
+        // checked like a `match` arm's, in a scratch scope: its depth-1 names
+        // are collected separately by `gather_pattern_bindings`.
+        Pattern::Record { .. } => {
+            ctx.push_scope();
+            check_pattern(pattern, value_ty, ctx);
+            ctx.pop_scope();
+        }
         // #474 §2.3.6: an or-pattern is legal after `is` (unlike a literal —
         // each alternative is checked by the same D5 rejection above if it is
         // one). Validate every alternative, then the same Rules 1/2 as a
@@ -4601,6 +4913,13 @@ fn check_is_pattern(
 /// leaves (wildcard / name binding / literal) are inert here.
 fn validate_is_pattern(pattern: &Pattern, ty: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
+    // #2641: a nested record pattern is checked in full, in a scratch scope.
+    if let Pattern::Record { .. } = pattern {
+        ctx.push_scope();
+        check_pattern(pattern, ty, ctx);
+        ctx.pop_scope();
+        return;
+    }
     let Pattern::Variant {
         variant, bindings, ..
     } = pattern
@@ -4651,7 +4970,9 @@ fn validate_is_nested_payloads(
 ) {
     for (i, b) in bindings.iter().enumerate() {
         let sub = b.pattern();
-        if sub.is_irrefutable() {
+        // A record pattern with only irrefutable fields is irrefutable, but
+        // its field names still need checking (#2641).
+        if sub.is_irrefutable() && !matches!(sub, Pattern::Record { .. }) {
             continue;
         }
         let field_ty = match &b.kind {
@@ -4777,6 +5098,42 @@ fn gather_pattern_bindings(
     if let Pattern::Or(alts, _) = pattern {
         if let Some(first) = alts.first() {
             gather_pattern_bindings(value_ty, first, types, out, tys);
+        }
+        return;
+    }
+    // #2641: a record pattern binds its depth-1 names — shorthand fields and
+    // `f: name` — at the field types, like a variant's flat payload bindings.
+    if let Pattern::Record {
+        type_name, fields, ..
+    } = pattern
+    {
+        let error = tys.intern(Ty::Error);
+        let record = match &*tys.get(value_ty) {
+            Ty::Named {
+                name,
+                kind: NamedKind::Record,
+                args,
+            } if *name == type_name.name => types.get(name).and_then(|d| match &d.body {
+                TypeBody::Record(r) => Some((d, r, args.clone())),
+                _ => None,
+            }),
+            _ => None,
+        };
+        for (fname, sub) in fields {
+            let bound = match sub {
+                None => Some(fname),
+                Some(Pattern::Binding(n)) => Some(n),
+                Some(_) => None,
+            };
+            let Some(bound) = bound else { continue };
+            let ty = record
+                .as_ref()
+                .and_then(|(decl, r, args)| {
+                    let f = r.fields.iter().find(|f| f.name.name == fname.name)?;
+                    instantiate_field_ty(decl, args, &f.type_ref, types, tys)
+                })
+                .unwrap_or(error);
+            out.push((bound.name.clone(), ty));
         }
         return;
     }

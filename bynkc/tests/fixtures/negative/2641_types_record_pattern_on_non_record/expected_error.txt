@@ -1,0 +1,2 @@
+bynk.types.record_pattern_on_non_record `Status` is not a record type
+bynk.types.record_pattern_on_non_record `Code` is not a record type

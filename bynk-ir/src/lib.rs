@@ -619,6 +619,10 @@ fn pattern_has_nested_test(pat: &Pattern) -> bool {
             let sp = b.pattern();
             !sp.is_irrefutable() || pattern_has_nested_test(sp)
         }),
+        // #2641: a record has no tag to switch on, and its fields are read off
+        // the scrutinee (`.field`), so a record pattern always needs the
+        // if-chain.
+        Pattern::Record { .. } => true,
         // #472: a refined pattern is never a top-level irrefutable/nested
         // payload today (the parser admits only `_` as `inner`, and only at a
         // match arm's top level), but keep this exhaustive and correct for

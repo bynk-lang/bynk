@@ -1,0 +1,1 @@
+bynk.context.opaque_inspection cannot match fields of opaquely-exported type `Account` from outside

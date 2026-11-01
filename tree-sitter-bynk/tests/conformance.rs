@@ -271,6 +271,69 @@ const CASES: &[Case] = &[
         body: "fn f() -> Effect[Int] { par { let a <- A.get(1) Effect.pure(1) }",
         accept: false,
     },
+    // -- #2641 record patterns (patterns track, slice 1): open, with a mandatory
+    //    trailing `..`, parenthesised after `is` (where the `{` would also open
+    //    the `if` block). --
+    Case {
+        what: "record pattern at a match-arm top level",
+        body: "type O = { a: Int, b: Int }\nfn f(o: O) -> Int { match o { O { a, b: 1, .. } => a O { .. } => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "record pattern nested in a variant payload",
+        body: "type O = { a: Int }\nfn f(o: Option[O]) -> Int { match o { Some(O { a, .. }) => a None => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "record pattern as an or-alternative in a match arm",
+        body: "type O = { a: Int }\nfn f(o: Option[O]) -> Int { match o { Some(O { a: 1, .. }) | Some(O { a: 2, .. }) => 1 _ => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "record pattern nested in a record pattern",
+        body: "type I = { x: Int }\ntype O = { i: I }\nfn f(o: O) -> Int { match o { O { i: I { x, .. }, .. } => x } }",
+        accept: true,
+    },
+    Case {
+        what: "record pattern with a trailing comma before ..",
+        body: "type O = { a: Int }\nfn f(o: O) -> Int { match o { O { a, .. } => a } }",
+        accept: true,
+    },
+    Case {
+        what: "record pattern without the trailing ..",
+        body: "type O = { a: Int }\nfn f(o: O) -> Int { match o { O { a } => a } }",
+        accept: false,
+    },
+    Case {
+        what: "record pattern with an empty body and no ..",
+        body: "type O = { a: Int }\nfn f(o: O) -> Int { match o { O { } => 0 } }",
+        accept: false,
+    },
+    Case {
+        what: "parenthesised record pattern after is, before the if block",
+        body: "type O = { a: Int }\nfn f(o: O) -> Bool { if o is (O { a: 1, .. }) { true } else { false } }",
+        accept: true,
+    },
+    Case {
+        what: "record pattern nested under Some after is",
+        body: "type O = { a: Int }\nfn f(o: Option[O]) -> Bool { if o is Some(O { a: 1, .. }) { true } else { false } }",
+        accept: true,
+    },
+    Case {
+        what: "unparenthesised record pattern after is rejected",
+        body: "type O = { a: Int }\nfn f(o: O) -> Bool { if o is O { a: 1, .. } { true } else { false } }",
+        accept: false,
+    },
+    Case {
+        what: "unparenthesised record pattern as an is or-alternative rejected",
+        body: "type O = { a: Int }\nfn f(o: Option[O]) -> Bool { if o is None | O { a: 1, .. } { true } else { false } }",
+        accept: false,
+    },
+    Case {
+        what: "a unit variant followed by the if block still parses after is",
+        body: "type S = enum { A, B }\nfn f(s: S) -> Bool { if s is A { true } else { false } }",
+        accept: true,
+    },
 ];
 
 #[test]

@@ -750,3 +750,44 @@ match o {
 A narrower arm may precede a wider one (`Some(Red)` then `Some(_)`), and a
 guarded arm never counts as covering, because its guard may fail. So an
 unguarded arm with the same pattern can always follow it.
+
+### Record patterns
+
+A record is matched by its fields with a record pattern, `TypeName { f1, f2: pattern, .. }`
+(patterns track, slice 1, #2641):
+
+```bynk,fragment
+match order {
+  Order { status: Paid, total, .. } if total > 100 => "large paid order"
+  Order { status: Paid, .. } => "paid"
+  _ => "other"
+}
+```
+
+```bynk,fragment
+if o is (Order { status: Cancelled, .. }) { "cancelled" } else { "live" }
+```
+
+- The type name is required. A bare field `total` binds a local `total`;
+  `status: Paid` matches the field against a sub-pattern, which can be any
+  pattern, a nested record pattern included. Record patterns nest anywhere a
+  pattern can, as in `Some(Order { total, .. })`.
+- The trailing `..` is **required**
+  (`bynk.parse.record_pattern_without_rest`). A record pattern is always open:
+  the fields it does not list are ignored, so **adding a field to a record never
+  breaks a pattern**. The editor offers a one-click fix that inserts `, ..`.
+- After `is`, a record pattern is **parenthesised**
+  (`bynk.parse.record_pattern_in_is_unparenthesised`), because there the `{`
+  would also open the `if`'s block. The editor offers a fix that adds the
+  parentheses.
+- The type must be a record (`bynk.types.record_pattern_on_non_record`), every
+  listed field must exist (`bynk.types.unknown_field`) and appear once
+  (`bynk.types.duplicate_pattern_field`). A generic record's type arguments are
+  taken from the matched value and are never written.
+- A record pattern reads fields as `.field` does, so it is refused on another
+  context's `exports opaque` type (`bynk.context.opaque_inspection`).
+- **Exhaustiveness is conservative.** A record pattern covers its type only when
+  every field is matched by a name or `_`; one with a literal or variant field
+  is partial, so end the `match` with a `_` arm. Precise coverage across several
+  arms is a later increment.
+

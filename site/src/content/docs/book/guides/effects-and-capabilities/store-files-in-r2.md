@@ -39,9 +39,10 @@ type:
 ```bynk,fragment
 service files from http {
   on GET("/dl/:key") (key: String) -> Effect[HttpResult[()]] given Archives {
-    match Archives.get(key) {
+    let found <- Archives.get(key)
+    match found {
       Some(body) => Raw(body, "application/octet-stream")
-      None       => NotFound("no such archive")
+      None       => NotFound
     }
   }
 }
@@ -76,8 +77,59 @@ let page <- Archives.list(Some("sha256/"), None)
 
 ## Size
 
-Objects are read and written whole and held in the Worker's memory, so keep each
-well under 128 MB. Streaming larger objects is a later increment.
+`get` and `put` hold the whole object in the Worker's memory, so keep each well
+under 128 MB. Larger objects stream.
+
+## Stream a large object
+
+`getStream` gives the object's metadata and its body as a `Stream[Bytes]`,
+read from R2 as the client pulls it. `RawStreamed` serves it without buffering:
+
+```bynk,fragment
+service files from http {
+  on GET("/v/:key") (key: String) -> Effect[HttpResult[()]] given Archives {
+    let found <- Archives.getStream(key)
+    match found {
+      Some(o) => RawStreamed(o.body, o.object.contentType.getOrElse("application/octet-stream"))
+      None    => NotFound
+    }
+  }
+}
+```
+
+The body can be read once. `putStream(key, body, size)` writes a stream, and R2
+needs its length up front: a stream that holds more or fewer than `size` bytes
+faults the write, and nothing is stored. Copying an object passes its own size:
+
+```bynk,fragment
+let found <- Archives.getStream(src)
+match found {
+  Some(o) => {
+    let copied <- Archives.putStream(dst, o.body, o.object.size)
+    Some(copied.size)
+  }
+  None => None
+}
+```
+
+## Upload in parts
+
+A request body is read whole, so a client sends an object too large for one
+request as a multipart upload, a part a request. `createUpload` returns an
+`R2Upload`, plain data the client keeps and sends back with each part:
+
+```bynk,fragment
+let u <- Archives.createUpload(key, R2UploadOptions { contentType: Some("video/mp4"), metadata: Map.empty() })
+// later requests, each with the handle:
+let part <- Archives.uploadPart(R2Upload { key: key, uploadId: id }, n, chunk)
+// and finally, with every part's R2Part:
+let o <- Archives.completeUpload(R2Upload { key: key, uploadId: id }, parts)
+o.size
+```
+
+Number parts from 1. Every part but the last must be the same size, and R2
+needs at least 5 MiB; it refuses a completion otherwise. `abortUpload`
+discards an upload, and R2 discards one left incomplete for 7 days.
 
 ## Test it
 

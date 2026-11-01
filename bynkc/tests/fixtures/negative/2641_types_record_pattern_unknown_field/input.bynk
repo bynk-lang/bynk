@@ -1,0 +1,14 @@
+commons demo
+
+type Status = enum { Open, Paid }
+type Order = { id: String, status: Status, total: Int }
+
+fn f(o: Order) -> Int {
+  match o {
+    Order { totl, .. } => totl
+  }
+}
+
+fn g(o: Option[Order]) -> Bool {
+  o is Some(Order { totl, .. })
+}
