@@ -6,6 +6,7 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export interface Item {
   readonly qty: number;
+  readonly pct: number;
   readonly ratio: number;
   readonly code: string;
 }

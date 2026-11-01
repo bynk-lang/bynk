@@ -6,6 +6,8 @@ suite demo.gen {
   property "inline field refinements hold for every drawn item" {
     for all i: Item {
       expect i.qty >= 1
+      expect i.pct >= 0
+      expect i.pct <= 100
       expect i.ratio >= 0.5
       expect i.ratio <= 2.5
       expect i.code.length() >= 3

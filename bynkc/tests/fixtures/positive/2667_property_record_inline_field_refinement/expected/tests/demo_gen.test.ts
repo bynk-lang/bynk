@@ -178,15 +178,17 @@ async function __prop_test_inline_field_refinements_hold_for_every_drawn_item() 
     const { Item } = __ns_demo_gen;
     type Item = __ns_demo_gen.Item;
     const __gens = [
-      { name: "i", boundaries: [{ qty: globalThis.Number(1n), ratio: 0.5, code: "xxx" }], gen: (rng: any) => ({ qty: globalThis.Number(rng.int(1n, 1000n)), ratio: rng.float(0.5, 2.5), code: rng.str(3, 11) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+      { name: "i", boundaries: [{ qty: globalThis.Number(1n), pct: globalThis.Number(0n), ratio: 0.5, code: "xxx" }], gen: (rng: any) => ({ qty: globalThis.Number(rng.int(1n, 1000n)), pct: globalThis.Number(rng.int(0n, 100n)), ratio: rng.float(0.5, 2.5), code: rng.str(3, 11) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
     ];
     const __where = null;
     const __body = async (__vals: any[]) => {
       const [i] = __vals;
       if (!(i.qty >= 1)) { throw __bynkExpectFailure("tests/gen.test.bynk:8:14", 404, 414, "expect i.qty >= 1\n  expected: i.qty >= 1\n  actual:   " + __bynkShow((i.qty)) + " >= " + __bynkShow((1))); }
-      if (!(i.ratio >= 0.5)) { throw __bynkExpectFailure("tests/gen.test.bynk:9:14", 428, 442, "expect i.ratio >= 0.5\n  expected: i.ratio >= 0.5\n  actual:   " + __bynkShow((i.ratio)) + " >= " + __bynkShow((0.5))); }
-      if (!(i.ratio <= 2.5)) { throw __bynkExpectFailure("tests/gen.test.bynk:10:14", 456, 470, "expect i.ratio <= 2.5\n  expected: i.ratio <= 2.5\n  actual:   " + __bynkShow((i.ratio)) + " <= " + __bynkShow((2.5))); }
-      if (!((i.code).length >= 3)) { throw __bynkExpectFailure("tests/gen.test.bynk:11:14", 484, 504, "expect i.code.length() >= 3\n  expected: i.code.length() >= 3\n  actual:   " + __bynkShow(((i.code).length)) + " >= " + __bynkShow((3))); }
+      if (!(i.pct >= 0)) { throw __bynkExpectFailure("tests/gen.test.bynk:9:14", 428, 438, "expect i.pct >= 0\n  expected: i.pct >= 0\n  actual:   " + __bynkShow((i.pct)) + " >= " + __bynkShow((0))); }
+      if (!(i.pct <= 100)) { throw __bynkExpectFailure("tests/gen.test.bynk:10:14", 452, 464, "expect i.pct <= 100\n  expected: i.pct <= 100\n  actual:   " + __bynkShow((i.pct)) + " <= " + __bynkShow((100))); }
+      if (!(i.ratio >= 0.5)) { throw __bynkExpectFailure("tests/gen.test.bynk:11:14", 478, 492, "expect i.ratio >= 0.5\n  expected: i.ratio >= 0.5\n  actual:   " + __bynkShow((i.ratio)) + " >= " + __bynkShow((0.5))); }
+      if (!(i.ratio <= 2.5)) { throw __bynkExpectFailure("tests/gen.test.bynk:12:14", 506, 520, "expect i.ratio <= 2.5\n  expected: i.ratio <= 2.5\n  actual:   " + __bynkShow((i.ratio)) + " <= " + __bynkShow((2.5))); }
+      if (!((i.code).length >= 3)) { throw __bynkExpectFailure("tests/gen.test.bynk:13:14", 534, 554, "expect i.code.length() >= 3\n  expected: i.code.length() >= 3\n  actual:   " + __bynkShow(((i.code).length)) + " >= " + __bynkShow((3))); }
     };
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "inline field refinements hold for every drawn item", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }

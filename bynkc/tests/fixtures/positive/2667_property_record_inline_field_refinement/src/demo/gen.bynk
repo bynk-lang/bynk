@@ -2,6 +2,7 @@ commons demo.gen
 
 type Item = {
 	qty: Int where Positive,
+	pct: Int where InRange(0, 100),
 	ratio: Float where InRange(0.5, 2.5),
 	code: String where MinLength(3),
 }
