@@ -1,2 +1,2 @@
-# exact
 bynk.parse.list_rest_not_last the `..` of a list pattern must be its final element @ 6:6
+# exact

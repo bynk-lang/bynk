@@ -1650,6 +1650,9 @@ impl<'a> Parser<'a> {
                         "bynk.parse.expected_token",
                         t.span,
                         "the name after `..` in a list pattern must start with a lowercase letter",
+                    )
+                    .with_note(
+                        "a capitalised name after `..` is reserved for range patterns, where it would be a named constant bound",
                     ));
                 }
                 let binder = self.expect_ident("after `..` in a list pattern")?;

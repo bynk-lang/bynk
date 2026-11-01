@@ -1,2 +1,2 @@
-# exact
 bynk.types.or_pattern_binding_mismatch this alternative of an or-pattern binds a different set of names than an earlier alternative @ 5:11
+# exact

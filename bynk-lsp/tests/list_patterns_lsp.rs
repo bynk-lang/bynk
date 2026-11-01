@@ -115,7 +115,7 @@ fn element_and_rest_bindings_are_locals_with_their_types() {
     assert_eq!(ty("tail"), "List[Int]");
     let local_tokens = bynk_ide::locals_nav::local_token_sites(locals, SRC);
     for name in ["first", "rest", "next", "tail"] {
-        let at = offset_of(&format!("{name}"), 0);
+        let at = offset_of(name, 0);
         assert!(
             local_tokens.iter().any(|(s, decl)| s.start == at && *decl),
             "`{name}` should be a variable declaration token: {local_tokens:?}"

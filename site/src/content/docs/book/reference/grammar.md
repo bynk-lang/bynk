@@ -1756,8 +1756,8 @@ begins no other pattern, so a list pattern needs no parentheses after `is`. See
 {{#grammar list_rest}}
 
 The `..` that ends a [`list_pattern`](#rule-list_pattern), with the optional
-name that binds the remaining elements (`..rest`). After `..`, a name or
-nothing makes a rest marker; a literal would make the bound of a range pattern,
+name that binds the remaining elements (`..rest`). After `..`, a lowercase name
+or nothing makes a rest marker (a capitalised name is reserved, like a literal); a literal would make the bound of a range pattern,
 which is not available yet (`bynk.parse.range_pattern_unsupported`). Anything
 after the rest is `bynk.parse.list_rest_not_last`.
 

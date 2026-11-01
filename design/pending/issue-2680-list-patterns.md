@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, ts_writes, diagnostic_coverage
 changelog: "List patterns: `[]`, `[p, …]`, `[p, …, ..]` and `[p, …, ..rest]` match a `List` by its length and elements in a `match`, an or-pattern, after `is` and in `let … else`. Exhaustiveness is by length, so `[]` and `[x, ..rest]` need no `_`, and a missing length is reported as a pattern (`[_, _, ..]`). Binding `..rest` copies the remaining elements. A `..` followed by a literal is reserved for range patterns (patterns track slice 4, [#2680](https://github.com/bynk-lang/bynk/issues/2680)). New diagnostics: `bynk.parse.list_rest_not_last`, `bynk.parse.range_pattern_unsupported` and `bynk.types.list_pattern_on_non_list`"
 ---
 
@@ -30,9 +31,11 @@ for range patterns (`lo..hi`, `lo..`, `..hi`, jointly with events, #990).
   a later proposal); its quick fix moves a bare `..` to the end only when nothing
   but wildcards follows. `.._` is not a form.
 - **C. `..` is a rest marker or a range bound by what follows.** After `..`, an
-  identifier, `,` or `]` (or nothing, in a record pattern) makes a rest marker; a
-  literal, including a negative one (`..9`, `..-1`), makes the upper bound of a
-  range. This slice reserves the second: `..` followed by a literal is
+  lowercase identifier, `,` or `]` (or nothing, in a record pattern) makes a rest
+  marker; a literal, including a negative one (`..9`, `..-1`), makes the upper
+  bound of a range. A capitalised name after `..` is neither (`..MAX`, a named
+  constant, is a plausible range bound), so it is rejected and reserved for range
+  patterns, as is every binding name that must start lowercase. This slice reserves the second: `..` followed by a literal is
   `bynk.parse.range_pattern_unsupported`, with a note pointing at range patterns.
   Slice 5 and the events slice (#990) take the range production over the same
   token without changing what `..` means here. The two cannot overlap, because a

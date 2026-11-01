@@ -1250,7 +1250,9 @@ The rest marker `..` is the rule it is in a record pattern, with one more case,
 reserved for range patterns (patterns track, Q7). After `..` the next token
 decides:
 
-- a name, `,` before the closing `]`, or `]` makes it a **rest marker**;
+- a lowercase name, `,` before the closing `]`, or `]` makes it a **rest marker**;
+  a capitalised name is rejected, since it would be a named constant bounding a
+  range (`..MAX`);
 - a literal, including a negative one (`..9`, `..-1`), is the upper bound of a
   range pattern, which is not available yet: `bynk.parse.range_pattern_unsupported`.
 

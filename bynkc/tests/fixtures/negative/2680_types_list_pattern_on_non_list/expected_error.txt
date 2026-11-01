@@ -1,5 +1,5 @@
-# exact
 bynk.types.list_pattern_on_non_list a list pattern cannot match a value of type `Int` @ 7:5
+# exact
 bynk.types.list_pattern_on_non_list a list pattern cannot match a value of type `Pair` @ 14:5
 bynk.types.list_pattern_on_non_list a list pattern cannot match a value of type `Set[Int]` @ 21:5
 bynk.types.list_pattern_on_non_list a list pattern cannot match a value of type `Pair` @ 27:8
