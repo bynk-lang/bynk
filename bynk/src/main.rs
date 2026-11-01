@@ -16,7 +16,7 @@ use bynk::probe::{SystemToolbox, Toolbox, Version};
 use bynk::registry::account;
 use bynk::report::{self, Format};
 use bynk::test;
-use clap::Parser;
+use clap::FromArgMatches;
 
 /// The stack the driver runs on. clap builds the whole command tree while
 /// parsing, which in a debug build takes most of a 1 MiB main-thread stack (the
@@ -41,7 +41,8 @@ fn main() -> ExitCode {
 }
 
 fn run() -> ExitCode {
-    let cli = Cli::parse();
+    let cli =
+        Cli::from_arg_matches(&bynk::cli::command().get_matches()).unwrap_or_else(|e| e.exit());
     match cli.command {
         Command::Doctor {
             input,
