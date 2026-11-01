@@ -1229,17 +1229,25 @@ fn check_signature_refs(
             for op in &c.ops {
                 // A generic operation has no body for a bound to serve, so
                 // slice 0 rejects one (Codable is where op bounds will earn it).
-                for tp in op.type_params.iter().filter(|tp| !tp.bounds.is_empty()) {
+                // `Key` alone is allowed (slice 2): it needs no witness, so it
+                // adds nothing to the operation's ABI, and without it an
+                // operation over `Map[K, _]` could not be written.
+                for tp in op.type_params.iter() {
+                    let Some(bound) = tp.bounds.iter().find(|b| b.name != "Key") else {
+                        continue;
+                    };
                     sinks.push(
                         CompileError::new(
                             "bynk.generics.bound_on_capability_op",
-                            tp.bounds[0].span,
+                            bound.span,
                             format!(
                                 "type parameter `{}` of capability operation `{}` carries a bound",
                                 tp.name.name, op.name.name
                             ),
                         )
-                        .with_note("capability operations take no bounds yet; remove the `: …`"),
+                        .with_note(
+                            "capability operations take only `Key` bounds yet; remove the `: …`",
+                        ),
                     );
                 }
                 let type_params: HashSet<String> = op
@@ -1251,6 +1259,14 @@ fn check_signature_refs(
                     check_type_ref_resolves_in(&p.type_ref, types, &type_params, sinks);
                 }
                 check_type_ref_resolves_in(&op.return_type, types, &type_params, sinks);
+                check_key_bounds(
+                    op.params
+                        .iter()
+                        .map(|p| &p.type_ref)
+                        .chain(std::iter::once(&op.return_type)),
+                    &op.type_params,
+                    sinks,
+                );
             }
         }
         CommonsItem::Type(_)
@@ -1444,6 +1460,18 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                 );
             }
         }
+    }
+    if !t.type_params.is_empty() {
+        let field_refs: Vec<&TypeRef> = match &t.body {
+            TypeBody::Record(r) => r.fields.iter().map(|f| &f.type_ref).collect(),
+            TypeBody::Sum(s) => s
+                .variants
+                .iter()
+                .flat_map(|v| v.payload.iter().map(|f| &f.type_ref))
+                .collect(),
+            _ => Vec::new(),
+        };
+        check_key_bounds(field_refs.into_iter(), &t.type_params, errors);
     }
     match &t.body {
         TypeBody::Refined { .. } => {
@@ -2459,6 +2487,28 @@ fn check_type_ref_resolves_in(
                                     ));
                                 continue;
                             }
+                            // Slice 2: a `Key` bound requires a key argument.
+                            if crate::checker::equality::has_key(&tp.bounds)
+                                && let Some(blocker) =
+                                    crate::checker::keying::typeref_not_key(arg, &scope, types)
+                            {
+                                errors.push(
+                                    CompileError::new(
+                                        "bynk.types.not_keyable",
+                                        arg.span(),
+                                        format!(
+                                            "`{}` requires `{}: Key`, but this makes `{}` `{}`, which is not `Key`{}",
+                                            name.name,
+                                            tp.name.name,
+                                            tp.name.name,
+                                            crate::checker::equality::render(arg),
+                                            crate::checker::keying::float_clause(&blocker),
+                                        ),
+                                    )
+                                    .with_note(crate::checker::keying::key_note(&blocker)),
+                                );
+                                continue;
+                            }
                             if !crate::checker::equality::has_eq(&tp.bounds) {
                                 continue;
                             }
@@ -2580,38 +2630,136 @@ fn check_keyable(
     errors: &mut Sinks,
     role: KeyRole,
 ) {
-    let keyable = match k {
-        TypeRef::Base(BaseType::String | BaseType::Int, _) => true,
-        TypeRef::Named(id) => {
-            // A type parameter is admitted (see above). An unknown name has
-            // already been reported by the resolution walk; don't pile a
-            // keyability error on top of it.
-            if type_params.contains(&id.name) || !types.contains_key(&id.name) {
-                return;
-            }
-            matches!(
-                types.get(&id.name).map(|t| &t.body),
-                Some(TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. })
-                    if matches!(base, BaseType::String | BaseType::Int)
-            )
-        }
-        _ => false,
+    let params: Vec<&str> = type_params.iter().map(String::as_str).collect();
+    // A type parameter is admitted here: whether its declaration says `K: Key`
+    // is checked where the declaration is (`check_key_bounds`, and the checker
+    // for a function). An unknown name has already been reported by the
+    // resolution walk; don't pile a keyability error on top of it.
+    let Some(blocker) = crate::checker::keying::typeref_not_key(k, &params, types) else {
+        return;
     };
-    if !keyable {
-        let (code, what) = match role {
-            KeyRole::MapKey => ("bynk.types.unkeyable_map_key", "a `Map` key"),
-            KeyRole::SetElement => ("bynk.types.unkeyable_set_element", "a `Set` element"),
-        };
-        errors.push(
-            CompileError::new(
-                code,
-                k.span(),
-                format!("{what} must be value-keyable — `String`, `Int`, or a refined/opaque type over them"),
-            )
-            .with_note(
-                "record, sum, collection, and function keys are rejected in v0.20b; value-equality keys need bounded generics",
+    let what = match role {
+        KeyRole::MapKey => "a `Map` key",
+        KeyRole::SetElement => "a `Set` element",
+    };
+    errors.push(
+        CompileError::new(
+            "bynk.types.not_keyable",
+            k.span(),
+            format!(
+                "{what} must be `Key`, but `{}` is not{}",
+                crate::checker::equality::render(k),
+                crate::checker::keying::float_clause(&blocker)
             ),
-        );
+        )
+        .with_note(crate::checker::keying::key_note(&blocker)),
+    );
+}
+
+/// The type parameters of `params` that `t` places in a `Map` key or `Set`
+/// element, in source order.
+fn key_position_params<'p>(t: &TypeRef, params: &'p [TypeParam], out: &mut Vec<&'p TypeParam>) {
+    fn mentions<'p>(t: &TypeRef, params: &'p [TypeParam], out: &mut Vec<&'p TypeParam>) {
+        match t {
+            TypeRef::Named(id) => {
+                if let Some(p) = params.iter().find(|p| p.name.name == id.name)
+                    && !out.iter().any(|q| q.name.name == p.name.name)
+                {
+                    out.push(p);
+                }
+            }
+            TypeRef::Option(a, _) | TypeRef::List(a, _) => mentions(a, params, out),
+            TypeRef::App { args, .. } => args.iter().for_each(|a| mentions(a, params, out)),
+            _ => {}
+        }
+    }
+    match t {
+        TypeRef::Map(k, v, _) => {
+            mentions(k, params, out);
+            key_position_params(k, params, out);
+            key_position_params(v, params, out);
+        }
+        TypeRef::Set(e, _) => {
+            mentions(e, params, out);
+            key_position_params(e, params, out);
+        }
+        TypeRef::Option(a, _)
+        | TypeRef::List(a, _)
+        | TypeRef::Effect(a, _)
+        | TypeRef::HttpResult(a, _)
+        | TypeRef::Query(a, _)
+        | TypeRef::Stream(a, _)
+        | TypeRef::Connection(a, _)
+        | TypeRef::History(a, _) => key_position_params(a, params, out),
+        TypeRef::Result(a, b, _) => {
+            key_position_params(a, params, out);
+            key_position_params(b, params, out);
+        }
+        TypeRef::Fn(ps, ret, _) => {
+            ps.iter().for_each(|p| key_position_params(p, params, out));
+            key_position_params(ret, params, out);
+        }
+        TypeRef::App { args, .. } => args
+            .iter()
+            .for_each(|a| key_position_params(a, params, out)),
+        _ => {}
+    }
+}
+
+/// Constrained generics slice 2 (DECISION F): a type parameter of a type
+/// declaration or a capability operation that reaches a `Map` key or `Set`
+/// element in `refs` is declared `Key` (`bynk.generics.missing_key_bound`, with a
+/// machine-applicable fix on the parameter list). A function's signature is the
+/// checker's, where the function's `where` clauses are in scope.
+fn check_key_bounds<'a>(
+    refs: impl Iterator<Item = &'a TypeRef>,
+    params: &[TypeParam],
+    errors: &mut Sinks,
+) {
+    let mut reported: HashSet<&str> = HashSet::new();
+    for t in refs {
+        let mut found = Vec::new();
+        key_position_params(t, params, &mut found);
+        for p in found {
+            if crate::checker::equality::has_key(&p.bounds) || !reported.insert(&p.name.name) {
+                continue;
+            }
+            // `Key` implies `Eq`: an explicit `Eq` is replaced, not joined.
+            let edit = match p.bounds.iter().find(|b| b.name == "Eq") {
+                Some(eq) => (eq.span, "Key".to_string()),
+                None => {
+                    let end = p.bounds.last().map_or(p.name.span, |b| b.span).end;
+                    let text = if p.bounds.is_empty() {
+                        ": Key"
+                    } else {
+                        " + Key"
+                    };
+                    (
+                        bynk_syntax::span::Span::new_in(p.name.span.file, end, end),
+                        text.to_string(),
+                    )
+                }
+            };
+            errors.push(
+                CompileError::new(
+                    "bynk.generics.missing_key_bound",
+                    t.span(),
+                    format!(
+                        "a `Map` key or `Set` element mentions type parameter `{}`, which has no `Key` bound",
+                        p.name.name
+                    ),
+                )
+                .with_note(format!(
+                    "a type parameter that keys a `Map` or `Set` must say so: declare `{}: Key`",
+                    p.name.name
+                ))
+                .with_suggestion(
+                    format!("declare `{}: Key`", p.name.name),
+                    vec![edit],
+                    bynk_syntax::error::Applicability::MachineApplicable,
+                ),
+            );
+        }
     }
 }
 

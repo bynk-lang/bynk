@@ -1,0 +1,3 @@
+commons demo
+
+fn first[K: Eq + Key](xs: Set[K]) -> Set[K] { xs }

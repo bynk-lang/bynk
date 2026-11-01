@@ -359,7 +359,20 @@ obligations follow from Q6 and Q7:
     concrete type, rather than emitted once beside each `derives Ord` type.
   - `Query` `sortBy`/`min`/`max` keep the five-base-type rule; widening it is a
     separate increment.
-- [ ] Slice 2 — `Key`
+- [x] Slice 2 — `Key` (#2684)
+  - `Key` is automatic, witness-free, and implies `Eq`; `Float` is excluded at any
+    depth. One structural predicate (`checker/keying.rs`) replaces the resolver's
+    and the checker's two copies of the `String`/`Int` rule. A type parameter in a
+    key position must now be declared `K: Key` (`bynk.generics.missing_key_bound`,
+    machine-applicable), which migrates the stdlib's `bynk.map` and `bynk.set`.
+  - Runtime: promote-on-first-composite-key `__BynkKeyMap`/`__BynkKeySet` under a
+    canonical encoding (`__bynkKeyEncode`); statically primitive-keyed sites emit
+    byte-identically. `serialiseAgentKey` is unchanged.
+  - Unchanged on purpose: store `Map`/`Set`/`Cache` and `@indexed` keys (their
+    persisted key encoding would be a new frozen format), `Query` keys, and the
+    boundary `Map` decoder's last-entry-wins on a repeated key (#2707, a
+    follow-up).
+  - `Key` is the one bound a capability operation's type parameter may carry.
 - [ ] Slice 3 — `Codable`
 - [ ] Slice 4 — static methods on generic types
 - [ ] Slice 5 — `Show` (conditional)

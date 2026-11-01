@@ -107,6 +107,30 @@ pub(crate) fn check_fn(
         }
     }
     let eq = EqScope::for_fn(f, input);
+    // Slice 2 (DECISION F): a type parameter in a `Map` key or `Set` element of
+    // the signature is declared `Key`.
+    if !vars.is_empty() {
+        super::keying::require_key_positions(
+            tys,
+            &vars,
+            &eq,
+            errors,
+            return_ty,
+            f.return_type.span(),
+        );
+        for p in &f.params {
+            if let Some(ty) = param_scope.get(&p.name.name).copied() {
+                super::keying::require_key_positions(
+                    tys,
+                    &vars,
+                    &eq,
+                    errors,
+                    ty,
+                    p.type_ref.span(),
+                );
+            }
+        }
+    }
     // v0.115: check the function's contract clauses (`requires`/`ensures`) in
     // the parameter scope before the body — a contract is the invariant
     // predicate attached to a function (ADR 0144). `result` in an `ensures` is
@@ -1056,12 +1080,14 @@ fn check_generic_call(
         _ => Default::default(),
     };
     let ord_names = super::ordering::witness_params(fn_decl, &ctx.input.types);
+    let key_names = super::keying::key_params(fn_decl, &ctx.input.types);
     let eq_params: Vec<(String, Option<Span>)> = fn_decl
         .type_params
         .iter()
         .filter(|tp| super::equality::has_eq(&tp.bounds) || compared.contains(&tp.name.name))
-        // An `Ord`-bounded parameter is checked as `Ord` below, which covers `Eq`.
-        .filter(|tp| !ord_names.contains(&tp.name.name))
+        // An `Ord`- or `Key`-bounded parameter is checked as such below, which
+        // covers `Eq`.
+        .filter(|tp| !ord_names.contains(&tp.name.name) && !key_names.contains(&tp.name.name))
         .map(|tp| (tp.name.name.clone(), Some(tp.span)))
         .collect();
     if !super::equality::check_declared_eq_args(&name.name, name.span, &eq_params, &subst, ctx) {
@@ -1071,6 +1097,11 @@ fn check_generic_call(
     // the call carries a comparator witness for it.
     let witnesses =
         super::ordering::check_declared_ord_args(&name.name, name.span, &ord_names, &subst, ctx)?;
+    // Slice 2: each `Key`-bounded type parameter takes a key type. `Key` is
+    // witness-free: nothing is recorded on the call.
+    if !super::keying::check_declared_key_args(&name.name, name.span, &key_names, &subst, ctx) {
+        return None;
+    }
     // v0.39 (ADR 0072): when the user omitted the type arguments, show the
     // inferred ones as a `Type`-kind hint after the function name —
     // `identity` ⟨`[Int]`⟩ `(5)`. Declaration order; skipped if any var stayed
@@ -3295,8 +3326,11 @@ fn check_generic_method_call(
         .collect();
     eq_params.extend(recv_type_params.iter().map(|p| (p.clone(), None)));
     let ord_params = super::ordering::witness_params(method_decl, &ctx.input.types);
+    let key_params = super::keying::key_params(method_decl, &ctx.input.types);
     eq_params.retain(|(p, _)| {
-        (declared_eq(p) || compared.contains(p)) && !ord_params.iter().any(|o| o == p)
+        (declared_eq(p) || compared.contains(p))
+            && !ord_params.iter().any(|o| o == p)
+            && !key_params.iter().any(|k| k == p)
     });
     let callee = format!("{type_name}.{}", method.name);
     if !super::equality::check_declared_eq_args(&callee, method.span, &eq_params, &subst, ctx) {
@@ -3309,6 +3343,9 @@ fn check_generic_method_call(
         &subst,
         ctx,
     )?;
+    if !super::keying::check_declared_key_args(&callee, method.span, &key_params, &subst, ctx) {
+        return None;
+    }
     if !witnesses.is_empty() {
         ctx.last_witness = Some(witnesses);
     }

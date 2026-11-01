@@ -125,8 +125,8 @@ which compares in constant time.
 `Bytes` is not compared by host reference). Equality is structural throughout,
 so a record carrying a `Bytes` field compares that field by content too. `Bytes` is **orderable**, unsigned lexicographic by octet with a proper prefix
 first, so `<` and a `sortBy` key work on it (`b.compare(other)` returns the same
-order as an `Int`). It is **not `Map`-keyable** — key on `b.toBase64()` (a
-`String`) instead. It has no arithmetic.
+order as an `Int`). It is a `Key`: a `Map[Bytes, V]` or `Set[Bytes]` holds
+bytes by content. It has no arithmetic.
 
 On the wire a `Bytes` **serialises as a base64 JSON string** (and deserialising
 requires a valid base64 string), so it round-trips through any record or `store`
@@ -146,7 +146,7 @@ bundle`.)
 | `HttpResult[T]` | see [HTTP](/book/reference/http/) | an HTTP response |
 | `Stream[T]` | — | a value-over-time source (see [Stream](#stream)) |
 | `Query[T]` | — | a lazy read over `store` storage (see [Query](#query)) |
-| `Set[T]` | — | an immutable set of value-keyable elements (see [Set](#set)) |
+| `Set[T]` | — | an immutable set of [`Key`](#keys) elements (see [Set](#set)) |
 
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
@@ -324,9 +324,9 @@ let more = tags.insert("c").remove("a")   // {b, c}; `tags` is unchanged
 let none: Set[Int] = Set.empty()
 ```
 
-- **Members** follow the `Map`-key rule: `Int` or `String`, or a refined or
-  opaque type over them. Anything else is `bynk.types.unkeyable_set_element`,
-  whether written (`Set[Point]`) or inferred (`Set.of([p])`).
+- **Members** are `Key` types: see [Keys](#keys). Anything else is
+  `bynk.types.not_keyable`, whether written (`Set[Float]`) or inferred
+  (`Set.of([f])`).
 - **Statics:** `Set.empty()` takes its element type from context, as
   `List.empty()` does, and `Set.of(xs: List[T])` drops repeats, keeping each
   element's first position.
@@ -720,6 +720,42 @@ type OrderId = opaque String
 - Opaque types are **excluded** from [literal admission](/book/reference/refined-types/).
 - An opaque type is not [`Ord`](#ordering-your-own-types) outside its defining
   unit unless it says `derives Ord`.
+
+## Keys
+
+A `Map` key, a `Set` member and the key of a `List`'s `distinct`, `distinctBy`,
+`groupBy` and joins must be a **`Key`** type. A type is `Key` when it is:
+
+- `String`, `Int`, `Bool`, `Instant`, `Duration` or `Bytes`, or a refined or opaque
+  type over one of them;
+- `Option[T]` or `List[T]` with `T` a `Key`;
+- a record, sum or enum whose every field and payload is a `Key`, with no `derives`
+  needed. A generic record or sum is a `Key` at an instantiation whose arguments
+  are;
+- a type parameter declared `K: Key` ([Generics](/book/reference/generics/#key)).
+
+A `Float` is never a `Key`, at any depth: `NaN` is not equal to itself, so a key
+that holds one could never be found again. `Map`, `Set`, functions and held
+resources are not keys either. Using one is `bynk.types.not_keyable`.
+
+Two keys are the same key when they are `==`, so `Map[OrderId, Int]` finds an entry
+with an equal `OrderId` however it was built, and `keys()` returns the keys as
+inserted, in insertion order. `Key` implies `Eq`.
+
+```bynk
+commons demo.keys
+
+type OrderId = { region: String, n: Int }
+
+fn tally(ids: List[OrderId]) -> Int {
+  let seen: Set[OrderId] = Set.of(ids)
+  seen.length()
+}
+```
+
+A `store` `Map`, `Set` or `Cache`, and an `@indexed` field, still take only
+`String`, `Int` or a refined or opaque type over them. A `Query`'s `distinct`,
+`groupBy` and join keys do too.
 
 ## Ordering your own types
 

@@ -260,6 +260,13 @@ impl RuntimeUse {
         self.cmp.borrow_mut().insert(name);
     }
 
+    /// Record that the module references the key helper `name` (`keys.ts`;
+    /// constrained-generics slice 2). They share the comparator group's import
+    /// run, which is a generic set of runtime names.
+    pub fn note_key(&self, name: &'static str) {
+        self.note_cmp(name);
+    }
+
     /// The comparator helpers to import, as a `", a, b"` run (empty when the
     /// module uses none), in the shape the other conditional groups take.
     pub fn cmp_imports(&self) -> String {

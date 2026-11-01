@@ -1,0 +1,9 @@
+commons keyed {
+  type Order = {
+    id: String,
+  }
+
+  fn count(m: Map[Order, Int]) -> Int {
+    m.length()
+  }
+}

@@ -1,0 +1,16 @@
+suite tally
+
+case "a record-keyed map survives the agent's stored state" {
+  let a = OrderId { region: "eu", n: 7 }
+  let first <- Registry("r").tally(a, 3)
+  let second <- Registry("r").tally(OrderId { n: 7, region: "eu" }, 4)
+  expect first == 3
+  expect second == 7
+}
+
+case "a record-keyed map is returned to the caller keyed by value" {
+  let _ <- Registry("s").tally(OrderId { region: "us", n: 1 }, 5)
+  let m <- Registry("s").snapshot()
+  expect m.length() == 1
+  expect m.get(OrderId { n: 1, region: "us" }) == Some(5)
+}

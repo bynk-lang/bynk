@@ -3,28 +3,28 @@ commons bynk.set {
 	Every element of `a`, then every element of `b` not already in `a`, in
 	that order.
 	---
-	fn union[T](a: Set[T], b: Set[T]) -> Set[T] {
+	fn union[T: Key](a: Set[T], b: Set[T]) -> Set[T] {
 		b.toList().fold(a, (acc, x) => acc.insert(x))
 	}
 
 	---
 	The elements of `a` that are also in `b`, in `a`'s order.
 	---
-	fn intersect[T](a: Set[T], b: Set[T]) -> Set[T] {
+	fn intersect[T: Key](a: Set[T], b: Set[T]) -> Set[T] {
 		Set.of(a.toList().filter((x) => b.contains(x)))
 	}
 
 	---
 	The elements of `a` that are not in `b`, in `a`'s order.
 	---
-	fn difference[T](a: Set[T], b: Set[T]) -> Set[T] {
+	fn difference[T: Key](a: Set[T], b: Set[T]) -> Set[T] {
 		Set.of(a.toList().filter((x) => !b.contains(x)))
 	}
 
 	---
 	Whether every element of `a` is in `b`.
 	---
-	fn isSubsetOf[T](a: Set[T], b: Set[T]) -> Bool {
+	fn isSubsetOf[T: Key](a: Set[T], b: Set[T]) -> Bool {
 		a.toList().all((x) => b.contains(x))
 	}
 
@@ -32,7 +32,7 @@ commons bynk.set {
 	The elements of `s` for which `p` holds, in order. Named apart from
 	`bynk.list`'s `filter`, so a unit can use both commons.
 	---
-	fn filterSet[T](s: Set[T], p: T -> Bool) -> Set[T] {
+	fn filterSet[T: Key](s: Set[T], p: T -> Bool) -> Set[T] {
 		Set.of(s.toList().filter(p))
 	}
 
@@ -42,7 +42,7 @@ commons bynk.set {
 	itself be value-keyable. Named apart from `bynk.list`'s `map`, so a unit can
 	use both commons.
 	---
-	fn mapSet[A, B](s: Set[A], f: A -> B) -> Set[B] {
+	fn mapSet[A: Key, B: Key](s: Set[A], f: A -> B) -> Set[B] {
 		Set.of(s.toList().map(f))
 	}
 }

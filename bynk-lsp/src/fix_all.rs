@@ -131,6 +131,31 @@ mod tests {
         assert!(bynk_ide::diagnose(&out).is_empty(), "{out}");
     }
 
+    /// Constrained generics slice 2: fix-all adds `Key` where a type parameter
+    /// keys a `Map` or `Set` without it, replaces a bound `Eq`, and drops the
+    /// redundant `Eq` beside `Key`.
+    #[test]
+    fn migrates_missing_key_bounds_in_one_action() {
+        let text = "commons m\n\nfn mk[K](k: K) -> Map[K, Int] { Map.empty() }\n\nfn st[K: Eq](k: K) -> Set[K] { Set.empty() }\n\nfn both[K: Eq + Key](k: K) -> Set[K] { Set.empty() }\n";
+        let cats: Vec<&str> = bynk_ide::diagnose(text)
+            .iter()
+            .map(|d| d.error.category)
+            .collect();
+        assert!(
+            cats.contains(&"bynk.generics.missing_key_bound"),
+            "{cats:?}"
+        );
+        assert!(
+            cats.contains(&"bynk.generics.redundant_eq_bound"),
+            "{cats:?}"
+        );
+        let out = fixed(text);
+        assert!(out.contains("fn mk[K: Key](k: K)"), "{out}");
+        assert!(out.contains("fn st[K: Key](k: K)"), "{out}");
+        assert!(out.contains("fn both[K: Key](k: K)"), "{out}");
+        assert!(bynk_ide::diagnose(&out).is_empty(), "{out}");
+    }
+
     /// Constrained generics slice 1: the redundant `Eq` beside `Ord`, and a
     /// `derives` of an automatic constraint, are removed by fix-all.
     #[test]

@@ -1,8 +1,0 @@
-commons bad
-
-// v0.110 (ADR 0142 D7): `Bytes` is equatable but not value-keyable, so it
-// cannot be a `Map` key. Key on `toBase64()` (a `String`) instead.
-
-fn count(m: Map[Bytes, Int]) -> Int {
-  m.length()
-}

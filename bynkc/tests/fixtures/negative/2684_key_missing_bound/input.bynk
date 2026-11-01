@@ -1,0 +1,5 @@
+commons demo
+
+// #2684 DECISION F: a type parameter in a key position says so. Without the
+// bound, `K` could be a function.
+fn mk[K](k: K) -> Map[K, Int] { Map.empty().insert(k, 1) }

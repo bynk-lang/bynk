@@ -31,8 +31,9 @@ Only a record or sum `type` may be generic.
 
 A bound is written after the parameter name: `T: Eq`, or `T: C1 + C2` for
 several. The constraints are **`Eq`**, which says values of the type compare with
-`==` and `!=`, and **`Ord`**, which says they have a total order (below). Any
-other name is `bynk.generics.unknown_constraint`.
+`==` and `!=`, **`Ord`**, which says they have a total order (below), and
+**`Key`**, which says they can key a `Map` or `Set` ([below](#key)). Any other name
+is `bynk.generics.unknown_constraint`.
 
 ```bynk
 commons demo.bounds
@@ -126,6 +127,53 @@ code is still the bare operator.
 These parameters are an implementation detail: they are not part of the
 published ABI, since hand-written TypeScript bindings never call a Bynk generic.
 
+## `Key`
+
+`K: Key` says values of `K` can key a `Map` or `Set`. Which types are keys is under
+[Keys](/book/reference/types/#keys). `Key` is automatic for concrete types and
+declared for a type parameter, and it implies `Eq`: `K: Eq + Key` is the warning
+`bynk.generics.redundant_eq_bound`. `Ord` does not imply `Key` (a `Float` is `Ord`
+but never a key), so `T: Ord + Key` is a real pair.
+
+A type parameter that reaches a `Map` key or a `Set` member, in a signature, a
+generic type's field, or a `distinct`/`groupBy`/join key in a body, must be declared
+`Key`, and a call must instantiate each `Key`-bounded parameter with a key type:
+
+```bynk
+commons demo.keybounds
+
+fn tally[K: Key](xs: List[K]) -> Map[K, Int] {
+  let init: Map[K, Int] = Map.empty()
+  xs.fold(init, (acc, k) => {
+    let seen = match acc.get(k) {
+      Some(n) => n,
+      None => 0,
+    }
+    acc.insert(k, seen + 1)
+  })
+}
+
+type Index[K: Key, V] = { m: Map[K, V] }
+```
+
+```bynk,fail=bynk.generics.missing_key_bound
+commons demo.missing.key
+
+fn single[K](k: K) -> Map[K, Int] {
+  let m: Map[K, Int] = Map.empty()
+  m.insert(k, 1)
+}
+```
+
+Without the bound `K` could be a function, so the error is
+`bynk.generics.missing_key_bound`. The fix is machine-applicable, and
+`bynk check --fix` applies it across a project, which is how code written before
+`Key` (including a generic over `Map` or `Set`) is migrated. A method's receiver
+parameter is bounded with `where K: Key`, or on the type.
+
+`Key` costs nothing at run time and adds no hidden argument: composite keys are
+held under a canonical encoding the runtime derives from the value itself.
+
 ## A method's receiver parameters
 
 A method on a generic type sees the type's parameters (`A` in `Box[A]`) without
@@ -156,22 +204,26 @@ T }`. The bound is checked where the type is applied to a written type argument:
 declared. No construct requires a bound on a type yet, so a bare type parameter
 as the argument (`Pair[U]`) is not checked.
 
-## Capability operations take no bounds
+## Capability operations take only `Key`
 
 A generic capability operation (`fn dedup[T](key: String) -> …`) has no body for a
-bound to serve. `bynk.generics.bound_on_capability_op` rejects one.
+bound to serve, so `bynk.generics.bound_on_capability_op` rejects `Eq` and `Ord`.
+`Key` alone is allowed (`fn snapshot[K: Key](keys: Set[K]) -> …`): it adds no hidden
+argument and nothing to the operation's published ABI, and without it an operation
+over a `Map[K, _]` could not be written.
 
 ## Where this is going
 
-`Eq` and `Ord` are the first constraints of the constrained-generics track. `Eq`
+`Eq`, `Ord` and `Key` are the first constraints of the constrained-generics track. `Eq`
 replaced the equality requirement the compiler used to infer, so the requirement
 a caller must meet is declared in the callee's signature rather than discovered
-from an error. Further constraints (map keys, boundary serialisation) will use
-the same `T: C` syntax.
+from an error. A further constraint (boundary serialisation) will use the same
+`T: C` syntax.
 
 ## See also
 
 - Guide: [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/).
+- Guide: [Key a map by a record](/book/guides/type-system/key-a-map-by-a-record/).
 - Guide: [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/).
 - Troubleshooting: [`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/),
   [`bynk.generics.missing_ord_bound`](/book/troubleshooting/generics-missing-ord-bound/).

@@ -3,6 +3,7 @@
 //! Split out of `checker.rs` (v0.29.10) verbatim; the parent module
 //! re-exports these via `use kernels::*`.
 
+use super::keying::{KeySite, check_key};
 use super::*;
 use crate::kernel_methods::{KernelMethod, LIST_METHODS, QUERY_METHODS};
 
@@ -62,6 +63,16 @@ pub(crate) fn check_collection_static(
             .and_then(|t| peel_to_map(t, tys))
             .map(|(k, v)| tys.intern(Ty::Map(k, v))),
     };
+    // A `Map`/`Set` built here is keyed by its (possibly generic) key type.
+    match inferred.map(|t| (*tys.get(t)).clone()) {
+        Some(Ty::Map(k, _)) => {
+            check_key(ctx, k, span, &KeySite::MapKey);
+        }
+        Some(Ty::Set(e)) => {
+            check_key(ctx, e, span, &KeySite::SetElement);
+        }
+        _ => {}
+    }
     if inferred.is_none() {
         ctx.errors.push(
             CompileError::new(
@@ -113,29 +124,8 @@ fn check_set_of(args: &[Expr], span: Span, expected: Option<TyId>, ctx: &mut Ctx
         ));
         return None;
     };
-    require_set_element(elem, args[0].span, ctx);
+    check_key(ctx, elem, args[0].span, &KeySite::SetElement);
     Some(tys.intern(Ty::Set(elem)))
-}
-
-/// K6a (#2596): a `Set`'s element must be value-keyable (the `Map`-key rule),
-/// since a JS `Set` compares anything else by identity.
-fn require_set_element(elem: TyId, span: Span, ctx: &mut Ctx) {
-    let tys = ctx.tys;
-    if !is_keyable(elem, tys) && !matches!(&*tys.get(elem), Ty::Var(_)) {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.unkeyable_set_element",
-                span,
-                format!(
-                    "a `Set` element must be value-keyable — `String`, `Int`, or a refined/opaque type over them — not `{}`",
-                    elem.display(tys)
-                ),
-            )
-            .with_note(
-                "record, sum, collection, and function elements are rejected; value-equality elements need bounded generics",
-            ),
-        );
-    }
 }
 
 /// K6a (#2596): the `Set` kernel — `length`, `contains`, `insert`, `remove`
@@ -221,11 +211,12 @@ fn is_numeric(t: TyId, tys: &Types) -> bool {
     )
 }
 
-/// v0.88: value-keyable for `distinct`/`distinctBy` — the Map-key rule
-/// (ADR 0110 D5): `Int`/`String`, including Refined *and* Opaque over them
-/// (dedup is by value *equality*, which an opaque id supports even though it
-/// does not widen for ordering).
-fn is_keyable(t: TyId, tys: &Types) -> bool {
+/// v0.88: value-keyable for a `Query`'s `distinct`/`distinctBy`/join/`groupBy` —
+/// `Int`/`String`, including Refined *and* Opaque over them (dedup is by value
+/// *equality*, which an opaque id supports even though it does not widen for
+/// ordering). A `Query` keeps this rule (slice 2 DECISION I): its keys hash
+/// through `String(key)`. A `List` is held to [`super::keying`]'s `Key`.
+fn is_query_keyable(t: TyId, tys: &Types) -> bool {
     match &*tys.get(t) {
         Ty::Base(BaseType::Int | BaseType::String) => true,
         Ty::Named {
@@ -278,21 +269,25 @@ fn require_numeric(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
     }
 }
 
+/// The element or key of `distinct`, `distinctBy`, `groupBy` or a join: a `List`
+/// takes any `Key` type, a `Query` the `String`/`Int` rule.
 fn require_keyable(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
+    if !method.starts_with("Query.") {
+        check_key(ctx, key, span, &KeySite::Kernel(method));
+        return;
+    }
     let tys = ctx.tys;
-    if !is_keyable(key, tys) {
+    if !is_query_keyable(key, tys) {
         ctx.errors.push(
             CompileError::new(
-                "bynk.types.unkeyable_distinct",
+                "bynk.types.not_keyable",
                 span,
                 format!(
                     "`{method}` needs a value-keyable element/key, but got `{}`",
                     key.display(tys)
                 ),
             )
-            .with_note(
-                "value-keyable types are `Int`, `String`, or a refined/opaque type over them",
-            ),
+            .with_note("a `Query` key is `Int`, `String`, or a refined/opaque type over them"),
         );
     }
 }

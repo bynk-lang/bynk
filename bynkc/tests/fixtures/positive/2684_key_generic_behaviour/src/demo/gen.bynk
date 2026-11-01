@@ -1,0 +1,15 @@
+---
+#2684: the stdlib's `bynk.set` runs erased over record elements; collisions that
+a naive encoding would conflate stay distinct.
+---
+commons demo.gen
+
+uses bynk.set
+
+type P = { x: Int, y: Int }
+
+type Tagged = | Num(n: Int) | Str(s: String)
+
+fn merge(a: Set[P], b: Set[P]) -> Set[P] { union(a, b) }
+
+fn common(a: Set[P], b: Set[P]) -> Set[P] { intersect(a, b) }

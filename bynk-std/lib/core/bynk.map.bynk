@@ -4,7 +4,7 @@ commons bynk.map {
 	---
 	Returns the values of `m`, one per key (order follows `m.keys()`).
 	---
-	fn values[K, V](m: Map[K, V]) -> List[V] {
+	fn values[K: Key, V](m: Map[K, V]) -> List[V] {
 		let init: List[V] = List.empty()
 		reverse(m.keys().fold(init, (acc, k) => match m.get(k) {
 			Some(v) => acc.prepend(v),
@@ -15,7 +15,7 @@ commons bynk.map {
 	---
 	True if `m` has an entry for `key`.
 	---
-	fn contains[K, V](m: Map[K, V], key: K) -> Bool {
+	fn contains[K: Key, V](m: Map[K, V], key: K) -> Bool {
 		match m.get(key) {
 			Some(v) => true,
 			None => false,
@@ -25,7 +25,7 @@ commons bynk.map {
 	---
 	Returns the value `m` holds for `key`, or `fallback` if there is none.
 	---
-	fn getOr[K, V](m: Map[K, V], key: K, fallback: V) -> V {
+	fn getOr[K: Key, V](m: Map[K, V], key: K, fallback: V) -> V {
 		match m.get(key) {
 			Some(v) => v,
 			None => fallback,

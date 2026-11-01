@@ -1,0 +1,27 @@
+context tally
+
+// #2684: a record-keyed `Map` crosses an agent boundary. The agent keeps it in a
+// `Cell`, so every call decodes it from stored state and re-encodes it, and
+// `snapshot` returns it to the caller through the handler's codec; the keyed
+// class must survive both, or the second `tally` call would lose its lookups.
+type OrderId = { region: String, n: Int }
+
+agent Registry {
+  key id: String
+  store totals: Cell[Map[OrderId, Int]] = Map.empty()
+
+  on call tally(order: OrderId, qty: Int) -> Effect[Int] {
+    let cur = totals
+    let next = match cur.get(order) {
+      Some(n) => n + qty,
+      None => qty,
+    }
+    let _ <- totals.update((m) => m.insert(order, next))
+    next
+  }
+
+  on call snapshot() -> Effect[Map[OrderId, Int]] {
+    let cur = totals
+    cur
+  }
+}

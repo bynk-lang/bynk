@@ -1,0 +1,3 @@
+commons demo
+
+fn dedup[T](xs: List[T]) -> List[T] { xs.distinct() }
