@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk check --fix` and `bynkc check --fix` apply the compiler's machine-applicable fix suggestions from the command line, repeated to a fixpoint and written only when the whole run is sound; the selection rule moves into `bynk-syntax` and is shared with the editor's fix all"
----
+# 0671 — `check --fix` applies machine-applicable suggestions from the CLI
 
-## ADR: cli-check-fix
-title: `check --fix` applies machine-applicable suggestions from the CLI
-summary: One shared selection rule, a fixpoint with a soundness gate, and an all-or-nothing write
+- **Status:** Accepted (v0.456)
 
 **Context.** ADR 0054 put structured fix suggestions on `CompileError` so that
 "the same suggestions back a future CLI `--fix` with no LSP involvement". Only
