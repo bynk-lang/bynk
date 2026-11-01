@@ -7,9 +7,9 @@
   shipped in #2669 ([#2662](https://github.com/bynk-lang/bynk/issues/2662));
   slice 1 was dropped (Q2); slice 3, the timeout, shipped in #2693
   ([#2683](https://github.com/bynk-lang/bynk/issues/2683), ADR 0687); slice 4,
-  the race `a.race(b)`, is in review in
-  [#2711](https://github.com/bynk-lang/bynk/issues/2711) and reopens Q7 (see
-  its **[Amended]** answer). Spine
+  the race `a.race(b)`, shipped in #2713
+  ([#2711](https://github.com/bynk-lang/bynk/issues/2711), ADR 0691) and
+  reopened Q7 (see its **[Amended]** answer). Every slice has shipped. Spine
   [#2615](https://github.com/bynk-lang/bynk/issues/2615).
 - **Realises:** the effect model of `design/bynk-design-notes.md` (an `Effect` is
   the only way a program reaches the outside world), extending the
@@ -375,8 +375,8 @@ a sub-issue of #2615.
   execution context to hand the abandoned work to. The `fn` refusal can lift once
   [#2682](https://github.com/bynk-lang/bynk/issues/2682) (`~>` in a function)
   is resolved.
-- **Slice 4 — Race (loser runs to completion)**,
-  [#2711](https://github.com/bynk-lang/bynk/issues/2711). Q7 first adopted no
+- **Slice 4 — Race (loser runs to completion)**, shipped in #2713
+  ([#2711](https://github.com/bynk-lang/bynk/issues/2711), ADR 0691). Q7 first adopted no
   general race and named (b) as a possible later slice; slice 4 adopts (b) (Q7,
   **[Amended]**). `a.race(b)` is a method of every `Effect[T]`, legal exactly
   where `within` is, lowered to `__bynkRace`; the loser is handed to `waitUntil`
@@ -428,7 +428,7 @@ To land with, or just before, slice 0:
 - [x] Slice 2 — agent handlers (folded into slice 0: the workerd gate test in
   #2646 found no new interleaving, so `par` stays legal in agent handlers)
 - [x] Slice 3 — general timeout (#2683, shipped in #2693, ADR 0687)
-- [ ] Slice 4 — race (#2711; adopts Q7 (b))
+- [x] Slice 4 — race (#2711, shipped in #2713, ADR 0691; adopts Q7 (b))
 
 ## 10. Non-goals
 
