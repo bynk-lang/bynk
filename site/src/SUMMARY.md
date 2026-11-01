@@ -39,6 +39,7 @@
     - [Declare `Eq` on a generic that compares](guides/type-system/declare-eq-bounds.md)
     - [Understand ordering your own types](guides/type-system/ordering-your-own-types.md)
     - [Key a map by a record](guides/type-system/key-a-map-by-a-record.md)
+    - [Generic code that crosses the boundary](guides/type-system/generic-code-that-crosses-the-boundary.md)
   - [Program structure](guides/program-structure/index.md)
     - [How a Bynk program is shaped](guides/program-structure/how-a-program-is-shaped.md)
     - [Consume another context's services](guides/program-structure/consume-services.md)
@@ -163,6 +164,7 @@
 
 - [Troubleshooting](troubleshooting/index.md)
   - [`bynk.generics.missing_eq_bound`](troubleshooting/generics-missing-eq-bound.md)
+  - [`bynk.generics.missing_codable_bound`](troubleshooting/generics-missing-codable-bound.md)
   - [`bynk.generics.missing_key_bound`](troubleshooting/generics-missing-key-bound.md)
   - [`bynk.generics.missing_ord_bound`](troubleshooting/generics-missing-ord-bound.md)
   - [`bynk.refine.literal_violates`](troubleshooting/refine-literal-violates.md)

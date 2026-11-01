@@ -395,29 +395,6 @@ pub fn witness_params(f: &FnDecl, types: &HashMap<String, Arc<TypeDecl>>) -> Vec
     out
 }
 
-/// At a call, check each `Ord`-bounded type parameter of the callee (`params`, in
-/// witness order) against its instantiation (`subst`) and collect the
-/// instantiations: the call's witnesses. `None` after reporting the first
-/// violation (`not_orderable`, or `missing_ord_bound` when the argument is a
-/// type parameter the caller has not declared `Ord`).
-pub(crate) fn check_declared_ord_args(
-    callee: &str,
-    call_span: Span,
-    params: &[String],
-    subst: &HashMap<String, TyId>,
-    ctx: &mut Ctx,
-) -> Option<Vec<TyId>> {
-    let mut out = Vec::new();
-    for param in params {
-        let &arg_ty = subst.get(param)?;
-        if !check_ord(ctx, arg_ty, call_span, &OrdSite::Call { callee, param }) {
-            return None;
-        }
-        out.push(arg_ty);
-    }
-    Some(out)
-}
-
 /// Whether `t` mentions the declaration's own name applied to anything but its
 /// own parameters, in order.
 fn irregular_self_reference(t: &TypeRef, decl: &TypeDecl, params: &[&str]) -> bool {

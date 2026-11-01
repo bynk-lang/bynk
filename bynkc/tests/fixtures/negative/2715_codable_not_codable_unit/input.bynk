@@ -1,0 +1,5 @@
+commons c
+
+fn f[T: Codable](x: T) -> String { Json.encode(x) }
+
+fn g() -> String { f(()) }

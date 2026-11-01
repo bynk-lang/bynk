@@ -1539,6 +1539,7 @@ pub fn build_cross_context_info(
                         .map(|p| (p.name.name.clone(), p.type_ref.clone()))
                         .collect(),
                     return_type: op.return_type.clone(),
+                    codable_params: crate::checker::codable::codable_op_params(op),
                 })
                 .collect();
             caps.insert(

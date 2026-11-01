@@ -39,6 +39,7 @@ use bynk_syntax::span::Span;
 pub use bynk_syntax::ast::ExprId;
 
 mod calls;
+pub mod codable;
 mod d1;
 pub(crate) mod equality;
 pub mod keying;
@@ -547,7 +548,7 @@ impl Ty {
 pub enum Callee {
     /// A free function call. The `Vec<TyId>` is the call's comparator witnesses
     /// (constrained-generics slice 1): the type argument of each `Ord`-bounded
-    /// type parameter of the callee, in [`ordering::witness_params`] order.
+    /// type parameter of the callee, in [`codable::witness_list`] order.
     /// Empty for a callee with no `Ord` bound, which is almost every call.
     Fn(Arc<FnDecl>, Vec<TyId>),
     /// A generic function with `Ord` bounds named as a value (`xs.map(max)`),
@@ -581,14 +582,20 @@ pub enum Callee {
     /// `Instant.fromEpochMillis`, `Bytes.fromUtf8`/`fromBase64`/`empty`,
     /// `Json.decode`/`encode`, `Stream.of`.
     Intrinsic { ns: &'static str, op: String },
-    /// A same-context capability operation call (`Cap.op(...)`).
-    Capability { cap: String, op: String },
+    /// A same-context capability operation call (`Cap.op(...)`). `wire` is set
+    /// for an operation with `Codable` parameters: how the call encodes them.
+    Capability {
+        cap: String,
+        op: String,
+        wire: Option<Arc<codable::CapEncoding>>,
+    },
     /// A cross-context capability operation call (`B.Cap.op(...)` /
     /// `Alias.Cap.op(...)`).
     CrossCap {
         unit: String,
         cap: String,
         op: String,
+        wire: Option<Arc<codable::CapEncoding>>,
     },
     /// A cross-context service call (`B.service(...)` / `Alias.service(...)`).
     Cross { unit: String, service: String },
@@ -2868,6 +2875,8 @@ pub struct CapabilityOpInfo {
     /// name and `trace(Cap.op)` yields records with these fields.
     pub param_names: Vec<String>,
     pub return_ty: TyId,
+    /// Slice 3: the op's type parameters declared `Codable`.
+    pub codable_params: Vec<String>,
 }
 
 /// The synthetic record type name for `trace(Cap.op)`'s call records (v0.117):

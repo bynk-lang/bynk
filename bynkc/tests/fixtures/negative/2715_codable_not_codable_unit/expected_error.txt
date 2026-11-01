@@ -1,0 +1,2 @@
+bynk.types.not_codable
+which is not `Codable`

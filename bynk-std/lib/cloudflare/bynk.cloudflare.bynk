@@ -390,7 +390,10 @@ adapter bynk.cloudflare {
 
 	A body is JSON text, normally `Json.encode(value)`, and the consumer
 	decodes it with its message type; text that is not JSON faults the send.
-	`sendBatch` sends its bodies in one call, all or none. The platform caps a
+	`sendValue(message)` is `send(Json.encode(message))` for any `Codable`
+	value: it puts exactly the same message on the queue, encoding at the call
+	site (`Queue.sendValue(order)`). `sendBatch` sends its bodies in one call,
+	all or none. The platform caps a
 	message at 128 KB and a batch at 100 messages and 256 KB; over a cap, the
 	send faults. Delivery is at least once and messages are stored by the
 	platform, so make consumers idempotent and keep secrets out of bodies.
@@ -399,6 +402,7 @@ adapter bynk.cloudflare {
 		fn send(body: String) -> Effect[()]
 		fn sendWith(body: String, options: QueueSend) -> Effect[()]
 		fn sendBatch(bodies: List[String]) -> Effect[()]
+		fn sendValue[T: Codable](message: T) -> Effect[()]
 	}
 
 	---

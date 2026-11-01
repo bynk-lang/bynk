@@ -373,7 +373,21 @@ obligations follow from Q6 and Q7:
     boundary `Map` decoder's last-entry-wins on a repeated key (#2707, a
     follow-up).
   - `Key` is the one bound a capability operation's type parameter may carry.
-- [ ] Slice 3 — `Codable`
+- [x] Slice 3 — `Codable` (#2715)
+  - `Codable` is automatic and means exactly what `Json.decode` accepts, as one
+    predicate (`checker/codable.rs`) shared by `Json.encode`, `Json.decode` and the
+    bound. A `Codable` type parameter takes a hidden trailing codec witness
+    (`__codec_T`), ordered with the comparator witnesses by declaration order, then
+    comparator before codec. `List`, `Option`, `Set`, `Map` and `Result` over a type
+    parameter use runtime combinators (`codec.ts`); a user generic type over one is
+    deferred (`bynk.generics.codec_generic_at_rigid`).
+  - Capability operations may take `Codable` parameters, encoded whole at the call
+    site; the provider gets plain JSON and no witness, so the emit ABI does not grow.
+    A `Codable` parameter in an operation's return type is deferred
+    (`bynk.generics.codable_op_return`). Part 14 clause (iv) and standard-library D4
+    are amended (J1). `Queue.sendValue[T: Codable]` ships.
+  - Additions to the proposal: an operation with `Codable` parameters infers its
+    type arguments from its arguments when they determine all of them.
 - [ ] Slice 4 — static methods on generic types
 - [ ] Slice 5 — `Show` (conditional)
 

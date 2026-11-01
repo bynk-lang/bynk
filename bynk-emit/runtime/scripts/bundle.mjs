@@ -38,6 +38,7 @@ const MODULES = [
   "errors",
   "storage",
   "boundary",
+  "codec",
   "httpresult",
   "http",
   "queue",

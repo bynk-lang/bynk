@@ -213,7 +213,11 @@
   "capability_op": [
     {
       "code": "bynk.generics.bound_on_capability_op",
-      "summary": "A generic capability operation's type parameter carries a bound other than `Key`; operations take only `Key` bounds yet."
+      "summary": "A generic capability operation's type parameter carries a bound other than `Key` or `Codable`; operations take only those two (constrained-generics slices 2 and 3)."
+    },
+    {
+      "code": "bynk.generics.codable_op_return",
+      "summary": "A capability operation's `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider's reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3)."
     },
     {
       "code": "bynk.parse.expected_capability_op",
@@ -652,8 +656,16 @@
       "summary": "A generic function with an `Ord` bound is used as a value, and its type arguments cannot be determined from the type expected at that reference; annotate the expected type (constrained-generics slice 1)."
     },
     {
+      "code": "bynk.generics.codec_generic_at_rigid",
+      "summary": "A user generic type is applied to a type parameter inside a `Codable` context (`Paginated[T]` in a body with `T: Codable`). Its codec would need a factory per generic declaration, which is deferred; the built-in containers over a type parameter are supported, as is a concrete instantiation (constrained-generics slice 3)."
+    },
+    {
       "code": "bynk.generics.method_on_generic_type",
       "summary": "A *static* method is attached to a generic type; static methods on generic types are deferred (they have no receiver to supply the type's parameters). Instance methods on generic types are supported (#594)."
+    },
+    {
+      "code": "bynk.generics.missing_codable_bound",
+      "summary": "A type parameter is encoded or decoded with `Json.encode`/`Json.decode`, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, but is not declared `Codable` (`[T: Codable]`, or `where A: Codable` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Codable`, beside an existing `Eq`, which `Codable` does not imply (constrained-generics slice 3)."
     },
     {
       "code": "bynk.generics.missing_eq_bound",

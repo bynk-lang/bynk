@@ -595,8 +595,11 @@ the built-in `Json` module: `encode` dispatches to the generated
 `__serialise_<T>` for the value's checked type; `decode` to `JSON.parse` +
 `__deserialise_<T>`. The **domain of `T`** (and of `encode`'s argument) is any
 boundary-legal shape — base types, named types, and the built-in containers
-over them; functions, effects, `HttpResult`, the error builtins, and type
-variables are `bynk.types.json_uncodable`. `decode`'s target is given
+over them; functions, effects, `HttpResult`, the error builtins, and
+type variables are `bynk.types.json_uncodable`, except a type parameter declared
+`T: Codable`, which `Json.encode` and `Json.decode[T]` accept inside the generic
+function (the call site passes the codec; an unbounded one is
+`bynk.generics.missing_codable_bound`). `decode`'s target is given
 explicitly (`Json.decode[Order](s)`, any boundary-legal type-ref including
 `Json.decode[List[Order]]`) or inferred from an expected
 `Result[T, JsonError]`; with neither, `bynk.generics.uninferable_type_arg`.

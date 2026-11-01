@@ -2666,7 +2666,7 @@ fn check_effect_result_fn_arg(
 /// v0.174 (#592): the shared diagnostic for a recursive generic record reaching
 /// a boundary — a `Json.encode`/`decode` target here, a serialised position in
 /// the emit-side boundary pass.
-fn recursive_generic_error(name: &str, span: bynk_syntax::span::Span) -> CompileError {
+pub(crate) fn recursive_generic_error(name: &str, span: bynk_syntax::span::Span) -> CompileError {
     CompileError::new(
         "bynk.generics.recursive_generic_at_boundary",
         span,
@@ -2685,7 +2685,7 @@ fn recursive_generic_error(name: &str, span: bynk_syntax::span::Span) -> Compile
 /// recursive generic record has no finite set of monomorphised codecs, so it
 /// cannot cross a boundary yet — this reports it with a specific diagnostic
 /// rather than the generic `json_uncodable`.
-fn first_recursive_generic(
+pub(crate) fn first_recursive_generic(
     t: TyId,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
@@ -2714,51 +2714,6 @@ fn first_recursive_generic(
             .find_map(|p| first_recursive_generic(*p, types, tys))
             .or_else(|| first_recursive_generic(*ret, types, tys)),
         _ => None,
-    }
-}
-
-fn json_codable(
-    t: TyId,
-    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
-    tys: &Types,
-) -> bool {
-    match &*tys.get(t) {
-        // R4.3: an already-diagnosed type doesn't also earn a
-        // `bynk.types.json_uncodable` diagnostic — the resolution failure was
-        // reported once, at its own site.
-        Ty::Error => true,
-        // v0.174 (#592): a generic record instantiation is boundary-serialisable
-        // through its monomorphised codec (`serialise_Paginated_User`) exactly
-        // when its type arguments are — a non-serialisable argument (a function,
-        // a `Query`, …) is the reason the instantiation is uncodable, mirroring
-        // the container arms below. (ADR 0183 Decision C's non-boundary rule was
-        // the previous, blanket rejection.)
-        // K-streams (#2623): a record or sum carrying a `Stream` has no codec.
-        Ty::Named { name, .. } if bynk_syntax::ast::type_carries_stream(name, types) => false,
-        Ty::Named { args, .. } if !args.is_empty() => {
-            args.iter().all(|a| json_codable(*a, types, tys))
-        }
-        Ty::Base(_) | Ty::Named { .. } | Ty::Unit => true,
-        Ty::Result(a, b) => json_codable(*a, types, tys) && json_codable(*b, types, tys),
-        Ty::Option(a) | Ty::List(a) | Ty::Set(a) => json_codable(*a, types, tys),
-        Ty::Map(k, v) => json_codable(*k, types, tys) && json_codable(*v, types, tys),
-        Ty::Fn { .. }
-        | Ty::Effect(_)
-        | Ty::Query(_)
-        | Ty::Stream(_)
-        | Ty::Connection(_)
-        | Ty::HttpResult(_)
-        | Ty::HttpOutcome(_)
-        | Ty::QueueResult
-        | Ty::BoundaryRejection
-        | Ty::Asset
-        | Ty::RequestHeaders
-        | Ty::TokenClaims
-        | Ty::ValidationError
-        | Ty::JsonError
-        | Ty::Var(_)
-        | Ty::Actor(_)
-        | Ty::ActorSum(_) => false,
     }
 }
 
@@ -2818,7 +2773,7 @@ pub(crate) fn check_json_static(
                 ));
                 return None;
             }
-            if !json_codable(t, &ctx.input.types, tys) {
+            if !super::codable::json_codable(t, &ctx.input.types, tys, &ctx.type_vars) {
                 ctx.errors.push(
                     CompileError::new(
                         "bynk.types.json_uncodable",
@@ -2830,6 +2785,14 @@ pub(crate) fn check_json_static(
                          containers over them — not functions, effects, streams (or a type that carries one), or error builtins",
                     ),
                 );
+                return None;
+            }
+            if !super::codable::require_codable_rigid(
+                ctx,
+                t,
+                args[0].span,
+                "`Json.encode` encodes this value",
+            ) {
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::String)))
@@ -2908,7 +2871,9 @@ pub(crate) fn check_json_static(
                 );
                 return None;
             }
-            if !json_codable(t, &ctx.input.types, tys) || t == tys.intern(Ty::Unit) {
+            if !super::codable::json_codable(t, &ctx.input.types, tys, &ctx.type_vars)
+                || t == tys.intern(Ty::Unit)
+            {
                 ctx.errors.push(
                     CompileError::new(
                         "bynk.types.json_uncodable",
@@ -2920,6 +2885,14 @@ pub(crate) fn check_json_static(
                          containers over them — not functions, effects, streams (or a type that carries one), or error builtins",
                     ),
                 );
+                return None;
+            }
+            if !super::codable::require_codable_rigid(
+                ctx,
+                t,
+                span,
+                &format!("`Json.{op}` decodes into this type"),
+            ) {
                 return None;
             }
             Some(tys.intern(Ty::Result(t, tys.intern(Ty::JsonError))))

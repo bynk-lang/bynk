@@ -2068,7 +2068,9 @@ shipped. The residue is three capabilities, each failing differently:
 
 A capability may be a pure adapter iff **(i)** it needs no syntax, **(ii)** it has no
 compile-time-checked payload, **(iii)** it does not join the handler transaction, and **(iv)** it needs
-no compiler-synthesised argument.
+no compiler-synthesised argument. An encoding derived from a `Codable` bound declared in the
+operation's own signature, using the boundary codec, is not a compiler-synthesised argument
+(amended by constrained-generics slice 3, #2715).
 
 | Tier | Definition | Shipped members |
 |---|---|---|

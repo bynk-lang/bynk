@@ -611,7 +611,7 @@ pub fn describe_derives_at(source: &str, offset: usize) -> Option<String> {
     })
 }
 
-/// The doc for a constraint name (`Eq`, `Ord`, `Key`), shown on hover wherever one
+/// The doc for a constraint name (`Eq`, `Ord`, `Key`, `Codable`), shown on hover wherever one
 /// appears in a bound or a `derives` clause.
 fn constraint_doc(name: &str) -> Option<&'static str> {
     match name {
@@ -623,6 +623,9 @@ fn constraint_doc(name: &str) -> Option<&'static str> {
         ),
         "Key" => Some(
             "```bynk\nconstraint Key\n```\n\nValues of the type can key a `Map` or be a `Set` member, and group under `distinct` and `groupBy`. Declare it on a type parameter (`K: Key`) to use it that way inside the function; `Key` implies `Eq`. Strings, ints, bytes, `Option` and `List` of a key, and records, sums and enums made of keys are `Key` automatically; a `Float` never is.",
+        ),
+        "Codable" => Some(
+            "```bynk\nconstraint Codable\n```\n\nValues of the type encode and decode with `Json`. Declare it on a type parameter (`T: Codable`) to call `Json.encode` and `Json.decode[T]` inside the function, or to pass the value to a `Codable` parameter of a capability operation, which encodes it at the call site so the provider receives plain JSON. Every type `Json.decode` accepts is `Codable` automatically; `()`, functions, `Effect`, streams and the HTTP result types are not.",
         ),
         _ => None,
     }

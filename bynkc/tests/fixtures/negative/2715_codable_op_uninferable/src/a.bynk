@@ -1,0 +1,11 @@
+context a
+
+capability Audit {
+  fn putAll[T: Codable](events: List[T]) -> Effect[()]
+}
+
+service s {
+  on call() -> Effect[()] given Audit {
+    Audit.putAll([])
+  }
+}

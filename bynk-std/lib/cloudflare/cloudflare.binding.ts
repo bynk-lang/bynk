@@ -584,6 +584,15 @@ export class WorkersQueue implements Queue {
     );
   }
 
+  // `sendValue[T: Codable]`: the call site has already encoded the message with
+  // the type's boundary codec, so the value arrives as a JSON value. It goes
+  // through `JSON.stringify` and `JSON.parse`, which is the text `Json.encode`
+  // writes and `parsed` reads, so the queue receives exactly the message
+  // `send(Json.encode(v))` sends (an absent field stays absent, `-0` is `0`).
+  async sendValue(message: unknown): Promise<void> {
+    await this.producer().send(this.parsed(JSON.stringify(message)), { contentType: "json" });
+  }
+
   // All or none: every body is parsed before anything is sent.
   async sendBatch(bodies: readonly string[]): Promise<void> {
     const messages = bodies.map((b) => ({ body: this.parsed(b), contentType: "json" as const }));

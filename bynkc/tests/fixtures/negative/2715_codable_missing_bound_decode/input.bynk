@@ -1,0 +1,3 @@
+commons c
+
+fn bad[T](s: String) -> Result[T, JsonError] { Json.decode[T](s) }

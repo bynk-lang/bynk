@@ -1,0 +1,2 @@
+bynk.generics.codec_generic_at_rigid
+generic type applied to a type parameter

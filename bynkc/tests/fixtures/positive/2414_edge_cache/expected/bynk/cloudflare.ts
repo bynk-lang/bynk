@@ -453,7 +453,10 @@ export const __RateLimitToken: symbol = globalThis.Symbol("RateLimit");
  *
  * A body is JSON text, normally `Json.encode(value)`, and the consumer
  * decodes it with its message type; text that is not JSON faults the send.
- * `sendBatch` sends its bodies in one call, all or none. The platform caps a
+ * `sendValue(message)` is `send(Json.encode(message))` for any `Codable`
+ * value: it puts exactly the same message on the queue, encoding at the call
+ * site (`Queue.sendValue(order)`). `sendBatch` sends its bodies in one call,
+ * all or none. The platform caps a
  * message at 128 KB and a batch at 100 messages and 256 KB; over a cap, the
  * send faults. Delivery is at least once and messages are stored by the
  * platform, so make consumers idempotent and keep secrets out of bodies.
@@ -462,6 +465,7 @@ export interface Queue {
   send(body: string): globalThis.Promise<void>;
   sendWith(body: string, options: QueueSend): globalThis.Promise<void>;
   sendBatch(bodies: readonly string[]): globalThis.Promise<void>;
+  sendValue(message: unknown): globalThis.Promise<void>;
 }
 
 export const __QueueToken: symbol = globalThis.Symbol("Queue");

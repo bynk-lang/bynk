@@ -1,0 +1,8 @@
+commons c
+
+fn f[T: Codable](x: T) -> T { x }
+
+fn g(h: (Int) -> Int) -> Int {
+  let _ = f(h)
+  1
+}

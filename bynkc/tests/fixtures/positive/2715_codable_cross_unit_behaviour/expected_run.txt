@@ -1,0 +1,3 @@
+# #2715: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# constrained generics slice 3: witness order across units.
+passed=3 failed=0

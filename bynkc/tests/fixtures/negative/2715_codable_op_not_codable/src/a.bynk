@@ -1,0 +1,11 @@
+context a
+
+capability Audit {
+  fn put[T: Codable](event: T) -> Effect[()]
+}
+
+service s {
+  on call(h: Int) -> Effect[()] given Audit {
+    Audit.put[(Int) -> Int]((x) => x)
+  }
+}
