@@ -5764,7 +5764,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
             Some(Ty::Fn { params, .. }) => params
                 .iter()
                 .enumerate()
-                .map(|(i, p)| format!("__a{i}: {}", ts_ty(*p, &tys)))
+                .map(|(i, p)| format!("__a{i}: {}", ts_ty(*p, tys)))
                 .collect(),
             _ => (0..decl.params.len())
                 .map(|i| format!("__a{i}: any"))

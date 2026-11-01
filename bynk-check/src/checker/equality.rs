@@ -233,11 +233,6 @@ impl EqScope {
         }
     }
 
-    /// Whether `param` is declared `Ord` here.
-    pub(crate) fn is_ord(&self, param: &str) -> bool {
-        self.ord.contains(param)
-    }
-
     /// The edit that declares `constraint` (`Eq` or `Ord`) on `param`. A missing
     /// `Ord` on a parameter already declared `Eq` replaces the `Eq`, which `Ord`
     /// implies.
