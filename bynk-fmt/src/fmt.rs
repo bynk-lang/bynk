@@ -3316,8 +3316,12 @@ fn stub_clause_to_string(pv: &StubClause) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     let rhs = match &pv.rhs {
-        StubRhs::Returns(e) => format!("returns {}", expr_to_string(e)),
+        StubRhs::Returns(e) => match &pv.after {
+            Some(d) => format!("returns {} after {}", expr_to_string(e), expr_to_string(d)),
+            None => format!("returns {}", expr_to_string(e)),
+        },
         StubRhs::Fails(_) => "fails".to_string(),
+        StubRhs::Never(_) => "never".to_string(),
         StubRhs::ReturnsEach(outcomes, _) => {
             let items = outcomes
                 .iter()

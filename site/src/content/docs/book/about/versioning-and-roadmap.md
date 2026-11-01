@@ -115,7 +115,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   together and waits for all of them, raising the first fault in source order.
   `parTraverse`, `parTraverseAll` and `parTraverseTry` now wait for every
   element before they raise, the same way
-  ([#2662](https://github.com/bynk-lang/bynk/issues/2662)). Next: `?` inside a block
+  ([#2662](https://github.com/bynk-lang/bynk/issues/2662)). `e.within(d)` now bounds
+  how long an effect may take, and tests drive it on virtual time
+  ([#2683](https://github.com/bynk-lang/bynk/issues/2683)); it is for service
+  handlers, and does not cancel the work it gives up on. Next: `?` inside a block
   ([#2615](https://github.com/bynk-lang/bynk/issues/2615)).
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.

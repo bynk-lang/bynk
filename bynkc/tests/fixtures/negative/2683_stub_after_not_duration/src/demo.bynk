@@ -1,0 +1,17 @@
+context demo
+
+capability Clock {
+  fn now() -> Effect[Int]
+}
+
+provides Clock = FixedClock {
+  fn now() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}
+
+service probe {
+  on call() -> Effect[Int] given Clock {
+    Clock.now()
+  }
+}

@@ -178,6 +178,7 @@ declares no constant emits exactly as before.
 | `?` | a check-and-early-return: on a `Result`, `if (r.tag === "Err") return r;` (or, when a declared embedding converts the error (v0.154), `return Err(F.V(r.error));`); on an `Option` in an HttpResult handler (v0.153), `if (o.tag === "None") return HttpResult.NotFound;` — then the expression is the `Ok`/`Some` payload |
 | `<-` | `await` |
 | `~>` | `ctx.__exec.waitUntil(<effect>)` — dispatched, not awaited |
+| `e.within(d)` | `__bynkWithin(<e>, <ms>, deps.__exec)` — races the effect against a timer and yields `Ok(value)` or `Err({ after })`; the handler receives `__exec` when its body calls `within`, as it does for `~>` (§7.4.14) |
 | `par { let a <- e1  let b <- e2 }` | `const [a, b] = await __bynkSettleAll([() => e1, () => e2]);` — the join calls the thunks in source order, issuing each effect before either is awaited; a `do` binding takes a hole in the pattern (§7.4.13) |
 
 An `Effect[T]` is realised as a `Promise<T>`; it has no runtime constructor.

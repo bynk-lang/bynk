@@ -128,6 +128,20 @@ export const FetchOptions = {
 };
 
 /**
+ * Why an `e.within(d)` produced no value: the deadline `after` passed first.
+ * The abandoned effect is **not** cancelled. It is handed to the platform's
+ * `waitUntil` and may still complete after the handler has returned, so its
+ * side effects (a write, a commit in another agent) can still happen. Use
+ * `FetchOptions.timeout` when the work must actually stop.
+ */
+export interface TimedOut {
+  readonly after: number;
+}
+
+export const TimedOut = {
+};
+
+/**
  * The level of a `Logger.log` record.
  */
 export type LogLevel =

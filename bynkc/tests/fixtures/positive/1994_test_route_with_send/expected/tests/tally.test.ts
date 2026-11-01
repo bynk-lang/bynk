@@ -83,7 +83,7 @@ async function test_a_route_that_sends_answers() {
     __ns_tally.__resetAgents();
     const deps = __makeTestDeps();
     const { Counter, __makeCounter, api } = __ns_tally;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -94,6 +94,7 @@ async function test_a_route_that_sends_answers() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettle(deps, api.http_GET(deps));
     if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/tally.bynk:5:9", 80, 90, "expect r is Ok(_)"); }
@@ -112,7 +113,7 @@ async function test_the_send_has_run_before_the_expectations() {
     __ns_tally.__resetAgents();
     const deps = __makeTestDeps();
     const { Counter, __makeCounter, api } = __ns_tally;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -123,6 +124,7 @@ async function test_the_send_has_run_before_the_expectations() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __bynkSettle(deps, api.http_GET(deps));
     const n = await __makeCounter("a").read(deps);
@@ -142,7 +144,7 @@ async function test_the_route_answers_at_the_integration_tier() {
     __ns_tally.__resetAgents();
     const deps = __makeTestDeps();
     const { Counter, __makeCounter, api } = __ns_tally;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -153,6 +155,7 @@ async function test_the_route_answers_at_the_integration_tier() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettle(deps, api.http_GET(deps));
     if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/tally.bynk:16:9", 312, 322, "expect r is Ok(_)"); }

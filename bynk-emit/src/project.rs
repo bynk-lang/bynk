@@ -5109,6 +5109,20 @@ fn emit_composition_root(
             };
             deps_entries.push(("__eventsDispatch".to_string(), arrow));
         }
+        // #2683: a `call` handler that calls `within` (or sends) reads
+        // `deps.__exec`. The bundle has no platform execution context, so what
+        // it is handed is kept alive by the process; a fault in it, with no
+        // handler left to raise it to, is logged.
+        if table.services.values().any(|s| {
+            s.handlers
+                .iter()
+                .any(crate::emitter::call_handler_needs_exec)
+        }) {
+            deps_entries.push((
+                "__exec".to_string(),
+                ident("{ waitUntil(promise: globalThis.Promise<unknown>): void { promise.catch((e) => globalThis.console.error(\"an abandoned effect failed\", String(e))); } }"),
+            ));
+        }
         deps_entries.sort_by_cached_key(|(k, _)| deps_entry_sort_key(k));
 
         let mut surface_entries: Vec<(String, TsExpr)> = Vec::new();

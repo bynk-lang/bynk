@@ -105,6 +105,8 @@
   "returns"
   "each"
   "fails"
+  "after"
+  "never"
 ] @keyword.operator
 
 ; #2134: the contextual `env` word heading a suite/case `env { … }` clause.

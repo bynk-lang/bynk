@@ -1385,6 +1385,9 @@ pub struct HandlerBodyCheck<'a> {
     pub borrowed_held: HashSet<String>,
     /// #2380 (L5): the binder name when the `by` actor is an `Oidc` one.
     pub oidc_binder: Option<String>,
+    /// #2683: the body is a service handler's, whose `deps` carry the
+    /// execution context `e.within(d)` needs.
+    pub service_handler: bool,
 }
 
 impl<'a> HandlerBodyCheck<'a> {
@@ -1411,6 +1414,7 @@ impl<'a> HandlerBodyCheck<'a> {
             store_fields: HashMap::new(),
             borrowed_held: HashSet::new(),
             oidc_binder: None,
+            service_handler: false,
         }
     }
 }
@@ -1436,6 +1440,7 @@ pub fn check_handler_body(
         store_fields,
         borrowed_held,
         oidc_binder,
+        service_handler: in_service_handler,
     } = check;
     let CheckSinks {
         tys,
@@ -1529,6 +1534,7 @@ pub fn check_handler_body(
         last_witness: None,
         store_fields,
         in_agent_handler: agent_state_ty.is_some(),
+        in_service_handler,
     };
     // Check the body and validate it matches the return type.
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {
@@ -1677,6 +1683,7 @@ pub fn check_body(
         last_witness: None,
         store_fields: HashMap::new(),
         in_agent_handler: false,
+        in_service_handler: false,
     };
     if let Some(w) = where_pred {
         let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
@@ -1840,6 +1847,7 @@ pub fn check_invariants(
             last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
+            in_service_handler: false,
         };
         let pred_ty = type_of(&inv.predicate, Some(bool_ty), &mut ctx);
         if let Some(t) = pred_ty
@@ -1989,6 +1997,7 @@ pub(crate) fn check_contracts(
             last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
+            in_service_handler: false,
         };
         let pred_ty = type_of(&c.predicate, Some(bool_ty), &mut ctx);
         if let Some(t) = pred_ty
@@ -2218,6 +2227,7 @@ pub fn check_transitions(
             last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
+            in_service_handler: false,
         };
         let pred_ty = type_of(&tr.predicate, Some(bool_ty), &mut ctx);
         if let Some(t) = pred_ty
@@ -2404,6 +2414,7 @@ pub fn check_migrations(
             last_witness: None,
             store_fields: HashMap::new(),
             in_agent_handler: false,
+            in_service_handler: false,
         };
         for item in &step.items {
             let value = match item {
@@ -2792,6 +2803,12 @@ pub(crate) struct Ctx<'a> {
     /// handler, which carries no execution context, so the send gate must
     /// see through the frame swap.
     pub in_agent_handler: bool,
+    /// #2683: true while checking a service handler body, lambdas included
+    /// (a lambda frame does not clear it, as with
+    /// [`in_agent_handler`](Self::in_agent_handler)). `e.within(d)` hands its
+    /// abandoned effect to the execution context, which only a service
+    /// handler's `deps` carry.
+    pub in_service_handler: bool,
 }
 
 /// Per-capability info for checker dispatch within a handler body.

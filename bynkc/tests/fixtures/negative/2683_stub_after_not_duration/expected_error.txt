@@ -1,0 +1,2 @@
+bynk.stub.after_type
+`after` in a `stub` for `Clock.now` takes a `Duration`

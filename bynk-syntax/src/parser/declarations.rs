@@ -835,12 +835,27 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::RParen, "to close the `stub` argument list")?;
         let rhs = self.parse_stub_rhs()?;
-        let span = kw.span.merge(rhs.span());
+        // #2683: `returns <v> after <d>`. `after` is a contextual word; an
+        // expression is never followed by a bare identifier, so seeing one
+        // here is unambiguous.
+        let after = if matches!(rhs, StubRhs::Returns(_))
+            && self.peek_kind() == Some(TokenKind::Ident)
+            && self.nth_text(0) == "after"
+        {
+            self.bump();
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+        let span = kw
+            .span
+            .merge(after.as_ref().map_or_else(|| rhs.span(), |e| e.span));
         Ok(StubClause {
             capability,
             method,
             args,
             rhs,
+            after,
             documentation: None,
             span,
             trivia: Trivia::default(),
@@ -904,10 +919,11 @@ impl<'a> Parser<'a> {
     fn parse_stub_rhs(&mut self) -> Result<StubRhs, CompileError> {
         let tok = self.expect(
             TokenKind::Ident,
-            "`returns` or `fails` after the `stub` call pattern",
+            "`returns`, `fails` or `never` after the `stub` call pattern",
         )?;
         match self.slice(tok.span) {
             "fails" => Ok(StubRhs::Fails(tok.span)),
+            "never" => Ok(StubRhs::Never(tok.span)),
             "returns" => {
                 let is_each = self.peek_kind() == Some(TokenKind::Ident)
                     && self.slice(self.peek().unwrap().span) == "each";
@@ -934,10 +950,10 @@ impl<'a> Parser<'a> {
             other => Err(CompileError::new(
                 "bynk.parse.expected_token",
                 tok.span,
-                format!("expected `returns` or `fails` in a `stub` clause, found `{other}`"),
+                format!("expected `returns`, `fails` or `never` in a `stub` clause, found `{other}`"),
             )
             .with_note(
-                "a `stub` clause ends `returns <value>`, `returns each [<outcome>, …]`, or `fails`",
+                "a `stub` clause ends `returns <value>` (optionally `after <duration>`), `returns each [<outcome>, …]`, `fails`, or `never`",
             )),
         }
     }

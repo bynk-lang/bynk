@@ -2638,6 +2638,9 @@ fn check_service_decls(
                     borrowed_held,
                     oidc_binder: crate::actors::oidc_seam_for(handler, &table.actors)
                         .and_then(|seam| seam.binder),
+                    // #2683: a WebSocket handler runs in the connection-hosting
+                    // Durable Object, whose `deps` carry no execution context.
+                    service_handler: !is_ws_lifecycle,
                     ..checker::HandlerBodyCheck::new(
                         &handler.body,
                         &handler.return_type,

@@ -119,7 +119,9 @@ an effect (binds its result); `let x = expr` binds a pure value; `do expr` runs 
 unit effect as a statement. `par { let a <- e1  let b <- e2 }` issues independent
 effects together and waits for all of them; it holds only `let x <- e` and `do e`,
 no binding may mention a sibling's name, and a fault raises the first in source
-order once every effect has settled. `Effect.pure(v)` lifts a value. A handler declares
+order once every effect has settled. `e.within(d)` bounds an effect's time and
+yields `Result[T, TimedOut]` (`TimedOut` is `bynk`'s), in a service handler only; the
+effect is not cancelled but handed to `waitUntil`, and may still complete. `Effect.pure(v)` lifts a value. A handler declares
 the capabilities it needs with `given`:
 
 ```bynk
@@ -283,7 +285,7 @@ case "an over-limit request is denied" {
 
 - A case drives a service by its natural surface: `api.GET("/path") by Visitor`,
   `svc.call(args)`, `svc.schedule("…")`, `svc.message(m)`, `svc.event(e)`.
-- `stub Cap.op(args) returns v` (or `fails`) replaces a capability operation for
+- `stub Cap.op(args) returns v` (or `fails`; `returns v after d` and `never` take virtual time, to test `e.within(d)`) replaces a capability operation for
   a suite or a case; `advance Clock by 15.minutes` moves the test clock.
 - `case "…" as integration` runs real collaborators within one context;
   `as system` stands contexts up as the Workers they deploy as and crosses the

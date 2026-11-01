@@ -192,6 +192,13 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 return Some(content);
             }
         }
+        // 3a. #2683: the `within` of `e.within(d)` on an `Effect`.
+        if let Some(text) = a.snapshots.get(a.rel)
+            && let Some(entries) = a.expr_types.get(a.rel)
+            && let Some(content) = crate::symbols::describe_within_at(text, a.offset, entries, tys)
+        {
+            return Some(content);
+        }
         // 4. #855: the handler HEADER — the `on` keyword, the HTTP method /
         //    handler-kind token, and any route string literal. No earlier rung
         //    (nor any later lexical one) ever answers here today: `GET` lexes

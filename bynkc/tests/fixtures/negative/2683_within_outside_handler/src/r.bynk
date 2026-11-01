@@ -1,0 +1,10 @@
+context r
+
+consumes bynk
+
+// #2683: an effectful function has no execution context (see #2682), so it
+// cannot hand an abandoned effect to one. A provider operation has none either.
+fn bounded(f: (Int) -> Effect[Int]) -> Effect[Int] {
+	let r <- f(1).within(2.seconds)
+	Effect.pure(0)
+}

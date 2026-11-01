@@ -278,8 +278,10 @@ The forward plan lives in dedicated, domain-scoped docs:
   [`tracks/concurrent-effects.md`](tracks/concurrent-effects.md)): slice 0, the
   `par { … }` binding block, has shipped ([#2640](https://github.com/bynk-lang/bynk/issues/2640));
   slice 0b, aligning the `parTraverse` family to settle-all, has shipped
-  ([#2662](https://github.com/bynk-lang/bynk/issues/2662)); `?` in a join is next, then a
-  general timeout.
+  ([#2662](https://github.com/bynk-lang/bynk/issues/2662)); slice 3, the general
+  timeout `e.within(d)` with its virtual-time test harness, has shipped
+  ([#2683](https://github.com/bynk-lang/bynk/issues/2683)); `within` in an agent handler
+  or a function is a recorded follow-up; `?` in a join remains.
 - **Editor tooling** — [`bynk-tooling-roadmap.md`](bynk-tooling-roadmap.md)
   (LSP + VS Code); the LSP track completed (ADRs 0093–0095,
   [`bynk-lsp-spec.md`](bynk-lsp-spec.md); remainder in issues #257/#258).

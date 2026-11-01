@@ -3011,8 +3011,13 @@ fn lower_method_call(
         // call — awaits the promises the handler handed `deps.__exec.waitUntil`
         // — so the case's expectations see the sends' effects.
         let settles = cx.test_settles_sends();
+        // #2683: on virtual time every addressed call is driven (auto-advance)
+        // and then settled, whether or not the handler also sends.
+        let virtual_time = cx.runtime_use().virtual_time();
         let settle = |call: String| {
-            if settles {
+            if virtual_time {
+                format!("__bynkSettleVirtual(deps, {call})")
+            } else if settles {
                 format!("__bynkSettle(deps, {call})")
             } else {
                 call
@@ -3379,6 +3384,17 @@ fn lower_method_call(
             // `flatMapOk`/`flatMapErr`. Lowered as an `async` IIFE that awaits the
             // receiver `Promise<Result<…>>` and rebuilds the transformed Result.
             Ty::Effect(inner) => {
+                // #2683: `e.within(d)` races the effect against a deadline and
+                // hands the abandoned effect to the handler's execution context.
+                if method.name == "within" && args.len() == 1 {
+                    cx.note_within();
+                    let recv = pre.lower(receiver, cx);
+                    let after = pre.lower(&args[0], cx);
+                    return pre.finish(format!(
+                        "__bynkWithin({recv}, {after}, {deps}.__exec)",
+                        deps = cx.cap_deps_expr()
+                    ));
+                }
                 if let Ty::Result(ok, err) = &*tys.get(*inner)
                     && let Some(s) = pre.absorb_opt(lower_effect_result_kernel(
                         e, receiver, method, args, *ok, *err, cx,

@@ -1139,6 +1139,43 @@ pub fn describe_self_at(
     Some(format!("```bynk\nself: {name}\n```"))
 }
 
+/// #2683: hover on the `within` of `e.within(d)`, where `e` is an `Effect`: its
+/// signature and what it does and does not do. The kernel methods have no
+/// declaration to read a doc from, so this one is written here; the receiver's
+/// type keeps a user type's own `within` method from being described as it.
+pub fn describe_within_at(
+    text: &str,
+    offset: usize,
+    expr_types: &[(Span, bynk_check::checker::TyId)],
+    tys: &bynk_check::checker::Types,
+) -> Option<String> {
+    let tokens = tokenize(text).ok()?;
+    let tok = tokens.iter().find(|t| {
+        t.span.start <= offset && offset < t.span.end && &text[t.span.start..t.span.end] == "within"
+    })?;
+    let before = text[..tok.span.start].trim_end();
+    let after = text[tok.span.end..].trim_start();
+    if !before.ends_with('.') || !after.starts_with('(') {
+        return None;
+    }
+    let dot = before.len() - 1;
+    let recv = bynk_check::expr_types::type_at_offset(expr_types, dot.checked_sub(1)?, tys)?;
+    if !matches!(&*tys.get(recv), bynk_check::checker::Ty::Effect(_)) {
+        return None;
+    }
+    Some(
+        "```bynk\nwithin(d: Duration) -> Effect[Result[T, TimedOut]]\n```\n\n\
+         Bounds how long the effect may take. If it settles within `d` the result is `Ok`; \
+         if `d` passes first it is `Err(TimedOut { after: d })` and the handler moves on.\n\n\
+         **The effect is not cancelled.** It is handed to the platform's `waitUntil` and may \
+         still complete after the handler has returned, so its side effects can still happen. \
+         Use `FetchOptions.timeout` when the work must actually stop.\n\n\
+         Only in a service handler's body (lambdas included): an agent handler or a function \
+         has no execution context to hand the effect to."
+            .to_string(),
+    )
+}
+
 /// v0.123 (editor-currency slice 2, DECISION B): if the identifier at
 /// `ident_span` is the member of an `Upper.member` name-receiver access
 /// (`Clock.now`, `Email.of`), return the full `Recv.member` callee for
@@ -2772,6 +2809,33 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #2683: hover on `within` names its signature and the abandoned-effect
+    /// caveat, and only when the receiver is an `Effect`.
+    #[test]
+    fn within_hovers_on_an_effect_receiver_only() {
+        use bynk_check::checker::{Ty, Types};
+        use bynk_syntax::ast::BaseType;
+        let tys = Types::new();
+        let int = tys.intern(Ty::Base(BaseType::Int));
+        let effect = tys.intern(Ty::Effect(int));
+        let src = "let r <- p.quote(1).within(2.seconds)\n";
+        let dot = src.find(".within").unwrap();
+        let at = src.find("within").unwrap() + 1;
+        let on_effect = [(Span::new(8, dot), effect)];
+        let hover = describe_within_at(src, at, &on_effect, &tys).expect("within hovers");
+        assert!(
+            hover.contains("within(d: Duration) -> Effect[Result[T, TimedOut]]"),
+            "{hover}"
+        );
+        assert!(hover.contains("not cancelled"), "{hover}");
+        assert!(hover.contains("waitUntil"), "{hover}");
+        // A receiver that is not an `Effect` is a user's own `within`.
+        let on_int = [(Span::new(8, dot), int)];
+        assert!(describe_within_at(src, at, &on_int, &tys).is_none());
+        // Elsewhere on the line is not `within`.
+        assert!(describe_within_at(src, 0, &on_effect, &tys).is_none());
+    }
+
     /// #2640: `par` hovers only as the head of a `par { … }` block.
     #[test]
     fn par_hover_is_for_the_block_keyword_only() {

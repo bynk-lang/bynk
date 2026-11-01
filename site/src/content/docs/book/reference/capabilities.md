@@ -96,6 +96,35 @@ fault a program sees independent of timing. Effects that completed before the fa
 keep their effects, exactly as in a sequence of `<-`s. See
 [what a join guarantees on failure](/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/).
 
+## Bounding an effect — `within` {#within}
+
+`e.within(d)` bounds how long an effect may take. It is a method of every
+`Effect[T]`, `d` is a `Duration`, and the result is `Effect[Result[T, TimedOut]]`:
+
+```bynk,fragment
+let r <- Pricing.quote(id).within(2.seconds)
+match r {
+  Ok(q) => Effect.pure("quoted \(q)")
+  Err(TimedOut { after, .. }) => Effect.pure("late")   // the quote may still complete
+}
+```
+
+`TimedOut { after: Duration }` is `bynk`'s, so the unit consumes `bynk`. When the
+deadline passes first, the effect is **not cancelled**: it is handed to the
+platform's `waitUntil` and may still complete after the handler returns, with its side
+effects. A tie goes to the effect. `FetchOptions.timeout` is the tool when the work must
+actually stop. An effect that already returns a `Result` gains a second layer.
+
+| Where | Code | Why |
+|---|---|---|
+| an agent handler, a lambda in one included | `bynk.within.in_agent_handler` | no execution context to hand the abandoned effect to |
+| an effectful `fn`, a provider operation or a WebSocket handler | `bynk.within.outside_handler` | none of them has an execution context (#2682; a WebSocket handler runs in the connection's Durable Object) |
+| a pure body | `bynk.within.in_pure_context` | it needs an effectful body |
+| a unit that does not consume `bynk` | `bynk.within.timed_out_not_in_scope` | `TimedOut` is `bynk`'s |
+
+A deadline that is not over zero and at most 2,147,483,647 ms faults the call. See
+[bound how long a call may take](/book/guides/effects-and-capabilities/bound-how-long-a-call-may-take/).
+
 ## Generic operations
 
 A capability operation may declare its own type parameter (v0.235, ADR 0281) —
