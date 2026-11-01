@@ -19,7 +19,7 @@
 //! context file they test, as the doc-example suites are (#2461), and the
 //! project's own suites are left out: a smoke run runs only the smoke. Whether a
 //! case can be built is decided by checking it: a case whose check reports one
-//! of the [`SKIPPABLE`] codes (a `Matches` type `Val` cannot fabricate, a
+//! of the codes in `SKIPPABLE` (a `Matches` type `Val` cannot fabricate, a
 //! principal it cannot construct) is dropped and reported as skipped, with the
 //! checker's reason. Any other diagnostic in a synthesised suite is a bug in
 //! this module, never a skip, so a run cannot pass green by skipping everything.
@@ -263,7 +263,7 @@ impl Smoke {
     }
 
     /// Check the synthesised suites with `check`, dropping every case that
-    /// reports a [`SKIPPABLE`] code, until they check clean. Returns the
+    /// reports a code in `SKIPPABLE`, until they check clean. Returns the
     /// overlay to build.
     pub fn settle(
         &mut self,
