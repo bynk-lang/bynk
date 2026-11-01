@@ -1,2 +1,0 @@
-bynk.stability.experimental
-`bynk.cloudflare.D1` is experimental
