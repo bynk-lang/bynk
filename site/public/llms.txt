@@ -4,7 +4,7 @@
 > services. The shape of a program — its contexts, services, agents, and the types
 > that flow between them — is part of the language, not a convention layered on top.
 > Bynk compiles to typed TypeScript and targets Cloudflare Workers. It is pre-1.0
-> and evolves in small, spec-first increments (currently v0.478).
+> and evolves in small, spec-first increments (currently v0.479).
 
 This file is a self-contained primer for an LLM agent. The first half teaches
 enough Bynk to read and write it; the second half links to the canonical [Bynk
@@ -112,6 +112,7 @@ match found {                 // found : Option[Item]
 - `match` is exhaustive. `is` tests a value against a variant pattern, yielding a
   `Bool` (e.g. `if (mo is None) { 1 } else { 0 }`).
 - `let Ok(x) = r else { … }` binds on a match and runs the `else` block otherwise.
+- `unreachable(message: String)` and `todo(message: String)` fault when evaluated and have a bottom type that fits any position (a `match` arm, a function body); `todo` also warns (`bynk.fault.todo`). Shadowable, not keywords; there is no general `panic`.
 - `Json.decode[T](s) -> Result[T, JsonError]` and `Json.encode(v) -> String`.
 
 ### Effects and capabilities

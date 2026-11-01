@@ -201,7 +201,11 @@ pub fn resolve_label(
             }
         }
     });
-    found
+    // #2620: the ambient fault built-ins, unless a `fn` of that name shadows them.
+    found.or_else(|| match callee {
+        "unreachable" | "todo" => Some(format!("{callee}(message: String) -> never returns")),
+        _ => None,
+    })
 }
 
 fn resolve_qualified(
@@ -463,6 +467,20 @@ mod tests {
     fn a_derivation_cycle_has_no_signature() {
         let doc = "context a\n\ncapability A = B\ncapability B = A\n";
         assert_eq!(resolve_label("A.put", doc, None), None);
+    }
+
+    #[test]
+    fn fault_builtins_have_a_signature_a_user_fn_shadows() {
+        // #2620
+        assert_eq!(
+            resolve_label("unreachable", "context a.b\n", None).as_deref(),
+            Some("unreachable(message: String) -> never returns")
+        );
+        let doc = "commons m {\n  fn todo(n: Int) -> Int { n }\n}\n";
+        assert_eq!(
+            resolve_label("todo", doc, None).as_deref(),
+            Some("todo(n: Int) -> Int")
+        );
     }
 
     #[test]

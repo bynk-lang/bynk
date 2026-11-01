@@ -2031,6 +2031,19 @@ fn expression_candidates(
     // of every `uses`-imported module (project + stdlib) — ADR 0093 D3 / G5 —
     // plus their assets (#1883), in scope by the same rule.
     out.extend(free_function_candidates(doc_text, files));
+    // #2620: the ambient `unreachable`/`todo`, unless a declaration shadows one.
+    for info in keywords::BUILTIN_FUNCTIONS {
+        if !out.iter().any(|c| c.label == info.word) {
+            out.push(
+                Completion::item(
+                    info.word,
+                    CompletionKind::Function,
+                    Some(format!("{}(message: String) -> never returns", info.word)),
+                )
+                .with_doc(Some(info.meaning)),
+            );
+        }
+    }
     out
 }
 
@@ -2241,6 +2254,7 @@ pub fn keyword_doc(word: &str) -> Option<&'static str> {
     keywords::KEYWORDS
         .iter()
         .find(|k| k.word == word)
+        .or_else(|| keywords::BUILTIN_FUNCTIONS.iter().find(|k| k.word == word))
         .map(|k| k.meaning)
 }
 
@@ -3019,6 +3033,23 @@ mod tests {
         assert!(
             find(&items, "Order", CompletionKind::Type).is_some(),
             "project type"
+        );
+    }
+
+    #[test]
+    fn expression_position_offers_the_fault_builtins_unless_shadowed() {
+        // #2620: `unreachable`/`todo` are ambient functions at a value position,
+        // and a `fn` of the same name replaces the built-in rather than doubling it.
+        let doc = "commons m {\n  fn todo(s: String) -> Int { 1 }\n}\n";
+        let items = complete("  let x = ", doc, None);
+        assert!(
+            find(&items, "unreachable", CompletionKind::Function).is_some(),
+            "unreachable offered"
+        );
+        assert_eq!(
+            items.iter().filter(|i| i.label == "todo").count(),
+            1,
+            "the user's `todo` shadows the built-in"
         );
     }
 

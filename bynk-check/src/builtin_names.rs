@@ -33,6 +33,22 @@ pub mod types {
     pub const MAP_ENTRY: &str = "MapEntry";
 }
 
+/// #2620: the ambient built-in functions that fault deliberately. Each is a
+/// bare call of the bottom type; a user declaration of the same name shadows it.
+pub mod faults {
+    pub const UNREACHABLE: &str = "unreachable";
+    pub const TODO: &str = "todo";
+
+    /// The runtime fault kind a built-in name raises, or `None` for any other name.
+    pub fn kind_of(name: &str) -> Option<&'static str> {
+        match name {
+            UNREACHABLE => Some("Unreachable"),
+            TODO => Some("Todo"),
+            _ => None,
+        }
+    }
+}
+
 /// The `.entries` / `.keys` / `.values` accessors a `store Map[K, V]` field
 /// exposes as lazy queries (v0.158, ADR 0184), and the two fields the
 /// `MapEntry` record carries.

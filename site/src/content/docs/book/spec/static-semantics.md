@@ -217,6 +217,22 @@ types over one base) agree at the base, but unrelated types do not
 from its expected type when that type is either, and otherwise from the enclosing
 return type, so it is never ambiguous (#1659).
 
+**The bottom type and deliberate faults** (#2620). `unreachable(message)` and
+`todo(message)` are ambient built-in functions, not keywords: each takes one
+`String` (`bynk.types.argument_mismatch`, `bynk.types.call_arity`), and a `fn`,
+parameter or local of the same name shadows the built-in, as `Json` is shadowed.
+A call has the internal **bottom type** `Never`, which is assignable to every
+type and is absorbed by every join — the join of `Never` and *T* is *T*, and of
+two `Never`s is `Never` — so such a call fits a `match` arm, an `if` branch, a
+function body or a lambda body of any type without poisoning the type of the
+whole. `Never` is not nameable in source (there is no `-> Never`); diagnostics
+and hover render it as "never returns". An `unreachable` arm is still an arm, so
+exhaustiveness is unchanged. Both are valid in pure and
+effectful positions; in an `Effect[T]` position the fault happens when the effect runs.
+`todo` additionally reports the non-failing warning `bynk.fault.todo` (ADR 0117),
+which `check --deny-warnings` turns into a refusal. Errors-as-values remains the
+rule for expected failure: there is deliberately no general `panic`.
+
 **Lambdas** (v0.20a). Against an expected function type, a lambda's
 parameters take the expected types (an annotation MUST agree), its body is
 checked against the expected return — a pure body auto-lifts into an
@@ -2430,7 +2446,9 @@ the claim is how a `case` observes one, not a way to catch it. Well-formedness:
   (`bynk.test.faults_needs_in_process`): `Nobody` exercises the `system`-tier auth
   seam, where the claim cannot hold.
 
-The claim types as `Bool`.
+The claim types as `Bool`. A call that reaches `unreachable(…)` or `todo(…)`
+([§5.2](#52-well-typedness)) faults like any other runtime fault, so the claim holds
+for it.
 
 {{#grammar-semantics faults_expr}}
 

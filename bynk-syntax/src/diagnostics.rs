@@ -1097,6 +1097,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`exports` names a type that is not declared.",
         &["exports_decl"],
     ),
+    warn(d(
+        "bynk.fault.todo",
+        "A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning).",
+    )),
     d(
         "bynk.fmt.comment_loss",
         "The formatter would drop a comment, so it leaves the file unchanged.",

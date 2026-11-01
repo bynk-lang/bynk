@@ -6434,6 +6434,22 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     let mut pre = Pre::new();
     // Bare variant constructor with payload → qualify.
     let args_lowered = lower_http_variant_args(&name.name, args, &mut pre, cx);
+    // #2620: `unreachable(msg)` / `todo(msg)` lower to a call of the runtime's
+    // `never`-returning `__fault`, which throws — valid in any expression
+    // position, and inside an async body it rejects the effect.
+    if let Some(Callee::Fault { kind }) = cx.commons().callee(e.id) {
+        let location = cx
+            .assert_loc()
+            .map(|_| expect_location(cx, e.span.start))
+            .or_else(|| crate::emitter::fault_source_location(e.span.start))
+            .map(|l| crate::emitter::escape_ts_string(&l))
+            .unwrap_or_else(|| format!("offset {}", e.span.start));
+        cx.note_fault();
+        return pre.finish(format!(
+            "__fault({kind:?}, {}, \"{location}\")",
+            args_lowered.join(", ")
+        ));
+    }
     // v0.9: HttpResult variant call.
     //
     // P6.21/P6.23 (review of #1251): reads `Callee::Intrinsic` instead of
@@ -6979,6 +6995,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         // (`checker/equality.rs`), so no certified program reaches here. The
         // walker is the safe answer if one ever did.
         Ty::Error
+        | Ty::Never
         | Ty::Fn { .. }
         | Ty::Effect(_)
         | Ty::Query(_)

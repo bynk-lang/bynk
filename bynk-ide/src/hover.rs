@@ -385,6 +385,23 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             })
         })
         .or_else(|| crate::symbols::describe_firstparty_symbol(&name))
+        // #2620: the ambient `unreachable`/`todo`, last, so a declaration of the
+        // same name (which shadows the built-in) is answered by a rung above.
+        .or_else(|| describe_fault_builtin(&name, &text[span.end..]))
+}
+
+/// #2620: hover for a call to the ambient `unreachable(…)` / `todo(…)`: the
+/// signature (its type is `never returns`) and the registry's one-line doc.
+fn describe_fault_builtin(name: &str, after: &str) -> Option<String> {
+    let info = bynk_syntax::keywords::BUILTIN_FUNCTIONS
+        .iter()
+        .find(|k| k.word == name)?;
+    after.trim_start().starts_with('(').then(|| {
+        format!(
+            "```bynk\n{name}(message: String) -> never returns\n```\n\n{}",
+            info.meaning
+        )
+    })
 }
 
 /// #2469: the shortest path to the capability's use, when the cursor is on a
@@ -762,6 +779,22 @@ mod tests {
             path: None,
             files: None,
         })
+    }
+
+    /// #2620: the ambient fault built-ins hover with their signature and doc; a
+    /// declaration of the same name shadows the built-in.
+    #[test]
+    fn fault_builtins_hover_unless_shadowed() {
+        let src = "commons demo.m\n\nfn f(n: Int) -> Int { if n > 0 { n } else { unreachable(\"never\") } }\n";
+        let h = hover_at(src, "unreachable", 0).expect("`unreachable` hovers");
+        assert!(
+            h.contains("unreachable(message: String) -> never returns"),
+            "{h}"
+        );
+        let shadowed =
+            "commons demo.m\n\nfn todo(n: Int) -> Int { n }\n\nfn g() -> Int { todo(1) }\n";
+        let h = hover_at(shadowed, "todo", 1).expect("the user's `todo` hovers");
+        assert!(!h.contains("never returns"), "{h}");
     }
 
     /// Constrained generics slice 1: `derives` and the constraint names it and

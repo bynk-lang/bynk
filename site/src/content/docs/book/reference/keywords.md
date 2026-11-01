@@ -5,7 +5,7 @@ title: Keywords
      Source: bynk-syntax/src/keywords.rs (`render_markdown`).
      Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference:: -->
 
-Bynk reserves names in four tiers. The first two are lexer keywords; the third are words the lexer treats as plain identifiers; the fourth are compiler-known type names. Only the **hard keywords** can never be used as an identifier.
+Bynk reserves names in four tiers. The first two are lexer keywords; the third are words the lexer treats as plain identifiers; the fourth are compiler-known type names. Only the **hard keywords** can never be used as an identifier. A last section lists the ambient built-in functions, which reserve nothing.
 
 ## Hard keywords
 
@@ -126,3 +126,12 @@ Compiler-known type constructors. They are not lexer keywords — you may use th
 | `Set` | The immutable set type, `Set[T]`. |
 | `Stream` | The value-over-time primitive, `Stream[T]`. |
 | `TokenClaims` | An `Oidc` actor's verified token claims, read through its binder (`who.claims`). |
+
+## Built-in functions
+
+Functions the compiler provides without a declaration. They reserve nothing: a `fn`, parameter or local of the same name shadows the built-in.
+
+| Name | Meaning |
+|---|---|
+| `todo` | Placeholder for unfinished code, `todo(message: String)`: type-checks anywhere, faults when run, and raises the `bynk.fault.todo` warning so `check --deny-warnings` can refuse it. |
+| `unreachable` | Mark a case that cannot happen, `unreachable(message: String)`: type-checks anywhere and faults when evaluated, so a broken assumption is loud instead of masked by a made-up default. |
