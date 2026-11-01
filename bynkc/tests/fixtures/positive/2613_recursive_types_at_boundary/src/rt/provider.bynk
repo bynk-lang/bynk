@@ -11,6 +11,27 @@ service trees {
   }
 }
 
+// Publishing `Planted` checks that a recursive type is accepted as an event
+// payload field and published. (The subscriber-side payload decoder is not
+// pinned here.)
+service gardener {
+  on call(t: Tree) -> Effect[()] given Events {
+    let _ <- Events.emit[Planted](Planted { tree: t })
+  }
+}
+
+service exprs {
+  on call(e: Expr) -> Effect[Expr] {
+    Effect.pure(e)
+  }
+}
+
+service indexes {
+  on call(i: Index) -> Effect[Index] {
+    Effect.pure(i)
+  }
+}
+
 service dirs {
   on call(d: Dir) -> Effect[Dir] {
     Effect.pure(d)

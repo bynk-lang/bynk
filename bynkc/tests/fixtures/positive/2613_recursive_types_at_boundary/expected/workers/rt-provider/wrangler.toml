@@ -8,7 +8,15 @@ compatibility_flags = ["global_fetch_strictly_public"]
 name = "KEEPER"
 class_name = "Keeper"
 
+[[durable_objects.bindings]]
+name = "___EVENTS_FANOUT"
+class_name = "__EventsFanout"
+
 [exports.Keeper]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.__EventsFanout]
 type = "durable-object"
 storage = "sqlite"
 
