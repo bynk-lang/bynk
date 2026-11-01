@@ -20,6 +20,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Match on a list's shape](/book/guides/type-system/match-on-a-lists-shape/)
 - [Match on a range of numbers](/book/guides/type-system/match-on-a-range-of-numbers/)
 - [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/)
+- [Fault on the impossible or the unfinished](/book/guides/type-system/fault-on-the-impossible/)
 - [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/)
 - [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/)
 - [Generic code that crosses the boundary](/book/guides/type-system/generic-code-that-crosses-the-boundary/)

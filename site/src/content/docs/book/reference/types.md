@@ -440,6 +440,44 @@ Every payload Bynk wrote decodes as before, but a hand-written tagged object
 with an extra key, such as `{"kind": "Some", "value": "d", "note": "x"}`, is
 read as a bare value, so it fails for an `Option[String]`.
 
+## Deliberate faults: `unreachable` and `todo` {#faults}
+
+Two ambient built-in functions raise a fault on purpose. Both take a `String`
+message and have the internal bottom type (`Never`), which is assignable to every
+type, so a call fits a `match` arm, an `if` branch or a function body of any type
+with no made-up default.
+
+| Call | Use | Diagnostics |
+|---|---|---|
+| `unreachable(message)` | A case the author knows cannot happen. | — |
+| `todo(message)` | Unfinished code that still type-checks. | `bynk.fault.todo` (warning) |
+
+```bynk,fragment
+fn label(s: Status) -> String {
+  match s {
+    Open => "open",
+    Closed => "closed",
+    Archived => unreachable("archived orders are filtered upstream"),
+  }
+}
+
+fn refund(o: Order) -> Effect[Result[(), RefundError]] {
+  todo("refunds — #1234")
+}
+```
+
+Evaluating either is a fault, like a division by zero or an invariant violation:
+the handler faults, an agent's state does not commit, and the response is the
+existing fault response. The logged fault carries the kind (`Unreachable` or
+`Todo`), the message and the `path:line:col` of the call. A test observes one
+with `expect <call> faults`. `todo` compiles but warns, so `bynkc check
+--deny-warnings` keeps unfinished code out of CI.
+
+They are not keywords: a `fn` or binding of the same name shadows them. There is
+no general `panic` — use `Result` for any failure a caller could handle. `Never`
+cannot be written in source, and a lambda whose body is only a fault call gets its
+type from the expected function type.
+
 ## Type aliases
 
 ```bynk

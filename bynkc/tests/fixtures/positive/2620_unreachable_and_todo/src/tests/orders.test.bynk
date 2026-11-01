@@ -1,0 +1,74 @@
+suite demo.orders {
+  case "a reachable arm returns its value" {
+    let l <- labels.call(Open)
+    expect l == "open"
+  }
+
+  case "an unreachable arm faults when evaluated" {
+    expect labels.call(Archived) faults
+  }
+
+  case "an unreachable branch is not taken for a valid input" {
+    let h <- halves.call(8)
+    expect h == 4
+  }
+
+  case "an unreachable branch faults on an invalid input" {
+    expect halves.call(0 - 1) faults
+  }
+
+  case "todo faults when it runs" {
+    expect refunds.call(Open) faults
+  }
+
+  case "a handler that faults does not commit agent state" {
+    let a <- bumps.call(false)
+    expect a == 1
+    expect bumps.call(true) faults
+    let after <- reads.call()
+    expect after == 1
+  }
+
+  case "bind on a fault call faults" {
+    expect awaits.call() faults
+  }
+
+  case "a fault in the first arm joins with the others" {
+    let l <- firsts.call(Closed)
+    expect l == "closed"
+    expect firsts.call(Archived) faults
+  }
+
+  case "a faulting guard with no else" {
+    let n <- guards.call(3)
+    expect n == 3
+    expect guards.call(0 - 1) faults
+  }
+
+  case "let else with a fault" {
+    let n <- unwraps.call(Some(5))
+    expect n == 5
+    expect unwraps.call(None) faults
+  }
+
+  case "a fault in a lambda body" {
+    let ok <- lambdas.call(1)
+    expect ok == "ok"
+    expect lambdas.call(0) faults
+  }
+
+  case "a parameter named todo shadows the built-in" {
+    expect shadowed((s) => s.length()) == 4
+  }
+
+  case "a faulting guard in an effectful body" {
+    let n <- effectGuards.call(4)
+    expect n == 8
+    expect effectGuards.call(0 - 1) faults
+  }
+
+  case "a fault argument does not bind a type variable" {
+    // Both calls type as `Int`; the arguments are evaluated, so the fault fires.
+    expect picks.call(3) faults
+  }
+}

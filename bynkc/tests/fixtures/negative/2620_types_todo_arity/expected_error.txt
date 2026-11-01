@@ -1,0 +1,1 @@
+bynk.types.call_arity `todo` takes 1 argument (a message), but 0 were given

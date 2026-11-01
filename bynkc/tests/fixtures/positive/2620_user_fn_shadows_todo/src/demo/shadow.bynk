@@ -1,0 +1,13 @@
+commons demo.shadow
+
+---
+A declaration of the same name shadows the ambient built-in: this `todo` is an
+ordinary function, with no `bynk.fault.todo` warning and no fault.
+---
+fn todo(note: String) -> Int {
+  note.length()
+}
+
+fn count() -> Int {
+  todo("four")
+}

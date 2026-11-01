@@ -1,0 +1,188 @@
+context demo.orders {
+  type Status = enum { Open, Closed, Archived }
+
+  ---
+  An arm the author knows cannot happen takes the type of the others: no made-up default.
+  ---
+  fn label(s: Status) -> String {
+    match s {
+      Open => "open",
+      Closed => "closed",
+      Archived => unreachable("archived orders are filtered upstream"),
+    }
+  }
+
+  ---
+  A guard on a branch the caller promises is impossible.
+  ---
+  fn half(n: Int) -> Int {
+    if n >= 0 { n / 2 } else { unreachable("callers pass a non-negative count") }
+  }
+
+  ---
+  The fault may come first: the join of `Never` and `String` is `String` either way round.
+  ---
+  fn firstArm(s: Status) -> String {
+    match s {
+      Archived => unreachable("archived orders are filtered upstream"),
+      Open => "open",
+      Closed => "closed",
+    }
+  }
+
+  ---
+  A guard with no `else` whose branch only faults is `()` where it is not taken.
+  ---
+  fn guard(n: Int) -> Int {
+    let _ = if n < 0 { unreachable("negative") }
+    n
+  }
+
+  ---
+  `let … else` with a fault in the `else`.
+  ---
+  fn unwrap(o: Option[Int]) -> Int {
+    let Some(v) = o else { unreachable("callers pass Some") }
+    v
+  }
+
+  ---
+  A fault in a lambda body takes its type from the expected function type.
+  ---
+  fn viaLambda(n: Int) -> String {
+    let f: (Int) -> String = (x) => unreachable("never called")
+    if n > 0 { "ok" } else { f(n) }
+  }
+
+  ---
+  A fault call never binds a type variable: `T` comes from the other argument,
+  whichever side the fault is on.
+  ---
+  fn pick[T](a: T, b: T) -> T {
+    a
+  }
+
+  fn pickFirst(n: Int) -> Int {
+    pick(unreachable("first"), n)
+  }
+
+  fn pickSecond(n: Int) -> Int {
+    pick(n, unreachable("second"))
+  }
+
+  ---
+  A parameter named `todo` shadows the built-in: this is an ordinary call.
+  ---
+  fn shadowed(todo: (String) -> Int) -> Int {
+    todo("note")
+  }
+
+  ---
+  Unfinished code type-checks as the declared return type; running it faults.
+  ---
+  fn refund(s: Status) -> Effect[Result[Int, String]] {
+    todo("refunds")
+  }
+
+  service labels {
+    on call(s: Status) -> Effect[String] {
+      label(s)
+    }
+  }
+
+  service guards {
+    on call(n: Int) -> Effect[Int] {
+      guard(n)
+    }
+  }
+
+  ---
+  The same faulting guard as a statement in an effectful body.
+  ---
+  service effectGuards {
+    on call(n: Int) -> Effect[Int] {
+      let _ = if n < 0 { unreachable("negative") }
+      let doubled <- Effect.pure(n * 2)
+      doubled
+    }
+  }
+
+  service picks {
+    on call(n: Int) -> Effect[Int] {
+      pickSecond(n) + pickFirst(n)
+    }
+  }
+
+  service unwraps {
+    on call(o: Option[Int]) -> Effect[Int] {
+      unwrap(o)
+    }
+  }
+
+  service firsts {
+    on call(s: Status) -> Effect[String] {
+      firstArm(s)
+    }
+  }
+
+  service lambdas {
+    on call(n: Int) -> Effect[String] {
+      viaLambda(n)
+    }
+  }
+
+  service halves {
+    on call(n: Int) -> Effect[Int] {
+      half(n)
+    }
+  }
+
+  service refunds {
+    on call(s: Status) -> Effect[Result[Int, String]] {
+      refund(s)
+    }
+  }
+
+  ---
+  A fault in a handler aborts it: the write below never commits.
+  ---
+  agent Ledger {
+    key id: String
+    store total: Cell[Int]
+
+    on call bump(fail: Bool) -> Effect[Int] {
+      let _ <- total.update((n) => n + 1)
+      if fail { unreachable("the ledger was told to fail") } else { total }
+    }
+
+    on call read() -> Effect[Int] {
+      total
+    }
+  }
+
+  service bumps {
+    on call(fail: Bool) -> Effect[Int] {
+      let ledger = Ledger("main")
+      let n <- ledger.bump(fail)
+      n
+    }
+  }
+
+  service reads {
+    on call() -> Effect[Int] {
+      let ledger = Ledger("main")
+      let n <- ledger.read()
+      n
+    }
+  }
+
+  ---
+  `<-` on a fault call: the effect position faults when it runs.
+  ---
+  service awaits {
+    on call() -> Effect[Int] {
+      let n <- todo("awaiting")
+      n
+    }
+  }
+}
