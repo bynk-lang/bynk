@@ -823,7 +823,10 @@ match order {
 }
 ```
 
-Redundancy is found across several earlier arms, not only one at a time. A
+A list is covered by length: `[]` and `[x, ..rest]` together cover every list, and
+`[_]` and `[_, _]` alone leave `[_, _, ..]` uncovered (see
+[List patterns](#list-patterns)). Redundancy is found across several earlier
+arms, not only one at a time. A
 guarded arm, and a refined pattern (`_ where …`), cover nothing, because the
 guard or predicate may fail. `Int` and `String` literals never complete their
 type, so those matches end in `_` or a name.
@@ -835,6 +838,63 @@ missing values leave open. The editor's *add missing arms* fix inserts every
 reported pattern. At most eight are reported at once, with a count of the rest. A
 `match` too tangled to decide within the compiler's step budget is reported as
 non-exhaustive, with a note asking for a `_` arm; it is never accepted unproved.
+
+### List patterns
+
+A `List` is matched by its length and elements with a list pattern (patterns
+track, slice 4, #2680):
+
+```bynk,fragment
+match items {
+  [] => "empty"
+  [only] => only.sku
+  [first, _, ..] => first.sku
+}
+
+match xs {
+  [] => 0
+  [x, ..rest] => x + sum(rest)
+}
+```
+
+| Pattern | Matches |
+| --- | --- |
+| `[]` | the empty list |
+| `[p₁, …, pₙ]` | exactly *n* elements, element *i* against `pᵢ` |
+| `[p₁, …, pₙ, ..]` | *n* or more elements; the rest is not bound |
+| `[p₁, …, pₙ, ..rest]` | *n* or more; `rest` is a `List[T]` of the remaining elements |
+
+*n* may be 0: `[..]` matches any list and `[..rest]` binds the whole list.
+
+- Each element is any pattern, and list patterns nest (`Some([x, ..])`,
+  `[[a, ..], ..]`). They work in `match`, in or-pattern alternatives, after `is`
+  (no parentheses: the pattern closes at `]`) and in `let … else`.
+- The `..` is the **last** element, and there is at most one
+  (`bynk.parse.list_rest_not_last`); patterns for the end of a list, such as
+  `[.., last]`, are not available. `..rest` names the rest, and `.._` is not a
+  form, because a bare `..` already binds nothing. A `..` followed by a literal
+  (`[..9]`) is reserved for range patterns
+  (`bynk.parse.range_pattern_unsupported`).
+- The value must be a `List[T]`; a `Set`, a `Map`, a record or any other type is
+  `bynk.types.list_pattern_on_non_list`. Each element is checked at `T`.
+- **Exhaustiveness is by length.** `[]` and `[x, ..rest]` cover every list, with
+  no `_` arm. A missing length is reported as a pattern, `[]`, `[_]` or
+  `[_, _, ..]`, with an element pattern where the missing lists need one
+  (`[None, ..]`). An arm the earlier ones cover is `bynk.types.unreachable_arm`
+  (`[x, ..]` after `[_, ..]`). See
+  [Exhaustiveness and reachability](#exhaustiveness-and-reachability).
+- Or-pattern alternatives bind the same names at the same types, so `[x] | [x, ..]`
+  is legal and `[x] | []` is not.
+- **Binding `..rest` copies** the remaining elements, which costs time in
+  proportion to the list's length (O(length − *n*)) on each match. A recursive
+  `[x, ..rest] => f(rest)` is therefore quadratic overall. The kernel folds
+  (`fold`, `map`, `filter`) are the recommended way to visit every element. `..`
+  with no name, and `[..rest]` (which binds the list itself), copy nothing.
+
+In a `let`, a list pattern needs an `else` (`let [head, ..] = jobs else { 0 }`),
+since a list can be shorter than the pattern. `[..]` and `[..rest]` cannot fail,
+so an `else` on one is `bynk.types.unreachable_arm`; write `let rest = xs`. See
+[Match on a list's shape](/book/guides/type-system/match-on-a-lists-shape/).
 
 ### Record patterns
 

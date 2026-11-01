@@ -33,6 +33,7 @@
     - [Pattern-match with `match`](guides/type-system/match.md)
     - [Match on a record's fields](guides/type-system/match-on-a-records-fields.md)
     - [Destructure a record with `let`](guides/type-system/destructure-a-record-with-let.md)
+    - [Match on a list's shape](guides/type-system/match-on-a-lists-shape.md)
     - [Narrow and bind with `is`](guides/type-system/narrow-with-is.md)
     - [Declare `Eq` on a generic that compares](guides/type-system/declare-eq-bounds.md)
   - [Program structure](guides/program-structure/index.md)

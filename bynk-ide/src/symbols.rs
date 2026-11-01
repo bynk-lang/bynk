@@ -474,7 +474,9 @@ fn receiver_segment_at(text: &str, member_span: Span) -> Option<(&str, usize)> {
 /// True when the identifier starting at `start` is itself the member of a
 /// further access (the `items` of `p.items`) rather than a bare name.
 pub(crate) fn is_dot_preceded(text: &str, start: usize) -> bool {
-    text[..start].ends_with('.')
+    // A `..` is a rest marker (`[x, ..rest]`, `T { f, .. }`), not a member
+    // access, so the name after it is a fresh binding.
+    text[..start].ends_with('.') && !text[..start].ends_with("..")
 }
 
 /// #596: the storage-kind vocabulary a bare receiver is eligible for at

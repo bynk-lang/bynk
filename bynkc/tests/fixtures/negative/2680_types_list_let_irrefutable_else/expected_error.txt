@@ -1,0 +1,2 @@
+# exact
+bynk.types.unreachable_arm this `else` can never run — `[..rest]` matches every `List[Int]` @ 4:21

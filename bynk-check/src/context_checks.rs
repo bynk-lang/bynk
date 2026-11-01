@@ -339,6 +339,11 @@ fn opaque_record_patterns(
                 }
             }
         }
+        Pattern::List { elems, .. } => {
+            for e in elems {
+                opaque_record_patterns(e, consumed, true, errors);
+            }
+        }
         Pattern::Variant { bindings, .. } => {
             for b in bindings {
                 opaque_record_patterns(b.pattern(), consumed, true, errors);

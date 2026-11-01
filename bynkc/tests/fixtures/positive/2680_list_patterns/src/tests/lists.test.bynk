@@ -1,0 +1,69 @@
+suite shop.lists {
+  case "an empty list, one element and many" {
+    expect sum([]) == 0
+    expect sum([1, 2, 3, 4]) == 10
+    expect describe([]) == "empty"
+    expect describe([Item { sku: "a", qty: 1 }]) == "a"
+    expect describe([Item { sku: "a", qty: 1 }, Item { sku: "b", qty: 2 }]) == "a"
+  }
+
+  case "exact lengths and an open tail" {
+    expect count([]) == 0
+    expect count([9]) == 1
+    expect count([9, 9]) == 2
+    expect count([9, 9, 9]) == 3
+    expect count([9, 9, 9, 9, 9]) == 3
+  }
+
+  case "a rest alone binds the whole list" {
+    expect whole([]) == 0
+    expect whole([5, 6, 7]) == 3
+  }
+
+  case "nested element patterns" {
+    expect firstSome([Some(4), None]) == 4
+    expect firstSome([None, Some(4)]) == -1
+    expect firstSome([]) == 0
+    expect headOfHeads([[7, 8], [9]]) == 7
+    expect headOfHeads([[], [9]]) == -1
+    expect headOfHeads([]) == -2
+    expect viaOption(Some([3, 4])) == 3
+    expect viaOption(Some([])) == -1
+    expect viaOption(None) == -2
+  }
+
+  case "a record or a literal inside a list" {
+    expect isApi([Segment { name: "api" }, Segment { name: "v1" }])
+    expect !isApi([Segment { name: "web" }])
+    expect !isApi([])
+    expect startsWithZero([0, 1])
+    expect !startsWithZero([1, 0])
+    expect !startsWithZero([])
+  }
+
+  case "or-patterns and guards" {
+    expect headOr([4]) == 4
+    expect headOr([4, 5]) == 4
+    expect headOr([4, 5, 6]) == 0
+    expect headOr([]) == 0
+    expect big([20, 1]) == "big"
+    expect big([2, 1]) == "small"
+    expect big([]) == "none"
+  }
+
+  case "is binds names" {
+    expect tailLength([1, 2, 3]) == 2
+    expect tailLength([1]) == 0
+    expect tailLength([]) == -1
+    expect secondOf([1, 2, 3]) == 2
+    expect secondOf([1]) == 0
+  }
+
+  case "let else" {
+    expect headOrZero([8, 9]) == 8
+    expect headOrZero([]) == 0
+    expect pairSum([3, 4]) == 7
+    expect pairSum([3]) == -1
+    expect pairSum([3, 4, 5]) == -1
+  }
+}

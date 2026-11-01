@@ -168,7 +168,8 @@ declares no constant emits exactly as before.
 |---|---|
 | `if … else …` | a conditional / `if` |
 | `match` | a `switch` on `.tag`, payload fields bound as `const` |
-| `match` with a record pattern, a guard, or a nested refutable pattern | a sequence of `if` blocks, one per arm: each tests its refutable sub-patterns (a record pattern tests each refutable field against `scrutinee.field`), binds names as `const`, then runs the guard and body; a record pattern adds no tag test |
+| `match` with a record pattern, a list pattern, a guard, or a nested refutable pattern | a sequence of `if` blocks, one per arm: each tests its refutable sub-patterns (a record pattern tests each refutable field against `scrutinee.field`; a list pattern tests `scrutinee.length === n`, or `scrutinee.length >= n` with a rest marker, then each refutable element against `scrutinee[i]`), binds names as `const`, then runs the guard and body; a record pattern adds no tag test, and `[..]` adds no test at all |
+| a list pattern's `..rest` | `const rest = scrutinee.slice(n);` after the *n* elements before it. Binding it **copies** the remaining elements, so it costs O(length − *n*) per match: a recursive `[x, ..rest] => f(rest)` is O(length²) overall, and the kernel folds are the way to iterate. `[..rest]` binds the scrutinee itself with no copy, which is unobservable because no list is ever mutated in place; a bare `..` copies nothing |
 | admitted literal | an inline brand cast `(literal as T)` ([§6.4](/book/spec/type-system/#64-admission--construction); ADR 0182) |
 | float literal | the source **lexeme** verbatim (`1e10` does not normalise) |
 | interpolated string | a **template literal**: chunks as escaped text (backslash, backtick, and `$` escaped), each `\(e)` hole as `${String(<e>)}` (ADR 0075) |

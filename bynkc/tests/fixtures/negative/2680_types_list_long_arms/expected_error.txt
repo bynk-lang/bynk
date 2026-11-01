@@ -1,0 +1,2 @@
+# exact
+bynk.types.non_exhaustive_match non-exhaustive `match` on `List[Int]` — `[_, _, _, _, _, _, _, _, _, _, _, _, _, ..]` is not covered @ 5:3

@@ -1457,6 +1457,10 @@ impl<'a> Parser<'a> {
                 self.bump();
                 return Ok(Pattern::Wildcard(t.span));
             }
+            // #2680: a list pattern. `[` begins no other pattern.
+            if t.kind == TokenKind::LBracket {
+                return self.parse_list_pattern();
+            }
             // Literal patterns (v0.130 §2.3.4): `31`, `"english"`, `true`, and a
             // leading unary minus on an integer literal (`-1`). A closed set
             // (ADR 0001) — no `Float`, no `()`.
@@ -1599,6 +1603,169 @@ impl<'a> Parser<'a> {
             ],
             Applicability::MachineApplicable,
         )
+    }
+
+    /// Parse a list pattern (#2680): `[]`, `[p, …]`, `[p, …, ..]` or
+    /// `[p, …, ..rest]`; the cursor is on the `[`. The `..` is the final
+    /// element, at most once, and followed by a name or nothing — a literal
+    /// after it is reserved for range patterns (patterns track, Q7).
+    fn parse_list_pattern(&mut self) -> Result<Pattern, CompileError> {
+        let open = self.expect(TokenKind::LBracket, "to open a list pattern")?;
+        let mut elems = Vec::new();
+        let mut rest = None;
+        loop {
+            match self.peek_kind() {
+                Some(TokenKind::RBracket) => break,
+                Some(TokenKind::DotDot) => {
+                    rest = Some(self.parse_list_rest()?);
+                    // A trailing comma after the rest is as harmless as in a list literal.
+                    self.eat(TokenKind::Comma);
+                    break;
+                }
+                _ => {}
+            }
+            elems.push(self.parse_pattern()?);
+            if self.eat(TokenKind::Comma).is_none() {
+                break;
+            }
+        }
+        let close = self.expect(TokenKind::RBracket, "to close a list pattern")?;
+        Ok(Pattern::List {
+            elems,
+            rest,
+            span: open.span.merge(close.span),
+        })
+    }
+
+    /// The `..` and optional binder of a list pattern, with the cursor on the
+    /// `..`. Leaves the cursor on whatever closes the rest (`]` or a trailing
+    /// `,`); anything else is a diagnostic.
+    fn parse_list_rest(&mut self) -> Result<ListRest, CompileError> {
+        let dots = self.expect(TokenKind::DotDot, "to start a list pattern's rest")?;
+        match self.peek_kind() {
+            Some(TokenKind::Ident) => {
+                let t = self.peek().expect("peeked identifier");
+                if self.slice(t.span).starts_with(|c: char| c.is_ascii_uppercase()) {
+                    return Err(CompileError::new(
+                        "bynk.parse.expected_token",
+                        t.span,
+                        "the name after `..` in a list pattern must start with a lowercase letter",
+                    ));
+                }
+                let binder = self.expect_ident("after `..` in a list pattern")?;
+                if self.peek_kind() == Some(TokenKind::Comma) {
+                    let after = self.tokens.get(self.pos + 1).map(|t| t.kind);
+                    if after != Some(TokenKind::RBracket) {
+                        return Err(self.list_rest_not_last(dots.span, Some(&binder)));
+                    }
+                }
+                Ok(ListRest {
+                    binder: Some(binder),
+                    span: dots.span,
+                })
+            }
+            Some(TokenKind::RBracket) => Ok(ListRest {
+                binder: None,
+                span: dots.span,
+            }),
+            Some(TokenKind::Comma) => {
+                if self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::RBracket) {
+                    return Ok(ListRest {
+                        binder: None,
+                        span: dots.span,
+                    });
+                }
+                Err(self.list_rest_not_last(dots.span, None))
+            }
+            Some(
+                TokenKind::IntLit
+                | TokenKind::StrLit
+                | TokenKind::True
+                | TokenKind::False
+                | TokenKind::Minus,
+            ) => Err(CompileError::new(
+                "bynk.parse.range_pattern_unsupported",
+                dots.span.merge(self.peek().expect("peeked literal").span),
+                "a `..` followed by a literal would be a range pattern, which is not available yet",
+            )
+            .with_note(
+                "in a list pattern `..` is the rest marker and takes a name or nothing: `[x, ..]` or `[x, ..rest]`; \
+                 range patterns are planned (patterns track, slice 5)",
+            )),
+            Some(TokenKind::Underscore) => Err(CompileError::new(
+                "bynk.parse.expected_token",
+                self.peek().expect("peeked `_`").span,
+                "`.._` is not a form: a bare `..` already binds nothing",
+            )
+            .with_suggestion(
+                "drop the `_`",
+                vec![(self.peek().expect("peeked `_`").span, String::new())],
+                Applicability::MachineApplicable,
+            )),
+            _ => Err(match self.peek() {
+                Some(t) => CompileError::new(
+                    "bynk.parse.expected_token",
+                    t.span,
+                    format!(
+                        "expected a name, `,` or `]` after `..` in a list pattern, found {}",
+                        t.kind.describe()
+                    ),
+                ),
+                None => CompileError::new(
+                    "bynk.parse.expected_token",
+                    self.eof_span(),
+                    "expected a name, `,` or `]` after `..` in a list pattern, found end of file",
+                ),
+            }),
+        }
+    }
+
+    /// `bynk.parse.list_rest_not_last` for a `..` (with its optional binder)
+    /// that something follows. The cursor is on the `,` after it. Offers the fix
+    /// that moves a bare `..` to the end only when what follows is wildcards.
+    fn list_rest_not_last(&mut self, dots: Span, binder: Option<&Ident>) -> CompileError {
+        let mut err = CompileError::new(
+            "bynk.parse.list_rest_not_last",
+            dots,
+            "the `..` of a list pattern must be its final element",
+        )
+        .with_note(
+            "patterns that match the end of a list, such as `[.., last]`, are not available",
+        );
+        if binder.is_some() {
+            return err;
+        }
+        // Wildcards only: `[a, .., _, _]` is `[a, _, _, ..]`.
+        self.bump();
+        let mut wilds = 0usize;
+        let mut last;
+        loop {
+            match self.peek_kind() {
+                Some(TokenKind::Underscore) => {
+                    last = self.bump().expect("peeked `_`").span;
+                    wilds += 1;
+                }
+                _ => return err,
+            }
+            match self.peek_kind() {
+                Some(TokenKind::Comma) => {
+                    self.bump();
+                    if self.peek_kind() == Some(TokenKind::RBracket) {
+                        break;
+                    }
+                }
+                Some(TokenKind::RBracket) => break,
+                _ => return err,
+            }
+        }
+        let region = dots.merge(last);
+        let text = format!("{}, ..", vec!["_"; wilds].join(", "));
+        err = err.with_suggestion(
+            "move the `..` to the end",
+            vec![(region, text)],
+            Applicability::MachineApplicable,
+        );
+        err
     }
 
     /// Parse the rest of a record pattern (#2641) — `{ f1, f2: pattern, .. }` —

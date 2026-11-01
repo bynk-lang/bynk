@@ -121,7 +121,7 @@ let_stmt ::= "let" binding_name (":" type_ref)? "=" expression
 effect_let_stmt ::= "let" binding_name (":" type_ref)? "<-" expression call_site_actor?
 let_else_stmt ::= "let" (let_pattern | let_or_pattern) ("=" | "<-") expression call_site_actor? "else" (block | let_else_match) | "let" (record_pattern | let_paren_record_pattern) ("=" | "<-") expression call_site_actor? ("else" (block | let_else_match))?
 let_paren_record_pattern ::= "(" record_pattern ")"
-let_pattern ::= literal_pattern | paren_pattern | let_variant_pattern
+let_pattern ::= literal_pattern | paren_pattern | list_pattern | let_variant_pattern
 let_or_pattern ::= (let_pattern | record_pattern) "|" pattern
 let_variant_pattern ::= identifier "." identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")? | identifier "(" (pattern_binding ("," pattern_binding)*)? ","? ")"
 let_else_match ::= "match" "{" match_arm* "}"
@@ -142,10 +142,12 @@ if_expr ::= "if" expression block ("else" (if_expr | block))?
 match_expr ::= "match" expression "{" match_arm* "}"
 match_arm ::= (pattern | refined_pattern) ("if" expression)? "=>" expression ","?
 refined_pattern ::= wildcard_pattern "where" refinement
-pattern ::= wildcard_pattern | literal_pattern | variant_pattern | record_pattern | or_pattern | paren_pattern
+pattern ::= wildcard_pattern | literal_pattern | variant_pattern | record_pattern | list_pattern | or_pattern | paren_pattern
 record_pattern ::= identifier "{" (record_pattern_field ",")* ".." "}"
+list_pattern ::= "[" (pattern ",")* (pattern | list_rest ","?)? "]"
+list_rest ::= ".." identifier?
 record_pattern_field ::= identifier ":" pattern | identifier
-is_base_pattern ::= wildcard_pattern | literal_pattern | variant_pattern | paren_pattern
+is_base_pattern ::= wildcard_pattern | literal_pattern | variant_pattern | list_pattern | paren_pattern
 is_pattern ::= is_base_pattern | is_or_pattern
 is_or_pattern ::= is_pattern "|" is_base_pattern
 or_pattern ::= pattern "|" pattern
@@ -165,7 +167,7 @@ lambda_param ::= (identifier | contextual_identifier) (":" type_ref)?
 paren_expr ::= "(" expression ")"
 method_call ::= primary "." identifier ("[" type_ref ("," type_ref)* "]")? "(" (expression ("," expression)*)? ","? ")"
 field_access ::= primary "." identifier
-call ::= (identifier | contextual_identifier) ("[" type_ref ("," type_ref)* "]")? "(" (expression ("," expression)*)? ","? ")"
+call ::= (identifier | contextual_identifier) "(" (expression ("," expression)*)? ","? ")" | (identifier | contextual_identifier) "[" type_ref ("," type_ref)* "]" "(" (expression ("," expression)*)? ","? ")"
 list_literal ::= "[" (expression ("," expression)* ","?)? "]"
 record_construction ::= identifier "{" (field_init ("," field_init)*)? ","? "}"
 field_init ::= identifier ":" expression | identifier

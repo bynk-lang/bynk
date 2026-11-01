@@ -387,6 +387,114 @@ const CASES: &[Case] = &[
         body: "type S = enum { A, B }\nfn f(s: S) -> Bool { if s is A { true } else { false } }",
         accept: true,
     },
+    // -- #2680 list patterns (patterns track, slice 4): the rest marker is last,
+    //    and takes a name or nothing; a literal after it is reserved for range
+    //    patterns. --
+    Case {
+        what: "empty list pattern",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [] => 0 _ => 1 } }",
+        accept: true,
+    },
+    Case {
+        what: "fixed-length list pattern",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [a, b] => a + b _ => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "list pattern with an unnamed rest",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [a, ..] => a\n [] => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "list pattern with a named rest",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [a, ..rest] => rest.length() [] => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "list pattern of only a rest",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [..rest] => rest.length() } }",
+        accept: true,
+    },
+    Case {
+        what: "list pattern with trailing commas",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [a,] => a,\n [a, ..,] => a,\n [a, ..r,] => a,\n _ => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "nested list patterns and a variant element",
+        body: "fn f(xs: List[List[Option[Int]]]) -> Int { match xs { [[Some(a), ..], ..] => a _ => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "list pattern inside a variant payload",
+        body: "fn f(o: Option[List[Int]]) -> Int { match o { Some([x, ..]) => x _ => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "or-pattern of list patterns",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [x] | [x, ..] => x\n [] => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "list pattern after is needs no parentheses",
+        body: "fn f(xs: List[Int]) -> Bool { if xs is [_, ..] { true } else { false } }",
+        accept: true,
+    },
+    Case {
+        what: "empty list pattern after is",
+        body: "fn f(xs: List[Int]) -> Bool { if xs is [] { true } else { false } }",
+        accept: true,
+    },
+    Case {
+        what: "record pattern inside a list pattern after is",
+        body: "type S = { n: String }\nfn f(xs: List[S]) -> Bool { if xs is [S { n: \"api\", .. }, ..] { true } else { false } }",
+        accept: true,
+    },
+    Case {
+        what: "list let with an else",
+        body: "fn f(xs: List[Int]) -> Int { let [h, ..] = xs else { 0 }\n h }",
+        accept: true,
+    },
+    Case {
+        what: "list let with a named rest and an else",
+        body: "fn f(xs: List[Int]) -> Int { let [h, ..t] = xs else { 0 }\n h }",
+        accept: true,
+    },
+    Case {
+        what: "effectful list let with an else",
+        body: "fn f(xs: List[Int]) -> Effect[Int] { let [h, ..] <- g(xs) else { Effect.pure(0) }\n Effect.pure(h) }",
+        accept: true,
+    },
+    Case {
+        what: "rest followed by another element rejected",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [.., last] => last _ => 0 } }",
+        accept: false,
+    },
+    Case {
+        what: "named rest followed by another element rejected",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [..r, last] => last _ => 0 } }",
+        accept: false,
+    },
+    Case {
+        what: "two rests rejected",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [.., ..] => 0 _ => 1 } }",
+        accept: false,
+    },
+    Case {
+        what: "rest followed by a literal rejected",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [..9] => 0 _ => 1 } }",
+        accept: false,
+    },
+    Case {
+        what: "rest followed by a negative literal rejected",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [a, ..-1] => 0 _ => 1 } }",
+        accept: false,
+    },
+    Case {
+        what: "rest followed by an underscore rejected",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [a, .._] => 0 _ => 1 } }",
+        accept: false,
+    },
     // -- #2654 record destructuring in `let` (patterns track, slice 2): an
     //    `else`-less `let` for a record pattern; the compiler alone judges it
     //    irrefutable (capitalisation is invisible to the grammar), so no case
