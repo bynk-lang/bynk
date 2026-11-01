@@ -5163,7 +5163,11 @@ fn rebranded_return_mismatch(
         format!(
             "cross-context call `{callee}` {} `{consumed}`'s type `{name}`, but `{name}` in \
              `{caller}` is a different type",
-            if in_param { "takes as a parameter" } else { "returns" }
+            if in_param {
+                "takes as a parameter"
+            } else {
+                "returns"
+            }
         ),
     )
     .with_note(
