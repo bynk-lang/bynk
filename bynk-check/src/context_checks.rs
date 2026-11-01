@@ -499,6 +499,18 @@ pub fn check_context_declarations(
         else {
             continue;
         };
+        // #2634: an operation may name a type the unit declares but does not
+        // export (an adapter's `Token`); the consumer's own table lacks it, so
+        // resolve against the consumer's table projected with the unit's
+        // (§6.5, as the qualified `U.Cap.op` form does).
+        let (op_types, _) = match cross_context.consumed_types.get(unit) {
+            Some(table) => checker::projected_types(
+                &typed.types,
+                &HashMap::from([(unit.clone(), table.clone())]),
+                tys,
+            ),
+            None => (typed.types.clone(), Default::default()),
+        };
         let ops = xcap
             .ops
             .iter()
@@ -511,18 +523,13 @@ pub fn check_context_declarations(
                         .params
                         .iter()
                         .map(|(_, tr)| {
-                            checker::resolve_type_ref_in(tr, &typed.types, &vars, tys)
+                            checker::resolve_type_ref_in(tr, &op_types, &vars, tys)
                                 .unwrap_or_else(|| tys.intern(Ty::Unit))
                         })
                         .collect(),
                     param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
-                    return_ty: checker::resolve_type_ref_in(
-                        &op.return_type,
-                        &typed.types,
-                        &vars,
-                        tys,
-                    )
-                    .unwrap_or_else(|| tys.intern(Ty::Unit)),
+                    return_ty: checker::resolve_type_ref_in(&op.return_type, &op_types, &vars, tys)
+                        .unwrap_or_else(|| tys.intern(Ty::Unit)),
                     codable_params: op.codable_params.clone(),
                 }
             })
