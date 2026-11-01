@@ -2886,11 +2886,12 @@ pub struct CapabilityOpInfo {
     pub return_ty: TyId,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
-    /// #2634: for a flattened cross-unit operation, `(unit, type name)` of the
+    /// #2634: for a flattened cross-unit operation, `(unit, type name, in a
+    /// parameter)` of the
     /// first type in its signature that the consumer binds to a structurally
     /// different declaration. Reported only when the op is called, as the
     /// qualified `U.Cap.op` call does.
-    pub boundary_conflict: Option<(String, String)>,
+    pub boundary_conflict: Option<(String, String, bool)>,
 }
 
 /// The synthetic record type name for `trace(Cap.op)`'s call records (v0.117):

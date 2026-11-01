@@ -519,20 +519,20 @@ pub fn check_context_declarations(
             .iter()
             .map(|op| {
                 let vars: HashSet<String> = op.type_params.iter().cloned().collect();
-                let mut conflict: Option<(String, String)> = None;
-                let mut resolve = |tr: &TypeRef| {
+                let mut conflict: Option<(String, String, bool)> = None;
+                let mut resolve = |tr: &TypeRef, in_param: bool| {
                     let ty = checker::resolve_type_ref_in(tr, unit_types, &vars, tys)
                         .unwrap_or_else(|| tys.intern(Ty::Unit));
                     if conflict.is_none()
                         && let Some(name) =
                             checker::rebrand_conflict(ty, unit_types, &typed.types, receiving, tys)
                     {
-                        conflict = Some((unit.clone(), name));
+                        conflict = Some((unit.clone(), name, in_param));
                     }
                     checker::rebrand_return_type(ty, &typed.types, tys)
                 };
-                let params = op.params.iter().map(|(_, tr)| resolve(tr)).collect();
-                let return_ty = resolve(&op.return_type);
+                let params = op.params.iter().map(|(_, tr)| resolve(tr, true)).collect();
+                let return_ty = resolve(&op.return_type, false);
                 CapabilityOpInfo {
                     name: op.name.clone(),
                     type_params: op.type_params.clone(),

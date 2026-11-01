@@ -1503,23 +1503,6 @@ pub(crate) fn check_static_call(
             }
             return None;
         };
-        // #2634: a flattened cross-unit op whose signature names a type the
-        // consumer binds to a different shape is refused at the call, as the
-        // qualified form refuses it.
-        if let Some((unit, name)) = &op.boundary_conflict {
-            let err = rebranded_return_mismatch(
-                &format!("{}.{}", type_name.name, method.name),
-                name,
-                unit,
-                span,
-                ctx,
-            );
-            ctx.errors.push(err);
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
-        }
         // v0.36 (ADR 0069, slice 2): the op is an index symbol keyed by the
         // compound `"Cap.op"` name; this local call is a reference. S4a
         // (#1966): a derived capability declares no operations, so its call
@@ -1540,6 +1523,24 @@ pub(crate) fn check_static_call(
                 SymbolKind::CapabilityOp,
                 &format!("{}.{}", type_name.name, method.name),
             ),
+        }
+        // #2634: a flattened cross-unit op whose signature names a type the
+        // consumer binds to a different shape is refused at the call (the
+        // refs above are recorded first, so a refused call still indexes).
+        if let Some((unit, name, in_param)) = &op.boundary_conflict {
+            let err = rebranded_return_mismatch(
+                &format!("{}.{}", type_name.name, method.name),
+                name,
+                unit,
+                *in_param,
+                span,
+                ctx,
+            );
+            ctx.errors.push(err);
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
         }
         // P4c (#2628): a `D1` statement's SQL is a literal.
         d1::check_sql_argument(
@@ -5130,6 +5131,7 @@ fn check_cross_context_capability_call(
             &format!("{consumed}.{cap}.{}", method.name),
             &name,
             consumed,
+            false,
             span,
             ctx,
         ));
@@ -5145,6 +5147,7 @@ fn rebranded_return_mismatch(
     callee: &str,
     name: &str,
     consumed: &str,
+    in_param: bool,
     span: Span,
     ctx: &Ctx,
 ) -> CompileError {
@@ -5158,13 +5161,14 @@ fn rebranded_return_mismatch(
         "bynk.boundary.structural_mismatch",
         span,
         format!(
-            "cross-context call `{callee}` returns `{consumed}`'s type `{name}`, but `{name}` in \
-             `{caller}` is a different type"
+            "cross-context call `{callee}` {} `{consumed}`'s type `{name}`, but `{name}` in \
+             `{caller}` is a different type",
+            if in_param { "takes as a parameter" } else { "returns" }
         ),
     )
     .with_note(
-        "a returned value takes the receiving context's type of the same name, so the two \
-         must be structurally compatible; rename one of them",
+        "a value crossing the boundary takes the receiving context's type of the same name, so \
+         the two must be structurally compatible; rename one of them",
     )
 }
 
@@ -5629,6 +5633,7 @@ fn check_cross_context_call(
             &format!("{consumed}.{}", method.name),
             &name,
             consumed,
+            false,
             span,
             ctx,
         ));
