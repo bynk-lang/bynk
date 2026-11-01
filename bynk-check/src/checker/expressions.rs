@@ -3730,8 +3730,6 @@ fn record_let_else_bindings(arm: &MatchArm, ctx: &mut Ctx) {
     }
 }
 
-/// #2010: the span of a desugared `let … else`'s own arms (all but the
-/// pattern's, which holds the rest of the block).
 /// #2641: the names a record pattern binds are locals of the arm — hover shows
 /// their type and semantic tokens colour them as variables, as for a `let`.
 /// Only names under a record pattern are recorded; the other pattern forms'
@@ -3779,6 +3777,8 @@ fn record_record_pattern_locals(arm: &MatchArm, ctx: &mut Ctx) {
     }
 }
 
+/// #2010: the span of a desugared `let … else`'s own arms (all but the
+/// pattern's, which holds the rest of the block).
 fn let_else_arms_span(arms: &[MatchArm]) -> Option<Span> {
     let first = arms.get(1)?;
     Some(
