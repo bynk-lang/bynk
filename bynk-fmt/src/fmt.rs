@@ -1522,6 +1522,21 @@ impl<'a> Formatter<'a> {
         };
         self.push(&format!("type {}{} = ", t.name.name, params));
         self.format_type_body(&t.body);
+        if !t.derives.is_empty() {
+            let names: Vec<&str> = t.derives.iter().map(|d| d.name.as_str()).collect();
+            let clause = format!("derives {}", names.join(" + "));
+            // A pipe-form sum ends on its last variant's line, which may carry
+            // a comment, so the clause takes its own line under the variants.
+            if matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| !v.payload.is_empty()))
+            {
+                self.indented(|f| {
+                    f.newline();
+                    f.push(&clause);
+                });
+            } else {
+                self.push(&format!(" {clause}"));
+            }
+        }
         self.emit_trailing_comment_or_newline(t.trivia.trailing.as_deref());
     }
 

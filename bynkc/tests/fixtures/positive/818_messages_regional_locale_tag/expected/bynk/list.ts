@@ -105,3 +105,26 @@ export async function traverse<A, B>(xs: readonly A[], f: (a0: A) => globalThis.
   });
   return reverse(rev);
 }
+
+/**
+ * Returns the elements of `xs` in ascending order. The sort is stable, and the
+ * order is the type's own: `Float` puts `NaN` last, a type that `derives Ord`
+ * orders by declaration order.
+ */
+export function sort<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): readonly T[] {
+  return [...xs].sort((__a: T, __b: T) => __cmp_T(((x) => x)(__a), ((x) => x)(__b)));
+}
+
+/**
+ * Returns the smallest element of `xs`, or `None` for an empty list.
+ */
+export function min<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Option<T> {
+  return ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((x) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x) => x)(__x); if (__cmp_T(__k, __m) < 0) __m = __k; } return Some(__m); })(xs);
+}
+
+/**
+ * Returns the largest element of `xs`, or `None` for an empty list.
+ */
+export function max<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Option<T> {
+  return ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((x) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x) => x)(__x); if (__cmp_T(__k, __m) > 0) __m = __k; } return Some(__m); })(xs);
+}

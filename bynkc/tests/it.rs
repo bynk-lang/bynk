@@ -212,6 +212,8 @@ mod multi_file_commons_barrel;
 mod observation_behaviour;
 #[path = "oidc_auth.rs"]
 mod oidc_auth;
+#[path = "ord_bound_fixes.rs"]
+mod ord_bound_fixes;
 #[path = "package_dependencies.rs"]
 mod package_dependencies;
 #[path = "package_exports.rs"]

@@ -30,9 +30,15 @@ pub fn quick_fixes(
             continue;
         }
         for s in &d.error.suggestions {
-            // Only `MachineApplicable` fixes are offered as one-click edits;
+            // `MachineApplicable` fixes are one-click edits, and the only ones
+            // `source.fixAll.bynk` takes. `MaybeIncorrect` fixes (a suggestion
+            // that changes meaning, e.g. `derives Ord`) are offered too, but
+            // never as the preferred fix and never by fix-all.
             // `HasPlaceholders` has no concrete replacement to apply.
-            if s.applicability != Applicability::MachineApplicable {
+            if !matches!(
+                s.applicability,
+                Applicability::MachineApplicable | Applicability::MaybeIncorrect
+            ) {
                 continue;
             }
             let edits: Vec<OneOf<TextEdit, AnnotatedTextEdit>> = s
@@ -48,6 +54,7 @@ pub fn quick_fixes(
             out.push(CodeActionOrCommand::CodeAction(CodeAction {
                 title: s.message.clone(),
                 kind: Some(CodeActionKind::QUICKFIX),
+                is_preferred: (s.applicability == Applicability::MaybeIncorrect).then_some(false),
                 edit: Some(WorkspaceEdit {
                     changes: None,
                     document_changes: Some(DocumentChanges::Edits(vec![TextDocumentEdit {

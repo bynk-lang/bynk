@@ -71,4 +71,27 @@ commons bynk.list {
 		})
 		Effect.pure(reverse(rev))
 	}
+
+	---
+	Returns the elements of `xs` in ascending order. The sort is stable, and the
+	order is the type's own: `Float` puts `NaN` last, a type that `derives Ord`
+	orders by declaration order.
+	---
+	fn sort[T: Ord](xs: List[T]) -> List[T] {
+		xs.sortBy((x) => x)
+	}
+
+	---
+	Returns the smallest element of `xs`, or `None` for an empty list.
+	---
+	fn min[T: Ord](xs: List[T]) -> Option[T] {
+		xs.min((x) => x)
+	}
+
+	---
+	Returns the largest element of `xs`, or `None` for an empty list.
+	---
+	fn max[T: Ord](xs: List[T]) -> Option[T] {
+		xs.max((x) => x)
+	}
 }

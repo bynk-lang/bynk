@@ -1,0 +1,18 @@
+suite demo.tree
+
+case "a recursive bounded generic forwards its comparator" {
+  let ns: List[Int] = [5, 2, 8, 2, 9, 1, 5]
+  expect countBelow(ns, 5, 7) == 3
+  expect countBelow(ns, 100, 7) == 7
+  expect countBelow(ns, 0, 7) == 0
+}
+
+case "recursion at a derived type" {
+  let ps: List[Pair] = [Pair { a: 2, b: "x" }, Pair { a: 1, b: "z" }, Pair { a: 2, b: "a" }]
+  expect countPairsBelow(ps, Pair { a: 2, b: "b" }) == 2
+}
+
+case "mutual recursion forwards the comparator in both directions" {
+  expect isBelowEven("a", "b", 5)
+  expect !isBelowOdd("b", "a", 4)
+}

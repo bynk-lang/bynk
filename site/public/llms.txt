@@ -306,7 +306,7 @@ case "an over-limit request is denied" {
 Reserved only in their own position (ordinary names elsewhere): `asset` `case`
 `const` `embed` `event` `messages` `on` `suite`.
 
-Contextual words (keywords in one place only): `advance` `drop` `key` `migrate`
+Contextual words (keywords in one place only): `advance` `derives` `drop` `key` `migrate`
 `par` `removed` `replaces` `store`.
 
 Built-in type names, reserved in type position: `Asset` `BoundaryRejection`

@@ -1,0 +1,5 @@
+commons m.ids
+
+// #2660: an opaque type keeps its representation private, so it is not `Ord`
+// outside this commons unless it opts in here with `derives Ord`.
+type Id = opaque Int

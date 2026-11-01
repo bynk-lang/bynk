@@ -1,1 +1,0 @@
-bynk.types.type_mismatch operator `<` is only defined on `Int`, `Float`, `Duration`, `Instant`, and `String`, not `Bytes`

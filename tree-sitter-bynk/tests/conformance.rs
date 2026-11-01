@@ -259,6 +259,43 @@ const CASES: &[Case] = &[
         body: "type Box[A] = { value: A }\nfn Box.has(self, x: A) -> Bool where A: Eq\n  requires p: true\n{ self.value == x }",
         accept: true,
     },
+    // -- Constrained generics slice 1: a trailing `derives` clause on a type
+    //    declaration. `derives` is a contextual word, so it stays a valid name. --
+    Case {
+        what: "derives clause on an enum",
+        body: "type Priority = enum { Low, High } derives Ord",
+        accept: true,
+    },
+    Case {
+        what: "derives clause on a record, with several names",
+        body: "type P[A] = { a: A } derives Ord + Eq",
+        accept: true,
+    },
+    Case {
+        what: "derives clause on a pipe-form sum",
+        body: "type S =\n  | A(x: Int)\n  | B\n  derives Ord",
+        accept: true,
+    },
+    Case {
+        what: "derives clause on a refined type",
+        body: "type Age = Int where NonNegative derives Ord",
+        accept: true,
+    },
+    Case {
+        what: "derives with no name rejected",
+        body: "type T = { a: Int } derives",
+        accept: false,
+    },
+    Case {
+        what: "derives with a dangling `+` rejected",
+        body: "type T = { a: Int } derives Ord +",
+        accept: false,
+    },
+    Case {
+        what: "derives stays usable as a name",
+        body: "fn f(derives: Int) -> Int { derives }",
+        accept: true,
+    },
     Case {
         what: "bound with a dangling `+` rejected",
         body: "fn f[T: Eq +](x: T) -> T { x }",

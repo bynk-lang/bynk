@@ -652,12 +652,24 @@
   ],
   "fn_decl": [
     {
+      "code": "bynk.generics.ambiguous_instantiation",
+      "summary": "A generic function with an `Ord` bound is used as a value, and its type arguments cannot be determined from the type expected at that reference; annotate the expected type (constrained-generics slice 1)."
+    },
+    {
       "code": "bynk.generics.method_on_generic_type",
       "summary": "A *static* method is attached to a generic type; static methods on generic types are deferred (they have no receiver to supply the type's parameters). Instance methods on generic types are supported (#594)."
     },
     {
       "code": "bynk.generics.missing_eq_bound",
       "summary": "A type parameter is compared with `==`/`!=`, or passed to an `Eq`-bounded parameter of another generic, but is not declared `Eq` (`[T: Eq]`, or `where A: Eq` for a receiver type's parameter). The diagnostic carries a machine-applicable fix (ADR 0430, amended by constrained-generics slice 0)."
+    },
+    {
+      "code": "bynk.generics.missing_ord_bound",
+      "summary": "A type parameter is ordered (`<`, `<=`, `>`, `>=`, an ordering kernel key), or passed to an `Ord`-bounded parameter of another generic, but is not declared `Ord` (`[T: Ord]`, or `where A: Ord` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Ord`, replacing an existing `Eq`, which `Ord` implies (constrained-generics slice 1)."
+    },
+    {
+      "code": "bynk.generics.redundant_eq_bound",
+      "summary": "A type parameter is declared both `Eq` and `Ord`; `Ord` implies `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slice 1, warning)."
     },
     {
       "code": "bynk.resolve.duplicate_fn",
@@ -1388,6 +1400,14 @@
     {
       "code": "bynk.resolve.reserved_host_name",
       "summary": "A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals."
+    },
+    {
+      "code": "bynk.types.derives_automatic",
+      "summary": "A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1)."
+    },
+    {
+      "code": "bynk.types.derives_field_not_orderable",
+      "summary": "A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1)."
     }
   ],
   "type_param": [

@@ -1,0 +1,1 @@
+bynk.generics.ambiguous_instantiation cannot determine type parameter `T` of `first` from where it is used

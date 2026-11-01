@@ -1,0 +1,1 @@
+bynk.types.not_orderable operator `<` needs an orderable type, but `Plain` is not
