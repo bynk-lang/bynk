@@ -1,0 +1,1 @@
+bynk.effect.bind_in_pure_context a `par` block can only be used inside an effectful body

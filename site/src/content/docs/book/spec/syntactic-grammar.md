@@ -1216,7 +1216,7 @@ implicit value `()` (unit) — the parser synthesises a `()` tail (v0.146, ADR
 {{#grammar _statement}}
 
 A statement: a `let`, an effectful `let`, an asynchronous send (`~>`), a `do`
-effect statement, a `:=` store write, or an assertion.
+effect statement, a `:=` store write, a `par` block, or an assertion.
 
 ### §4.8.3 let_stmt
 
@@ -1314,6 +1314,20 @@ The contextual word `advance`, a capability name, `by`, and an expression — a
 move of the test case's harness clock. `advance` opens a statement only before
 `<Ident> by`. Well-formedness — only in a `case` body, only on `Clock`, by a
 `Duration`: §5.
+
+### §4.8.7b par_stmt (#2640)
+
+{{#grammar par_stmt}}
+
+{{#grammar _par_statement}}
+
+The contextual word `par`, `{`, statements, `}` — a **concurrent binding block**
+(concurrent effects slice 0, #2640). `par` opens a statement only before `{`;
+anywhere else it is an ordinary identifier, so no existing name is taken. The
+grammar admits every statement but a `let … else` (which would take the rest of
+the block as its arm, and so is `bynk.par.invalid_statement` at parse time); the
+checker narrows the contents to `let x <- e` and `do e`. Well-formedness and
+meaning: [§5.5](/book/spec/static-semantics/#55-effects-capabilities--providers).
 
 ### §4.8.8 expect_expr
 

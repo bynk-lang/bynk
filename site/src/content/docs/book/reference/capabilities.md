@@ -54,6 +54,48 @@ A `given` name must be a declared capability (`bynk.given.unknown_capability`); 
 call to a capability not in `given` is an error (`bynk.given.undeclared_capability`);
 a declared-but-unused capability is a warning (`bynk.given.unused_capability`).
 
+## Joining independent effects — `par` {#par}
+
+Every `<-` waits for its effect, so two independent calls cost the sum of their
+latencies. A `par` block issues several effects together and waits for all of them:
+
+```bynk,fragment
+service dashboard {
+  on call(id: Int) -> Effect[String] given Users, Orders {
+    par {
+      let user <- Users.get(id)
+      let orders <- Orders.forUser(id)
+    }
+    Effect.pure("\(user): \(orders)")
+  }
+}
+```
+
+Both effects are issued, in source order, before either is awaited. The block
+completes when every binding has settled, and the names it binds are in scope after
+the closing brace, not inside it. `par` is contextual: it opens a statement only
+before `{`, and is an ordinary identifier everywhere else.
+
+A `par` block holds only `let x <- e` (optionally `let x: T <- e`) and `do e`, and is
+legal wherever a `<-` is: an effectful body, an agent handler included. It has no
+value; it is a statement. These are refused:
+
+| In the block | Code | Why |
+|---|---|---|
+| a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, or nothing at all | `bynk.par.invalid_statement` | each has no effect to overlap, nothing to join, or must stay sequential |
+| `?` in a binding | `bynk.par.question_in_join` | propagating the first `Err` in source order across a join is not available yet; match on the result after the block |
+| a binding that mentions a name another binding of the block binds, or two bindings of one name | `bynk.par.sibling_name` | the bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding |
+
+A block with one binding is the warning `bynk.par.single_binding`: it is a plain
+`let x <- e` with extra syntax.
+
+**If an effect faults,** the block waits for the others to settle, then raises the
+**first fault in source order**, not the first in time. A fast failure waits for a
+slow sibling; that is what keeps every effect inside the handler's lifetime and the
+fault a program sees independent of timing. Effects that completed before the fault
+keep their effects, exactly as in a sequence of `<-`s. See
+[what a join guarantees on failure](/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/).
+
 ## Generic operations
 
 A capability operation may declare its own type parameter (v0.235, ADR 0281) —

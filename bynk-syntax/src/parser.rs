@@ -3072,6 +3072,58 @@ mod tests {
         assert!(matches!(arms[1].pattern, Pattern::Wildcard(_)));
     }
 
+    /// #2640: `par { … }` parses to a `Par` holding its statements in order.
+    #[test]
+    fn par_block_holds_its_statements_in_source_order() {
+        let b = body_block(
+            "par {\n    let a <- one()\n    do two()\n    let b: Int <- three()\n  }\n  a",
+        );
+        let Statement::Par(p) = &b.statements[0] else {
+            panic!("expected a par block, got {:?}", b.statements[0]);
+        };
+        assert_eq!(p.statements.len(), 3);
+        assert!(matches!(&p.statements[0], Statement::EffectLet(l) if l.name.name == "a"));
+        assert!(matches!(&p.statements[1], Statement::Do(_)));
+        assert!(
+            matches!(&p.statements[2], Statement::EffectLet(l) if l.name.name == "b" && l.type_annot.is_some())
+        );
+    }
+
+    /// #2640: `par` is contextual — an identifier everywhere but before `{`.
+    #[test]
+    fn par_is_an_identifier_outside_its_statement_shape() {
+        let b = body_block("let par = 1\n  let x = par + 1\n  x");
+        assert_eq!(b.statements.len(), 2);
+        assert!(matches!(&b.statements[0], Statement::Let(l) if l.name.name == "par"));
+    }
+
+    /// #2640: the parser admits any statement in a block (the checker names the
+    /// forbidden ones), except those it cannot hold at all.
+    #[test]
+    fn par_block_admits_statements_for_the_checker_to_refuse() {
+        let b = body_block(
+            "par {\n    let a = 1\n    ~> notify()\n    par {\n      do x()\n    }\n  }\n  1",
+        );
+        let Statement::Par(p) = &b.statements[0] else {
+            panic!("expected a par block");
+        };
+        assert!(matches!(&p.statements[0], Statement::Let(_)));
+        assert!(matches!(&p.statements[1], Statement::Send(_)));
+        assert!(matches!(&p.statements[2], Statement::Par(_)));
+    }
+
+    #[test]
+    fn par_block_refuses_a_refutable_let_and_a_stray_expression() {
+        assert!(has_error(
+            &body_err("par {\n    let Ok(v) <- load() else { 0 }\n  }\n  1"),
+            "bynk.par.invalid_statement"
+        ));
+        assert!(has_error(
+            &body_err("par {\n    load()\n  }\n  1"),
+            "bynk.par.invalid_statement"
+        ));
+    }
+
     #[test]
     fn effectful_let_else_binds_with_an_arrow() {
         let b = body_block("let Ok(v) <- load() else { Effect.pure(0) }\n  v");

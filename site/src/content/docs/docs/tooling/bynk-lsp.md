@@ -91,7 +91,8 @@ deduplicating only.
 Fix all takes a fix only from a diagnostic that offers exactly one
 machine-applicable fix. A diagnostic offering a choice between candidates stays
 an individual quick fix. A fix whose edits would overlap one already taken is
-left for the next run.
+left for the next run. [`bynk check --fix`](/docs/bynk-cli/#applying-fixes)
+applies the same fixes from the command line, repeating until none remain.
 
 ## Build
 

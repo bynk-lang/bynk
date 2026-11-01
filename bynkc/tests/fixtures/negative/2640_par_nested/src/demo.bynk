@@ -1,0 +1,24 @@
+context demo
+
+// #2640: a `par` does not nest.
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+  fn touch(id: Int) -> Effect[()]
+}
+
+service dash {
+  on call(id: Int) -> Effect[Int] given Users, Orders {
+    par {
+      let a <- Users.get(id)
+      par {
+        let b <- Orders.forUser(id)
+        let c <- Orders.forUser(id)
+      }
+    }
+    Effect.pure(0)
+  }
+}

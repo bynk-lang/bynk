@@ -12,6 +12,7 @@ Workers.
 - [Lay out a project](/book/guides/projects-build-and-deployment/layout/)
 - [Share code between projects](/book/guides/projects-build-and-deployment/share-code-between-projects/)
 - [Run a private registry](/book/guides/projects-build-and-deployment/run-a-private-registry/)
+- [Apply a breaking-change migration without an editor](/book/guides/projects-build-and-deployment/apply-a-migration-without-an-editor/)
 - [Run your project locally](/book/guides/projects-build-and-deployment/run-locally/)
 - [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
 - [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/)

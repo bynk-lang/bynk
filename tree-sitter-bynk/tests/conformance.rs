@@ -226,6 +226,51 @@ const CASES: &[Case] = &[
         body: "fn f(r: Result[Int, String]) -> Bool { r is Ok(_ where NonNegative) }",
         accept: false,
     },
+    // -- #2640: the `par { … }` binding block. `par` is contextual, so it opens
+    //    a statement only before `{` and is an identifier everywhere else. Both
+    //    parsers admit any statement but a `let … else` inside the braces (the
+    //    checker names the forbidden ones); anything that is not a statement is
+    //    refused by both. --
+    Case {
+        what: "par block of effectful lets and a do",
+        body: "fn f(id: Int) -> Effect[Int] { par { let a <- A.get(id) let b: Int <- B.get(id) do C.touch(id) } Effect.pure(a + b) }",
+        accept: true,
+    },
+    Case {
+        what: "par block holding a statement the checker refuses",
+        body: "fn f(id: Int) -> Effect[Int] { par { let a = 1 ~> N.ping(id) par { do C.touch(id) } } Effect.pure(1) }",
+        accept: true,
+    },
+    Case {
+        what: "empty par block",
+        body: "fn f() -> Effect[Int] { par { } Effect.pure(1) }",
+        accept: true,
+    },
+    Case {
+        what: "par as an identifier",
+        body: "fn f(par: Int) -> Int { let x = par + 1\n let y = par\n x + y }",
+        accept: true,
+    },
+    Case {
+        what: "par as a binding name before a statement",
+        body: "fn f() -> Int { let par = 1\n par }",
+        accept: true,
+    },
+    Case {
+        what: "par block holding an expression rejected",
+        body: "fn f() -> Effect[Int] { par { load() } Effect.pure(1) }",
+        accept: false,
+    },
+    Case {
+        what: "par block holding a let-else rejected",
+        body: "fn f() -> Effect[Int] { par { let Ok(v) <- load() else { Effect.pure(0) } } Effect.pure(1) }",
+        accept: false,
+    },
+    Case {
+        what: "par block without a closing brace rejected",
+        body: "fn f() -> Effect[Int] { par { let a <- A.get(1) Effect.pure(1) }",
+        accept: false,
+    },
     // -- #2641 record patterns (patterns track, slice 1): open, with a mandatory
     //    trailing `..`, parenthesised after `is` (where the `{` would also open
     //    the `if` block). --

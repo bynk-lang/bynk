@@ -1380,6 +1380,7 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
                 }
                 // #2137: moving the harness clock is an effect on the case.
                 Statement::Advance(_) => return true,
+                Statement::Par(_) => return true,
             }
         }
         body_performs_effects(&b.tail, ctx)
