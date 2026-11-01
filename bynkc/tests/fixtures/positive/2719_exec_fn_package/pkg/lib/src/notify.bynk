@@ -1,0 +1,6 @@
+commons notify
+
+fn announce(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
+  ~> f(n)
+  Effect.pure(n)
+}

@@ -795,6 +795,11 @@ pub struct TypedCommons {
     /// S3 (#1963): carried from [`ResolvedCommons::stability`] for the same
     /// per-handler checks.
     pub stability: crate::stability::UnitStability,
+    /// #2719: the needs-context set as of this unit — the functions that take
+    /// the hidden execution-context parameter, and the handlers whose `deps`
+    /// carry it. Empty until the unit's files are all checked and
+    /// [`ExecPlan::extend`](crate::exec_plan::ExecPlan::extend) has run.
+    pub exec_plan: Arc<crate::exec_plan::ExecPlan>,
 }
 
 impl TypedCommons {
@@ -833,6 +838,7 @@ impl TypedCommons {
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
             stability: Default::default(),
+            exec_plan: Default::default(),
         }
     }
 
@@ -1257,6 +1263,7 @@ pub fn check_record_in(
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
                 stability: input.stability,
+                exec_plan: Default::default(),
             }),
             ty_intern,
             typed_despite_errors: None,
@@ -1284,6 +1291,7 @@ pub fn check_record_in(
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
                 stability: input.stability,
+                exec_plan: Default::default(),
             }),
             ty_intern,
         }
@@ -1552,6 +1560,7 @@ pub fn check_handler_body(
         store_fields,
         in_agent_handler: agent_state_ty.is_some(),
         in_service_handler,
+        in_fn_body: false,
     };
     // Check the body and validate it matches the return type.
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {
@@ -1701,6 +1710,7 @@ pub fn check_body(
         store_fields: HashMap::new(),
         in_agent_handler: false,
         in_service_handler: false,
+        in_fn_body: false,
     };
     if let Some(w) = where_pred {
         let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
@@ -1865,6 +1875,7 @@ pub fn check_invariants(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            in_fn_body: false,
         };
         let pred_ty = type_of(&inv.predicate, Some(bool_ty), &mut ctx);
         if let Some(t) = pred_ty
@@ -2015,6 +2026,7 @@ pub(crate) fn check_contracts(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            in_fn_body: false,
         };
         let pred_ty = type_of(&c.predicate, Some(bool_ty), &mut ctx);
         if let Some(t) = pred_ty
@@ -2245,6 +2257,7 @@ pub fn check_transitions(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            in_fn_body: false,
         };
         let pred_ty = type_of(&tr.predicate, Some(bool_ty), &mut ctx);
         if let Some(t) = pred_ty
@@ -2432,6 +2445,7 @@ pub fn check_migrations(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            in_fn_body: false,
         };
         for item in &step.items {
             let value = match item {
@@ -2826,6 +2840,13 @@ pub(crate) struct Ctx<'a> {
     /// abandoned effect to the execution context, which only a service
     /// handler's `deps` carry.
     pub in_service_handler: bool,
+    /// #2719: true while checking the body of a `fn` or a method, lambdas
+    /// included. A function takes the execution context as a hidden trailing
+    /// parameter when its body (or a function it calls) hands work to it, so
+    /// `~>`, `within` and `race` are legal here; whether a *caller* has a
+    /// context to pass is the needs-context analysis's question
+    /// ([`crate::exec_plan`]), not this body's.
+    pub in_fn_body: bool,
 }
 
 /// Per-capability info for checker dispatch within a handler body.

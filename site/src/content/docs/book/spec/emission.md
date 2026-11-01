@@ -252,6 +252,18 @@ emits byte-for-byte as before. This is the *immediate* delivery tier; a
 buffered/at-commit tier is reserved for the events channel and is not yet
 emitted.
 
+A function, which has no `deps`, receives the execution context as a **hidden trailing
+parameter** (#2719). A function in the needs-context set (§4.8.5, *The execution context
+in functions*) is emitted with a final `__exec` parameter, after any comparator witnesses;
+`~>`, `within` and `race` lower through it (`__exec.waitUntil(…)`), every call to the
+function passes the caller's context as the last argument (`deps.__exec` in a handler, its
+own `__exec` in another function, the harness's double in a test `case`), and a function
+named as a value is wrapped in a closure that passes the context in scope. A service handler
+whose body uses a construct, or calls or names a function in the set, receives `__exec` in
+its `deps` (and on Workers its entry point and `compose` thread the request's context). The
+parameter is not part of the function's Bynk signature, and a function outside the set emits
+byte-for-byte as before.
+
 ### §7.3.3 Agents
 
 An agent emits a state `interface`, a **zero-value factory** that realises the

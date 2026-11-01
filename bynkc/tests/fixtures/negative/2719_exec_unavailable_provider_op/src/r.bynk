@@ -1,0 +1,19 @@
+context r
+
+consumes bynk
+
+capability Pricing {
+	fn quote(id: Int) -> Effect[Int]
+}
+
+fn hedged(a: Effect[Int], b: Effect[Int]) -> Effect[Int] {
+	a.race(b)
+}
+
+// #2719: a provider operation has no execution context either, so it cannot call
+// a function that needs one.
+provides Pricing = HedgedPricing {
+	fn quote(id: Int) -> Effect[Int] {
+		hedged(Effect.pure(id), Effect.pure(id + 1))
+	}
+}

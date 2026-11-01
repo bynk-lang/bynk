@@ -1991,8 +1991,9 @@ pub(crate) fn check_string_kernel_method(
 /// `a.race(b)`. Both hand an abandoned effect to the execution context's
 /// `waitUntil` (it is never cancelled, track Q7), so each is legal only where a
 /// service handler's `deps` supply that context: a service handler's body,
-/// lambdas included. An agent handler (like `~>`, #2017) and every function or
-/// provider body are refused. The check order is agent handler, pure context,
+/// lambdas included, or a function's (#2719), which takes it as a hidden
+/// trailing parameter. An agent handler (like `~>`, #2017), a WebSocket
+/// handler and a provider body are refused. The check order is agent handler, pure context,
 /// then outside a handler, so each position reports the remedy that applies to
 /// it. Returns whether the call was refused; `codes` are the agent-handler,
 /// pure-context and outside-handler diagnostics, in that order.
@@ -2035,30 +2036,30 @@ fn check_exec_context(name: &str, codes: [&'static str; 3], span: Span, ctx: &mu
             .with_note("change the enclosing handler's return type to `Effect[...]`"),
         );
         true
-    } else if !ctx.in_service_handler {
+    } else if !ctx.in_service_handler && !ctx.in_fn_body {
         let what = if name == "within" {
             "the abandoned effect"
         } else {
             "the losing effect"
         };
         let case = if name == "within" {
-            "a test `case` body is not a service handler either: address a service whose handler calls `within`, and test it with `stub … after`."
+            "a test `case` body is not a service handler either: address a service whose handler calls `within`, or call a function that does, and test it with `stub … after`."
         } else {
-            "a test `case` body is not a service handler either: address a service whose handler calls `race`, and test it with `stub … after`."
+            "a test `case` body is not a service handler either: address a service whose handler calls `race`, or call a function that does, and test it with `stub … after`."
         };
         let advice = if name == "within" {
-            "call the `within` from a service handler (not a WebSocket one) that uses this function, and pass the function the bounded effect, not the work"
+            "call the `within` from a service handler (not a WebSocket one), or from a function that one calls"
         } else {
-            "call the `race` from a service handler (not a WebSocket one) that uses this function, and pass the function the raced effect, not the work"
+            "call the `race` from a service handler (not a WebSocket one), or from a function that one calls"
         };
         ctx.errors.push(
             CompileError::new(
                 outside_code,
                 span,
-                format!("`{name}` can only be used in a service handler's body: a function, a provider operation or a WebSocket handler has no execution context to hand {what} to"),
+                format!("`{name}` can only be used in a service handler's body or a function's: a provider operation, a WebSocket handler or a test `case` body has no execution context to hand {what} to"),
             )
             .with_note(format!(
-                "{case} A function has no execution context (#2682), and a WebSocket handler runs in the connection's Durable Object, which has none either; {advice}"
+                "{case} A WebSocket handler runs in the connection's Durable Object, which has no execution context, and a provider operation has none either; {advice}"
             )),
         );
         true

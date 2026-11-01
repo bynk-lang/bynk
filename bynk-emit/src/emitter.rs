@@ -44,7 +44,7 @@ use bynk_lower::{
 use bynk_syntax::ast::{
     AgentDecl, BaseType, BinOp, Block, CommonsItem, Expr, ExprKind, FnDecl, FnName, Ident,
     InterpPart, MatchBody, MessagesDecl, ObservationMatcher, Param, Pattern, PredKind, ServiceDecl,
-    Statement, TypeBody, TypeDecl, TypeRef, expr_children,
+    Statement, TypeBody, TypeDecl, TypeRef,
 };
 
 pub mod client;
@@ -759,144 +759,17 @@ pub(crate) fn emit_project(
     (program, printed.source_map)
 }
 
-/// v0.79: does this block contain a `~>` send (or, since #2683, an
-/// `e.within(d)` or `a.race(b)` call, which hands its abandoned effect to the
-/// same execution context) anywhere — including nested
-/// branches, match arms, and lambdas? Gates execution-context threading
-/// (`deps.__exec`) so a context that never sends keeps byte-identical output.
-///
-/// A `~>` send is a [`Statement`] variant, not an [`ExprKind`] one, and a bare
-/// `{ … }` block is only parseable in a handful of positions (an `if`/`else`
-/// body, a `match` arm, a lambda body) — never as an arbitrary sub-expression
-/// — so `Block`/`If`/`Match`/`Lambda` were already the complete reachable set
-/// and the old `_ => false` tail never actually dropped a send. It is
-/// rewritten to recurse over `expr_children`, the total child iterator,
-/// anyway: a `Statement`-only construct like this is exactly the shape that
-/// silently drifts if a later `ExprKind` variant *does* start admitting a
-/// nested block and this list isn't updated to match — see
-/// `block_writes_state`, whose traversal was converted alongside this one for
-/// the same reason. Both now also enumerate `ExprKind` explicitly instead of
-/// ending in a `_` arm, so that drift is a build failure rather than a silent
-/// miss.
-///
-/// A `match` arm's guard is walked too (#1769). A guard is an expression, so
-/// it cannot hold a `~>` itself, but it can hold an `if` whose branch blocks
-/// do (`Some(x) if if x > 0 { … } else { false } => …`, a `then` block that
-/// sends and then yields `true`): the handler is effectful, so the send
-/// type-checks, and missing it emitted
-/// `deps.__exec.waitUntil(…)` against a `deps` that had no `__exec`.
-pub(crate) fn block_uses_send(b: &Block) -> bool {
-    block_needs_exec(b, true)
-}
-
-/// #2683, #2711: whether a service's `on call` handler calls `within` or `race`, so the Bundle
-/// target's `__makeSurface` deps must carry the execution context
-/// (`deps.__exec`) it forwards to the handler. Only `within` and `race` count, not `~>`:
-/// a `~>` in a bundle `on call` handler is a separate, existing gap, left as
-/// it was so that no other construct's output changes.
-pub(crate) fn call_handler_needs_exec(h: &bynk_syntax::ast::Handler) -> bool {
-    matches!(h.kind, bynk_syntax::ast::HandlerKind::Call) && block_uses_within(&h.body)
-}
-
-/// #2683, #2711: does this block call `e.within(d)` or `a.race(b)` anywhere,
-/// lambdas included? The race hands the abandoned effect to `deps.__exec`, so a handler that does
-/// receives the execution context exactly as a `~>`-sending one does. The test
-/// is syntactic, like [`block_uses_send`]'s: a user type's own one-argument
-/// `within` method matches too. That threads an `__exec` its handler never
-/// reads, and takes that target's test modules onto virtual time, which a
-/// module with no `within`, `race` or timed stub would not see; neither changes what
-/// the program does.
-pub(crate) fn block_uses_within(b: &Block) -> bool {
-    block_needs_exec(b, false)
-}
-
-/// The shared walk behind [`block_uses_send`] (which counts a `~>` send, or a
-/// `within` or `race` call) and [`block_uses_within`] (a `within` or `race` call
-/// alone).
-fn block_needs_exec(b: &Block, sends: bool) -> bool {
-    fn stmt(s: &Statement, sends: bool) -> bool {
-        match s {
-            Statement::Send(_) => sends,
-            Statement::Let(l) | Statement::EffectLet(l) => expr(&l.value, sends),
-            Statement::Expect(a) => expr(&a.value, sends),
-            Statement::Do(d) => expr(&d.value, sends),
-            Statement::Assign(a) => expr(&a.value, sends),
-            Statement::Advance(a) => expr(&a.amount, sends),
-            Statement::Par(p) => p.statements.iter().any(|s| stmt(s, sends)),
-        }
-    }
-    fn expr(e: &Expr, sends: bool) -> bool {
-        match &e.kind {
-            // #2683, #2711: `e.within(d)` and `a.race(b)` hand their abandoned
-            // effect to `deps.__exec`.
-            ExprKind::MethodCall { method, args, .. }
-                if (method.name == "within" || method.name == "race") && args.len() == 1 =>
-            {
-                true
-            }
-            ExprKind::Block(b) => block_needs_exec(b, sends),
-            ExprKind::If {
-                cond,
-                then_block,
-                else_block,
-            } => {
-                expr(cond, sends)
-                    || block_needs_exec(then_block, sends)
-                    || block_needs_exec(else_block, sends)
-            }
-            ExprKind::Match { discriminant, arms } => {
-                expr(discriminant, sends)
-                    || arms.iter().any(|a| {
-                        a.guard.as_ref().is_some_and(|g| expr(g, sends))
-                            || match &a.body {
-                                MatchBody::Expr(e) => expr(e, sends),
-                                MatchBody::Block(b) => block_needs_exec(b, sends),
-                            }
-                    })
-            }
-            // No variant below carries a `Block` *field*, so `expr_children`'s
-            // total descent is complete for it — a block reached through a
-            // child (a braced lambda body, say) comes back as an `Expr` and
-            // re-enters this match at the `Block` arm above. A *new* variant
-            // that holds a `Block` directly must be hand-matched up there
-            // alongside `Block`/`If`/`Match`: appending it here loses the
-            // `Statement::Send` tag (`expr_children` flattens a block to its
-            // statements' values), and with it `deps.__exec` threading for a
-            // context that does send.
-            ExprKind::IntLit { .. }
-            | ExprKind::FloatLit { .. }
-            | ExprKind::DurationLit { .. }
-            | ExprKind::StrLit(_)
-            | ExprKind::InterpStr(_)
-            | ExprKind::BoolLit(_)
-            | ExprKind::Ident(_)
-            | ExprKind::Call { .. }
-            | ExprKind::Lambda(_)
-            | ExprKind::BinOp(..)
-            | ExprKind::UnaryOp(..)
-            | ExprKind::Paren(_)
-            | ExprKind::Ok(_)
-            | ExprKind::Err(_)
-            | ExprKind::Question(_)
-            | ExprKind::RecordConstruction { .. }
-            | ExprKind::FieldAccess { .. }
-            | ExprKind::MethodCall { .. }
-            | ExprKind::Is { .. }
-            | ExprKind::Some(_)
-            | ExprKind::None
-            | ExprKind::UnitLit
-            | ExprKind::RecordSpread { .. }
-            | ExprKind::EffectPure(_)
-            | ExprKind::Expect(_)
-            | ExprKind::Val { .. }
-            | ExprKind::Wire(_)
-            | ExprKind::ListLit(_)
-            | ExprKind::Observation(_)
-            | ExprKind::Faults(_)
-            | ExprKind::Trace { .. } => expr_children(e).into_iter().any(|c| expr(c, sends)),
-        }
-    }
-    b.statements.iter().any(|s| stmt(s, sends)) || expr(&b.tail, sends)
+/// Whether a service's `on call` handler hands work to the execution context
+/// (`~>`, `within` or `race`, directly or through the functions it calls or
+/// names, #2719), so the Bundle target's `__makeSurface` deps must carry the
+/// execution context (`deps.__exec`) it forwards to the handler. The set is the
+/// checker's ([`bynk_check::exec_plan::ExecPlan`]), computed from what it
+/// resolved rather than by walking the syntax for method names.
+pub(crate) fn call_handler_needs_exec(
+    plan: &bynk_check::exec_plan::ExecPlan,
+    h: &bynk_syntax::ast::Handler,
+) -> bool {
+    matches!(h.kind, bynk_syntax::ast::HandlerKind::Call) && plan.handler_needs(h)
 }
 
 /// P6.48 (design/tracks/the-ir.md §6b): every handler/op body in `table` —
@@ -5125,6 +4998,17 @@ impl<'a> LowerCtx<'a> {
     /// at all (an `Events.emit` call cannot occur there).
     pub(crate) fn owning_context(&self) -> Option<&str> {
         self.handler().map(|h| h.owning_context.as_str())
+    }
+
+    /// #2719: the expression naming the execution context: the hidden `__exec`
+    /// parameter inside a function or method (a lambda there closes over it),
+    /// the handler's `deps.__exec` everywhere else (a test `case` body's deps
+    /// carry the harness's double).
+    pub(crate) fn exec_expr(&self) -> String {
+        match &self.mode {
+            BodyMode::FreeFn | BodyMode::Method => "__exec".to_string(),
+            _ => format!("{}.__exec", self.cap_deps_expr()),
+        }
     }
 
     /// v0.12: the receiver expression a capability call resolves against.

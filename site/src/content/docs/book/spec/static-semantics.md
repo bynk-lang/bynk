@@ -1099,6 +1099,9 @@ it, so its effects are awaited (`let _ <- e`, `do e`). A send of the agent's own
 write is staged and committed atomically at the handler boundary, so there is
 nothing to send without waiting for — write it as `do field.op(…)`.
 
+A send MAY occur in an effectful `fn` or method (#2719): the function takes the execution
+context from its caller. See *The execution context in functions* below.
+
 A **`do` statement** (`do e`, §4.8.6) performs a unit effect without a binder: it
 MUST occur in an effectful position (`bynk.effect.do_in_pure_context`) and MUST
 be applied to an `Effect[()]` (`bynk.effect.do_on_non_effect`,
@@ -1171,11 +1174,11 @@ closes over the handler's `deps`). It MUST NOT occur in an **agent handler**, a
 lambda within one included (`bynk.within.in_agent_handler`), for the reason a `~>`
 send MUST NOT (an agent handler has no execution context; the Durable Object's own
 `waitUntil` is a recorded follow-up). It MUST occur in an effectful position
-(`bynk.within.in_pure_context`), and it MUST NOT occur in an effectful `fn`, a
-provider operation or a WebSocket handler (`bynk.within.outside_handler`): no
-function has an execution context today (#2682), so the check is the same for every
-function and calls into one need no rule of their own, and a WebSocket handler runs
-in the connection's Durable Object, which has none either. A `within` in a `par` binding bounds its own effect
+(`bynk.within.in_pure_context`), and it MUST NOT occur in a provider operation or a
+WebSocket handler (`bynk.within.outside_handler`): a WebSocket handler runs in the
+connection's Durable Object, which has no execution context. It MAY occur in an
+effectful `fn` or method (#2719): see *The execution context in functions* below. A
+`within` in a `par` binding bounds its own effect
 alone, as the binding would be checked written outside the block.
 
 A **race** (`a.race(b)`; #2711) takes the first of two effects to succeed. It is a
@@ -1197,10 +1200,27 @@ race is decided is the platform's to log. `race` is for idempotent work.
 handler's body**, a lambda written there included, and in event, cron and queue
 handlers. It MUST NOT occur in an **agent handler**, a lambda within one included
 (`bynk.race.in_agent_handler`); it MUST occur in an effectful position
-(`bynk.race.in_pure_context`); and it MUST NOT occur in an effectful `fn`, a provider
-operation or a WebSocket handler (`bynk.race.outside_handler`). Its argument is consumed
+(`bynk.race.in_pure_context`); and it MUST NOT occur in a provider operation or a
+WebSocket handler (`bynk.race.outside_handler`); it MAY occur in an effectful `fn` or
+method, as `within` may. Its argument is consumed
 by the call, so the unawaited-effect check (`bynk.effect.unbound_effect`) does not flag
 it. The `race` of a `race`, or of a `within`, composes: `a.race(b).within(d)`.
+
+**The execution context in functions (#2719).** `~>`, `within` and `race` MAY occur in
+an effectful `fn` or method. A function takes the execution context from its caller, so
+the compiler works out which functions need it: the **needs-context set** holds every
+effectful function whose body (a lambda in it included) uses `~>`, or a `within` or
+`race` the checker resolved as the kernel method on an `Effect` receiver (never by
+name: a user type's own `race` method puts nothing in the set), or that calls a function
+in the set, or names one as a value. It is a fixed point over the whole build,
+dependency packages included. A function in the set MAY be called, or named as a value,
+only where an execution context exists: in a service handler (an event, cron or queue
+handler included), a Bundle `on call` handler, a lambda written in either, another
+function in the set, or a test `case` body. A call or a reference to such a function in
+an **agent handler**, a **WebSocket handler** or a **provider operation** MUST be refused
+(`bynk.exec.unavailable`), with a note naming the chain of functions down to the
+construct. A direct `~>`, `within` or `race` written in a test `case` body remains
+refused.
 
 **Implicit unit tail (§4.8.1).** A block with no trailing expression has value
 `()`: the tail auto-lift (an `Effect[T]` context lifts a tail of type `T`) then
