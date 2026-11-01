@@ -37,8 +37,10 @@ fn Box.has(self, x: A) -> Bool where A: Eq { self.value == x }
 
 `bynk.generics.missing_eq_bound` carries a machine-applicable fix. In an editor
 it is a quick fix, and **Fix all** (`source.fixAll.bynk`) applies every one in
-the file in a single action. If a chain of generics needs bounds, run it again
-until nothing is left: each round exposes the next link.
+the file in a single action. One pass reports every link of a chain of generics
+(across units too), so one fix-all adds them all; a method that compares two
+receiver type parameters may need a second pass, since both fixes extend the same
+`where` clause.
 
 ## What a bound changes for callers
 

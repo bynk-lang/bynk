@@ -55,13 +55,16 @@ site stands, but the bound is declared instead of inferred.
    parameter per function. The editor's quick fix and `source.fixAll.bynk` apply
    it with no new wiring. Pre-1.0 an increment may break source, and a
    one-release warning would leave two accepted spellings.
-6. **The inference is removed, not kept.** ADR 0430 computed each generic's
-   compared parameters by re-checking its body into throwaway sinks, cached per
-   declaration across units. With declared bounds nothing consults that set:
-   every error site already knows the parameter that needs the bound, so the fix
-   is computed there. Dropping the machinery also removes ADR 0430's permissive
-   miss (an importer that could not see a scan read "compares nothing"): the
-   callee's bounds are in its declaration.
+6. **The inference is kept to compute the fixes.** ADR 0430 computed each
+   generic's compared parameters by re-checking its body into throwaway sinks,
+   cached per declaration across units. That scan no longer decides what a call
+   accepts: a call is checked against the callee's *declared* bounds. It is
+   consulted only to hold a call to a generic that compares a parameter it has
+   not yet declared to that parameter too, so one pass reports every link of a
+   chain (`twice` calling `same`, across units) and one fix-all migrates the
+   lot, instead of each round exposing the next caller. The `missing_eq_bound`
+   at the callee's own body is reported either way, so the scan changes no
+   program's accept/reject outcome.
 7. **Bounds are part of the signature.** A cross-unit signature carries each
    parameter's bounds and the `where` entries, so a changed bound changes the
    contract hash; a signature with no bounds hashes as before. Bounds erase:

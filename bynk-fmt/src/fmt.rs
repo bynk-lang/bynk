@@ -3910,6 +3910,23 @@ fn stmt_to_string(s: &Statement) -> String {
     }
 }
 
+/// `T` or `T: Eq + C`: a type parameter as written, bounds included.
+fn type_param_text(tp: &TypeParam) -> String {
+    if tp.bounds.is_empty() {
+        tp.name.name.clone()
+    } else {
+        format!("{}: {}", tp.name.name, bounds_text(&tp.bounds))
+    }
+}
+
+fn bounds_text(bounds: &[Ident]) -> String {
+    bounds
+        .iter()
+        .map(|b| b.name.as_str())
+        .collect::<Vec<_>>()
+        .join(" + ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4745,21 +4762,4 @@ mod tests {
         );
         assert_eq!(out, fmt(&out), "not idempotent: {out}");
     }
-}
-
-/// `T` or `T: Eq + C`: a type parameter as written, bounds included.
-fn type_param_text(tp: &TypeParam) -> String {
-    if tp.bounds.is_empty() {
-        tp.name.name.clone()
-    } else {
-        format!("{}: {}", tp.name.name, bounds_text(&tp.bounds))
-    }
-}
-
-fn bounds_text(bounds: &[Ident]) -> String {
-    bounds
-        .iter()
-        .map(|b| b.name.as_str())
-        .collect::<Vec<_>>()
-        .join(" + ")
 }

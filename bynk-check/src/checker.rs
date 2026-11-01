@@ -921,7 +921,15 @@ pub fn certify(
 
 // ==== Entry points ====
 
+/// #1688: clear the cache of generic functions' compared type parameters.
+/// A project check calls this once before its per-unit loop; a single-file
+/// [`check`] calls it itself.
+pub fn reset_compared_cache() {
+    equality::reset_compared_cache();
+}
+
 pub fn check(input: ResolvedCommons) -> Result<TypedCommons, Vec<CompileError>> {
+    reset_compared_cache();
     check_record(
         input,
         &mut RefSink::new(),
@@ -1021,6 +1029,10 @@ pub fn check_record_in(
             refs.clear_owner();
         }
     }
+    // #1688: record this unit's generics' compared type parameters, in this
+    // unit's environment, for the units that import them.
+    equality::scan_local_generics(&input, &ty_intern);
+
     // v0.89 (ADR 0117): split diagnostics by severity. A unit with no
     // error-severity diagnostic *checks* — its warnings ride on `TypedCommons`,
     // surfaced but non-gating. Only error-severity diagnostics fail the check;

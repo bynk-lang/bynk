@@ -1004,7 +1004,11 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
             // top-level type was checked, so `Option[Connection[F]]` and
             // `List[(Int) -> Int]` slipped through to a reference `===`.
             // Constrained generics slice 0: inside a generic body a type
-            // parameter is comparable only when declared `Eq`.
+            // parameter is comparable only when declared `Eq`. The type
+            // variables compared are also noted, for the scan that computes
+            // the bound a fix declares (ADR 0430's inference, kept for that).
+            super::equality::record_compared(lt, tys);
+            super::equality::record_compared(rt, tys);
             for operand in [lt, rt] {
                 if !super::equality::require_eq(
                     ctx,

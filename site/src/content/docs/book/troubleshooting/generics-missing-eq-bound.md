@@ -34,9 +34,10 @@ code at the call; declare the bound on the caller.
 ## Migrating older code
 
 This is a **breaking change** for generics written before it. Every error has the
-fix above, so migrating a project is applying the quick fixes (**Fix all**
-repeatedly if generics call one another) and rebuilding. Emitted TypeScript is
-unchanged. A command-line `--fix` is planned separately.
+fix above, so migrating a project is applying the quick fixes (**Fix all** adds
+every bound in a file, following chains of generics that call one another; run it
+again if a method compares two receiver type parameters) and rebuilding. Emitted
+TypeScript is unchanged. A command-line `--fix` is planned separately.
 
 ## Related
 

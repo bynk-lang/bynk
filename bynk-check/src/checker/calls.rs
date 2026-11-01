@@ -950,11 +950,20 @@ fn check_generic_call(
         return None;
     }
     // Constrained generics slice 0: each `Eq`-bounded type parameter of the
-    // callee must be instantiated with an equality-supporting type.
+    // callee must be instantiated with an equality-supporting type. A callee
+    // that compares a parameter it has not yet declared (reported in its own
+    // body) is held to it too, so one pass reports a whole chain of generics
+    // that need the bound and a single fix-all applies them.
+    let compared = match ctx.input.fns.get(&name.name) {
+        Some(decl) if std::ptr::eq(decl.as_ref(), fn_decl) => {
+            super::equality::compared_type_params(decl, ctx)
+        }
+        _ => Default::default(),
+    };
     let eq_params: Vec<(String, Option<Span>)> = fn_decl
         .type_params
         .iter()
-        .filter(|tp| super::equality::has_eq(&tp.bounds))
+        .filter(|tp| super::equality::has_eq(&tp.bounds) || compared.contains(&tp.name.name))
         .map(|tp| (tp.name.name.clone(), Some(tp.span)))
         .collect();
     if !super::equality::check_declared_eq_args(&name.name, name.span, &eq_params, &subst, ctx) {
@@ -3111,21 +3120,37 @@ fn check_generic_method_call(
         return None;
     }
     // The same call-site bound as a generic function's, over the method's own
-    // `Eq`-bounded parameters and the receiver parameters its `where` clause
-    // bounds.
+    // parameters and the receiver parameters its `where` clause bounds (or that
+    // it compares without yet saying so).
+    let decl = ctx.input.methods.get(type_name).and_then(|t| {
+        t.instance
+            .get(&method.name)
+            .or_else(|| t.statics.get(&method.name))
+            .cloned()
+    });
+    let compared = match &decl {
+        Some(decl) if std::ptr::eq(decl.as_ref(), method_decl) => {
+            super::equality::compared_type_params(decl, ctx)
+        }
+        _ => Default::default(),
+    };
+    let declared_eq = |name: &str| {
+        method_decl
+            .type_params
+            .iter()
+            .any(|tp| tp.name.name == name && super::equality::has_eq(&tp.bounds))
+            || method_decl
+                .where_bounds
+                .iter()
+                .any(|wb| wb.param.name == name && super::equality::has_eq(&wb.bounds))
+    };
     let mut eq_params: Vec<(String, Option<Span>)> = method_decl
         .type_params
         .iter()
-        .filter(|tp| super::equality::has_eq(&tp.bounds))
         .map(|tp| (tp.name.name.clone(), Some(tp.span)))
         .collect();
-    eq_params.extend(
-        method_decl
-            .where_bounds
-            .iter()
-            .filter(|wb| super::equality::has_eq(&wb.bounds))
-            .map(|wb| (wb.param.name.clone(), Some(wb.param.span))),
-    );
+    eq_params.extend(recv_type_params.iter().map(|p| (p.clone(), None)));
+    eq_params.retain(|(p, _)| declared_eq(p) || compared.contains(p));
     let callee = format!("{type_name}.{}", method.name);
     if !super::equality::check_declared_eq_args(&callee, method.span, &eq_params, &subst, ctx) {
         return None;

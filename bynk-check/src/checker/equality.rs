@@ -23,11 +23,21 @@
 //! method's receiver parameter (constrained-generics slice 0, which replaced
 //! ADR 0430's inferred bound with a declared one). `==` on a type that mentions
 //! an undeclared type parameter is `bynk.generics.missing_eq_bound`
-//! ([`require_eq`]), and so is passing one to an `Eq`-bounded parameter
-//! of another generic. At a call, [`check_declared_eq_args`] checks each
+//! ([`require_eq`]), and so is passing one to an `Eq`-bounded parameter of
+//! another generic. At a call, [`check_declared_eq_args`] checks each
 //! `Eq`-bounded type parameter's instantiation with [`not_comparable`]. Bynk
 //! generics are not monomorphised, so the instantiation is the only place the
 //! concrete type is known.
+//!
+//! ADR 0430's inference is kept for one purpose: [`compared_type_params`] still
+//! computes which type parameters a generic compares — directly with
+//! `==`/`!=`, or by passing them to a compared parameter of another generic,
+//! across units — so that a call to a generic that compares a parameter it has
+//! not declared yet is held to it too. One pass then reports every link of a
+//! chain that needs the bound, each with its fix, and a single fix-all migrates
+//! the lot; without it each round of fixes would expose the next caller. It
+//! never decides acceptance: a program it flags already has the
+//! `missing_eq_bound` in the callee's own body.
 //!
 //! One gap remains, and it is permissive (the runtime walker then compares the
 //! offending part by identity): a record imported from another unit is absent
@@ -39,14 +49,20 @@
 //! parameters is covered by walking the corresponding applied argument. A
 //! visited set keeps recursive types (`Node = { next: Option[Node] }`) finite.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::sync::Arc;
 
-use bynk_syntax::ast::{FnDecl, FnName, Ident, TypeBody, TypeDecl, TypeRef};
+use bynk_syntax::ast::{CommonsItem, FnDecl, FnName, Ident, TypeBody, TypeDecl, TypeRef};
 use bynk_syntax::error::{Applicability, CompileError};
 use bynk_syntax::span::Span;
 
 use super::{Ctx, Ty, TyId, Types};
+use crate::hints::HintSink;
+use crate::index::RefSink;
+use crate::locals::LocalsSink;
+use crate::requirements::RequirementSink;
 use crate::resolver::ResolvedCommons;
 
 /// The constraint names a bound may use. Slice 0 admits only `Eq`; later slices
@@ -208,6 +224,38 @@ pub(crate) fn require_eq(ctx: &mut Ctx, ty: TyId, span: Span, site: &str) -> boo
     false
 }
 
+thread_local! {
+    /// #1688: one frame per generic body being scanned by
+    /// [`compared_type_params`]; `==` and compared call arguments add the type
+    /// variables they mention to the innermost frame. Empty outside a scan, so
+    /// ordinary checking records nothing.
+    static RECORDING: RefCell<Vec<HashSet<String>>> = const { RefCell::new(Vec::new()) };
+    /// #1688: each generic function's compared type parameters, keyed by the
+    /// address of its shared declaration (`Arc<FnDecl>`, the same allocation in
+    /// its own unit and in every importer) and valid for one project check
+    /// (see [`reset_compared_cache`]). `None` marks a scan in progress, which a
+    /// recursive call reads as "compares nothing yet".
+    static COMPARED: RefCell<HashMap<usize, Option<Rc<HashSet<String>>>>> =
+        RefCell::new(HashMap::new());
+}
+
+/// #1688: clear the cache of compared type parameters. Called at the start of
+/// each project check (and of a single-file check), so a declaration address
+/// never outlives the program it was computed for.
+pub(crate) fn reset_compared_cache() {
+    COMPARED.with(|c| c.borrow_mut().clear());
+}
+
+/// #1688: inside a [`compared_type_params`] scan, note that every type variable
+/// in `ty` is compared. A no-op during ordinary checking.
+pub(crate) fn record_compared(ty: TyId, tys: &Types) {
+    RECORDING.with(|r| {
+        if let Some(frame) = r.borrow_mut().last_mut() {
+            collect_vars(ty, tys, frame);
+        }
+    });
+}
+
 fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
     match &*tys.get(ty) {
         Ty::Var(name) => {
@@ -250,6 +298,130 @@ fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
         | Ty::Actor(_)
         | Ty::ActorSum(_) => {}
     }
+}
+
+/// #1688: the type parameters of generic function `decl` that it compares —
+/// that reach an `==`/`!=` operand in its body, or a compared parameter of a
+/// generic function it calls (transitively). A caller must instantiate each
+/// with an equality-supporting type.
+///
+/// A function declared in the unit being checked is scanned here, on first
+/// use, in this unit's environment. An imported one was scanned while its own
+/// unit was checked ([`scan_local_generics`]; units are checked `uses`-first),
+/// so it is only looked up: scanning it here would resolve its body against
+/// the *caller's* names (#1702 review), missing what it calls through its own
+/// `uses` and seeing local functions that shadow them. A miss reads as
+/// "compares nothing", which can only accept.
+pub(crate) fn compared_type_params(decl: &Arc<FnDecl>, ctx: &Ctx) -> Rc<HashSet<String>> {
+    let local = ctx
+        .input
+        .commons
+        .items
+        .iter()
+        .any(|i| matches!(i, CommonsItem::Fn(f) if same_fn(&f.name, &decl.name)));
+    if local {
+        compared_in(decl, ctx.input, ctx.tys)
+    } else {
+        cached(decl).flatten().unwrap_or_default()
+    }
+}
+
+/// #1688: scan every generic function and method declared in `input`'s own
+/// unit, so the units checked after it (its importers) can look the results up.
+pub(crate) fn scan_local_generics(input: &ResolvedCommons, tys: &Types) {
+    for item in &input.commons.items {
+        let CommonsItem::Fn(f) = item else {
+            continue;
+        };
+        let decl = match &f.name {
+            FnName::Free(id) => input.fns.get(&id.name),
+            FnName::Method {
+                type_name,
+                method_name,
+            } => input.methods.get(&type_name.name).and_then(|t| {
+                t.instance
+                    .get(&method_name.name)
+                    .or_else(|| t.statics.get(&method_name.name))
+            }),
+        };
+        if let Some(decl) = decl {
+            compared_in(decl, input, tys);
+        }
+    }
+}
+
+/// Whether two names denote the same declaration (a method's identity is its
+/// type and method name together; [`FnName::display`] keeps only the latter).
+fn same_fn(a: &FnName, b: &FnName) -> bool {
+    match (a, b) {
+        (FnName::Free(x), FnName::Free(y)) => x.name == y.name,
+        (
+            FnName::Method {
+                type_name: t1,
+                method_name: m1,
+            },
+            FnName::Method {
+                type_name: t2,
+                method_name: m2,
+            },
+        ) => t1.name == t2.name && m1.name == m2.name,
+        _ => false,
+    }
+}
+
+/// The type parameters a scan of `decl` tracks: its own, plus — for a method
+/// on a generic type — the receiver type's, which its body sees as rigid
+/// variables too (#1702 review: `fn Box.has(self, x: A)` compares `A`).
+fn tracked_params(decl: &FnDecl, input: &ResolvedCommons) -> Vec<String> {
+    let mut params: Vec<String> = decl
+        .type_params
+        .iter()
+        .map(|tp| tp.name.name.clone())
+        .collect();
+    if let FnName::Method { type_name, .. } = &decl.name
+        && let Some(t) = input.types.get(&type_name.name)
+    {
+        params.extend(t.type_params.iter().map(|tp| tp.name.name.clone()));
+    }
+    params
+}
+
+fn cached(decl: &Arc<FnDecl>) -> Option<Option<Rc<HashSet<String>>>> {
+    let key = Arc::as_ptr(decl) as usize;
+    COMPARED.with(|c| c.borrow().get(&key).cloned())
+}
+
+/// Check `decl`'s body again into throwaway sinks with a recording frame
+/// pushed, in `input`'s environment, which must be `decl`'s own unit. Its
+/// diagnostics were reported by the ordinary check, so they are discarded.
+fn compared_in(decl: &Arc<FnDecl>, input: &ResolvedCommons, tys: &Types) -> Rc<HashSet<String>> {
+    let tracked = tracked_params(decl, input);
+    if tracked.is_empty() {
+        return Rc::new(HashSet::new());
+    }
+    if let Some(entry) = cached(decl) {
+        return entry.unwrap_or_default();
+    }
+    let key = Arc::as_ptr(decl) as usize;
+    COMPARED.with(|c| c.borrow_mut().insert(key, None));
+    RECORDING.with(|r| r.borrow_mut().push(HashSet::new()));
+    super::calls::check_fn(
+        decl,
+        input,
+        &mut HashMap::new(),
+        &mut HashMap::new(),
+        &mut Vec::new(),
+        &mut RefSink::new(),
+        &mut HintSink::new(),
+        &mut LocalsSink::new(),
+        &mut RequirementSink::new(),
+        tys,
+    );
+    let seen = RECORDING.with(|r| r.borrow_mut().pop()).unwrap_or_default();
+    let compared: HashSet<String> = tracked.into_iter().filter(|n| seen.contains(n)).collect();
+    let compared = Rc::new(compared);
+    COMPARED.with(|c| c.borrow_mut().insert(key, Some(Rc::clone(&compared))));
+    compared
 }
 
 /// Why a type is not equality-supporting: the first offending part found.
@@ -471,6 +643,8 @@ pub(crate) fn check_declared_eq_args(
         let Some(&arg_ty) = subst.get(param) else {
             continue;
         };
+        // A scan of a generic caller sees the requirement pass through.
+        record_compared(arg_ty, tys);
         if let Some(blocker) = not_comparable(arg_ty, ctx) {
             let shown = arg_ty.display(tys);
             let top = matches!(

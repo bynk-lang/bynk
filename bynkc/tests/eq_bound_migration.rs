@@ -59,14 +59,40 @@ fn categories(result: &bynk_ide::ProjectDiagnostics) -> Vec<String> {
     out
 }
 
-/// Apply every `missing_eq_bound` fix, round after round, until none is left.
-/// Returns the migrated sources and the rounds it took.
+/// Two edits conflict as `source.fixAll.bynk` judges it: they share a character,
+/// or both insert at the same point.
+fn overlaps(a: &(usize, usize, String), b: &(usize, usize, String)) -> bool {
+    if a.0 == a.1 && b.0 == b.1 {
+        return a.0 == b.0;
+    }
+    a.0 < b.1 && b.0 < a.1
+}
+
+/// The `(file, category)` pairs the language server's fix-all gate compares.
+fn gate_view(result: &bynk_ide::ProjectDiagnostics) -> Vec<(PathBuf, String)> {
+    result
+        .files
+        .iter()
+        .flat_map(|f| {
+            f.diagnostics
+                .iter()
+                .map(|d| (f.source_path.clone(), d.error.category.to_string()))
+        })
+        .collect()
+}
+
+/// Apply every `missing_eq_bound` fix the way fix-all does — each suggestion
+/// whole, skipping one that overlaps an edit already taken — round after round
+/// until none is left. Every round must pass fix-all's safety gate (it may add
+/// no diagnostic the round did not already have). Returns the migrated sources
+/// and the rounds it took.
 fn migrate(root: &Path, mut files: HashMap<PathBuf, String>) -> (HashMap<PathBuf, String>, usize) {
     for round in 0.. {
         let result = diagnose(root, &files);
+        let mut next = files.clone();
         let mut applied = false;
         for f in &result.files {
-            let mut edits: Vec<(usize, usize, String)> = Vec::new();
+            let mut taken: Vec<(usize, usize, String)> = Vec::new();
             for d in &f.diagnostics {
                 if d.error.category != "bynk.generics.missing_eq_bound" {
                     continue;
@@ -75,23 +101,34 @@ fn migrate(root: &Path, mut files: HashMap<PathBuf, String>) -> (HashMap<PathBuf
                     panic!("`missing_eq_bound` must carry exactly one suggestion");
                 };
                 assert_eq!(s.applicability, Applicability::MachineApplicable);
-                for (span, text) in &s.edits {
-                    let edit = (span.start, span.end, text.clone());
-                    if !edits.contains(&edit) {
-                        edits.push(edit);
-                    }
+                let fresh: Vec<(usize, usize, String)> = s
+                    .edits
+                    .iter()
+                    .map(|(span, text)| (span.start, span.end, text.clone()))
+                    .filter(|e| !taken.contains(e))
+                    .collect();
+                if fresh.iter().any(|e| taken.iter().any(|t| overlaps(t, e))) {
+                    continue;
                 }
+                taken.extend(fresh);
             }
-            if !edits.is_empty() {
-                let path = root.join(&f.source_path);
-                let migrated = apply(&f.text, edits);
-                files.insert(path, migrated);
+            if !taken.is_empty() {
+                next.insert(root.join(&f.source_path), apply(&f.text, taken));
                 applied = true;
             }
         }
         if !applied {
             return (files, round);
         }
+        let post = diagnose(root, &next);
+        assert!(
+            bynk_ide::index_queries::no_new_diagnostics(&gate_view(&result), &gate_view(&post))
+                .is_ok(),
+            "round {round}: fix-all's safety gate would refuse these fixes: {:?} -> {:?}",
+            categories(&result),
+            categories(&post)
+        );
+        files = next;
         assert!(round < 8, "the fixes did not converge");
     }
     unreachable!()
@@ -171,7 +208,10 @@ fn a_transitive_bound_is_added_to_every_link_and_still_rejected_at_the_call() {
         &["m.bynk: bynk.types.not_comparable"],
     );
     let (text, rounds) = migrated(&[("m.bynk", src)], "m.bynk");
-    assert_eq!(rounds, 2, "the call-site fix needs `same` migrated first");
+    assert_eq!(
+        rounds, 1,
+        "one pass reports every link, so one fix-all migrates the chain"
+    );
     assert!(text.contains("fn same[T: Eq]"), "{text}");
     assert!(text.contains("fn twice[U: Eq]"), "{text}");
 }
@@ -214,6 +254,34 @@ fn comparable_instantiations_and_non_comparing_generics_still_compile() {
 fn a_receiver_method_that_compares_accepts_comparable_receivers() {
     let src = "commons demo.box\n\ntype Box[A] = { value: A }\n\nfn Box.has(self, x: A) -> Bool { self.value == x }\n\nfn Box.apply(self, n: Int) -> Int { 0 }\n\nfn hasThree(n: Int) -> Bool {\n  let b = Box { value: 3 }\n  b.has(n)\n}\n\nfn inc(n: Int) -> Int { n + 1 }\n\nfn boxedFnApplied(f: (Int) -> Int) -> Int {\n  let b = Box { value: f }\n  b.apply(1)\n}\n";
     run(&[("demo/box.bynk", src)], &["A"], &[]);
+}
+
+#[test]
+fn two_receiver_parameters_take_two_rounds_and_end_in_one_where_clause() {
+    // Both fixes insert at the end of the return type, so fix-all takes the
+    // first and leaves the second (it overlaps) for the next round.
+    let src = "commons m\n\ntype Pair[A, B] = { a: A, b: B }\n\nfn Pair.same(self, x: A, y: B) -> Bool { self.a == x && self.b == y }\n";
+    let (text, rounds) = migrated(&[("m.bynk", src)], "m.bynk");
+    assert_eq!(rounds, 2);
+    assert!(
+        text.contains("-> Bool where A: Eq, B: Eq {"),
+        "one clause, both bounds: {text}"
+    );
+}
+
+#[test]
+fn a_cross_unit_chain_migrates_in_one_round() {
+    // `same` (lib) calls `eq2` (core); fixing `eq2` alone would expose `same`
+    // next round, in another file, which fix-all's gate refuses. One pass
+    // reports both, so the gate holds.
+    let core = "commons m.core\n\nfn eq2[T](a: T, b: T) -> Bool { a == b }\n";
+    let lib = "commons m.lib\n\nuses m.core\n\nfn same[T](a: T, b: T) -> Bool { eq2(a, b) }\n";
+    let (root, map) = project(&[("m/core.bynk", core), ("m/lib.bynk", lib)]);
+    let (done, rounds) = migrate(&root, map);
+    assert_eq!(rounds, 1);
+    assert!(done[&root.join("m/lib.bynk")].contains("fn same[T: Eq]"));
+    assert!(done[&root.join("m/core.bynk")].contains("fn eq2[T: Eq]"));
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
