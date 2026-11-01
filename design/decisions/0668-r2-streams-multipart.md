@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_abi_shapes
-changelog: "`bynk.cloudflare`'s `R2` gains streamed reads and writes: `getStream` gives an `R2Body` (the object's metadata and its body as a single-pass `Stream[Bytes]`, served with `RawStreamed`), and `putStream`/`putStreamWith` write a stream of a declared `size`, a mismatch faulting with nothing stored. Multipart uploads (`createUpload`, `uploadPart`, `completeUpload`, `abortUpload`) build one object from whole-`Bytes` parts across requests, through a plain `R2Upload` handle (standard-library P5b, [#2626](https://github.com/bynk-lang/bynk/issues/2626))"
----
+# 0668 — R2 streams objects through a declared size and uploads them in parts through a plain handle
 
-## ADR: r2-streams-multipart
-title: R2 streams objects through a declared size and uploads them in parts through a plain handle
-summary: `R2.getStream` gives metadata plus an unclaimed single-pass `Stream[Bytes]` wrapping R2's body; `putStream`/`putStreamWith` take a declared `size`, enforced by the binding and passed through `FixedLengthStream` on Workers; multipart uploads take whole-`Bytes` parts and a codable `R2Upload { key, uploadId }` rebuilt with `resumeMultipartUpload` on every call; all inherit `R2`'s experimental tier
+- **Status:** Accepted (v0.454)
 
 **Context.** ADR 0585 (P5) shipped `R2` over whole `Bytes` objects. Its
 decision B split byte streams out because they needed language work. That work
