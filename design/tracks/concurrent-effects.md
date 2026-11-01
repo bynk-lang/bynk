@@ -82,11 +82,16 @@ language is `FetchOptions.timeout` on `Fetch.sendWith` (standard-library K5a).
   (`bynk.effect.unbound_effect`). That rules out the JavaScript idiom of starting
   two promises and awaiting both later. It is the reason a join needs its own
   surface rather than falling out of existing syntax.
-- **Collection fan-out exists.** `parTraverse` issues every element's effect and
-  awaits them together; "a rejecting element does **not** cancel siblings
-  already issued — every element's effect is in flight before the first failure
-  surfaces, and each runs to completion" (§5.10). `parTraverseAll` gathers every
-  `Result` in input order; `parTraverseTry` short-circuits on the first `Err`.
+- **Collection fan-out exists.** `parTraverse`, `parTraverseAll` and
+  `parTraverseTry` issue every element's effect and lower to
+  `globalThis.Promise.all(…)` (`bynk-emit/src/emitter/lower.rs`). So a **fault**
+  surfaces at the *first* rejection, and the siblings keep running unobserved:
+  "each runs to completion" (§5.10) means they are not cancelled, not that the
+  fan-out waits for them. For **`Result` errors** the picture is different.
+  `parTraverseAll` gathers every `Result` in input order, and `parTraverseTry`
+  awaits every element and *then* returns the first `Err` in input order. Its
+  name suggests it short-circuits, but it does not stop waiting early. That is
+  the precedent for Q2's draft.
 - **`~>` is fire-and-forget.** It lowers to `waitUntil(<effect>)`, is not
   awaited, and is not retracted by a later fault (ADR 0106, ADR 0109 D4).
 - **Handler atomicity is per effect class** (ADR 0109 D4). `store` writes are
@@ -113,8 +118,9 @@ language is `FetchOptions.timeout` on `Fetch.sendWith` (standard-library K5a).
   the fault it raises must not depend on which subrequest finished first.
 - **No work outlives the handler unseen.** On Workers, a subrequest still
   running when the response is returned is cancelled unless it was handed to
-  `waitUntil`. A join must either finish everything it started or say exactly
-  what it abandons.
+  `waitUntil`. A join must finish everything it awaits. The only work allowed to
+  outlive it is what a construct explicitly hands to `waitUntil` at a visible
+  call site: `~>` today, and a timeout's abandoned effect (Q6).
 - **Sequential code is unchanged**, byte for byte.
 
 ## 5. Open design questions
@@ -155,9 +161,13 @@ puts the wait at a visible closing brace. Rules for the block:
 
 - it contains only `let x <- e` bindings, `let pattern <- e else …` is excluded,
   and `do e` lines are allowed for unit effects;
-- no binding may refer to a name bound by another binding in the same block
-  (`bynk.par.dependent_binding`). That is what makes the overlap safe and the
-  semantics independent of order;
+- no binding may mention a name that another binding in the same block binds,
+  **even where that name would resolve to an outer binding**
+  (`bynk.par.sibling_name`). Because names bound inside are only in scope after
+  the block, a narrower rule ("may not *depend on* a sibling") would be redundant,
+  and would let `let user <- …; par { let user <- A(); let o <- B(user) }`
+  silently pass the stale outer `user` to `B`. Rejecting the name outright
+  catches that case, and keeps the semantics independent of order;
 - it is legal only in an effectful context, like any `<-`;
 - names bound inside are in scope after the block, not inside it.
 
@@ -193,11 +203,18 @@ unobserved.
   the first fault in source order (a later fault is logged with it). Nothing
   started by the join is still running when the join completes.
 
-**Draft recommendation: (b).** It is deterministic, it keeps every effect the
-handler started inside the handler's lifetime (§4), and it matches
-`parTraverse`'s documented "each runs to completion". ADR 0109 D4 is unchanged:
+**Draft recommendation: (b).** It is deterministic, and it keeps every effect
+the join awaits inside the handler's lifetime (§4). ADR 0109 D4 is unchanged:
 cross-agent calls that completed before the fault still stand, and `store`
 writes are still staged and discarded.
+
+This **differs from today's `parTraverse` family**, which is option (a) (§3), so
+it also breaks §4 today. Two forms with different fault semantics for the same
+idea would be a trap. **Draft:** move `parTraverse`, `parTraverseAll` and
+`parTraverseTry` (on `List`, `Map` and `Query`) to settle-all as well, in their
+own slice (§6, slice 0b). The change is visible only when an element faults:
+the fan-out then waits for its siblings before raising, and raises the first
+fault in input order rather than the first to arrive.
 
 ### Q4 — Joins in agent handlers
 
@@ -211,9 +228,14 @@ writes are still staged and discarded.
   nothing but loses nothing either.
 - **Durable Object gates.** Awaiting a subrequest already opens the input gate
   in sequential code, so a join does not add any interleaving that sequential
-  awaits do not already allow. The settling review should confirm this against
-  current Durable Object input-gate behaviour, and against any agent code that
-  assumes no other request runs between two sequential `<-` lines.
+  awaits do not already allow. There is one difference. Sequential code has a
+  synchronous gap between line 1 returning and line 2 being issued, in which no
+  other request can run, and code can rely on that gap (read a value, then decide
+  what to issue next). A join removes that gap while keeping the overall
+  gate-open period. Q1's sibling-name rule already stops one binding from using
+  another's result, so nothing *inside* a join can rely on the gap. The settling
+  review should confirm the rest against current Durable Object input-gate
+  behaviour, including for `store` reads.
 - **Draft:** joins are legal in agent handlers with the rules above. Calling the
   agent's own handlers from inside a join (re-entrancy) stays exactly as legal or
   illegal as it is sequentially.
@@ -224,11 +246,19 @@ The observation recorder logs a capability call when it is *made*. In a join,
 calls are issued in source order, synchronously, before any is awaited, so the
 issue order is deterministic even though completion order is not.
 
+- That holds only for the **first** capability call each binding makes. When a
+  binding's expression is a composite effect (`X.a().flatMap(…)`, `mapOk`, or a
+  user function that makes several calls), its later calls are issued when the
+  earlier ones complete, so their order against another binding's calls follows
+  completion and microtask order, not source order.
 - **Draft:** keep recording at issue time and document that `expect A.op before
-  B.op` compares **issue** order. Between two bindings of one join it is
-  therefore source order, which is a true fact about the program, but not
-  evidence that `A` finished first. A test that needs completion order is
-  testing a race and should be written against a stub that controls it.
+  B.op` compares **issue** order. Between the *first* calls of two bindings it
+  is source order; for any later call it is whatever order the calls were
+  actually made in. Neither is evidence that `A` finished first. Restricting each
+  binding to a single direct capability call would make the stronger guarantee
+  hold, but would rule out ordinary helper functions, so the draft does not
+  recommend it. A test that needs completion order is testing a race and should
+  be written against a stub that controls it.
 - Stubs resolve deterministically in a test, so a join's result in a test does
   not depend on timing. Combined with Q2 and Q3, a join is reproducible under
   test.
@@ -245,7 +275,10 @@ cross-agent call, the remote handler still runs and commits.
 
 - **Draft:** (b), shipped after the join, with the abandoned effect handed to
   `waitUntil` so it is allowed to finish rather than being cut off mid-write when
-  the response returns. The spec must say plainly that a timed-out effect may
+  the response returns. This is the one **deliberate exception** to Q3's "nothing
+  the join started is still running": in `par { let x <- e.within(d) }`, the join
+  waits for `within`, and `within` detaches `e` explicitly. Q3's guarantee covers
+  what a join awaits, and §4 and §8 are worded to allow this exception. The spec must say plainly that a timed-out effect may
   still complete and commit. Per-capability timeouts that *can* abort (`Fetch`,
   through `AbortSignal`) remain the right tool when the work must actually stop.
 - Testing a timeout needs the harness clock (`advance Clock by d`) to drive it,
@@ -278,6 +311,9 @@ a sub-issue of #2615.
 - **Slice 0 — The concurrent binding block.** Grammar, the independence check,
   scoping, emission to a settle-all helper, Q3's fault semantics, and Q5's
   documented observation semantics. Value and unit bindings only; no `?`.
+- **Slice 0b — Settle-all for the `parTraverse` family**, aligning its fault
+  semantics with the join's (Q3). A behaviour change only when an element
+  faults.
 - **Slice 1 — `Result` and `?` in a join**, with Q2's source-order rule.
 - **Slice 2 — Agent handlers**, if the settling review finds rules beyond
   Q4's draft that need their own increment. Otherwise folded into slice 0.
@@ -293,7 +329,8 @@ To land with, or just before, slice 0:
 - **The join surface and its result carrier** (Q1). Choosing tuples here would
   add a Foundations-level type; choosing the block form avoids it.
 - **Settle-all fault semantics and source-order reporting** (Q2, Q3). They fix
-  what every join, and every later timeout, means on failure.
+  what every join, and every later timeout, means on failure, and they amend the
+  `parTraverse` family's semantics (ADRs 0171–0174) for slice 0b.
 - **The cancellation stance** (Q7). It decides whether capabilities and bindings
   must ever carry an abort signal.
 
@@ -307,8 +344,10 @@ To land with, or just before, slice 0:
     depending on another, `store` writes are excluded from joins, and Q4's
     review confirms gates add no new interleaving.
   - Work keeps running after the handler replies, or is cut off half-done when
-    the platform cancels it. Mitigation: settle-all (Q3) for joins, and an
-    explicit `waitUntil` handover for anything a timeout abandons (Q6).
+    the platform cancels it. Mitigation: settle-all (Q3) for joins and, after
+    slice 0b, for the `parTraverse` family; an explicit `waitUntil` handover for
+    anything a timeout abandons (Q6), which is the only work allowed to outlive
+    a join.
   - A handler reports a different error or fault depending on timing, which
     makes failures hard to reproduce and lets an attacker who can slow one
     dependency choose which error a caller sees. Mitigation: source-order
@@ -323,6 +362,7 @@ To land with, or just before, slice 0:
 ## 9. Slice status
 
 - [ ] Slice 0 — concurrent binding block
+- [ ] Slice 0b — settle-all for the `parTraverse` family
 - [ ] Slice 1 — `Result` and `?` in a join
 - [ ] Slice 2 — agent handlers (may fold into slice 0)
 - [ ] Slice 3 — general timeout
