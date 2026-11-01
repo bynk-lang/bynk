@@ -1614,7 +1614,8 @@ impl<'a> Parser<'a> {
     /// Parse a list pattern (#2680): `[]`, `[p, …]`, `[p, …, ..]` or
     /// `[p, …, ..rest]`; the cursor is on the `[`. The `..` is the final
     /// element, at most once, and followed by a name or nothing; `..` followed
-    /// by an integer is a range element instead (#2699, patterns track Q7).
+    /// by an integer is a range element instead (#2699; the patterns track's
+    /// Q7 in `design/archive/retired-tracks.md`).
     fn parse_list_pattern(&mut self) -> Result<Pattern, CompileError> {
         let open = self.expect(TokenKind::LBracket, "to open a list pattern")?;
         let mut elems = Vec::new();
