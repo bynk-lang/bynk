@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.470**.
+written against **v0.471**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.471.0** | "Integer range patterns: `lo..hi`, `lo..` and `..hi` (inclusive, bounds optionally negative) match an `Int` in a `match`, nested in variant, record and list patterns, in or-patterns and in `let … else`. Exhaustiveness is by interval, so `..-1` and `0..` need no `_`, and a missing interval is reported as a pattern (`13..17`). `via schema(...)` takes the same ranges and `_` (events slice 4b, [#990](https://github.com/bynk-lang/bynk/issues/990)), through one shared production. `[..9]` in a list pattern is now a range element, which retires `bynk.parse.range_pattern_unsupported`. New diagnostics: `bynk.types.range_pattern_on_non_int`, `bynk.types.empty_range_pattern` and `bynk.types.is_range_pattern` (patterns track slice 5, [#2699](https://github.com/bynk-lang/bynk/issues/2699))" |
 | **v0.470.1** | "A named constant is emitted as an exported, hoisted TypeScript function that caches its value, and each reference is a call, so constants in sibling files that import each other (through a constant, a function or a type) no longer risk reading a constant before it is initialised; `bynk.resolve.const_file_cycle` is retired ([#2617](https://github.com/bynk-lang/bynk/issues/2617))" |
 | **v0.470.0** | "`e.within(d)` (the unit `consumes bynk { TimedOut }`): a general timeout on any `Effect[T]` yielding `Effect[Result[T, TimedOut]]`; the abandoned effect is handed to `waitUntil`, not cancelled; service handlers only; tests drive it on virtual time with `stub … returns v after d` and `stub … never` (concurrent effects, slice 3, [#2683](https://github.com/bynk-lang/bynk/issues/2683))" |
 | **v0.469.0** | "`private` now applies to `const`: a `private const` is visible across its own unit's files and to its suites, never through `uses`. A reference from another unit is `bynk.visibility.private_item` (\"a private constant\"), and a public constant whose type annotation names a private type of its unit is `bynk.visibility.private_in_public`" |

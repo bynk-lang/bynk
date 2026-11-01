@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "Integer range patterns: `lo..hi`, `lo..` and `..hi` (inclusive, bounds optionally negative) match an `Int` in a `match`, nested in variant, record and list patterns, in or-patterns and in `let … else`. Exhaustiveness is by interval, so `..-1` and `0..` need no `_`, and a missing interval is reported as a pattern (`13..17`). `via schema(...)` takes the same ranges and `_` (events slice 4b, [#990](https://github.com/bynk-lang/bynk/issues/990)), through one shared production. `[..9]` in a list pattern is now a range element, which retires `bynk.parse.range_pattern_unsupported`. New diagnostics: `bynk.types.range_pattern_on_non_int`, `bynk.types.empty_range_pattern` and `bynk.types.is_range_pattern` (patterns track slice 5, [#2699](https://github.com/bynk-lang/bynk/issues/2699))"
----
+# 0689 — One integer-range production serves match patterns and `via schema(...)`, and `..` is a rest marker or a range bound by the next token
 
-## ADR: range-patterns
-title: One integer-range production serves match patterns and `via schema(...)`, and `..` is a rest marker or a range bound by the next token
-summary: Inclusive integer ranges `lo..hi`, `lo..`, `..hi` as one `int_range` production shared by `match` patterns and `via schema(...)`; Int-only; empty ranges rejected; interval constructors split at the column's endpoints in the usefulness engine; comparison lowering in the if-chain; the rule that decides `..` between a list rest marker and a range, closing slice 4's reservation; realises patterns-track slice 5 and events slice 4b
+- **Status:** Accepted (v0.471)
 
 **Context.** An `Int` was matched by literal, or by `_ where InRange(lo, hi)`,
 which binds nothing and which the coverage engine treats as matching nothing, so
