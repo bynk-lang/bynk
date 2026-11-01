@@ -11,8 +11,8 @@ This page is the mental model for the emit/subscribe core (slice 0),
 subscription pattern filtering (slice 1), the runtime envelope (slice 2),
 event field defaults (slice 3a), `@schema(N)` event versioning (slice 3b),
 the cross-build schema registry that verifies it (slice 3c), and
-version-aware dispatch with `via schema(N)` (slice 4). For the track's
-remaining scope (replay, range-valued `via schema(...)` patterns), see
+version-aware dispatch with `via schema(N)` (slice 4) and its ranges (slice 4b).
+For the track's remaining scope (replay), see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/).
 
 ## The three pieces
@@ -366,9 +366,48 @@ you toward mutually-exclusive ranges. Keep sibling `via schema(...)` clauses
 disjoint by convention if you want exactly-one-handler-per-version
 semantics; the compiler does not enforce it for you.
 
-Only a positive integer literal is accepted today — range patterns like
-`via schema(2..)` (`schemaVersion` 2 or later) are a future addition, not
-yet built.
+## Dispatching a range of versions
+
+`via schema(...)` also takes a range of versions, the same `lo..hi`, `lo..` and
+`..hi` that [a `match` takes](/book/guides/type-system/match-on-a-range-of-numbers/),
+and `_`:
+
+```bynk,fragment
+service OnV1 from Events(PaymentConfirmed) via schema(1) {
+  on event(e: PaymentConfirmed) -> Effect[()] {
+    // version 1 only
+  }
+}
+
+service OnV2To4 from Events(PaymentConfirmed) via schema(2..4) {
+  on event(e: PaymentConfirmed) -> Effect[()] {
+    // versions 2, 3 and 4
+  }
+}
+
+service OnV5Up from Events(PaymentConfirmed) via schema(5..) {
+  on event(e: PaymentConfirmed) -> Effect[()] {
+    // version 5 and later
+  }
+}
+
+service OnAny from Events(PaymentConfirmed) via schema(_) {
+  on event(e: PaymentConfirmed) -> Effect[()] {
+    // every version
+  }
+}
+```
+
+- Both ends are **inclusive**, as in `InRange(lo, hi)`: `2..4` is versions 2, 3
+  and 4. `2..` is version 2 or later and `..4` is version 4 or earlier.
+- Every bound must be a positive `Int` literal
+  (`bynk.event.bad_schema_dispatch`), and `lo` must not exceed `hi`
+  (`bynk.types.empty_range_pattern`, whose fix swaps the bounds).
+- `_` matches every version, exactly like omitting the clause. It is for writing
+  every case of a family of subscribers explicitly; the envelope is still
+  threaded to the handler.
+- As with a literal, sibling subscribers whose ranges overlap, or leave a gap, are
+  **not** flagged: delivery is still deliver-and-filter.
 
 ## Only the declaring context may emit
 

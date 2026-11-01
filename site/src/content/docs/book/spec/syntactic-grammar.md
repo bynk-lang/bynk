@@ -742,9 +742,10 @@ a variant reference, bare (`Domestic`) or qualified (`Region.Domestic`).
 
 {{#grammar schema_dispatch_clause}}
 
-`via schema(N)`. The grammar admits a signed number literal; that `N` is a
-positive `Int` is well-formedness (§5.7b). A range (`via schema(2..)`) is not
-part of the grammar.
+`via schema(N)`, `via schema(N..M)`, `via schema(N..)`, `via schema(..M)` and
+`via schema(_)`. The argument is a signed number literal, the shared
+[`int_range`](#4713-int_range) production, or `_`; that each bound is a positive
+`Int`, and that `N <= M`, is well-formedness (§5.7b).
 
 ### §4.4.8 by_clause (v0.45) {#448-by_clause}
 
@@ -1268,14 +1269,14 @@ list. An element is any pattern, so list patterns nest (`Some([x, ..])`,
 `[[a, ..], ..]`).
 
 The rest marker `..` is the rule it is in a record pattern, with one more case,
-reserved for range patterns (patterns track, Q7). After `..` the next token
+shared with range patterns (patterns track, Q7). After `..` the next token
 decides:
 
 - a lowercase name, `,` before the closing `]`, or `]` makes it a **rest marker**;
   a capitalised name is rejected, since it would be a named constant bounding a
   range (`..MAX`);
-- a literal, including a negative one (`..9`, `..-1`), is the upper bound of a
-  range pattern, which is not available yet: `bynk.parse.range_pattern_unsupported`.
+- an integer, including a negative one (`..9`, `..-1`), is the upper bound of a
+  range pattern ([§4.7.13](#4713-int_range)), an element of the list.
 
 The rest marker MUST be the final element, and appears at most once; a `..` with
 anything after it is `bynk.parse.list_rest_not_last` (suffix patterns such as
@@ -1283,6 +1284,29 @@ anything after it is `bynk.parse.list_rest_not_last` (suffix patterns such as
 binds nothing. A `[` begins no other pattern, so a list pattern needs no
 parentheses anywhere, after `is` included: the pattern closes at the `]`. It may
 begin a `let` (§4.8.4a). Well-formedness: §5.6.
+
+### §4.7.13 int_range {#4713-int_range}
+
+{{#grammar int_range}}
+
+`lo..hi`, `lo..` and `..hi` (patterns track, slice 5, #2699; events slice 4b,
+#990) — an inclusive integer range, each bound an optionally negative number
+literal. It is one production, used by a match pattern and by `via schema(...)`
+(§4.4.7).
+
+A bare `..` is never a range. Whether `..` is a rest marker or a range is decided
+by the next token alone (§4.7.12): a range has a number on at least one side, and
+a rest marker is never followed by one. The high bound of `lo..` is read greedily,
+so `5.. -1` is the range `5..-1`; an open range ends where the next token cannot
+be a number, which in a `match` arm is always the `=>`, `if`, `|`, `,` or closing
+delimiter that follows a pattern. `0..9` lexes as three tokens, never a float,
+because a float needs a digit on both sides of its `.`.
+
+A range opens a match arm, a list element, a variant payload and a `let` pattern,
+and is an or-pattern alternative. After `is` it parses and is rejected by the
+checker (`bynk.types.is_range_pattern`); the tree-sitter grammar does not admit it
+there, since an arm body ending `x is 5` and the next arm starting `..9` would
+otherwise be one range. A bound's range and `lo <= hi` are well-formedness (§5.6).
 
 ## §4.8 Statements
 
@@ -1333,7 +1357,9 @@ The pattern MUST open as a pattern rather than a name: with a literal, with `(`,
 with `Ok`/`Err`/`Some`/`None`, with a variant name followed by `(` or `.`
 (`Shipped(at)`, `Status.Done`), or with a capitalised name followed by `{`, which
 opens a record pattern ([§4.7.11](#4711-record_pattern); #2654), or with `[`, which
-opens a list pattern ([§4.7.12](#4712-list_pattern); #2680):
+opens a list pattern ([§4.7.12](#4712-list_pattern); #2680), or with a range
+([§4.7.13](#4713-int_range); #2699), which begins with a number followed by `..`,
+or with `..` followed by a number:
 
 {{#grammar _let_pattern}}
 

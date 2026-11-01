@@ -930,14 +930,21 @@ module.exports = grammar({
     // than nested inside it. Nested inside the `Events` choice arm, not a
     // free-standing clause any protocol could carry — `via` on `http`/
     // `cron`/`queue`/`websocket` is a syntax error, not a checker
-    // diagnostic. Literal only (v1 of this clause); a range pattern
-    // (`via schema(2..)`) is unbuilt grammar, left to a future slice.
+    // diagnostic. A literal, an integer range (`via schema(2..)`, #990 —
+    // the same `int_range` a match pattern uses, #2699) or `_`.
     schema_dispatch_clause: ($) =>
       seq(
         "via",
         "schema",
         "(",
-        field("version", seq(optional("-"), $.number_literal)),
+        field(
+          "version",
+          choice(
+            $.int_range,
+            seq(optional("-"), $.number_literal),
+            $.wildcard_pattern,
+          ),
+        ),
         ")",
       ),
     event_pattern_field: ($) =>
@@ -1481,6 +1488,7 @@ module.exports = grammar({
     // a bare `_` a discard), so `let x = …` is never ambiguous here.
     _let_pattern: ($) =>
       choice(
+        $.int_range,
         $.literal_pattern,
         $.paren_pattern,
         $.list_pattern,
@@ -1719,6 +1727,7 @@ module.exports = grammar({
     _pattern: ($) =>
       choice(
         $.wildcard_pattern,
+        $.int_range,
         $.literal_pattern,
         $.variant_pattern,
         $.record_pattern,
@@ -1789,6 +1798,29 @@ module.exports = grammar({
     // never nested, parenthesized, or one alternative of an outer `|`-chain).
     paren_pattern: ($) => seq("(", $._pattern, ")"),
     wildcard_pattern: () => "_",
+    // #2699 (patterns track, slice 5; events slice 4b, #990): an inclusive
+    // integer range — `lo..hi`, `lo..` or `..hi`, each bound an optionally
+    // negative `Int` literal. One production shared by match patterns and
+    // `via schema(...)`. A bare `..` is never a range (it is `list_rest`), and
+    // `0..9` lexes as `number_literal ".." number_literal` since a float needs
+    // a digit on both sides of its `.`.
+    int_range: ($) => {
+      // Spelled out in each position (not a shared rule), so the parser does
+      // not have to reduce a bound before it can tell a range from a literal.
+      const bound = seq(optional("-"), $.number_literal);
+      return choice(
+        // Right-associative: after `x is 5..` a `-` is the high bound's sign
+        // (the hand-written parser reads it greedily), never a subtraction.
+        prec.right(
+          seq(
+            field("lo", bound),
+            "..",
+            optional(field("hi", bound)),
+          ),
+        ),
+        seq("..", field("hi", bound)),
+      );
+    },
     // v0.130 §2.3.4: a literal pattern — an integer (optionally negated), a
     // string, or a boolean. A closed set (ADR 0001); no `Float`, no `()`.
     literal_pattern: ($) =>

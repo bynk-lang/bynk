@@ -1,0 +1,2 @@
+bynk.types.is_range_pattern the `is` operator tests a value's type or refinement, not membership in a range @ 5:8
+# exact

@@ -5520,6 +5520,40 @@
     }
   },
   {
+    "type": "int_range",
+    "named": true,
+    "fields": {
+      "hi": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "-",
+            "named": false
+          },
+          {
+            "type": "number_literal",
+            "named": true
+          }
+        ]
+      },
+      "lo": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "-",
+            "named": false
+          },
+          {
+            "type": "number_literal",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "invariant_decl",
     "named": true,
     "fields": {
@@ -6128,6 +6162,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "int_range",
+            "named": true
+          },
           {
             "type": "list_pattern",
             "named": true
@@ -6786,6 +6824,10 @@
       "required": false,
       "types": [
         {
+          "type": "int_range",
+          "named": true
+        },
+        {
           "type": "list_pattern",
           "named": true
         },
@@ -7127,6 +7169,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "int_range",
+            "named": true
+          },
           {
             "type": "list_pattern",
             "named": true
@@ -7806,6 +7852,10 @@
         "required": true,
         "types": [
           {
+            "type": "int_range",
+            "named": true
+          },
+          {
             "type": "list_pattern",
             "named": true
           },
@@ -8198,6 +8248,10 @@
       "required": true,
       "types": [
         {
+          "type": "int_range",
+          "named": true
+        },
+        {
           "type": "list_pattern",
           "named": true
         },
@@ -8464,6 +8518,10 @@
       "multiple": false,
       "required": true,
       "types": [
+        {
+          "type": "int_range",
+          "named": true
+        },
         {
           "type": "list_pattern",
           "named": true
@@ -9182,6 +9240,10 @@
         "required": false,
         "types": [
           {
+            "type": "int_range",
+            "named": true
+          },
+          {
             "type": "list_pattern",
             "named": true
           },
@@ -9710,7 +9772,15 @@
             "named": false
           },
           {
+            "type": "int_range",
+            "named": true
+          },
+          {
             "type": "number_literal",
+            "named": true
+          },
+          {
+            "type": "wildcard_pattern",
             "named": true
           }
         ]
@@ -12330,6 +12400,10 @@
       "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "int_range",
+          "named": true
+        },
         {
           "type": "list_pattern",
           "named": true

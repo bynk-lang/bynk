@@ -100,9 +100,10 @@ commons shop {
 
 The `..` is always the last element. A pattern for the end of a list,
 `[.., last]`, is not available, and writing one is
-`bynk.parse.list_rest_not_last`. A `..` followed by a number (`[..9]`) is
-reserved for range patterns and is `bynk.parse.range_pattern_unsupported`. Only a
-`List` has list patterns: a `Set` or `Map` is not one
+`bynk.parse.list_rest_not_last`. A `..` followed by a number (`[..9]`) is not
+the rest marker but a range: see
+[Match on a range of numbers](/book/guides/type-system/match-on-a-range-of-numbers/).
+Only a `List` has list patterns: a `Set` or `Map` is not one
 (`bynk.types.list_pattern_on_non_list`).
 
 See [list patterns](/book/reference/types/#list-patterns) for the rules.

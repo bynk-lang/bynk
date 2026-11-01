@@ -594,9 +594,14 @@ pub fn lower_protocol_ir_from_commons(
                 .resolve_type_ref(event_type)
                 .unwrap_or_else(|| cx.unit_ty()),
             pattern: pattern.as_ref().map(lower_event_pattern_ir),
-            schema_dispatch: schema_dispatch.as_ref().map(|d| {
-                let bynk_syntax::ast::SchemaVersionPattern::Literal(version) = d.pattern;
-                version
+            schema_dispatch: schema_dispatch.as_ref().map(|d| match &d.pattern {
+                bynk_syntax::ast::SchemaVersionPattern::Literal(v) => {
+                    bynk_ir::SchemaVersionIr::Exact(*v)
+                }
+                bynk_syntax::ast::SchemaVersionPattern::Range(r) => {
+                    bynk_ir::SchemaVersionIr::Range { lo: r.lo, hi: r.hi }
+                }
+                bynk_syntax::ast::SchemaVersionPattern::Wildcard => bynk_ir::SchemaVersionIr::Any,
             }),
         },
     }

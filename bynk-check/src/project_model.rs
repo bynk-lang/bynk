@@ -3252,16 +3252,28 @@ fn check_schema_dispatch(
     identity_path: &std::path::Path,
     errors: &mut ErrorSink,
 ) {
-    let SchemaVersionPattern::Literal(n) = &dispatch.pattern;
-    if *n <= 0 {
+    // Each bound is checked on its own (#990); a range's inverted bounds are
+    // the shared range check's `bynk.types.empty_range_pattern` (#2699).
+    let (lo, hi) = match &dispatch.pattern {
+        SchemaVersionPattern::Literal(n) => (Some(*n), Some(*n)),
+        SchemaVersionPattern::Range(r) => (r.lo, r.hi),
+        SchemaVersionPattern::Wildcard => return,
+    };
+    if lo.into_iter().chain(hi).any(|n| n <= 0) {
         errors.push_for(
             Some(identity_path),
             CompileError::new(
                 "bynk.event.bad_schema_dispatch",
                 dispatch.span,
-                "`via schema(...)`'s argument must be a positive `Int` literal",
+                "`via schema(...)`'s version bounds must be positive `Int` literals",
             ),
         );
+        return;
+    }
+    if let SchemaVersionPattern::Range(r) = &dispatch.pattern
+        && let Some(err) = crate::checker::empty_range_error(r, "`via schema(...)`")
+    {
+        errors.push_for(Some(identity_path), err);
     }
 }
 

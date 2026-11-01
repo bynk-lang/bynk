@@ -3269,6 +3269,8 @@ fn event_pattern_value_src(v: &EventPatternValue) -> String {
 fn schema_dispatch_src(d: &SchemaDispatch) -> String {
     match &d.pattern {
         SchemaVersionPattern::Literal(n) => format!("via schema({n})"),
+        SchemaVersionPattern::Range(r) => format!("via schema({})", r.describe()),
+        SchemaVersionPattern::Wildcard => "via schema(_)".to_string(),
     }
 }
 
@@ -3785,6 +3787,8 @@ fn pattern_to_string(p: &Pattern) -> String {
             LiteralValue::Str(s) => format!("\"{}\"", escape_string(s)),
             LiteralValue::Bool(b) => b.to_string(),
         },
+        // #2699: `lo..hi`, `lo..`, `..hi`, with no spaces.
+        Pattern::Range(r) => r.describe(),
         // #472: `p where predicate` — the inner pattern, then the predicate
         // list rendered the same way a `type X = Base where P` refinement is.
         Pattern::Refined {
@@ -4913,6 +4917,44 @@ mod tests {
             out.contains("from Events(PaymentConfirmed { region: Domestic, .. }) via schema(2)"),
             "{out}"
         );
+        assert_eq!(out, fmt(&out), "not idempotent: {out}");
+    }
+
+    // #990: a `via schema(...)` range and `_` print without spaces, and a
+    // spaced input normalises.
+    #[test]
+    fn via_schema_ranges_and_wildcard_format_and_are_idempotent() {
+        for (written, printed) in [
+            ("2 .. 4", "2..4"),
+            ("2 ..", "2.."),
+            (".. 4", "..4"),
+            ("_", "_"),
+        ] {
+            let src = format!(
+                "context commerce.order {{\nservice OnPayment from Events(PaymentConfirmed) via schema({written}) {{\non event(e: PaymentConfirmed) -> Effect[()] {{\nEffect.pure(())\n}}\n}}\n}}"
+            );
+            let out = fmt(&src);
+            assert!(out.contains(&format!("via schema({printed})")), "{out}");
+            assert_eq!(out, fmt(&out), "not idempotent: {out}");
+        }
+    }
+
+    // #2699: range patterns print as `lo..hi` with no spaces, in a match arm,
+    // an or-pattern, a nested payload and a list.
+    #[test]
+    fn range_patterns_format_without_spaces_and_are_idempotent() {
+        let src = "commons c {\nfn f(n: Int, o: Option[Int], xs: List[Int]) -> Int {\nlet 0 .. 9 = n else { 0 }\nlet _ = match o {\nSome(0 .. 9 | 90 .. 99) => 1\nSome(.. -1) => 2\nSome(18 ..) => 3\nSome(_) => 4\nNone => 5\n}\nmatch xs {\n[0 .. 9, ..rest] => 1\n[.. -1] => 2\n_ => 3\n}\n}\n}";
+        let out = fmt(src);
+        for want in [
+            "let 0..9 = n else",
+            "Some(0..9 | 90..99) =>",
+            "Some(..-1) =>",
+            "Some(18..) =>",
+            "[0..9, ..rest] =>",
+            "[..-1] =>",
+        ] {
+            assert!(out.contains(want), "{want}: {out}");
+        }
         assert_eq!(out, fmt(&out), "not idempotent: {out}");
     }
 }

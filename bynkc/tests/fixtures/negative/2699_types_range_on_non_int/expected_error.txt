@@ -1,0 +1,3 @@
+bynk.types.range_pattern_on_non_int range pattern `1..3` cannot match a value of type `String` — range patterns match `Int` scrutinees @ 6:5
+# exact
+bynk.types.range_pattern_on_non_int range pattern `1..3` cannot match a value of type `Float` — range patterns match `Int` scrutinees @ 13:5

@@ -897,8 +897,10 @@ A list is covered by length: `[]` and `[x, ..rest]` together cover every list, a
 [List patterns](#list-patterns)). Redundancy is found across several earlier
 arms, not only one at a time. A
 guarded arm, and a refined pattern (`_ where …`), cover nothing, because the
-guard or predicate may fail. `Int` and `String` literals never complete their
-type, so those matches end in `_` or a name.
+guard or predicate may fail. `String` literals never complete their type, so a
+`String` match ends in `_` or a name; an `Int` match is complete when its
+literals and [range patterns](#range-patterns) leave no integer out, which only
+ranges with an open end can do.
 
 A missing case is reported as a pattern you can paste as an arm:
 `variant Pair(false, false) of Pair is not covered`, or
@@ -943,9 +945,8 @@ match xs {
 - The `..` is the **last** element, and there is at most one
   (`bynk.parse.list_rest_not_last`); patterns for the end of a list, such as
   `[.., last]`, are not available. `..rest` names the rest, and `.._` is not a
-  form, because a bare `..` already binds nothing. A `..` followed by a literal
-  (`[..9]`) is reserved for range patterns
-  (`bynk.parse.range_pattern_unsupported`).
+  form, because a bare `..` already binds nothing. A `..` followed by an integer
+  (`[..9]`) is not a rest marker but a [range pattern](#range-patterns) element.
 - The value must be a `List[T]`; a `Set`, a `Map`, a record or any other type is
   `bynk.types.list_pattern_on_non_list`. Each element is checked at `T`.
 - **Exhaustiveness is by length.** `[]` and `[x, ..rest]` cover every list, with
@@ -966,6 +967,55 @@ In a `let`, a list pattern needs an `else` (`let [head, ..] = jobs else { 0 }`),
 since a list can be shorter than the pattern. `[..]` and `[..rest]` cannot fail,
 so an `else` on one is `bynk.types.unreachable_arm`; write `let rest = xs`. See
 [Match on a list's shape](/book/guides/type-system/match-on-a-lists-shape/).
+
+### Range patterns
+
+An `Int` is matched by the band it falls in with a range pattern (patterns track,
+slice 5, #2699; the same production `via schema(...)` takes, events slice 4b, #990):
+
+```bynk,fragment
+match age {
+  ..-1 => "invalid"
+  0..12 => "child"
+  13..17 => "teen"
+  18.. => "adult"
+}
+```
+
+| Pattern | Matches |
+| --- | --- |
+| `lo..hi` | every `Int` *n* with `lo <= n <= hi` |
+| `lo..` | every `Int` *n* with `n >= lo` |
+| `..hi` | every `Int` *n* with `n <= hi` |
+
+- Both bounds are **inclusive**, like `InRange(lo, hi)`. Each is an `Int` literal,
+  optionally negative (`-5..-1`, `..-1`), with digit separators as in any literal.
+  A bound beyond the safe-integer range is the usual `Int` literal error.
+  `lo..lo` is legal and means the literal. A bare `..` is never a range: it is the
+  rest marker of a list or record pattern.
+- A range is a pattern wherever an `Int` literal is: in a `match` arm, nested in
+  variant, record and list patterns, in or-patterns (`0..9 | 90..99`) and in
+  `let … else`. It binds nothing.
+- **Only `Int`.** The scrutinee, or the field or element the range sits in, must be
+  an `Int` or a refinement of one; anything else is
+  `bynk.types.range_pattern_on_non_int`. `Float` (`NaN`, representation) and
+  `String` ranges are deliberate non-goals. A refined `Int` is matched as an
+  `Int`: `Age = Int where InRange(0, 150)` still needs the whole of `Int` covered.
+- `lo > hi` is `bynk.types.empty_range_pattern`, whose fix swaps the bounds.
+- **Exhaustiveness is by interval.** The integers are the safe integers, and a
+  column is split at every endpoint its patterns use, so `..-1` and `0..` cover
+  every `Int` with no `_` arm. A match of literals alone is not split, and stays
+  incomplete without a `_`. A missing interval is reported as a pattern you can
+  paste as an arm: `13..17`, `101..`, or a single value (`100`) when the gap is one
+  number. An arm the earlier ones wholly cover is `bynk.types.unreachable_arm`;
+  one they only partly cover is legal.
+- After `is`, a range directly after the keyword is
+  `bynk.types.is_range_pattern`, as a literal is: `is` tests a type, not a value.
+  Use a `match` arm, a guard or `InRange`.
+- A match with a range lowers to the `if` chain, with `x >= lo && x <= hi` (one
+  side only for an open range); a match of literals alone keeps its `switch`.
+
+See [Match on a range of numbers](/book/guides/type-system/match-on-a-range-of-numbers/).
 
 ### Record patterns
 

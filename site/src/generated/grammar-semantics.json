@@ -820,6 +820,16 @@
       "summary": "An `if` with no `else` branch has a non-unit then-branch; the missing else defaults to `()`, so the branch must be `()` or `Effect[()]`."
     }
   ],
+  "int_range": [
+    {
+      "code": "bynk.types.empty_range_pattern",
+      "summary": "A range pattern or `via schema(...)` range has its bounds inverted (`lo > hi`), so it can never match."
+    },
+    {
+      "code": "bynk.types.range_pattern_on_non_int",
+      "summary": "A range pattern (`lo..hi`) was matched against a scrutinee that is not an `Int`."
+    }
+  ],
   "is_expr": [
     {
       "code": "bynk.types.is_base_mismatch",
@@ -832,6 +842,10 @@
     {
       "code": "bynk.types.is_non_sum",
       "summary": "`is` was applied to a value that is not a sum type."
+    },
+    {
+      "code": "bynk.types.is_range_pattern",
+      "summary": "A range pattern was used directly on the right of `is`; `is` tests type/refinement, not value ranges (use `match`, a guard or `InRange`)."
     },
     {
       "code": "bynk.types.is_refined_pattern",
@@ -902,10 +916,6 @@
     {
       "code": "bynk.parse.list_rest_not_last",
       "summary": "A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available."
-    },
-    {
-      "code": "bynk.parse.range_pattern_unsupported",
-      "summary": "A `..` in a list pattern is followed by a literal; range patterns are not available yet."
     },
     {
       "code": "bynk.types.list_pattern_on_non_list",
