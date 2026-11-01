@@ -1,0 +1,25 @@
+context shop
+
+// #2684: a route takes and returns record-keyed collections. The request body
+// decodes into the keyed `Map`, so a lookup by an equal `OrderId` finds the
+// entry; the reply encodes it back.
+type OrderId = { region: String, n: Int }
+
+type Status = enum { Open, Shipped }
+
+service api from http {
+  on POST("/total") (body: Map[OrderId, Int]) -> Effect[HttpResult[Int]] by v: Visitor {
+    match body.get(OrderId { n: 7, region: "eu" }) {
+      Some(n) => Ok(n),
+      None => Ok(0),
+    }
+  }
+
+  on POST("/echo") (body: Map[OrderId, Int]) -> Effect[HttpResult[Map[OrderId, Int]]] by v: Visitor {
+    Ok(body)
+  }
+
+  on POST("/status") (body: Set[Status]) -> Effect[HttpResult[Int]] by v: Visitor {
+    Ok(body.length())
+  }
+}

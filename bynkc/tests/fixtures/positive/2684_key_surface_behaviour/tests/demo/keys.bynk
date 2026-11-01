@@ -1,0 +1,94 @@
+---
+#2684: lookup, replacement, `keys()` returning real keys in insertion order, a
+`Set` over an enum, `Bytes` keys, `distinct`, `groupBy` and `joinOn` with record
+keys, and the generic `countBy`/`index` over a `Key` parameter.
+---
+suite demo.keys
+
+case "a record keys a map by value" {
+  let a = OrderId { region: "eu", n: 7 }
+  let m: Map[OrderId, Int] = Map.empty().insert(a, 3).insert(OrderId { region: "us", n: 1 }, 4)
+  expect m.get(OrderId { n: 7, region: "eu" }) == Some(3)
+  expect m.get(OrderId { region: "eu", n: 8 }) == None
+  expect m.length() == 2
+  expect contains(m, OrderId { region: "us", n: 1 })
+  expect !contains(m, OrderId { region: "us", n: 2 })
+}
+
+case "inserting an equal key replaces in place" {
+  let m: Map[OrderId, Int] = Map.empty()
+    .insert(OrderId { region: "eu", n: 1 }, 1)
+    .insert(OrderId { region: "us", n: 1 }, 2)
+    .insert(OrderId { region: "eu", n: 1 }, 9)
+  expect m.length() == 2
+  expect m.keys() == [OrderId { region: "eu", n: 1 }, OrderId { region: "us", n: 1 }]
+  expect m.values() == [9, 2]
+}
+
+case "an enum is a set member by value" {
+  let s: Set[Status] = Set.of([Open, Shipped, Open])
+  expect s.length() == 2
+  expect s.contains(Shipped)
+  expect !s.contains(Cancelled)
+  expect s.toList() == [Open, Shipped]
+  expect s.insert(Open).length() == 2
+  expect s.insert(Cancelled).length() == 3
+  expect s.remove(Open).toList() == [Shipped]
+}
+
+case "Bytes key a map by content" {
+  let k1 = Bytes.fromUtf8("ab")
+  let k2 = Bytes.fromUtf8("ab")
+  let m: Map[Bytes, String] = Map.empty().insert(k1, "x")
+  expect m.get(k2) == Some("x")
+  expect m.get(Bytes.fromUtf8("abc")) == None
+}
+
+case "an Option and a List can key a map" {
+  let m: Map[Option[Int], String] = Map.empty().insert(Some(1), "one").insert(None, "none")
+  expect m.get(Some(1)) == Some("one")
+  expect m.get(None) == Some("none")
+  expect m.get(Some(2)) == None
+  let ls: Map[List[Int], String] = Map.empty().insert([1, 0], "a").insert([10], "b")
+  expect ls.length() == 2
+  expect ls.get([1, 0]) == Some("a")
+}
+
+case "distinct and distinctBy compare records by value" {
+  let ls = [
+    Line { id: OrderId { region: "eu", n: 1 }, qty: 1 },
+    Line { id: OrderId { region: "eu", n: 1 }, qty: 2 },
+    Line { id: OrderId { region: "us", n: 1 }, qty: 3 },
+  ]
+  expect distinctIds(ls) == [OrderId { region: "eu", n: 1 }, OrderId { region: "us", n: 1 }]
+  expect ls.distinctBy((l) => l.id).map((l) => l.qty) == [1, 3]
+}
+
+case "groupBy and joinOn hash record keys by value" {
+  let ls = [
+    Line { id: OrderId { region: "eu", n: 1 }, qty: 1 },
+    Line { id: OrderId { region: "us", n: 1 }, qty: 3 },
+    Line { id: OrderId { region: "eu", n: 1 }, qty: 2 },
+  ]
+  let totals = ls.groupBy((l) => l.id, (id, rows) => rows.map((r) => r.qty))
+  expect totals == [[1, 2], [3]]
+  let names = [OrderId { region: "us", n: 1 }]
+  let joined = ls.joinOn(names, (l) => l.id, (n) => n, (l, n) => l.qty)
+  expect joined == [3]
+}
+
+case "a generic helper over a Key parameter" {
+  let ls = [
+    Line { id: OrderId { region: "eu", n: 1 }, qty: 1 },
+    Line { id: OrderId { region: "eu", n: 1 }, qty: 2 },
+    Line { id: OrderId { region: "us", n: 1 }, qty: 3 },
+  ]
+  let counts = countBy(ls, (l) => l.id)
+  expect counts.get(OrderId { region: "eu", n: 1 }) == Some(2)
+  expect counts.length() == 2
+  let byQty = index(ls, (l) => l.qty)
+  expect byQty.length() == 3
+  let statuses: List[Status] = [Open, Shipped, Open]
+  let byStatus = countBy(statuses, (s) => s)
+  expect byStatus.get(Open) == Some(2)
+}

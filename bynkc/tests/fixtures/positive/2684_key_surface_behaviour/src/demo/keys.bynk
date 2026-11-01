@@ -1,0 +1,31 @@
+---
+#2684: structural `Map` keys and `Set` members, and `distinct`, `groupBy` and
+joins over record keys.
+---
+commons demo.keys
+
+uses bynk.list
+uses bynk.map
+
+type OrderId = { region: String, n: Int }
+
+type Status = enum { Open, Shipped, Cancelled }
+
+type Line = { id: OrderId, qty: Int }
+
+fn countBy[K: Key, V](xs: List[V], key: (V) -> K) -> Map[K, Int] {
+  let init: Map[K, Int] = Map.empty()
+  xs.fold(init, (acc, x) => {
+    let k = key(x)
+    acc.insert(k, getOr(acc, k, 0) + 1)
+  })
+}
+
+fn index[K: Key, V](xs: List[V], key: (V) -> K) -> Map[K, V] {
+  let init: Map[K, V] = Map.empty()
+  xs.fold(init, (acc, x) => acc.insert(key(x), x))
+}
+
+fn distinctIds(ls: List[Line]) -> List[OrderId] {
+  ls.map((l) => l.id).distinct()
+}

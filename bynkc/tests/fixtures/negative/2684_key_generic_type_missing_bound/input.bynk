@@ -1,0 +1,4 @@
+commons demo
+
+// A generic type whose parameter keys a map declares the bound on the type.
+type Index[K, V] = { m: Map[K, V] }

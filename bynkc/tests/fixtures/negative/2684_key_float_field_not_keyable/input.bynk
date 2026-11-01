@@ -1,0 +1,6 @@
+commons demo
+
+// #2684: a `Float` is never a `Key`, at any depth: `NaN` is not equal to itself.
+type Point = { x: Float, y: Float }
+
+fn count(m: Map[Point, Int]) -> Int { m.length() }

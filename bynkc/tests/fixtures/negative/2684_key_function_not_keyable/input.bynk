@@ -1,0 +1,4 @@
+commons demo
+
+// #2684: a function is not a `Key`.
+fn count(m: Map[(Int) -> Int, Int]) -> Int { m.length() }

@@ -1112,7 +1112,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.generics.bound_on_capability_op",
-        "A generic capability operation's type parameter carries a bound; operations take no bounds yet.",
+        "A generic capability operation's type parameter carries a bound other than `Key`; operations take only `Key` bounds yet.",
         &["capability_op"],
     ),
     dg(
@@ -1146,6 +1146,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["fn_decl"],
     ),
     dg(
+        "bynk.generics.missing_key_bound",
+        "A type parameter keys a `Map` or `Set` (a `Map` key, a `Set` element, a `distinct`/`groupBy`/join key), or is passed to a `Key`-bounded parameter of another generic, but is not declared `Key` (`[K: Key]`, or `where A: Key` for a receiver type's parameter; on the type for a generic type's own parameter). The diagnostic carries a machine-applicable fix that declares `Key`, replacing an existing `Eq`, which `Key` implies (constrained-generics slice 2).",
+        &["fn_decl"],
+    ),
+    dg(
         "bynk.generics.missing_ord_bound",
         "A type parameter is ordered (`<`, `<=`, `>`, `>=`, an ordering kernel key), or passed to an `Ord`-bounded parameter of another generic, but is not declared `Ord` (`[T: Ord]`, or `where A: Ord` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Ord`, replacing an existing `Eq`, which `Ord` implies (constrained-generics slice 1).",
         &["fn_decl"],
@@ -1157,7 +1162,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     warn(dg(
         "bynk.generics.redundant_eq_bound",
-        "A type parameter is declared both `Eq` and `Ord`; `Ord` implies `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slice 1, warning).",
+        "A type parameter is declared both `Eq` and `Ord` (or `Eq` and `Key`); `Ord` and `Key` imply `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slices 1 and 2, warning).",
         &["fn_decl"],
     )),
     dg(
@@ -3047,6 +3052,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.not_comparable",
         "A value compared with `==`/`!=` contains a function, `Effect`, or `Query` somewhere inside it — those have no value equality, so the type is not equality-supporting (type-system §2.3.5, #1652).",
     ),
+    dg(
+        "bynk.types.not_keyable",
+        "A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2). A `Query` keeps the narrower `String`/`Int` rule.",
+        &["generic_type_ref"],
+    ),
     d(
         "bynk.types.not_orderable",
         "A value is ordered (`<`, `<=`, `>`, `>=`), or passed to an `Ord`-bounded parameter, but its type is not `Ord`. `Int`, `Float`, `String`, `Duration`, `Instant`, `Bytes`, `Option`/`List` of an orderable type, refined types over those, and types that declare `derives Ord` are; adding `derives Ord` is offered as a fix that is never applied automatically, because it makes declaration order significant (constrained-generics slice 1).",
@@ -3183,21 +3193,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.uninferable_element_type",
         "An empty `[]` (or `List.empty()` / `Map.empty()`) has no expected type to infer its element type from.",
         &["list_literal"],
-    ),
-    dg(
-        "bynk.types.unkeyable_distinct",
-        "A `distinct`/`distinctBy` element or key is not value-keyable (`String`, `Int`, or a refined/opaque type over them).",
-        &[],
-    ),
-    dg(
-        "bynk.types.unkeyable_map_key",
-        "A `Map` key type is not value-keyable (`String`, `Int`, or a refined/opaque type over them).",
-        &["generic_type_ref"],
-    ),
-    dg(
-        "bynk.types.unkeyable_set_element",
-        "A `Set` element type is not value-keyable (`String`, `Int`, or a refined/opaque type over them), written or inferred through `Set.of`.",
-        &["generic_type_ref"],
     ),
     dg(
         "bynk.types.unknown_field",

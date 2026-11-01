@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "provides": {
+    "tally": "8be1e2fea7be86a4"
+  },
+  "expects": {},
+  "foreign": {
+    "Billing": {
+      "tally": "8be1e2fea7be86a4"
+    }
+  },
+  "provides_shapes": {
+    "tally": "Svc(\"tally\",P(\"totals\",M(Rec(\"OrderId\",F(\"n\",B(\"Int\")),F(\"region\",B(\"String\"))),B(\"Int\"))),P(\"seen\",St(Sum(\"Status\",V(\"Open\"),V(\"Shipped\")))),Ret(M(Rec(\"OrderId\",F(\"n\",B(\"Int\")),F(\"region\",B(\"String\"))),B(\"Int\"))))"
+  }
+}
