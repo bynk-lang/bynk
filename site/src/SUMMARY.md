@@ -31,6 +31,7 @@
     - [Define sum, record, and opaque types](guides/type-system/define-types.md)
     - [Work with `Result` and optional values](guides/type-system/result-and-optionals.md)
     - [Pattern-match with `match`](guides/type-system/match.md)
+    - [Match on a record's fields](guides/type-system/match-on-a-records-fields.md)
     - [Narrow and bind with `is`](guides/type-system/narrow-with-is.md)
   - [Program structure](guides/program-structure/index.md)
     - [How a Bynk program is shaped](guides/program-structure/how-a-program-is-shaped.md)

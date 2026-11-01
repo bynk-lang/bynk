@@ -15,6 +15,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Define sum, record, and opaque types](/book/guides/type-system/define-types/)
 - [Work with `Result` and optional values](/book/guides/type-system/result-and-optionals/)
 - [Pattern-match with `match`](/book/guides/type-system/match/)
+- [Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/)
 - [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/)
 
 **See also:** [Reference — Type system](/book/reference/types/),

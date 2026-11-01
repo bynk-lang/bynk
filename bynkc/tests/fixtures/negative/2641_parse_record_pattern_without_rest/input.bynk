@@ -1,0 +1,11 @@
+commons demo
+
+// #2641: every record pattern ends with `..`, so adding a field never breaks one.
+type Status = enum { Open, Paid }
+type Order = { id: String, status: Status, total: Int }
+
+fn f(o: Order) -> Int {
+  match o {
+    Order { total } => total
+  }
+}

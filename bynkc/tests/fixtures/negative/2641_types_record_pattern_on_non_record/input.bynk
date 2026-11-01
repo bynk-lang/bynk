@@ -1,0 +1,20 @@
+commons demo
+
+type Status = enum { Open, Paid }
+type Order = { id: String, status: Status, total: Int }
+type Code = String where NonEmpty
+
+fn f(o: Order, s: Status, c: Code) -> Int {
+  let a = match o {
+    Status { .. } => 1
+    _ => 2
+  }
+  let b = match s {
+    Status { .. } => 1
+  }
+  let d = match c {
+    Code { .. } => 1
+    _ => 2
+  }
+  a + b + d
+}
