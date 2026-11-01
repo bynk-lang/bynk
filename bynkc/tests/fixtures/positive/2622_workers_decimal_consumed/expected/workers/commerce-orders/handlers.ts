@@ -2,7 +2,7 @@
 // context commerce.orders
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import { __bynkDecimalParse, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
+import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -45,7 +45,7 @@ export function __deserialise_Result_Decimal_Int(json: __JsonValue, path: string
   if (typeof obj["value"] !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "decimal string", actual: typeof obj["value"] });
   }
-  const __b_v = __bynkDecimalParse(obj["value"]);
+  const __b_v = __bynkDecimalParseWire(obj["value"]);
   if (__b_v.tag === "None") {
     return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "decimal string", actual: "invalid decimal" });
   }

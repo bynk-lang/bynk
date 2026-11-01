@@ -1906,6 +1906,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
         // #2622: the smallest value the refinement admits, at scale 2.
         BaseType::Decimal => {
             let mut lo: i128 = 0;
+            let mut hi: Option<i128> = None;
             let mut scale = 2u32;
             if let Some(r) = refinement {
                 for p in &r.predicates {
@@ -1916,14 +1917,23 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                 for p in &r.predicates {
                     match &p.kind {
                         PredKind::Positive => lo = lo.max(1),
-                        PredKind::InRangeD(a, _) => {
+                        PredKind::InRangeD(a, b) => {
                             if let Some(v) = scaled_coef(&a.coef, a.scale, scale) {
                                 lo = lo.max(v);
+                            }
+                            if let Some(v) = scaled_coef(&b.coef, b.scale, scale) {
+                                hi = Some(hi.map_or(v, |h| h.min(v)));
                             }
                         }
                         _ => {}
                     }
                 }
+            }
+            // As for `Float`: a floor above the ceiling falls back to the ceiling.
+            if let Some(h) = hi
+                && lo > h
+            {
+                lo = h;
             }
             Some(crate::emitter::decimal_ts_literal(&lo.to_string(), scale))
         }

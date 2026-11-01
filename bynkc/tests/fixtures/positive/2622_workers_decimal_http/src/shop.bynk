@@ -5,7 +5,7 @@ context shop
 
 type Price = Decimal where Positive
 
-type Quote = { sku: String, unit: Price, total: Decimal }
+type Quote = { sku: String, unit: Price, total: Decimal where NonNegative }
 
 service api from http {
   on POST("/quote") (body: Quote) -> Effect[HttpResult[Decimal]] by v: Visitor {

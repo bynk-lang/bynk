@@ -194,6 +194,15 @@ export type __BynkRoundingMode =
 /** The longest decimal text `__bynkDecimalParse` accepts, in characters. */
 const MAX_TEXT = 1000;
 
+/** The largest scale `round` and `div` accept; above it they fault, as a negative scale does. */
+export const __BYNK_DECIMAL_MAX_SCALE = 1000;
+
+function checkScale(scale: number, op: string): void {
+  if (!Number.isSafeInteger(scale) || scale < 0 || scale > __BYNK_DECIMAL_MAX_SCALE) {
+    throw new Error(`Decimal.${op}: the scale must be an Int from 0 to ${__BYNK_DECIMAL_MAX_SCALE}`);
+  }
+}
+
 /** Build a decimal from a coefficient and a scale. */
 export function __bynkDecimal(coefficient: bigint, scale: number): __BynkDecimalValue {
   return Object.freeze({ coefficient, scale });
@@ -307,9 +316,7 @@ export function __bynkDecimalRound(
   scale: number,
   mode: __BynkRoundingMode,
 ): __BynkDecimalValue {
-  if (!Number.isSafeInteger(scale) || scale < 0) {
-    throw new Error("Decimal.round: the scale must be a non-negative Int");
-  }
+  checkScale(scale, "round");
   if (scale >= d.scale) return __bynkDecimal(lift(d, scale), scale);
   const negative = d.coefficient < 0n;
   const mag = negative ? -d.coefficient : d.coefficient;
@@ -327,9 +334,7 @@ export function __bynkDecimalDiv(
   mode: __BynkRoundingMode,
 ): __BynkDecimalValue {
   if (b.coefficient === 0n) throw new Error("Decimal division by zero");
-  if (!Number.isSafeInteger(scale) || scale < 0) {
-    throw new Error("Decimal.div: the scale must be a non-negative Int");
-  }
+  checkScale(scale, "div");
   // a/b = (ca / 10^sa) / (cb / 10^sb); the result coefficient at `scale` is
   // round(ca * 10^(scale + sb) / (cb * 10^sa)).
   const negative = a.coefficient < 0n !== b.coefficient < 0n;
@@ -384,6 +389,16 @@ export function __bynkDecimalParse(s: string): Option<__BynkDecimalValue> {
   const frac = m[3] ?? "";
   const coefficient = BigInt(m[2] + frac);
   return Some(__bynkDecimal(m[1] === "-" ? -coefficient : coefficient, frac.length));
+}
+
+const CANONICAL_WIRE = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
+
+/**
+ * The wire decoder: `__bynkDecimalParse` with leading zeros refused too
+ * (`"007"`, `"-01.5"`), so the wire form is canonical. `"0.5"` and `"-0"` pass.
+ */
+export function __bynkDecimalParseWire(s: string): Option<__BynkDecimalValue> {
+  return CANONICAL_WIRE.test(s) ? __bynkDecimalParse(s) : None;
 }
 
 /**

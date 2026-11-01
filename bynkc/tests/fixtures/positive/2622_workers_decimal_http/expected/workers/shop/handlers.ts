@@ -2,7 +2,7 @@
 // context shop
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import { __bynkDecimalMul, __bynkDecimalParse, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
+import { __bynkDecimalMul, __bynkDecimalParse, __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -12,7 +12,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Price", message: "must be positive", value });
+      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },
@@ -54,7 +54,7 @@ export function __deserialise_Price(json: __JsonValue, path: string = "$"): Resu
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: typeof json });
   }
-  const __d = __bynkDecimalParse(json);
+  const __d = __bynkDecimalParseWire(json);
   if (__d.tag === "None") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: "invalid decimal" });
   }
@@ -90,11 +90,14 @@ export function __deserialise_Quote(json: __JsonValue, path: string = "$"): Resu
   if (typeof obj["total"] !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "decimal string", actual: typeof obj["total"] });
   }
-  const __b_total = __bynkDecimalParse(obj["total"]);
+  const __b_total = __bynkDecimalParseWire(obj["total"]);
   if (__b_total.tag === "None") {
     return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "decimal string", actual: "invalid decimal" });
   }
   const __total = __b_total.value;
+  if (!((__total).coefficient >= 0n)) {
+    return Err({ kind: "RefinementViolation", path: `${path}.total`, violation: { field: "total", message: "must be non-negative", value: __bynkDecimalToString(__total) } });
+  }
   return Ok({ sku: __sku, unit: __unit, total: __total } as Quote);
 }
 

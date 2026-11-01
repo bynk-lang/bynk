@@ -235,6 +235,16 @@ pub const EXAMPLES: &[Example] = &[
     Example {
         ty: "Price",
         codec: "Price",
+        json: r#""007""#,
+        outcome: Outcome::Rejected {
+            kind: "StructuralMismatch",
+            path: "$",
+        },
+        note: "The wire form is canonical, so a leading zero is refused. `Decimal.parse` in a program is lenient about it.",
+    },
+    Example {
+        ty: "Price",
+        codec: "Price",
         json: "12.5",
         outcome: Outcome::Rejected {
             kind: "StructuralMismatch",
@@ -383,7 +393,7 @@ fn base_type_rows(out: &mut String) {
             "valid base64; anything else is `StructuralMismatch` (`expected: \"base64 string\"`)"
                 .to_string()
         } else if base == BaseType::Decimal {
-            "an optional `-`, digits, and optionally `.` and digits (at most 1000 characters); an exponent, a leading `+`, whitespace, `.5` or `5.` is `StructuralMismatch` (`expected: \"decimal string\"`), and so is a JSON number. The scale is the number of fraction digits written, and is kept"
+            "an optional `-`, digits with no leading zero (`0` or `1`-`9` first), and optionally `.` and digits (at most 1000 characters); an exponent, a leading `+`, a leading zero (`007`), whitespace, `.5` or `5.` is `StructuralMismatch` (`expected: \"decimal string\"`), and so is a JSON number. The scale is the number of fraction digits written, and is kept"
                 .to_string()
         } else {
             let mut rule = format!("JSON {}", json_kind_name(kind));

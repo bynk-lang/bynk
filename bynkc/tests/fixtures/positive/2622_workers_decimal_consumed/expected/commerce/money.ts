@@ -2,7 +2,7 @@
 // commons commerce.money
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import { __bynkDecimalParse, __bynkDecimalToString } from "../__bynk_runtime/decimal.js";
+import { __bynkDecimalParseWire, __bynkDecimalToString } from "../__bynk_runtime/decimal.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../__bynk_runtime/boundary.js";
 
@@ -11,7 +11,7 @@ export type Amount = { readonly coefficient: bigint; readonly scale: number } & 
 export const Amount = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Amount, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Amount", message: "must be positive", value });
+      return Err({ field: "Amount", message: "must be positive", value: __bynkDecimalToString(value) });
     }
     return Ok(value as Amount);
   },
@@ -33,7 +33,7 @@ export function __deserialise_Amount(json: __JsonValue, path: string = "$"): Res
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: typeof json });
   }
-  const __d = __bynkDecimalParse(json);
+  const __d = __bynkDecimalParseWire(json);
   if (__d.tag === "None") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: "invalid decimal" });
   }
@@ -64,13 +64,13 @@ export function __deserialise_Money(json: __JsonValue, path: string = "$"): Resu
   if (typeof obj["fee"] !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.fee`, expected: "decimal string", actual: typeof obj["fee"] });
   }
-  const __b_fee = __bynkDecimalParse(obj["fee"]);
+  const __b_fee = __bynkDecimalParseWire(obj["fee"]);
   if (__b_fee.tag === "None") {
     return Err({ kind: "StructuralMismatch", path: `${path}.fee`, expected: "decimal string", actual: "invalid decimal" });
   }
   const __fee = __b_fee.value;
   if (!((((__fee).coefficient * 10n ** globalThis.BigInt(2) >= (0n) * 10n ** globalThis.BigInt((__fee).scale)) && ((__fee).coefficient * 10n ** globalThis.BigInt(2) <= (500n) * 10n ** globalThis.BigInt((__fee).scale))))) {
-    return Err({ kind: "RefinementViolation", path: `${path}.fee`, violation: { field: "fee", message: "must be in range [0.00, 5.00]", value: __fee } });
+    return Err({ kind: "RefinementViolation", path: `${path}.fee`, violation: { field: "fee", message: "must be in range [0.00, 5.00]", value: __bynkDecimalToString(__fee) } });
   }
   return Ok({ amount: __amount, fee: __fee } as Money);
 }

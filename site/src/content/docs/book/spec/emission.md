@@ -918,7 +918,8 @@ byte-identically to v0.22a.
 **`Decimal` on the wire** (#2622). A `Decimal` is a JSON **string** of its
 canonical text (`"1.20"`), written by `__bynkDecimalToString` and read by
 `__bynkDecimalParse`, which accepts an optional `-`, digits, and optionally `.`
-and digits (at most 1000 characters). It rejects an exponent, a leading `+`,
+and digits (at most 1000 characters, and no leading zero: `__bynkDecimalParseWire`, where
+the in-language `Decimal.parse` is lenient about it). It rejects an exponent, a leading `+`,
 whitespace, `.5` and `5.`; a non-string, or a string that does not parse, is a
 `StructuralMismatch` (`expected: "decimal string"`) at the field's path. The
 scale is the number of fraction digits written and survives the round trip. A

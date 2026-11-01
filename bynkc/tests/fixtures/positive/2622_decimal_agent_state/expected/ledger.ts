@@ -2,7 +2,7 @@
 // context ledger
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
-import { __bynkDecimalAdd, __bynkDecimalParse, __bynkDecimalToString } from "./__bynk_runtime/decimal.js";
+import { __bynkDecimalAdd, __bynkDecimalParseWire, __bynkDecimalToString } from "./__bynk_runtime/decimal.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
@@ -13,7 +13,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Price", message: "must be positive", value });
+      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },
@@ -29,9 +29,9 @@ const __AccountRegistry = new __StateRegistry();
 function __zeroOfAccountState(): AccountState { return { balance: { coefficient: 0n, scale: 2 }, last: None, prices: {} }; }
 
 function __rehydrateAccountState(s: AccountState, stored: AccountState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParse(__v)) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: typeof __v } as __BoundaryError))((s.balance as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: typeof __v } as __BoundaryError))((s.balance as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"]; }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) { const __r = __deserialise_Option_Price((s.last as unknown as __JsonValue), "last"); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "prices")) for (const __k of globalThis.Object.keys(s.prices)) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParse(__v)) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: typeof __v } as __BoundaryError))((s.prices[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); s.prices[__k] = __r.value as unknown as (typeof s.prices)[string]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "prices")) for (const __k of globalThis.Object.keys(s.prices)) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: typeof __v } as __BoundaryError))((s.prices[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); s.prices[__k] = __r.value as unknown as (typeof s.prices)[string]; }
   for (const __k of globalThis.Object.keys(s.prices)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "prices", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); }
 }
 
@@ -140,7 +140,7 @@ export function __deserialise_Price(json: __JsonValue, path: string = "$"): Resu
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: typeof json });
   }
-  const __d = __bynkDecimalParse(json);
+  const __d = __bynkDecimalParseWire(json);
   if (__d.tag === "None") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: "invalid decimal" });
   }

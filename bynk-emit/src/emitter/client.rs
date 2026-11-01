@@ -92,7 +92,7 @@ const PACKAGE_NAMES: &[(&str, &str)] = &[
     ("__boundaryError", "__boundaryError"),
     ("__bynkBytesFromBase64", "__bynkBytesFromBase64"),
     ("__bynkBytesToBase64", "__bynkBytesToBase64"),
-    ("__bynkDecimalParse", "__bynkDecimalParse"),
+    ("__bynkDecimalParseWire", "__bynkDecimalParseWire"),
     ("__bynkDecimalToString", "__bynkDecimalToString"),
     ("__callService", "__callService"),
 ];

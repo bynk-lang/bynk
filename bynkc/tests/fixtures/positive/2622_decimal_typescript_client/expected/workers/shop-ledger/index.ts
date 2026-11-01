@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.ledger`.
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
-import { __bynkDecimalParse, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
+import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -51,7 +51,7 @@ export default {
             const __r_c = handlers.__deserialise_Charge(argsObj["c"], "$.c");
             if (__r_c.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_c.error), { status: 400, headers: { "content-type": "application/json" } });
             const c = __r_c.value;
-            const __r_tip = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$.tip", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParse(__v)) : Err({ kind: "StructuralMismatch", path: "$.tip", expected: "decimal string", actual: typeof __v } as __BoundaryError))(argsObj["tip"]);
+            const __r_tip = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$.tip", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "$.tip", expected: "decimal string", actual: typeof __v } as __BoundaryError))(argsObj["tip"]);
             if (__r_tip.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_tip.error), { status: 400, headers: { "content-type": "application/json" } });
             const tip = __r_tip.value;
             const result = await surface.charge(c, tip);

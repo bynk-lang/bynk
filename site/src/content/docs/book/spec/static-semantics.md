@@ -364,7 +364,7 @@ from JSON equals the same variant written in source.
 the larger of the two scales, a product the sum of them, and the result is never
 rounded. `/` is rejected (`bynk.types.decimal_division_unscaled`); division is
 `a.div(b, scale, mode)`, the quotient at exactly `scale` fraction digits rounded
-by `mode`, and a zero divisor faults. `d.round(scale, mode)` returns `d` at
+by `mode`, and a zero divisor faults. The `scale` of `div` and `round` MUST be an `Int` from 0 to 1000; any other scale faults. `d.round(scale, mode)` returns `d` at
 exactly `scale` fraction digits: a larger scale pads with zeros, a smaller one
 rounds by `mode`. `mode` is written `RoundingMode.<mode>` for one of `Down`,
 `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown`, `HalfEven`, read where the

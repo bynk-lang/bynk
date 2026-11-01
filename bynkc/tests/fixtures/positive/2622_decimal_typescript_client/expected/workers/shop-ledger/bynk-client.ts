@@ -2,7 +2,7 @@
 // The typed client for context `shop.ledger`, for a Worker that is not Bynk.
 // It imports `@bynk/wire-client`: https://bynk-lang.org/book/reference/typescript-client/
 
-import { Err, None, Ok, type Option, type Result, Some, type __BoundaryError, type __JsonValue, type __ServiceBinding, type WireVersion as __WireVersion, __bynkDecimalParse, __bynkDecimalToString, __callService } from "@bynk/wire-client";
+import { Err, None, Ok, type Option, type Result, Some, type __BoundaryError, type __JsonValue, type __ServiceBinding, type WireVersion as __WireVersion, __bynkDecimalParseWire, __bynkDecimalToString, __callService } from "@bynk/wire-client";
 
 /**
  * The context this client calls.
@@ -87,7 +87,7 @@ export interface ConnectOptions<A extends ForeignCaller> {
 export function connect<A extends ForeignCaller>(options: ConnectOptions<A>): Client<A> {
   const services: Services = {
     charge(c: Charge, tip: { readonly coefficient: bigint; readonly scale: number }): globalThis.Promise<{ readonly coefficient: bigint; readonly scale: number }> {
-      return __callService(options.binding, "charge", { c: __serialise_Charge(c), tip: __bynkDecimalToString(tip) as __JsonValue }, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParse(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: typeof __v } as __BoundaryError))(__j), options.caller, CONTRACTS.charge, options.env, CONTEXT);
+      return __callService(options.binding, "charge", { c: __serialise_Charge(c), tip: __bynkDecimalToString(tip) as __JsonValue }, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: typeof __v } as __BoundaryError))(__j), options.caller, CONTRACTS.charge, options.env, CONTEXT);
     },
   };
   return services as unknown as Client<A>;
@@ -135,7 +135,7 @@ export function __deserialise_Price(json: __JsonValue, path: string = "$"): Resu
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: typeof json });
   }
-  const __d = __bynkDecimalParse(json);
+  const __d = __bynkDecimalParseWire(json);
   if (__d.tag === "None") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: "invalid decimal" });
   }
@@ -155,7 +155,7 @@ function __option_value_Decimal(raw: __JsonValue, at: string): Result<unknown, _
   if (typeof raw !== "string") {
     return Err({ kind: "StructuralMismatch", path: at, expected: "decimal string", actual: typeof raw });
   }
-  const __b_v = __bynkDecimalParse(raw);
+  const __b_v = __bynkDecimalParseWire(raw);
   if (__b_v.tag === "None") {
     return Err({ kind: "StructuralMismatch", path: at, expected: "decimal string", actual: "invalid decimal" });
   }

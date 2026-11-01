@@ -15,6 +15,8 @@ import {
   __bynkDecimalKey,
   __bynkDecimalFromInt,
   __bynkDecimalShow,
+  __bynkDecimalParseWire,
+  __BYNK_DECIMAL_MAX_SCALE,
   type __BynkDecimalValue,
   type __BynkRoundingMode,
 } from "../src/decimal.ts";
@@ -105,4 +107,24 @@ test("__bynkDecimalShow prints a decimal wherever it sits, and never throws", ()
   assert.equal(__bynkDecimalShow({ a: [d("2"), d("-0.5")], b: "x" }), '{"a":["2d","-0.5d"],"b":"x"}');
   assert.equal(__bynkDecimalShow(undefined), "undefined");
   assert.equal(__bynkDecimalShow(7n), "7");
+});
+
+test("round and div fault above the scale cap, not at it", () => {
+  assert.equal(__BYNK_DECIMAL_MAX_SCALE, 1000);
+  assert.equal(__bynkDecimalRound(d("1"), 1000, "Down").scale, 1000);
+  assert.throws(() => __bynkDecimalRound(d("1"), 1001, "Down"), /0 to 1000/);
+  assert.equal(__bynkDecimalDiv(d("1"), d("3"), 1000, "Down").scale, 1000);
+  assert.throws(() => __bynkDecimalDiv(d("1"), d("3"), 1001, "Down"), /0 to 1000/);
+  assert.throws(() => __bynkDecimalRound(d("1"), -1, "Down"));
+  assert.throws(() => __bynkDecimalRound(d("1"), 1.5, "Down"));
+});
+
+test("the wire decoder refuses leading zeros; parse stays lenient", () => {
+  for (const ok of ["0", "-0", "0.5", "-0.50", "10", "10.05", "123.456"]) {
+    assert.equal(__bynkDecimalParseWire(ok).tag, "Some", ok);
+  }
+  for (const bad of ["007", "-01.5", "00", "00.5", "+1", "1e3", ".5", "5.", ""]) {
+    assert.equal(__bynkDecimalParseWire(bad).tag, "None", bad);
+  }
+  assert.equal(__bynkDecimalParse("007").tag, "Some");
 });

@@ -131,7 +131,7 @@ decoded by checking its shape, then any predicates.
 | `Bool` | boolean (`true` or `false`) | JSON boolean | as is |
 | `String` | string (a string) | JSON string | as is |
 | `Bytes` | string (standard base64 with padding (RFC 4648 §4)) | valid base64; anything else is `StructuralMismatch` (`expected: "base64 string"`) | as is |
-| `Decimal` | string (plain decimal text, such as `"12.50"`) | an optional `-`, digits, and optionally `.` and digits (at most 1000 characters); an exponent, a leading `+`, whitespace, `.5` or `5.` is `StructuralMismatch` (`expected: "decimal string"`), and so is a JSON number. The scale is the number of fraction digits written, and is kept | as is |
+| `Decimal` | string (plain decimal text, such as `"12.50"`) | an optional `-`, digits with no leading zero (`0` or `1`-`9` first), and optionally `.` and digits (at most 1000 characters); an exponent, a leading `+`, a leading zero (`007`), whitespace, `.5` or `5.` is `StructuralMismatch` (`expected: "decimal string"`), and so is a JSON number. The scale is the number of fraction digits written, and is kept | as is |
 | `Duration` | number (whole milliseconds) | JSON number, and `Number.isSafeInteger` (whole, within ±(2^53 − 1)); otherwise `StructuralMismatch` (`expected: "safe integer"`) | an unsafe value throws in the sender (a `500`), never a lossy number |
 | `Instant` | number (milliseconds since the Unix epoch) | JSON number, and `Number.isSafeInteger` (whole, within ±(2^53 − 1)); otherwise `StructuralMismatch` (`expected: "safe integer"`) | an unsafe value throws in the sender (a `500`), never a lossy number |
 | `()` | `null` | anything; the value is not inspected | `null` |
@@ -248,6 +248,7 @@ service legacy {
 | `Qty` | `-1` | `RefinementViolation` at `$` | A named refined type is its base value, checked against its predicates. |
 | `Price` | `"12.50"` | accepted; encodes back the same | A `Decimal` is its canonical text, and keeps its scale: `"12.50"` re-encodes as `"12.50"`, not `"12.5"`. |
 | `Price` | `"1e3"` | `StructuralMismatch` at `$` | No exponent form: a `Decimal` is plain digits, so every client reads it exactly. |
+| `Price` | `"007"` | `StructuralMismatch` at `$` | The wire form is canonical, so a leading zero is refused. `Decimal.parse` in a program is lenient about it. |
 | `Price` | `12.5` | `StructuralMismatch` at `$` | A JSON number is refused: parsing it as a float is how money loses precision. |
 | `Price` | `"0.00"` | `RefinementViolation` at `$` | The text parses, then the refinement is checked on the decoded value. |
 | `Tagged[String]` | `{"n":0,"v":"x"}` | `RefinementViolation` at `$.n` | A generic record's inline refinements are checked in every instantiation. |

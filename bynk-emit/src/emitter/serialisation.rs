@@ -933,7 +933,7 @@ fn emit_decimal_named_codec(
     ru: &RuntimeUse,
 ) -> Vec<TsDecl> {
     ru.note_decimal("__bynkDecimalToString");
-    ru.note_decimal("__bynkDecimalParse");
+    ru.note_decimal("__bynkDecimalParseWire");
     let ty = qual_type(qual, name);
 
     let serialise = TsDecl::Export(Box::new(TsDecl::Function {
@@ -969,7 +969,7 @@ fn emit_decimal_named_codec(
         ),
         const_(
             "__d",
-            call(ident("__bynkDecimalParse"), vec![ident("json")]),
+            call(ident("__bynkDecimalParseWire"), vec![ident("json")]),
         ),
         if_(
             strict_eq(member(ident("__d"), "tag"), str_lit("None")),
@@ -1386,8 +1386,17 @@ fn emit_field_refinement_checks(
     predicates: &[PredKind],
     path_expr: &str,
     base: Option<BaseType>,
+    ru: &RuntimeUse,
 ) -> Vec<TsStmt> {
     let value = format!("__{fname}");
+    // #2622: a `Decimal` violation reports its canonical text; the decoded
+    // value holds a `bigint`, which cannot be JSON-stringified.
+    let shown = if base == Some(BaseType::Decimal) {
+        ru.note_decimal("__bynkDecimalToString");
+        ident(format!("__bynkDecimalToString({value})"))
+    } else {
+        ident(value.clone())
+    };
     let violation = |msg: &str| -> TsStmt {
         return_(call(
             ident("Err"),
@@ -1402,7 +1411,7 @@ fn emit_field_refinement_checks(
                             "message".to_string(),
                             TsExpr::Lit(TsLit::Raw(format!("\"{msg}\""))),
                         ),
-                        ("value".to_string(), ident(value.clone())),
+                        ("value".to_string(), shown.clone()),
                     ]),
                 ),
             ])],
@@ -1712,6 +1721,7 @@ fn emit_record_codec(
                 WireRef::Decimal => Some(BaseType::Decimal),
                 _ => None,
             },
+            ru,
         ));
     }
     // Review of #1444: a *zero-field* record — `type X = {}`, parse-legal
@@ -2183,7 +2193,7 @@ fn emit_field_deserialise_wire(
         // #2622: a bare `Decimal` field is a canonical decimal JSON string -
         // require a string, then parse it (rejecting any other spelling).
         WireRef::Decimal => {
-            ru.note_decimal("__bynkDecimalParse");
+            ru.note_decimal("__bynkDecimalParseWire");
             vec![
                 if_(
                     strict_neq(typeof_expr(ident(json)), str_lit("string")),
@@ -2195,7 +2205,7 @@ fn emit_field_deserialise_wire(
                 ),
                 const_(
                     format!("__b_{name}"),
-                    call(ident("__bynkDecimalParse"), vec![ident(json)]),
+                    call(ident("__bynkDecimalParseWire"), vec![ident(json)]),
                 ),
                 if_(
                     strict_eq(member(ident(format!("__b_{name}")), "tag"), str_lit("None")),
@@ -3024,8 +3034,8 @@ pub(crate) fn deserialise_expr_via(
         // (rejecting a non-string or invalid base64) to a `Uint8Array`.
         TypeRef::Base(base @ (BaseType::Bytes | BaseType::Decimal), _) => {
             let (parse, expected, invalid) = if *base == BaseType::Decimal {
-                ru.note_decimal("__bynkDecimalParse");
-                ("__bynkDecimalParse", "decimal string", "invalid decimal")
+                ru.note_decimal("__bynkDecimalParseWire");
+                ("__bynkDecimalParseWire", "decimal string", "invalid decimal")
             } else {
                 ru.note_bytes();
                 ("__bynkBytesFromBase64", "base64 string", "invalid base64")

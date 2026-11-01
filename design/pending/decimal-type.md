@@ -28,7 +28,10 @@ be refined, admitted from a literal, compared and keyed as a base type:
   `/` is **not defined**: `bynk.types.decimal_division_unscaled` points at
   `a.div(b, scale, mode)`, which states the quotient's scale and rounding mode, so
   cost and rounding stay visible. A zero divisor faults, as `Int` division does.
-  `d.round(scale, mode)` pads when the scale grows and rounds when it shrinks.
+  `d.round(scale, mode)` pads when the scale grows and rounds when it shrinks. The
+  scale of `round` and `div` is capped at 1000, in line with the 1000-character
+  parse cap: above it (or below zero) the call faults, so a hostile scale cannot
+  allocate a huge `BigInt`.
   The modes are `Down`, `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown`, `HalfEven`.
 - **Literals (C).** A `d` suffix: `1.20d`, `5d`, `0.005d`, with `_` separators and
   no exponent. The scale is the number of fraction digits as written. No `Int` or
@@ -39,8 +42,11 @@ be refined, admitted from a literal, compared and keyed as a base type:
   like `Int.parse`: an optional `-`, digits, optionally `.` and digits, at most
   1000 characters; an exponent, a leading `+`, whitespace, `.5`, `5.` or a JSON
   number is a `StructuralMismatch` at the field path, and a refined type then
-  applies its predicates to the decoded value (`RefinementViolation`). The scale
-  survives the round trip. The encoding is part of a persisted agent's stored
+  applies its predicates to the decoded value (`RefinementViolation`), and
+  reports the offending value as its canonical text. The wire decoder also
+  refuses a leading zero (`"007"`, `"-01.5"`; `"0.5"` is fine) so the form is
+  canonical, whereas the in-language `Decimal.parse` stays lenient about it. The
+  scale survives the round trip. The encoding is part of a persisted agent's stored
   state, so it is final at first ship (Gate 3).
 - **Equality and order (E).** By numeric value, so `1.20d == 1.2d`; `scale()` and
   `toString()` still tell them apart. A `Decimal` is `Eq`, `Ord` and `Key`: a

@@ -2,7 +2,7 @@
 // commons money
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
-import { __bynkDecimalAdd, __bynkDecimalDiv, __bynkDecimalFromInt, __bynkDecimalMul, __bynkDecimalNeg, __bynkDecimalParse, __bynkDecimalRound, __bynkDecimalToString } from "./__bynk_runtime/decimal.js";
+import { __bynkDecimalAdd, __bynkDecimalDiv, __bynkDecimalFromInt, __bynkDecimalMul, __bynkDecimalNeg, __bynkDecimalParse, __bynkDecimalParseWire, __bynkDecimalRound, __bynkDecimalToString } from "./__bynk_runtime/decimal.js";
 import { __bynkDistinct } from "./__bynk_runtime/keys.js";
 import { __bynkCmpDecimal } from "./__bynk_runtime/compare.js";
 import type { ValidationError, JsonError } from "./__bynk_runtime/errors.js";
@@ -13,7 +13,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Price", message: "must be positive", value });
+      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },
@@ -24,9 +24,20 @@ export type Rate = { readonly coefficient: bigint; readonly scale: number } & { 
 export const Rate = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Rate, ValidationError> {
     if (!((((value).coefficient * 10n ** globalThis.BigInt(2) >= (0n) * 10n ** globalThis.BigInt((value).scale)) && ((value).coefficient * 10n ** globalThis.BigInt(2) <= (100n) * 10n ** globalThis.BigInt((value).scale))))) {
-      return Err({ field: "Rate", message: "must be in range [0.00, 1.00]", value });
+      return Err({ field: "Rate", message: "must be in range [0.00, 1.00]", value: __bynkDecimalToString(value) });
     }
     return Ok(value as Rate);
+  },
+};
+
+export type Debt = { readonly coefficient: bigint; readonly scale: number } & { readonly __brand: "Debt" };
+
+export const Debt = {
+  of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Debt, ValidationError> {
+    if (!((((value).coefficient * 10n ** globalThis.BigInt(2) >= (-500n) * 10n ** globalThis.BigInt((value).scale)) && ((value).coefficient * 10n ** globalThis.BigInt(2) <= (-100n) * 10n ** globalThis.BigInt((value).scale))))) {
+      return Err({ field: "Debt", message: "must be in range [-5.00, -1.00]", value: __bynkDecimalToString(value) });
+    }
+    return Ok(value as Debt);
   },
 };
 
@@ -279,7 +290,7 @@ export function __deserialise_Charge(json: __JsonValue, path: string = "$"): Res
   if (typeof __d_fee !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.fee`, expected: "decimal string", actual: typeof __d_fee });
   }
-  const __b_fee = __bynkDecimalParse(__d_fee);
+  const __b_fee = __bynkDecimalParseWire(__d_fee);
   if (__b_fee.tag === "None") {
     return Err({ kind: "StructuralMismatch", path: `${path}.fee`, expected: "decimal string", actual: "invalid decimal" });
   }
@@ -288,13 +299,13 @@ export function __deserialise_Charge(json: __JsonValue, path: string = "$"): Res
   if (typeof __d_tip !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.tip`, expected: "decimal string", actual: typeof __d_tip });
   }
-  const __b_tip = __bynkDecimalParse(__d_tip);
+  const __b_tip = __bynkDecimalParseWire(__d_tip);
   if (__b_tip.tag === "None") {
     return Err({ kind: "StructuralMismatch", path: `${path}.tip`, expected: "decimal string", actual: "invalid decimal" });
   }
   const __tip = __b_tip.value;
   if (!((__tip).coefficient >= 0n)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.tip`, violation: { field: "tip", message: "must be non-negative", value: __tip } });
+    return Err({ kind: "RefinementViolation", path: `${path}.tip`, violation: { field: "tip", message: "must be non-negative", value: __bynkDecimalToString(__tip) } });
   }
   return Ok({ sku: __sku, fee: __fee, tip: __tip } as Charge);
 }
@@ -337,7 +348,7 @@ export function __deserialise_Price(json: __JsonValue, path: string = "$"): Resu
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: typeof json });
   }
-  const __d = __bynkDecimalParse(json);
+  const __d = __bynkDecimalParseWire(json);
   if (__d.tag === "None") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: "invalid decimal" });
   }

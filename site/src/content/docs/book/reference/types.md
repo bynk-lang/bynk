@@ -60,7 +60,7 @@ fn halves(d: Decimal) -> Bool {
 - **`/` is not defined.** A quotient has no exact decimal answer, so division
   states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)`
   (`bynk.types.decimal_division_unscaled`). A zero divisor faults, as `Int`
-  division does.
+  division does. So does a `scale` below 0 or above 1000.
 - `d.round(scale, mode)` returns the value at exactly `scale` fraction digits: a
   larger scale pads with zeros, a smaller one rounds by `mode`.
 - A `Decimal` never mixes with `Int` or `Float`
@@ -104,7 +104,8 @@ initialiser.
 
 **On the wire** a `Decimal` is a **JSON string** (`"1.20"`), never a number: a
 number invites every client to parse it as a float. Decoding is strict (the rules
-of `Decimal.parse`), and the scale survives the round trip. A string that is
+of `Decimal.parse`, and in addition no leading zero: `"007"` is refused on the wire,
+though `Decimal.parse("007")` is `Some(7)`), and the scale survives the round trip. A string that is
 malformed, or a JSON number, is a `StructuralMismatch` at the field's path; a
 well-formed string that fails the type's refinement is a `RefinementViolation`.
 The encoding is part of a persisted agent's stored state, so it is frozen. See

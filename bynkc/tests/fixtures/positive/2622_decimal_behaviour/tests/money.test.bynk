@@ -107,6 +107,24 @@ suite money {
     expect r == r
   }
 
+  case "a mocked refined decimal lands inside a negative range" {
+    let d = Val[Debt]
+    expect d.toString() == "-1.00"
+    expect Debt.of(-3.00d) is Ok(_)
+    expect Debt.of(0d) is Err(_)
+  }
+
+  case "rounding to the largest scale works" {
+    expect roundTo(1d, "down") == 1d
+    expect 1d.round(1000, RoundingMode.Down).scale() == 1000
+  }
+
+  case "a leading zero is refused on the wire but not by parse" {
+    expect lineError("{\"sku\": \"a\", \"unit\": \"007\", \"qty\": 1}") == "StructuralMismatch $.unit"
+    expect lineError("{\"sku\": \"a\", \"unit\": \"0.5\", \"qty\": 1}") == "ok"
+    expect parsed("007") == 7d
+  }
+
   case "constants and field defaults" {
     expect gross(100.00d) == 120.00d
     expect refund() == -1.5d

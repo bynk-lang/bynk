@@ -2,7 +2,7 @@
 // context invoice
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import { __bynkDecimalFromInt, __bynkDecimalMul, __bynkDecimalParse, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
+import { __bynkDecimalFromInt, __bynkDecimalMul, __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -11,7 +11,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Price", message: "must be positive", value });
+      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },
@@ -63,13 +63,13 @@ export function __deserialise_Line(json: __JsonValue, path: string = "$"): Resul
   if (typeof obj["discount"] !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.discount`, expected: "decimal string", actual: typeof obj["discount"] });
   }
-  const __b_discount = __bynkDecimalParse(obj["discount"]);
+  const __b_discount = __bynkDecimalParseWire(obj["discount"]);
   if (__b_discount.tag === "None") {
     return Err({ kind: "StructuralMismatch", path: `${path}.discount`, expected: "decimal string", actual: "invalid decimal" });
   }
   const __discount = __b_discount.value;
   if (!((__discount).coefficient >= 0n)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.discount`, violation: { field: "discount", message: "must be non-negative", value: __discount } });
+    return Err({ kind: "RefinementViolation", path: `${path}.discount`, violation: { field: "discount", message: "must be non-negative", value: __bynkDecimalToString(__discount) } });
   }
   if (typeof obj["qty"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
@@ -89,7 +89,7 @@ export function __deserialise_Price(json: __JsonValue, path: string = "$"): Resu
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: typeof json });
   }
-  const __d = __bynkDecimalParse(json);
+  const __d = __bynkDecimalParseWire(json);
   if (__d.tag === "None") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: "invalid decimal" });
   }
@@ -139,7 +139,7 @@ export function __deserialise_Result_Decimal_Unit(json: __JsonValue, path: strin
   if (typeof obj["value"] !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "decimal string", actual: typeof obj["value"] });
   }
-  const __b_v = __bynkDecimalParse(obj["value"]);
+  const __b_v = __bynkDecimalParseWire(obj["value"]);
   if (__b_v.tag === "None") {
     return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "decimal string", actual: "invalid decimal" });
   }

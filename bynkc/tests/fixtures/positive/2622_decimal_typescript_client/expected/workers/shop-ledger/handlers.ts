@@ -2,7 +2,7 @@
 // context shop.ledger
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import { __bynkDecimalAdd, __bynkDecimalParse, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
+import { __bynkDecimalAdd, __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -11,7 +11,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Price", message: "must be positive", value });
+      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },
@@ -66,7 +66,7 @@ export function __deserialise_Price(json: __JsonValue, path: string = "$"): Resu
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: typeof json });
   }
-  const __d = __bynkDecimalParse(json);
+  const __d = __bynkDecimalParseWire(json);
   if (__d.tag === "None") {
     return Err({ kind: "StructuralMismatch", path, expected: "decimal string", actual: "invalid decimal" });
   }
@@ -89,7 +89,7 @@ function __option_value_Decimal(raw: __JsonValue, at: string): Result<unknown, _
   if (typeof raw !== "string") {
     return Err({ kind: "StructuralMismatch", path: at, expected: "decimal string", actual: typeof raw });
   }
-  const __b_v = __bynkDecimalParse(raw);
+  const __b_v = __bynkDecimalParseWire(raw);
   if (__b_v.tag === "None") {
     return Err({ kind: "StructuralMismatch", path: at, expected: "decimal string", actual: "invalid decimal" });
   }

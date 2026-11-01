@@ -246,6 +246,11 @@ fn emit_refined_type(
     let checks_text = {
         let mut checks = String::new();
         emit_refined_checks(&mut checks, t, base, refinement);
+        // #2622: a `Decimal` violation reports its canonical text, since the
+        // `bigint` coefficient cannot be JSON-stringified.
+        if base == BaseType::Decimal && refinement.is_some() {
+            runtime_use.note_decimal("__bynkDecimalToString");
+        }
         checks
     };
     let cast_to_name = bynk_ts::TsExpr::As {
@@ -375,6 +380,7 @@ fn print_numeric_guard_stmt(name: &str, method: &str, message: &str) -> String {
         cond,
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(message.to_string())),
+        false,
     )
 }
 
@@ -385,11 +391,20 @@ fn print_guard_if_stmt(
     cond: bynk_ts::TsExpr,
     field: bynk_ts::TsExpr,
     message: bynk_ts::TsExpr,
+    decimal: bool,
 ) -> String {
+    let value_entry = if decimal {
+        bynk_ts::TsObjectEntry::Prop(
+            "value".to_string(),
+            bynk_ts::TsExpr::Ident("__bynkDecimalToString(value)".to_string()),
+        )
+    } else {
+        bynk_ts::TsObjectEntry::Shorthand("value".to_string())
+    };
     let err_obj = bynk_ts::TsExpr::object_entries(vec![
         bynk_ts::TsObjectEntry::Prop("field".to_string(), field),
         bynk_ts::TsObjectEntry::Prop("message".to_string(), message),
-        bynk_ts::TsObjectEntry::Shorthand("value".to_string()),
+        value_entry,
     ]);
     let return_stmt = bynk_ts::TsStmt::return_stmt(
         Some(bynk_ts::TsExpr::Call {
@@ -428,6 +443,7 @@ fn emit_pred_check(out: &mut String, type_name: &str, pred: &PredKind, base: Bas
         cond_expr,
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(type_name.to_string())),
         bynk_ts::TsExpr::VerbatimExpr(format!("\"{msg}\""), bynk_ts::VerbatimOrigin::Emit),
+        base == BaseType::Decimal,
     ));
 }
 
