@@ -7,10 +7,14 @@ import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
-import { Dir as __CommonsDir, Tree as __CommonsTree } from "../../rt/shapes.js";
-import { __serialise_Dir, __deserialise_Dir, __serialise_Tree, __deserialise_Tree } from "../../rt/shapes.js";
+import { Dir as __CommonsDir, Expr as __CommonsExpr, Index as __CommonsIndex, Tree as __CommonsTree } from "../../rt/shapes.js";
+
+import * as bynk from "../../bynk.js";
+import { __serialise_Dir, __deserialise_Dir, __serialise_Expr, __deserialise_Expr, __serialise_Index, __deserialise_Index, __serialise_Stmt, __deserialise_Stmt, __serialise_Tree, __deserialise_Tree } from "../../rt/shapes.js";
 
 export type Dir = __CommonsDir & { readonly __ctxBrand?: "rt.provider" };
+export type Expr = __CommonsExpr & { readonly __ctxBrand?: "rt.provider" };
+export type Index = __CommonsIndex & { readonly __ctxBrand?: "rt.provider" };
 export type Tree = __CommonsTree & { readonly __ctxBrand?: "rt.provider" };
 
 export interface Planted {
@@ -27,6 +31,32 @@ export function roundTrip(t: Tree): Result<Tree, JsonError> {
 export const trees = {
   async call(t: Tree, deps: {}): globalThis.Promise<Tree> {
     return t;
+  },
+};
+
+export const gardener = {
+  async call(t: Tree, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+    const __result = await (async () => {
+    const __r0 = await (async () => { __events.push({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rt.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1 } }); })();
+    return undefined;
+    })();
+    if (__events.length > 0) {
+      await deps.__eventsDispatch(__events);
+    }
+    return __result;
+  },
+};
+
+export const exprs = {
+  async call(e: Expr, deps: {}): globalThis.Promise<Expr> {
+    return e;
+  },
+};
+
+export const indexes = {
+  async call(i: Index, deps: {}): globalThis.Promise<Index> {
+    return i;
   },
 };
 
@@ -106,7 +136,7 @@ export function __resetAgents(): void {
   __KeeperRegistry.reset();
 }
 
-export { __serialise_Dir, __deserialise_Dir, __serialise_Tree, __deserialise_Tree };
+export { __serialise_Dir, __deserialise_Dir, __serialise_Expr, __deserialise_Expr, __serialise_Index, __deserialise_Index, __serialise_Stmt, __deserialise_Stmt, __serialise_Tree, __deserialise_Tree };
 
 export function __serialise_Option_Tree(value: Option<__CommonsTree>): __JsonValue {
   if (value.tag === "Some") return { kind: "Some", value: __serialise_Tree(value.value) };

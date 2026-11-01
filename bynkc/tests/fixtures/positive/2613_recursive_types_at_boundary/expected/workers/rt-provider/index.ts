@@ -8,6 +8,8 @@ import * as handlers from "./handlers.js";
 
 export { Keeper } from "./handlers.js";
 
+export { __EventsFanout } from "./events_fanout.js";
+
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
   if (ctx === undefined) return;
   const fault = globalThis.Promise.reject(e);
@@ -49,6 +51,66 @@ export default {
             const d = __r_d.value;
             const result = await surface.dirs(d);
             const body = handlers.__serialise_Dir(result);
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
+          case "exprs": {
+            __route = "call exprs";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "7b87f0744280ca14") {
+              globalThis.console.error("ContractMismatch rt.provider call exprs", { service: "exprs", expected: "7b87f0744280ca14", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "exprs", expected: "7b87f0744280ca14", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            const __r_e = handlers.__deserialise_Expr(args, "$");
+            if (__r_e.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_e.error), { status: 400, headers: { "content-type": "application/json" } });
+            const e = __r_e.value;
+            const result = await surface.exprs(e);
+            const body = handlers.__serialise_Expr(result);
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
+          case "gardener": {
+            __route = "call gardener";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "dbff9be948887cfc") {
+              globalThis.console.error("ContractMismatch rt.provider call gardener", { service: "gardener", expected: "dbff9be948887cfc", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "gardener", expected: "dbff9be948887cfc", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            const __r_t = handlers.__deserialise_Tree(args, "$");
+            if (__r_t.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_t.error), { status: 400, headers: { "content-type": "application/json" } });
+            const t = __r_t.value;
+            const result = await surface.gardener(t);
+            const body = null;
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
+          case "indexes": {
+            __route = "call indexes";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "0fa3418e56f85218") {
+              globalThis.console.error("ContractMismatch rt.provider call indexes", { service: "indexes", expected: "0fa3418e56f85218", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "indexes", expected: "0fa3418e56f85218", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            const __r_i = handlers.__deserialise_Index(args, "$");
+            if (__r_i.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_i.error), { status: 400, headers: { "content-type": "application/json" } });
+            const i = __r_i.value;
+            const result = await surface.indexes(i);
+            const body = handlers.__serialise_Index(result);
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
           case "trees": {

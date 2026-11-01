@@ -2,19 +2,30 @@
 // composition root for `rt.provider` Worker.
 
 import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
+import { __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
   KEEPER: __DurableObjectNamespace;
+  ___EVENTS_FANOUT: __DurableObjectNamespace;
 }
 
 type __DurableObjectNamespace = { idFromName(name: string): { toString(): string }; idFromString(id: string): { toString(): string }; get(id: any): any };
 
 export function compose(env: Env) {
-  const deps = { env };
+  const deps = { env, __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT, events) };
   return {
     async dirs(d: handlers.Dir) {
       return handlers.dirs.call(d, deps);
+    },
+    async exprs(e: handlers.Expr) {
+      return handlers.exprs.call(e, deps);
+    },
+    async gardener(t: handlers.Tree) {
+      return handlers.gardener.call(t, deps);
+    },
+    async indexes(i: handlers.Index) {
+      return handlers.indexes.call(i, deps);
     },
     async trees(t: handlers.Tree) {
       return handlers.trees.call(t, deps);

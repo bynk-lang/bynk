@@ -93,7 +93,8 @@ A record MUST NOT contain itself through record fields alone: a field whose
 type is the record, or a chain of fields through other records that leads back
 to it (`type A = { b: B }` with `type B = { a: A }`), is
 `bynk.resolve.recursive_record_field`, reported on each field in the cycle. A
-value of such a type could never be built, and it has no zero value to emit. A
+value of such a type could never be built, and the compiler could not
+synthesise the default value it needs for one (for a `store` field, say). A
 cycle that passes through an `Option`, `List` or `Map`, or through a sum type,
 is permitted, because that position can hold a value that ends the chain
 (#2613):

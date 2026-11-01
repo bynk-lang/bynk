@@ -2,11 +2,17 @@
   "version": 1,
   "provides": {
     "dirs": "925055b3a5fea763",
+    "exprs": "7b87f0744280ca14",
+    "gardener": "dbff9be948887cfc",
+    "indexes": "0fa3418e56f85218",
     "trees": "d8dd08313c20865a"
   },
   "expects": {},
   "provides_shapes": {
     "dirs": "Svc(\"dirs\",P(\"d\",Rec(\"Dir\",F(\"children\",L(Ref(\"Dir\"))),F(\"name\",B(\"String\")))),Ret(Rec(\"Dir\",F(\"children\",L(Ref(\"Dir\"))),F(\"name\",B(\"String\")))))",
+    "exprs": "Svc(\"exprs\",P(\"e\",Sum(\"Expr\",V(\"Block\",F(\"stmts\",L(Sum(\"Stmt\",V(\"Eval\",F(\"expr\",Ref(\"Expr\"))))))),V(\"Lit\",F(\"value\",B(\"Int\"))))),Ret(Sum(\"Expr\",V(\"Block\",F(\"stmts\",L(Sum(\"Stmt\",V(\"Eval\",F(\"expr\",Ref(\"Expr\"))))))),V(\"Lit\",F(\"value\",B(\"Int\"))))))",
+    "gardener": "Svc(\"gardener\",P(\"t\",Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))),Ret(U()))",
+    "indexes": "Svc(\"indexes\",P(\"i\",Rec(\"Index\",F(\"entries\",M(B(\"String\"),Ref(\"Index\"))))),Ret(Rec(\"Index\",F(\"entries\",M(B(\"String\"),Ref(\"Index\"))))))",
     "trees": "Svc(\"trees\",P(\"t\",Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))),Ret(Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))))"
   }
 }
