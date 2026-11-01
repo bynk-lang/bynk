@@ -472,12 +472,15 @@ bynk check --fix src/shop.bynk
   with nothing to fix keeps its modification time. Run [`bynk fmt`](#bynk-fmt)
   afterwards if you want both. One line per file written precedes the report:
   `fixed: src/shop.bynk (3 edits)`.
+- **A directory you cannot write to** is only noticed when its file is written, so a
+  failure there can come after earlier files were written.
 - **There is no dry run.** Review with `git diff` and undo with `git checkout`.
 - **At a workspace root** every member is planned first, in path order, and
   files are written only if every member's plan is accepted. One refused member
   writes nothing anywhere and fails the run. Members are planned independently,
-  so a fix in one member that exposes a fix in another (through a dependency
-  between them) may need a second run.
+  so they do not see each other's fixes: if a fix in one member changes
+  something another depends on, the second member can be left with a new problem
+  that `check` then reports, and `git checkout` undoes the run.
 - **Under `BYNK_BYNKC`** the flag is passed to the pinned `bynkc`, which must be
   new enough to know it. [Version skew](#version-skew) names the gap.
 

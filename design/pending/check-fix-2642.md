@@ -44,8 +44,11 @@ is that CLI (#2642). No grammar, checker, emitter or runtime change.
 - **Input (G).** Whatever `check` accepts: a file, a project, or a workspace
   root (#2207). At a workspace root every member is planned before any is
   written, so a member that is refused leaves the whole workspace untouched.
-  Members are planned independently: a fix in one that exposes a fix in another
-  needs a second run.
+  Members are planned independently, against their on-disk text, so a fix in
+  one member that changes something another depends on is not seen by the gate;
+  `check` reports the result and `git checkout` undoes it. The final state of
+  each member is also held against its input: it may hold no diagnostic the
+  input did not.
 
 Output is one `fixed: <path> (<n> edits)` line per file written, then the
 ordinary report for what remains. The exit code is that of the check that

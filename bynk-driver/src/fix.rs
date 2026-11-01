@@ -83,7 +83,7 @@ impl std::fmt::Display for Refusal {
         match self {
             Self::Oscillates(codes) => write!(
                 f,
-                "fixes did not settle after {PASS_CAP} passes (still being applied: {})",
+                "fixes did not settle after {PASS_CAP} passes (fixes applied along the way: {})",
                 codes.join(", ")
             ),
             Self::NewUnfixable {
@@ -118,10 +118,11 @@ fn fixpoint(
     let mut codes: BTreeSet<&'static str> = BTreeSet::new();
     let mut passes = 0;
     let mut previous: Option<Vec<Found>> = None;
+    let mut baseline: Option<Vec<Found>> = None;
     loop {
         let found = diagnose(&sources);
         if let Some(before) = &previous {
-            gate(before, &found)?;
+            gate(before, &found, true)?;
         }
         let mut by_file: BTreeMap<&PathBuf, Vec<&CompileError>> = BTreeMap::new();
         for f in &found {
@@ -139,6 +140,13 @@ fn fixpoint(
             }
         }
         if picks.is_empty() {
+            // The accepted state must not hold a diagnostic the input did not:
+            // the per-pass gate lets a fixable one through on the promise that
+            // the next pass applies it, which is not kept if its edits were
+            // skipped (a bad span) or it belongs to no source file.
+            if let Some(start) = &baseline {
+                gate(start, &found, false)?;
+            }
             break;
         }
         codes.extend(picks.iter().flat_map(|(_, s)| s.categories.iter().copied()));
@@ -154,6 +162,9 @@ fn fixpoint(
                 first_pass.insert(path.clone(), selection.edits);
             }
             sources.insert(path, fixed);
+        }
+        if baseline.is_none() {
+            baseline = Some(found_clone(&found));
         }
         previous = Some(found);
     }
@@ -172,23 +183,38 @@ fn fixpoint(
     Ok(FixPlan { files, passes })
 }
 
+fn found_clone(found: &[Found]) -> Vec<Found> {
+    found
+        .iter()
+        .map(|f| Found {
+            file: f.file.clone(),
+            error: f.error.clone(),
+        })
+        .collect()
+}
+
 /// DECISION D: a pass may add diagnostics only if each carries a single
 /// machine-applicable fix. Diagnostics are matched across the edit by
 /// (file, category, message), since their spans move; a key with more fixless
-/// diagnostics after the pass than before has gained one.
-fn gate(before: &[Found], after: &[Found]) -> Result<(), Refusal> {
+/// diagnostics after the pass than before has gained one. With
+/// `fixless_only` false every diagnostic counts, which is how the final state
+/// is held against the input.
+fn gate(before: &[Found], after: &[Found], fixless_only: bool) -> Result<(), Refusal> {
     type Key<'a> = (&'a Option<PathBuf>, &'static str, &'a str);
-    fn fixless<'a>(found: &'a [Found]) -> HashMap<Key<'a>, usize> {
+    fn counted<'a>(found: &'a [Found], fixless_only: bool) -> HashMap<Key<'a>, usize> {
         let mut counts = HashMap::new();
-        for f in found.iter().filter(|f| lone_fix(&f.error).is_none()) {
+        for f in found
+            .iter()
+            .filter(|f| !fixless_only || lone_fix(&f.error).is_none())
+        {
             *counts
                 .entry((&f.file, f.error.category, f.error.message.as_str()))
                 .or_default() += 1;
         }
         counts
     }
-    let was = fixless(before);
-    let mut now: Vec<_> = fixless(after).into_iter().collect();
+    let was = counted(before, fixless_only);
+    let mut now: Vec<_> = counted(after, fixless_only).into_iter().collect();
     now.sort();
     for ((file, category, message), count) in now {
         if count > was.get(&(file, category, message)).copied().unwrap_or(0) {
@@ -397,6 +423,32 @@ mod tests {
                 refusal,
                 Refusal::NewUnfixable {
                     category: "t.stuck",
+                    ..
+                }
+            ),
+            "{refusal:?}"
+        );
+    }
+
+    #[test]
+    fn a_new_fixable_diagnostic_that_is_never_applied_is_refused() {
+        // After pass 1 a lone-fix diagnostic appears whose edit is out of
+        // bounds, so no pass can take it: the run must not be accepted.
+        let bad = CompileError::new("t.bad", Span::new(0, 1), "bad span").with_suggestion(
+            "fix",
+            vec![(Span::new(50, 60), "q".into())],
+            M,
+        );
+        let refusal = run("x", |text| match text {
+            "x" => vec![rewrite("t.one", "x", "y")],
+            _ => vec![bad.clone()],
+        })
+        .expect_err("refused");
+        assert!(
+            matches!(
+                refusal,
+                Refusal::NewUnfixable {
+                    category: "t.bad",
                     ..
                 }
             ),
