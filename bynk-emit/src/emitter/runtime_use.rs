@@ -102,6 +102,8 @@ pub(crate) struct RuntimeUse {
     within: Cell<bool>,
     /// #2711: the module references `a.race(b)`'s helper, `__bynkRace`.
     race: Cell<bool>,
+    /// #2620: the module references `unreachable`/`todo`'s helper, `__fault`.
+    fault: Cell<bool>,
     /// #2683: the test module runs on virtual time, so an addressed call is
     /// driven by `__bynkSettleVirtual`.
     virtual_time: Cell<bool>,
@@ -200,6 +202,11 @@ impl RuntimeUse {
     /// Record that the module references the `race` helper (#2711).
     pub fn note_race(&self) {
         self.race.set(true);
+    }
+
+    /// Record that the module references the `__fault` helper (#2620).
+    pub fn note_fault(&self) {
+        self.fault.set(true);
     }
 
     /// Record that the module builds a `RequestHeaders` value (#2341).
@@ -357,6 +364,11 @@ impl RuntimeUse {
     /// Whether `__bynkWithin` must be imported (#2683).
     pub fn within(&self) -> bool {
         self.within.get()
+    }
+
+    /// Whether `__fault` must be imported (#2620).
+    pub fn fault(&self) -> bool {
+        self.fault.get()
     }
 
     /// Whether `__bynkRace` must be imported (#2711).

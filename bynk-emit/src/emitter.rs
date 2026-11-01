@@ -351,6 +351,7 @@ pub(crate) fn emit_project(
     source_name: &str,
 ) -> (bynk_ts::TsProgram, Option<String>) {
     let commons = program.program();
+    let _fault_source = FaultSourceGuard::set(source_text, &ctx.identity_path);
     // #1486: no more `RefCell<SourceMapBuilder>` — every top-level item's
     // own checkpoint is `stmt.span` on the first statement its own emitter
     // returns, and `bynk_ts::print`'s own top-level loop (per #1477's own
@@ -1040,6 +1041,7 @@ pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
         // types below, but for the additional reason that a checked program
         // should never contain one at a codec-generation site.
         Ty::Error
+        | Ty::Never
         | Ty::Effect(_)
         | Ty::Query(_)
         | Ty::Stream(_)
@@ -3156,6 +3158,7 @@ fn record_ty_refs(
             }
         }
         Ty::Error
+        | Ty::Never
         | Ty::Base(_)
         | Ty::QueueResult
         | Ty::BoundaryRejection
@@ -3966,6 +3969,9 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         if ctx.runtime_use.race() {
             parts.extend(RACE_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
+        if ctx.runtime_use.fault() {
+            parts.extend(FAULT_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
+        }
         if ctx.runtime_use.url_ops() {
             parts.extend(URL_OPS_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
@@ -4088,6 +4094,12 @@ fn write_header_single(
         } else {
             ""
         };
+        // #2620: `unreachable`/`todo`'s helper, imported only when a body calls one.
+        let fault_imports = if runtime_use.fault() {
+            FAULT_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #2341 (L4): the `RequestHeaders` constructor, imported only when a
         // body built one (`RequestHeaders.of`/`empty`).
         let request_headers_imports = if runtime_use.request_headers() {
@@ -4125,7 +4137,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{within_imports}{race_imports}{url_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4155,6 +4167,9 @@ pub(crate) const WITHIN_RUNTIME_IMPORTS: &str = ", __bynkWithin";
 
 /// #2711: the `race` helper.
 pub(crate) const RACE_RUNTIME_IMPORTS: &str = ", __bynkRace";
+
+/// #2620: the deliberate-fault helper behind `unreachable`/`todo`.
+pub(crate) const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
 
 /// K2 (#2594): the percent-encoding helpers (`percentEncode`,
 /// `percentDecode`), appended only when the body calls one.
@@ -4800,6 +4815,43 @@ pub(crate) struct LowerCtx<'a> {
 pub(crate) struct TailSlot {
     pub(crate) slot: String,
     pub(crate) label: String,
+}
+
+thread_local! {
+    /// #2620: the `.bynk` source being emitted and its project-relative identity
+    /// path, so a `unreachable(…)` / `todo(…)` lowering can name its own
+    /// `path:line:col`. Lowering reaches every body kind through a `LowerCtx`
+    /// built at many sites; this is set once per unit by [`emit_project`].
+    static FAULT_SOURCE: std::cell::RefCell<Option<(String, String)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Installs [`FAULT_SOURCE`] for the unit being emitted and restores the
+/// previous value on drop.
+struct FaultSourceGuard(Option<(String, String)>);
+
+impl FaultSourceGuard {
+    fn set(source: &str, identity_path: &str) -> Self {
+        let next = Some((source.to_string(), identity_path.replace('\\', "/")));
+        Self(FAULT_SOURCE.with(|s| s.replace(next)))
+    }
+}
+
+impl Drop for FaultSourceGuard {
+    fn drop(&mut self) {
+        FAULT_SOURCE.with(|s| *s.borrow_mut() = self.0.take());
+    }
+}
+
+/// #2620: the `path:line:col` of a byte offset in the unit being emitted, or
+/// `None` outside [`emit_project`] (the single-file path has no identity).
+pub(crate) fn fault_source_location(offset: usize) -> Option<String> {
+    FAULT_SOURCE.with(|s| {
+        s.borrow().as_ref().map(|(source, path)| {
+            let (line, col) = bynk_syntax::span::line_col(source, offset);
+            format!("{path}:{line}:{col}")
+        })
+    })
 }
 
 /// v0.59: the source context an `assert` lowering needs to turn its span into a
@@ -5523,6 +5575,11 @@ impl<'a> LowerCtx<'a> {
     /// Record that this lowering emitted a `within` race (#2683).
     fn note_within(&self) {
         self.runtime_use().note_within();
+    }
+
+    /// Record that this lowering emitted a `__fault` call (#2620).
+    fn note_fault(&self) {
+        self.runtime_use().note_fault();
     }
 
     /// Record that this lowering emitted a `race` (#2711).
@@ -6646,6 +6703,8 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
             "bynk internal error (finding #28): emitter asked to render `Ty::Error` as a \
              TypeScript type — a checked program should never contain one"
         ),
+        // #2620: the bottom type renders as TypeScript's own `never`.
+        Ty::Never => TsType::named("never"),
         Ty::Base(b) => TsType::named(ts_base(*b)),
         // #1977: the compiler-known `MapEntry[K, V]` (ADR 0184) has no
         // `TypeDecl`, so no module declares or imports a `MapEntry` type to
