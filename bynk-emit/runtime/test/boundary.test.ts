@@ -524,7 +524,8 @@ test("verifyCall: refuses a stale or future timestamp", async () => {
   try {
     // Signing floors the timestamp to the second, so a request signed
     // 301s ahead can be barely 300s ahead by the time it is verified,
-    // inside the window. 302s clears it whatever the clock's fraction.
+    // inside the window. 302s clears it whatever the clock's fraction;
+    // 298s, below, keeps the accepted case as clear on the other side.
     for (const skew of [-302_000, 302_000]) {
       Date.now = () => realNow() + skew;
       const req = await signedRequest();
@@ -532,7 +533,7 @@ test("verifyCall: refuses a stale or future timestamp", async () => {
       const res = await verifyCall(req, CALLEE_ENV, "shop.payment");
       assert.ok(res instanceof Response && res.status === 401, String(skew));
     }
-    Date.now = () => realNow() - 299_000;
+    Date.now = () => realNow() - 298_000;
     const req = await signedRequest();
     Date.now = realNow;
     assert.equal(await verifyCall(req, CALLEE_ENV, "shop.payment"), "{}", "inside the window");
