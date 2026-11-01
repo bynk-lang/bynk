@@ -193,9 +193,9 @@ pub enum Command {
     /// Stream a deployed Worker's logs, mapped to `.bynk` sources.
     ///
     /// Runs `wrangler tail` with stack frames rewritten to `.bynk` locations,
-    /// as `bynk dev` does for the local server (#2546). The project is compiled so the frames can be mapped
-    /// through the emitter's source maps, but nothing is deployed or
-    /// provisioned. Everything after `--` is forwarded to `wrangler tail`.
+    /// as `bynk dev` does for the local server (#2546). The project is
+    /// compiled so the frames can be mapped through the emitter's source maps,
+    /// but nothing is deployed or provisioned. Everything after `--` is forwarded to `wrangler tail`.
     Tail {
         /// Project directory (anywhere inside the project). Defaults to `.`.
         #[arg(default_value = ".")]
@@ -461,7 +461,7 @@ pub enum Command {
     },
     /// Inspect and migrate agents' stored state.
     ///
-    /// Where each agent class's stored state stands, and the sweep that
+    /// `status` reports where each agent class's stored state stands; `sweep`
     /// migrates every stored instance so old `migrate` steps can retire.
     Migrate {
         #[command(subcommand)]
@@ -517,7 +517,8 @@ pub enum Command {
     /// Publish this package to its registry.
     ///
     /// Publishes to the registry its organisation routes to (#2287): check it,
-    /// pack it, upload it through the registry's publish API, and verify the signed line the registry returns.
+    /// pack it, upload it through the registry's publish API, and verify the
+    /// signed line the registry returns.
     Publish {
         /// The package directory.
         #[arg(long, default_value = ".")]
@@ -607,8 +608,8 @@ pub enum Command {
     },
     /// Explain a diagnostic code.
     ///
-    /// The longer-form "what the rule is, why it
-    /// exists, and how to fix it" behind a `bynk.*` error code (#853).
+    /// Prints the longer-form "what the rule is, why it exists, and how to fix
+    /// it" behind a `bynk.*` error code (#853).
     ///
     /// Prints a curated blurb, a minimal before/after example, and a link to
     /// the relevant Book concept page. The blurb is offline-complete, so the
@@ -638,10 +639,8 @@ pub enum Command {
     },
     /// Print or search the Bynk Book.
     ///
-    /// The Book as this toolchain documents it (#2463).
-    ///
-    /// The whole Book, every page in reading order, is embedded in this build,
-    /// so it matches the `bynk` you run and works offline. With no arguments it
+    /// The whole Book, every page in reading order, is embedded in this build
+    /// (#2463), so it matches the `bynk` you run and works offline. With no arguments it
     /// prints the Book, its first line naming the toolchain version. With
     /// `--search <QUERY>` it prints the best-matching sections instead, each
     /// with its page link. Used by the editor's `bynk_search_book`
@@ -1163,6 +1162,26 @@ mod tests {
             .collect();
         visible.sort_unstable();
         assert_eq!(grouped, visible);
+    }
+
+    /// The rendered help keeps clap's own parts around the groups, so a typo in
+    /// a template tag (`{usage-heading}` and the like) shows up here.
+    #[test]
+    fn help_renders_groups_between_usage_and_options() {
+        let help = command().render_help().to_string();
+        let usage = help.find("Usage: bynk <COMMAND>").expect("usage line");
+        let options = help.find("Options:\n  -h, --help").expect("options");
+        let mut at = usage;
+        for (heading, names) in COMMAND_GROUPS {
+            let found = help[at..].find(&format!("\n{heading}:\n"));
+            at += found.unwrap_or_else(|| panic!("heading {heading:?} out of order"));
+            for name in *names {
+                assert!(help.contains(&format!("\n  {name} ")), "{name} listed");
+            }
+        }
+        assert!(at < options, "groups precede Options:");
+        assert!(help.starts_with("The Bynk driver\n"));
+        assert!(!help.contains('{'), "an unexpanded template tag:\n{help}");
     }
 
     /// The top-level listing stays scannable: each summary fits on one line,
