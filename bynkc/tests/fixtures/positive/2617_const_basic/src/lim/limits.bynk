@@ -1,0 +1,54 @@
+---
+#2617: named constants of several kinds, one referring to another, used in
+functions. Each is emitted as an exported `const`, after the types and before
+the functions, in dependency order.
+---
+commons lim.limits
+
+--- How many times a request is retried.
+const MaxRetries: Int = 3
+const Greeting: String = "hello"
+const Ratio: Float = 0.5
+const Enabled: Bool = true
+const Floor: Int = -10
+const Timeout: Duration = 30.seconds
+// Refers to `PageSize`, declared below it: emitted after it.
+const DefaultPage: Page = Page { size: PageSize, offset: 0 }
+const PageSize: Int = 50
+const Primary: Colour = Colour.Red
+const Unit: Shape = Circle(1)
+const Fallback: Option[Int] = Some(MaxRetries)
+const Missing: Option[Int] = None
+const Outcome: Result[Int, String] = Ok(200)
+const Steps: List[Int] = [1, 2, MaxRetries]
+const NoTags: List[String] = List.empty()
+const DefaultPort: Port = 8080
+const Admin: UserId = UserId.unsafe("admin")
+
+type Page = { size: Int, offset: Int }
+type Colour = enum { Red, Green }
+type Shape = | Circle(r: Int) | Square(s: Int)
+type Port = Int where InRange(1, 65535)
+type UserId = opaque String
+
+fn attempts() -> Int {
+  MaxRetries + 1
+}
+
+fn greet(name: String) -> String {
+  "\(Greeting), \(name)"
+}
+
+fn pageEnd() -> Int {
+  DefaultPage.offset + DefaultPage.size
+}
+
+fn adminName() -> String {
+  Admin.raw
+}
+
+fn shadowed() -> Int {
+  // A local shadows a constant of the same name.
+  let MaxRetries = 7
+  MaxRetries
+}

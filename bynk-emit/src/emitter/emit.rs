@@ -1005,6 +1005,56 @@ pub(crate) fn emit_free_fn(
     stmts
 }
 
+/// #2617: this file's constants, each an exported `const` typed by its
+/// annotation, its initialiser lowered as a static expression (the agent
+/// field initialiser's lowering, `BodyMode::StaticInit`). Ordered so a
+/// constant comes after every constant of this file its initialiser names
+/// (`consts::definition_order`); one of another file is imported. Empty when
+/// the file declares none, so a module without constants is unchanged.
+pub(crate) fn emit_consts(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::TsStmt> {
+    let local: Vec<&bynk_syntax::ast::ConstDecl> = commons
+        .commons
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Const(c) => Some(c),
+            _ => None,
+        })
+        .collect();
+    let mut stmts = Vec::new();
+    for c in bynk_check::consts::definition_order(&local) {
+        let mut pre = Pre::new();
+        let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
+        module.target = ctx.target;
+        module.consumed_type_ns = consumed_type_ns(ctx);
+        module.consumed_context_types = ctx.consumed_context_types();
+        let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
+        let expr = pre.lower(&c.init, &mut icx);
+        // A static initialiser lowers to a pure expression; should the
+        // lowering ever hoist setup statements, wrap them in an IIFE, as the
+        // agent field initialiser does.
+        let init = if pre.is_empty() {
+            expr
+        } else {
+            format!("(() => {{ {} return {expr}; }})()", pre.stmts().join(" "))
+        };
+        if let Some(doc) = c.documentation.as_deref() {
+            stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
+        }
+        let mut stmt = bynk_ts::TsStmt::decl(
+            bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
+                name: ts_ident(&c.name.name),
+                ty: Some(ts_type_ref_to_ts_type(&c.ty, None)),
+                init: bynk_ts::TsExpr::Ident(init),
+            })),
+            Some(c.span),
+        );
+        stmt.no_blank_before = c.documentation.is_some();
+        stmts.push(stmt);
+    }
+    stmts
+}
+
 /// #1353 (R7.1): closes step (4) of the design pass's own decomposition
 /// order — `emit_free_fn`'s own outer wrapper landed in #1352; this converts
 /// `emit_contract_guarded_body`'s own real remainder. Each precondition/

@@ -1858,7 +1858,10 @@ pub fn check_function_type_boundary_items(
             | CommonsItem::Provider(_)
             | CommonsItem::Messages(_)
             | CommonsItem::Asset(_)
-            | CommonsItem::Embed(_) => {}
+            | CommonsItem::Embed(_)
+            // #2617: a constant's initialiser is static, so it can never hold
+            // a function value; its type needs no boundary rule.
+            | CommonsItem::Const(_) => {}
         }
     }
 }
@@ -2477,6 +2480,31 @@ pub fn phase_uses_name_conflicts(
                     );
                 } else {
                     imported.insert(embed_name.clone(), t.clone());
+                }
+            }
+            // #2617: and its constants, the same way.
+            for const_name in used.consts.keys() {
+                if crate::symbols::local_value_kind(local, const_name).is_some() {
+                    continue;
+                }
+                if let Some(prev) = imported.get(const_name) {
+                    let site = uses_span_of(parsed, &groups[name], t);
+                    let span = site.map(|(_, s)| s).unwrap_or_default();
+                    let file = site.map(|(i, _)| parsed[i].identity_path());
+                    errors.push_for(file.as_deref(),
+                        CompileError::new(
+                            "bynk.uses.name_conflict",
+                            span,
+                            format!(
+                                "`{name}` uses two commons that both declare `{const_name}`: `{prev}` and `{t}`",
+                            ),
+                        )
+                        .with_note(
+                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
+                        ),
+                    );
+                } else {
+                    imported.insert(const_name.clone(), t.clone());
                 }
             }
         }
@@ -5229,6 +5257,16 @@ pub fn compose_unit_symbols(
                 imported_from_kind.insert(embed_name.clone(), UnitKind::Commons);
             }
         }
+        // #2617: and its constants.
+        for const_name in used.consts.keys() {
+            if crate::symbols::local_value_kind(local_table, const_name).is_none()
+                && !combined_fns.contains_key(const_name)
+                && !imported_from.contains_key(const_name)
+            {
+                imported_from.insert(const_name.clone(), t.clone());
+                imported_from_kind.insert(const_name.clone(), UnitKind::Commons);
+            }
+        }
         for (type_name, mt) in &used.methods {
             let entry = combined_methods.entry(type_name.clone()).or_default();
             for (m, decl) in &mt.instance {
@@ -5482,6 +5520,7 @@ mod native_platform_closure_tests {
             flattened_caps: StdHashMap::new(),
             assets: StdHashMap::new(),
             embeds: StdHashMap::new(),
+            consts: StdHashMap::new(),
             derived: StdHashMap::new(),
         }
     }

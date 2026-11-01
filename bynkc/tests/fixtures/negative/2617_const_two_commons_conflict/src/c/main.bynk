@@ -1,0 +1,5 @@
+context c
+
+// #2617 (decision E): two used commons may not both declare a constant name.
+uses a
+uses b

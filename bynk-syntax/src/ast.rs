@@ -678,6 +678,11 @@ pub enum CommonsItem {
     /// `String` constant. Context or commons; an adapter is rejected by the
     /// checker, not the grammar, like `Asset`.
     Embed(EmbedDecl),
+    /// `const Name: Type = <static expression>` (#2617). A named value of
+    /// the declared type, usable wherever an expression of that type is.
+    /// Context or commons; an adapter is rejected by the checker, not the
+    /// grammar, like `Embed`.
+    Const(ConstDecl),
 }
 
 impl CommonsItem {
@@ -699,6 +704,7 @@ impl CommonsItem {
             CommonsItem::Event(e) => Some(&e.name),
             CommonsItem::Asset(a) => Some(&a.name),
             CommonsItem::Embed(e) => Some(&e.name),
+            CommonsItem::Const(c) => Some(&c.name),
         }
     }
 
@@ -716,6 +722,7 @@ impl CommonsItem {
             CommonsItem::Event(e) => e.span,
             CommonsItem::Asset(a) => a.span,
             CommonsItem::Embed(e) => e.span,
+            CommonsItem::Const(c) => c.span,
         }
     }
 }
@@ -759,6 +766,23 @@ pub struct EmbedDecl {
     pub name: Ident,
     pub path: String,
     pub path_span: Span,
+    pub documentation: Option<Doc>,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+/// `const Name: Type = <static expression>` (#2617): a named value, typed by
+/// its required annotation `ty`. The initialiser `init` is a *static
+/// expression* (ADR 0004) or a reference to another constant; the checker
+/// rejects anything else (`bynk.resolve.bad_const_initialiser`), a name that
+/// is not upper-camel (`bynk.resolve.const_name_case`) and constants whose
+/// initialisers refer to each other in a cycle (`bynk.resolve.const_cycle`).
+/// Emitted as an exported TypeScript `const`.
+#[derive(Debug, Clone)]
+pub struct ConstDecl {
+    pub name: Ident,
+    pub ty: TypeRef,
+    pub init: Expr,
     pub documentation: Option<Doc>,
     pub span: Span,
     pub trivia: Trivia,

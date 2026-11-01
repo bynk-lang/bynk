@@ -52,6 +52,9 @@ pub enum SymbolKind {
     /// #2387: an `embed name = "path"` declaration — a `String` constant
     /// holding a project file's text, keyed by its name in the declaring unit.
     Embed,
+    /// #2617: a `const Name: Type = …` declaration — a value of its annotated
+    /// type, keyed by its name in the declaring unit.
+    Const,
 }
 
 impl SymbolKind {
@@ -71,6 +74,7 @@ impl SymbolKind {
             SymbolKind::Messages => "messages",
             SymbolKind::Asset => "asset",
             SymbolKind::Embed => "embed",
+            SymbolKind::Const => "constant",
         }
     }
 }

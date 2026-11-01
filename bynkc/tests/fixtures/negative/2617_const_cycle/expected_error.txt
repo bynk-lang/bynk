@@ -1,0 +1,1 @@
+bynk.resolve.const_cycle constant `First` refers to itself: `First` → `Second` → `Third` → `First`

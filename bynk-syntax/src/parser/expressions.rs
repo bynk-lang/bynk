@@ -910,6 +910,7 @@ impl<'a> Parser<'a> {
             TokenKind::Ident
             | TokenKind::Asset
             | TokenKind::Case
+            | TokenKind::Const
             | TokenKind::Embed
             | TokenKind::Event
             | TokenKind::Messages

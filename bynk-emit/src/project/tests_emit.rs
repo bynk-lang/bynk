@@ -2742,6 +2742,7 @@ fn integration_typed_commons(
         actor_bindings: HashMap::new(),
         assets: HashMap::new(),
         embeds: HashMap::new(),
+        consts: HashMap::new(),
         shadowed_imports: HashMap::new(),
         extensible_enums: Default::default(),
         stability: Default::default(),
@@ -5103,6 +5104,7 @@ fn synthetic_typed_commons_for_target(
         actor_bindings: HashMap::new(),
         assets: HashMap::new(),
         embeds: HashMap::new(),
+        consts: HashMap::new(),
         shadowed_imports: HashMap::new(),
         extensible_enums: Default::default(),
         stability: Default::default(),
@@ -6205,6 +6207,7 @@ fn emit_test_scope_setup(
             .chain(table.fns.keys())
             .chain(table.assets.keys())
             .chain(table.embeds.keys())
+            .chain(table.consts.keys())
             .cloned()
             .collect();
         // For contexts, also bring services and providers into scope.
@@ -6249,6 +6252,7 @@ fn emit_test_scope_setup(
                 .chain(t.fns.keys())
                 .chain(t.assets.keys())
                 .chain(t.embeds.keys())
+                .chain(t.consts.keys())
                 .collect()
         })
         .unwrap_or_default();
@@ -6292,6 +6296,7 @@ fn emit_test_scope_setup(
                     .chain(table.fns.keys())
                     .chain(assets)
                     .chain(table.embeds.keys())
+                    .chain(table.consts.keys())
                     .filter(|n| !target_values.contains(n))
                     .cloned()
                     .collect();

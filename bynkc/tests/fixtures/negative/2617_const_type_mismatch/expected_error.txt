@@ -1,0 +1,1 @@
+bynk.resolve.bad_const_initialiser constant `Greeting` is declared `Int`, but its initialiser is a `String`

@@ -263,6 +263,9 @@ pub fn check_file_core(
             CommonsItem::Embed(e) => {
                 emit_items.push(CommonsItem::Embed(e.clone()));
             }
+            CommonsItem::Const(c) => {
+                emit_items.push(CommonsItem::Const(c.clone()));
+            }
         }
     }
     for type_name in &types_in_this_file {
@@ -363,6 +366,8 @@ pub fn check_file_core(
     .with_assets(crate::assets::compose_unit_assets(name, unit_info))
     // #2387, slice 1: likewise this unit's embeds and its `uses`d commons'.
     .with_embeds(crate::embeds::compose_unit_embeds(name, unit_info))
+    // #2617: likewise this unit's constants and its `uses`d commons'.
+    .with_consts(crate::consts::compose_unit_consts(name, unit_info))
     // #1925: imports hidden behind a local declaration of another kind.
     .with_shadowed_imports(crate::project_model::shadowed_imports(name, unit_info))
     // S3 (#1963): which names in scope are a first-party extensible enum,

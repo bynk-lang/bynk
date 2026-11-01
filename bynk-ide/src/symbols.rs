@@ -1573,6 +1573,8 @@ fn describe_item(item: &CommonsItem, name: &str) -> Option<String> {
         CommonsItem::Asset(a) if a.name.name == name => Some(describe_asset(a)),
         // #2387, slice 1: an embed's hover and docs.
         CommonsItem::Embed(e) if e.name.name == name => Some(describe_embed(e)),
+        // #2617: a constant's hover and docs.
+        CommonsItem::Const(c) if c.name.name == name => Some(describe_const(c)),
         // #972 (Events slice 3a): an event, keyed by its plain name — the same
         // top-level convention as the arms above. Reuses `describe_type` via
         // the synthetic `TypeDecl` `as_type_decl` already builds for every
@@ -2256,6 +2258,23 @@ pub(crate) fn describe_embed(e: &EmbedDecl) -> String {
         bynk_fmt::escape_string(&e.path)
     );
     if let Some(doc) = &e.documentation {
+        out.push('\n');
+        out.push_str(doc);
+        out.push('\n');
+    }
+    out
+}
+
+/// #2617: a constant's hover and docs — the declaration as written (its type
+/// and initialiser), then its doc.
+pub(crate) fn describe_const(c: &ConstDecl) -> String {
+    let mut out = format!(
+        "```bynk\nconst {}: {} = {}\n```\n",
+        c.name.name,
+        type_ref_str(&c.ty),
+        bynk_fmt::expr_to_string(&c.init)
+    );
+    if let Some(doc) = &c.documentation {
         out.push('\n');
         out.push_str(doc);
         out.push('\n');

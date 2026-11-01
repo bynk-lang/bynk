@@ -124,6 +124,9 @@ fn check_single_file(
         &commons.items,
         mode == SingleFileMode::Build,
     ));
+    // #2617: the `const` name rules (duplicates, name conflicts), which the
+    // project path raises in `build_unit_table`.
+    boundary_errors.extend(bynk_check::consts::single_file_const_errors(&commons.items));
     // #1663: a boundary or resolve error is local to its declaration, so the
     // checker still runs over every declaration and its diagnostics join
     // theirs (minus echoes); any error still refuses the compile.

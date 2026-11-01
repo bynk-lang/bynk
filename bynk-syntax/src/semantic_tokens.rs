@@ -50,6 +50,9 @@ pub const TOKEN_TYPES: &[&str] = &[
     // #2387: `embed` names (embedded text). Appended at index 14
     // (never reordered); a custom type the VS Code extension declares.
     "embed",
+    // #2617: `const` names (named constants). Appended at index 15 (never
+    // reordered); a custom type the VS Code extension declares.
+    "constant",
 ];
 
 /// The token modifiers, in wire order (bit 0 first).

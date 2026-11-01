@@ -5666,7 +5666,7 @@ fn doc_link_item_kind(kind: Option<bynk_check::index::SymbolKind>) -> Completion
         K::Capability => CompletionItemKind::INTERFACE,
         K::Method | K::CapabilityOp | K::Handler => CompletionItemKind::METHOD,
         K::Field => CompletionItemKind::FIELD,
-        K::Asset | K::Embed => CompletionItemKind::CONSTANT,
+        K::Asset | K::Embed | K::Const => CompletionItemKind::CONSTANT,
         _ => CompletionItemKind::CLASS,
     }
 }
@@ -5796,6 +5796,8 @@ fn lsp_symbol_kind(kind: bynk_check::index::SymbolKind) -> SymbolKind {
         bynk_check::index::SymbolKind::Asset => SymbolKind::CONSTANT,
         // #2387: likewise a named string constant.
         bynk_check::index::SymbolKind::Embed => SymbolKind::CONSTANT,
+        // #2617: a named constant.
+        bynk_check::index::SymbolKind::Const => SymbolKind::CONSTANT,
     }
 }
 

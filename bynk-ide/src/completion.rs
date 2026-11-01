@@ -1763,6 +1763,16 @@ fn free_function_candidates(
                     ),
                     e.documentation.as_deref().map(str::to_string),
                 )),
+                // #2617: a constant rides the same pass and gate as an embed.
+                CommonsItem::Const(c) => Some((
+                    c.name.name.clone(),
+                    format!(
+                        "const {}: {}",
+                        c.name.name,
+                        crate::symbols::type_ref_str(&c.ty)
+                    ),
+                    c.documentation.as_deref().map(str::to_string),
+                )),
                 _ => None,
             })
             .collect();

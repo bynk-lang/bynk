@@ -371,6 +371,7 @@ pub const DOC_LINK_BARE_KINDS: &[SymbolKind] = &[
     SymbolKind::Actor,
     SymbolKind::Asset,
     SymbolKind::Embed,
+    SymbolKind::Const,
 ];
 
 /// #2454: the declaration a doc comment is attached to, as far as link

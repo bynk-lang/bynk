@@ -224,6 +224,8 @@ pub(crate) fn emit(program: &CheckedProgram) -> String {
             body_stmts.extend(emit_type(t, &shape, commons, &dummy_ctx));
         }
     }
+    // #2617: constants after the types, before the functions.
+    body_stmts.extend(emit_consts(commons, &dummy_ctx));
     // Free functions afterward.
     for item in &commons.commons.items {
         if let CommonsItem::Fn(f) = item
@@ -448,6 +450,11 @@ pub(crate) fn emit_project(
             ));
         }
     }
+    // #2617: each constant is an exported `const`, after the types (its
+    // initialiser may construct one) and before the functions, in dependency
+    // order. A unit that `uses` this one, or a sibling file, imports it like
+    // a function (`record_name_ref`).
+    body.extend(emit_consts(commons, ctx));
     for item in &commons.commons.items {
         if let CommonsItem::Fn(f) = item
             && let FnName::Free(_) = &f.name
@@ -996,6 +1003,8 @@ fn commons_mentions_type(commons: &TypedCommons, marker: TypeRefMarker) -> bool 
         // An `event` registers into the `types` table and is checked over
         // the same record-field path as `CommonsItem::Type`'s `Record` arm.
         CommonsItem::Event(e) => e.body.fields.iter().any(|f| in_type_ref(&f.type_ref)),
+        // #2617: a constant's annotation is part of the module's surface.
+        CommonsItem::Const(c) => in_type_ref(&c.ty),
         CommonsItem::Actor(_)
         | CommonsItem::Messages(_)
         | CommonsItem::Asset(_)
@@ -1058,7 +1067,9 @@ fn file_mentions_connection(commons: &TypedCommons) -> bool {
         | CommonsItem::Messages(_)
         | CommonsItem::Event(_)
         | CommonsItem::Asset(_)
-        | CommonsItem::Embed(_) => false,
+        | CommonsItem::Embed(_)
+        // #2617: a constant's static initialiser can never be a held value.
+        | CommonsItem::Const(_) => false,
     })
 }
 
@@ -2672,6 +2683,12 @@ fn collect_external_references(commons: &TypedCommons, ctx: &EmitProjectCtx) -> 
             CommonsItem::Messages(_) | CommonsItem::Asset(_) => {}
             // #2387, slice 1: an embed references no other declaration.
             CommonsItem::Embed(_) => {}
+            // #2617: a constant's annotation and initialiser may name types,
+            // variants and other constants of a sibling file or used commons.
+            CommonsItem::Const(c) => {
+                collect_refs_in_typeref(&c.ty, &local_to_file, ctx, &mut refs);
+                collect_refs_in_expr(&c.init, &local_to_file, commons, ctx, &mut refs);
+            }
         }
     }
     for (cap, path) in &ctx.file_decl_index.capabilities {
@@ -2840,7 +2857,9 @@ fn collect_refs_in_expr(
         ExprKind::Ident(id) => {
             if let Some(type_name) = sum_owner_of_variant(&id.name, e.id, commons) {
                 record_name_ref(&type_name, local_to_file, ctx, out);
-            } else if commons.assets.contains_key(&id.name) || commons.embeds.contains_key(&id.name)
+            } else if commons.assets.contains_key(&id.name)
+                || commons.embeds.contains_key(&id.name)
+                || commons.consts.contains_key(&id.name)
             {
                 // #1883, slice 1b: a bare asset name (an `Asset` argument,
                 // not just `style.url`, which the field-access arm already

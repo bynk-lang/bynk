@@ -119,7 +119,21 @@ fn item_symbol(pm: &PositionMap, item: &CommonsItem) -> DocumentSymbol {
         CommonsItem::Event(e) => type_symbol(pm, &e.as_type_decl()),
         CommonsItem::Asset(a) => asset_symbol(pm, a),
         CommonsItem::Embed(e) => embed_symbol(pm, e),
+        CommonsItem::Const(c) => const_symbol(pm, c),
     }
+}
+
+/// #2617: a constant outlines as a constant, its type as the detail when it
+/// has no doc.
+fn const_symbol(pm: &PositionMap, c: &ConstDecl) -> DocumentSymbol {
+    make_symbol(
+        c.name.name.clone(),
+        detail_from_doc(&c.documentation).or_else(|| Some(bynk_ide::symbols::type_ref_str(&c.ty))),
+        SymbolKind::CONSTANT,
+        pm.range(c.span),
+        pm.range(c.name.span),
+        Vec::new(),
+    )
 }
 
 /// #1883, slice 1a: an `asset` outlines as a constant — a named value that

@@ -1,0 +1,6 @@
+adapter app.host
+
+// #2617: an adapter is the host boundary, so it declares no constants.
+binding "./host.js"
+
+const Limit: Int = 3

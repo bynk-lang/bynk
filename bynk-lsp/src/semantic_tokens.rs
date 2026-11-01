@@ -56,6 +56,8 @@ fn token_type_index(kind: SymbolKind) -> u32 {
         SymbolKind::Asset => 13,
         // #2387: embed names append `embed` at 14.
         SymbolKind::Embed => 14,
+        // #2617: constant names append `constant` at 15.
+        SymbolKind::Const => 15,
     }
 }
 

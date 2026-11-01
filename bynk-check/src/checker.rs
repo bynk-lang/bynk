@@ -53,7 +53,7 @@ use expressions::*;
 use kernels::*;
 use refinements::*;
 
-pub use calls::{check_event_field_default, check_state_initialiser};
+pub use calls::{check_const_decl, check_event_field_default, check_state_initialiser};
 pub use d1::row_bool_fields;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
 pub use refinements::{locale_tag_accepts, locale_tag_pattern, zero_value_ts};
@@ -754,6 +754,10 @@ pub struct TypedCommons {
     /// #2387, slice 1: the embeds visible in this unit, carried from
     /// [`ResolvedCommons::embeds`] for the same per-handler checks.
     pub embeds: HashMap<String, EmbedDecl>,
+    /// #2617: the constants visible in this unit, carried from
+    /// [`ResolvedCommons::consts`] for the same per-handler checks and for
+    /// emission.
+    pub consts: HashMap<String, ConstDecl>,
     /// #1925: the imports this unit's own declarations shadow, carried from
     /// [`ResolvedCommons::shadowed_imports`] for the same per-handler checks.
     pub shadowed_imports: HashMap<String, crate::resolver::ShadowedImport>,
@@ -797,6 +801,7 @@ impl TypedCommons {
             actor_bindings: HashMap::new(),
             assets: HashMap::new(),
             embeds: HashMap::new(),
+            consts: HashMap::new(),
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
             stability: Default::default(),
@@ -1009,6 +1014,32 @@ pub fn check_record_in(
         }
     }
 
+    // 1b. #2617: check each constant declared in this file — its name, its
+    // initialiser's static-ness and type — and the cycles through it.
+    let local_consts: Vec<&ConstDecl> = input
+        .commons
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Const(c) => Some(c),
+            _ => None,
+        })
+        .collect();
+    for c in &local_consts {
+        check_const_decl(
+            c,
+            &input,
+            &ty_intern,
+            &mut expr_types,
+            &mut callees,
+            &mut errors,
+            refs,
+            hints,
+            locals,
+        );
+    }
+    errors.extend(crate::consts::cycle_errors(&local_consts, &input.consts));
+
     // 2. Type-check each function and method body.
     for item in &input.commons.items {
         if let CommonsItem::Fn(f) = item {
@@ -1071,6 +1102,7 @@ pub fn check_record_in(
                 actor_bindings: HashMap::new(),
                 assets: input.assets,
                 embeds: input.embeds,
+                consts: input.consts,
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
                 stability: input.stability,
@@ -1097,6 +1129,7 @@ pub fn check_record_in(
                 actor_bindings: HashMap::new(),
                 assets: input.assets,
                 embeds: input.embeds,
+                consts: input.consts,
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
                 stability: input.stability,

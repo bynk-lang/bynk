@@ -34,6 +34,7 @@ pub mod builtin_names;
 pub mod capability_paths;
 pub mod check_pipeline;
 pub mod checker;
+pub mod consts;
 pub mod context_checks;
 pub mod contract;
 pub mod contract_compat;
