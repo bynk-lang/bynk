@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk test --smoke` smoke-tests every `from http` route without a test written for it: each route is called with arguments `Val` fabricates and must not answer a 5xx or a body that doesn't decode as its declared type, a route with a JSON body must reject a malformed one, and a route behind an actor must refuse a call with no credential. It runs in process, against `dev`, or against a named target (`GET` routes only unless `--smoke-unsafe`); a route `Val` can't fill is skipped and named, and `--print` prints the synthesised suites. Also fixed: bare `Val[T]` of a record now honours an inline `where` on a field, so `qty: Int where Positive` is `1`, not `0`, and a field `where Matches(…)` needs a pin (`bynk.val.needs_pin`) as a `Matches` type does ([#2658](https://github.com/bynk-lang/bynk/issues/2658))"
----
+# 0677 — `bynk test --smoke` derives a `system` suite from a project's `from http` routes
 
-## ADR: derived-smoke-suites
-title: `bynk test --smoke` derives a `system` suite from a project's `from http` routes
-summary: Smoke cases are synthesised Bynk source, checked and run through the ordinary test pipeline in place of the project's own suites; un-fabricable routes are skipped by an allowlist of checker codes; decoding is strict; the declared-status warning is deferred
+- **Status:** Accepted (v0.461.1)
 
 **Context.** Every Bynk app that wanted an end-to-end check hand-wrote one, such
 as `bynk-lang/example-template`'s `e2e/scenarios.sh`: a `curl` script asserting,
