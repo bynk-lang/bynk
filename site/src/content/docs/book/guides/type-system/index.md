@@ -18,6 +18,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/)
 - [Destructure a record with `let`](/book/guides/type-system/destructure-a-record-with-let/)
 - [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/)
+- [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/)
 
 **See also:** [Reference — Type system](/book/reference/types/),
 [Refined-type API](/book/reference/refined-types/),

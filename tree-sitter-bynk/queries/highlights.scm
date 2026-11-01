@@ -138,6 +138,8 @@
 (service_protocol event_type: (identifier) @type)
 (event_pattern_value type: (identifier) @type)
 (opaque_type) @type
+; Constrained generics slice 0: a constraint name in a bound (`T: Eq`).
+(constraint) @type
 (generic_type_ref arg: (identifier) @type)
 ; v0.157 (ADR 0183): a user generic-type application — the head name and each
 ; argument are types.

@@ -15,7 +15,8 @@ commons envelope {
       (identifier))
     (type_decl
       name: (identifier)
-      type_param: (identifier)
+      type_param: (type_param
+        name: (identifier))
       body: (record_type
         (record_field
           name: (identifier)
@@ -58,8 +59,10 @@ commons pair {
       (identifier))
     (type_decl
       name: (identifier)
-      type_param: (identifier)
-      type_param: (identifier)
+      type_param: (type_param
+        name: (identifier))
+      type_param: (type_param
+        name: (identifier))
       body: (record_type
         (record_field
           name: (identifier)

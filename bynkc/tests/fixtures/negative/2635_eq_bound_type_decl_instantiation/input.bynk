@@ -1,0 +1,6 @@
+// A bound on a type declaration is checked where the type is applied.
+commons c
+
+type Set2[T: Eq] = { items: List[T] }
+
+fn f(s: Set2[(Int) -> Int]) -> Int { 0 }

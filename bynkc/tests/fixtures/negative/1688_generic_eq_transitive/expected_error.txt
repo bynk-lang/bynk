@@ -1,2 +1,2 @@
 bynk.types.not_comparable
-`twice` compares values of its type parameter `U`, but this call makes `U` `List[Int -> Int]`
+`twice` requires `U: Eq`, but this call makes `U` `List[Int -> Int]`

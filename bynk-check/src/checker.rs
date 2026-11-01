@@ -40,7 +40,8 @@ pub use bynk_syntax::ast::ExprId;
 
 mod calls;
 mod d1;
-mod equality;
+pub(crate) mod equality;
+use equality::EqScope;
 mod expressions;
 mod kernels;
 mod linearity;
@@ -1359,6 +1360,7 @@ pub fn check_handler_body(
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: HashSet::new(),
+        eq: EqScope::default(),
         store_fields,
         in_agent_handler: agent_state_ty.is_some(),
     };
@@ -1505,6 +1507,7 @@ pub fn check_body(
         test_services,
         test_actors,
         type_vars: HashSet::new(),
+        eq: EqScope::default(),
         store_fields: HashMap::new(),
         in_agent_handler: false,
     };
@@ -1666,6 +1669,7 @@ pub fn check_invariants(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
+            eq: EqScope::default(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -1706,7 +1710,7 @@ pub fn check_invariants(
 ///
 /// Distinct from ADR 0127's capability `@requires` annotation.
 #[allow(clippy::too_many_arguments)]
-pub fn check_contracts(
+pub(crate) fn check_contracts(
     requires: &[Contract],
     ensures: &[Contract],
     // The function's parameters in scope by bare name (plus `self` for a
@@ -1728,6 +1732,7 @@ pub fn check_contracts(
     requirements: &mut RequirementSink,
     callees: &mut HashMap<ExprId, Callee>,
     type_vars: &HashSet<String>,
+    eq: &EqScope,
     tys: &Types,
 ) {
     // Duplicate-name check across *all* clauses — the name is the dedup key for
@@ -1812,6 +1817,7 @@ pub fn check_contracts(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: type_vars.clone(),
+            eq: eq.clone(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -2039,6 +2045,7 @@ pub fn check_transitions(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
+            eq: EqScope::default(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -2223,6 +2230,7 @@ pub fn check_migrations(
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
+            eq: EqScope::default(),
             store_fields: HashMap::new(),
             in_agent_handler: false,
         };
@@ -2593,6 +2601,8 @@ pub(crate) struct Ctx<'a> {
     /// nested explicit type arguments (`identity[A](x)` inside a generic
     /// body) resolve. Empty outside generic fn bodies.
     pub type_vars: HashSet<String>,
+    /// Constrained generics slice 0: the `Eq` bounds declared in scope.
+    pub eq: EqScope,
     /// The agent's `store` fields, by name (finding #36: collapses the five
     /// former per-kind maps — `store_cells`/`store_maps`/`store_sets`/
     /// `store_caches`/`store_logs` — into one, since a field name can only

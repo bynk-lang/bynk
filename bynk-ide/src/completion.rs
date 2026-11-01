@@ -74,6 +74,9 @@ pub enum CompletionKind {
     /// A named constant value at expression position — an `asset` (#1883),
     /// in scope by the same rule as a free function.
     Constant,
+    /// A constraint name after `T:` or `where A:` (constrained generics
+    /// slice 0).
+    Constraint,
 }
 
 pub struct Completion {
@@ -215,6 +218,11 @@ pub fn complete_in(
     if after_clause_keyword(line_prefix, "provides") {
         return in_scope_capabilities(doc_text, &split());
     }
+    // 4f'. Constrained generics slice 0: `fn f[T: <cursor>` / `where A: <cursor>`
+    //      — the constraint names.
+    if is_constraint_position(line_prefix) {
+        return constraint_candidates();
+    }
     // 4g. `where <cursor>` — the closed refinement-predicate vocabulary.
     // Shared by a type declaration's `type X = Base where <cursor>` and
     // (#472) a match arm's `_ where <cursor>`; both reuse the same closed
@@ -292,6 +300,49 @@ fn is_uses_target(line: &str) -> bool {
         return false;
     };
     after.starts_with(char::is_whitespace) && after.split_whitespace().count() <= 1
+}
+
+/// Constrained generics slice 0: the cursor follows the `:` (or a `+`) of a
+/// bound — inside a `fn`/`type` type-parameter list (`fn f[T: <cursor>`), or in
+/// a method's `where` clause (`-> Bool where A: <cursor>`). The partial
+/// constraint name being typed is stripped first.
+fn is_constraint_position(line: &str) -> bool {
+    let head = line
+        .trim_end_matches(|c: char| c.is_alphanumeric() || c == '_')
+        .trim_end();
+    if !(head.ends_with(':') && !head.ends_with("::") || head.ends_with('+')) {
+        return false;
+    }
+    // Inside a still-open `[ … ]` that a `fn name` / `type Name` opened.
+    if let Some(open) = head.rfind('[')
+        && !head[open..].contains(']')
+    {
+        let before = head[..open].trim_end();
+        let name_start = before
+            .rfind(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '.')))
+            .map_or(0, |i| i + 1);
+        let decl = before[..name_start].trim_end();
+        return decl.ends_with("fn") || decl.ends_with("type");
+    }
+    // A `where` clause after a return type: only names, `:`, `,`, `+` since it.
+    if let Some(w) = head.rfind("where")
+        && line[..w].contains("->")
+        && head[..w].chars().last().is_none_or(char::is_whitespace)
+    {
+        return head[w + "where".len()..]
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | ':' | ',' | '+' | ' ' | '\t'));
+    }
+    false
+}
+
+/// The constraint names (slice 0: `Eq` only).
+fn constraint_candidates() -> Vec<Completion> {
+    vec![Completion::item(
+        "Eq",
+        CompletionKind::Constraint,
+        Some("constraint: values of the type compare with `==`".to_string()),
+    )]
 }
 
 /// The cursor is inside a `given` list (after `given`, before the `{` body).
@@ -1812,7 +1863,7 @@ fn stability_suffix(experimental: bool) -> &'static str {
 
 /// Render a free function's signature for the completion detail, the same way
 /// hover and signature help do (`symbols::type_ref_str`) — one format, never
-/// divergent. Mirrors signature help: no generic-parameter list.
+/// divergent. Mirrors signature help, bounds included.
 fn free_fn_signature(name: &str, f: &bynk_syntax::ast::FnDecl) -> String {
     let params = f
         .params
@@ -1820,7 +1871,12 @@ fn free_fn_signature(name: &str, f: &bynk_syntax::ast::FnDecl) -> String {
         .map(|p| format!("{}: {}", p.name.name, type_ref_str(&p.type_ref)))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("{name}({params}) -> {}", type_ref_str(&f.return_type))
+    format!(
+        "{name}{}({params}) -> {}{}",
+        crate::symbols::fn_type_params_str(f),
+        type_ref_str(&f.return_type),
+        crate::symbols::fn_where_str(f)
+    )
 }
 
 /// Free-function candidates at expression position: the current unit's own
@@ -2553,6 +2609,33 @@ mod tests {
             .into_iter()
             .map(|c| c.label)
             .collect()
+    }
+
+    /// Constrained generics slice 0: the constraint names are offered after the
+    /// `:` / `+` of a bound, in a type-parameter list and in a `where` clause,
+    /// and only there.
+    #[test]
+    fn constraint_names_follow_a_bound_colon() {
+        let doc = "commons m\n";
+        let eq = |line: &str| {
+            complete(line, doc, None)
+                .into_iter()
+                .filter(|c| c.kind == CompletionKind::Constraint)
+                .map(|c| c.label)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(eq("fn same[T: "), ["Eq"]);
+        assert_eq!(eq("fn same[T: E"), ["Eq"]);
+        assert_eq!(eq("fn same[T: Eq + "), ["Eq"]);
+        assert_eq!(eq("fn same[A, T: "), ["Eq"]);
+        assert_eq!(eq("type Pair[T: "), ["Eq"]);
+        assert_eq!(eq("fn Box.has(self, x: A) -> Bool where A: "), ["Eq"]);
+        assert_eq!(eq("fn f(self) -> Int where A: Eq, B: "), ["Eq"]);
+        // A parameter's type annotation and a refinement `where` are not bounds.
+        assert!(eq("fn f(x: ").is_empty());
+        assert!(eq("fn f(x: Int) -> ").is_empty());
+        assert!(eq("type Age = Int where ").is_empty());
+        assert!(eq("fn f[T](x: ").is_empty());
     }
 
     #[test]

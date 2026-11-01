@@ -191,9 +191,11 @@ pub fn resolve_label(
                     .map(|p| format!("{}: {}", p.name.name, type_ref_str(&p.type_ref)))
                     .collect();
                 found = Some(format!(
-                    "{callee}({}) -> {}",
+                    "{callee}{}({}) -> {}{}",
+                    crate::symbols::fn_type_params_str(f),
                     params.join(", "),
-                    type_ref_str(&f.return_type)
+                    type_ref_str(&f.return_type),
+                    crate::symbols::fn_where_str(f)
                 ));
                 return;
             }
@@ -355,6 +357,23 @@ fn push_trimmed(label: &str, start: usize, end: usize, out: &mut Vec<(usize, usi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Constrained generics slice 0: the label shows a generic's bounds.
+    #[test]
+    fn free_fn_label_shows_bounds() {
+        let doc = "commons m\n\nfn same[T: Eq](a: T, b: T) -> Bool { a == b }\n\nfn pick[T](a: T) -> T { a }\n";
+        assert_eq!(
+            resolve_label("same", doc, None).as_deref(),
+            Some("same[T: Eq](a: T, b: T) -> Bool")
+        );
+        assert_eq!(
+            resolve_label("pick", doc, None).as_deref(),
+            Some("pick[T](a: T) -> T")
+        );
+        let label = resolve_label("same", doc, None).unwrap();
+        let ranges = param_ranges(&label);
+        assert_eq!(&label[ranges[0].0..ranges[0].1], "a: T");
+    }
 
     #[test]
     fn call_context_finds_callee_and_active_param() {

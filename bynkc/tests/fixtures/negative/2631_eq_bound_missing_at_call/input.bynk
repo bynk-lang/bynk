@@ -1,0 +1,6 @@
+// Passing an undeclared type parameter to an `Eq`-bounded one is rejected at the call.
+commons c
+
+fn same[T: Eq](a: T, b: T) -> Bool { a == b }
+
+fn g[U](x: U) -> Bool { same(x, x) }

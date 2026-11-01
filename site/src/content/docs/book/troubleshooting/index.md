@@ -4,6 +4,8 @@ title: Troubleshooting
 One page per common diagnostic — the cause and the fix. Search for the error
 code you saw.
 
+- [`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/) — a generic compares a
+  type parameter that is not declared `Eq`.
 - [`bynk.refine.literal_violates`](/book/troubleshooting/refine-literal-violates/) — a literal didn't
   satisfy a refined type's predicate.
 - [`bynk.agents.non_zeroable_state_field`](/book/troubleshooting/agents-non-zeroable-state-field/) —

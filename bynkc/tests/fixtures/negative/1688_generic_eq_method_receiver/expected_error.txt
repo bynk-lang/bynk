@@ -1,2 +1,2 @@
 bynk.types.not_comparable
-`Box.has` compares values of its type parameter `A`, but this call makes `A` `Int -> Int`
+`Box.has` requires `A: Eq`, but this call makes `A` `Int -> Int`

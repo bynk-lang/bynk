@@ -232,7 +232,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.D1\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();

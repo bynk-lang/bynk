@@ -200,15 +200,18 @@ container element, or a generic argument written in the type, such as
 `Box[(Int) -> Int]`) is not equality-supporting, and `==` on it is rejected
 (`bynk.types.not_comparable`, `bynk.types.stream_not_comparable`,
 `bynk.types.held_not_comparable`). Inside a generic function or method, `==` on
-a type parameter is accepted; the bound moves to the call. A generic function
-*compares* a type parameter when `==`/`!=` reaches a value of it, directly or by
-passing it to a compared parameter of another generic function — through any
-number of calls and units. A method compares its own type parameters and its
-receiver type's the same way. Each call MUST instantiate a compared parameter
-with an equality-supporting type (the same codes, reported at the call:
-`same(f, h)` on two functions is rejected for
-`fn same[T](a: T, b: T) -> Bool { a == b }`, and `b.has(dec)` for
-`fn Box.has(self, x: A) -> Bool { self.value == x }` on a `Box[(Int) -> Int]`). One case is not yet checked, and
+a type that mentions a type parameter is accepted only when that parameter is
+**declared `Eq`**: by a `T: Eq` bound on the function, a `where A: Eq` entry on
+a method (for its receiver type's parameter), or a bound its receiver type
+declares; otherwise it is `bynk.generics.missing_eq_bound`. Passing a type
+parameter to an `Eq`-bounded parameter of another generic is the same rule,
+reported at the call, so a bound is declared at every link of a chain of calls.
+Each call MUST instantiate an `Eq`-bounded parameter with an equality-supporting
+type (the same codes, reported at the call: `same(f, h)` on two functions is
+rejected for `fn same[T: Eq](a: T, b: T) -> Bool { a == b }`, and `b.has(dec)`
+for `fn Box.has(self, x: A) -> Bool where A: Eq { self.value == x }` on a
+`Box[(Int) -> Int]`). Every `missing_eq_bound` carries a machine-applicable fix
+that adds the bound. One case is not yet checked, and
 falls back to comparing such values by identity: a record imported from another
 unit is not walked through its fields. A nullary variant read from storage or decoded
 from JSON equals the same variant written in source.
@@ -494,12 +497,22 @@ neither inferable nor given explicitly (`name[T](…)`) is rejected
 as a value. There is no inference between lambdas and none from the call's
 own expected type. Only a record or sum *type* declaration may be generic — type
 parameters on a refined or opaque body are rejected
-(`bynk.generics.generic_non_record`) — and parameter *bounds* are rejected
-(`bynk.generics.no_bounds`); a
+(`bynk.generics.generic_non_record`); a
 type parameter MUST NOT shadow a declared type. Within a generic function's
 body its type parameters are rigid: equal only to themselves. The checker
 maintains the invariant that a type-variable-bearing expected type imposes
 no constraint on expression checking.
+
+**Bounds** (constrained generics, slice 0). A type parameter MAY carry bounds,
+`T: Eq` or `T: C1 + C2`, on a `fn`, a `type` declaration or — as a `where`
+clause — a method (§4.3.1b). `Eq` is the only constraint; any other name is
+`bynk.generics.unknown_constraint`. A bound on a generic capability operation's
+type parameter is `bynk.generics.bound_on_capability_op`, and a `where` entry
+that names no type parameter of the method or its receiver type is
+`bynk.generics.unknown_where_param`. A bound on a type declaration is checked
+where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
+`Set2[(Int) -> Int]` with the equality diagnostics below. Bounds are erased; they
+add nothing to emission.
 
 {{#grammar-semantics if_expr}}
 

@@ -521,7 +521,7 @@ and can't be used until it is listed here.
 
 ```toml
 [unstable]
-allow = ["bynk.cloudflare.D1"]
+allow = ["bynk.cloudflare.R2"]
 ```
 
 Using an experimental item that no entry covers is a

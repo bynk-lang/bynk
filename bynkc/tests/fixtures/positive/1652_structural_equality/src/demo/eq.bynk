@@ -17,7 +17,7 @@ type Blob = { name: String, data: Bytes }
 
 type Token = opaque Bytes
 
-fn same[T](a: T, b: T) -> Bool {
+fn same[T: Eq](a: T, b: T) -> Bool {
   a == b
 }
 
