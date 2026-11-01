@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: "`Int` gains the bitwise methods `and`, `or`, `xor`, `andNot`, `shl` and `shr`, exact over the whole safe-integer range, faulting on a negative operand, a shift count outside 0..52, or a `shl` result past the safe range (standard-library, [#2621](https://github.com/bynk-lang/bynk/issues/2621))"
----
+# 0695 — Bitwise operations on Int as numeric kernel methods over the full safe range
 
-## ADR: int-bitwise
-title: Bitwise operations on Int as numeric kernel methods over the full safe range
-summary: `Int` gains `and`, `or`, `xor`, `andNot`, `shl` and `shr` as value methods, computed over the 53-bit safe-integer domain by splitting into hi/lo halves rather than JS's 32-bit operators; a negative operand or a shift count outside 0..52 faults, as does a `shl` past the safe range
+- **Status:** Accepted (v0.477)
 
 **Context.** `Int` had arithmetic and, since K6b (#2598), `div`/`rem`/`mod`/`pow`,
 but no bitwise operations, so flags, bit-packed ids, hash mixing and binary
