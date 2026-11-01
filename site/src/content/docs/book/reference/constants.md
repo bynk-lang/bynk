@@ -82,22 +82,30 @@ const DefaultPort: Port = 8080
 
 Constants may refer to each other in any order, across files and through
 `uses`, but not in a cycle: `const A: Int = B` with `const B: Int = A` is
-`bynk.resolve.const_cycle`, which names the members of the cycle. Nor may the
-files of a unit depend on each other in a cycle through their constants: if
-`a.bynk` declares `const C: Int = B` and `b.bynk` declares `const B: Int = A`,
-where `A` is declared in `a.bynk`, each file's module would import the other's
-and read a constant before it is defined. That is
-`bynk.resolve.const_file_cycle`; move the constants into one file. A function
-reading another file's constant is always fine.
+`bynk.resolve.const_cycle`, which names the members of the cycle. The files
+of a unit may import each other freely: `a.bynk` can declare `const A: Int = 1`
+and `const C: Int = B` while `b.bynk` declares `const B: Int = A`, and either
+file's functions can call the other's.
 
 A constant cannot yet stand in a compile-time position, such as a refinement
 bound (`InRange(1, MaxQty)`) or an annotation argument.
 
 ## What it becomes
 
-A constant is an exported TypeScript `const` of the declaring module, typed by
-its annotation, emitted after the module's types and before its functions, and
-imported by name like a function wherever a sibling file or a `uses`-ing unit
-names it. A unit-tier `suite` case can name its target's constants, private ones
-included, and the public constants of the commons the target `uses`. `private`
-changes nothing in the emitted module: it is a naming rule only.
+A constant is an exported TypeScript function of the declaring module, typed by
+its annotation, that computes its value on the first call and returns the cached
+value after that:
+
+```typescript
+var __const_MaxRetries: { v: number } | undefined;
+export function MaxRetries(): number { return (__const_MaxRetries ??= { v: 3 }).v; }
+```
+
+Every reference to the constant is a call, `MaxRetries()`, and a sibling file or
+a `uses`-ing unit imports it by name like any other function. Because a function
+declaration is hoisted, a constant can be read whichever order the modules of a
+unit load in, even when its files import each other. Constants are emitted
+after the module's types and before its functions. A unit-tier `suite` case can
+name its target's constants, private ones included, and the public constants of
+the commons the target `uses`. `private` changes nothing in the emitted module:
+it is a naming rule only.

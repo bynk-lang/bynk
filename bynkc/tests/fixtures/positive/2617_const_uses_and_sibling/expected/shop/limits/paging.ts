@@ -7,8 +7,9 @@ import type { ValidationError } from "../../__bynk_runtime/errors.js";
 
 import { DefaultPage, MaxItems } from "./limits.js";
 
-export const Window: number = MaxItems;
+var __const_Window: { v: number } | undefined;
+export function Window(): number { return (__const_Window ??= { v: MaxItems() }).v; }
 
 export function pages(): number {
-  return __bynkIntDiv(Window, DefaultPage.size);
+  return __bynkIntDiv(Window(), DefaultPage().size);
 }

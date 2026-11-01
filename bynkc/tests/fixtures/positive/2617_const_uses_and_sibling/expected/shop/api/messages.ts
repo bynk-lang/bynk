@@ -4,4 +4,5 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 
-export const Welcome: string = "welcome";
+var __const_Welcome: { v: string } | undefined;
+export function Welcome(): string { return (__const_Welcome ??= { v: "welcome" }).v; }

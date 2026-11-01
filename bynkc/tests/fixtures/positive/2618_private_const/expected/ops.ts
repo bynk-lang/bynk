@@ -6,8 +6,9 @@ import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 import { Retries } from "./limits/defaults.js";
 
-export const Step: number = 7;
+var __const_Step: { v: number } | undefined;
+export function Step(): number { return (__const_Step ??= { v: 7 }).v; }
 
 export function plan(): number {
-  return Retries + Step;
+  return Retries() + Step();
 }

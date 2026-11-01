@@ -6,4 +6,5 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 import { Pt } from "../a/main.js";
 
-export const Origin: Pt = { x: 1, y: 2 };
+var __const_Origin: { v: Pt } | undefined;
+export function Origin(): Pt { return (__const_Origin ??= { v: { x: 1, y: 2 } }).v; }

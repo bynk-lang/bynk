@@ -501,9 +501,14 @@ fn render_stmt_kind(
             render_stmt_level_expr(out, init, depth);
             out.push_str(";\n");
         }
-        TsStmtKind::Let { name, ty, init } => {
+        TsStmtKind::Let {
+            name,
+            ty,
+            init,
+            hoisted,
+        } => {
             out.push_str(&indent(depth));
-            out.push_str("let ");
+            out.push_str(if *hoisted { "var " } else { "let " });
             render_binding_name(out, name);
             if let Some(ty) = ty {
                 out.push_str(": ");

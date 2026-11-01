@@ -43,8 +43,8 @@ async function test_a_public_constant_over_a_private_one__beside_a_local_of_the_
     const deps = {};
     const { Step, plan } = __ns_ops;
     const { Retries, retries, span } = __ns_limits;
-    if (!(Retries === 5)) { throw __bynkExpectFailure("tests/ops.test.bynk:5:12", 212, 224, "expect Retries == 5\n  expected: Retries == 5\n  actual:   " + __bynkShow((Retries)) + " == " + __bynkShow((5))); }
-    if (!(Step === 7)) { throw __bynkExpectFailure("tests/ops.test.bynk:6:12", 236, 245, "expect Step == 7\n  expected: Step == 7\n  actual:   " + __bynkShow((Step)) + " == " + __bynkShow((7))); }
+    if (!(Retries() === 5)) { throw __bynkExpectFailure("tests/ops.test.bynk:5:12", 212, 224, "expect Retries == 5\n  expected: Retries == 5\n  actual:   " + __bynkShow((Retries())) + " == " + __bynkShow((5))); }
+    if (!(Step() === 7)) { throw __bynkExpectFailure("tests/ops.test.bynk:6:12", 236, 245, "expect Step == 7\n  expected: Step == 7\n  actual:   " + __bynkShow((Step())) + " == " + __bynkShow((7))); }
     if (!(plan() === 12)) { throw __bynkExpectFailure("tests/ops.test.bynk:7:12", 257, 269, "expect plan() == 12\n  expected: plan() == 12\n  actual:   " + __bynkShow((plan())) + " == " + __bynkShow((12))); }
     return { pass: true };
   } catch (e) {

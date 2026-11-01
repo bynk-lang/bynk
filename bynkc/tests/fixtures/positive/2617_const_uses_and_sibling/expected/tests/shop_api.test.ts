@@ -46,9 +46,9 @@ async function test_the_context_reads_a_used_commons__constants() {
     type Page = __ns_shop_limits.Page;
     type Quantity = __ns_shop_limits.Quantity;
     type Tier = __ns_shop_limits.Tier;
-    if (!(MaxItems === 20)) { throw __bynkExpectFailure("tests/shop/api.bynk:7:10", 147, 161, "expect MaxItems == 20\n  expected: MaxItems == 20\n  actual:   " + __bynkShow((MaxItems)) + " == " + __bynkShow((20))); }
-    if (!(DefaultPage.size === 10)) { throw __bynkExpectFailure("tests/shop/api.bynk:8:10", 171, 193, "expect DefaultPage.size == 10\n  expected: DefaultPage.size == 10\n  actual:   " + __bynkShow((DefaultPage.size)) + " == " + __bynkShow((10))); }
-    if (!(Window === 20)) { throw __bynkExpectFailure("tests/shop/api.bynk:9:10", 203, 215, "expect Window == 20\n  expected: Window == 20\n  actual:   " + __bynkShow((Window)) + " == " + __bynkShow((20))); }
+    if (!(MaxItems() === 20)) { throw __bynkExpectFailure("tests/shop/api.bynk:7:10", 147, 161, "expect MaxItems == 20\n  expected: MaxItems == 20\n  actual:   " + __bynkShow((MaxItems())) + " == " + __bynkShow((20))); }
+    if (!(DefaultPage().size === 10)) { throw __bynkExpectFailure("tests/shop/api.bynk:8:10", 171, 193, "expect DefaultPage.size == 10\n  expected: DefaultPage.size == 10\n  actual:   " + __bynkShow((DefaultPage().size)) + " == " + __bynkShow((10))); }
+    if (!(Window() === 20)) { throw __bynkExpectFailure("tests/shop/api.bynk:9:10", 203, 215, "expect Window == 20\n  expected: Window == 20\n  actual:   " + __bynkShow((Window())) + " == " + __bynkShow((20))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -103,7 +103,7 @@ async function test_a_service_answers_with_the_context_s_own_constant() {
         switch (__d.tag) {
           case "Ok": {
             const s = __d.value;
-            return __bynkExpect((s === Welcome), "tests/shop/api.bynk:23:21", 488, 500, "expect s == Welcome");
+            return __bynkExpect((s === Welcome()), "tests/shop/api.bynk:23:21", 488, 500, "expect s == Welcome");
           }
           default: {
             return __bynkExpect((false), "tests/shop/api.bynk:24:17", 517, 522, "expect false");
@@ -165,7 +165,7 @@ async function test_a_refined_constant_crosses_the_context_s_rebrand() {
         switch (__d.tag) {
           case "Ok": {
             const q = __d.value;
-            return __bynkExpect((q === SmallBatch), "tests/shop/api.bynk:39:21", 811, 826, "expect q == SmallBatch");
+            return __bynkExpect((q === SmallBatch()), "tests/shop/api.bynk:39:21", 811, 826, "expect q == SmallBatch");
           }
           default: {
             return __bynkExpect((false), "tests/shop/api.bynk:40:17", 843, 848, "expect false");
