@@ -329,7 +329,7 @@ pub fn check_state_initialiser(
 
 /// Events slice 3a (#972): type-check an event field's default expression
 /// (`field: T = init`), reusing `check_static_initialiser`'s empty-pure-scope
-/// discipline. Pushes `bynk.event.bad_field_default`.
+/// discipline. Pushes `bynk.types.bad_field_default`.
 ///
 /// One admission `check_static_initialiser` doesn't cover on its own: an
 /// opaque type's `T.unsafe(lit)` is, by design (ADR 0182), a bypass of its
@@ -343,11 +343,14 @@ pub fn check_state_initialiser(
 /// actually triggers it — a deferred, surprising failure this check closes
 /// statically instead. Only `T.unsafe(lit)` on a *literal* argument is
 /// checked here (anything else already fails the static-value requirement
-/// above); a violated refinement pushes the same `bynk.event.bad_field_default`.
+/// above); a violated refinement pushes the same `bynk.types.bad_field_default`.
 #[allow(clippy::too_many_arguments)]
 pub fn check_event_field_default(
     init: &Expr,
     field_type: &TypeRef,
+    // #2607: what the default belongs to, for the message ("event field
+    // default", "record field default").
+    subject: &str,
     input: &ResolvedCommons,
     tys: &Types,
     expr_types: &mut HashMap<ExprId, TypedExpr>,
@@ -367,8 +370,8 @@ pub fn check_event_field_default(
         refs,
         hints,
         locals,
-        "bynk.event.bad_field_default",
-        "event field default",
+        "bynk.types.bad_field_default",
+        subject,
         tys,
     );
     // `T.unsafe(lit)` parses as `ExprKind::MethodCall { receiver: Ident(T),
@@ -392,10 +395,10 @@ pub fn check_event_field_default(
     {
         errors.push(
             CompileError::new(
-                "bynk.event.bad_field_default",
+                "bynk.types.bad_field_default",
                 lit_expr.span,
                 format!(
-                    "`{}.unsafe(...)` bypasses its own refinement, but an event field default \
+                    "`{}.unsafe(...)` bypasses its own refinement, but a {subject} \
                      must be a value the wire could actually carry — this literal fails `{}`",
                     type_name.name,
                     failed.name(),

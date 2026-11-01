@@ -9,10 +9,6 @@ pub(crate) fn check_type_decl(
     t: &TypeDecl,
     types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
-    // State-migrations S2 (#2224): the record is a `migrate` step's old shape,
-    // where a field default is meaningful (and validated by the agent's own
-    // check, as an event's is).
-    allows_field_defaults: bool,
     errors: &mut Vec<CompileError>,
 ) {
     match &t.body {
@@ -47,33 +43,6 @@ pub(crate) fn check_type_decl(
                             ),
                         ));
                     }
-                }
-                // Events slice 3a (#972): `= expr` on a record field is
-                // meaningful only on an `event`'s own fields (checked
-                // separately, `check_event_field_default`) — an event never
-                // reaches `check_type_decl` at all (it's a `CommonsItem::Event`,
-                // resolved through the distinct `check_type_decl_refs` path,
-                // never `CommonsItem::Type`), so any `init` seen *here* is on
-                // an ordinary record and was, until now, silently parsed and
-                // dropped (`RecordField.init` is parsed for every record body
-                // — v0.11's grammar — but nothing before this read it outside
-                // agent state's own separate `StoreField.init`).
-                if let Some(init) = f.init.as_ref().filter(|_| !allows_field_defaults) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.event.default_outside_event",
-                            init.span,
-                            format!(
-                                "a field default is only meaningful on an `event`'s field, not `{}`",
-                                f.name.name
-                            ),
-                        )
-                        .with_note(
-                            "a default exists so an older wire event missing this key can still \
-                             deserialise — an ordinary record has no wire-evolution story, so a \
-                             default here would be silently ignored",
-                        ),
-                    );
                 }
             }
         }

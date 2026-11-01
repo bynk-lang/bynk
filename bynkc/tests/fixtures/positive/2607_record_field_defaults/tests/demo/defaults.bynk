@@ -1,0 +1,66 @@
+---
+#2607: record field defaults, proved at runtime.
+---
+suite demo.defaults
+
+case "a literal that leaves fields out takes their defaults" {
+  let o = minimal()
+  expect o.name == "m"
+  expect o.count == 3
+  expect o.mode == Mode.Careful
+  expect o.retry == Times(2)
+  expect o.timeout == None
+  expect o.note == Some("default note")
+  expect o.tags == ["a"]
+  expect o.meta.length() == 0
+  expect o.seen.length() == 0
+  expect o.inner == Inner { a: 7, label: "inner" }
+}
+
+case "a written field keeps its value" {
+  let o = Options { name: "w", count: 9, mode: Fast, note: None }
+  expect o.count == 9
+  expect o.mode == Mode.Fast
+  expect o.note == None
+  expect o.retry == Times(2)
+}
+
+case "a nested default fills its own defaulted field" {
+  expect Inner { a: 1 }.label == "inner"
+}
+
+case "a spread takes unwritten fields from its base, not the default" {
+  let base = Options { name: "b", count: 5 }
+  let o = Options { ...base, name: "s" }
+  expect o.count == 5
+  expect o.name == "s"
+}
+
+case "a body with no key for a defaulted field decodes to the default" {
+  let o = decoded("{\"name\":\"j\"}")
+  expect o.name == "j"
+  expect o.count == 3
+  expect o.retry == Times(2)
+  expect o.note == Some("default note")
+  expect o.inner == Inner { a: 7, label: "inner" }
+}
+
+case "a present key decodes as sent, null included" {
+  let o = decoded("{\"name\":\"j\",\"count\":4,\"note\":null}")
+  expect o.count == 4
+  expect o.note == None
+}
+
+case "a body missing a field with no default is still rejected" {
+  expect decoded("{\"count\":1}").count == -1
+}
+
+case "a generic record's defaults hold at an instantiation" {
+  let built: Page[Int] = Page { note: "p" }
+  expect built.items == []
+  expect built.next == None
+  let p = decodedPage("{\"items\":[1,2]}")
+  expect p.items == [1, 2]
+  expect p.note == ""
+  expect p.next == None
+}

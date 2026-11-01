@@ -1022,14 +1022,22 @@ fn record_field_names(
                 && let TypeBody::Record(r) = &t.body
             {
                 found = true;
-                for f in &r.fields {
+                // #2607: the fields a literal must give come first; a field
+                // with a default follows, its default in the detail, since a
+                // literal may leave it out.
+                let (required, defaulted): (Vec<_>, Vec<_>) =
+                    r.fields.iter().partition(|f| f.init.is_none());
+                for f in required.into_iter().chain(defaulted) {
+                    let detail = match &f.init {
+                        Some(init) => format!(
+                            "field of `{name}`, default `{}`",
+                            bynk_fmt::expr_to_string(init)
+                        ),
+                        None => format!("field of `{name}`"),
+                    };
                     out.push(
-                        Completion::item(
-                            f.name.name.clone(),
-                            CompletionKind::Field,
-                            Some(format!("field of `{name}`")),
-                        )
-                        .with_doc(f.documentation.as_deref()),
+                        Completion::item(f.name.name.clone(), CompletionKind::Field, Some(detail))
+                            .with_doc(f.documentation.as_deref()),
                     );
                 }
                 return;
@@ -3124,6 +3132,21 @@ mod tests {
         assert!(record_construction_receiver("  let o = Order { id: ").is_none());
         // A lowercase brace context (a block) is not a construction.
         assert!(record_construction_receiver("  if x { ").is_none());
+    }
+
+    #[test]
+    fn record_construction_lists_defaulted_fields_last_with_their_default() {
+        // #2607: a literal may leave a defaulted field out, so the fields it must
+        // give come first.
+        let doc = "commons m\n\ntype Opts = { retries: Int = 3, name: String }\n";
+        let fields = record_field_names("Opts", doc, None);
+        let names: Vec<&str> = fields.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(names, ["name", "retries"], "{names:?}");
+        assert_eq!(fields[0].detail.as_deref(), Some("field of `Opts`"));
+        assert_eq!(
+            fields[1].detail.as_deref(),
+            Some("field of `Opts`, default `3`")
+        );
     }
 
     #[test]

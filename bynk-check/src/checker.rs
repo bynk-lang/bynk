@@ -920,6 +920,112 @@ pub fn certify(
 
 // ==== Entry points ====
 
+/// #2607 (Decisions B and I): validate each default a record type's fields
+/// declare (`field: T = expr`). It must be a static value of the field's type,
+/// the rule an event field's default follows, and it must have a wire form,
+/// since a body that lacks the key decodes to it. In a generic record, a
+/// default must hold for every instantiation: a field whose type is a bare
+/// type parameter has none.
+#[allow(clippy::too_many_arguments)]
+fn check_record_field_defaults(
+    t: &TypeDecl,
+    input: &ResolvedCommons,
+    tys: &Types,
+    expr_types: &mut HashMap<ExprId, TypedExpr>,
+    callees: &mut HashMap<ExprId, Callee>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+) {
+    let TypeBody::Record(r) = &t.body else {
+        return;
+    };
+    for field in &r.fields {
+        let Some(init) = &field.init else {
+            continue;
+        };
+        if let TypeRef::Named(id) = &field.type_ref
+            && t.type_params.iter().any(|p| p.name.name == id.name)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.bad_field_default",
+                    init.span,
+                    format!(
+                        "field `{}` has the type parameter `{}`, so it cannot have a default",
+                        field.name.name, id.name
+                    ),
+                )
+                .with_note(
+                    "no single value has every type; a default must hold for every \
+                     instantiation of the record, as `None`, `[]` or `Map.empty()` do",
+                ),
+            );
+            continue;
+        }
+        let before = errors.len();
+        check_event_field_default(
+            init,
+            &field.type_ref,
+            "record field default",
+            input,
+            tys,
+            expr_types,
+            callees,
+            errors,
+            refs,
+            hints,
+            locals,
+        );
+        if errors.len() > before {
+            continue;
+        }
+        if let Err(reason) =
+            crate::wire_default::lower_field_default_wire(init, &field.type_ref, &input.types)
+        {
+            // A default that reaches a type parameter (`Option[T] = Some(1)`)
+            // holds for one instantiation at most.
+            if let Some(p) = t
+                .type_params
+                .iter()
+                .find(|p| reason == format!("cannot resolve type `{}`", p.name.name))
+            {
+                errors.push(
+                    CompileError::new(
+                        "bynk.types.bad_field_default",
+                        init.span,
+                        format!(
+                            "field `{}`'s default does not hold for every `{}`",
+                            field.name.name, p.name.name
+                        ),
+                    )
+                    .with_note(
+                        "a generic record's default must hold for every instantiation, as \
+                         `None`, `[]` or `Map.empty()` do",
+                    ),
+                );
+                continue;
+            }
+            errors.push(
+                CompileError::new(
+                    "bynk.types.bad_field_default",
+                    init.span,
+                    format!(
+                        "field `{}`'s default cannot be represented on the wire: {reason}",
+                        field.name.name
+                    ),
+                )
+                .with_note(
+                    "a body without this field decodes to its default, so the default needs a \
+                     wire form: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, a \
+                     list literal, or `Map.empty()`/`Set.empty()`",
+                ),
+            );
+        }
+    }
+}
+
 /// #1688: clear the cache of generic functions' compared type parameters.
 /// A project check calls this once before its per-unit loop; a single-file
 /// [`check`] calls it itself.
@@ -999,13 +1105,23 @@ pub fn check_record_in(
         .collect();
     for item in &input.commons.items {
         if let CommonsItem::Type(t) = item {
-            check_type_decl(
-                t,
-                &input.types,
-                &ty_intern,
-                migrate_old_types.contains(t.name.name.as_str()),
-                &mut errors,
-            );
+            check_type_decl(t, &input.types, &ty_intern, &mut errors);
+            // #2607: a record field's default. A `migrate` step's old shape
+            // is validated by its agent's own check, against the types the
+            // agent sees, so it is skipped here rather than reported twice.
+            if !migrate_old_types.contains(t.name.name.as_str()) {
+                check_record_field_defaults(
+                    t,
+                    &input,
+                    &ty_intern,
+                    &mut expr_types,
+                    &mut callees,
+                    &mut errors,
+                    refs,
+                    hints,
+                    locals,
+                );
+            }
         }
     }
 

@@ -1,0 +1,7 @@
+---
+#2607 (Decision I): a generic record's default must hold for every
+instantiation, so a field whose type is the parameter itself has none.
+---
+context demo.page
+
+type Page[T] = { first: T = 0, note: String = "" }

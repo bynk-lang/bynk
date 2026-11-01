@@ -42,7 +42,12 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   one-line `--- text` docs ([#1888](https://github.com/bynk-lang/bynk/issues/1888),
   [#2203](https://github.com/bynk-lang/bynk/issues/2203)) is an end-of-line doc
   for a member, if the doc-above form proves too tall for short records; today a
-  `---` after code is three `-` operators.
+  `---` after code is three `-` operators. Record field defaults
+  ([#2607](https://github.com/bynk-lang/bynk/issues/2607)) name three possible
+  follow-ups: the agent schema lock counting a defaulted nested field as an
+  additive change, as the event registry does; a service contract hash that
+  ignores an added defaulted field; and defaults on a field whose type applies a
+  user generic.
 - **Events.** Slices 0–2, 3a–3c, and 4 have shipped — `event` declarations,
   `given Events` emission with owner-only enforcement, `from Events(E)`
   subscription across contexts on every platform, structural pattern

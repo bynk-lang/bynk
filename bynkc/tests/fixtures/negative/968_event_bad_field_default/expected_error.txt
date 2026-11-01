@@ -1,1 +1,1 @@
-bynk.event.bad_field_default
+bynk.types.bad_field_default

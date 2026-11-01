@@ -115,7 +115,8 @@ export const Redirect = {
  * response body included; when it elapses the result is `Err(Timeout)`. A
  * timeout of zero or less, or over 2,147,483,647 ms (about 24 days, the
  * longest a platform timer takes), faults the call, with nothing sent. `None` waits as
- * long as the platform does.
+ * long as the platform does. Each field defaults to what `send` does, so
+ * `FetchOptions {}` is `send`.
  */
 export interface FetchOptions {
   readonly timeout: Option<number>;
@@ -435,10 +436,12 @@ export function __deserialise_FetchOptions(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_timeout = __deserialise_Option_Duration(obj["timeout"], `${path}.timeout`);
+  const __d_timeout: __JsonValue = "timeout" in obj ? obj["timeout"] : { kind: "None" };
+  const __r_timeout = __deserialise_Option_Duration(__d_timeout, `${path}.timeout`);
   if (__r_timeout.tag === "Err") return __r_timeout;
   const __timeout = __r_timeout.value;
-  const __r_redirect = __deserialise_Redirect(obj["redirect"], `${path}.redirect`);
+  const __d_redirect: __JsonValue = "redirect" in obj ? obj["redirect"] : { kind: "Follow" };
+  const __r_redirect = __deserialise_Redirect(__d_redirect, `${path}.redirect`);
   if (__r_redirect.tag === "Err") return __r_redirect;
   const __redirect = __r_redirect.value;
   return Ok({ timeout: __timeout, redirect: __redirect } as FetchOptions);

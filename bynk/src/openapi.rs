@@ -955,11 +955,25 @@ impl Renderer<'_> {
             WireInst::RecordInst { name, args } => {
                 let n = self.names.of(self.unit, key);
                 if let Some(fields) = wire::record_inst_fields(name, args, self.types) {
+                    // #2607 (Decision I): a defaulted field of a generic record
+                    // is optional at every instantiation, as in a plain one.
+                    let defaulted: std::collections::HashSet<&str> =
+                        match self.types.get(name.as_str()).map(|d| &d.body) {
+                            Some(bynk_syntax::ast::TypeBody::Record(r)) => r
+                                .fields
+                                .iter()
+                                .filter(|f| f.init.is_some())
+                                .map(|f| f.name.name.as_str())
+                                .collect(),
+                            _ => std::collections::HashSet::new(),
+                        };
                     let mut props = Map::new();
                     let mut required = Vec::new();
                     for (fname, ty) in &fields {
                         props.insert(fname.clone(), self.ref_schema(components, &shape(ty)));
-                        required.push(json!(fname));
+                        if !defaulted.contains(fname.as_str()) {
+                            required.push(json!(fname));
+                        }
                     }
                     components.put(
                         n.clone(),

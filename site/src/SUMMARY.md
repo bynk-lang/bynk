@@ -35,6 +35,7 @@
   - [Program structure](guides/program-structure/index.md)
     - [How a Bynk program is shaped](guides/program-structure/how-a-program-is-shaped.md)
     - [Consume another context's services](guides/program-structure/consume-services.md)
+    - [Add an option without breaking callers](guides/program-structure/add-an-option.md)
     - [Document your code](guides/program-structure/document-your-code.md)
   - [Effects & capabilities](guides/effects-and-capabilities/index.md)
     - [Understand the capability model](guides/effects-and-capabilities/understand-the-capability-model.md)

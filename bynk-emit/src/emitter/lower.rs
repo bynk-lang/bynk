@@ -6171,27 +6171,61 @@ fn lower_record_construction(
     cx: &mut LowerCtx,
 ) -> Lowered {
     let mut pre = Pre::new();
-    let mut parts = Vec::new();
+    // Each entry is `(key, value)`; a `None` value is a shorthand `{ x }` whose
+    // binding kept its name, written as the bare key.
+    let mut entries: Vec<(String, Option<String>)> = Vec::new();
     for f in fields {
         match &f.value {
             Some(v) => {
                 let val = pre.lower(v, cx);
-                parts.push(format!("{}: {}", f.name.name, val));
+                entries.push((f.name.name.clone(), Some(val)));
             }
             None => {
                 // Shorthand `{ x }` references the binding `x`; if the binding
                 // was renamed (a reserved word), expand to `x: __id_x` — the
                 // key is wire format and must keep the source spelling.
                 let v = ts_ident(&f.name.name);
-                if v == f.name.name {
-                    parts.push(f.name.name.clone());
-                } else {
-                    parts.push(format!("{}: {v}", f.name.name));
-                }
+                let renamed = (v != f.name.name).then_some(v);
+                entries.push((f.name.name.clone(), renamed));
             }
         }
     }
-    let _ = type_name;
+    // #2607 (Decision C): each declared field the literal leaves out takes its
+    // default, written as a self-contained value (`lower_field_default_value`)
+    // so it needs nothing imported into this module. The checker has already
+    // required every field without a default, and rejected any default that
+    // has no such value.
+    let types = &cx.commons().types;
+    if let Some(decl) = types.get(&type_name.name)
+        && let TypeBody::Record(r) = &decl.body
+    {
+        for declared in &r.fields {
+            let Some(init) = &declared.init else {
+                continue;
+            };
+            if fields.iter().any(|f| f.name.name == declared.name.name) {
+                continue;
+            }
+            match bynk_check::wire_default::lower_field_default_value(
+                init,
+                &declared.type_ref,
+                types,
+            ) {
+                Ok(v) => entries.push((declared.name.name.clone(), Some(v))),
+                Err(reason) => unreachable!(
+                    "field `{}`'s default passed the checker but has no value: {reason}",
+                    declared.name.name
+                ),
+            }
+        }
+    }
+    let parts: Vec<String> = entries
+        .into_iter()
+        .map(|(key, value)| match value {
+            Some(v) => format!("{key}: {v}"),
+            None => key,
+        })
+        .collect();
     pre.finish(format!("{{ {} }}", parts.join(", ")))
 }
 

@@ -152,8 +152,8 @@ call MUST supply the right number of arguments (`bynk.resolve.arity_mismatch`,
 `bynk.types.method_arity`). A returned value MUST match the declared return type
 (`bynk.types.return_mismatch`); a `let` value MUST match any annotation
 (`bynk.types.let_annotation_mismatch`); a record field MUST be given a value of
-its type (`bynk.types.field_value_mismatch`), and every required field MUST be
-supplied (`bynk.resolve.missing_field`).
+its type (`bynk.types.field_value_mismatch`), and every field without a default
+([§5.2b](#field-defaults)) MUST be supplied (`bynk.resolve.missing_field`).
 
 An `if` condition MUST be a `Bool` and both branches MUST **join** to a common
 type — their least upper bound, so a refined type and its base (or two refined
@@ -518,6 +518,44 @@ stripped before the value is parsed, so `1_000` and `1000` denote the same value
 As with `Float` literals, the **as-written lexeme is preserved**, so `bynkc fmt`
 keeps the author's grouping verbatim.
 
+### §5.2b Record field defaults {#field-defaults}
+
+A field of a record type (`type R = { … }`) or of an `event` MAY declare a
+**default**, `field: T = expr`. A sum variant's payload field MUST NOT
+(`bynk.types.field_default_on_variant`): a variant is built like a call, with
+every payload field given.
+
+**What a default may be.** `expr` MUST be a static, wire-representable value of
+`T` (`bynk.types.bad_field_default`): a literal admitted to `T`, a sum variant,
+`Some`/`None`/`Ok`/`Err`, a record literal, a list literal, `Map.empty()` or
+`Set.empty()`, or `T.unsafe(lit)` for an opaque `T` whose literal satisfies its
+refinement. It is evaluated in an empty scope, so it MUST NOT name `self`, a
+parameter, a binding, a capability or a function (ADR 0004's static set). A field
+whose type has no wire form (a function, a held resource) has no default.
+
+**Generic records.** A default MUST hold for every instantiation of the record. A
+field whose type is a bare type parameter has none, and neither does a default
+that reaches one (`Option[T] = Some(1)`); `Option[T] = None`, `List[T] = []`,
+`Map.empty()`, `Set.empty()` and a concrete field's default do. A field whose type
+applies a user generic record or sum (`Page[T]`, `Page[Int]`) has no default.
+
+**Where a default applies.** In exactly two places:
+- **A record literal** that leaves a defaulted field out takes the field's
+  default, as if it were written. A literal that writes the field keeps its own
+  value. A spread (`R { ...base, f: v }`) takes every unwritten field from `base`,
+  never from a default. A record literal written *as* a default may itself leave
+  out a defaulted field of its own type.
+- **A decode** (an HTTP body, a queue message, a service call, an event,
+  `Json.decode`, agent-state rehydration) of a body with no key for a defaulted
+  field takes the default. A present key decodes as sent: `null` or an explicit
+  `None` at an `Option` field is `None`, not the default.
+
+Everywhere else a value is complete: field access, equality and encoding never
+see a missing field. A default is part of a type's source contract, not its wire
+contract hash ([wire format](/book/reference/wire-format/)): adding a field changes
+the hash whether or not it has a default, and changing only a default's value does
+not.
+
 ## §5.3 Refinement & admission
 
 A refinement's predicates MUST apply to the type's base — a string predicate on
@@ -748,7 +786,9 @@ by-convention (no coercion, no silent drop).
 **Additive evolution is automatic:** a `store` field absent from the stored record
 (added in a later deploy) takes its zero/initialiser
 ([§5.4](/book/spec/static-semantics/#54-agents--state)) instead of reading as absent,
-and is not decoded. A stored key the current definition does not declare (a renamed
+and is not decoded. Inside a stored value, a record field with a default
+([§5.2b](#field-defaults)) that the stored record lacks decodes to its default.
+A stored key the current definition does not declare (a renamed
 or removed field) is carried through unchanged and written back, never silently
 dropped. A value that has no wire form, such as a non-finite `Float`, cannot be
 stored: the commit faults and nothing persists.
@@ -1440,13 +1480,10 @@ whether, or how, a subscriber ran.
 **Declaration.** An `event` ([§4.1.12](/book/spec/syntactic-grammar/#4112-event_decl))
 MUST be declared in a context (`bynk.event.outside_context`). Its one admitted
 annotation is `@schema(N)` (`bynk.event.unknown_annotation`), at most once, with
-`N` a single positive `Int` literal (`bynk.event.bad_schema_version`). A field
-default (`field: T = expr`) is admitted only on an event's own fields
-(`bynk.event.default_outside_event`), and `expr` MUST be a static,
-wire-representable value of `T`: a literal admitted to `T`, a sum variant,
-`Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque `T`
-(`bynk.event.bad_field_default`). A default is used when a received payload has
-no key for the field; a present key, `None` included, decodes as sent.
+`N` a single positive `Int` literal (`bynk.event.bad_schema_version`). An event's
+fields MAY declare defaults under the record rule ([§5.2b](#field-defaults)): a
+received payload with no key for a defaulted field takes the default, and the
+schema registry counts a field added with a default as an additive change.
 
 **Emission.** `Events` is a first-party capability of the `bynk` adapter,
 `emit[E](event: E) -> Effect[()]`, consumed with `consumes bynk { Events }` and
