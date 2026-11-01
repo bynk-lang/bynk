@@ -63,6 +63,10 @@ module.exports = grammar({
     // parenthesised expression (and `()` the unit literal) until the
     // closing `)` is followed — or not — by `=>`.
     [$.lambda_param, $._primary],
+    // #2712: `(T { f, …` opens a record construction or a record-pattern lambda
+    // parameter; the pattern's mandatory `..` (never an expression) settles it.
+    [$.field_init, $._lambda_record_field],
+    [$._primary, $._lambda_field_binding],
     [$._primary, $.lambda_expr],
     // v0.145: a match-arm `if`-guard is an `_expression` immediately followed by
     // the arm's `=>`. When the guard opens with `(`, one token can't tell a unit
@@ -1940,11 +1944,44 @@ module.exports = grammar({
         field("body", choice($._expression, $.block)),
       ),
 
+    // #2712 (patterns track, slice 6): a parameter is a name with an optional
+    // annotation, or an unannotated record pattern whose fields are bindings.
     lambda_param: ($) =>
-      seq(
-        field("name", choice($.identifier, $._contextual_identifier)),
-        optional(seq(":", field("type", $._type_ref))),
+      choice(
+        seq(
+          field("name", choice($.identifier, $._contextual_identifier)),
+          optional(seq(":", field("type", $._type_ref))),
+        ),
+        field("pattern", alias($._lambda_record_pattern, $.record_pattern)),
       ),
+    // The irrefutable subset a lambda parameter admits: each field is a bare
+    // name, `name: binding`, `name: _`, or a nested such pattern. (A bare
+    // capitalised name is a variant, a refutable pattern the compiler reports.)
+    _lambda_record_pattern: ($) =>
+      seq(
+        field("type", $.identifier),
+        "{",
+        repeat(seq(alias($._lambda_record_field, $.record_pattern_field), ",")),
+        "..",
+        "}",
+      ),
+    _lambda_record_field: ($) =>
+      choice(
+        seq(
+          field("name", $.identifier),
+          ":",
+          field(
+            "pattern",
+            choice(
+              $._lambda_field_binding,
+              $.wildcard_pattern,
+              alias($._lambda_record_pattern, $.record_pattern),
+            ),
+          ),
+        ),
+        field("name", $.identifier),
+      ),
+    _lambda_field_binding: ($) => $.identifier,
 
     paren_expr: ($) => seq("(", $._expression, ")"),
 

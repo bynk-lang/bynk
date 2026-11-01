@@ -1319,6 +1319,25 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
 /// a lambda may close over and call a `given` capability (ADR 0033). The
 /// frame swap forbids `commit` inside a lambda (`agent_state_ty = None` →
 /// the existing `bynk.commit.outside_agent`).
+/// #2712: whether a record-pattern lambda parameter names a generic type, so its
+/// parameter type cannot come from the name alone.
+fn pattern_param_is_generic(type_name: &Ident, ctx: &Ctx) -> bool {
+    ctx.input
+        .types
+        .get(&type_name.name)
+        .is_some_and(|d| !d.type_params.is_empty())
+}
+
+/// #2712: whether a lambda parameter's type is stated in the source — an
+/// annotation, or a record pattern naming a non-generic type. Such a lambda
+/// grounds a generic call's type variables itself.
+pub(crate) fn lambda_param_is_typed(p: &LambdaParam, ctx: &Ctx) -> bool {
+    match &p.pattern {
+        Some(Pattern::Record { type_name, .. }) => !pattern_param_is_generic(type_name, ctx),
+        _ => p.type_ref.is_some(),
+    }
+}
+
 pub(crate) fn check_lambda(
     lambda: &LambdaExpr,
     expected: Option<TyId>,
@@ -1369,7 +1388,7 @@ pub(crate) fn check_lambda(
                 None => {
                     // v0.27 (ADR 0056): a param typed from the expected fn
                     // type gets an inferred-type inlay hint at its name.
-                    if p.name.name != "_" {
+                    if p.name.name != "_" && p.pattern.is_none() {
                         ctx.hints
                             .record(p.name.span, format!(": {}", ep.display(tys)));
                     }
@@ -1387,6 +1406,33 @@ pub(crate) fn check_lambda(
                     // #712: report an unknown annotation type instead of the
                     // bare `?` silently dropping the lambda in a handler body.
                     let ty = resolve_expr_type_ref(tr, ctx)?;
+                    scope.insert(p.name.name.clone(), ty);
+                    param_tys.push(ty);
+                }
+                // #2712: a record-pattern parameter takes its type from the
+                // record it names — as if annotated — unless the record is
+                // generic, whose type arguments only an expected function type
+                // can supply (a pattern never writes them).
+                None if p.pattern.is_some() => {
+                    let Some(Pattern::Record { type_name, .. }) = &p.pattern else {
+                        unreachable!("a pattern parameter is a record pattern");
+                    };
+                    if pattern_param_is_generic(type_name, ctx) {
+                        ctx.errors.push(
+                            CompileError::new(
+                                "bynk.lambda.unannotated_param",
+                                p.span,
+                                format!(
+                                    "lambda parameter pattern `{} {{ .. }}` needs its type arguments — no function type is expected here to infer them from",
+                                    type_name.name
+                                ),
+                            )
+                            .with_note(format!("`{}` is generic; pass the lambda where a function type is expected, or take an annotated name and destructure it with `let` in the body", type_name.name)),
+                        );
+                        missing = true;
+                        continue;
+                    }
+                    let ty = resolve_expr_type_ref(&TypeRef::Named(type_name.clone()), ctx)?;
                     scope.insert(p.name.name.clone(), ty);
                     param_tys.push(ty);
                 }
@@ -1413,7 +1459,9 @@ pub(crate) fn check_lambda(
 
     // v0.31: lambda parameters are in scope over the lambda body.
     for (p, ty) in lambda.params.iter().zip(&param_tys) {
-        if p.name.name != "_" {
+        // #2712: a pattern parameter's hidden binder is not the author's name;
+        // the names its pattern binds are recorded by the desugared `let`.
+        if p.name.name != "_" && p.pattern.is_none() {
             ctx.locals.record(
                 p.name.name.clone(),
                 p.name.span,

@@ -1108,3 +1108,19 @@ names are in scope for the rest of the block. An `else` on a pattern that cannot
 fail is `bynk.types.unreachable_arm`, and the editor offers to remove it. See
 [Destructure a record with `let`](/book/guides/type-system/destructure-a-record-with-let/).
 
+A lambda parameter may be an irrefutable record pattern too (#2712):
+
+```bynk,fragment
+let skus = items.map((Item { sku, .. }) => sku)
+let total = items.fold(0, (sum, Item { qty, price, .. }) => sum + qty * price)
+let vips = orders.filter((Order { customer: Customer { vip, .. }, .. }) => vip)
+```
+
+It takes the place of a name, mixes freely with name parameters, and binds its
+names in the lambda body. The pattern must be irrefutable
+(`bynk.parse.lambda_pattern_refutable` names the field that can fail), must be a
+record pattern (`bynk.parse.lambda_pattern_not_record`) and takes no annotation
+(`bynk.parse.lambda_pattern_annotation`; the editor offers to remove it). A
+generic record takes its type arguments from the expected function type. Function,
+method and handler parameters stay plain names.
+

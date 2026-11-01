@@ -7053,12 +7053,21 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
         Some(bynk_check::checker::Ty::Fn { ret, .. }) if ret.is_effect(tys)
     );
     let prefix = if is_async { "async " } else { "" };
+    // #2712: a record-pattern parameter has no annotation to print; its type is
+    // the checked function type's, so a lambda with nothing to type it from
+    // (held in a `let`) still compiles under `tsc --strict`.
+    let fn_params = match cx.commons().expr_ty(e.id).as_deref() {
+        Some(bynk_check::checker::Ty::Fn { params, .. }) => params.clone(),
+        _ => Vec::new(),
+    };
     let params: Vec<String> = lambda
         .params
         .iter()
-        .map(|p| match &p.type_ref {
-            Some(tr) => format!("{}: {}", ts_ident(&p.name.name), ts_type_ref(tr)),
-            None => ts_ident(&p.name.name),
+        .enumerate()
+        .map(|(i, p)| match (&p.type_ref, &p.pattern, fn_params.get(i)) {
+            (Some(tr), _, _) => format!("{}: {}", ts_ident(&p.name.name), ts_type_ref(tr)),
+            (None, Some(_), Some(ty)) => format!("{}: {}", ts_ident(&p.name.name), ts_ty(*ty, tys)),
+            _ => ts_ident(&p.name.name),
         })
         .collect();
     let params = params.join(", ");

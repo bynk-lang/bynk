@@ -3252,6 +3252,134 @@ mod tests {
         errs.iter().any(|e| e.category == code)
     }
 
+    // ---- #2712: record patterns as lambda parameters ----
+
+    fn lambda_of(body: &str) -> LambdaExpr {
+        let b = body_block(body);
+        let ExprKind::Lambda(l) = &b.tail.kind else {
+            panic!("expected a lambda tail, got {:?}", b.tail.kind);
+        };
+        l.clone()
+    }
+
+    #[test]
+    fn a_record_pattern_parameter_desugars_to_a_hidden_binder_and_a_let() {
+        // `(P) => body` is `(__lambdaArg) => { let P = __lambdaArg; body }`.
+        let l = lambda_of("(Item { qty, .. }) => qty");
+        assert_eq!(l.params.len(), 1);
+        let p = &l.params[0];
+        assert!(p.name.name.starts_with(LAMBDA_ARG_BINDER_PREFIX));
+        assert!(is_generated_binding(&p.name.name));
+        assert_eq!(
+            p.name.span.start, p.name.span.end,
+            "the binder has no extent"
+        );
+        assert!(p.type_ref.is_none());
+        assert!(matches!(p.pattern, Some(Pattern::Record { .. })));
+        assert!(!l.block_body);
+        let ExprKind::Block(b) = &l.body.kind else {
+            panic!("expected a block body, got {:?}", l.body.kind);
+        };
+        let Statement::Let(hidden) = &b.statements[0] else {
+            panic!("expected the hidden `let`, got {:?}", b.statements[0]);
+        };
+        assert_eq!(
+            hidden.let_else.as_ref().map(|le| le.form),
+            Some(LetElseForm::Plain)
+        );
+        assert!(b.tail.is_let_else_match());
+        assert!(
+            matches!(&hidden.value.kind, ExprKind::Ident(i) if i.name == p.name.name),
+            "the `let` destructures the hidden parameter"
+        );
+    }
+
+    #[test]
+    fn name_and_pattern_parameters_mix_and_each_binder_is_distinct() {
+        let l = lambda_of("(a, Item { qty, .. }, b: Int, Box { v, .. }) => a");
+        let names: Vec<_> = l.params.iter().map(|p| p.name.name.as_str()).collect();
+        assert_eq!(names[0], "a");
+        assert_eq!(names[2], "b");
+        assert!(names[1].starts_with(LAMBDA_ARG_BINDER_PREFIX));
+        assert!(names[3].starts_with(LAMBDA_ARG_BINDER_PREFIX));
+        assert_ne!(names[1], names[3]);
+        assert!(l.params[0].pattern.is_none() && l.params[2].type_ref.is_some());
+        // The first pattern's `let` is outermost, the second's inside its arm.
+        let ExprKind::Block(outer) = &l.body.kind else {
+            panic!("expected a block body");
+        };
+        let ExprKind::Match { arms, .. } = &outer.tail.kind else {
+            panic!("expected the first pattern's match");
+        };
+        let MatchBody::Block(inner) = &arms[0].body else {
+            panic!("expected the arm's block");
+        };
+        assert!(inner.tail.is_let_else_match(), "the second pattern nests");
+    }
+
+    #[test]
+    fn a_block_body_is_kept_as_the_pattern_arms_block() {
+        let l = lambda_of("(Item { qty, .. }) => { let x = qty\n  x }");
+        assert!(l.block_body);
+    }
+
+    #[test]
+    fn a_lambda_without_pattern_parameters_is_unchanged() {
+        let l = lambda_of("(a, b: Int) => a");
+        assert!(l.params.iter().all(|p| p.pattern.is_none()));
+        assert!(matches!(l.body.kind, ExprKind::Ident(_)));
+    }
+
+    #[test]
+    fn a_lambda_pattern_parameter_that_is_refutable_names_its_first_failing_field() {
+        let errs = body_err("(Item { status: Paid, qty, .. }) => qty");
+        assert_eq!(errs[0].category, "bynk.parse.lambda_pattern_refutable");
+        assert!(
+            errs[0].notes.iter().any(|n| n.contains("status: Paid")),
+            "{:?}",
+            errs[0].notes
+        );
+    }
+
+    #[test]
+    fn a_lambda_pattern_parameter_must_be_a_record_pattern() {
+        for body in [
+            "(Some(x)) => x",
+            "(a, [x, ..]) => x",
+            "(0..9) => 1",
+            "(1) => 1",
+            "(None) => 1",
+            "(Status.Paid) => 1",
+        ] {
+            let errs = body_err(body);
+            assert_eq!(
+                errs[0].category, "bynk.parse.lambda_pattern_not_record",
+                "{body}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_annotated_lambda_pattern_parameter_offers_to_remove_the_annotation() {
+        let body = "(Item { qty, .. }: Item) => qty";
+        let errs = body_err(body);
+        assert_eq!(errs[0].category, "bynk.parse.lambda_pattern_annotation");
+        let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
+        let fixed = apply_fix(&src, &errs[0]);
+        assert!(fixed.contains("(Item { qty, .. }) => qty"), "{fixed}");
+        parse_str(&fixed).unwrap_or_else(|e| panic!("fixed to {fixed:?}: {e:?}"));
+    }
+
+    #[test]
+    fn a_missing_rest_in_a_lambda_pattern_parameter_has_slice_ones_fix() {
+        let body = "(a, Item { qty }) => qty";
+        let errs = body_err(body);
+        assert_eq!(errs[0].category, "bynk.parse.record_pattern_without_rest");
+        let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
+        let fixed = apply_fix(&src, &errs[0]);
+        parse_str(&fixed).unwrap_or_else(|e| panic!("fixed to {fixed:?}: {e:?}"));
+    }
+
     #[test]
     fn let_else_desugars_to_a_hidden_binding_and_a_match() {
         // #2010: `let P = e else E; rest` is `let __v = e` then

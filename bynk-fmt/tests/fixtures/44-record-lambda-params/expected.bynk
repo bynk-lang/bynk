@@ -1,0 +1,52 @@
+commons shop.orders {
+	type Customer = {
+		name: String,
+		vip: Bool,
+	}
+
+	type Item = {
+		sku: String,
+		qty: Int,
+		price: Int,
+	}
+
+	type Order = {
+		id: String,
+		customer: Customer,
+		total: Int,
+	}
+
+	fn skus(items: List[Item]) -> List[String] {
+		items.map((Item { sku, .. }) => sku)
+	}
+
+	fn total(items: List[Item]) -> Int {
+		items.fold(0, (sum, Item { qty, price: p, .. }) => sum + qty * p)
+	}
+
+	fn nested(os: List[Order]) -> List[String] {
+		os
+			.filter((Order { customer: Customer { vip, .. }, .. }) => vip)
+			.map((Order { id: name, total: _, .. }) => name)
+	}
+
+	fn block(items: List[Item]) -> List[Int] {
+		items.map((Item { qty, price, .. }) => {
+			// the line total
+			let t = qty * price
+			t
+		})
+	}
+
+	fn both[A, B](a: A, b: B, f: (A, B) -> Int) -> Int {
+		f(a, b)
+	}
+
+	fn two(a: Item, b: Order) -> Int {
+		both(a, b, (Item { qty, .. }, Order { total, .. }) => qty + total)
+	}
+
+	fn annotated(items: List[Item]) -> Int {
+		items.fold(0, (acc: Int, Item { qty, .. }) => acc + qty)
+	}
+}

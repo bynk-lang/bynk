@@ -165,7 +165,9 @@ unary_expr ::= ("!" | "-") expression
 primary ::= lambda_expr | paren_expr | method_call | field_access | call | record_construction | record_spread | question_expr | ok_expr | err_expr | some_expr | none_expr | effect_pure_expr | val_expr | wire_expr | trace_expr | list_literal | block | number_literal | float_literal | string_literal | boolean_literal | unit_literal | self_expr | identifier | contextual_identifier
 contextual_identifier ::= "trace" | "advance" | "par"
 lambda_expr ::= "(" (lambda_param ("," lambda_param)*)? ")" "=>" (expression | block)
-lambda_param ::= (identifier | contextual_identifier) (":" type_ref)?
+lambda_param ::= (identifier | contextual_identifier) (":" type_ref)? | lambda_record_pattern
+lambda_record_pattern ::= identifier "{" (lambda_record_field ",")* ".." "}"
+lambda_record_field ::= identifier ":" (identifier | wildcard_pattern | lambda_record_pattern) | identifier
 paren_expr ::= "(" expression ")"
 method_call ::= primary "." identifier ("[" type_ref ("," type_ref)* "]")? "(" (expression ("," expression)*)? ","? ")"
 field_access ::= primary "." identifier

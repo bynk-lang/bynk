@@ -229,6 +229,19 @@ wrapping its result in `Effect` — effectfulness is judged by the *presence*
 of effect operations, never by a pre-declared result type, which is what
 dissolves the apparent circularity. A nested lambda's effects are its own.
 
+A lambda parameter MAY be an irrefutable record pattern (#2712, patterns track
+slice 6; [§4.6.9b](/book/spec/syntactic-grammar/#469b-lambda_param)). The pattern
+counts as one parameter, so the arity rule is unchanged. Its type is the expected
+parameter type when there is an expected function type — and the pattern is then
+checked against it by the record-pattern rules below, so a pattern naming another
+type is `bynk.types.pattern_type_mismatch` at the pattern and a generic record
+takes its type arguments from the expectation. With no expected function type it
+is the record the pattern names, as if annotated, when that record is not
+generic; a generic one has nothing to supply its type arguments, so it is
+`bynk.lambda.unannotated_param`. Field existence, duplicate fields and
+`bynk.context.opaque_inspection` are the record pattern's own (§5.6). The names
+the pattern binds are in scope in the lambda body.
+
 **Value application** (v0.20a). Applying a function-typed value checks
 arguments against the function type's parameters
 (`bynk.types.argument_mismatch`, `bynk.types.call_arity`).
@@ -1529,6 +1542,9 @@ for `let P <- e else E`, where `v` is a name the program cannot write; for
   coverage rule above. It adds no type rule: the pattern's type checks,
   visibility (`bynk.context.opaque_inspection`) and binding scopes are those of
   the `match` arm.
+- A lambda parameter that is a record pattern (#2712) is this `else`-less `let`
+  on a hidden parameter: `(P) => body` means `(v) => { let P = v; body }`. It
+  adds no rule of its own beyond §5.2's lambda typing.
 - `<-` follows the `effect_let_stmt` rules (§5.5): the body MUST be effectful,
   and `P` matches the `Effect`'s payload.
 

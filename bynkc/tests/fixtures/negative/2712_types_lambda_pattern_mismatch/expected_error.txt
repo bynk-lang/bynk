@@ -1,0 +1,5 @@
+# A pattern parameter that does not fit the expected parameter type is one
+# `pattern_type_mismatch` at the pattern: nothing about a hidden binder, a `match`
+# or exhaustiveness follows it.
+bynk.types.pattern_type_mismatch record pattern `Item { .. }` cannot match a value of type `Other`
+bynk.types.pattern_type_mismatch record pattern `Item { .. }` cannot match a value of type `Int`

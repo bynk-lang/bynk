@@ -459,7 +459,9 @@ mod tests {
         // #2618 (private declarations) added: visibility_modifier. Net +1.
         // #2680 (list patterns) added: list_pattern and list_rest. Net +2.
         // #2699 (range patterns) added: int_range. Net +1.
-        assert_eq!(rules.len(), 183);
+        // #2712 (lambda record-pattern parameters) added: _lambda_record_pattern and
+        // _lambda_record_field. Net +2.
+        assert_eq!(rules.len(), 185);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

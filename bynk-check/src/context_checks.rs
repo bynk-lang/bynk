@@ -266,7 +266,15 @@ fn walk_expr_for_constraints(
         // type, the match is forbidden because we can't reveal the variants.
         ExprKind::Match { discriminant, arms } => {
             let mut discriminant_reported = false;
-            if let Some(ty) = typed.expr_ty(discriminant.id).as_deref() {
+            // #2712: a `let`/lambda-parameter record pattern is a `match` on a
+            // hidden binder the author never wrote, so its opaque type is
+            // reported where they wrote it — at the pattern, below.
+            let hidden_record = matches!(&discriminant.kind, ExprKind::Ident(i) if bynk_syntax::ast::is_generated_binding(&i.name))
+                && matches!(
+                    arms.first().map(|a| &a.pattern),
+                    Some(Pattern::Record { .. })
+                );
+            if !hidden_record && let Some(ty) = typed.expr_ty(discriminant.id).as_deref() {
                 let display = ty.display(tys);
                 if let Some(ct) = consumed.get(&display)
                     && ct.visibility == Visibility::Opaque

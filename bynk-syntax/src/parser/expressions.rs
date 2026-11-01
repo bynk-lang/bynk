@@ -1327,7 +1327,7 @@ impl<'a> Parser<'a> {
     /// `Ok(Ok(…))` still overflows (#713). Folds `|` alternatives (#474), but
     /// never checks for a trailing `where` (#472) — that suffix is admitted
     /// only at a pattern's top level; see [`Parser::parse_pattern_top`].
-    fn parse_pattern(&mut self) -> Result<Pattern, CompileError> {
+    pub(super) fn parse_pattern(&mut self) -> Result<Pattern, CompileError> {
         self.enter_recursion("this pattern")?;
         // Every nested entry is delimited (`(…)`, a payload list, a record
         // pattern's braces), so the `is`-tail restriction does not reach it.

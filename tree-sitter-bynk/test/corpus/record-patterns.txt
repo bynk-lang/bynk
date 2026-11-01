@@ -117,3 +117,94 @@ commons d {
                 variant: (identifier))))
           value: (identifier))
         tail: (identifier)))))
+
+==========================
+record pattern — a lambda parameter, alone and after a name
+==========================
+
+commons d {
+	fn f(xs: List[Item]) -> Int {
+		xs.fold(0, (total, Item { qty, price: p, note: _, .. }) => total + qty * p)
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (generic_type_ref
+          name: (builtin_type)
+          arg: (identifier)))
+      return_type: (base_type)
+      body: (block
+        tail: (method_call
+          receiver: (identifier)
+          method: (identifier)
+          arg: (number_literal)
+          arg: (lambda_expr
+            (lambda_param
+              name: (identifier))
+            (lambda_param
+              pattern: (record_pattern
+                type: (identifier)
+                (record_pattern_field
+                  name: (identifier))
+                (record_pattern_field
+                  name: (identifier)
+                  pattern: (identifier))
+                (record_pattern_field
+                  name: (identifier)
+                  pattern: (wildcard_pattern))))
+            body: (binary_expr
+              (identifier)
+              (binary_expr
+                (identifier)
+                (identifier)))))))))
+
+==========================
+record pattern — a nested lambda parameter pattern
+==========================
+
+commons d {
+	fn f(os: List[Order]) -> List[Order] {
+		os.filter((Order { customer: Customer { vip, .. }, .. }) => vip)
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (generic_type_ref
+          name: (builtin_type)
+          arg: (identifier)))
+      return_type: (generic_type_ref
+        name: (builtin_type)
+        arg: (identifier))
+      body: (block
+        tail: (method_call
+          receiver: (identifier)
+          method: (identifier)
+          arg: (lambda_expr
+            (lambda_param
+              pattern: (record_pattern
+                type: (identifier)
+                (record_pattern_field
+                  name: (identifier)
+                  pattern: (record_pattern
+                    type: (identifier)
+                    (record_pattern_field
+                      name: (identifier))))))
+            body: (identifier)))))))

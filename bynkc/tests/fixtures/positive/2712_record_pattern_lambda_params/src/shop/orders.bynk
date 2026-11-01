@@ -1,0 +1,66 @@
+context shop.orders {
+  exports transparent { Item, Order, Customer, Box }
+
+  type Customer = { name: String, vip: Bool }
+
+  type Item = { sku: String, qty: Int, price: Int }
+
+  type Order = { id: String, customer: Customer, total: Int }
+
+  type Box[T] = { value: T, label: String }
+
+  ---
+  A pattern parameter takes the place of a name: no throwaway `item`, no `item.`.
+  ---
+  fn skus(items: List[Item]) -> List[String] {
+    items.map((Item { sku, .. }) => sku)
+  }
+
+  ---
+  Name parameters and pattern parameters mix freely.
+  ---
+  fn total(items: List[Item]) -> Int {
+    items.fold(0, (sum, Item { qty, price, .. }) => sum + qty * price)
+  }
+
+  ---
+  A renamed field, a wildcard field and a block body.
+  ---
+  fn lines(items: List[Item]) -> List[String] {
+    items.map((Item { sku, qty: n, price: _, .. }) => {
+      let doubled = n * 2
+      "\(sku) x\(doubled)"
+    })
+  }
+
+  ---
+  A nested record pattern is still irrefutable.
+  ---
+  fn vips(orders: List[Order]) -> List[String] {
+    orders
+      .filter((Order { customer: Customer { vip, .. }, .. }) => vip)
+      .map((Order { id, .. }) => id)
+  }
+
+  ---
+  A generic record's type arguments come from the expected function type.
+  ---
+  fn unboxed(boxes: List[Box[Int]]) -> List[Int] {
+    boxes.map((Box { value, .. }) => value + 1)
+  }
+
+  ---
+  Two pattern parameters in one lambda.
+  ---
+  fn pairUp(items: List[Item], orders: List[Order]) -> Int {
+    items.fold(0, (acc, Item { qty, .. }) => acc + qty + orders.fold(0, (inner, Order { total, .. }) => inner + total))
+  }
+
+  ---
+  A lambda held in a `let` takes its pattern's type from the record it names.
+  ---
+  fn held(item: Item) -> Int {
+    let cost = (Item { qty, price, .. }) => qty * price
+    cost(item)
+  }
+}
