@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk.schema.lock` now counts a record field added **with a default** inside an agent's stored state as an additive change, at any depth (a `Cell`'s record, a `Map`'s value, a `List`'s element, a `Log`'s entry), so it needs no `migrate` step: an instance stored before the field existed loads it as its default. Each stored field's lock entry gains the list of positions in its value (`paths`), which the first unchanged build after upgrading fills in; until then a change inside a value is judged as before. `bynk.agent.non_additive_state_change` now names each position that broke, such as `prefs.size added without a default`, `prefs.theme removed` or `prefs.size lost its default`. See [Changes that need no migration](/book/reference/agents/#changes-that-need-no-migration)."
----
+# 0682 — The agent schema lock records each stored value's positions, and a record field added with a default is additive
 
-## ADR: agent-schema-additive-defaulted-fields
-title: The agent schema lock records each stored value's positions, and a record field added with a default is additive
-summary: Nested defaulted additions to stored state need no migrate step; the lock gains per-position shapes
+- **Status:** Accepted (v0.466)
 
 **Context.** ADR 0676 (record field defaults, #2607) made a stored record decode
 a missing defaulted field as its default, but left the lock's rule unchanged (its

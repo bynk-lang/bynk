@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.465**.
+written against **v0.466**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.466.0** | "`bynk.schema.lock` now counts a record field added **with a default** inside an agent's stored state as an additive change, at any depth (a `Cell`'s record, a `Map`'s value, a `List`'s element, a `Log`'s entry), so it needs no `migrate` step: an instance stored before the field existed loads it as its default. Each stored field's lock entry gains the list of positions in its value (`paths`), which the first unchanged build after upgrading fills in; until then a change inside a value is judged as before. `bynk.agent.non_additive_state_change` now names each position that broke, such as `prefs.size added without a default`, `prefs.theme removed` or `prefs.size lost its default`. See [Changes that need no migration](/book/reference/agents/#changes-that-need-no-migration)." |
 | **v0.465.0** | "**Ordering your own types** (constrained-generics slice 1): `type Priority = enum { Low, Medium, High } derives Ord` opts a record, sum, enum or opaque type into an order by declaration order, and `Ord` is a bound (`fn top[T: Ord](xs: List[T])`; `Ord` implies `Eq`). `< <= > >=` accept any `Ord` type, `List` `sortBy`/`min`/`max` accept any `Ord` key, and `bynk.list` gains `sort`/`min`/`max`. **`Bytes` is now `Ord`** (unsigned lexicographic), and **`Float` keys of the ordering kernels use a total order** (`NaN` last and equal to itself, `-0` equal to `0`; the operators keep IEEE), so a `NaN` no longer makes a sort inconsistent. New diagnostics: `bynk.generics.missing_ord_bound` (machine-applicable fix), `bynk.generics.redundant_eq_bound`, `bynk.generics.ambiguous_instantiation`, `bynk.types.not_orderable`, `bynk.types.derives_field_not_orderable`, `bynk.types.derives_automatic`; a bounded generic takes hidden comparator arguments (internal, not ABI)" |
 | **v0.464.1** | "`for all` over a record draws a field with an inline `where` (`qty: Int where Positive`) from that refinement's domain, boundary value included, as it does a declared refined type; it drew over the whole base type before (#2667)" |
 | **v0.464.0** | "Precise exhaustiveness and reachability: a Maranget usefulness engine replaces the conservative coverage rules, so a multi-field variant payload or a record is exhaustive when its arms cover every case between them (no `_` needed), every uncovered case is reported as a pattern you can paste as an arm (`Pair(false, false)`, `Order { status: Cancelled, .. }`), and redundancy spread across several earlier arms is now `bynk.types.unreachable_arm` (patterns track slice 3, [#2665](https://github.com/bynk-lang/bynk/issues/2665))" |
