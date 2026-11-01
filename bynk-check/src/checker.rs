@@ -1039,7 +1039,16 @@ pub fn check_record_in(
             locals,
         );
     }
-    errors.extend(crate::consts::cycle_errors(&local_consts, &input.consts));
+    // A cycle can only run through this unit's own constants (`uses` is
+    // acyclic), so the walk follows only them and treats an imported
+    // constant as a leaf. Following an imported constant's initialiser here
+    // would resolve its names in this unit's scope, where a local constant of
+    // the same name would be taken for the one it actually names.
+    let own_consts: HashMap<String, ConstDecl> = local_consts
+        .iter()
+        .map(|c| (c.name.name.clone(), (*c).clone()))
+        .collect();
+    errors.extend(crate::consts::cycle_errors(&local_consts, &own_consts));
 
     // 2. Type-check each function and method body.
     for item in &input.commons.items {
