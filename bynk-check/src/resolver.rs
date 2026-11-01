@@ -3068,7 +3068,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     "List" | "Map" => &["empty"],
                     // K6a (#2596): `Set.empty()` and `Set.of(xs)`.
                     "Set" => &["empty", "of"],
-                    "Json" => &["encode", "decode"],
+                    // P4c (#2628): `decodeSql`, `decode` with SQLite's `0`/`1` flags.
+                    "Json" => &["encode", "decode", "decodeSql"],
                     // v0.86 (ADR 0112): `Duration.millis(n)`.
                     "Duration" => &["millis"],
                     // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)`; K3

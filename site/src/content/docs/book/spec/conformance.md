@@ -9,12 +9,12 @@ implementation MUST do in terms of that corpus and those gates.
 
 The corpus is two sets of fixtures:
 
-- the **positive** suite (≈172 fixtures) — programs that MUST compile. Each is
+- the **positive** suite (`bynkc/tests/fixtures/positive/`) — programs that MUST compile. Each is
   either single-file (an `input.bynk` compiled against an `expected.ts`) or a
   project (a `src/` tree compiled against a mirrored `expected/` tree). A
   conforming implementation MUST accept every positive fixture and emit the
   expected TypeScript.
-- the **negative** suite (≈132 fixtures) — programs that MUST be rejected. Each
+- the **negative** suite (`bynkc/tests/fixtures/negative/`) — programs that MUST be rejected. Each
   pairs an input with an `expected_error.txt` naming the diagnostic categories the
   output MUST contain. A conforming implementation MUST reject every negative
   fixture, emitting a diagnostic of the specified `bynk.*` category

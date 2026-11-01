@@ -920,6 +920,14 @@
     {
       "code": "bynk.types.regex_not_literal",
       "summary": "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time."
+    },
+    {
+      "code": "bynk.types.sql_not_literal",
+      "summary": "A `D1` statement's SQL (the first argument of `all`, `first` or `run`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c)."
+    },
+    {
+      "code": "bynk.types.sql_row_shape",
+      "summary": "`Json.decodeSql[T]`'s `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c)."
     }
   ],
   "none_expr": [
@@ -1060,6 +1068,10 @@
     {
       "code": "bynk.types.field_value_mismatch",
       "summary": "A record field was given a value of the wrong type."
+    },
+    {
+      "code": "bynk.types.sql_not_literal",
+      "summary": "A `D1` statement's SQL (the first argument of `all`, `first` or `run`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c)."
     }
   ],
   "record_field": [
@@ -1084,6 +1096,10 @@
     {
       "code": "bynk.record_spread.unknown_field",
       "summary": "A record spread overrides a field the record does not have."
+    },
+    {
+      "code": "bynk.types.sql_not_literal",
+      "summary": "A `D1` statement's SQL (the first argument of `all`, `first` or `run`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c)."
     }
   ],
   "record_type": [

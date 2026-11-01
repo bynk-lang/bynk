@@ -1296,7 +1296,7 @@ awaiting the call throws rather than returns. `faults` is contextual: outside an
 `expect` subject it is an ordinary identifier. Well-formedness — the subject is a
 call of type `Effect[_]`, and the claim is not made at the `system` tier: §5.
 
-### §4.8.9 trace_expr (v0.117)
+### §4.8.9b trace_expr (v0.117)
 
 {{#grammar trace_expr}}
 
@@ -1304,12 +1304,12 @@ call of type `Effect[_]`, and the claim is not made at the `system` tier: §5.
 operation as a `List` of per-operation call records, in call order. `trace` is an
 ordinary identifier outside a `case`. Well-formedness: §5.
 
-### §4.8.9b contextual_identifier
+### §4.8.9c contextual_identifier
 
 {{#grammar _contextual_identifier}}
 
 The contextual words `trace` and `advance` in identifier position. Each is a
-keyword only in its own shape (`trace(Cap.op)`, §4.8.9; `advance Clock by …`,
+keyword only in its own shape (`trace(Cap.op)`, §4.8.9b; `advance Clock by …`,
 `advance_stmt`); anywhere else an identifier is admitted — a primary
 expression, a call's callee, a lambda parameter, an assignment target — it is an
 ordinary identifier.

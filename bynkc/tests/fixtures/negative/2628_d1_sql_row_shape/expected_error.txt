@@ -1,0 +1,5 @@
+bynk.types.sql_row_shape `Json.decodeSql` decodes SQL rows, but field `total` of `Order` is not a column type
+bynk.types.sql_row_shape `Json.decodeSql` decodes SQL rows, but field `tags` of `Tags` is not a column type
+bynk.types.sql_row_shape `Json.decodeSql` decodes SQL rows, but `Status` is not a row record or a `List` of one
+bynk.types.sql_row_shape `Json.decodeSql` decodes SQL rows, but `List[Money]` is not a row record or a `List` of one
+# exact

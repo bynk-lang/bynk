@@ -1,11 +1,9 @@
 ---
 title: "Appendix B — Version history"
 ---
-This specification defines the language at its **current version, v0.451**
+This specification defines the language at its **current version, v0.452**
 ([§1.1](/book/spec/scope/)). Bynk is pre-1.0 and developed in small, spec-first
-increments; while it is pre-1.0, an increment may change behaviour. (v0.59 is
-tooling — `bynkc test --format json` — with **no language-surface change**; the
-language is unchanged from v0.55, the last increment that touched it.)
+increments; while it is pre-1.0, an increment may change behaviour.
 
 This specification is the **single source of truth** for the shipped language.
 The standalone development instalments that preceded it — the
