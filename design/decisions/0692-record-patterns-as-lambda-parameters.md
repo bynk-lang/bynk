@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes, diagnostic_coverage
-changelog: "Record patterns as lambda parameters: `items.fold(0, (total, Item { qty, price, .. }) => total + qty * price)` takes an irrefutable record pattern in place of a lambda parameter's name, mixed freely with name parameters, with the parameter's type from the expected function type or the record's own name; a refutable or non-record pattern, or an annotation, is a parse error (patterns track slice 6, [#2712](https://github.com/bynk-lang/bynk/issues/2712))"
----
+# 0692 — A lambda parameter may be an irrefutable record pattern, desugared to a hidden parameter and an `else`-less `let`
 
-## ADR: record-patterns-as-lambda-parameters
-title: A lambda parameter may be an irrefutable record pattern, desugared to a hidden parameter and an `else`-less `let`
-summary: `(Item { qty, .. }) => …` takes the place of a lambda parameter's name; the parser rewrites it to a hidden `__lambdaArg<offset>` parameter plus slice 2's plain `let`, so the checker, emitter and every slice 1–2 diagnostic are reused; function signatures stay plain names; realises patterns-track slice 6
+- **Status:** Accepted (v0.474)
 
 **Context.** A lambda parameter was a name with an optional annotation
 (`LambdaParam { name, type_ref, span }`), so a fold or `map` over records read

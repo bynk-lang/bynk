@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.473**.
+written against **v0.474**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.474.0** | "Record patterns as lambda parameters: `items.fold(0, (total, Item { qty, price, .. }) => total + qty * price)` takes an irrefutable record pattern in place of a lambda parameter's name, mixed freely with name parameters, with the parameter's type from the expected function type or the record's own name; a refutable or non-record pattern, or an annotation, is a parse error (patterns track slice 6, [#2712](https://github.com/bynk-lang/bynk/issues/2712))" |
 | **v0.473.0** | "`a.race(b)`: the first of two `Effect[T]` to succeed wins, and the loser is handed to `waitUntil`, not cancelled, so it suits idempotent reads; if every side faults the first fault in source order is raised with the rest as `suppressed`; a same-instant tie goes to the receiver; legal where `within` is, and tested on virtual time with latency stubs; reopens track Q7 and adopts its option (b) (concurrent effects, slice 4, [#2711](https://github.com/bynk-lang/bynk/issues/2711))" |
 | **v0.472.0** | "**`Key`: structural `Map` keys and `Set` members** (constrained-generics slice 2, breaking for generics over maps and sets): records, sums, enums, `Bytes`, and `Option`/`List` of a key are now legal `Map` keys, `Set` members and `distinct`/`groupBy`/join keys (`Map[OrderId, Int]`, `Set[Status]`, `Map[Bytes, V]`); a `Float` never is, at any depth. `Key` is automatic, implies `Eq`, and is a bound (`fn index[K: Key, V](…)`); it is the one bound a capability operation may carry. **A type parameter in a `Map` key or `Set` element position must now be declared `K: Key`**: run `bynk check --fix` to migrate (the stdlib's `bynk.map` and `bynk.set` are migrated). New diagnostics `bynk.types.not_keyable` (replaces `unkeyable_map_key`, `unkeyable_set_element` and `unkeyable_distinct`) and `bynk.generics.missing_key_bound` (machine-applicable). Store `Map`/`Set`/`Cache` and `@indexed` keys, `Query` keys and agent keys are unchanged" |
 | **v0.471.0** | "Integer range patterns: `lo..hi`, `lo..` and `..hi` (inclusive, bounds optionally negative) match an `Int` in a `match`, nested in variant, record and list patterns, in or-patterns and in `let … else`. Exhaustiveness is by interval, so `..-1` and `0..` need no `_`, and a missing interval is reported as a pattern (`13..17`). `via schema(...)` takes the same ranges and `_` (events slice 4b, [#990](https://github.com/bynk-lang/bynk/issues/990)), through one shared production. `[..9]` in a list pattern is now a range element, which retires `bynk.parse.range_pattern_unsupported`. New diagnostics: `bynk.types.range_pattern_on_non_int`, `bynk.types.empty_range_pattern` and `bynk.types.is_range_pattern` (patterns track slice 5, [#2699](https://github.com/bynk-lang/bynk/issues/2699))" |
