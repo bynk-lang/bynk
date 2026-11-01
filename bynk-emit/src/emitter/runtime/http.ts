@@ -326,11 +326,24 @@ const STATUS_TO_TAG: Record<number, HttpResult<unknown>["tag"]> = {
   504: "GatewayTimeout",
 };
 
+// #2658: `bynk test --smoke` sets `BYNK_TEST_STRICT_WIRE` in the runner's
+// environment, so an answer outside the route's contract fails the case where
+// an author's own case gets the raw value to judge. Read in the test runner
+// only: no Worker's environment sets it.
+function strictWire(): boolean {
+  const host = globalThis as { process?: { env?: Record<string, string | undefined> } };
+  return host.process?.env?.BYNK_TEST_STRICT_WIRE === "1";
+}
+
 export async function responseToHttpResult<T>(
   response: Response,
   deserialiseValue: (json: JsonValue) => Result<T, BoundaryError>,
 ): Promise<HttpResult<T>> {
-  const tag = STATUS_TO_TAG[response.status] ?? "ServerError";
+  const known = STATUS_TO_TAG[response.status];
+  if (known === undefined && strictWire()) {
+    throw new globalThis.Error(`the answer's status ${response.status} is not one an \`HttpResult\` carries`);
+  }
+  const tag = known ?? "ServerError";
   switch (tag) {
     // A 201 may be a `RawCreated` (#2403, L6), and a 200 a `Raw` or a
     // `RawStreamed` (K-streams, #2623), whose body need not be JSON: it still
@@ -354,6 +367,11 @@ export async function responseToHttpResult<T>(
         return { tag, value: text as unknown as T };
       }
       const decoded = deserialiseValue(json);
+      if (decoded.tag !== "Ok" && saysJson && strictWire()) {
+        throw new globalThis.Error(
+          `the answer's ${response.status} body does not decode as the route's declared type: ${JSON.stringify(decoded.error)}`,
+        );
+      }
       const value = (decoded.tag === "Ok" ? decoded.value : (json as unknown)) as T;
       return { tag, value };
     }
