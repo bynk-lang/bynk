@@ -216,7 +216,7 @@ annotation types its thunk's result (`(): Promise<T> => …`), so the destructur
 name has the type `const x: T = await e` gives it. A re-bound name takes a fresh
 identifier as for `<-`, and the names are bound only after every expression is
 lowered. The join is imported only by a module that has a `par` block, so every
-other module emits byte-for-byte as before.
+other module emits byte-for-byte as before. The `parTraverse` family imports it too, in a module with no `par` block.
 
 An **asynchronous send** (`~>`, §4.8.5) lowers on the Workers target to
 `deps.__exec.waitUntil(<effect>)`: the effect's `Promise` is handed to the
@@ -793,16 +793,18 @@ before the argument, as written; `insert` copies
 ones) — iteration is the kernel's, so no user-visible recursion or stack growth
 exists. `forEach` (v0.146) is the `for…await` analogue of the `Query.forEach`
 terminal, awaiting each step **in sequence**; `parTraverse` (v0.147) is the
-`await Promise.all(xs.map(f))` analogue of `Query.parTraverse`, issuing every
-element's effect **concurrently** — both yield `Promise<void>`. The **collect-all**
+`await __bynkSettleAll(xs.map((x) => () => f(x)))` analogue of `Query.parTraverse`
+(§7.4 `settleAll`; it was `Promise.all` until #2662), issuing every element's effect
+**concurrently**, in input order, and waiting for all of them to settle before it
+raises the first fault in input order — both yield `Promise<void>`. The **collect-all**
 pair (v0.148) return the gathered `Result`s: `traverseAll` awaits each into a
 typed `Result<U, E>[]` (`const __out: Result<…>[] = []; … __out.push(await f(x))`),
-`parTraverseAll` is `await Promise.all(xs.map(f))` keeping the resolved array
+`parTraverseAll` is the same `await __bynkSettleAll(xs.map((x) => () => f(x)))` keeping the resolved array
 (a `Result` `Err` is a value, so nothing rejects) — both yield
 `Promise<Result<…>[]>`. The **short-circuit** pair (v0.150) instead thread the
 `Result`: `traverseTry` awaits each and `return Err(__r.error)` on the first
 `Err`, else pushes `__r.value`, finally `return Ok(__out)`; `parTraverseTry`
-`Promise.all`s first, then scans the resolved `Result`s in input order for the
+settles all first (a fault anywhere is raised before any `Err` is looked at), then scans the resolved `Result`s in input order for the
 first `Err` — both yield `Promise<Result<U[], E>>`. Local mutation inside these
 loops is permitted; it never escapes.
 

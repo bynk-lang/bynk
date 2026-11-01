@@ -113,8 +113,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
 - **Concurrent effects.** In progress: a
   [`par` block](/book/reference/capabilities/#par) issues independent effects
   together and waits for all of them, raising the first fault in source order.
-  Next: making `parTraverse` wait for every element before it raises
-  ([#2615](https://github.com/bynk-lang/bynk/issues/2615)), then `?` inside a block.
+  `parTraverse`, `parTraverseAll` and `parTraverseTry` now wait for every
+  element before they raise, the same way
+  ([#2662](https://github.com/bynk-lang/bynk/issues/2662)). Next: `?` inside a block
+  ([#2615](https://github.com/bynk-lang/bynk/issues/2615)).
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 
