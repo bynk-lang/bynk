@@ -82,4 +82,5 @@ commons p {
       name: (identifier)
       return_type: (base_type)
       body: (block
-        tail: (string_literal)))))
+        tail: (string_literal
+          (escape_sequence))))))

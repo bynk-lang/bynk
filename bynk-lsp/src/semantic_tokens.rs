@@ -74,6 +74,13 @@ pub const TOK_INTERFACE: u32 = 15;
 /// position, a contextual keyword the editor grammars may not know).
 pub const TOK_KEYWORD: u32 = 17;
 
+/// Legend index of the `escape` token type (#2619: an escape sequence in a
+/// string literal).
+pub const TOK_ESCAPE: u32 = 18;
+
+/// Legend index of the `string` token type (#2619: a raw string's delimiters).
+pub const TOK_STRING: u32 = 19;
+
 const MOD_DECLARATION: u32 = 1 << 0;
 const MOD_REFINED: u32 = 1 << 1;
 const MOD_OPAQUE: u32 = 1 << 2;
@@ -250,6 +257,8 @@ mod tests {
                 "interface", // constrained generics slice 0: constraint names — appended
                 "constant",  // #2617: named constants — appended
                 "keyword",   // #2618: contextual `private` modifier — appended
+                "escape",    // #2619: escape sequences in string literals — appended
+                "string",    // #2619: raw string delimiters — appended
             ]
         );
         let modifiers: Vec<&str> = legend.token_modifiers.iter().map(|m| m.as_str()).collect();

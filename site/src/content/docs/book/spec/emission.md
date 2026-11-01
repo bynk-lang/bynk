@@ -192,6 +192,7 @@ A module that declares no constant emits exactly as before.
 | a list pattern's `..rest` | `const rest = scrutinee.slice(n);` after the *n* elements before it. Binding it **copies** the remaining elements, so it costs O(length − *n*) per match: a recursive `[x, ..rest] => f(rest)` is O(length²) overall, and the kernel folds are the way to iterate. `[..rest]` binds the scrutinee itself with no copy, which is unobservable because no list is ever mutated in place; a bare `..` copies nothing |
 | admitted literal | an inline brand cast `(literal as T)` ([§6.4](/book/spec/type-system/#64-admission--construction); ADR 0182) |
 | float literal | the source **lexeme** verbatim (`1e10` does not normalise) |
+| string literal | the **decoded** value as a double-quoted TypeScript string, whatever form it was written in (§3.2.2): `\\`, `"`, `\n`, `\t` and `\r` as those escapes, and any other control character, `\0` included, and U+2028/U+2029 as `\u{…}`; every other character, non-BMP ones included, is written as itself |
 | interpolated string | a **template literal**: chunks as escaped text (backslash, backtick, and `$` escaped), each `\(e)` hole as `${String(<e>)}` (ADR 0075) |
 | `Int / Int` | `Math.trunc(a / b)` — truncating, unchanged |
 | `Float / Float` | `a / b` — true division (v0.21, operand-typed) |

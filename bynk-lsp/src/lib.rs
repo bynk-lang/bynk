@@ -2351,6 +2351,20 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
         );
+        // #2619: escape sequences in every form of string literal, and a raw
+        // literal's delimiters as `string`.
+        dt.extend(
+            bynk_syntax::lexer::string_parts(text)
+                .into_iter()
+                .map(|(s, part)| match part {
+                    bynk_syntax::lexer::StringPart::Escape => {
+                        (s, crate::semantic_tokens::TOK_ESCAPE)
+                    }
+                    bynk_syntax::lexer::StringPart::RawDelimiter => {
+                        (s, crate::semantic_tokens::TOK_STRING)
+                    }
+                }),
+        );
         crate::index_queries::semantic_tokens(&analysis.index, &lt, &dt, &rel, text, span)
     }
 

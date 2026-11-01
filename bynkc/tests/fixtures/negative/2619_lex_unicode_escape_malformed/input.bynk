@@ -1,0 +1,3 @@
+commons demo
+
+fn bad() -> String { "\u{12" }

@@ -872,13 +872,17 @@ Six `String` methods use the same patterns to look inside one:
 ```bynk,fragment
 let ok = sku.matchesRegex("[A-Z]{3}-[0-9]{4}")         // the whole string
 let has = text.containsRegex("(?i)error")               // anywhere, ignoring case
-let v = text.findRegex("v(\\d+)\\.(\\d+)")            // Some([Some("v2.14"), Some("2"), Some("14")])
-let all = text.findAllRegex("\\d+")                     // every match
-let tidy = text.replaceRegex("\\s+", " ")              // every match; `$1`, `$<name>`, `$$`
-let parts = csv.splitRegex("\\s*,\\s*")              // captured groups are not kept
+let v = text.findRegex(r"v(\d+)\.(\d+)")                // Some([Some("v2.14"), Some("2"), Some("14")])
+let all = text.findAllRegex(r"\d+")                      // every match
+let tidy = text.replaceRegex(r"\s+", " ")               // every match; `$1`, `$<name>`, `$$`
+let parts = csv.splitRegex(r"\s*,\s*")                 // captured groups are not kept
 ```
 
-- **The pattern must be a string literal.** It is checked when the program
+A regex is easiest to read as a [raw string](/book/reference/grammar/#rule-string_literal),
+`r"…"`, where a backslash is just a backslash: `r"\d+"` and `"\\d+"` are the same
+pattern, and the compiler checks them identically.
+
+- **The pattern must be a string literal** (of any form: ordinary, raw or multi-line). It is checked when the program
   compiles, as a `Matches` pattern is: its syntax, and that it cannot take
   catastrophic time on a crafted input (ReDoS). A pattern built at run time
   would escape that check, so it is refused (`bynk.types.regex_not_literal`).
