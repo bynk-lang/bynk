@@ -96,6 +96,22 @@ export function viaLambda(n: number): string {
 }
 
 /**
+ * A fault call never binds a type variable: `T` comes from the other argument,
+ * whichever side the fault is on.
+ */
+export function pick<T>(a: T, b: T): T {
+  return a;
+}
+
+export function pickFirst(n: number): number {
+  return pick(__fault("Unreachable", "first", "demo/orders.bynk:66:10"), n);
+}
+
+export function pickSecond(n: number): number {
+  return pick(n, __fault("Unreachable", "second", "demo/orders.bynk:70:13"));
+}
+
+/**
  * A parameter named `todo` shadows the built-in: this is an ordinary call.
  */
 export function shadowed(todo: (a0: string) => number): number {
@@ -106,7 +122,7 @@ export function shadowed(todo: (a0: string) => number): number {
  * Unfinished code type-checks as the declared return type; running it faults.
  */
 export async function refund(s: Status): globalThis.Promise<Result<number, string>> {
-  return __fault("Todo", "refunds", "demo/orders.bynk:68:5");
+  return __fault("Todo", "refunds", "demo/orders.bynk:84:5");
 }
 
 export const labels = {
@@ -118,6 +134,23 @@ export const labels = {
 export const guards = {
   async call(n: number, deps: {}): globalThis.Promise<number> {
     return guard(n);
+  },
+};
+
+/**
+ * The same faulting guard as a statement in an effectful body.
+ */
+export const effectGuards = {
+  async call(n: number, deps: {}): globalThis.Promise<number> {
+    const __r0 = (n < 0 ? __fault("Unreachable", "negative", "demo/orders.bynk:104:26") : undefined);
+    const doubled = await globalThis.Promise.resolve(n * 2);
+    return doubled;
+  },
+};
+
+export const picks = {
+  async call(n: number, deps: {}): globalThis.Promise<number> {
+    return pickSecond(n) + pickFirst(n);
   },
 };
 
@@ -193,7 +226,7 @@ export class Ledger {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await (() => { __state.total = ((n) => n + 1)(__state.total); return undefined; })();
-      return (fail ? __fault("Unreachable", "the ledger was told to fail", "demo/orders.bynk:122:17") : __state.total);
+      return (fail ? __fault("Unreachable", "the ledger was told to fail", "demo/orders.bynk:155:17") : __state.total);
     })();
     await this.commitState(__state);
     return __result;
@@ -231,7 +264,7 @@ export const reads = {
  */
 export const awaits = {
   async call(deps: {}): globalThis.Promise<number> {
-    const n = await __fault("Todo", "awaiting", "demo/orders.bynk:151:16");
+    const n = await __fault("Todo", "awaiting", "demo/orders.bynk:184:16");
     return n;
   },
 };
@@ -250,6 +283,12 @@ export function __makeSurface(deps: __DemoOrdersDeps) {
     },
     async guards(n: number): globalThis.Promise<number> {
       return guards.call(n, deps);
+    },
+    async effectGuards(n: number): globalThis.Promise<number> {
+      return effectGuards.call(n, deps);
+    },
+    async picks(n: number): globalThis.Promise<number> {
+      return picks.call(n, deps);
     },
     async unwraps(o: Option<number>): globalThis.Promise<number> {
       return unwraps.call(o, deps);

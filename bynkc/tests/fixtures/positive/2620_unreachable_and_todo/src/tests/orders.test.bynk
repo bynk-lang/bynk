@@ -60,4 +60,15 @@ suite demo.orders {
   case "a parameter named todo shadows the built-in" {
     expect shadowed((s) => s.length()) == 4
   }
+
+  case "a faulting guard in an effectful body" {
+    let n <- effectGuards.call(4)
+    expect n == 8
+    expect effectGuards.call(0 - 1) faults
+  }
+
+  case "a fault argument does not bind a type variable" {
+    // Both calls type as `Int`; the arguments are evaluated, so the fault fires.
+    expect picks.call(3) faults
+  }
 }

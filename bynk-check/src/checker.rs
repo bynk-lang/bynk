@@ -3246,6 +3246,10 @@ pub(crate) fn unify(
     // they are destructured by, and a `TyId` pair is not itself matchable.
     let (p_node, a_node) = (tys.get(pattern), tys.get(actual));
     match (&*p_node, &*a_node) {
+        // #2620: the bottom type fits any pattern and constrains nothing, so a
+        // fault call never binds a type variable — the other arguments or the
+        // expected type resolve it (`pick(unreachable("x"), n)`).
+        (_, Ty::Never) => true,
         (Ty::Var(n), _) => match subst.get(n) {
             // T3.6b (R4.1): "matches its prior binding exactly" is now a
             // `TyId` comparison — one `u32` equality, where it used to be a

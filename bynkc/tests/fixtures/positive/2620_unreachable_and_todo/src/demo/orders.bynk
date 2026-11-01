@@ -55,6 +55,22 @@ context demo.orders {
   }
 
   ---
+  A fault call never binds a type variable: `T` comes from the other argument,
+  whichever side the fault is on.
+  ---
+  fn pick[T](a: T, b: T) -> T {
+    a
+  }
+
+  fn pickFirst(n: Int) -> Int {
+    pick(unreachable("first"), n)
+  }
+
+  fn pickSecond(n: Int) -> Int {
+    pick(n, unreachable("second"))
+  }
+
+  ---
   A parameter named `todo` shadows the built-in: this is an ordinary call.
   ---
   fn shadowed(todo: (String) -> Int) -> Int {
@@ -77,6 +93,23 @@ context demo.orders {
   service guards {
     on call(n: Int) -> Effect[Int] {
       guard(n)
+    }
+  }
+
+  ---
+  The same faulting guard as a statement in an effectful body.
+  ---
+  service effectGuards {
+    on call(n: Int) -> Effect[Int] {
+      let _ = if n < 0 { unreachable("negative") }
+      let doubled <- Effect.pure(n * 2)
+      doubled
+    }
+  }
+
+  service picks {
+    on call(n: Int) -> Effect[Int] {
+      pickSecond(n) + pickFirst(n)
     }
   }
 
