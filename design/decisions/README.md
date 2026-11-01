@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0676](0676-record-field-defaults.md) | **Record field defaults on every record type, applied at the literal and at the decode** (v0.461) — Optional inputs stay in options records; their fields take defaults, so function arity stays fixed | Accepted (v0.461) |
 | [0675](0675-record-destructuring-in-let.md) | **A `let` destructures a record, and omits `else` when the pattern cannot fail** (v0.460) — `let T { f, .. } = e` opens a record pattern in `let` (a capitalised name followed by `{`), and a `let` whose pattern is an irrefutable record pattern needs no `else`; it reuses the ADR 0484 one-arm `match` desugaring and adds no type rule; realises patterns-track slice 2 | Accepted (v0.460) |
 | [0674](0674-declared-eq-bounds.md) | **Type-parameter bounds are declared, and `Eq` replaces the inferred equality bound** (v0.459) — Bounds `T: Eq` and a method `where A: Eq`; `==` on an undeclared type parameter is `missing_eq_bound`; amends ADR 0430 | Accepted (v0.459) |
 | [0673](0673-d1-stable.md) | **D1 graduates to stable on its own gate** (v0.458) — `D1` leaves `bynk.cloudflare`'s experimental list and comes under the compatibility promise, the first platform capability to graduate; it does so on the gate its own ADRs set (0662 H, 0664 G, met by 0666), not the first-party-use bar the other experimental Cloudflare capabilities keep | Accepted (v0.458) |
