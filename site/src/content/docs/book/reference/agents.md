@@ -241,12 +241,18 @@ on its own when every record already stored still reads. That covers adding a
 `store` field, changing only a refinement (which warns), and adding a record field
 **with a default** anywhere inside a stored value:
 
-```bynk,fragment
+```bynk
+context shop
+
 type Prefs = { theme: String, size: Int = 12 }   // `size` added since the last deploy
 
 agent Profile {
   key id: String
   store prefs: Cell[Prefs] = Prefs { theme: "light" }
+
+  on call size() -> Effect[Int] {
+    prefs.size
+  }
 }
 ```
 
