@@ -37,7 +37,9 @@ This is a **breaking change** for generics written before it. Every error has th
 fix above, so migrating a project is applying the quick fixes (**Fix all** adds
 every bound in a file, following chains of generics that call one another; run it
 again if a method compares two receiver type parameters) and rebuilding. Emitted
-TypeScript is unchanged. A command-line `--fix` is planned separately.
+TypeScript is unchanged. Without an editor, run `bynk check --fix`
+([#2642](https://github.com/bynk-lang/bynk/issues/2642)), which applies the same
+machine-applicable fixes and repeats until none is left.
 
 ## Related
 

@@ -97,6 +97,9 @@ fn migrate(root: &Path, mut files: HashMap<PathBuf, String>) -> (HashMap<PathBuf
                 if d.error.category != "bynk.generics.missing_eq_bound" {
                     continue;
                 }
+                // Every one, the cascade at a caller included, carries exactly one
+                // machine-applicable suggestion: `bynk check --fix` (#2642) only
+                // accepts a pass whose new diagnostics each do.
                 let [s] = d.error.suggestions.as_slice() else {
                     panic!("`missing_eq_bound` must carry exactly one suggestion");
                 };

@@ -42,6 +42,10 @@ the file in a single action. One pass reports every link of a chain of generics
 receiver type parameters may need a second pass, since both fixes extend the same
 `where` clause.
 
+Without an editor, `bynk check --fix`
+([#2642](https://github.com/bynk-lang/bynk/issues/2642)) applies the same fixes
+from the command line, repeating until none is left.
+
 ## What a bound changes for callers
 
 A call is checked against the declared bound. `same(f, h)` on two functions fails

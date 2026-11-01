@@ -1,7 +1,7 @@
 ---
 level: minor
 probes: emit_diagnostics, diagnostic_coverage
-changelog: "**Breaking:** a generic that compares a type parameter now declares it, `fn same[T: Eq](a: T, b: T)`, or `where A: Eq` for a method's receiver type parameter, in place of ADR 0430's inferred bound (constrained-generics slice 0); `bynk.generics.missing_eq_bound` carries a machine-applicable fix, and `bynk.generics.no_bounds` is retired; see [the migration note](/book/troubleshooting/generics-missing-eq-bound/)"
+changelog: "**Breaking:** a generic that compares a type parameter now declares it, `fn same[T: Eq](a: T, b: T)`, or `where A: Eq` for a method's receiver type parameter, in place of ADR 0430's inferred bound (constrained-generics slice 0); `bynk.generics.missing_eq_bound` carries a machine-applicable fix, and `bynk.generics.no_bounds` is retired; apply the fixes with `source.fixAll.bynk` or `bynk check --fix` (#2642), see [the migration note](/book/troubleshooting/generics-missing-eq-bound/)"
 ---
 
 ## ADR: declared-eq-bounds
@@ -74,8 +74,8 @@ site stands, but the bound is declared instead of inferred.
 **Consequences.**
 - Every generic that compared a type parameter must add `: Eq` (or `where A: Eq`)
   before it compiles; the diagnostic's fix does it. The in-repo corpus was
-  migrated by applying those fixes. A CLI `bynk check --fix` is a separate
-  increment (#2639 DECISION F).
+  migrated by applying those fixes. The editor-less path is `bynk check --fix`
+  (#2642, a separate increment, #2639 DECISION F).
 - Calls make the same accept/reject decisions as under ADR 0430: the fix is
   exactly the parameters the inference found, so applying it to an ADR 0430
   fixture preserves every call site's outcome.
