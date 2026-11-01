@@ -213,3 +213,5 @@ binds `r` in the truthy branch.
 - For a one-branch test that yields a `Bool`, see
   [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/).
 - Reference: [type system](/book/reference/types/).
+
+To match a record by its fields, see [Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/).

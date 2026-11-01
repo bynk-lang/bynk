@@ -264,12 +264,14 @@ fn walk_expr_for_constraints(
         }
         // If the discriminant is typed as an opaquely-exported consumed
         // type, the match is forbidden because we can't reveal the variants.
-        ExprKind::Match { discriminant, .. } => {
+        ExprKind::Match { discriminant, arms } => {
+            let mut discriminant_reported = false;
             if let Some(ty) = typed.expr_ty(discriminant.id).as_deref() {
                 let display = ty.display(tys);
                 if let Some(ct) = consumed.get(&display)
                     && ct.visibility == Visibility::Opaque
                 {
+                    discriminant_reported = true;
                     errors.push(
                         CompileError::new(
                             "bynk.context.opaque_inspection",
@@ -285,11 +287,70 @@ fn walk_expr_for_constraints(
                     );
                 }
             }
+            // #2641: a record pattern reads fields exactly as `.field` does.
+            // The discriminant report above already covers a `match` on the
+            // opaque value itself.
+            for arm in arms {
+                opaque_record_patterns(&arm.pattern, consumed, !discriminant_reported, errors);
+            }
         }
+        ExprKind::Is { pattern, .. } => opaque_record_patterns(pattern, consumed, true, errors),
         _ => {}
     }
     for child in expr_children(e) {
         walk_expr_for_constraints(child, typed, consumed, local, errors, tys);
+    }
+}
+
+/// #2641: every record pattern in `pattern` that names an opaquely-exported
+/// consumed type reads the fields the export hides, as a field read does.
+/// `top` is false when the pattern's own scrutinee was already reported.
+fn opaque_record_patterns(
+    pattern: &Pattern,
+    consumed: &HashMap<String, ConsumedType>,
+    top: bool,
+    errors: &mut Vec<CompileError>,
+) {
+    match pattern {
+        Pattern::Record {
+            type_name, fields, ..
+        } => {
+            if top
+                && let Some(ct) = consumed.get(&type_name.name)
+                && ct.visibility == Visibility::Opaque
+            {
+                errors.push(
+                    CompileError::new(
+                        "bynk.context.opaque_inspection",
+                        pattern.span(),
+                        format!(
+                            "cannot match fields of opaquely-exported type `{}` from outside context `{}`",
+                            type_name.name, ct.owning_context,
+                        ),
+                    )
+                    .with_note(
+                        "opaque exports hide the type's shape; a consumer can hold and pass the value, and call its methods, but not read its fields",
+                    ),
+                );
+            }
+            for (_, sub) in fields {
+                if let Some(sub) = sub {
+                    opaque_record_patterns(sub, consumed, true, errors);
+                }
+            }
+        }
+        Pattern::Variant { bindings, .. } => {
+            for b in bindings {
+                opaque_record_patterns(b.pattern(), consumed, true, errors);
+            }
+        }
+        Pattern::Or(alts, _) => {
+            for a in alts {
+                opaque_record_patterns(a, consumed, top, errors);
+            }
+        }
+        Pattern::Refined { inner, .. } => opaque_record_patterns(inner, consumed, top, errors),
+        Pattern::Wildcard(_) | Pattern::Binding(_) | Pattern::Literal { .. } => {}
     }
 }
 

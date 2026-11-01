@@ -370,7 +370,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 |---|---|
 | **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttlSeconds: Int) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]` · *(experimental)* `getWith(key, options: KvGet) -> Effect[Option[KvEntry]]` · `putWith(key, value: String, options: KvPut) -> Effect[()]` · `getBytes(key) -> Effect[Option[Bytes]]` · `putBytes(key, value: Bytes, options: KvPut) -> Effect[()]` · `listPage(options: KvList) -> Effect[KvListing]`; see [Metadata, expiry and binary values](#metadata-expiry-and-binary-values). |
 | **`Service`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance; see below. |
-| **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]`. Used only through a named instance; see below. |
+| **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]` · `getStream(key) -> Effect[Option[R2Body]]` · `putStream(key, body: Stream[Bytes], size: Int) -> Effect[R2Object]` · `putStreamWith(key, body, size, options: R2Put) -> Effect[Option[R2Object]]` · `createUpload(key, options: R2UploadOptions) -> Effect[R2Upload]` · `uploadPart(upload, partNumber: Int, body: Bytes) -> Effect[R2Part]` · `completeUpload(upload, parts: List[R2Part]) -> Effect[R2Object]` · `abortUpload(upload) -> Effect[()]`. Used only through a named instance; see below. |
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 
@@ -472,9 +472,9 @@ capability Indexes = R2 @jurisdiction("eu")
 pins the bucket's jurisdiction when `bynk deploy` creates it; any other value
 is `bynk.capability.invalid_option`.
 
-Objects are read and written whole, as `Bytes`, buffered in the Worker's
-memory, so keep each well under the 128 MB isolate limit; streamed reads and
-writes are a later increment.
+`get`, `put` and `putWith` move objects whole, as `Bytes`, buffered in the
+Worker's memory, so keep each well under the 128 MB isolate limit. Larger
+objects stream, or are uploaded in parts (below).
 
 - `get` and `head` give `None` for a missing key. `head` returns the object's
   `R2Object`: `key`, `size`, `etag`, `uploaded` (an `Instant`), `contentType`
@@ -490,9 +490,32 @@ writes are a later increment.
   order, optionally under a prefix. Pass the previous page's `cursor` for the
   next; `None` on the last page. A page may be shorter than 1000 while more
   remain, so trust the cursor, not the length.
+- `getStream` gives an `R2Body { object, body }`: the object's `R2Object`, and
+  its body as a `Stream[Bytes]` read from R2 as it is pulled. Serve it with
+  `RawStreamed(o.body, contentType)`, or `collect` it. The body can be read
+  once; a second read faults. `R2Body` carries a stream, so it can't be stored,
+  sent or JSON-encoded.
+- `putStream(key, body, size)` writes a stream of exactly `size` bytes. R2 needs
+  a stream's length up front (on Workers it goes through a
+  `FixedLengthStream`), so a stream holding more or fewer bytes faults the
+  write and nothing is stored. `putStreamWith` adds `putWith`'s `R2Put`. To
+  copy an object, pass its `getStream` body with `o.object.size`.
+- A multipart upload builds one object from parts, in any order and across
+  requests. `createUpload(key, R2UploadOptions { contentType, metadata })`
+  returns an `R2Upload { key, uploadId }`, plain data that can be kept or
+  handed to a client. `uploadPart(upload, n, bytes)` uploads part `n` (1 to
+  10,000) and returns its `R2Part { partNumber, etag }`; `completeUpload`
+  takes every part and returns the stored `R2Object`; `abortUpload` discards
+  the upload. Every part but the last must be the same size, at least 5 MiB;
+  a completion R2 refuses faults, and R2 aborts an upload left incomplete for
+  7 days.
+
+A request body is still read whole, so a client's upload doesn't stream into
+R2; send a large object as a multipart upload, a part a request.
 
 Each instance has its own in-memory bucket in tests, honouring conditions,
-metadata and paging, so `stub Archives.get(_)` and `expect Archives.get called`
+metadata, paging, declared sizes and part rules (all but the 5 MiB minimum, so
+a test needn't build 5 MiB of bytes), so `stub Archives.get(_)` and `expect Archives.get called`
 work as for any capability. `R2` is experimental: list `"bynk.cloudflare.R2"`
 under `[unstable] allow`. `bynk deploy` creates and names the buckets; see
 [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#r2-buckets).

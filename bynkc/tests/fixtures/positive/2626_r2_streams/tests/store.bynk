@@ -1,0 +1,101 @@
+suite media.store {
+	case "a streamed write stores its chunks, and a streamed read gives them back" {
+		let n <- save.call("v", Bytes.fromUtf8("hello"))
+		expect n == 5
+		let text <- read.call("v")
+		expect text == Some("hello")
+	}
+
+	case "a stream that doesn't hold its declared size faults, storing nothing" {
+		expect saveExactly.call("v", Bytes.fromUtf8("hello"), 4) faults
+		expect saveExactly.call("v", Bytes.fromUtf8("hello"), 6) faults
+		let text <- read.call("v")
+		expect text is None
+	}
+
+	case "a conditional streamed write creates only" {
+		let first <- saveNew.call("v", Bytes.fromUtf8("one"))
+		let second <- saveNew.call("v", Bytes.fromUtf8("two"))
+		expect first && !second
+		let text <- read.call("v")
+		expect text == Some("one")
+	}
+
+	case "an object copies stream to stream" {
+		let _ <- save.call("a", Bytes.fromUtf8("copied"))
+		let n <- copy.call("a", "b")
+		expect n == Some(6)
+		let text <- read.call("b")
+		expect text == Some("copied")
+		let none <- copy.call("absent", "c")
+		expect none is None
+	}
+
+	case "a stored object is served as a RawStreamed" {
+		let _ <- saveNew.call("v", Bytes.fromUtf8("frames"))
+		let r <- api.GET("/videos/:key", "v") by Visitor
+		match r {
+			RawStreamed(body, contentType) => {
+				let parts <- body.collect()
+				expect parts.length() == 1 && contentType == "video/mp4"
+			}
+			_ => expect false
+		}
+	}
+
+	case "a missing object is NotFound" {
+		let missing <- api.GET("/videos/:key", "absent") by Visitor
+		expect missing is NotFound
+	}
+
+	case "a multipart upload completes from its handle, parts in any order" {
+		let id <- begin.call("big")
+		let o <- finish.call("big", id, "head-", "tail")
+		expect o == "9 video/mp4 test"
+		let text <- read.call("big")
+		expect text == Some("head-tail")
+	}
+
+	case "an aborted upload stores nothing and can't be completed" {
+		let id <- begin.call("big")
+		let _ <- abandon.call("big", id)
+		expect finish.call("big", id, "a", "b") faults
+		let text <- read.call("big")
+		expect text is None
+	}
+
+	case "a stubbed streamed read answers" {
+		stub Videos.getStream(_) returns None
+		let r <- api.GET("/videos/:key", "anything") by Visitor
+		expect r is NotFound
+		expect Videos.getStream called once
+	}
+
+	case "the integration tier streams and uploads too" as integration {
+		let n <- save.call("v", Bytes.fromUtf8("hello"))
+		expect n == 5
+		let n2 <- copy.call("v", "w")
+		expect n2 == Some(5)
+		let text <- read.call("w")
+		expect text == Some("hello")
+		let id <- begin.call("big")
+		let o <- finish.call("big", id, "head-", "tail")
+		expect o == "9 video/mp4 test"
+	}
+
+	case "a wrong size faults at the integration tier too" as integration {
+		expect saveExactly.call("v", Bytes.fromUtf8("hello"), 4) faults
+	}
+}
+
+suite media.store as system {
+	case "a streamed object arrives over HTTP, read back as Ok" {
+		let r <- api.GET("/echo/:text", "frames") by Visitor
+		expect r is Ok(_)
+	}
+
+	case "a missing object is NotFound over HTTP" {
+		let r <- api.GET("/videos/:key", "absent") by Visitor
+		expect r is NotFound
+	}
+}

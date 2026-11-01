@@ -3651,6 +3651,21 @@ pub enum Pattern {
         bindings: Vec<PatternBinding>,
         span: Span,
     },
+    /// `TypeName { f1, f2: pattern, .. }` — a record pattern (patterns track,
+    /// slice 1, #2641). Always open: unlisted fields are ignored, and the
+    /// trailing `..` is mandatory so that adding a field to the record never
+    /// breaks a pattern. A field with no sub-pattern (`f`) binds the field to a
+    /// local of the same name; `f: p` matches the field against `p`.
+    Record {
+        /// The record type's name — required, and never carries type
+        /// arguments (a generic record's come from the scrutinee).
+        type_name: Ident,
+        /// The listed fields, in source order. `None` is the shorthand `f`.
+        fields: Vec<(Ident, Option<Pattern>)>,
+        /// The span of the mandatory trailing `..`.
+        rest_span: Span,
+        span: Span,
+    },
     /// `p 'where' refinement-predicate` — a refinement guard on a pattern
     /// (#472). Matches when `inner` matches *and* the scrutinee satisfies
     /// `predicate` at runtime. v1 admits only `Wildcard` as `inner` (no
@@ -3702,6 +3717,7 @@ impl Pattern {
             Pattern::Binding(id) => id.span,
             Pattern::Literal { span, .. } => *span,
             Pattern::Variant { span, .. } => *span,
+            Pattern::Record { span, .. } => *span,
             Pattern::Refined { span, .. } => *span,
             Pattern::Or(_, span) => *span,
         }
@@ -3723,6 +3739,13 @@ impl Pattern {
                 .iter()
                 .flat_map(|b| b.pattern().bound_names())
                 .collect(),
+            Pattern::Record { fields, .. } => fields
+                .iter()
+                .flat_map(|(name, sub)| match sub {
+                    Some(p) => p.bound_names(),
+                    None => vec![name],
+                })
+                .collect(),
             Pattern::Refined { inner, .. } => inner.bound_names(),
             Pattern::Or(alts, _) => alts.first().map(Pattern::bound_names).unwrap_or_default(),
         }
@@ -3743,6 +3766,9 @@ impl Pattern {
         match self {
             Pattern::Wildcard(_) | Pattern::Binding(_) => true,
             Pattern::Or(alts, _) => alts.iter().any(Pattern::is_irrefutable),
+            Pattern::Record { fields, .. } => fields
+                .iter()
+                .all(|(_, sub)| sub.as_ref().is_none_or(Pattern::is_irrefutable)),
             _ => false,
         }
     }

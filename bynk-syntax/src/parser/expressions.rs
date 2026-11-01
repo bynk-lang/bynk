@@ -6,6 +6,7 @@
 //! the parent module, reached as ancestor privates via `self`.
 
 use super::*;
+use crate::error::Applicability;
 
 impl<'a> Parser<'a> {
     // -- expressions --
@@ -328,7 +329,10 @@ impl<'a> Parser<'a> {
             // ever be this expression's outermost pattern shape, not buried
             // inside one. Rejecting it here, not just in the checker, keeps
             // the two parsers in agreement on every input (ADR 0213).
-            let pattern = self.parse_pattern_top()?;
+            self.is_pattern_tail = true;
+            let pattern = self.parse_pattern_top();
+            self.is_pattern_tail = false;
+            let pattern = pattern?;
             if matches!(pattern, Pattern::Refined { .. }) {
                 return Err(CompileError::new(
                     "bynk.types.is_refined_pattern",
@@ -1325,7 +1329,11 @@ impl<'a> Parser<'a> {
     /// only at a pattern's top level; see [`Parser::parse_pattern_top`].
     fn parse_pattern(&mut self) -> Result<Pattern, CompileError> {
         self.enter_recursion("this pattern")?;
+        // Every nested entry is delimited (`(…)`, a payload list, a record
+        // pattern's braces), so the `is`-tail restriction does not reach it.
+        let tail = std::mem::replace(&mut self.is_pattern_tail, false);
         let result = self.parse_pattern_or();
+        self.is_pattern_tail = tail;
         self.depth -= 1;
         result
     }
@@ -1488,6 +1496,25 @@ impl<'a> Parser<'a> {
         // above a `()` tail is a pattern and a unit, not `None()`.
         let has_payload = self.peek_kind() == Some(TokenKind::LParen)
             && !self.next_token_on_new_line(variant.span);
+        // A record pattern (#2641): an uppercase type name directly followed by
+        // `{`. Before this, `Name {` could not continue a pattern at all except
+        // after `is`, where the `{` opens the `if`'s block.
+        if type_name.is_none()
+            && !has_payload
+            && self.peek_kind() == Some(TokenKind::LBrace)
+            && variant
+                .name
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase())
+        {
+            if !self.is_pattern_tail {
+                return self.parse_record_pattern(variant);
+            }
+            if let Some(close) = self.record_pattern_close_ahead() {
+                return Err(self.record_pattern_in_is_unparenthesised(variant.span, close));
+            }
+        }
         if type_name.is_none()
             && !has_payload
             && variant
@@ -1517,6 +1544,138 @@ impl<'a> Parser<'a> {
             variant,
             bindings,
             span: start_span.merge(end_span),
+        })
+    }
+
+    /// The index of the `}` closing the brace group at the cursor, when that
+    /// group ends in `..` — the shape of a record pattern, which a block never
+    /// has (`..` is not an expression). `None` for anything else, including an
+    /// unbalanced group. Used only to tell `x is T { f, .. }` (a record pattern
+    /// that needs parentheses) from `x is T { body }` (a variant and a block).
+    fn record_pattern_close_ahead(&self) -> Option<usize> {
+        let mut depth = 0usize;
+        let mut i = self.pos;
+        while let Some(t) = self.tokens.get(i) {
+            match t.kind {
+                TokenKind::LBrace | TokenKind::LParen | TokenKind::LBracket => depth += 1,
+                TokenKind::RBrace | TokenKind::RParen | TokenKind::RBracket => {
+                    depth = depth.checked_sub(1)?;
+                    if depth == 0 {
+                        let prev = self.tokens.get(i.checked_sub(1)?)?;
+                        return (t.kind == TokenKind::RBrace && prev.kind == TokenKind::DotDot)
+                            .then_some(i);
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        None
+    }
+
+    /// `bynk.parse.record_pattern_in_is_unparenthesised`, with the fix that
+    /// wraps `Name { … }` (the type name at `name`, the `}` at token `close`)
+    /// in parentheses.
+    fn record_pattern_in_is_unparenthesised(&self, name: Span, close: usize) -> CompileError {
+        let end = self.tokens[close].span;
+        let whole = name.merge(end);
+        CompileError::new(
+            "bynk.parse.record_pattern_in_is_unparenthesised",
+            whole,
+            "a record pattern after `is` must be parenthesised",
+        )
+        .with_note(
+            "the `{` would otherwise be read as the block that follows the condition; \
+             write `x is (Type { field, .. })`",
+        )
+        .with_suggestion(
+            "parenthesise the record pattern",
+            vec![
+                (
+                    Span::new_in(name.file, name.start, name.start),
+                    "(".to_string(),
+                ),
+                (Span::new_in(end.file, end.end, end.end), ")".to_string()),
+            ],
+            Applicability::MachineApplicable,
+        )
+    }
+
+    /// Parse the rest of a record pattern (#2641) — `{ f1, f2: pattern, .. }` —
+    /// after its type name; the cursor is on the `{`. The trailing `..` is
+    /// mandatory: every record pattern is open, so adding a field to the record
+    /// never breaks one.
+    fn parse_record_pattern(&mut self, type_name: Ident) -> Result<Pattern, CompileError> {
+        self.expect(TokenKind::LBrace, "to open a record pattern")?;
+        let mut fields: Vec<(Ident, Option<Pattern>)> = Vec::new();
+        let mut last_end = None;
+        let mut trailing_comma = false;
+        let rest_span = loop {
+            match self.peek_kind() {
+                Some(TokenKind::DotDot) => {
+                    break self.bump().expect("peeked `..`").span;
+                }
+                Some(TokenKind::RBrace) => {
+                    let close = self.peek().expect("peeked `}`").span;
+                    let (at, text) = match (last_end, trailing_comma) {
+                        (Some(end), false) => (end, ", .."),
+                        _ => (close.start, ".. "),
+                    };
+                    return Err(CompileError::new(
+                        "bynk.parse.record_pattern_without_rest",
+                        close,
+                        "a record pattern must end with `..`",
+                    )
+                    .with_note(
+                        "record patterns are always open, so adding a field to the record \
+                         never breaks one; the `..` makes that visible",
+                    )
+                    .with_suggestion(
+                        "add the trailing `..`",
+                        vec![(Span::new_in(close.file, at, at), text.to_string())],
+                        Applicability::MachineApplicable,
+                    ));
+                }
+                _ => {}
+            }
+            let name = self.expect_ident("as a record pattern field name")?;
+            let sub = if self.eat(TokenKind::Colon).is_some() {
+                Some(self.parse_pattern()?)
+            } else {
+                None
+            };
+            last_end = Some(sub.as_ref().map_or(name.span.end, |p| p.span().end));
+            fields.push((name, sub));
+            trailing_comma = self.eat(TokenKind::Comma).is_some();
+            if !trailing_comma {
+                match self.peek_kind() {
+                    Some(TokenKind::RBrace) => continue,
+                    _ => {
+                        return Err(match self.peek() {
+                            Some(t) => CompileError::new(
+                                "bynk.parse.expected_token",
+                                t.span,
+                                format!(
+                                    "expected `,` or `}}` in a record pattern, found {}",
+                                    t.kind.describe()
+                                ),
+                            ),
+                            None => CompileError::new(
+                                "bynk.parse.expected_token",
+                                self.eof_span(),
+                                "expected `,` or `}` in a record pattern, found end of file",
+                            ),
+                        });
+                    }
+                }
+            }
+        };
+        let close = self.expect(TokenKind::RBrace, "to close a record pattern")?;
+        Ok(Pattern::Record {
+            span: type_name.span.merge(close.span),
+            type_name,
+            fields,
+            rest_span,
         })
     }
 

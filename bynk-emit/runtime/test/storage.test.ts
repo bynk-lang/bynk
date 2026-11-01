@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationRateLimit } from "../src/storage.ts";
+import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit } from "../src/storage.ts";
 
 // Standard-library P3 (#2342): the integration tier's rate limiter.
 test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", async () => {
@@ -103,4 +103,44 @@ test("makeIntegrationD1 faults on a failing migration, naming it", () => {
     () => makeIntegrationD1([["0001_bad.sql", "CREATE TABLE t (k TEXT); CREATE TABL u (x)"]]),
     /^Error: bynk: D1 migration `0001_bad\.sql` failed: /,
   );
+});
+
+// P5b (#2626): the integration tier's R2 bucket streams bodies, takes a stream
+// to `put`, and completes multipart uploads by R2's part rules.
+test("makeIntegrationR2: get streams the body in 64 KiB chunks; put takes a stream", async () => {
+  const r2 = makeIntegrationR2();
+  const big = new Uint8Array(70_000).fill(7);
+  await r2.put("k", new Response(big).body!);
+  const o = await r2.get("k");
+  const sizes: number[] = [];
+  for await (const c of o!.body as unknown as AsyncIterable<Uint8Array>) sizes.push(c.length);
+  assert.deepEqual(sizes, [65_536, 70_000 - 65_536]);
+});
+
+test("makeIntegrationR2: a multipart upload joins its parts in number order, by R2's rules", async () => {
+  const r2 = makeIntegrationR2();
+  const u = await r2.createMultipartUpload("big", { httpMetadata: { contentType: "text/plain" } });
+  const resumed = r2.resumeMultipartUpload("big", u.uploadId);
+  const p2 = await resumed.uploadPart(2, new Uint8Array([3]));
+  const p1 = await resumed.uploadPart(1, new Uint8Array([1, 2]));
+  await assert.rejects(resumed.uploadPart(0, new Uint8Array([1])), /not between 1 and 10,000/);
+  await assert.rejects(resumed.complete([p1, { partNumber: 2, etag: "wrong" }]), /not uploaded with etag wrong/);
+  const o = await resumed.complete([p2, p1]);
+  assert.equal(o.size, 3);
+  assert.equal(o.httpMetadata?.contentType, "text/plain");
+  assert.deepEqual([...new Uint8Array(await (await r2.get("big"))!.arrayBuffer())], [1, 2, 3]);
+  await assert.rejects(resumed.complete([p1]), /no multipart upload/);
+});
+
+test("makeIntegrationR2: every part but the last must be the same size", async () => {
+  const r2 = makeIntegrationR2();
+  const u = await r2.createMultipartUpload("big");
+  const parts = [
+    await u.uploadPart(1, new Uint8Array(2)),
+    await u.uploadPart(2, new Uint8Array(3)),
+    await u.uploadPart(3, new Uint8Array(1)),
+  ];
+  await assert.rejects(u.complete(parts), /must be the same size/);
+  await u.abort();
+  await assert.rejects(u.complete(parts), /no multipart upload/);
 });

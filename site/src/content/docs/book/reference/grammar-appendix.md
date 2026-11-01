@@ -136,7 +136,12 @@ if_expr ::= "if" expression block ("else" (if_expr | block))?
 match_expr ::= "match" expression "{" match_arm* "}"
 match_arm ::= (pattern | refined_pattern) ("if" expression)? "=>" expression ","?
 refined_pattern ::= wildcard_pattern "where" refinement
-pattern ::= wildcard_pattern | literal_pattern | variant_pattern | or_pattern | paren_pattern
+pattern ::= wildcard_pattern | literal_pattern | variant_pattern | record_pattern | or_pattern | paren_pattern
+record_pattern ::= identifier "{" (record_pattern_field ",")* ".." "}"
+record_pattern_field ::= identifier ":" pattern | identifier
+is_base_pattern ::= wildcard_pattern | literal_pattern | variant_pattern | paren_pattern
+is_pattern ::= is_base_pattern | is_or_pattern
+is_or_pattern ::= is_pattern "|" is_base_pattern
 or_pattern ::= pattern "|" pattern
 paren_pattern ::= "(" pattern ")"
 wildcard_pattern ::= "_"
@@ -144,7 +149,7 @@ literal_pattern ::= "-"? number_literal | string_literal | boolean_literal
 variant_pattern ::= (identifier ".")? identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")?
 pattern_binding ::= named_binding | pattern
 named_binding ::= identifier ":" pattern
-is_expr ::= expression "is" pattern
+is_expr ::= expression "is" is_pattern
 binary_expr ::= expression "implies" expression | expression "||" expression | expression "&&" expression | expression ("==" | "!=") expression | expression ("<" | "<=" | ">" | ">=") expression | expression ("+" | "-") expression | expression ("*" | "/") expression
 unary_expr ::= ("!" | "-") expression
 primary ::= lambda_expr | paren_expr | method_call | field_access | call | record_construction | record_spread | question_expr | ok_expr | err_expr | some_expr | none_expr | effect_pure_expr | val_expr | wire_expr | trace_expr | list_literal | block | number_literal | float_literal | string_literal | boolean_literal | unit_literal | self_expr | identifier | contextual_identifier

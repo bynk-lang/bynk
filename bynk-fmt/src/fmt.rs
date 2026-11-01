@@ -2747,7 +2747,7 @@ impl<'a> Formatter<'a> {
                 self.format_expr_at(rhs, prec + 1, reserve);
             }
             ExprKind::Is { value, pattern } => {
-                let pat = format!(" is {}", pattern_to_string(pattern));
+                let pat = format!(" is {}", is_pattern_src(pattern));
                 self.format_expr_at(value, 4, pat.chars().count() + reserve);
                 self.push(&pat);
             }
@@ -3631,7 +3631,7 @@ fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
             format!(
                 "{} is {}",
                 expr_with_prec(value, 4),
-                pattern_to_string(pattern)
+                is_pattern_src(pattern)
             )
         }
         ExprKind::RecordSpread {
@@ -3753,6 +3753,21 @@ fn pattern_to_string(p: &Pattern) -> String {
                 format!("{}({})", name_part, parts.join(", "))
             }
         }
+        // #2641: a record pattern renders like a record literal; the trailing
+        // `..` is part of the syntax, not an optional marker.
+        Pattern::Record {
+            type_name, fields, ..
+        } => {
+            let mut parts: Vec<String> = fields
+                .iter()
+                .map(|(name, sub)| match sub {
+                    Some(p) => format!("{}: {}", name.name, pattern_to_string(p)),
+                    None => name.name.clone(),
+                })
+                .collect();
+            parts.push("..".to_string());
+            format!("{} {{ {} }}", type_name.name, parts.join(", "))
+        }
         // #474: an or-pattern renders as its alternatives joined by `|`.
         Pattern::Or(alts, _) => alts
             .iter()
@@ -3760,6 +3775,20 @@ fn pattern_to_string(p: &Pattern) -> String {
             .collect::<Vec<_>>()
             .join(" | "),
     }
+}
+
+/// #2641: a pattern after `is`. A record pattern there must be parenthesised —
+/// its `{` would otherwise read as the block that follows the condition — so a
+/// record, or an or-pattern with a record alternative, keeps the parentheses
+/// the parser dropped as transparent grouping.
+fn is_pattern_src(p: &Pattern) -> String {
+    let src = pattern_to_string(p);
+    let has_record = match p {
+        Pattern::Record { .. } => true,
+        Pattern::Or(alts, _) => alts.iter().any(|a| matches!(a, Pattern::Record { .. })),
+        _ => false,
+    };
+    if has_record { format!("({src})") } else { src }
 }
 
 /// #981: whether a block's `()` tail should be omitted rather than printed.

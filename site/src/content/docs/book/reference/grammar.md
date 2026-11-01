@@ -1687,6 +1687,25 @@ or-pattern for readability (`is (Held(...) | Confirmed(...))`). Optional:
 `is` already parses one whole pattern, `|`-chain included, without them.
 Never admits a `refined_pattern` inside (#472) — see below.
 
+### record_pattern {#rule-record_pattern}
+
+{{#grammar record_pattern}}
+
+`TypeName { f1, f2: pattern, .. }` (patterns track, slice 1, #2641) — matches a
+record by its fields. The type name is required; a bare field binds it to a local
+of the same name, `f: p` matches it against a sub-pattern. Always open: the
+trailing `..` is required (`bynk.parse.record_pattern_without_rest`), so adding a
+field to a record never breaks a pattern. After `is` it must be parenthesised
+(`bynk.parse.record_pattern_in_is_unparenthesised`). See
+[Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/).
+
+### record_pattern_field {#rule-record_pattern_field}
+
+{{#grammar record_pattern_field}}
+
+One field of a [`record_pattern`](#rule-record_pattern): a bare name, or
+`name: pattern`.
+
 ### refined_pattern {#rule-refined_pattern}
 
 {{#grammar refined_pattern}}
@@ -1818,6 +1837,29 @@ binding name: qualified (`Status.Done`, `Status.Shipped(at)`) or with a payload
 
 An [`or_pattern`](#rule-or_pattern) after `let`, whose first alternative opens as
 a [`let_pattern`](#rule-_let_pattern): `let Ok(x) | Err(x) = r else { … }`.
+
+### is_pattern {#rule-_is_pattern}
+
+{{#grammar _is_pattern}}
+
+The pattern after `is`: a [`pattern`](#rule-_pattern) without a
+[`record_pattern`](#rule-record_pattern) at its tail, at the top level or as an
+or-alternative, because there the `{` would also open the `if`'s block. A record
+pattern is written in parentheses (`x is (T { f, .. })`) or nested in a variant
+payload.
+
+### is_base_pattern {#rule-_is_base_pattern}
+
+{{#grammar _is_base_pattern}}
+
+The single patterns an [`is_pattern`](#rule-_is_pattern) is built from.
+
+### is_or_pattern {#rule-_is_or_pattern}
+
+{{#grammar _is_or_pattern}}
+
+An [`or_pattern`](#rule-or_pattern) after `is`, whose alternatives are
+[`is_base_pattern`](#rule-_is_base_pattern)s.
 
 ### effect_send_stmt {#rule-effect_send_stmt}
 

@@ -1107,8 +1107,9 @@ or sub-pattern. Well-formedness: §5.
 
 {{#grammar _pattern}}
 
-A pattern: a wildcard, a literal, a binding, a variant pattern, an
-or-pattern, or a parenthesised pattern. A
+A pattern: a wildcard, a literal, a binding, a variant pattern, a record
+pattern ([§4.7.11](#4711-record_pattern)), an or-pattern, or a parenthesised
+pattern. A
 lowercase-led identifier is a binding (it matches anything and binds the
 value); an uppercase-led one is a nullary variant — in the concrete grammar
 both parse as `variant_pattern`.
@@ -1177,6 +1178,37 @@ refinement-predicate catalogue of [§4.2.11](#4211-refinement). The inner form i
 the wildcard only: any other inner pattern, `(p₁ | p₂)` included, is
 `bynk.parse.refined_pattern_inner`. Its scrutinee types and exhaustiveness are
 well-formedness: [§5.6](/book/spec/static-semantics/#56-pattern-matching).
+
+### §4.7.11 record_pattern {#4711-record_pattern}
+
+{{#grammar record_pattern}}
+
+`TypeName { f1, f2: pattern, .. }` (patterns track, slice 1, #2641) — matches a
+value of a record type by its fields. The type name is required and carries no
+type arguments: a generic record's come from the scrutinee. A bare field `f`
+binds that field to a local named `f`; `f: p` matches the field against the
+sub-pattern `p` (any pattern, a record pattern included).
+
+Record patterns are **always open**: the trailing `..` is required, and fields
+not listed are ignored. Adding a field to a record therefore never breaks a
+record pattern. A pattern without the `..` is `bynk.parse.record_pattern_without_rest`.
+
+{{#grammar record_pattern_field}}
+
+After `is`, a record pattern MUST be parenthesised —
+`x is (T { f, .. })` — because there the `{` would also open the `if`'s block,
+so the pattern admitted without parentheses is the same as `_pattern` less a
+record pattern at its tail, at the top level or as an or-alternative:
+
+{{#grammar _is_pattern}}
+
+{{#grammar _is_base_pattern}}
+
+{{#grammar _is_or_pattern}}
+
+An unparenthesised one is `bynk.parse.record_pattern_in_is_unparenthesised`. A
+record pattern inside a delimiter — a variant payload (`x is Some(T { f, .. })`)
+or parentheses — needs nothing more. Well-formedness: §5.6.
 
 ## §4.8 Statements
 

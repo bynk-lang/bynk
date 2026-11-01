@@ -1016,7 +1016,8 @@ operation of the same capability is unaffected.
 
 A `match` MUST be **exhaustive** — every variant of the scrutinised sum,
 `Result`, or `Option` covered (`bynk.types.non_exhaustive_match`) — and its
-scrutinee MUST be a sum type (`bynk.types.match_non_sum_discriminant`). Its arms
+scrutinee MUST be a sum type, a primitive, or a record matched by record
+patterns (`bynk.types.match_non_sum_discriminant`). Its arms
 MUST **join** to a common result type — their least upper bound, so a refined
 type and its base agree at the base (`bynk.types.match_arm_mismatch`), MUST NOT
 repeat a
@@ -1037,6 +1038,31 @@ is identified by the unit that provides it, not by its name, so a user's own
 enum of the same name is unaffected. Suite bodies are not checked under this
 rule: a test is not under the compatibility promise, and its views lack the
 unit's provenance.
+
+**Record patterns** (patterns track, slice 1, #2641, [§4.7.11](/book/spec/syntactic-grammar/#4711-record_pattern)).
+In `T { f, g: p, .. }`:
+
+- `T` MUST be a record type — not a sum, enum, refined or opaque type, or a
+  built-in (`bynk.types.record_pattern_on_non_record`) — and the matched value
+  MUST be of type `T` (`bynk.types.pattern_type_mismatch`). For a generic record
+  the type arguments are the scrutinee's.
+- Each listed field MUST exist (`bynk.types.unknown_field`) and appear at most
+  once (`bynk.types.duplicate_pattern_field`). A bare `f` binds a local `f` of
+  the field's type; in `f: p`, `p` is checked against the field's type. Under an
+  or-pattern the alternatives MUST bind the same names at the same types, as
+  for any pattern.
+- A record pattern is subject to the visibility rules of a field read: it MUST
+  NOT name a type the unit may not inspect, such as another context's
+  `exports opaque` type (`bynk.context.opaque_inspection`, reported at the
+  pattern).
+- **Coverage is conservative.** A record pattern covers its type only when every
+  field sub-pattern is irrefutable (a name or `_`); otherwise it is partial,
+  and a later irrefutable arm is needed for the `match` to be exhaustive
+  (`bynk.types.non_exhaustive_match`). An arm is `bynk.types.unreachable_arm`
+  when an earlier unguarded arm's record pattern is no more specific on any
+  field. Precise multi-field coverage is a later increment.
+- After `is`, the names bound by a record pattern in scope are its flat fields:
+  bare `f` and `f: name`, like a variant's flat payload bindings.
 
 A pattern MUST name a real variant (`bynk.types.unknown_variant_in_pattern`) and
 real payload fields (`bynk.types.unknown_pattern_field`), bind the right number

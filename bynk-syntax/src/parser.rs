@@ -622,6 +622,13 @@ struct Parser<'a> {
     /// delimited sub-expression (parentheses, call arguments, list, record
     /// field). Mirrors Rust's `NO_STRUCT_LITERAL` restriction.
     no_record_literal: bool,
+    /// True while parsing the tail of an `is` pattern that sits outside every
+    /// delimiter — `x is P`, `x is A | B`. A record pattern there would be
+    /// ambiguous with the block that follows an `if` condition, so it must be
+    /// parenthesised (`x is (T { .. })`, patterns track Q2, #2641). Cleared by
+    /// [`Parser::parse_pattern`], the entry every delimited (nested) pattern
+    /// goes through.
+    is_pattern_tail: bool,
     /// Running count of unclosed `{` seen so far — maintained solely by
     /// [`Self::bump`] (the one primitive that advances `self.pos`), so it
     /// always reflects the true nesting depth no matter which parse function
@@ -676,6 +683,7 @@ impl<'a> Parser<'a> {
             trivia,
             depth: 0,
             no_record_literal: false,
+            is_pattern_tail: false,
             brace_depth: 0,
             item_loop_baseline: Vec::new(),
             next_expr_id: 0,
@@ -2810,6 +2818,92 @@ mod tests {
     fn body_err(body: &str) -> Vec<CompileError> {
         let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
         parse_str(&src).expect_err(&format!("expected a parse error for {body:?}"))
+    }
+
+    // ---- #2641: record patterns ----
+
+    /// Apply a parse error's first suggestion to `src`.
+    fn apply_fix(src: &str, err: &CompileError) -> String {
+        let s = &err.suggestions[0];
+        assert_eq!(
+            s.applicability,
+            crate::error::Applicability::MachineApplicable
+        );
+        let mut edits = s.edits.clone();
+        edits.sort_by_key(|(span, _)| std::cmp::Reverse(span.start));
+        let mut out = src.to_string();
+        for (span, text) in edits {
+            out.replace_range(span.start..span.end, &text);
+        }
+        out
+    }
+
+    #[test]
+    fn record_pattern_parses_in_a_match_arm_and_nested() {
+        let ExprKind::Match { arms, .. } = body_tail(
+            "match o { Order { status: Paid, total, .. } => 1 Some(Order { .. }) => 2 _ => 3 }",
+        ) else {
+            panic!("expected Match");
+        };
+        let Pattern::Record {
+            type_name, fields, ..
+        } = &arms[0].pattern
+        else {
+            panic!("expected a record pattern, got {:?}", arms[0].pattern);
+        };
+        assert_eq!(type_name.name, "Order");
+        assert_eq!(fields.len(), 2);
+        assert!(fields[0].1.is_some(), "`status: Paid` has a sub-pattern");
+        assert!(fields[1].1.is_none(), "`total` is shorthand");
+        let Pattern::Variant { bindings, .. } = &arms[1].pattern else {
+            panic!("expected Some(..)");
+        };
+        assert!(matches!(bindings[0].pattern(), Pattern::Record { .. }));
+    }
+
+    #[test]
+    fn record_pattern_without_rest_is_an_error_with_a_fix() {
+        for body in [
+            "match o { Order { total } => 1 }",
+            "match o { Order { total, } => 1 }",
+            "match o { Order { status: Paid, total } => 1 }",
+            "match o { Order { } => 1 }",
+        ] {
+            let errs = body_err(body);
+            assert_eq!(errs[0].category, "bynk.parse.record_pattern_without_rest");
+            let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
+            let fixed = apply_fix(&src, &errs[0]);
+            parse_str(&fixed).unwrap_or_else(|e| panic!("{body:?} fixed to {fixed:?}: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn record_pattern_after_is_must_be_parenthesised() {
+        for body in [
+            "if o is Order { status: Paid, .. } { 1 } else { 2 }",
+            "if o is None | Order { .. } { 1 } else { 2 }",
+        ] {
+            let errs = body_err(body);
+            assert_eq!(
+                errs[0].category,
+                "bynk.parse.record_pattern_in_is_unparenthesised"
+            );
+            let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
+            if body.contains("None |") {
+                continue; // the fix wraps only the record alternative
+            }
+            let fixed = apply_fix(&src, &errs[0]);
+            parse_str(&fixed).unwrap_or_else(|e| panic!("{body:?} fixed to {fixed:?}: {e:?}"));
+        }
+        // Parenthesised, nested, and a unit variant before the block all parse.
+        for body in [
+            "if o is (Order { status: Paid, .. }) { 1 } else { 2 }",
+            "if o is Some(Order { .. }) { 1 } else { 2 }",
+            "if o is (None | Order { .. }) { 1 } else { 2 }",
+            "if o is Paid { 1 } else { 2 }",
+        ] {
+            body_tail(body);
+        }
     }
 
     #[test]

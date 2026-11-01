@@ -1,9 +1,10 @@
 # Constrained generics — declared bounds on type parameters
 
-- **Status:** Draft (settling). Direction not yet merged; no slice authorised.
-  Spine [#2614](https://github.com/bynk-lang/bynk/issues/2614). The questions in
-  §5 carry *draft* recommendations for the settling review; none is settled
-  until this PR is marked ready and merged.
+- **Status:** Settled (#2630, merged 2026-11-01). Every question in §5 is
+  closed; the maintainer confirmed the adopted answers on 2026-11-01. Q3 adopted
+  declared bounds with a codemod, so slice 0 must land before the 1.0 freeze
+  (Q8). Slicing next: no slice is authorised until its proposal is accepted.
+  Spine [#2614](https://github.com/bynk-lang/bynk/issues/2614).
 - **Realises:** the extension point [ADR 0028](../decisions/0028-open-narrow-generics.md)
   left open ("the `TypeParam` representation is a struct, so a bound is a later
   field addition, not a rework"), and the alternative
@@ -129,8 +130,9 @@ These come from existing principles and decisions, not from this track.
 
 ## 5. Open design questions
 
-Each question has options, prior art, and a **draft recommendation** for the
-settling review to test.
+Each question has options, prior art, and the **adopted** answer. Where an
+answer leaves a fact to verify against the code or the platform, the proposal
+for the slice that depends on it must do so before that slice is accepted.
 
 ### Q1 — Closed or open?
 
@@ -144,7 +146,7 @@ settling review to test.
   the fixed lists ad hoc. Prior art: Gleam, Elm (whose `comparable` is a closed
   set in all but name).
 
-**Draft recommendation: (a), closed.** Every motivating case in §1 is one of
+**Adopted: (a), closed.** Every motivating case in §1 is one of
 four or five well-known constraints whose meaning can be derived from a type's
 structure. An open mechanism brings implementation coherence, orphan rules,
 dictionary-passing everywhere and a large new Foundations surface to freeze,
@@ -164,16 +166,16 @@ order and variant order explicitly carry no meaning (the wire-format reference
 lists "field order; variant order" as not changing the contract hash).
 Reordering fields would silently change sort order.
 
-**Draft recommendation: (c).** `Eq`, `Key` and `Codable` have one obvious
+**Adopted: (c).** `Eq`, `Key` and `Codable` have one obvious
 structural meaning and no ordering hazard, so they stay automatic, consistent
 with ADR 0421. `Ord` is opted into with `derives Ord`, which makes declaration
 order deliberate and visible exactly where it becomes meaningful. A refined
 type over an orderable base is `Ord` without declaration: its representation is
 its base, visible everywhere. An opaque type is not, because ordering it by its
 hidden representation would expose that representation's order outside the
-defining `commons`. Its defining `commons` opts in with `derives Ord`. The review
-should confirm this against how `sortBy` treats opaque keys today, and keep the
-two consistent.
+defining `commons`. Its defining `commons` opts in with `derives Ord`. Slice 1's
+proposal must check this against how `sortBy` treats opaque keys today, and keep
+the two consistent.
 
 ### Q3 — Syntax, and what happens to inferred equality
 
@@ -189,12 +191,12 @@ for several. The real question is ADR 0430:
   infers `Key`, and so on. No new syntax, but nothing in the signature tells a
   reader what is required.
 
-**Draft recommendation: (b), with a codemod, before 1.0.** "Cost visible at the
+**Adopted: (b), with a codemod, before 1.0.** "Cost visible at the
 call site" and "one canonical way" both point to declared bounds. The inference
 machinery is kept as the codemod's engine and as the source of a quick fix
 ("this generic compares `T`; add `T: Eq`"). This is a breaking change to
-Foundations-level source, so it is the main fork for maintainer sign-off and the
-reason Q8 exists.
+Foundations-level source, so it was the main fork for maintainer sign-off and the
+reason Q8 exists. The maintainer adopted it on 2026-11-01.
 
 ### Q4 — The runtime shape under erasure
 
@@ -216,11 +218,11 @@ the comparator for the *concrete* `T` at run time.
   the boundary codecs. That gives bigger output and makes cross-unit generics
   and recursion harder.
 
-**Draft recommendation: (b).** It confines the cost to code that asks for it,
+**Adopted: (b).** It confines the cost to code that asks for it,
 keeps unbounded output byte-identical (§4), and the per-type witnesses reuse what
 the emitter already generates (the monomorphised codecs of ADR 0197/0237 are
 exactly a `Codable` witness). Witnesses are internal and not added to the ADR
-0310 ABI. The settling review should confirm that bindings never call bounded
+0310 ABI. Slice 1's proposal must confirm that bindings never call bounded
 Bynk generics directly; if they can, the witness argument becomes ABI.
 
 ### Q5 — What `Ord` means
@@ -236,11 +238,11 @@ Bynk generics directly; if they can, the witness argument becomes ABI.
   - change `Float`'s `==` to match that total order, which contradicts the IEEE
     semantics §5.2 specifies.
 
-  **Draft:** the second option. Keep `Float` orderable, and state the `NaN`
+  **Adopted:** the second option. Keep `Float` orderable, and state the `NaN`
   exception normatively. `sort` puts `NaN`s last, `max` returns `NaN` when one
   is present, `min` returns `NaN` only when every element is `NaN`, and the
   comparison operators keep their IEEE meaning (`NaN < x` is `false`). `==` is
-  unchanged. The review should weigh this against excluding `Float`.
+  unchanged. Excluding `Float` was considered and not adopted.
 - Records order lexicographically by declared field order; sums by variant
   declaration order, then payload; `List` lexicographically; `Option` puts
   `None` first; `Bytes` unsigned lexicographically (matching its existing
@@ -254,7 +256,7 @@ Bynk generics directly; if they can, the witness argument becomes ABI.
 `Key` admits a type as a `Map` key or `Set` member. It requires `Eq` plus a
 canonical encoding, so that semantically equal values index identically.
 
-- **Draft:** `Key` holds for every equality-supporting, boundary-legal type
+- **Adopted:** `Key` holds for every equality-supporting, boundary-legal type
   except those containing `Float` (where `NaN != NaN` breaks lookup). The runtime
   encodes non-primitive keys with a canonical encoding **derived from**
   `serialiseAgentKey` (`bynk-emit/runtime/src/agent.ts`), not that function as
@@ -266,12 +268,11 @@ canonical encoding, so that semantically equal values index identically.
   - `Bytes` falls into the generic-object branch and encodes as index→byte
     pairs sorted as strings (`"10"` before `"2"`). That is deterministic but
     large and slow; a dedicated `Bytes` form (hex or base64) is better.
-- Open: whether widening keys changes the **stored-state encoding** of
-  `Map`-typed `store` fields. Primitive-keyed maps must keep their encoding
-  exactly, and a non-primitive-keyed map is new, so this should be additive. The
-  settling review must confirm it against ADR 0538.
-- Open: iteration order. Insertion order is unchanged, which this track
-  recommends keeping.
+- **To verify in slice 2's proposal:** whether widening keys changes the
+  **stored-state encoding** of `Map`-typed `store` fields. Primitive-keyed maps
+  must keep their encoding exactly, and a non-primitive-keyed map is new, so
+  this should be additive; the proposal must confirm it against ADR 0538.
+- **Adopted:** iteration order stays insertion order.
 
 ### Q7 — `Codable`, and generic capability operations
 
@@ -282,28 +283,29 @@ pair the emitter already monomorphises per type.
 - It lifts ADR 0281 D for bounded parameters: `capability Queue { fn send[T:
   Codable](msg: T) -> Effect[()] }` can encode `msg` without the caller calling
   `Json.encode`.
-- It keeps ADR 0281 E (a generic op needs an external provider) unless the
-  settling review finds the witness makes Bynk-bodied providers tractable.
-- **Draft:** Slice 3, after ordering and keying, because its main consumer is
+- It keeps ADR 0281 E (a generic op needs an external provider) unless slice
+  3's proposal shows the witness makes Bynk-bodied providers tractable.
+- **Adopted:** Slice 3, after ordering and keying, because its main consumer is
   the stdlib track (#1936) and it can be cut as a stdlib slice once the
   mechanism exists.
 
 ### Q8 — What must land before 1.0?
 
-If Q3 resolves to (b), declared `Eq` changes existing Foundations-level
-source, so the bound syntax and the `Eq` cutover (slice 0) must ship before the
-1.0 freeze. Every other slice adds a new capability without breaking existing
-code, so it can land in 1.x. If Q3 resolves to (a) or (c), the whole track is
-additive and nothing gates 1.0.
+Declared `Eq` (Q3 (b)) changes existing Foundations-level source, so the bound
+syntax and the `Eq` cutover (slice 0) must ship before the 1.0 freeze. Every
+other slice adds a new capability without breaking existing code, so it can land
+in 1.x. Had Q3 resolved to (a) or (c), the whole track would have been additive.
+
+**Adopted:** slice 0 is a 1.0 prerequisite; slices 1 to 5 are 1.x.
 
 ## 6. Candidate slice decomposition
 
-Provisional until this doc settles. Each becomes an increment proposal opened as
+Each becomes an increment proposal opened as
 a sub-issue of #2614.
 
 - **Slice 0 — Bounds and `Eq`.** Parse and check `T: C`; the constraint table;
   checking at instantiation; `Eq` as the first constraint, with the ADR 0430
-  codemod and quick fix if Q3 resolves to (b). No runtime change.
+  codemod and quick fix (Q3 (b)). No runtime change. Must land before 1.0.
 - **Slice 1 — `Ord`.** `derives Ord`; the normative total order (Q5); witness
   passing (Q4); comparison operators on `Ord` types; `sort`/`min`/`max` in
   `bynk.list`.
@@ -313,7 +315,8 @@ a sub-issue of #2614.
   generic stdlib operation, cut jointly with #1936.
 - **Slice 4 — Static methods on generic types.** Resolve the type's parameters
   from explicit type arguments or the expected type (`Box.empty[Int]()`).
-- **Slice 5 — `Show`**, only if the settling review keeps it: a user-defined
+- **Slice 5 — `Show`**, conditional (Q1 left it optional; decided when the
+  slice is proposed): a user-defined
   string form usable in interpolation.
 
 ## 7. Front-loaded ADR candidates

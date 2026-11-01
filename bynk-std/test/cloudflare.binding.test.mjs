@@ -1,7 +1,8 @@
 // `cloudflare.binding`: the `bynk.cloudflare` adapter's `WorkersKv` binding,
 // tested against a KV namespace fake (standard-library S2, #1952), its
 // `WorkersService` (interop I5, #1972) against a Service Binding fake, and its
-// `WorkersR2` (standard-library P5, #2323) against an R2 bucket fake, and its
+// `WorkersR2` (standard-library P5, #2323; streams and multipart, P5b, #2626)
+// against an R2 bucket fake, and its
 // `WorkersRateLimit` (standard-library P3, #2342) against a rate limiter fake,
 // `WorkersQueue` (standard-library P2, #2578) against a queue producer fake,
 // `WorkersAnalytics` (standard-library P3b, #2582) against a dataset fake,
@@ -260,6 +261,8 @@ t("WorkersService.send: a missing binding names it", async () => {
 // `bynkc/tests/binding_workerd.rs` checks, on `workerd`.
 function fakeR2(pageSize = 2) {
   const objects = new Map();
+  const uploads = new Map();
+  const completions = [];
   const puts = [];
   const lists = [];
   let version = 0;
@@ -278,14 +281,30 @@ function fakeR2(pageSize = 2) {
     async get(key) {
       const o = objects.get(key);
       if (!o) return null;
-      return { ...meta(o, ["httpMetadata", "customMetadata"]), arrayBuffer: async () => o.body.slice().buffer };
+      // P5b: the body streams two bytes a chunk, so chunking is exercised;
+      // `cancelled` records a reader that stopped early.
+      let at = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          if (at >= o.body.length) return controller.close();
+          controller.enqueue(o.body.slice(at, at + 2));
+          at += 2;
+        },
+        cancel() {
+          o.cancelled = true;
+        },
+      });
+      return { ...meta(o, ["httpMetadata", "customMetadata"]), body, arrayBuffer: async () => o.body.slice().buffer };
     },
     async head(key) {
       const o = objects.get(key);
       return o ? meta(o, ["httpMetadata", "customMetadata"]) : null;
     },
     async put(key, value, options = {}) {
-      puts.push({ key, options });
+      puts.push({ key, options, streamed: value instanceof ReadableStream });
+      // P5b: a stream is read whole, as R2 reads it; one that errors fails
+      // the put, and nothing is stored.
+      if (value instanceof ReadableStream) value = new Uint8Array(await new Response(value).arrayBuffer());
       const current = objects.get(key);
       const { etagMatches, etagDoesNotMatch } = options.onlyIf ?? {};
       if (etagMatches !== undefined && current?.etag !== etagMatches) return null;
@@ -317,6 +336,62 @@ function fakeR2(pageSize = 2) {
       return next < keys.length
         ? { objects: page, truncated: true, cursor: String(next) }
         : { objects: page, truncated: false };
+    },
+    // P5b: multipart, as R2 documents it. `resumeMultipartUpload` checks
+    // nothing; an unknown upload fails at its first operation. `complete`
+    // takes the parts' numbers and etags and joins them in the order listed,
+    // as Miniflare does (`completions` records that order).
+    uploads,
+    completions,
+    async createMultipartUpload(key, options = {}) {
+      version += 1;
+      const uploadId = `upload-${version}`;
+      uploads.set(uploadId, { key, options, parts: new Map() });
+      return this.resumeMultipartUpload(key, uploadId);
+    },
+    resumeMultipartUpload(key, uploadId) {
+      const open = () => {
+        const u = uploads.get(uploadId);
+        if (!u || u.key !== key) throw new Error("The specified multipart upload does not exist.");
+        return u;
+      };
+      return {
+        key,
+        uploadId,
+        async uploadPart(partNumber, value) {
+          const u = open();
+          version += 1;
+          u.parts.set(partNumber, { etag: `part-${version}`, body: new Uint8Array(value) });
+          return { partNumber, etag: `part-${version}` };
+        },
+        async complete(parts) {
+          const u = open();
+          completions.push(parts.map((p) => p.partNumber));
+          const bodies = parts
+            .map((p) => {
+              const part = u.parts.get(p.partNumber);
+              if (!part || part.etag !== p.etag) throw new Error("One or more of the specified parts could not be found.");
+              return part.body;
+            });
+          const body = new Uint8Array(bodies.flatMap((b) => [...b]));
+          uploads.delete(uploadId);
+          version += 1;
+          const o = {
+            key,
+            body,
+            etag: `etag-${version}`,
+            uploaded: new Date(1_000 * version),
+            httpMetadata: u.options.httpMetadata ?? {},
+            customMetadata: u.options.customMetadata ?? {},
+          };
+          objects.set(key, o);
+          return meta(o, ["httpMetadata", "customMetadata"]);
+        },
+        async abort() {
+          open();
+          uploads.delete(uploadId);
+        },
+      };
     },
   };
 }
@@ -454,6 +529,173 @@ t("WorkersR2: each instance reads its own binding", async () => {
   await new WorkersR2(env, "R2_INDEXES").put("k", bytes(1));
   assert.equal(archives.objects.size, 0);
   assert.equal(indexes.objects.size, 1);
+});
+
+// P5b (#2626): a Bynk `Stream[Bytes]`, an async iterable of chunks.
+async function* chunks(...parts) {
+  for (const p of parts) yield new Uint8Array(p);
+}
+
+t("WorkersR2.getStream: None when absent; the object's metadata and its body chunk by chunk", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(1, 2, 3, 4, 5), { httpMetadata: { contentType: "video/mp4" }, customMetadata: { by: "me" } });
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  assert.deepEqual(await store.getStream("absent"), None);
+  const got = await store.getStream("k");
+  assert.equal(got.tag, "Some");
+  assert.equal(got.value.object.size, 5);
+  assert.deepEqual(got.value.object.contentType, Some("video/mp4"));
+  assert.equal(got.value.object.metadata.get("by"), "me");
+  const seen = [];
+  for await (const c of got.value.body) seen.push([...c]);
+  assert.deepEqual(seen, [[1, 2], [3, 4], [5]]);
+});
+
+t("WorkersR2.getStream: the body is unclaimed until read, and stopping early cancels R2's stream", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(1, 2, 3, 4, 5));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const { value } = await store.getStream("k");
+  assert.equal(value.body[Symbol.for("bynk.stream.read")], undefined);
+  for await (const c of value.body) {
+    assert.deepEqual([...c], [1, 2]);
+    break;
+  }
+  assert.equal(r2.objects.get("k").cancelled, true);
+});
+
+t("WorkersR2.putStream: writes a stream of the declared size, as a stream, and returns the object", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const o = await store.putStream("k", chunks([1, 2], [], [3]), 3);
+  assert.equal(o.size, 3);
+  assert.equal(r2.puts[0].streamed, true);
+  assert.deepEqual([...r2.objects.get("k").body], [1, 2, 3]);
+});
+
+t("WorkersR2.putStream: a stream longer or shorter than its size faults, and nothing is stored", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  await assert.rejects(store.putStream("long", chunks([1, 2], [3]), 2), /the stream held at least 3 bytes, not the declared size 2/);
+  await assert.rejects(store.putStream("short", chunks([1]), 2), /the stream held 1 bytes, not the declared size 2/);
+  await assert.rejects(store.putStream("neg", chunks(), -1), /size must be a whole number of bytes, not -1/);
+  assert.equal(r2.objects.size, 0);
+});
+
+t("WorkersR2.putStream: claims its stream, so a stream already read faults", async () => {
+  const store = new WorkersR2({ R2_ARCHIVES: fakeR2() }, "R2_ARCHIVES");
+  const s = chunks([1]);
+  await store.putStream("a", s, 1);
+  await assert.rejects(store.putStream("b", s, 1), /a stream can be read only once/);
+});
+
+t("WorkersR2.putStream: a source that fails fails the write, with its own error", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  async function* broken() {
+    yield new Uint8Array([1]);
+    throw new Error("upstream reset");
+  }
+  await assert.rejects(store.putStream("k", broken(), 2), /upstream reset/);
+  assert.equal(r2.objects.size, 0);
+});
+
+t("WorkersR2.putStream: goes through a FixedLengthStream of the size where the platform has one", async () => {
+  const lengths = [];
+  globalThis.FixedLengthStream = class extends TransformStream {
+    constructor(n) {
+      super();
+      lengths.push(n);
+    }
+  };
+  try {
+    const r2 = fakeR2();
+    await new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES").putStream("k", chunks([7, 8]), 2);
+    assert.deepEqual(lengths, [2]);
+    assert.deepEqual([...r2.objects.get("k").body], [7, 8]);
+  } finally {
+    delete globalThis.FixedLengthStream;
+  }
+});
+
+t("WorkersR2.putStreamWith: content type, metadata and conditions, as putWith", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const made = await store.putStreamWith("k", chunks([1]), 1, putOptions({ contentType: Some("text/plain"), metadata: new Map([["a", "b"]]), onlyIf: { tag: "Absent" } }));
+  assert.equal(made.tag, "Some");
+  assert.deepEqual(made.value.contentType, Some("text/plain"));
+  assert.equal(made.value.metadata.get("a"), "b");
+  assert.deepEqual(await store.putStreamWith("k", chunks([2]), 1, putOptions({ onlyIf: { tag: "Absent" } })), None);
+  assert.deepEqual([...r2.objects.get("k").body], [1]);
+  const swapped = await store.putStreamWith("k", chunks([3]), 1, putOptions({ onlyIf: { tag: "EtagMatches", etag: made.value.etag } }));
+  assert.equal(swapped.tag, "Some");
+  await assert.rejects(store.putStreamWith("k", chunks([1, 2]), 1, putOptions()), /putStreamWith: the stream held at least 2 bytes/);
+});
+
+t("WorkersR2.putStreamWith: a put that answers without reading the stream releases its source", async () => {
+  // Real R2 may refuse a failed condition, or a put, before reading the body.
+  for (const answer of [async () => null, async () => { throw new Error("binding down"); }]) {
+    let released = false;
+    // Two chunks: the stream reads ahead one, leaving the source open.
+    async function* source() {
+      try {
+        yield new Uint8Array([1]);
+        yield new Uint8Array([2]);
+      } finally {
+        released = true;
+      }
+    }
+    const store = new WorkersR2({ R2_ARCHIVES: { put: answer } }, "R2_ARCHIVES");
+    await store.putStreamWith("k", source(), 2, putOptions({ onlyIf: { tag: "Absent" } })).catch(() => {});
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(released, true);
+  }
+});
+
+t("WorkersR2.createUpload: begins an upload of the key, with the object's content type and metadata", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const u = await store.createUpload("big", { contentType: Some("video/mp4"), metadata: new Map([["by", "me"]]) });
+  assert.equal(u.key, "big");
+  assert.equal(typeof u.uploadId, "string");
+  assert.deepEqual(r2.uploads.get(u.uploadId).options, { httpMetadata: { contentType: "video/mp4" }, customMetadata: { by: "me" } });
+});
+
+t("WorkersR2.uploadPart: uploads a part of a resumed upload, reporting its number and etag", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const u = await store.createUpload("big", { contentType: None, metadata: noMetadata() });
+  // A fresh binding, as a later request would have: only the handle carries over.
+  const part = await new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES").uploadPart({ key: u.key, uploadId: u.uploadId }, 2, bytes(9));
+  assert.equal(part.partNumber, 2);
+  assert.equal(typeof part.etag, "string");
+  await assert.rejects(store.uploadPart({ key: "big", uploadId: "nope" }, 1, bytes(1)), /does not exist/);
+});
+
+t("WorkersR2.completeUpload: joins the parts in number order into the stored object", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const u = await store.createUpload("big", { contentType: Some("text/plain"), metadata: noMetadata() });
+  const p2 = await store.uploadPart(u, 2, bytes(3));
+  const p1 = await store.uploadPart(u, 1, bytes(1, 2));
+  const o = await store.completeUpload(u, [p2, p1]);
+  assert.deepEqual(r2.completions, [[1, 2]]);
+  assert.equal(o.key, "big");
+  assert.equal(o.size, 3);
+  assert.deepEqual(o.contentType, Some("text/plain"));
+  assert.deepEqual([...r2.objects.get("big").body], [1, 2, 3]);
+  await assert.rejects(store.completeUpload(u, [p1, p2]), /does not exist/);
+});
+
+t("WorkersR2.abortUpload: discards the upload and its parts", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const u = await store.createUpload("big", { contentType: None, metadata: noMetadata() });
+  const p = await store.uploadPart(u, 1, bytes(1));
+  await store.abortUpload(u);
+  assert.equal(r2.uploads.size, 0);
+  await assert.rejects(store.completeUpload(u, [p]), /does not exist/);
+  assert.equal(r2.objects.has("big"), false);
 });
 
 t("WorkersR2.get: a missing binding names it", async () => {
