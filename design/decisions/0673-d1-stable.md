@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk.cloudflare.D1` is stable: it no longer needs an `[unstable] allow` entry, and a leftover `\"bynk.cloudflare.D1\"` entry is a `bynk.project.unstable_not_experimental` warning (standard-library P4d, [#2652](https://github.com/bynk-lang/bynk/issues/2652))"
----
+# 0673 — D1 graduates to stable on its own gate
 
-## ADR: d1-stable
-title: D1 graduates to stable on its own gate
-summary: `D1` leaves `bynk.cloudflare`'s experimental list and comes under the compatibility promise, the first platform capability to graduate; it does so on the gate its own ADRs set (0662 H, 0664 G, met by 0666), not the first-party-use bar the other experimental Cloudflare capabilities keep
+- **Status:** Accepted (v0.458)
 
 **Context.** `D1` shipped experimental (ADR 0662 H) until its schema
 migrations landed. ADR 0664 G kept it experimental after that, because two

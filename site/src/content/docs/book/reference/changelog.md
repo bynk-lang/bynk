@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.457**.
+written against **v0.458**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.458.0** | "`bynk.cloudflare.D1` is stable: it no longer needs an `[unstable] allow` entry, and a leftover `\"bynk.cloudflare.D1\"` entry is a `bynk.project.unstable_not_experimental` warning (standard-library P4d, [#2652](https://github.com/bynk-lang/bynk/issues/2652))" |
 | **v0.457.0** | "`par { let a <- e1  let b <- e2 }`: a concurrent binding block that issues every effect, in source order, before awaiting any of them, and completes when all have settled; the first fault in source order is raised after the rest have settled (concurrent effects, slice 0, [#2640](https://github.com/bynk-lang/bynk/issues/2640))" |
 | **v0.456.0** | "`bynk check --fix` and `bynkc check --fix` apply the compiler's machine-applicable fix suggestions from the command line, repeated to a fixpoint and written only when the whole run is sound; the selection rule moves into `bynk-syntax` and is shared with the editor's fix all" |
 | **v0.455.1** | "`bynk --help` lists its commands under five headings (Project, Run and deploy, Dependencies, Publishing, Help and tooling), each with a one-line summary; the longer description moves to `bynk <command> --help`" |
