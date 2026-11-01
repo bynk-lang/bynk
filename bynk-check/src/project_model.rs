@@ -5746,6 +5746,7 @@ mod native_platform_closure_tests {
 
     fn empty_table() -> UnitTable {
         UnitTable {
+            exec_plan: Default::default(),
             kind: None,
             removed_agents: Vec::new(),
             types: StdHashMap::new(),

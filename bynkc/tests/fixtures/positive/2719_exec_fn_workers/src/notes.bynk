@@ -1,0 +1,47 @@
+context notes
+
+consumes bynk
+
+// #2719 on the Workers target: a function's `~>` and `within` hand work to the
+// request's `ctx.waitUntil` through the context the handler passes in.
+
+capability Audit {
+	fn note(n: Int) -> Effect[()]
+}
+
+capability Prices {
+	fn get(sku: Int) -> Effect[Int]
+}
+
+provides Audit = NoAudit {
+	fn note(n: Int) -> Effect[()] { () }
+}
+
+provides Prices = FixedPrices {
+	fn get(sku: Int) -> Effect[Int] { sku }
+}
+
+fn audited(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
+	~> f(n)
+	Effect.pure(n)
+}
+
+fn priced(e: Effect[Int]) -> Effect[Bool] {
+	let r <- e.within(2.seconds)
+	Effect.pure(r.isOk())
+}
+
+service api from http {
+	on GET("/") () -> Effect[HttpResult[String]] by Visitor given Audit, Prices {
+		let n <- audited((x) => Audit.note(x), 1)
+		let ok <- priced(Prices.get(n))
+		Effect.pure(Ok("done"))
+	}
+}
+
+service direct {
+	on call(sku: Int) -> Effect[Int] given Audit {
+		let n <- audited((x) => Audit.note(x), sku)
+		Effect.pure(n)
+	}
+}

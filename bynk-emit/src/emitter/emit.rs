@@ -795,6 +795,29 @@ pub(crate) fn emit_forwarded_methods(
     entries
 }
 
+/// #2719: the type of the hidden execution-context parameter a function in the
+/// needs-context set takes last; the same shape a handler's `deps.__exec` has.
+fn exec_param(name: &str) -> bynk_ts::TsParam {
+    bynk_ts::TsParam {
+        name: name.to_string(),
+        ty: Some(bynk_ts::TsType::Object(vec![
+            bynk_ts::TsTypeMember::method(
+                "waitUntil",
+                vec![bynk_ts::TsParam {
+                    name: "promise".to_string(),
+                    ty: Some(bynk_ts::TsType::named_with_args(
+                        "globalThis.Promise",
+                        vec![bynk_ts::TsType::named("unknown")],
+                    )),
+                    optional: false,
+                }],
+                bynk_ts::TsType::named("void"),
+            ),
+        ])),
+        optional: false,
+    }
+}
+
 /// #1337: returns one real `bynk_ts::TsObjectEntry::Method` (was
 /// `out: &mut String`) — the per-entry builder [`emit_attached_methods`]
 /// calls once per matching attached method.
@@ -876,6 +899,10 @@ fn emit_method(
     // Constrained generics slice 1: one trailing comparator parameter per
     // `Ord`-bounded type parameter (the receiver type's first).
     params.extend(cx.declare_witnesses(f));
+    // #2719: the execution context, last.
+    if commons.exec_plan.fn_needs(f) {
+        params.push(exec_param("__exec"));
+    }
     // Methods are emitted as plain (non-async) members on an object literal;
     // any `Effect.pure(...)` in tail position must still wrap as
     // `Promise.resolve(...)` because there's no surrounding `async` to absorb
@@ -886,17 +913,22 @@ fn emit_method(
     for p in &f.params {
         cx.declare_binder(&p.name.name);
     }
+    // #2719: a method that takes the execution context is `async`, and its tail
+    // wraps as a free function's does, since it awaits the construct it hands
+    // the context to. Every other method stays a plain member, byte for byte
+    // (an effectful method that awaits without it is a separate, existing gap).
+    let is_async = commons.exec_plan.fn_needs(f);
     emit_block_as_function_body_with_return(
         &mut body_text,
         &f.body,
         &mut cx,
         INDENT_STEP * 2,
-        false,
+        is_async,
         Some(&f.return_type),
     );
     bynk_ts::TsObjectEntry::Method {
         name: method_name.name.clone(),
-        is_async: false,
+        is_async,
         generics,
         params,
         return_type: Some(bynk_ts::TsType::named(ts_type_ref(&f.return_type))),
@@ -988,6 +1020,10 @@ pub(crate) fn emit_free_fn(
     // Constrained generics slice 1: one trailing comparator parameter per
     // `Ord`-bounded type parameter.
     params.extend(cx.declare_witnesses(f));
+    // #2719: the execution context, last.
+    if commons.exec_plan.fn_needs(f) {
+        params.push(exec_param("__exec"));
+    }
     let async_tail = is_effectful_return(&f.return_type);
     let guarded = contracts && (!f.requires.is_empty() || !f.ensures.is_empty());
     // #1653: parameters are bindings of the body's own scope, so a `let` that
@@ -3178,7 +3214,7 @@ pub(crate) fn emit_service(
         // v0.79: a handler whose body uses `~>` receives the execution context
         // (`__exec`) in its deps, so the fire-and-forget send can hand its promise
         // to `waitUntil`. Gated on the body so non-sending handlers are unchanged.
-        if crate::emitter::block_uses_send(&handler.body) {
+        if commons.exec_plan.handler_needs(handler) {
             append_deps_field(
                 &mut deps_members,
                 "__exec",
@@ -3865,7 +3901,7 @@ fn emit_context_deps_interface(
         CommonsItem::Service(s) => s
             .handlers
             .iter()
-            .any(crate::emitter::call_handler_needs_exec),
+            .any(|h| crate::emitter::call_handler_needs_exec(&commons.exec_plan, h)),
         _ => false,
     }) {
         members.push(bynk_ts::TsTypeMember::readonly_prop(

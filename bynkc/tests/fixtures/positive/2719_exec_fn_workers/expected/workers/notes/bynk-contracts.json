@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "direct": "afb5dad3e38010bb"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "direct": "Svc(\"direct\",P(\"sku\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
+}

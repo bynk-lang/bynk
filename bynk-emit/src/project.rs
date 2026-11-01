@@ -2136,6 +2136,8 @@ fn check_unit_files(
     // each file's own `CheckedProgram` before it is dropped at the end of
     // this loop's iteration.
     event_subscriber_shapes: &mut HashMap<String, EventSubscriberShape>,
+    // #2719: the build's needs-context set so far; this unit extends it.
+    exec_plan: &mut bynk_check::exec_plan::ExecPlan,
 ) {
     // Emit-prologue tables invariant across every file of this unit — built
     // once here rather than once per file (see `EmitUnitCtx`).
@@ -2161,6 +2163,15 @@ fn check_unit_files(
         policy,
     );
 
+    // #2719: check every file of the unit before emitting any. Whether a
+    // function takes the hidden execution-context parameter depends on the
+    // functions it calls, which may sit in a sibling file, so the unit's
+    // needs-context set is settled between the two.
+    let mut checked: Vec<(
+        usize,
+        bynk_check::checker::TypedCommons,
+        bynk_check::resolver::CrossContextInfo,
+    )> = Vec::new();
     for &i in indices {
         let pf = &parsed[i];
         let Some(check_pipeline::FileCheckResult {
@@ -2202,19 +2213,23 @@ fn check_unit_files(
                 pf.is_synthetic(),
                 &typed.expr_types,
             );
-            continue;
         }
-        // T3.7b (R3.10): every per-unit gate above already ran (check_record's
-        // Ok path, check_context_constraints, check_context_declarations's
-        // blocks_emission, all inside `check_file_core`) — certify makes that
-        // structural, the same way T3.7a did for the single-file path, rather
-        // than relying on every future call site remembering to check all
-        // three before reaching emission. A later, unrelated diagnostic (e.g.
-        // check_platform_lock, which runs after this whole loop) can still
-        // bail the entire build via finish_build's separate
-        // errors.is_empty() gate — that's whole-build atomicity (already
-        // correct, already unconditional), orthogonal to this unit's own
-        // certification here.
+        checked.push((i, typed, cross_context_for_file));
+    }
+    let plan_errors = {
+        let files: Vec<&bynk_check::checker::TypedCommons> =
+            checked.iter().map(|(_, t, _)| t).collect();
+        exec_plan.extend(&files)
+    };
+    let plan_failed = !plan_errors.is_empty();
+    errors.extend_attributed_by_span(parsed, plan_errors);
+    if plan_failed || mode == Mode::Analyse {
+        return;
+    }
+    let exec_snapshot = Arc::new(exec_plan.clone());
+    for (i, mut typed, cross_context_for_file) in checked {
+        let pf = &parsed[i];
+        typed.exec_plan = Arc::clone(&exec_snapshot);
         let program = checker::certify(typed, Vec::new()).unwrap_or_else(|_| {
             panic!("bynk internal error: unit already passed every per-unit gate above")
         });
@@ -2928,6 +2943,8 @@ fn run_checks(
     let mut unit_event_subscriber_shapes: HashMap<String, HashMap<String, EventSubscriberShape>> =
         HashMap::new();
     let mut unit_consumed_context_types: HashMap<String, HashSet<String>> = HashMap::new();
+    // #2719: the needs-context set, extended unit by unit in dependency order.
+    let mut exec_plan = bynk_check::exec_plan::ExecPlan::default();
 
     // v0.119 (testing track slice 7, ADR 0155): a project-wide fold over every
     // parsed file, producing the identical `HashSet` regardless of which unit
@@ -3090,8 +3107,24 @@ fn run_checks(
             unit_event_subscriber_shapes
                 .entry(name.clone())
                 .or_default(),
+            &mut exec_plan,
         );
     }
+
+    // #2719: every unit is checked, so the needs-context set is final. Stamp it
+    // on each unit's table, which is what the emission gates for service
+    // handlers (the Worker entry, `compose`, the Bundle surface, the test
+    // harness) already hold.
+    let unit_tables: HashMap<String, UnitTable> = {
+        let plan = Arc::new(exec_plan);
+        unit_tables
+            .into_iter()
+            .map(|(k, mut t)| {
+                t.exec_plan = Arc::clone(&plan);
+                (k, t)
+            })
+            .collect()
+    };
 
     // v0.7: process test declarations. Each `test commerce.X` group resolves
     // its target, validates mocks against the target's capability/consumed-
@@ -3595,6 +3628,12 @@ fn build_output(
                     needs_kv,
                     ctx_uses_emit,
                 );
+                // #2719: the context's handlers that hand work to the execution
+                // context, from the checker's needs-context set.
+                let ctx_uses_exec = table
+                    .services
+                    .values()
+                    .any(|s| s.handlers.iter().any(|h| table.exec_plan.handler_needs(h)));
                 let (compose_ts, needs_locale_request) = emitter::emit_worker_compose(
                     ctx_name,
                     table,
@@ -3611,6 +3650,7 @@ fn build_output(
                     ctx_uses_emit,
                     &bindings,
                     harness_clock_contexts.contains(ctx_name),
+                    ctx_uses_exec,
                 );
                 // #2136: a context a `system` suite targets gets the test
                 // build's scheduled-result hook. A deployable build strips
@@ -3647,6 +3687,7 @@ fn build_output(
                     system_driven,
                     consumed_types,
                     &migratable,
+                    ctx_uses_exec,
                 );
                 // P6.x cutover slice 2 (#1191): collected here, not inside
                 // `emit_wrangler_toml` itself, so that function's own file
@@ -5118,7 +5159,7 @@ fn emit_composition_root(
         if table.services.values().any(|s| {
             s.handlers
                 .iter()
-                .any(crate::emitter::call_handler_needs_exec)
+                .any(|h| crate::emitter::call_handler_needs_exec(&table.exec_plan, h))
         }) {
             deps_entries.push((
                 "__exec".to_string(),

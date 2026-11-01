@@ -1,0 +1,10 @@
+context shop.front
+
+consumes shop.audit as Audit
+
+service front {
+	on call(id: Int) -> Effect[Int] {
+		let a <- Audit.audit(id)
+		Audit.relay(a)
+	}
+}

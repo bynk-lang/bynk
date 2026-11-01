@@ -1,0 +1,29 @@
+suite shapes {
+	case "every call shape threads the context" {
+		let r <- run.call(3)
+		expect r == 18
+	}
+
+	case "a send from a helper runs on the handler's context" {
+		let n <- twice((x) => Effect.pure(()), 5)
+		expect n == 5
+	}
+
+	case "a helper that bounds a call runs on virtual time" {
+		stub Quotes.quote(_) returns 7 after 3.seconds
+		let ok <- bounded(Quotes.quote(1))
+		expect ok == false
+	}
+
+	case "a fast call is within the bound" {
+		stub Quotes.quote(_) returns 7 after 1.seconds
+		let ok <- bounded(Quotes.quote(1))
+		expect ok == true
+	}
+
+	case "a method that bounds a call" {
+		let box <- Box.make(2)
+		let n <- box.bump(3)
+		expect n == 5
+	}
+}

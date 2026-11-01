@@ -1043,6 +1043,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.event.unknown_subscription",
         "A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context.",
     ),
+    d(
+        "bynk.exec.unavailable",
+        "A call to, or reference to, a function that hands work to the execution context (`~>`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
+    ),
     dg(
         "bynk.expect.faults_not_effect",
         "A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`.",
@@ -2108,7 +2112,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.race.outside_handler",
-        "`a.race(b)` was used outside a service handler's body (in a function, a provider or a WebSocket handler), where no execution context exists.",
+        "`a.race(b)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists.",
         &["method_call"],
     ),
     dg(
@@ -3366,7 +3370,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.within.outside_handler",
-        "`e.within(d)` was used outside a service handler's body (in a function or provider), where no execution context exists.",
+        "`e.within(d)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists.",
         &["method_call"],
     ),
     dg(
