@@ -1856,9 +1856,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /// Parse a literal pattern (v0.130 §2.3.4): `31`, `-1`, `"english"`,
-    /// `true`/`false`. The caller has already confirmed the leading token is one
-    /// of these forms.
     /// Whether the cursor is on an integer range (#2699): `lo..`, `lo..hi` or
     /// `..hi`, each bound an optionally negative `IntLit`. The one test every
     /// range position shares (a match pattern, a `let` pattern, a list element,
@@ -1914,6 +1911,9 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// Parse a literal pattern (v0.130 §2.3.4): `31`, `-1`, `"english"`,
+    /// `true`/`false`. The caller has already confirmed the leading token is one
+    /// of these forms.
     fn parse_literal_pattern(&mut self) -> Result<Pattern, CompileError> {
         let (value, span) = self.parse_literal_value()?;
         Ok(Pattern::Literal { value, span })
