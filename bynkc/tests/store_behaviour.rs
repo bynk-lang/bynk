@@ -2001,6 +2001,92 @@ fn lock_through(tag: &str, history: &[&str]) -> String {
     lock.expect("a lock-on build reconciles")
 }
 
+// #2676: a record field added with a default inside stored state is an
+// additive change, so the lock carries version 1 to version 2 with no
+// `migrate` step, and a record stored at version 1 loads with the default.
+const NESTED_DEFAULT_V1: &str = "context shop\n\
+\n\
+type Prefs = { theme: String }\n\
+\n\
+agent Profile {\n\
+\x20 key id: String\n\
+\n\
+\x20 store prefs: Cell[Prefs] = Prefs { theme: \"light\" }\n\
+\n\
+\x20 on call theme() -> Effect[String] {\n\
+\x20   prefs.theme\n\
+\x20 }\n\
+}\n";
+
+const NESTED_DEFAULT_V2: &str = "context shop\n\
+\n\
+type Prefs = { theme: String, size: Int = 12 }\n\
+\n\
+agent Profile {\n\
+\x20 key id: String\n\
+\n\
+\x20 store prefs: Cell[Prefs] = Prefs { theme: \"light\" }\n\
+\n\
+\x20 on call size() -> Effect[Int] {\n\
+\x20   prefs.size\n\
+\x20 }\n\
+\n\
+\x20 on call grow() -> Effect[()] {\n\
+\x20   prefs.update((p) => Prefs { ...p, size: p.size + 1 })\n\
+\x20 }\n\
+}\n";
+
+const NESTED_DEFAULT_DRIVER_TS: &str = r#"
+import { Profile } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function fakeState(initial?: Record<string, unknown>) {
+  const m = new Map<string, unknown>();
+  if (initial) m.set("state", initial);
+  return {
+    m,
+    state: {
+      storage: {
+        async get(key: string): Promise<unknown> { return m.get(key); },
+        async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      },
+    },
+  };
+}
+
+// 1. A record stored at version 1, before `size` existed, reads its default.
+const old = fakeState({ prefs: { theme: "dark" }, __v: 1 });
+assert((await new Profile(old.state as never).size({})) === 12, "a v1 record reads the default");
+
+// 2. Writing it back stores the field and the current version.
+const grown = fakeState({ prefs: { theme: "dark" }, __v: 1 });
+await new Profile(grown.state as never).grow({});
+const after = grown.m.get("state") as { prefs: { size: number }; __v: number };
+assert(after.prefs.size === 13 && after.__v === 2, "written back at version 2");
+
+// 3. A version-2 record keeps its value.
+const cur = fakeState({ prefs: { theme: "dark", size: 9 }, __v: 2 });
+assert((await new Profile(cur.state as never).size({})) === 9, "a v2 record keeps its value");
+
+console.log("ALL OK");
+"#;
+
+#[test]
+fn a_defaulted_field_added_inside_stored_state_needs_no_migrate_step() {
+    let lock = lock_through("nested-default", &[NESTED_DEFAULT_V1]);
+    verify_with_lock(
+        "nested-default",
+        NESTED_DEFAULT_V2,
+        NESTED_DEFAULT_DRIVER_TS,
+        Some(&lock),
+    );
+}
+
 #[test]
 fn migrate_steps_carry_stored_records_forward_at_load() {
     let lock = lock_through("migrate", &[MIGRATE_V1, MIGRATE_V2]);

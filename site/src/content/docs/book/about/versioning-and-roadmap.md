@@ -44,10 +44,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   for a member, if the doc-above form proves too tall for short records; today a
   `---` after code is three `-` operators. Record field defaults
   ([#2607](https://github.com/bynk-lang/bynk/issues/2607)) name three possible
-  follow-ups: the agent schema lock counting a defaulted nested field as an
-  additive change, as the event registry does; a service contract hash that
-  ignores an added defaulted field; and defaults on a field whose type applies a
-  user generic.
+  follow-ups: a service contract hash that ignores an added defaulted field, and
+  defaults on a field whose type applies a user generic. The agent schema lock now
+  counts a defaulted field added inside stored state as additive
+  ([#2676](https://github.com/bynk-lang/bynk/issues/2676)); adding a sum variant to
+  stored state is the next candidate there.
 - **Events.** Slices 0–2, 3a–3c, and 4 have shipped — `event` declarations,
   `given Events` emission with owner-only enforcement, `from Events(E)`
   subscription across contexts on every platform, structural pattern

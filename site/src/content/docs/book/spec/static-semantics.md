@@ -905,12 +905,31 @@ stored: the commit faults and nothing persists.
 against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
 shape is its storage kind and its value types, expanded structurally (record
 fields, sum variants and variant payload fields by name; type names do not
-appear, since stored bytes carry none), with and without refinements. A new class is recorded at version 1.
-An unchanged shape keeps its version. Adding a field, or changing only a
-refinement, increments it; the latter also warns (`bynk.agent.refinement_changed`),
-since a narrowing faults on load as above. Removing a field, changing its value
-types, or changing its storage kind is `bynk.agent.non_additive_state_change`,
-and so is renaming one, which is a removal plus an addition. A recorded class no
+appear, since stored bytes carry none), with and without refinements, and as the
+list of positions in the stored value (each record field, variant and container
+element by path, with whether a record field declares a default). A new class is
+recorded at version 1. An unchanged shape keeps its version. These changes
+increment it:
+- adding a `store` field;
+- adding a record field **with a default** anywhere inside a stored value, together
+  with whatever lies beneath it, since every record stored before decodes it as its
+  default ([§5.2b](#field-defaults));
+- a record field gaining a default;
+- changing only a refinement, which also warns (`bynk.agent.refinement_changed`),
+  since a narrowing faults on load as above.
+
+Any other change is `bynk.agent.non_additive_state_change`, and the diagnostic
+names each position that broke:
+- removing a `store` field, or a record field inside a stored value;
+- changing a position's type, or a field's storage kind;
+- adding a record field without a default;
+- a record field losing its default;
+- adding a sum variant.
+
+Renaming a field is a removal plus an addition. A shape recorded before positions
+were (an older lock) has none: an unchanged build fills them in without changing
+the version, and until then a change inside a stored value is judged as a change of
+the field's value types. A recorded class no
 longer declared is `bynk.agent.class_removed`. As for events, `bynkc check` and
 `bynkc test` reconcile without writing the lock, and only a build records a new
 version.

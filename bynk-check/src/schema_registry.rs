@@ -43,7 +43,7 @@ use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
 
 use bynk_project::schema_registry::{
-    AgentEntry, AgentShape, EventEntry, FieldShape, SchemaRegistry, StoreShape,
+    AgentEntry, AgentShape, EventEntry, FieldShape, PathShape, SchemaRegistry, StoreShape,
 };
 
 use crate::symbols::UnitTable;
@@ -429,11 +429,37 @@ fn agent_snapshot(
                 .iter()
                 .map(|a| crate::contract::canon_storage_type(a, types))
                 .unzip();
+            // #2676 (Decision B): one argument roots its paths at the
+            // field's name; a kind with several (`Map[K, V]`) numbers them.
+            let args = &f.kind.args;
+            let paths = args
+                .iter()
+                .enumerate()
+                .flat_map(|(i, a)| {
+                    let root = if args.len() == 1 {
+                        f.name.name.clone()
+                    } else {
+                        format!("{}#{i}", f.name.name)
+                    };
+                    crate::contract::storage_paths(a, &root, types)
+                })
+                .map(|p| PathShape {
+                    refinement: if p.full == p.structure {
+                        String::new()
+                    } else {
+                        p.full
+                    },
+                    path: p.path,
+                    ty: p.structure,
+                    default: p.default,
+                })
+                .collect();
             StoreShape {
                 name: f.name.name.clone(),
                 kind: f.kind.head.name.clone(),
                 ty: structure.join(", "),
                 refinement: full.join(", "),
+                paths,
             }
         })
         .collect();
@@ -445,15 +471,25 @@ fn agent_snapshot(
 #[derive(Debug, PartialEq, Eq)]
 enum AgentChange {
     Unchanged,
-    /// Fields added, and/or refinements changed with the structure intact.
+    /// Fields added, record fields added with a default inside a stored value
+    /// (#2676), and/or refinements changed with the structure intact.
     Additive {
         refined: Vec<String>,
+        /// #2676: what changed inside a stored value, path by path
+        /// ("prefs.size added with a default").
+        nested: Vec<String>,
     },
     NonAdditive {
         removed: Vec<String>,
         added: Vec<String>,
+        /// A retyped field, with the paths that broke when the lock recorded
+        /// them (`prefs (prefs.size added without a default)`).
         retyped: Vec<String>,
         rekinded: Vec<String>,
+        /// #2676 (Decision C): a field was retyped against a snapshot written
+        /// before the lock recorded paths, so the change could not be judged
+        /// path by path.
+        unrecorded: bool,
     },
 }
 
@@ -467,13 +503,50 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
     let mut retyped = Vec::new();
     let mut rekinded = Vec::new();
     let mut refined = Vec::new();
+    let mut nested = Vec::new();
+    let mut unrecorded = false;
     for (name, o) in &old {
-        match new.get(name) {
-            None => removed.push(name.to_string()),
-            Some(n) if n.kind != o.kind => rekinded.push(name.to_string()),
-            Some(n) if n.ty != o.ty => retyped.push(name.to_string()),
-            Some(n) if n.refinement != o.refinement => refined.push(name.to_string()),
-            Some(_) => {}
+        let Some(n) = new.get(name) else {
+            removed.push(name.to_string());
+            continue;
+        };
+        if n.kind != o.kind {
+            rekinded.push(name.to_string());
+            continue;
+        }
+        if o.paths.is_empty() {
+            // Decision C: no recorded paths, so only the strings can be
+            // compared, as before #2676. An unchanged one is backfilled by the
+            // reconcile.
+            if n.ty != o.ty {
+                retyped.push(name.to_string());
+                unrecorded = true;
+            } else if n.refinement != o.refinement {
+                refined.push(name.to_string());
+            }
+            continue;
+        }
+        let paths = compare_paths(&o.paths, &n.paths);
+        if !paths.problems.is_empty() {
+            retyped.push(format!("{name} ({})", paths.problems.join(", ")));
+            continue;
+        }
+        if n.ty != o.ty && paths.added.is_empty() {
+            // The strings differ but no path explains it: never guess.
+            retyped.push(name.to_string());
+            continue;
+        }
+        nested.extend(
+            paths
+                .added
+                .iter()
+                .map(|p| format!("{p} added with a default")),
+        );
+        nested.extend(paths.gained.iter().map(|p| format!("{p} gained a default")));
+        // The whole-value strings differ whenever a field is added, so a
+        // refinement change is read position by position.
+        if paths.refined {
+            refined.push(name.to_string());
         }
     }
     let added: Vec<String> = new
@@ -481,16 +554,105 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
         .filter(|n| !old.contains_key(*n))
         .map(|n| n.to_string())
         .collect();
-    if removed.is_empty() && retyped.is_empty() && rekinded.is_empty() {
-        AgentChange::Additive { refined }
-    } else {
-        AgentChange::NonAdditive {
+    if !removed.is_empty() || !retyped.is_empty() || !rekinded.is_empty() {
+        return AgentChange::NonAdditive {
             removed,
             added,
             retyped,
             rekinded,
+            unrecorded,
+        };
+    }
+    if added.is_empty() && refined.is_empty() && nested.is_empty() {
+        // Equal but for paths a pre-#2676 snapshot never recorded.
+        return AgentChange::Unchanged;
+    }
+    AgentChange::Additive { refined, nested }
+}
+
+/// #2676: how one stored field's recorded paths relate to its live ones.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct PathChange {
+    /// What makes the change non-additive, one clause per path.
+    problems: Vec<String>,
+    /// The topmost new paths, each a record field that declares a default.
+    added: Vec<String>,
+    /// Existing record fields that gained a default.
+    gained: Vec<String>,
+    /// Whether a position both shapes have changed its predicates only.
+    refined: bool,
+}
+
+/// #2676 (Decisions A and E). Every recorded path must still exist with the
+/// same shallow structure, and must not lose its default (a record stored
+/// before the field existed would no longer decode). Every new path must sit
+/// under a new record field that declares a default: that field is absent from
+/// every stored record and decodes to its default, and whatever lies beneath it
+/// comes with it. Anything else (a removed or retyped position, a field added
+/// without a default, a new variant) is a problem.
+fn compare_paths(stored: &[PathShape], live: &[PathShape]) -> PathChange {
+    let old: BTreeMap<&str, &PathShape> = stored.iter().map(|p| (p.path.as_str(), p)).collect();
+    let new: BTreeMap<&str, &PathShape> = live.iter().map(|p| (p.path.as_str(), p)).collect();
+    let mut change = PathChange::default();
+    for (path, o) in &old {
+        match new.get(path) {
+            None => change.problems.push(format!("{path} removed")),
+            Some(n) if n.ty != o.ty => change.problems.push(format!("{path} retyped")),
+            Some(n) if o.default && !n.default => {
+                change.problems.push(format!("{path} lost its default"));
+            }
+            Some(n) => {
+                if !o.default && n.default {
+                    change.gained.push(path.to_string());
+                }
+                if path_refinement(n) != path_refinement(o) {
+                    change.refined = true;
+                }
+            }
         }
     }
+    let fresh: Vec<&str> = new
+        .keys()
+        .copied()
+        .filter(|p| !old.contains_key(p))
+        .collect();
+    for path in &fresh {
+        // Only the topmost new position is judged; what lies under it comes
+        // with it.
+        if fresh.iter().any(|q| q != path && is_under(path, q)) {
+            continue;
+        }
+        let node = new[path];
+        if node.default {
+            change.added.push(path.to_string());
+        } else if node.ty == "variant" {
+            change.problems.push(format!("{path} variant added"));
+        } else {
+            change
+                .problems
+                .push(format!("{path} added without a default"));
+        }
+    }
+    change
+}
+
+/// A path's rendering with predicates kept (recorded only where it differs from
+/// its structure).
+fn path_refinement(p: &PathShape) -> &str {
+    if p.refinement.is_empty() {
+        &p.ty
+    } else {
+        &p.refinement
+    }
+}
+
+/// Whether `path` lies strictly beneath `ancestor`: it extends it at a segment
+/// boundary (`prefs.size` is under `prefs`, `prefs.sizes` is not under
+/// `prefs.size`).
+fn is_under(path: &str, ancestor: &str) -> bool {
+    path.strip_prefix(ancestor)
+        .and_then(|rest| rest.chars().next())
+        .is_some_and(|c| matches!(c, '.' | '[' | '?' | '{' | '|' | '#'))
 }
 
 /// The rename the author most likely made, when it is unambiguous: exactly
@@ -987,8 +1149,24 @@ pub fn reconcile_agents(
                         .map(|s| s.fields.as_slice())
                         .expect("a parsed agent entry has a snapshot at its version");
                     match classify_agent_change(&current, stored) {
-                        AgentChange::Unchanged => stored_entry.clone(),
-                        AgentChange::Additive { refined } => {
+                        AgentChange::Unchanged => {
+                            // #2676 (Decision C): a snapshot written before
+                            // the lock recorded paths takes them from the
+                            // unchanged declaration, so the next change can
+                            // be judged path by path. The structure is the
+                            // same, and defaults were never recorded, so
+                            // nothing is invented.
+                            let mut entry = stored_entry.clone();
+                            let version = entry.version;
+                            if let Some(snapshot) =
+                                entry.shapes.iter_mut().find(|s| s.version == version)
+                                && snapshot.fields != current
+                            {
+                                snapshot.fields = current.clone();
+                            }
+                            entry
+                        }
+                        AgentChange::Additive { refined, .. } => {
                             for name in &refined {
                                 errors.push(refinement_changed_warning(agent, name));
                             }
@@ -1006,6 +1184,7 @@ pub fn reconcile_agents(
                             added,
                             retyped,
                             rekinded,
+                            unrecorded,
                         } => {
                             // State-migrations S2 (#2224 Decision C): a
                             // `migrate from <stored version>` step that checks
@@ -1033,10 +1212,21 @@ pub fn reconcile_agents(
                                 None => {
                                     let hint =
                                         unambiguous_rename(&removed, &added, stored, &current);
-                                    errors.push(non_additive_state_error(
+                                    let mut err = non_additive_state_error(
                                         agent, &key, from, stored, &removed, &retyped, &rekinded,
                                         &hint,
-                                    ));
+                                    );
+                                    if unrecorded {
+                                        err = err.with_note(
+                                            "this lock predates per-path shapes, so a change \
+                                             inside a stored value can't be judged field by \
+                                             field: build once with the definition the lock \
+                                             records, before this change, so the lock records \
+                                             which fields have defaults; a record field added \
+                                             with a default is then additive",
+                                        );
+                                    }
+                                    errors.push(err);
                                     stored_entry.clone()
                                 }
                             }
@@ -1264,9 +1454,14 @@ pub fn diff_against_lock(
                 .is_some_and(|e| e.version > stored_entry.version);
             let (class, detail) = match change {
                 AgentChange::Unchanged => continue,
-                AgentChange::Additive { .. } => (
+                AgentChange::Additive { nested, .. } => (
                     ChangeClass::Compatible,
-                    "stored state changed additively".to_string(),
+                    // #2676 (Decision G): name what changed inside a value.
+                    if nested.is_empty() {
+                        "stored state changed additively".to_string()
+                    } else {
+                        format!("stored state changed additively ({})", nested.join(", "))
+                    },
                 ),
                 AgentChange::NonAdditive {
                     removed,
@@ -1426,6 +1621,85 @@ fn non_additive_state_error(
         RenameHint::None => {}
     }
     err.with_note(never_deployed_note(key))
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+
+    fn at(path: &str, ty: &str, default: bool) -> PathShape {
+        PathShape {
+            path: path.to_string(),
+            ty: ty.to_string(),
+            default,
+            refinement: String::new(),
+        }
+    }
+
+    #[test]
+    fn is_under_needs_a_segment_boundary() {
+        assert!(is_under("prefs.size", "prefs"));
+        assert!(is_under("items[].note", "items"));
+        assert!(is_under("byId#1.label", "byId"));
+        assert!(is_under("last?|Added.sku", "last?|Added"));
+        assert!(!is_under("prefs.sizes", "prefs.size"));
+        assert!(!is_under("prefs", "prefs"));
+    }
+
+    #[test]
+    fn only_a_topmost_new_defaulted_field_is_additive() {
+        let old = [at("p", "{}", false), at("p.theme", "String", false)];
+        let added = [
+            at("p", "{}", false),
+            at("p.extra", "{}", true),
+            at("p.extra.note", "String", false),
+            at("p.theme", "String", false),
+        ];
+        let change = compare_paths(&old, &added);
+        assert!(change.problems.is_empty(), "{change:?}");
+        assert_eq!(change.added, ["p.extra"]);
+
+        let undefaulted = [
+            at("p", "{}", false),
+            at("p.dark", "Bool", false),
+            at("p.theme", "String", false),
+        ];
+        assert_eq!(
+            compare_paths(&old, &undefaulted).problems,
+            ["p.dark added without a default"]
+        );
+    }
+
+    #[test]
+    fn removal_retype_lost_default_and_a_variant_are_problems() {
+        let old = [
+            at("p", "{}", false),
+            at("p.size", "Int", true),
+            at("p.theme", "String", false),
+        ];
+        let new = [at("p", "{}", false), at("p.size", "String", false)];
+        assert_eq!(
+            compare_paths(&old, &new).problems,
+            ["p.size retyped", "p.theme removed"]
+        );
+        let lost = [
+            at("p", "{}", false),
+            at("p.size", "Int", false),
+            at("p.theme", "String", false),
+        ];
+        assert_eq!(
+            compare_paths(&old, &lost).problems,
+            ["p.size lost its default"]
+        );
+
+        let sum = [at("e", "|", false), at("e|A", "variant", false)];
+        let more = [
+            at("e", "|", false),
+            at("e|A", "variant", false),
+            at("e|B", "variant", false),
+        ];
+        assert_eq!(compare_paths(&sum, &more).problems, ["e|B variant added"]);
+    }
 }
 
 #[cfg(test)]
