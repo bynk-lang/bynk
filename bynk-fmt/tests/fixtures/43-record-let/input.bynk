@@ -1,0 +1,48 @@
+commons shop.orders {
+  type Status = enum { Pending, Paid }
+  type Customer = { name: String, email: String }
+  type Order = { id: String, status: Status, total: Int, customer: Customer }
+
+  fn plain(o: Order) -> Int {
+    let Order{id,total:t,..}=o
+    t
+  }
+
+  fn nested(o: Order) -> String {
+    let Order {   customer: Customer { email, .. }  , total  , .. } = o
+    // keep the nesting
+    email
+  }
+
+  fn parenthesised(o: Order) -> String {
+    let ( Order { id, .. } ) = o
+    id
+  }
+
+  fn refutable(o: Order) -> Int {
+    let Order { status: Paid, total, .. } = o else { 0 }
+    total
+  }
+
+  fn refutableMatch(o: Order) -> Int {
+    let Order { status: Paid, total, .. } = o else match {
+      _ => 0,
+    }
+    total
+  }
+
+  fn orPattern(o: Order) -> Int {
+    let Order { status: Paid, .. } | Order { status: Pending, .. } = o else { 0 }
+    1
+  }
+
+  fn effectful(id: String) -> Effect[Int] {
+    let Order { total, .. } <- load(id)
+    total
+  }
+
+  fn inLambda(os: List[Order]) -> List[Int] {
+    os.map((o) => { let Order{total,..}=o
+ total })
+  }
+}

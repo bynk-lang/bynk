@@ -1,0 +1,1 @@
+bynk.parse.let_pattern_annotation a `let` with a pattern cannot carry a type annotation

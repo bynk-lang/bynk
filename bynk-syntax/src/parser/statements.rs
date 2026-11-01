@@ -240,7 +240,8 @@ impl<'a> Parser<'a> {
 
     /// #2010: whether the `let` at the cursor starts a pattern rather than a
     /// binding name. A pattern starts with `Ok`/`Err`/`Some`/`None`, a literal,
-    /// `(`, or a name followed by `(` or `.` (`Shipped(at)`, `Status.Pending`).
+    /// `(`, a name followed by `(` or `.` (`Shipped(at)`, `Status.Pending`), or a
+    /// capitalised name followed by `{` (`Item { sku, .. }`, #2654).
     /// A bare name stays a binding (`let None = …` is not a binding today
     /// either, since `None` is a keyword), so no existing program changes.
     fn let_pattern_ahead(&self) -> bool {
@@ -258,7 +259,17 @@ impl<'a> Parser<'a> {
                 | TokenKind::LParen,
             ) => true,
             Some(TokenKind::Minus) => at(2) == Some(TokenKind::IntLit),
-            Some(TokenKind::Ident) => matches!(at(2), Some(TokenKind::LParen | TokenKind::Dot)),
+            Some(TokenKind::Ident) => match at(2) {
+                Some(TokenKind::LParen | TokenKind::Dot) => true,
+                // #2654: a capitalised name directly followed by `{` opens a
+                // record pattern. A binding name is never followed by `{`, so
+                // no `let` that parses today changes.
+                Some(TokenKind::LBrace) => self.tokens.get(self.pos + 1).is_some_and(|t| {
+                    self.slice(t.span)
+                        .starts_with(|c: char| c.is_ascii_uppercase())
+                }),
+                _ => false,
+            },
             _ => false,
         }
     }
@@ -266,7 +277,9 @@ impl<'a> Parser<'a> {
     /// #2010: `let <pattern> (= | <-) <expr> else (<block> | match { <arms> })`.
     fn parse_let_else(&mut self) -> Result<LetElseParts, CompileError> {
         let kw = self.expect(TokenKind::Let, "to start a let statement")?;
+        let pattern_first = self.pos;
         let pattern = self.parse_pattern_top()?;
+        let pattern_after = self.pos;
         if self.peek_kind() == Some(TokenKind::Colon) {
             let colon = self.peek().unwrap().span;
             return Err(CompileError::new(
@@ -295,15 +308,45 @@ impl<'a> Parser<'a> {
             None
         };
         if self.peek_kind() != Some(TokenKind::Else) {
-            return Err(CompileError::new(
+            // #2654: an irrefutable record pattern has no values to fall back
+            // on, so its `let` may omit the `else`. Parentheses around the
+            // pattern are transparent, so they are already gone here.
+            if matches!(pattern, Pattern::Record { .. }) && pattern.is_irrefutable() {
+                let end = principal.as_ref().map_or(value.span, |p| p.span);
+                return Ok(LetElseParts {
+                    kw: kw.span,
+                    pattern,
+                    value,
+                    effectful,
+                    principal,
+                    else_span: Span {
+                        file: end.file,
+                        start: end.end,
+                        end: end.end,
+                    },
+                    remove_else: Vec::new(),
+                    otherwise: None,
+                    span: kw.span.merge(end),
+                    leading: Vec::new(),
+                    trailing: None,
+                });
+            }
+            let mut err = CompileError::new(
                 "bynk.parse.let_pattern_without_else",
                 kw.span.merge(value.span),
                 "a `let` with a pattern needs an `else` for the values the pattern does not match",
-            )
-            .with_note(
+            );
+            if let Some(field) = first_refutable_field(&pattern) {
+                err = err.with_note(format!(
+                    "`{}` can fail to match, so the pattern does not cover every value",
+                    self.slice(field)
+                ));
+            }
+            return Err(err.with_note(
                 "add `else { … }` after the value to say what this block produces when it does not match, or write a `match`",
             ));
         }
+        let after_value = principal.as_ref().map_or(value.span, |p| p.span);
         let else_span = self.bump().unwrap().span;
         let (otherwise, end) = if self.peek_kind() == Some(TokenKind::Match) {
             let match_kw = self.bump().unwrap().span;
@@ -327,6 +370,8 @@ impl<'a> Parser<'a> {
             let end = block.span;
             (LetElseOtherwise::Block(block), end)
         };
+        let remove_else =
+            self.else_removal(&pattern, pattern_first..pattern_after, after_value, end);
         Ok(LetElseParts {
             kw: kw.span,
             pattern,
@@ -334,11 +379,48 @@ impl<'a> Parser<'a> {
             effectful,
             principal,
             else_span,
-            otherwise,
+            remove_else,
+            otherwise: Some(otherwise),
             span: kw.span.merge(end),
             leading: Vec::new(),
             trailing: None,
         })
+    }
+
+    /// #2654: the ranges to delete to turn `let (T { … }) = e else …` into
+    /// `let T { … } = e` — the parentheses around the pattern (any number: they
+    /// are transparent) and everything from the end of the value to the end of
+    /// the `else`. Empty unless the pattern is a record pattern, the only one
+    /// that has an `else`-less form. `tokens` is the pattern's token range.
+    fn else_removal(
+        &self,
+        pattern: &Pattern,
+        tokens: std::ops::Range<usize>,
+        after_value: Span,
+        end: Span,
+    ) -> Vec<Span> {
+        if !matches!(pattern, Pattern::Record { .. }) {
+            return Vec::new();
+        }
+        let kind = |i: usize| self.tokens.get(i).map(|t| t.kind);
+        let opens = tokens
+            .clone()
+            .take_while(|&i| kind(i) == Some(TokenKind::LParen))
+            .count();
+        let closes = tokens
+            .clone()
+            .rev()
+            .take_while(|&i| kind(i) == Some(TokenKind::RParen))
+            .count();
+        let mut out = Vec::new();
+        if opens > 0 && opens == closes {
+            let open = self.tokens[tokens.start].span;
+            let close = self.tokens[tokens.end - 1].span;
+            out.push(Span::new_in(open.file, open.start, pattern.span().start));
+            out.push(Span::new_in(close.file, pattern.span().end, close.end));
+        }
+        out.push(Span::new_in(end.file, after_value.end, end.end));
+        out
     }
 
     /// #2010: the hidden binding and the `match` a `let … else` stands for —
@@ -354,6 +436,7 @@ impl<'a> Parser<'a> {
             effectful,
             principal,
             else_span,
+            remove_else,
             otherwise,
             span,
             leading,
@@ -368,16 +451,21 @@ impl<'a> Parser<'a> {
             name: format!("{LET_ELSE_BINDER_PREFIX}{}", kw.start),
             span: at,
         };
-        let form = match otherwise {
-            LetElseOtherwise::Block(_) => LetElseForm::Block,
-            LetElseOtherwise::Arms(_) => LetElseForm::Match,
+        let form = match &otherwise {
+            Some(LetElseOtherwise::Block(_)) => LetElseForm::Block,
+            Some(LetElseOtherwise::Arms(_)) => LetElseForm::Match,
+            None => LetElseForm::Plain,
         };
         let let_stmt = LetStmt {
             name: binder.clone(),
             type_annot: None,
             value,
             principal,
-            let_else: Some(LetElse { form, else_span }),
+            let_else: Some(LetElse {
+                form,
+                else_span,
+                remove_else,
+            }),
             span,
             trivia: Trivia { leading, trailing },
         };
@@ -394,13 +482,14 @@ impl<'a> Parser<'a> {
             body: MatchBody::Block(rest),
         }];
         match otherwise {
-            LetElseOtherwise::Block(block) => arms.push(MatchArm {
+            None => {}
+            Some(LetElseOtherwise::Block(block)) => arms.push(MatchArm {
                 span: else_span.merge(block.span),
                 pattern: Pattern::Wildcard(else_span),
                 guard: None,
                 body: MatchBody::Block(block),
             }),
-            LetElseOtherwise::Arms(more) => arms.extend(more),
+            Some(LetElseOtherwise::Arms(more)) => arms.extend(more),
         }
         let discriminant = Expr {
             id: self.alloc_expr_id(),
@@ -800,10 +889,30 @@ struct LetElseParts {
     effectful: bool,
     principal: Option<CallSiteActor>,
     else_span: Span,
-    otherwise: LetElseOtherwise,
+    remove_else: Vec<Span>,
+    /// `None` for the `else`-less form of an irrefutable record pattern (#2654).
+    otherwise: Option<LetElseOtherwise>,
     span: Span,
     leading: Vec<Comment>,
     trailing: Option<String>,
+}
+
+/// #2654: the span of the first field of a record pattern that can fail to
+/// match, descending into nested record patterns to the field that does.
+fn first_refutable_field(p: &Pattern) -> Option<Span> {
+    let Pattern::Record { fields, .. } = p else {
+        return None;
+    };
+    for (name, sub) in fields {
+        let Some(sub) = sub else { continue };
+        if let Some(inner) = first_refutable_field(sub) {
+            return Some(inner);
+        }
+        if !sub.is_irrefutable() {
+            return Some(name.span.merge(sub.span()));
+        }
+    }
+    None
 }
 
 enum LetElseOtherwise {

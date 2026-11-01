@@ -1,0 +1,8 @@
+commons demo
+
+type Item = { sku: String, qty: Int }
+
+fn f(item: Item) -> Int {
+  let Item { qty, .. }: Item = item
+  qty
+}

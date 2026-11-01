@@ -829,7 +829,7 @@
     },
     {
       "code": "bynk.parse.let_pattern_without_else",
-      "summary": "A `let` binds a pattern but has no `else` saying what the block produces when the value does not match."
+      "summary": "A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it."
     }
   ],
   "let_stmt": [
