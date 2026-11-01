@@ -1,12 +1,6 @@
----
-level: minor
-changelog: "String literals gain `\\r`, `\\0` and `\\u{…}` escapes, raw strings (`r\"…\"`, `r#\"…\"#`) and multi-line strings (`\"\"\"…\"\"\"`, `r\"\"\"…\"\"\"`) that strip the closing delimiter's indentation; a raw or multi-line literal is accepted wherever a string literal is required, so regex patterns and SQL statements read as written (proposed in [#2619](https://github.com/bynk-lang/bynk/issues/2619))"
-probes: diagnostic_coverage, ts_writes
----
+# 0694 — String literals have raw and multi-line forms and a wider escape set
 
-## ADR: string-literal-forms
-title: String literals have raw and multi-line forms and a wider escape set
-summary: `\r`, `\0` and `\u{…}`; raw `r"…"`; multi-line `"""…"""` with the closing delimiter's indentation stripped; newlines always `\n`
+- **Status:** Accepted (v0.476)
 
 **Context.** A string literal recognised only `\n`, `\t`, `\"`, `\\` and `\(…)`.
 There was no `\r` (HTTP header lines, CSV `\r\n`), no way to write a

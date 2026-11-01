@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.475**.
+written against **v0.476**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.476.0** | "String literals gain `\\r`, `\\0` and `\\u{…}` escapes, raw strings (`r\"…\"`, `r#\"…\"#`) and multi-line strings (`\"\"\"…\"\"\"`, `r\"\"\"…\"\"\"`) that strip the closing delimiter's indentation; a raw or multi-line literal is accepted wherever a string literal is required, so regex patterns and SQL statements read as written (proposed in [#2619](https://github.com/bynk-lang/bynk/issues/2619))" |
 | **v0.475.0** | "The execution context reaches effectful functions: `~>`, `e.within(d)` and `a.race(b)` are legal in an effectful `fn` or method, which takes the context as a hidden trailing parameter the compiler infers (a fixed point over the build) and every call passes on; a call from an agent handler, a WebSocket handler or a provider operation to a function that needs it is `bynk.exec.unavailable`, with the chain to the construct; fixes the `~>` in a `fn` that checked clean and failed `tsc` ([#2719](https://github.com/bynk-lang/bynk/issues/2719), [#2682](https://github.com/bynk-lang/bynk/issues/2682))" |
 | **v0.474.0** | "Record patterns as lambda parameters: `items.fold(0, (total, Item { qty, price, .. }) => total + qty * price)` takes an irrefutable record pattern in place of a lambda parameter's name, mixed freely with name parameters, with the parameter's type from the expected function type or the record's own name; a refutable or non-record pattern, or an annotation, is a parse error (patterns track slice 6, [#2712](https://github.com/bynk-lang/bynk/issues/2712))" |
 | **v0.473.0** | "`a.race(b)`: the first of two `Effect[T]` to succeed wins, and the loser is handed to `waitUntil`, not cancelled, so it suits idempotent reads; if every side faults the first fault in source order is raised with the rest as `suppressed`; a same-instant tie goes to the receiver; legal where `within` is, and tested on virtual time with latency stubs; reopens track Q7 and adopts its option (b) (concurrent effects, slice 4, [#2711](https://github.com/bynk-lang/bynk/issues/2711))" |
