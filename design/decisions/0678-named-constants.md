@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: "A commons or context declares a named constant with `const Name: Type = <static expression>`, usable wherever an expression of its type is and imported through `uses` like a function. The type is required, the name is upper-camel, and the initialiser is a literal, a constructor over static values, `T.unsafe(lit)`, an empty collection, a `Duration` literal or another constant, with no cycles; it is emitted as an exported TypeScript `const` ([#2617](https://github.com/bynk-lang/bynk/issues/2617))"
----
+# 0678 — Named constants are typed, upper-camel and statically initialised
 
-## ADR: named-constants
-title: Named constants are typed, upper-camel and statically initialised
-summary: `const Name: Type = <static expression>` in a commons or context joins the unit's value namespace, takes ADR 0004's static set plus references to other constants, refuses cycles, and emits as an exported TypeScript `const` in dependency order
+- **Status:** Accepted (v0.462)
 
 **Context.** A program that wants a named value (a retry limit, a default
 page, a timeout) had two workarounds: a nullary function (`fn maxRetries() ->
