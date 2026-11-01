@@ -1,7 +1,7 @@
 ---
 level: minor
 probes: emit_diagnostics, diagnostic_coverage
-changelog: "A `private` modifier on a commons or context `fn` (including a method), `type`, `messages`, `asset` or `embed` keeps it within its own unit: visible across the unit's files and to its suites, never through `uses`. A reference from another unit is `bynk.visibility.private_item`, a public signature naming a private type is `bynk.visibility.private_in_public`, and `private` on any other declaration is `bynk.visibility.private_not_allowed`. `private` is a contextual keyword, so `@cache(scope: private)` is unchanged ([#2618](https://github.com/bynk-lang/bynk/issues/2618))"
+changelog: "A `private` modifier on a commons or context `fn` (including a method), `type`, `messages`, `asset` or `embed` keeps it within its own unit: visible across the unit's files and to its suites, never through `uses`. A reference from another unit is `bynk.visibility.private_item`, a public signature naming a private type is `bynk.visibility.private_in_public`, `private` on any other declaration is `bynk.visibility.private_not_allowed`, and `private` on a `messages` block warns (`bynk.visibility.private_messages`), since negotiation reads only the `@reference` block's visibility. `private` is a contextual keyword, so `@cache(scope: private)` is unchanged ([#2618](https://github.com/bynk-lang/bynk/issues/2618))"
 ---
 
 ## ADR: private-declarations
@@ -64,6 +64,13 @@ The choices the proposal left open:
   `bynk.visibility.private_item` as in any unit. A `system` harness filters
   the suite's own `uses` the same way and leaves the participants (the
   systems under test) as they were.
+  - This leaves a deliberate asymmetry: a `system` suite can name a
+    participant context's private type, while a context that `consumes`
+    that participant cannot (it sees only what the participant exports, and
+    decision H keeps a private type out of `exports`). It is kept because a
+    harness test often needs to build or inspect a value the system keeps to
+    itself. Spec §5.1c and §5.9 state it, and the positive fixture
+    `2618_private_type_in_system_suite` pins it.
 - **J. Emission is unchanged.** A private declaration is still emitted with
   `export`. Omitting it is not trivially safe: a unit suite's scaffold and
   the hidden-type closure (#1807) import from the declaring module, and the
@@ -84,9 +91,24 @@ The choices the proposal left open:
 - **M. A private `messages` bundle** is accepted (decision D) and, like
   every private declaration, never reaches a unit through `uses`: a context
   that `uses` the commons does not negotiate its locale against that bundle.
-  Since a bundle only ever serves a context that uses its commons, a private
-  bundle has no effect today; it is admitted so that the modifier means the
-  same on every declaration it applies to.
+  Negotiation reads a bundle's visibility off its `@reference` block alone,
+  and emission is unchanged (decision J), so the commons' own `render` still
+  reads every block. `private` on a `messages` block therefore never does
+  what it suggests, and it warns with `bynk.visibility.private_messages`:
+  - on the `@reference` block, because no context that uses the commons will
+    negotiate against the bundle (the note suggests removing `private`);
+  - on any other block of a bundle whose `@reference` block is public,
+    because it has no effect: the block's locale is still negotiated.
+
+  The warning applies to a commons only. A `messages` block in a context or
+  adapter is already `bynk.messages.outside_commons`, and a bundle with no
+  `@reference` block, or more than one, is already an error, so neither
+  warns as well. It fires whether or not any context uses the commons yet:
+  the warning is about what the modifier does, not about a particular user.
+  The modifier is still admitted so that it means the same on every
+  declaration it applies to. The positive fixture
+  `2618_private_messages_warns` pins both warnings and that `render` still
+  reads a private bundle.
 - **N. Constants.** Named constants (#2617) are landing separately. Whichever
   of the two changes merges second extends `private` to `const`.
 - **O. Standard library.** No standard-library helper is marked `private`:

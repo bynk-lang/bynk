@@ -176,6 +176,19 @@ through `uses`.
 - `private` MUST NOT modify a `service`, `agent`, `capability`, `provides`,
   `actor` or `event` declaration, nor any declaration in an `adapter`
   (`bynk.visibility.private_not_allowed`).
+- A context negotiates its locale (`Locale.current()`) against the bundle of
+  a commons it `uses` only when that bundle's `@reference` block is public. A
+  private `@reference` block keeps the whole bundle out of every such
+  context; the commons' own `render` still reads every block. `private` on a
+  `messages` block warns (`bynk.visibility.private_messages`): on the
+  `@reference` block because no context will negotiate against the bundle,
+  and on any other block of a bundle whose reference is public because it
+  has no effect.
+- A `system` suite (§5.9) may name every type a participant context
+  declares, its private types included, although a context that `consumes`
+  the participant may not: a harness test often needs to build or inspect a
+  value the system keeps to itself. The suite's own `uses` commons keep their
+  private declarations, as in any other unit.
 
 Visibility is a naming rule only. It does not change what a declaration
 means, how it is checked within its own unit, or what is emitted for it. A
@@ -1760,6 +1773,8 @@ properties: tests routinely exercise helpers. The exception covers the target
 alone. A commons that the target, or the suite, `uses` keeps its own private
 declarations, and a reference to one is `bynk.visibility.private_item` as it
 would be in any other unit.
+A `system` suite may instead name every type a participant context declares,
+its private types included (§5.1c).
 
 `Val[T]` (v0.114, retiring `Mock[T]`) MUST occur only in a test body
 (`bynk.val.outside_test`), name a resolvable type (`bynk.val.unknown_type`), and

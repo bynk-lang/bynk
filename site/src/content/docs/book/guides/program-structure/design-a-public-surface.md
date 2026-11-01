@@ -37,8 +37,12 @@ unit's files, and to the unit's suites. It is never visible through `uses`.
 - **Assets and embeds.** `private asset` and `private embed` hide the
   declaration's *name* from importers. A private asset is still served by the
   platform: `private` is about names, not about who can fetch the file.
-- **Message bundles.** `private messages` keeps a bundle out of every context
-  that uses the commons, so no context negotiates its locale against it.
+- **Message bundles.** `private` on a bundle's `@reference` block keeps the
+  bundle out of every context that uses the commons, so no context
+  negotiates its locale against it; the commons' own `render` still reads it.
+  That is rarely what you want, so the compiler warns
+  (`bynk.visibility.private_messages`), as it does for `private` on any other
+  block, where it has no effect.
 
 A unit that `uses` `pricing` does not see `lineTotal` at all, so it may
 declare its own `lineTotal` without a name conflict. If it calls `pricing`'s,
@@ -96,6 +100,11 @@ suite pricing {
 
 The exception is for the suite's own target. A commons that the target uses
 keeps its private declarations, in a suite as anywhere else.
+
+A `system` suite goes further: it may name any type a participant context
+declares, private ones included, though a context that consumes the
+participant may not. A harness test often needs to build or inspect a value
+the system keeps to itself.
 
 ## Where `private` doesn't apply
 

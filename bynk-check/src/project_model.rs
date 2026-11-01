@@ -2850,6 +2850,60 @@ pub fn phase_messages_bundles(
                 }
             }
         }
+        // #2618 review: `private` on a `messages` block never does what it
+        // suggests, so it warns. Negotiation (`detect_context_message_bundle`,
+        // symbols.rs) reads the bundle's visibility off its `@reference`
+        // block alone: a private reference keeps the whole bundle out of
+        // every context that uses this commons, and `private` on any other
+        // block of a bundle whose reference is public changes nothing. The
+        // commons' own `render` uses every block either way. Only a commons
+        // gets here (a context's or adapter's `messages` block is already
+        // `bynk.messages.outside_commons`, above), and only with exactly one
+        // `@reference` (a missing or doubled one is already an error).
+        if let (Some((_, reference)), [_]) = (reference_block, reference_sites.as_slice()) {
+            for &i in indices {
+                for item in parsed[i].items() {
+                    let CommonsItem::Messages(m) = item else {
+                        continue;
+                    };
+                    let Some(private_span) = m.private else {
+                        continue;
+                    };
+                    let is_reference = std::ptr::eq(m, reference);
+                    let (message, note) = if is_reference {
+                        (
+                            format!(
+                                "a `private` messages bundle is never negotiated by a context that uses `{name}`"
+                            ),
+                            format!(
+                                "remove `private` so that a context that uses `{name}` negotiates its locale against this bundle; this commons' own `render` reads the bundle either way"
+                            ),
+                        )
+                    } else if reference.private.is_some() {
+                        // The reference block's own warning covers the bundle.
+                        continue;
+                    } else {
+                        (
+                            format!(
+                                "`private` has no effect on this `messages` block: the bundle's `@reference` block is public, so a context that uses `{name}` still negotiates locale \"{}\"",
+                                m.tag
+                            ),
+                            "remove `private`: a bundle's visibility follows its `@reference` block"
+                                .to_string(),
+                        )
+                    };
+                    errors.push_for(
+                        Some(&parsed[i].identity_path()),
+                        CompileError::new(
+                            "bynk.visibility.private_messages",
+                            private_span,
+                            message,
+                        )
+                        .with_note(note),
+                    );
+                }
+            }
+        }
         // Locale-negotiation-slice-2 follow-up (#886): the synthetic `render`
         // this commons gets (`synthetic_render_fn`, symbols.rs) names
         // `LocaleTag`/`Message` by `TypeRef::Named` — real, resolved

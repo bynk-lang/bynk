@@ -3223,6 +3223,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A reference from another unit names a `private` declaration, which is visible only within its own unit and that unit's suites.",
         &["visibility_modifier"],
     ),
+    warn(dg(
+        "bynk.visibility.private_messages",
+        "A `messages` block in a commons is `private`. A bundle whose `@reference` block is private is never negotiated by a context that uses the commons, and `private` on another block of a bundle whose reference is public has no effect (warning).",
+        &["visibility_modifier"],
+    )),
     dg(
         "bynk.visibility.private_not_allowed",
         "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset` or `embed` in a commons or context.",

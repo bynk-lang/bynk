@@ -1,0 +1,15 @@
+context shop.till
+
+// #2618: `Line` is private to `shop.till`. A context that consumes
+// `shop.till` cannot name it, but a `system` suite can.
+private type Line = { name: String, price: Int }
+
+private fn show(l: Line) -> String {
+  "\(l.name): \(l.price)"
+}
+
+service api from http {
+  on GET("/tea") () -> Effect[HttpResult[String]] by Visitor {
+    Ok(show(Line { name: "tea", price: 3 }))
+  }
+}

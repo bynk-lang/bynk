@@ -1,0 +1,14 @@
+commons app.loud
+
+uses bynk.locale
+uses bynk.locale.types
+
+messages "en" @reference {
+  "farewell" => "Goodbye, {name}!"
+}
+
+// #2618 review: the reference block above is public, so `private` here
+// changes nothing (`bynk.visibility.private_messages`).
+private messages "de" {
+  "farewell" => "Auf Wiedersehen, {name}!"
+}
