@@ -1971,3 +1971,98 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/test-explorer-depth.md`, is removed. Code comments that cited its
   sections now cite this entry. Retired 24 October 2026.
+
+- **`patterns.md`** — spine [#2616](https://github.com/bynk-lang/bynk/issues/2616): destructuring
+  and richer patterns, the next slice ADR 0169 F named ("field patterns on a record type … the natural
+  next slice").
+  - **The problem.** Bynk's patterns were a wildcard, a literal, a binding, a variant with nested
+    payload patterns (ADR 0169), an or-pattern (ADR 0252) and the match-arm-only refined pattern
+    (ADR 0253). A record was read only through `.field`, a list only through `first()`, `get(i)` and
+    `length()`, and an integer range only through a guard or `_ where InRange(lo, hi)`, which binds
+    nothing. Coverage was conservative for any multi-field pattern, so matches that covered every case
+    still needed `_`, and their witnesses (`Pair(…)`) could not be written as arms.
+  - **What it built.** Record patterns, open with a required `..`, in `match`, `is`, `let` and lambda
+    parameters; list patterns with a rest binding; integer range patterns sharing one production with
+    events' `via schema(...)`; and one usefulness engine that decides exhaustiveness and reachability
+    for all of them.
+  - **Settling.** It settled 1 November 2026 (settling PR
+    [#2637](https://github.com/bynk-lang/bynk/pull/2637)), with all eight questions (§5 Q1–Q8) closed
+    and the maintainer's confirmation of the adopted answers. Slice 7 (tuple patterns) was dropped at
+    settling because the concurrent-effects track (#2615) adopted a binding block, not tuples. Slice 6
+    was conditional ("only if usage asks for it") and was built at the maintainer's request.
+  - **What the build found.** Every slice ran its parse-position spike first and none hit its stop
+    condition. Slice 3 ran the old and new coverage engines side by side over the whole corpus before
+    deleting the old one: all 14,034 reachability checks agreed and no program newly failed
+    `unreachable_arm`, so the stop point for a source-breaking tightening was not needed. Its review
+    found that the step budget did not count the witnesses built, so a wide match could produce
+    millions; the engine now charges for them. Slice 4 confirmed that no `List` value is mutated in
+    place at runtime, so `[..rest]` binds the scrutinee itself without a copy.
+
+  **What shipped** (v0.455.0–v0.474.0):
+  - **Slice 1, record patterns in `match` and `is`** ([#2641](https://github.com/bynk-lang/bynk/issues/2641),
+    [#2644](https://github.com/bynk-lang/bynk/pull/2644), v0.455.0,
+    [ADR 0669](../decisions/0669-open-record-patterns-with-required-rest.md),
+    [ADR 0670](../decisions/0670-record-pattern-parenthesised-after-is.md)). `TypeName { f, f: pat, .. }`
+    with the type name and the trailing `..` required, parenthesised after `is`, with the
+    opaque-inspection rule applied at the pattern and the conservative coverage rule of ADR 0169 D.
+  - **Slice 2, record destructuring in `let`** ([#2654](https://github.com/bynk-lang/bynk/issues/2654),
+    [#2659](https://github.com/bynk-lang/bynk/pull/2659), v0.460.0,
+    [ADR 0675](../decisions/0675-record-destructuring-in-let.md)). `let T { … } = e` (or `<-`) with no
+    `else` when the pattern is irrefutable, desugared as a one-arm `match` (ADR 0484), plus a
+    "remove the `else`" fix for an irrefutable `let … else`.
+  - **Slice 3, precise exhaustiveness and reachability** ([#2665](https://github.com/bynk-lang/bynk/issues/2665),
+    [#2674](https://github.com/bynk-lang/bynk/pull/2674), v0.464.0,
+    [ADR 0680](../decisions/0680-usefulness-based-exhaustiveness.md), superseding ADR 0169 D). A
+    Maranget usefulness engine (`bynk-check/src/checker/usefulness.rs`) with concrete, pasteable
+    witnesses, a witness cap and a step budget with a sound fallback.
+  - **Slice 4, list patterns** ([#2680](https://github.com/bynk-lang/bynk/issues/2680),
+    [#2687](https://github.com/bynk-lang/bynk/pull/2687), v0.468.0,
+    [ADR 0685](../decisions/0685-list-patterns.md)). `[]`, `[p, …]`, `[p, …, ..]` and `[p, …, ..rest]`,
+    with length-based coverage and the `slice` cost of `..rest` stated in the spec.
+  - **Slice 5, integer range patterns** ([#2699](https://github.com/bynk-lang/bynk/issues/2699),
+    [#2708](https://github.com/bynk-lang/bynk/pull/2708), v0.471.0,
+    [ADR 0689](../decisions/0689-range-patterns.md)). Inclusive `lo..hi`, `lo..` and `..hi` over `Int`,
+    with interval coverage, built jointly with events slice 4b
+    ([#990](https://github.com/bynk-lang/bynk/issues/990)) so `via schema(...)` ranges and `_` use the
+    same production. The earlier, separate #990 implementation
+    ([#1601](https://github.com/bynk-lang/bynk/pull/1601)) was closed as superseded.
+  - **Slice 6, record patterns as lambda parameters** ([#2712](https://github.com/bynk-lang/bynk/issues/2712),
+    [#2714](https://github.com/bynk-lang/bynk/pull/2714), v0.474.0,
+    [ADR 0692](../decisions/0692-record-patterns-as-lambda-parameters.md)). An irrefutable record
+    pattern in place of a lambda parameter's name, desugared to a hidden parameter and slice 2's
+    plain `let`.
+  - **Slice 7, tuple patterns.** Dropped at settling; the language has no tuples to match.
+
+  **Settled decisions** (the questions code comments and the spec cite):
+  - **Q1, open or closed record patterns.** Always open, with `..` required, so adding a field to a
+    record never breaks a pattern (ADR 0669).
+  - **Q2, syntax.** The type name is required. After `is`, and nowhere else, a record pattern is
+    parenthesised, because there the `{` would also open the `if` block (ADR 0670).
+  - **Q3, visibility.** A pattern may read only what `.field` may, through
+    `bynk.context.opaque_inspection`. A type the consumer cannot name has no record pattern.
+  - **Q4, exhaustiveness.** Conservative in slice 1, then one usefulness algorithm for every pattern
+    form (ADR 0680).
+  - **Q5, destructuring outside `match`.** `let` and lambda parameters; function signatures stay
+    plain names.
+  - **Q6, list patterns.** Exact and at-least lengths, the rest last and at most once, `..rest` a
+    stated O(n) copy and `..` without a name free (ADR 0685).
+  - **Q7, range patterns and the `..` rule.** Inclusive `Int` ranges shared with `via schema(...)`.
+    After `..`, a name or nothing is a rest marker and a literal is a range bound (ADR 0689).
+  - **Q8, tuple patterns.** Dropped.
+
+  **Named follow-ons:**
+  - Suffix list patterns (`[.., last]`), left out of slice 4.
+  - Range patterns directly after `is` (`age is 13..17`), rejected in slice 5 like literals, and
+    `Float`, `String`, `Duration` or `Instant` ranges.
+  - Bindings deeper than one level after `is`, noted in slice 1's review.
+  - As-patterns (`n @ 0..9`), a §10 non-goal for this track.
+  - The tree-sitter grammar's narrower lambda-parameter pattern and the comma it needs before a
+    `[`-led arm ([#2700](https://github.com/bynk-lang/bynk/issues/2700)), and `is`-bound names
+    missing from the editor's locals ([#2701](https://github.com/bynk-lang/bynk/issues/2701)).
+  - Two pre-existing bugs the slices found: bare `via schema(...)` subscribers emit TypeScript that
+    does not import `EventEnvelope` ([#2720](https://github.com/bynk-lang/bynk/issues/2720)), and a
+    parenthesised match-arm guard is parsed as a lambda
+    ([#2721](https://github.com/bynk-lang/bynk/issues/2721)).
+
+  This track's doc, `design/tracks/patterns.md`, is removed. Code comments that cited its questions
+  now cite this entry. Retired 1 November 2026.

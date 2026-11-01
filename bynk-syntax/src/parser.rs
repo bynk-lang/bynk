@@ -625,7 +625,8 @@ struct Parser<'a> {
     /// True while parsing the tail of an `is` pattern that sits outside every
     /// delimiter — `x is P`, `x is A | B`. A record pattern there would be
     /// ambiguous with the block that follows an `if` condition, so it must be
-    /// parenthesised (`x is (T { .. })`, patterns track Q2, #2641). Cleared by
+    /// parenthesised (`x is (T { .. })`, #2641; the patterns track's Q2 in
+    /// `design/archive/retired-tracks.md`). Cleared by
     /// [`Parser::parse_pattern`], the entry every delimited (nested) pattern
     /// goes through.
     is_pattern_tail: bool,
