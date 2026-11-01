@@ -1643,7 +1643,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.par.question_in_join",
-        "A `?` appears inside a `par { … }` binding. Propagating a failure in source order across a join is a later increment, so the block takes no `?` yet; match on the result after the block.",
+        "A `?` appears inside a `par { … }` binding. `?` takes a `Result` value, not an effect, so a binding's own result is unwrapped after the block (`let user = userR?`), where the `?` lines run in source order; a `?` on an argument is computed before the block.",
         &["par_stmt"],
     ),
     dg(

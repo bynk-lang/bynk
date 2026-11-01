@@ -972,8 +972,10 @@ pattern and an `else`, a plain `let` (it has no effect to overlap), `~>` (a
 fire-and-forget send has nothing to join), `:=` or a mutating `store` operation
 (`store` writes stay sequential), `expect`, `advance`, a nested `par`, and an
 empty block. A `?` in a binding is `bynk.par.question_in_join` (a `?` inside a
-lambda belongs to the lambda); propagating the first `Err` in source order across a
-join is a later increment. The bindings run together, so **no binding may mention
+lambda belongs to the lambda). This is permanent: `?` takes a `Result` value, not
+an effect, so a binding's `Result` is bound in the block and unwrapped after it
+(`let user = userR?`). The block has waited for every binding, so those `?` lines
+propagate the first `Err` in source order. The bindings run together, so **no binding may mention
 a name another binding of the block binds, and no two bind one name**
 (`bynk.par.sibling_name`) — even where the name would also resolve to a binding from
 before the block, so a stale value is never picked up silently. A binding's own name

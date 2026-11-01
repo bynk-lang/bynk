@@ -22,8 +22,11 @@ carries the decisions slice 0 (#2640) fixed.
   plain `let` (no effect to overlap), `~>` (fire-and-forget has nothing to
   join), `:=` and a mutating store operation (`store` writes stay sequential,
   track Q4), `expect`, `advance`, a nested `par`, and an empty block. A `?`
-  inside a binding is `bynk.par.question_in_join`: Q2's source-order rule is
-  slice 1. The parser admits any statement but a `let … else` and the checker
+  inside a binding is `bynk.par.question_in_join`. [Amended] This is
+  permanent, not a placeholder for slice 1: `?` takes a `Result` value, not an
+  effect, so a binding's `Result` is unwrapped after the block, where the `?`
+  lines run in source order and Q2's rule already holds. Slice 1 was dropped
+  (track doc Q2). The parser admits any statement but a `let … else` and the checker
   names the rest, so the editor still sees the rejected statement in place. A
   `?` inside a lambda belongs to the lambda and is not refused.
 - **C. Sibling names.** No binding may mention a name another binding of the
@@ -82,6 +85,6 @@ carries the decisions slice 0 (#2640) fixed.
 **Consequences.** Independent effects can overlap, and the wait sits at a visible
 closing brace. The language gains no tuple type. The `parTraverse` family still
 raises at the first rejection (`Promise.all`); aligning it to settle-all is
-slice 0b. `?` in a join (slice 1) and a general `within` timeout (slice 3)
-build on this block. The grammar's `par_stmt` holds every statement but a
+slice 0b. A general `within` timeout (slice 3) builds on this block. [Amended]
+`?` in a join (slice 1) was dropped; see B. The grammar's `par_stmt` holds every statement but a
 `let … else`, a deliberately permissive subset the compiler narrows.
