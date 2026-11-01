@@ -375,8 +375,8 @@ a sub-issue of #2615.
   execution context to hand the abandoned work to. The `fn` refusal can lift once
   [#2682](https://github.com/bynk-lang/bynk/issues/2682) (`~>` in a function)
   is resolved.
-- **Slice 4 — Race (loser runs to completion)**,
-  [#2711](https://github.com/bynk-lang/bynk/issues/2711). Q7 first adopted no
+- **Slice 4 — Race (loser runs to completion)**, shipped in #2713
+  ([#2711](https://github.com/bynk-lang/bynk/issues/2711), ADR 0691). Q7 first adopted no
   general race and named (b) as a possible later slice; slice 4 adopts (b) (Q7,
   **[Amended]**). `a.race(b)` is a method of every `Effect[T]`, legal exactly
   where `within` is, lowered to `__bynkRace`; the loser is handed to `waitUntil`
