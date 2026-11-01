@@ -907,6 +907,40 @@ is unit. The unit gate is the send's error gate transplanted: a **valued** reply
 (`Effect[T]`, `T ≠ ()`) is rejected so that discarding a real value stays the
 explicit `let _ <- e`.
 
+A **`par` block** (`par { … }`, §4.8.7b; #2640) joins independent effects: it
+issues every effect it holds, in source order, before awaiting any of them, and
+completes when all have settled. It MUST occur in an effectful position
+(`bynk.effect.bind_in_pure_context`) and holds only `let x <- e` (optionally typed)
+and `do e`; each binding is checked exactly as the same statement written outside
+the block, against the scope *outside* it. Anything else is
+`bynk.par.invalid_statement`, naming the statement: a `let` with a refutable
+pattern and an `else`, a plain `let` (it has no effect to overlap), `~>` (a
+fire-and-forget send has nothing to join), `:=` or a mutating `store` operation
+(`store` writes stay sequential), `expect`, `advance`, a nested `par`, and an
+empty block. A `?` in a binding is `bynk.par.question_in_join` (a `?` inside a
+lambda belongs to the lambda); propagating the first `Err` in source order across a
+join is a later increment. The bindings run together, so **no binding may mention
+a name another binding of the block binds, and no two bind one name**
+(`bynk.par.sibling_name`) — even where the name would also resolve to a binding from
+before the block, so a stale value is never picked up silently. A binding's own name
+is not a sibling: `let n <- F(n + 1)` reads the earlier `n`. The bound names are in
+scope after the closing brace, and re-binding an earlier name follows §5.1. A block
+with one binding is `bynk.par.single_binding`, a non-failing warning (ADR 0117). The
+block has no value; it is a statement.
+
+*Faults.* If any effect of the block faults, the block still waits for every other
+to settle, then raises the **first fault in source order**, whichever faulted first
+in time; later faults are attached to it for the log and cannot be caught
+separately. Nothing the block started is still running when it completes or
+raises, so no work outlives the handler, and the fault a program sees does not
+depend on timing. Effects that completed before the fault keep their effects
+(ADR 0109 D4: a cross-agent `<-` call commits as it returns; `store` writes are
+staged and discarded; `~>` sends stand). A `par` block is legal in an agent handler:
+an input gate that is open while a handler awaits a subrequest is open for a join
+too, so a join adds no interleaving a sequence of `<-`s does not already allow —
+the one thing it removes is the synchronous gap between two adjacent lines, which
+nothing inside the block can rely on, because no binding can read another's result.
+
 **Implicit unit tail (§4.8.1).** A block with no trailing expression has value
 `()`: the tail auto-lift (an `Effect[T]` context lifts a tail of type `T`) then
 lifts it to `Effect[()]` where the enclosing return type is `Effect[()]`, so an
@@ -1896,6 +1930,15 @@ capability and one of its operations, named not called). Well-formedness:
   (`bynk.observe.with_not_bool`) and MUST be pure (`bynk.observe.impure_with`);
 - a call count is `once` or a non-negative integer literal followed by `times`
   (the grammar admits nothing else) — `called once` desugars to a count of one.
+
+**Issue order.** The recorder logs a call when it is *made*, so `A.op before B.op`
+compares **issue** order, not completion order. Inside a `par` block (§4.8.7b) the
+first capability call of each binding is issued in source order, so between two
+bindings' first calls it is source order. A later call inside a composite binding —
+a user function that makes several calls — is issued when the earlier ones complete,
+so its place against another binding's calls follows completion and microtask
+order. Neither is evidence that one effect *finished* first; a test that needs
+completion order is testing a race and belongs against a stub that controls it.
 
 `trace(Cap.op)` is a **test-only builtin** yielding `List[<CallRecord>]`, where
 `<CallRecord>` is a synthetic record of the operation's parameters at their declared

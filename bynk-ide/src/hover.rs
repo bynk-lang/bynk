@@ -281,6 +281,10 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     if let Some(content) = crate::symbols::describe_advance_at(text, span.start) {
         return Some(content);
     }
+    // 5a. #2640: the contextual `par` of a `par { … }` binding block.
+    if let Some(content) = crate::symbols::describe_par_at(text, span.start) {
+        return Some(content);
+    }
     // 5b. #2136: a `schedule` / `message` address in a `system`-tier case,
     //    which runs through the Worker's own entry point. Neither name is a
     //    declaration, so this shadows nothing.

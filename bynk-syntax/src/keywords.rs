@@ -238,6 +238,10 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
         "An agent's migration step: carries a stored record from an older schema version to the current shape (`migrate from 1 (old: CartV1) { … }`).",
     ),
     k(
+        "par",
+        "Opens a concurrent binding block (`par { let a <- e1  let b <- e2 }`): every effect is issued before any is awaited, and the block completes when all have settled.",
+    ),
+    k(
         "removed",
         "Declares an agent class gone (`removed agent Old`): its stored data is deleted at the next deploy, after a named confirmation.",
     ),

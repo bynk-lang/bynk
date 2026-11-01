@@ -1,0 +1,22 @@
+context demo.svc
+
+// #2640: a `par` block with one binding is a plain `let x <- e` with extra
+// syntax. It is a warning, not an error: it can be a harmless intermediate
+// state while editing a block.
+
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+provides Users = FixedUsers {
+  fn get(id: Int) -> Effect[String] { "ada" }
+}
+
+service lookup {
+  on call(id: Int) -> Effect[String] given Users {
+    par {
+      let user <- Users.get(id)
+    }
+    Effect.pure(user)
+  }
+}

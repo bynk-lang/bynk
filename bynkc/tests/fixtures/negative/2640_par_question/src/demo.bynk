@@ -1,0 +1,29 @@
+context demo
+
+// #2640: `?` in a join is slice 1 (source-order `Err`); until then the
+// result is matched after the block.
+
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+}
+
+fn parse(raw: String) -> Result[Int, String] {
+  match Int.parse(raw) {
+    Some(n) => Ok(n),
+    None => Err("not a number"),
+  }
+}
+
+service dash {
+  on call(raw: String) -> Effect[Result[Int, String]] given Users, Orders {
+    par {
+      let user <- Users.get(1)
+      let n <- Orders.forUser(parse(raw)?)
+    }
+    Effect.pure(Ok(n))
+  }
+}

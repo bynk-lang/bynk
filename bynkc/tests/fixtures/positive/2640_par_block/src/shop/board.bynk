@@ -1,0 +1,91 @@
+context shop.board
+
+// #2640: `par { … }` issues every effect in the block before awaiting any of
+// them, and binds the names once all have settled.
+
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+}
+
+capability Audit {
+  fn touch(id: Int) -> Effect[()]
+}
+
+provides Users = FixedUsers {
+  fn get(id: Int) -> Effect[String] { "ada" }
+}
+
+provides Orders = FixedOrders {
+  fn forUser(id: Int) -> Effect[Int] { id }
+}
+
+provides Audit = NoAudit {
+  fn touch(id: Int) -> Effect[()] { () }
+}
+
+service board {
+  on call(id: Int) -> Effect[String] given Users, Orders, Audit {
+    par {
+      let user <- Users.get(id)
+      let orders: Int <- Orders.forUser(id)
+      do Audit.touch(id)
+    }
+    Effect.pure("\(user):\(orders)")
+  }
+}
+
+// A binding may re-bind a name from before the block, and read the earlier
+// value in its own expression; `_` discards a result.
+service rebind {
+  on call(id: Int) -> Effect[Int] given Orders {
+    let orders <- Orders.forUser(id)
+    par {
+      let orders <- Orders.forUser(orders + 1)
+      let _ <- Orders.forUser(id)
+    }
+    Effect.pure(orders)
+  }
+}
+
+// A `par` block sits anywhere a statement can, inside a branch included.
+service branch {
+  on call(id: Int) -> Effect[Int] given Users, Orders {
+    if id > 0 {
+      par {
+        let user <- Users.get(id)
+        let orders <- Orders.forUser(id)
+      }
+      Effect.pure(user.length() + orders)
+    } else {
+      Effect.pure(0)
+    }
+  }
+}
+
+// A name a lambda parameter, a `match` arm or an inner `let` binds for itself is
+// that binding, not a sibling's: only reading the sibling's own name is refused.
+service shadow {
+  on call(id: Int) -> Effect[Int] given Users, Orders {
+    par {
+      let user <- Users.get(id)
+      let n <- Orders.forUser([1, 2].map((user) => user + 1).length())
+      let m <- Orders.forUser(match Some(id) { Some(user) => user, None => 0 })
+    }
+    Effect.pure(user.length() + n + m)
+  }
+}
+
+// A binding whose value hoists statements keeps them inside its own thunk.
+service hoist {
+  on call(id: Int) -> Effect[Int] given Orders {
+    par {
+      let a <- Orders.forUser(id)
+      let b: Int <- Orders.forUser(match id { 0 => 1, _ => id })
+    }
+    Effect.pure(a + b)
+  }
+}

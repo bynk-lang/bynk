@@ -20,6 +20,7 @@ pub mod coverage;
 pub mod dev_run;
 pub mod discovery;
 pub mod doc_examples;
+pub mod fix;
 pub mod output;
 pub mod probe;
 pub mod remote;
@@ -1018,7 +1019,11 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
 /// single file through [`bynk_emit::check_with_warnings`]. `short` selects
 /// the one-line `--format short` rendering. `prog` prefixes messages
 /// (`bynk: …`).
-pub fn run_check(prog: &str, input: &Path, short: bool) -> ExitCode {
+///
+/// #2642: `fix` first applies the machine-applicable suggestions ([`fix`]) to
+/// the input, or to each workspace member in turn, then reports what remains
+/// as an ordinary check does. A refused or failed fix fails the run.
+pub fn run_check(prog: &str, input: &Path, short: bool, fix: bool) -> ExitCode {
     // #2207 (decision C): at a workspace root, check every member in order.
     // Every member runs, and the run fails if any does. `rich` heads each
     // member's report with its path; `short` adds no headers, and its paths
@@ -1031,13 +1036,26 @@ pub fn run_check(prog: &str, input: &Path, short: bool) -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
+        let members: Vec<PathBuf> = workspace
+            .members
+            .iter()
+            .map(|m| member_dir(input, m))
+            .collect();
+        // #2642: plan every member before writing any, so a refusal in one
+        // leaves the whole workspace untouched.
         let mut failed = false;
-        for member in &workspace.members {
-            let member = member_dir(input, member);
+        if fix {
+            let named: Vec<(&Path, String)> = members
+                .iter()
+                .map(|m| (m.as_path(), format!("{prog}: {}", shown(m))))
+                .collect();
+            failed |= !fix::fix_all(prog, &named);
+        }
+        for member in &members {
             if !short {
-                eprintln!("{}", member_header(&member));
+                eprintln!("{}", member_header(member));
             }
-            failed |= !check_one(prog, &member, short, Some(&member));
+            failed |= !check_one(prog, member, short, Some(member));
         }
         return if failed {
             ExitCode::FAILURE
@@ -1045,7 +1063,8 @@ pub fn run_check(prog: &str, input: &Path, short: bool) -> ExitCode {
             ExitCode::SUCCESS
         };
     }
-    if check_one(prog, input, short, None) {
+    let fixed = !fix || fix::fix_all(prog, &[(input, prog.to_string())]);
+    if check_one(prog, input, short, None) && fixed {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE

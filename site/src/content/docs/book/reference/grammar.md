@@ -1891,6 +1891,25 @@ forward. `advance` is contextual: it opens a statement only before
 **Static semantics.**
 {{#grammar-semantics advance_stmt}}
 
+### par_stmt {#rule-par_stmt}
+
+{{#grammar par_stmt}}
+
+`par { … }` (#2640) is a concurrent binding block: it issues every effect it holds
+before awaiting any, and completes when all have settled. `par` is contextual: it
+opens a statement only before `{`. See
+[Joining independent effects](/book/reference/capabilities/#par).
+
+**Static semantics.**
+{{#grammar-semantics par_stmt}}
+
+### par_statement {#rule-_par_statement}
+
+{{#grammar _par_statement}}
+
+What a [`par_stmt`](#rule-par_stmt) may hold in the grammar: every statement but a
+`let … else`. The compiler narrows it to `let x <- e` and `do e`.
+
 ### expect_expr {#rule-expect_expr}
 
 {{#grammar expect_expr}}
@@ -1941,9 +1960,10 @@ surface. A test-only builtin.
 
 {{#grammar _contextual_identifier}}
 
-`trace` and `advance` used as ordinary names. Both are contextual keywords —
-`trace` only in [`trace_expr`](#rule-trace_expr) and `advance` only in
-[`advance_stmt`](#rule-advance_stmt) — so outside those shapes each is an
+`trace`, `advance` and `par` used as ordinary names. Each is a contextual keyword —
+`trace` only in [`trace_expr`](#rule-trace_expr), `advance` only in
+[`advance_stmt`](#rule-advance_stmt) and `par` only in
+[`par_stmt`](#rule-par_stmt) — so outside those shapes each is an
 [`identifier`](#rule-identifier) like any other: a binding, a parameter, a call,
 or an assignment target.
 
