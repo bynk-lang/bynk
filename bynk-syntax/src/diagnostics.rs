@@ -1480,6 +1480,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["string_literal"],
     ),
     dg(
+        "bynk.lex.bad_unicode_escape",
+        "A `\\u{…}` escape names a surrogate or a value above U+10FFFF.",
+        &["string_literal"],
+    ),
+    dg(
         "bynk.lex.float_literal_overflow",
         "A float literal does not fit a finite 64-bit float.",
         &["float_literal"],
@@ -1501,6 +1506,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.lex.legacy_doc_line",
         "A `--|` one-line doc, the spelling before #2203; a one-line doc is `--- text` (auto-fixable; `bynk fmt` rewrites it).",
+    ),
+    dg(
+        "bynk.lex.multiline_close_not_own_line",
+        "A `\"\"\"` inside a multi-line string literal is not on a line of its own.",
+        &["string_literal"],
+    ),
+    dg(
+        "bynk.lex.multiline_indent",
+        "A line of a multi-line string literal is indented less than its closing `\"\"\"`.",
+        &["string_literal"],
+    ),
+    dg(
+        "bynk.lex.multiline_open",
+        "The opening `\"\"\"` of a multi-line string literal is not followed by a newline.",
+        &["string_literal"],
     ),
     d(
         "bynk.lex.slash_doc",

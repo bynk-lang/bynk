@@ -1,0 +1,34 @@
+commons demo
+
+fn line() -> String {
+	"HTTP/1.1 200 OK\r\n"
+}
+
+fn nbsp() -> String {
+	"a\u{00A0}b"
+}
+
+fn digits() -> String {
+	r"\d+\.\d+"
+}
+
+fn quoted() -> String {
+	r#"say "hi""#
+}
+
+fn query(name: String) -> String {
+	"""
+	SELECT id
+	  FROM t WHERE n = \(name)
+	"""
+}
+
+fn pattern() -> String {
+	r"""
+	^\d+$
+	"""
+}
+
+fn check(s: String) -> Bool {
+	s.matchesRegex(r"\w+")
+}

@@ -686,6 +686,72 @@ const CASES: &[Case] = &[
         body: "type I = { a: Int }\nfn f(n: Int) -> I { (I { a: n }) }",
         accept: true,
     },
+    // -- String literals (#2619): the new escapes, raw and multi-line forms. --
+    Case {
+        what: "string with \\r, \\0 and \\u{…} escapes",
+        body: r#"fn f() -> String { "a\r\0\u{1F600}" }"#,
+        accept: true,
+    },
+    Case {
+        what: "string with a malformed \\u{…} escape",
+        body: r#"fn f() -> String { "\u{12" }"#,
+        accept: false,
+    },
+    Case {
+        what: "string with a seven-digit \\u{…} escape",
+        body: r#"fn f() -> String { "\u{1234567}" }"#,
+        accept: false,
+    },
+    Case {
+        what: "raw string",
+        body: r#"fn f() -> String { r"\d+\.\d+" }"#,
+        accept: true,
+    },
+    Case {
+        what: "hashed raw string holding quotes",
+        body: r##"fn f() -> String { r#"say "hi""# }"##,
+        accept: true,
+    },
+    Case {
+        what: "empty raw string",
+        body: r#"fn f() -> String { r"" }"#,
+        accept: true,
+    },
+    Case {
+        what: "unterminated raw string",
+        body: r#"fn f() -> String { r"abc }"#,
+        accept: false,
+    },
+    Case {
+        what: "multi-line string",
+        body: "fn f() -> String {\n  \"\"\"\n    a \"q\" \\n\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "multi-line string with an interpolation hole",
+        body: "fn f(n: String) -> String {\n  \"\"\"\n    hi \\(n)\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "raw multi-line string",
+        body: "fn f() -> String {\n  r\"\"\"\n    \\d+\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "multi-line string whose opening delimiter is followed by text",
+        body: "fn f() -> String {\n  \"\"\"abc\n  \"\"\"\n}",
+        accept: false,
+    },
+    Case {
+        what: "unterminated multi-line string",
+        body: "fn f() -> String {\n  \"\"\"\n    abc\n}",
+        accept: false,
+    },
+    Case {
+        what: "an identifier r followed by a spaced string is not a raw string",
+        body: "fn f(r: Int) -> Int { r \"x\" }",
+        accept: false,
+    },
     Case {
         what: "a plain let of a capitalised name is still a binding",
         body: "fn f(i: Int) -> Int { let Total = i\n Total }",
@@ -843,6 +909,23 @@ const EXCLUDED_PARSE_TIME_CATEGORIES: &[(&str, &str)] = &[
         "bynk.lex.float_literal_overflow",
         "inexpressible: an arithmetic-magnitude check on the literal's parsed \
          value, not a grammar shape",
+    ),
+    (
+        "bynk.lex.bad_unicode_escape",
+        "inexpressible: whether a `\\u{…}` names a Unicode scalar value (not a \
+         surrogate, at most 10FFFF) is a range check on the parsed digits (#2619); \
+         the grammar admits any 1 to 6 hex digits",
+    ),
+    (
+        "bynk.lex.multiline_indent",
+        "inexpressible: a body line's indentation is compared with the closing \
+         `\"\"\"`'s, which is relative state a context-free production cannot carry \
+         (#2619)",
+    ),
+    (
+        "bynk.lex.multiline_close_not_own_line",
+        "declined: the grammar ends a multi-line string at its first `\"\"\"`; the \
+         compiler also insists it has a line to itself (#2619)",
     ),
     (
         "bynk.parse.nesting_too_deep",

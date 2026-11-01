@@ -39,7 +39,7 @@ const PREC = {
 module.exports = grammar({
   name: "bynk",
 
-  externals: ($) => [$.doc_block, $.doc_line],
+  externals: ($) => [$.doc_block, $.doc_line, $.raw_string],
 
   extras: ($) => [/\s+/, $.doc_line, $.line_comment, $.doc_block],
 
@@ -2141,19 +2141,45 @@ module.exports = grammar({
     float_literal: () =>
       /[0-9]+(_[0-9]+)*\.[0-9]+(_[0-9]+)*([eE][+-]?[0-9]+(_[0-9]+)*)?|[0-9]+(_[0-9]+)*[eE][+-]?[0-9]+(_[0-9]+)*/,
     string_literal: ($) =>
-      seq(
-        '"',
-        // #2203: string text is one high-precedence immediate token, so a
-        // `//` inside a string (a URL) is text, not a line comment.
-        repeat(
-          choice(
-            token.immediate(prec(1, /[^"\\\n]+/)),
-            /\\[nt"\\]/,
-            $.string_interpolation,
+      choice(
+        seq(
+          '"',
+          // #2203: string text is one high-precedence immediate token, so a
+          // `//` inside a string (a URL) is text, not a line comment.
+          repeat(
+            choice(
+              token.immediate(prec(1, /[^"\\\n]+/)),
+              $.escape_sequence,
+              $.string_interpolation,
+            ),
           ),
+          '"',
         ),
-        '"',
+        // #2619: a multi-line string. The opening `"""` is followed by a
+        // newline; the body may hold lone or doubled quotes; escapes and
+        // interpolation are those of an ordinary string. (Indentation stripping
+        // is a value rule, not a shape: the compiler checks it.)
+        seq(
+          token(/"""\r?\n/),
+          repeat(
+            choice(
+              token.immediate(prec(1, /[^"\\]+/)),
+              token.immediate(prec(1, /"{1,2}[^"\\]/)),
+              $.escape_sequence,
+              $.string_interpolation,
+            ),
+          ),
+          '"""',
+        ),
+        // #2619: a raw string (`r"…"`, `r#"…"#`, `r"""…"""`): no escapes, no
+        // interpolation. An external token — the `#` count is not regular.
+        $.raw_string,
       ),
+    // `\n \t \r \0 \" \\` and `\u{1–6 hex digits}` (#2619). Whether a `\u{…}`
+    // names a scalar value (not a surrogate, at most 10FFFF) is the compiler's
+    // check.
+    escape_sequence: () =>
+      token.immediate(choice(/\\[ntr0"\\]/, /\\u\{[0-9a-fA-F]{1,6}\}/)),
     // v0.43: an interpolation hole `\(expr)`. A bare `\(` was an invalid
     // escape, so this is backward-compatible; `\\(` is an escaped backslash
     // followed by a literal `(`, so it is not a hole.

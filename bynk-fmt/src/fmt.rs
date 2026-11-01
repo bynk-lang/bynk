@@ -114,7 +114,7 @@ pub fn format_source(source: &str, opts: &FormatOptions) -> Result<String, Forma
     // file byte-identical.
     let (units, _warnings, _) =
         parse_units_migrating(&tokens, source).map_err(|errors| FormatError { errors })?;
-    let output = render_units(&units, opts);
+    let output = render_units(&units, source, opts);
     // #523/#66 guard: trivia is only attached at declaration/statement
     // granularity, so a comment inside an expression subtree can be silently
     // dropped. Losing user text is worse than leaving a file unformatted — when
@@ -284,12 +284,98 @@ pub fn normalize_line_endings(source: &str) -> std::borrow::Cow<'_, str> {
     std::borrow::Cow::Owned(out)
 }
 
+thread_local! {
+    /// The source being formatted, so a string literal can be re-emitted as it
+    /// was written (#2619). Set by [`render_units`] for the duration of a render.
+    static WRITTEN_SOURCE: std::cell::RefCell<Option<std::rc::Rc<str>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Scope guard installing [`WRITTEN_SOURCE`].
+struct WrittenForms(Option<std::rc::Rc<str>>);
+
+impl WrittenForms {
+    fn enter(source: &str) -> Self {
+        let new = Some(std::rc::Rc::<str>::from(source));
+        Self(WRITTEN_SOURCE.with(|cell| cell.replace(new)))
+    }
+}
+
+impl Drop for WrittenForms {
+    fn drop(&mut self) {
+        let previous = self.0.take();
+        WRITTEN_SOURCE.with(|cell| *cell.borrow_mut() = previous);
+    }
+}
+
+/// #2619: a string literal's written form, when the source holds one that is
+/// worth preserving: a raw or multi-line literal, or one using a `\u{…}`
+/// escape. It is the source text at `e.span`, kept only if it decodes to
+/// `value`, so a synthesised or mis-spanned literal falls back to the canonical
+/// rendering. Formatting must not turn `r"\d+"` into `"\\d+"`.
+fn written_string_form(e: &Expr, value: Option<&str>) -> Option<String> {
+    WRITTEN_SOURCE.with(|cell| {
+        let source = cell.borrow();
+        let text = source.as_deref()?.get(e.span.range())?;
+        let special = text.starts_with("r\"")
+            || text.starts_with("r#")
+            || text.starts_with("\"\"\"")
+            || text.contains("\\u{");
+        if !special {
+            return None;
+        }
+        // A multi-line literal is re-emitted at column zero, with the closing
+        // delimiter's indentation removed from every line: the value is
+        // unchanged (that indentation is stripped anyway), the formatter's
+        // re-indent pass then sets the current depth for all of it, and the
+        // result no longer depends on how the author happened to indent it.
+        let text = if text.starts_with("\"\"\"") || text.starts_with("r\"\"\"") {
+            dedent_multiline(text)
+        } else {
+            text.to_string()
+        };
+        match value {
+            Some(value) => {
+                let decoded = bynk_syntax::lexer::decode_string_literal(&text, e.span).ok()?;
+                (decoded == value).then_some(text)
+            }
+            // An interpolated multi-line string is kept whole only when it is
+            // multi-line (its holes would otherwise be reformatted).
+            None => text.starts_with("\"\"\"").then_some(text),
+        }
+    })
+}
+
+/// Strip the closing delimiter's indentation from every line of a multi-line
+/// literal's text, so it sits at column zero (see [`written_string_form`]).
+fn dedent_multiline(text: &str) -> String {
+    let last = text.rsplit('\n').next().unwrap_or("");
+    let indent = &last[..last.len() - last.trim_start_matches([' ', '\t']).len()];
+    let mut out = String::with_capacity(text.len());
+    for (i, line) in text.split('\n').enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        if i == 0 {
+            out.push_str(line);
+        } else if let Some(rest) = line.strip_prefix(indent) {
+            out.push_str(rest);
+        } else if line.trim().is_empty() {
+            // a blank line shorter than the indentation is empty
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
 /// Format every top-level unit and join with a blank line. A file may hold more
 /// than one top-level unit (v0.113, an atomic `commons` + `suite` file,
 /// DECISION S). Each unit's output already ends in exactly one newline, so
 /// joining with `"\n"` inserts one blank line between units and leaves a
 /// single-unit file byte-identical.
-fn render_units(units: &[SourceUnit], opts: &FormatOptions) -> String {
+fn render_units(units: &[SourceUnit], source: &str, opts: &FormatOptions) -> String {
+    let _written_forms = WrittenForms::enter(source);
     let parts: Vec<String> = units
         .iter()
         .map(|unit| {
@@ -327,7 +413,7 @@ fn code_only_canonical_from_tokens(
         .cloned()
         .collect();
     let (units, _, _) = parse_units_migrating(&code, source)?;
-    Ok(render_units(&units, opts))
+    Ok(render_units(&units, source, opts))
 }
 
 /// #735: refuse when the formatter's `output` does not round-trip to the same
@@ -3481,6 +3567,19 @@ pub fn escape_string(s: &str) -> String {
             '"' => out.push_str("\\\""),
             '\n' => out.push_str("\\n"),
             '\t' => out.push_str("\\t"),
+            // #2619: a CR or NUL cannot sit raw in a literal; other control and
+            // invisible characters print as `\u{…}` so they stay visible.
+            '\r' => out.push_str("\\r"),
+            '\0' => out.push_str("\\0"),
+            c if c.is_control()
+                || matches!(
+                    c,
+                    '\u{A0}' | '\u{2028}' | '\u{2029}' | '\u{200B}'..='\u{200F}'
+                        | '\u{202A}'..='\u{202E}' | '\u{2060}' | '\u{FEFF}'
+                ) =>
+            {
+                out.push_str(&format!("\\u{{{:X}}}", c as u32));
+            }
             c => out.push(c),
         }
     }
@@ -3515,11 +3614,16 @@ fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         ExprKind::FloatLit { lexeme, .. } => lexeme.clone(),
         // v0.86 (ADR 0112): a duration literal `<value>.<unit>`.
         ExprKind::DurationLit { value, unit, .. } => format!("{value}.{}", unit.name()),
-        ExprKind::StrLit(s) => format!("\"{}\"", escape_string(s)),
+        ExprKind::StrLit(s) => {
+            written_string_form(e, Some(s)).unwrap_or_else(|| format!("\"{}\"", escape_string(s)))
+        }
         // v0.43: re-emit the interpolated string — chunks re-escaped, each
         // hole as `\(expr)`. Re-escaping a chunk's literal `\` to `\\` keeps a
         // source `\\(` (an escaped `\(`) round-tripping as text, not a hole.
         ExprKind::InterpStr(parts) => {
+            if let Some(written) = written_string_form(e, None) {
+                return written;
+            }
             let mut out = String::from("\"");
             for part in parts {
                 match part {

@@ -73,9 +73,39 @@ rejected at lex time.
 
 {{#grammar string_literal}}
 
-A double-quoted string. The escapes `\n`, `\t`, `\"`, and `\\` are recognised.
-A string may also contain `\(expr)` interpolation holes (v0.43); see
-`string_interpolation`.
+A string literal, in one of three forms:
+
+- **Ordinary**, `"…"`, on one line. The escapes are `\n`, `\r`, `\t`, `\0`,
+  `\"`, `\\` and `\u{…}` (1 to 6 hex digits naming a Unicode scalar value;
+  `"\u{1F600}"` is 😀, `"\u{00A0}"` a no-break space). A surrogate
+  (`\u{D800}`) or a value above `10FFFF` is `bynk.lex.bad_unicode_escape`.
+- **Raw**, `r"…"` or `r#"…"#` (use more `#` when the text holds `"#`). There are
+  no escapes and no interpolation: `r"\d+\.\d+"` is the characters `\d+\.\d+`,
+  and `r"C:\Users"` needs no doubled backslash. Write the `r` directly against
+  the quote; `r "x"` is an identifier and a string.
+- **Multi-line**, `"""` followed by a newline, the text, and a closing `"""` on
+  a line of its own; `r"""…"""` is the raw variant. The closing delimiter's
+  indentation is stripped from every line, so the source can be indented
+  without changing the value, and a line indented less is
+  `bynk.lex.multiline_indent`. The value's line endings are always `\n`,
+  whatever the file's; write `\r\n` explicitly.
+
+```bynk,fragment
+fn statusLine() -> String { "HTTP/1.1 200 OK\r\n" }
+fn digits() -> String { r"\d+\.\d+" }
+fn query() -> String {
+	"""
+	SELECT id, total
+	  FROM orders
+	 WHERE customer = ?
+	"""
+}
+```
+
+Ordinary and multi-line strings may also contain `\(expr)` interpolation holes
+(v0.43); see `string_interpolation`. Raw strings are accepted wherever a string
+literal is required: a `Matches` or regex-method pattern, a SQL statement, a
+message template.
 
 **Static semantics.**
 {{#grammar-semantics string_literal}}
