@@ -1,0 +1,25 @@
+---
+#2660: a generic `derives Ord` type is `Ord` at an instantiation whose arguments
+are, and its comparator is built per instantiation: `Entry[Int, String]` and
+`Entry[String, Int]` order by different field types.
+---
+commons demo.pairs
+
+uses bynk.list
+
+type Entry[K, V] = { key: K, value: V } derives Ord
+
+type Maybe[T] =
+  | Missing
+  | Present(item: T)
+  derives Ord
+
+fn entriesByInt(xs: List[Entry[Int, String]]) -> List[Entry[Int, String]] { sort(xs) }
+
+fn entriesByString(xs: List[Entry[String, Int]]) -> List[Entry[String, Int]] { sort(xs) }
+
+fn firstEntry[K: Ord, V: Ord](xs: List[Entry[K, V]]) -> Option[Entry[K, V]] { min(xs) }
+
+fn maybes(xs: List[Maybe[Int]]) -> List[Maybe[Int]] { sort(xs) }
+
+fn nested(xs: List[Entry[Maybe[Int], List[Int]]]) -> Option[Entry[Maybe[Int], List[Int]]] { max(xs) }

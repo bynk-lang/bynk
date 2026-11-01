@@ -1,0 +1,29 @@
+suite demo.hand
+
+case "a bounded generic from another unit orders an imported record" {
+  let two = Card { rank: Two, name: "x" }
+  let jack = Card { rank: Jack, name: "x" }
+  let ace = Card { rank: Ace, name: "x" }
+  expect lowest(ace, jack, two) == two
+  expect lowest(jack, ace, ace) == jack
+}
+
+case "rankOf counts the smaller elements" {
+  let two = Card { rank: Two, name: "x" }
+  let jack = Card { rank: Jack, name: "x" }
+  let ace = Card { rank: Ace, name: "x" }
+  let hand: List[Card] = [ace, two, jack]
+  expect position(jack, hand) == 1
+  expect position(ace, hand) == 2
+  expect position(two, hand) == 0
+}
+
+case "sort and max use the imported declaration order" {
+  let a = Card { rank: Ace, name: "a" }
+  let j = Card { rank: Jack, name: "z" }
+  let t = Card { rank: Two, name: "m" }
+  let hand: List[Card] = [a, t, j]
+  let ranks: List[Rank] = [Jack, Two, Ace, Three]
+  expect ordered(hand) == [t, j, a]
+  expect bestRank(ranks) == Some(Ace)
+}

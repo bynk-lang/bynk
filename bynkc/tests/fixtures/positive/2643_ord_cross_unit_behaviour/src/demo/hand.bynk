@@ -1,0 +1,17 @@
+---
+#2660: a unit that uses both: bounded calls on an imported record, an imported
+enum, and a base type.
+---
+commons demo.hand
+
+uses demo.cards
+uses demo.algo
+uses bynk.list
+
+fn lowest(a: Card, b: Card, c: Card) -> Card { twiceSmaller(a, b, c) }
+
+fn position(c: Card, hand: List[Card]) -> Int { rankOf(c, hand) }
+
+fn bestRank(ranks: List[Rank]) -> Option[Rank] { max(ranks) }
+
+fn ordered(hand: List[Card]) -> List[Card] { sort(hand) }

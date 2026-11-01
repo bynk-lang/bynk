@@ -1,0 +1,22 @@
+---
+#2660 (DECISION E): a generic function with an `Ord` bound named as a value is
+instantiated at the reference, from the function type expected there. The closure
+it becomes captures the comparators.
+---
+commons demo.refs
+
+type Level = enum { Lo, Mid, Hi } derives Ord
+
+fn top[T: Ord](xs: List[T]) -> Option[T] { xs.max((x) => x) }
+
+fn sorted[T: Ord](xs: List[T]) -> List[T] { xs.sortBy((x) => x) }
+
+fn tops(xss: List[List[Int]]) -> List[Option[Int]] { xss.map(top) }
+
+fn levelTops(xss: List[List[Level]]) -> List[Option[Level]] { xss.map(top) }
+
+fn sortAll(xss: List[List[String]]) -> List[List[String]] { xss.map(sorted) }
+
+fn apply(f: (List[Int]) -> Option[Int], xs: List[Int]) -> Option[Int] { f(xs) }
+
+fn viaParam(xs: List[Int]) -> Option[Int] { apply(top, xs) }

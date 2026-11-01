@@ -1,0 +1,30 @@
+suite demo.ranked
+
+case "a method with a receiver-parameter bound" {
+  let xs: List[Int] = [3, 9, 4]
+  let b = Bag { items: xs }
+  expect b.largest() == Some(9)
+  expect b.countAbove(3) == 2
+}
+
+case "a method on an enum-typed receiver" {
+  let ls: List[Level] = [Mid, Hi, Lo]
+  let p = Bag { items: ls }
+  expect p.largest() == Some(Hi)
+}
+
+case "a bound declared on the receiver type holds in its methods" {
+  let xs: List[String] = ["b", "a"]
+  let s = Sorted { items: xs }
+  expect s.smallest() == Some("a")
+  expect s.isBelow("c")
+  expect !s.isBelow("a")
+}
+
+case "a method's own type parameter takes a comparator" {
+  let xs: List[Int] = [1]
+  let b = Bag { items: xs }
+  expect b.biggerOf("a", "b") == "b"
+  expect b.biggerOf(2, 1) == 2
+  expect b.pickBigger("x", true)
+}

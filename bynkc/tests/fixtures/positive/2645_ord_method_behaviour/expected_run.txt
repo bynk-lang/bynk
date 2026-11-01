@@ -1,0 +1,3 @@
+# #2660: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# a bounded method: receiver-type and own parameters.
+passed=4 failed=0
