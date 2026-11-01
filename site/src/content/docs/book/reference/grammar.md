@@ -638,7 +638,7 @@ commons demo {
 {{#grammar type_param}}
 
 A type parameter of a `fn`, `type` or capability operation, with optional bounds:
-`T`, `T: Eq`, `T: Ord`. The constraints are `Eq` and `Ord`
+`T`, `T: Eq`, `T: Ord`, `T: Key`. The constraints are `Eq`, `Ord` and `Key`
 (`bynk.generics.unknown_constraint` otherwise). See [Generics and bounds](/book/reference/generics/).
 
 **Example.**

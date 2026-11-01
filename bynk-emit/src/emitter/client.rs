@@ -84,6 +84,8 @@ const PACKAGE_NAMES: &[(&str, &str)] = &[
     ("Some", "Some"),
     ("ValidationError", "type ValidationError"),
     ("__BoundaryError", "type __BoundaryError"),
+    ("__BynkKeyMap", "__BynkKeyMap"),
+    ("__BynkKeySet", "__BynkKeySet"),
     ("__JsonValue", "type __JsonValue"),
     ("__ServiceBinding", "type __ServiceBinding"),
     ("__WireVersion", "type WireVersion as __WireVersion"),

@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, diagnostic_coverage, ts_writes, ts_any
+probes: emit_diagnostics, diagnostic_coverage, ts_writes
 changelog: "**`Key`: structural `Map` keys and `Set` members** (constrained-generics slice 2, breaking for generics over maps and sets): records, sums, enums, `Bytes`, and `Option`/`List` of a key are now legal `Map` keys, `Set` members and `distinct`/`groupBy`/join keys (`Map[OrderId, Int]`, `Set[Status]`, `Map[Bytes, V]`); a `Float` never is, at any depth. `Key` is automatic, implies `Eq`, and is a bound (`fn index[K: Key, V](…)`); it is the one bound a capability operation may carry. **A type parameter in a `Map` key or `Set` element position must now be declared `K: Key`**: run `bynk check --fix` to migrate (the stdlib's `bynk.map` and `bynk.set` are migrated). New diagnostics `bynk.types.not_keyable` (replaces `unkeyable_map_key`, `unkeyable_set_element` and `unkeyable_distinct`) and `bynk.generics.missing_key_bound` (machine-applicable). Store `Map`/`Set`/`Cache` and `@indexed` keys, `Query` keys and agent keys are unchanged"
 ---
 

@@ -64,7 +64,8 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotKey>
             part: tys.display(ty),
             float: true,
         }),
-        Ty::Var(_) => None,
+        // A type that already failed to resolve was reported where it failed.
+        Ty::Var(_) | Ty::Error => None,
         Ty::Option(t) | Ty::List(t) => walk_ty(*t, ctx, visited),
         Ty::Named {
             name, kind, args, ..
@@ -195,10 +196,14 @@ pub(crate) fn check_key(ctx: &mut Ctx, ty: TyId, span: Span, site: &KeySite) -> 
 
 /// The note every `not_keyable` diagnostic carries.
 pub(crate) fn key_note(blocker: &NotKey) -> String {
-    format!(
+    let mut note = format!(
         "`{}` is not `Key`; key types are `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option` and `List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types",
         blocker.part
-    )
+    );
+    if blocker.float {
+        note.push_str(". A `Float` is never a key: `NaN` is not equal to itself, so a key holding one could never be found again");
+    }
+    note
 }
 
 /// The tail of a `not_keyable` message when the blocker is a `Float`.

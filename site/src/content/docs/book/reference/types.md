@@ -146,7 +146,7 @@ bundle`.)
 | `HttpResult[T]` | see [HTTP](/book/reference/http/) | an HTTP response |
 | `Stream[T]` | — | a value-over-time source (see [Stream](#stream)) |
 | `Query[T]` | — | a lazy read over `store` storage (see [Query](#query)) |
-| `Set[T]` | — | an immutable set of value-keyable elements (see [Set](#set)) |
+| `Set[T]` | — | an immutable set of [`Key`](#keys) elements (see [Set](#set)) |
 
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 

@@ -409,7 +409,7 @@ The unit type `()`.
 
 A generic constructor — `Result`, `Option`, `Effect`, `HttpResult`, or
 (v0.20b) `List`, `Map` — applied to bracketed type arguments.
-Well-formedness: §5 (`Map` keys are value-keyable,
+Well-formedness: §5 (`Map` keys are `Key`,
 [§5.10](/book/spec/static-semantics/#510-collections)); the type system: §6.
 
 ### §4.2.20a applied_type_ref
@@ -443,9 +443,9 @@ number of **contract clauses** (v0.115), and a block body. Well-formedness: §5.
 A type parameter: a name, optionally followed by `:` and one or more
 **constraint** names joined by `+` (`T`, `T: Eq`, `T: Eq + C`). The same form
 appears on `fn`, `type` and capability-operation type-parameter lists. The
-grammar admits any constraint name; the checker admits `Eq` and `Ord`
-(`bynk.generics.unknown_constraint`), and rejects a bound on a capability
-operation (`bynk.generics.bound_on_capability_op`). Well-formedness: §5.2.
+grammar admits any constraint name; the checker admits `Eq`, `Ord` and `Key`
+(`bynk.generics.unknown_constraint`), and rejects any bound but `Key` on a
+capability operation (`bynk.generics.bound_on_capability_op`). Well-formedness: §5.2.
 
 {{#grammar where_clause}}
 

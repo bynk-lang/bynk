@@ -213,7 +213,7 @@
   "capability_op": [
     {
       "code": "bynk.generics.bound_on_capability_op",
-      "summary": "A generic capability operation's type parameter carries a bound; operations take no bounds yet."
+      "summary": "A generic capability operation's type parameter carries a bound other than `Key`; operations take only `Key` bounds yet."
     },
     {
       "code": "bynk.parse.expected_capability_op",

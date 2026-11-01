@@ -1112,7 +1112,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.generics.bound_on_capability_op",
-        "A generic capability operation's type parameter carries a bound; operations take no bounds yet.",
+        "A generic capability operation's type parameter carries a bound other than `Key`; operations take only `Key` bounds yet.",
         &["capability_op"],
     ),
     dg(

@@ -1,0 +1,25 @@
+suite shop
+
+case "a record-keyed map body is looked up by value" {
+  let m: Map[OrderId, Int] = Map.empty().insert(OrderId { region: "eu", n: 7 }, 3)
+  let r <- api.POST("/total", m)
+  expect r is Ok(3)
+}
+
+case "an absent key reads as zero" {
+  let m: Map[OrderId, Int] = Map.empty().insert(OrderId { region: "us", n: 7 }, 3)
+  let r <- api.POST("/total", m)
+  expect r is Ok(0)
+}
+
+case "the map is echoed back" {
+  let m: Map[OrderId, Int] = Map.empty().insert(OrderId { region: "eu", n: 1 }, 5)
+  let r <- api.POST("/echo", m)
+  expect r is Ok(_)
+}
+
+case "a set body counts its distinct members" {
+  let s: Set[Status] = Set.of([Open, Shipped, Open])
+  let r <- api.POST("/status", s)
+  expect r is Ok(2)
+}
