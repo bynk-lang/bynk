@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`private` now applies to `const`: a `private const` is visible across its own unit's files and to its suites, never through `uses`. A reference from another unit is `bynk.visibility.private_item` (\"a private constant\"), and a public constant whose type annotation names a private type of its unit is `bynk.visibility.private_in_public`"
----
+# 0686 — `private` extends to named constants
 
-## ADR: private-const
-title: `private` extends to named constants
-summary: `private const` hides a constant from importers exactly as `private` hides a function, and a public constant may not be typed with a private type
+- **Status:** Accepted (v0.469)
 
 **Context.** Named constants (ADR 0678, #2617) and private declarations
 (ADR 0683, #2618) were built in parallel. Neither could cover the other, so
