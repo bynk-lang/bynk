@@ -1,11 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  __bynkIntAnd,
+  __bynkIntAndNot,
   __bynkIntDiv,
   __bynkIntDivFloor,
   __bynkIntMod,
+  __bynkIntOr,
   __bynkIntPow,
   __bynkIntRem,
+  __bynkIntShl,
+  __bynkIntShr,
+  __bynkIntXor,
   __bynkToInt,
 } from "../src/int.ts";
 
@@ -75,4 +81,48 @@ test("mod stays exact for operands near the safe limit, and div never returns -0
   assert.equal(__bynkIntMod(-(M - 1), -M), -(M - 1));
   assert.ok(!Object.is(__bynkIntDivFloor(0, -5), -0));
   assert.equal(__bynkIntDivFloor(0, -5), 0);
+});
+
+test("bitwise and/or/xor/andNot agree with native ops below 2^31", () => {
+  assert.equal(__bynkIntAnd(12, 10), 8);
+  assert.equal(__bynkIntOr(12, 10), 14);
+  assert.equal(__bynkIntXor(12, 10), 6);
+  assert.equal(__bynkIntAndNot(12, 10), 4);
+});
+
+test("bitwise operations are exact across the full safe range", () => {
+  const M = Number.MAX_SAFE_INTEGER; // 2^53 - 1: all 53 bits set
+  const bit40 = 2 ** 40;
+  assert.equal(__bynkIntAnd(M, bit40 + 5), bit40 + 5);
+  assert.equal(__bynkIntOr(bit40, 5), bit40 + 5);
+  assert.equal(__bynkIntAnd(__bynkIntOr(bit40, 5), 5), 5);
+  assert.equal(__bynkIntXor(M, M), 0);
+  assert.equal(__bynkIntXor(M, bit40), M - bit40);
+  assert.equal(__bynkIntAndNot(M, bit40), M - bit40);
+  assert.equal(__bynkIntOr(2 ** 31, 1), 2 ** 31 + 1);
+  assert.equal(__bynkIntAnd(2 ** 32 + 3, 2 ** 32 + 1), 2 ** 32 + 1);
+  assert.equal(__bynkIntOr(0, 0), 0);
+});
+
+test("shl and shr are exact, and shl faults past the safe range", () => {
+  assert.equal(__bynkIntShl(1, 40), 2 ** 40);
+  assert.equal(__bynkIntShl(1, 52), 2 ** 52);
+  assert.equal(__bynkIntShl(0, 52), 0);
+  assert.equal(__bynkIntShl(3, 51), 3 * 2 ** 51);
+  assert.throws(() => __bynkIntShl(1, 53), /outside 0\.\.52/);
+  assert.throws(() => __bynkIntShl(2, 52), /past the safe Int range/);
+  assert.equal(__bynkIntShr(2 ** 52, 52), 1);
+  assert.equal(__bynkIntShr(Number.MAX_SAFE_INTEGER, 1), 2 ** 52 - 1);
+  assert.equal(__bynkIntShr(5, 1), 2);
+  assert.equal(__bynkIntShr(5, 0), 5);
+  assert.throws(() => __bynkIntShr(1, -1), /outside 0\.\.52/);
+});
+
+test("a negative operand faults in every bitwise operation", () => {
+  assert.throws(() => __bynkIntAnd(-1, 1), /negative operand/);
+  assert.throws(() => __bynkIntOr(1, -1), /negative operand/);
+  assert.throws(() => __bynkIntXor(-1, -1), /negative operand/);
+  assert.throws(() => __bynkIntAndNot(1, -1), /negative operand/);
+  assert.throws(() => __bynkIntShl(-1, 1), /negative operand/);
+  assert.throws(() => __bynkIntShr(-1, 1), /negative operand/);
 });

@@ -415,6 +415,16 @@ is `bynk.types.method_arity`; an unknown method on a numeric receiver is
   is unchecked, `pow` overflows too readily for an imprecise result to be
   tolerable. `0.pow(0) == 1`.
 
+**Bitwise operations** (#2621). On `Int`, as methods (no operator, so no
+grammar change): `a.and(b)`, `a.or(b)`, `a.xor(b)`, `a.andNot(mask)` (the bits
+of `a` not in `mask`), `a.shl(n)` and `a.shr(n)`, each `-> Int`. They are exact
+over the whole safe-integer range, not the 32 bits of the host's own operators,
+so `1.shl(40).or(5).and(5) == 5`; values past 2^31 are slower than native ops.
+Operands must be non-negative (a sign-magnitude domain has no two's complement),
+so a negative operand faults, which is also why there is no `not`. A shift
+count outside `0..52` faults, as does an `shl` whose result passes 2^53 − 1;
+`shr` floors, and is the logical shift.
+
 **`Float` functions** (K6b). On `Float`: `f.sqrt()`, `f.pow(y)`, `f.exp()`,
 `f.ln()`, `f.log10()`, `f.log2()`, and in radians `f.sin()`, `f.cos()`,
 `f.tan()`, `f.asin()`, `f.acos()`, `f.atan()` and `y.atan2(x)` (the angle of

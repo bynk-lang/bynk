@@ -1510,7 +1510,10 @@ pub(crate) fn check_numeric_kernel_method(
         (BaseType::Float, "isNaN" | "isFinite") => Some((vec![], Ty::Base(BaseType::Bool))),
         // K6b (#2598): integer division companions and an exact power, each
         // faulting on a zero divisor or a result past the safe-integer range.
-        (BaseType::Int, "div" | "rem" | "mod" | "pow") => {
+        (
+            BaseType::Int,
+            "div" | "rem" | "mod" | "pow" | "and" | "or" | "xor" | "andNot" | "shl" | "shr",
+        ) => {
             Some((vec![tys.intern(b.clone())], b.clone()))
         }
         // K6b (#2598): the `Float` functions over JS `Math`, host-defined
@@ -1526,7 +1529,7 @@ pub(crate) fn check_numeric_kernel_method(
     let Some((params, ret)) = sig else {
         let kernel = match base {
             BaseType::Int => {
-                "`toFloat`, `toString`, `abs`, `min`, `max`, `clamp`, `div`, `rem`, `mod`, `pow`"
+                "`toFloat`, `toString`, `abs`, `min`, `max`, `clamp`, `div`, `rem`, `mod`, `pow`, `and`, `or`, `xor`, `andNot`, `shl`, `shr`"
             }
             _ => {
                 "`round`, `floor`, `ceil`, `truncate`, `toString`, `abs`, `min`, `max`, \

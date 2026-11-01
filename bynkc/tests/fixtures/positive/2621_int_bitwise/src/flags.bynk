@@ -1,0 +1,31 @@
+context flags
+
+// #2621: bitwise operations on `Int`, exact across the whole safe range.
+
+fn pack(shard: Int, seq: Int) -> Int {
+	shard.shl(40).or(seq)
+}
+
+fn shardOf(id: Int) -> Int {
+	id.shr(40)
+}
+
+fn seqOf(id: Int) -> Int {
+	id.and(1099511627775)
+}
+
+fn has(flags: Int, bit: Int) -> Bool {
+	flags.and(bit) != 0
+}
+
+service bits {
+	on call(a: Int, b: Int) -> Effect[Int] {
+		Effect.pure(a.and(b))
+	}
+}
+
+service shift {
+	on call(n: Int, count: Int) -> Effect[Int] {
+		Effect.pure(n.shl(count))
+	}
+}

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "bits": "6cb4ac4cf3196e47",
+    "shift": "856d12c2c3fc5879"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "bits": "Svc(\"bits\",P(\"a\",B(\"Int\")),P(\"b\",B(\"Int\")),Ret(B(\"Int\")))",
+    "shift": "Svc(\"shift\",P(\"n\",B(\"Int\")),P(\"count\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
+}

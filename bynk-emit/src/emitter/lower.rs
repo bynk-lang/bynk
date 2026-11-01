@@ -5029,13 +5029,23 @@ fn lower_numeric_kernel(
         }
         // K6b (#2598): the `Int` division companions and exact power, through
         // `int.ts` helpers so their fault branches stay out of coverage.
-        ("div" | "rem" | "mod" | "pow", [other]) if base == BaseType::Int => {
+        (
+            "div" | "rem" | "mod" | "pow" | "and" | "or" | "xor" | "andNot" | "shl" | "shr",
+            [other],
+        ) if base == BaseType::Int => {
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
             let helper = match method.name.as_str() {
                 "div" => "__bynkIntDivFloor",
                 "rem" => "__bynkIntRem",
                 "mod" => "__bynkIntMod",
+                // #2621: the bitwise operations, split hi/lo in the runtime.
+                "and" => "__bynkIntAnd",
+                "or" => "__bynkIntOr",
+                "xor" => "__bynkIntXor",
+                "andNot" => "__bynkIntAndNot",
+                "shl" => "__bynkIntShl",
+                "shr" => "__bynkIntShr",
                 _ => "__bynkIntPow",
             };
             cx.note_int();
