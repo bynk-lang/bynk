@@ -81,10 +81,20 @@ variant payload.
 
 ## Cover the rest
 
-A record pattern counts as covering its type only when every field is matched by
-a name or `_`. A pattern with a literal or variant field is partial, so end the
-`match` with a `_` arm, as `describe` does above. Exhaustiveness across several
-partial arms is not yet precise.
+Arms cover a record between them. If every `status` has an arm, no `_` is needed:
+
+```bynk,fragment
+match order {
+  Order { status: Paid, .. } => 1
+  Order { status: Pending, .. } => 2
+  Order { status: Cancelled, .. } => 3
+}
+```
+
+Leave one out and the compiler names the pattern to add, such as
+`Order { status: Cancelled, .. }`; the editor's *add missing arms* fix inserts
+it. A later arm that the earlier ones already cover, even all together, is
+`bynk.types.unreachable_arm`.
 
 To bind a record's fields without a `match`, see
 [Destructure a record with `let`](/book/guides/type-system/destructure-a-record-with-let/).

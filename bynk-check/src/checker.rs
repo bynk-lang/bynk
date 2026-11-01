@@ -49,6 +49,7 @@ mod par;
 mod refinements;
 pub use refinements::split_regex_flags;
 mod regex_ambiguity;
+mod usefulness;
 
 use calls::*;
 use expressions::*;

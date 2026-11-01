@@ -2996,7 +2996,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.non_exhaustive_match",
-        "A `match` does not cover every variant.",
+        "A `match` does not cover every value.",
         &["match_expr"],
     ),
     d(

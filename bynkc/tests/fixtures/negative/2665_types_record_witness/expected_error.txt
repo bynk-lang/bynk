@@ -1,0 +1,2 @@
+# exact
+bynk.types.non_exhaustive_match non-exhaustive `match` on `Order` — `Order { status: Cancelled, .. }` is not covered @ 7:3
