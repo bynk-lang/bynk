@@ -59,6 +59,16 @@ structurally validated as it crosses ([§6.5](/book/spec/type-system/#65-type-co
   language there is no excuse for fractional `Int`s, and codec and `.of`
   agree (as 0040 aligned them for `Float`).
 
+**Recursive types at boundaries** (#2656). The codecs of a type on a type
+cycle, and the container and generic-instantiation codecs the cycle passes
+through, take a trailing `depth: number = 0` and are bounded at 256 levels
+([§6.5](/book/spec/type-system/#65-type-compatibility--boundaries)). A record's
+or sum's codec counts one level and passes `depth + 1` on; a container's passes
+`depth` through. `__deserialise_` past the bound returns a `StructuralMismatch`
+expecting `a value nested at most 256 levels deep`; `__serialise_` past it
+**throws**, as for a non-finite `Float`. The codecs of every other type, and
+every call from outside a cycle, are emitted without the parameter.
+
 ## §7.3 Construct emission
 
 ### §7.3.1 Types
@@ -418,6 +428,11 @@ left to be discovered: the **runtime-owned error types** (`ValidationError`,
 by the runtime rather than by a type declaration the emitter can walk, so there is
 no helper to generate; their JSON shape is fixed by the runtime, so the
 pass-through is unchecked rather than wrong.
+
+A recursive type's codec is **depth-bounded** on both sides (#2656, §7.2): a
+callee refuses an argument nested past the bound with a `400`
+`StructuralMismatch`, and a caller or callee that would encode one faults
+instead of sending it, so a value one side rejects is never on the wire.
 
 ### §7.3.4c The contract seam (v0.177)
 

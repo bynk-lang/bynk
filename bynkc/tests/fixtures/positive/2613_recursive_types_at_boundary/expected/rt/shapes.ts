@@ -22,14 +22,18 @@ export interface Dir {
 export const Dir = {
 };
 
-export function __serialise_Dir(value: Dir): __JsonValue {
+export function __serialise_Dir(value: Dir, depth: number = 0): __JsonValue {
+  if (depth >= 256) throw new globalThis.Error("value nested more than 256 levels deep at boundary");
   return {
     name: value.name as __JsonValue,
-    children: __serialise_List_Dir(value.children),
+    children: __serialise_List_Dir(value.children, depth + 1),
   };
 }
 
-export function __deserialise_Dir(json: __JsonValue, path: string = "$"): Result<Dir, __BoundaryError> {
+export function __deserialise_Dir(json: __JsonValue, path: string = "$", depth: number = 0): Result<Dir, __BoundaryError> {
+  if (depth >= 256) {
+    return Err({ kind: "StructuralMismatch", path, expected: "a value nested at most 256 levels deep", actual: "a value nested more deeply" });
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -38,23 +42,27 @@ export function __deserialise_Dir(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
   }
   const __name = obj["name"];
-  const __r_children = __deserialise_List_Dir(obj["children"], `${path}.children`);
+  const __r_children = __deserialise_List_Dir(obj["children"], `${path}.children`, depth + 1);
   if (__r_children.tag === "Err") return __r_children;
   const __children = __r_children.value;
   return Ok({ name: __name, children: __children } as Dir);
 }
 
-export function __serialise_Tree(value: Tree): __JsonValue {
+export function __serialise_Tree(value: Tree, depth: number = 0): __JsonValue {
+  if (depth >= 256) throw new globalThis.Error("value nested more than 256 levels deep at boundary");
   switch (value.tag) {
     case "Leaf":
       return { kind: "Leaf" };
     case "Node": {
-      return { kind: "Node", left: __serialise_Tree(value.left), value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value), right: __serialise_Tree(value.right) };
+      return { kind: "Node", left: __serialise_Tree(value.left, depth + 1), value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value), right: __serialise_Tree(value.right, depth + 1) };
     }
   }
 }
 
-export function __deserialise_Tree(json: __JsonValue, path: string = "$"): Result<Tree, __BoundaryError> {
+export function __deserialise_Tree(json: __JsonValue, path: string = "$", depth: number = 0): Result<Tree, __BoundaryError> {
+  if (depth >= 256) {
+    return Err({ kind: "StructuralMismatch", path, expected: "a value nested at most 256 levels deep", actual: "a value nested more deeply" });
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -64,7 +72,7 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$"): Resul
     case "Leaf":
       return Ok({ tag: "Leaf" } as Tree);
     case "Node": {
-  const __r_left = __deserialise_Tree(obj["left"], `${path}.left`);
+  const __r_left = __deserialise_Tree(obj["left"], `${path}.left`, depth + 1);
   if (__r_left.tag === "Err") return __r_left;
   const __left = __r_left.value;
   if (typeof obj["value"] !== "number") {
@@ -74,7 +82,7 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
   }
   const __value = obj["value"];
-  const __r_right = __deserialise_Tree(obj["right"], `${path}.right`);
+  const __r_right = __deserialise_Tree(obj["right"], `${path}.right`, depth + 1);
   if (__r_right.tag === "Err") return __r_right;
   const __right = __r_right.value;
       return Ok({ tag: "Node", left: __left, value: __value, right: __right } as Tree);
@@ -85,18 +93,18 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$"): Resul
 }
 
 
-export function __serialise_List_Dir(value: readonly Dir[]): __JsonValue {
-  return value.map((v) => __serialise_Dir(v));
+export function __serialise_List_Dir(value: readonly Dir[], depth: number = 0): __JsonValue {
+  return value.map((v) => __serialise_Dir(v, depth));
 }
 
-export function __deserialise_List_Dir(json: __JsonValue, path: string = "$"): Result<readonly Dir[], __BoundaryError> {
+export function __deserialise_List_Dir(json: __JsonValue, path: string = "$", depth: number = 0): Result<readonly Dir[], __BoundaryError> {
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }
   const out: Dir[] = [];
   for (let i = 0; i < json.length; i++) {
   const item = json[i];
-  const __r_el = __deserialise_Dir(item, `${path}[${i}]`);
+  const __r_el = __deserialise_Dir(item, `${path}[${i}]`, depth);
   if (__r_el.tag === "Err") return __r_el;
   const __el = __r_el.value;
   out.push(__el as Dir);

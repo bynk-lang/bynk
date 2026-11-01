@@ -1,0 +1,30 @@
+---
+#2656: the nesting bound on recursive boundary types, proved at runtime.
+---
+suite demo.depth
+
+case "a chain at the bound round-trips" {
+  expect chainRoundTrips(chain(256))
+}
+
+case "a tree at the bound round-trips" {
+  expect treeRoundTrips(tree(256))
+}
+
+case "a hand-written chain at the bound decodes" {
+  expect decodesChain(chainJson(256))
+}
+
+case "a chain one level past the bound is a StructuralMismatch" {
+  // A bare `next` value is the lenient `Option` form, so each level adds one
+  // `.next` to the path; the 257th level is at the 256th `.next`.
+  expect chainError(chainJson(257)) == "StructuralMismatch at $".concat(repeat(".next", 256)).concat(": expected a value nested at most 256 levels deep, got a value nested more deeply")
+}
+
+case "encoding a chain one level past the bound faults" {
+  expect encodeChain(chain(257)) faults
+}
+
+case "encoding a tree one level past the bound faults" {
+  expect encodeTree(tree(257)) faults
+}
