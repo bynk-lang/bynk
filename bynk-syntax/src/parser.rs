@@ -2994,22 +2994,70 @@ mod tests {
     }
 
     #[test]
-    fn list_rest_followed_by_a_literal_is_reserved_for_ranges() {
+    fn list_rest_followed_by_an_integer_is_a_range_element() {
+        // #2699 retired slice 4's reservation: `..` then an integer is a range.
         for body in [
-            "match xs { [..9] => 1 }",
-            "match xs { [a, ..-1] => 1 }",
-            "match xs { [..\"a\"] => 1 }",
-            "match xs { [..true] => 1 }",
+            "match xs { [..9] => 1 _ => 0 }",
+            "match xs { [a, ..-1] => 1 _ => 0 }",
+            "match xs { [0..9, ..rest] => 1 _ => 0 }",
+            "match xs { [18.., ..] => 1 _ => 0 }",
         ] {
-            let errs = body_err(body);
-            assert_eq!(
-                errs[0].category, "bynk.parse.range_pattern_unsupported",
+            let ExprKind::Match { arms, .. } = body_tail(body) else {
+                panic!("expected Match: {body}");
+            };
+            let Pattern::List { elems, .. } = &arms[0].pattern else {
+                panic!("expected a list pattern: {body}");
+            };
+            assert!(
+                elems.iter().any(|e| matches!(e, Pattern::Range(_))),
                 "{body}"
             );
+        }
+        // A string or boolean after `..` is still no form.
+        for body in ["match xs { [..\"a\"] => 1 }", "match xs { [..true] => 1 }"] {
+            let errs = body_err(body);
+            assert_eq!(errs[0].category, "bynk.parse.expected_token", "{body}");
         }
         // And `.._` is not a form.
         let errs = body_err("match xs { [a, .._] => 1 }");
         assert_eq!(errs[0].category, "bynk.parse.expected_token");
+    }
+
+    #[test]
+    fn int_range_patterns_parse_in_every_form() {
+        let range = |body: &str| {
+            let ExprKind::Match { arms, .. } = body_tail(body) else {
+                panic!("expected Match: {body}");
+            };
+            match &arms[0].pattern {
+                Pattern::Range(r) => (r.lo, r.hi),
+                other => panic!("expected a range: {body}: {other:?}"),
+            }
+        };
+        assert_eq!(range("match n { 0..12 => 1 _ => 0 }"), (Some(0), Some(12)));
+        assert_eq!(range("match n { 18.. => 1 _ => 0 }"), (Some(18), None));
+        assert_eq!(range("match n { ..-1 => 1 _ => 0 }"), (None, Some(-1)));
+        assert_eq!(
+            range("match n { -5..-1 => 1 _ => 0 }"),
+            (Some(-5), Some(-1))
+        );
+        assert_eq!(
+            range("match n { 1_000..2_000 => 1 _ => 0 }"),
+            (Some(1000), Some(2000))
+        );
+        // An open range ends its arm: the next arm's literal is not its bound.
+        let ExprKind::Match { arms, .. } = body_tail("match n { 18.. => 1 5 => 2 _ => 0 }") else {
+            panic!("expected Match");
+        };
+        assert!(matches!(arms[0].pattern, Pattern::Range(_)));
+        assert!(matches!(arms[1].pattern, Pattern::Literal { .. }));
+    }
+
+    #[test]
+    fn a_range_is_not_an_event_pattern_value() {
+        // Only `via schema(...)` takes a range; a payload field's value does not.
+        let src = "service S from Events(E { n: 1..5 }) { }";
+        assert!(parse_str(src).is_err());
     }
 
     #[test]

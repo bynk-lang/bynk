@@ -1,7 +1,8 @@
 # The Events protocol — in-system pub-sub for cross-context decoupling
 
-- **Status:** Slicing — slices 0–4 have shipped (§7); slice 4b, range
-  patterns in `via schema(...)`, is open as [#990](https://github.com/accuser/bynk/issues/990). This began as a
+- **Status:** Slicing — slices 0–4 and 4b have shipped (§7); slice 4b, range
+  patterns in `via schema(...)` ([#990](https://github.com/accuser/bynk/issues/990)),
+  landed with patterns slice 5 (#2699) through one shared range production. This began as a
   settling-draft doc per
   [ADR 0167](../decisions/0167-feature-tracks-run-github-native.md): the
   **spine issue** is
@@ -644,6 +645,15 @@ receives *exactly* the emissions its pattern admits.
   (#985). Nested inside the `Events` protocol's grammar arm; no cross-
   subscriber ambiguity check (same policy as slice 1's payload pattern);
   range patterns split to slice 4b ([#990](https://github.com/accuser/bynk/issues/990), see §4).
+- [x] Slice 4b — range patterns and `_` in `via schema(...)` (#990, with
+  patterns-track slice 5, #2699). `via schema(2..4)`, `(2..)`, `(..4)` and `(_)`
+  through the same `int_range` production a `match` takes; inclusive bounds,
+  `lo > hi` rejected (`bynk.types.empty_range_pattern`), each bound a positive
+  `Int`, no sibling-overlap diagnostic. Proven behaviourally
+  (`bynkc/tests/events_schema_dispatch_behaviour.rs`): five subscribers
+  (`(1)`, `(2..4)`, `(5..)`, `(..2)`, `(_)`, the last both with and without a
+  declared `env`) compiled at versions 1, 2, 4, 5 and 7, each firing exactly
+  where its range holds, at both edges.
 - [ ] (Not a slice of this track) Replay / backfill + actors Q8 — future track (§3.6)
 
 ## 8. Done when

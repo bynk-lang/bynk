@@ -975,7 +975,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.event.bad_schema_dispatch",
-        "A `via schema(...)` dispatch clause's argument is malformed — it must be a single, positive, positional `Int` literal.",
+        "A `via schema(...)` dispatch clause's argument is malformed — it must be a positive `Int` literal, a range of positive `Int` literals, or `_`.",
     ),
     d(
         "bynk.event.bad_schema_version",
@@ -1861,11 +1861,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.policy_order",
         "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`.",
         &["service_decl"],
-    ),
-    dg(
-        "bynk.parse.range_pattern_unsupported",
-        "A `..` in a list pattern is followed by a literal; range patterns are not available yet.",
-        &["list_pattern"],
     ),
     dg(
         "bynk.parse.record_pattern_in_is_unparenthesised",
@@ -2856,6 +2851,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `embeds E as V` target variant must have exactly one payload field, of type `E`.",
     ),
     dg(
+        "bynk.types.empty_range_pattern",
+        "A range pattern or `via schema(...)` range has its bounds inverted (`lo > hi`), so it can never match.",
+        &["int_range"],
+    ),
+    dg(
         "bynk.types.empty_refinement",
         "A refinement admits no values (contradictory predicates).",
         &["refinement"],
@@ -2952,6 +2952,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.types.is_non_sum",
         "`is` was applied to a value that is not a sum type.",
+        &["is_expr"],
+    ),
+    dg(
+        "bynk.types.is_range_pattern",
+        "A range pattern was used directly on the right of `is`; `is` tests type/refinement, not value ranges (use `match`, a guard or `InRange`).",
         &["is_expr"],
     ),
     dg(
@@ -3129,6 +3134,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.question_outside_result",
         "`?` used in a function that does not return a `Result`.",
         &["question_expr"],
+    ),
+    dg(
+        "bynk.types.range_pattern_on_non_int",
+        "A range pattern (`lo..hi`) was matched against a scrutinee that is not an `Int`.",
+        &["int_range"],
     ),
     dg(
         "bynk.types.record_pattern_on_non_record",

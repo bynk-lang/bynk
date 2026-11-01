@@ -1737,6 +1737,18 @@ mod tests {
     }
 
     #[test]
+    fn range_bounds_never_lex_as_a_float() {
+        use TokenKind::*;
+        // #2699: a float needs a digit on both sides of its `.`, so every range
+        // spelling is `IntLit DotDot IntLit`, with the sign a separate `Minus`.
+        assert_eq!(kinds("0..9"), vec![IntLit, DotDot, IntLit]);
+        assert_eq!(kinds("18.."), vec![IntLit, DotDot]);
+        assert_eq!(kinds("..-1"), vec![DotDot, Minus, IntLit]);
+        assert_eq!(kinds("-5..-1"), vec![Minus, IntLit, DotDot, Minus, IntLit]);
+        assert_eq!(kinds("1_000..2_000"), vec![IntLit, DotDot, IntLit]);
+    }
+
+    #[test]
     fn digit_separators_lex_as_one_number() {
         use TokenKind::*;
         // v0.142 (ADR 0166): `_` between digit groups keeps the literal a single

@@ -142,6 +142,55 @@ service markPaid {{
     )
 }
 
+// Events slice 4b (#990, through patterns slice 5's shared range production,
+// #2699): a literal, a closed range, an open-above range and `_`. Each
+// declares no `env`, so every one relies on the synthetic envelope parameter
+// (`_` included, which has no guard but still takes the envelope).
+const SOURCE_NOTIFICATIONS_RANGES: &str = r#"context commerce.notifications
+
+consumes commerce.order
+consumes bynk { Logger }
+
+service OnExactlyV1 from Events(PaymentConfirmed) via schema(1) {
+  on event(e: PaymentConfirmed) -> Effect[()] given Logger {
+    Logger.info("exact-fired")
+  }
+}
+
+service OnV2To4 from Events(PaymentConfirmed) via schema(2..4) {
+  on event(e: PaymentConfirmed) -> Effect[()] given Logger {
+    Logger.info("closed-fired")
+  }
+}
+
+service OnV5Up from Events(PaymentConfirmed) via schema(5..) {
+  on event(e: PaymentConfirmed) -> Effect[()] given Logger {
+    Logger.info("open-fired")
+  }
+}
+
+// Declares `env`, which also pulls `EventEnvelope` into this file's imports for
+// the bare subscribers (the precedent `SOURCE_NOTIFICATIONS` sets).
+service OnAny from Events(PaymentConfirmed) via schema(_) {
+  on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Logger {
+    Logger.info("any-fired")
+  }
+}
+
+// `_` has no guard, but it still takes the synthetic envelope parameter.
+service OnAnyBare from Events(PaymentConfirmed) via schema(_) {
+  on event(e: PaymentConfirmed) -> Effect[()] given Logger {
+    Logger.info("bare-wild-fired")
+  }
+}
+
+service OnUpTo2 from Events(PaymentConfirmed) via schema(..2) {
+  on event(e: PaymentConfirmed) -> Effect[()] given Logger {
+    Logger.info("below-fired")
+  }
+}
+"#;
+
 const DRIVER_TS: &str = r#"import { composeApp } from "./compose.js";
 
 const app: any = composeApp();
@@ -153,7 +202,12 @@ console.log("ALL OK");
 
 /// Compile + run one variant (`schema_annotation` is `""` for version 1, or
 /// `" @schema(2)"` for version 2), returning the captured stdout/stderr.
-fn compile_and_run(runner: &(String, Vec<String>), schema_annotation: &str, tag: &str) -> String {
+fn compile_and_run(
+    runner: &(String, Vec<String>),
+    notifications: &str,
+    schema_annotation: &str,
+    tag: &str,
+) -> String {
     let tmp = std::env::temp_dir().join(format!(
         "bynk-events-schema-dispatch-behaviour-{tag}-{}",
         std::process::id()
@@ -162,7 +216,7 @@ fn compile_and_run(runner: &(String, Vec<String>), schema_annotation: &str, tag:
     let proj = tmp.join("proj/commerce");
     fs::create_dir_all(&proj).unwrap();
     fs::write(proj.join("order.bynk"), source_order(schema_annotation)).unwrap();
-    fs::write(proj.join("notifications.bynk"), SOURCE_NOTIFICATIONS).unwrap();
+    fs::write(proj.join("notifications.bynk"), notifications).unwrap();
 
     let out = match bynkc::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Bundle),
@@ -228,7 +282,7 @@ fn bundle_via_schema_dispatches_only_to_the_matching_version() {
 
     // Compile A: no `@schema` annotation — version 1. Only `OnV1` (the
     // handler with NO declared `env`) should fire.
-    let msg_v1 = compile_and_run(&runner, "", "v1");
+    let msg_v1 = compile_and_run(&runner, SOURCE_NOTIFICATIONS, "", "v1");
     assert!(
         msg_v1.contains("v1-fired"),
         "a version-1 emission must reach the `via schema(1)` subscriber, \
@@ -242,7 +296,7 @@ fn bundle_via_schema_dispatches_only_to_the_matching_version() {
 
     // Compile B: `@schema(2)` — version 2. Only `OnV2` should fire, with
     // its own declared `env.schemaVersion` reading back 2.
-    let msg_v2 = compile_and_run(&runner, " @schema(2)", "v2");
+    let msg_v2 = compile_and_run(&runner, SOURCE_NOTIFICATIONS, " @schema(2)", "v2");
     assert!(
         msg_v2.contains("v2-fired:2"),
         "a version-2 emission must reach the `via schema(2)` subscriber, \
@@ -252,4 +306,77 @@ fn bundle_via_schema_dispatches_only_to_the_matching_version() {
         !msg_v2.contains("v1-fired"),
         "a version-2 emission must NOT reach the `via schema(1)` subscriber:\n{msg_v2}"
     );
+}
+
+/// #990: `via schema(2..4)`, `(5..)`, `(..2)` and `(_)` dispatch on the
+/// envelope's version with inclusive bounds, alongside a literal. One compile
+/// per version tested, at both edges of each range.
+#[test]
+fn bundle_via_schema_ranges_and_wildcard_dispatch_by_version() {
+    let Some(runner) = discover_tsc() else {
+        eprintln!(
+            "\n!!! EVENTS SCHEMA-DISPATCH BEHAVIOUR VERIFICATION SKIPPED !!!\nno tsc runner.\n"
+        );
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("{REQUIRE_ENV} is set but no tsc runner was found");
+        }
+        return;
+    };
+    if !tool_exists("node") {
+        eprintln!(
+            "\n!!! EVENTS SCHEMA-DISPATCH BEHAVIOUR VERIFICATION SKIPPED !!!\n`node` not on PATH.\n"
+        );
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("{REQUIRE_ENV} is set but `node` was not found");
+        }
+        return;
+    }
+    let all = [
+        "exact-fired",
+        "closed-fired",
+        "open-fired",
+        "any-fired",
+        "bare-wild-fired",
+        "below-fired",
+    ];
+    // (version, the subscribers that must fire).
+    let cases: [(u32, &[&str]); 5] = [
+        (
+            1,
+            &["exact-fired", "any-fired", "bare-wild-fired", "below-fired"],
+        ),
+        (
+            2,
+            &[
+                "closed-fired",
+                "any-fired",
+                "bare-wild-fired",
+                "below-fired",
+            ],
+        ),
+        (4, &["closed-fired", "any-fired", "bare-wild-fired"]),
+        (5, &["open-fired", "any-fired", "bare-wild-fired"]),
+        (7, &["open-fired", "any-fired", "bare-wild-fired"]),
+    ];
+    for (version, fires) in cases {
+        let annotation = if version == 1 {
+            String::new()
+        } else {
+            format!(" @schema({version})")
+        };
+        let msg = compile_and_run(
+            &runner,
+            SOURCE_NOTIFICATIONS_RANGES,
+            &annotation,
+            &format!("ranges-v{version}"),
+        );
+        for name in all {
+            assert_eq!(
+                msg.contains(name),
+                fires.contains(&name),
+                "version {version}: `{name}` should {}fire:\n{msg}",
+                if fires.contains(&name) { "" } else { "not " }
+            );
+        }
+    }
 }

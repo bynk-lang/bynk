@@ -21,8 +21,8 @@ use bynk_syntax::ast::{
 };
 
 use bynk_ir::{
-    ActorSeamIr, FnSig, IrHandlerKind, IrHttpMethod, OpSig, ProtocolIr, StoreFieldIr, StoreKindIr,
-    TypeShape,
+    ActorSeamIr, FnSig, IrHandlerKind, IrHttpMethod, OpSig, ProtocolIr, SchemaVersionIr,
+    StoreFieldIr, StoreKindIr, TypeShape,
 };
 use bynk_lower::{
     HandlerSignatureIr, body_writes_state, is_effectful_return, lower_actor_seam_ir,
@@ -108,6 +108,29 @@ pub(crate) fn emit_type(
     }
     stmts.extend(shape_stmts);
     stmts
+}
+
+/// The runtime test a `via schema(...)` guard negates (events slice 4b, #990):
+/// `===` for a literal, `>=` and/or `<=` for a range, and none for `_`, which
+/// only forwards the envelope. Bounds are inclusive.
+fn schema_version_test(env_binder: &str, version: SchemaVersionIr) -> Option<String> {
+    let v = format!("{env_binder}.schemaVersion");
+    match version {
+        SchemaVersionIr::Exact(n) => Some(format!("{v} === {n}")),
+        SchemaVersionIr::Range {
+            lo: Some(lo),
+            hi: Some(hi),
+        } => Some(format!("{v} >= {lo} && {v} <= {hi}")),
+        SchemaVersionIr::Range {
+            lo: Some(lo),
+            hi: None,
+        } => Some(format!("{v} >= {lo}")),
+        SchemaVersionIr::Range {
+            lo: None,
+            hi: Some(hi),
+        } => Some(format!("{v} <= {hi}")),
+        SchemaVersionIr::Range { lo: None, hi: None } | SchemaVersionIr::Any => None,
+    }
 }
 
 /// Emit a doc block as a JSDoc-style comment at the given indent. Each line
@@ -3056,9 +3079,10 @@ pub(crate) fn emit_service(
             ..
         } = protocol
             && let Some(env_binder) = &schema_dispatch_env_binder
+            && let Some(test) = schema_version_test(env_binder, *version)
         {
             let prologue = format!(
-                "{}if (!({env_binder}.schemaVersion === {version})) return undefined;\n",
+                "{}if (!({test})) return undefined;\n",
                 " ".repeat(INDENT_STEP * 2)
             );
             body_out.insert_str(0, &prologue);

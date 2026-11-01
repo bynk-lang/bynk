@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **682** codes in total.
+There are **684** codes in total.
 
 ## Agents
 
@@ -327,7 +327,7 @@ There are **682** codes in total.
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
 | `bynk.duration.literal_overflow` | A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range. |  | — |
 | `bynk.event.bad_params` | An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope. |  | — |
-| `bynk.event.bad_schema_dispatch` | A `via schema(...)` dispatch clause's argument is malformed — it must be a single, positive, positional `Int` literal. |  | — |
+| `bynk.event.bad_schema_dispatch` | A `via schema(...)` dispatch clause's argument is malformed — it must be a positive `Int` literal, a range of positive `Int` literals, or `_`. |  | — |
 | `bynk.event.bad_schema_version` | An event's `@schema(N)` annotation is malformed — `N` must be a single, positive, positional `Int` literal, and `@schema` may appear at most once on an event. |  | — |
 | `bynk.event.duplicate_handler` | A `from Events` service declares more than one `on event` handler; it has exactly one. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
 | `bynk.event.emit_not_an_event` | `Events.emit[E]` named a type `E` that is declared in this context, but is not itself an `event` — only an `event` type may be emitted. |  | — |
@@ -551,7 +551,6 @@ There are **682** codes in total.
 | `bynk.parse.non_associative` | A non-associative operator was chained (e.g. `a == b == c`). | [`binary_expr`](/book/reference/grammar/#rule-binary_expr) | — |
 | `bynk.parse.orphan_doc_block` | A documentation block is not attached to a declaration (warning). |  | Warning |
 | `bynk.parse.policy_order` | A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.parse.range_pattern_unsupported` | A `..` in a list pattern is followed by a literal; range patterns are not available yet. | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
 | `bynk.parse.record_pattern_in_is_unparenthesised` | A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | `bynk.parse.record_pattern_without_rest` | A record pattern does not end with `..`; every record pattern is open. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | `bynk.parse.refined_pattern_inner` | A refined pattern's inner form is something other than `_`. | [`refined_pattern`](/book/reference/grammar/#rule-refined_pattern) | — |
@@ -765,6 +764,7 @@ There are **682** codes in total.
 | `bynk.types.embeds_ambiguous` | A type is embedded by more than one variant of a sum, so `?`'s conversion would be ambiguous. |  | — |
 | `bynk.types.embeds_unknown_variant` | An `embeds … as V` clause names a variant the sum does not declare. |  | — |
 | `bynk.types.embeds_variant_shape` | An `embeds E as V` target variant must have exactly one payload field, of type `E`. |  | — |
+| `bynk.types.empty_range_pattern` | A range pattern or `via schema(...)` range has its bounds inverted (`lo > hi`), so it can never match. | [`int_range`](/book/reference/grammar/#rule-int_range) | — |
 | `bynk.types.empty_refinement` | A refinement admits no values (contradictory predicates). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.err_value_mismatch` | An `Err` payload has the wrong type. | [`err_expr`](/book/reference/grammar/#rule-err_expr) | — |
 | `bynk.types.extensible_match_needs_wildcard` | A `match` covers an extensible standard-library enum (`FetchError`, `Method`) without a wildcard; it may gain variants in a minor release. |  | — |
@@ -786,6 +786,7 @@ There are **682** codes in total.
 | `bynk.types.is_base_mismatch` | An `is` refinement check is applied to a value of the wrong base type. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.is_literal_pattern` | A literal was used on the right of `is`; `is` tests type/refinement, not value equality (use `==`). | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.is_non_sum` | `is` was applied to a value that is not a sum type. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
+| `bynk.types.is_range_pattern` | A range pattern was used directly on the right of `is`; `is` tests type/refinement, not value ranges (use `match`, a guard or `InRange`). | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.is_refined_pattern` | A refined (`where`) pattern was used on the right of `is`; refined patterns are `match`-only. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.is_unknown_variant` | `is` names a variant the type does not have. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.json_uncodable` | A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, error builtins). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
@@ -822,6 +823,7 @@ There are **682** codes in total.
 | `bynk.types.question_on_non_result` | `?` was applied to a non-`Result` value. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
 | `bynk.types.question_option_outside_http` | `?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
 | `bynk.types.question_outside_result` | `?` used in a function that does not return a `Result`. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
+| `bynk.types.range_pattern_on_non_int` | A range pattern (`lo..hi`) was matched against a scrutinee that is not an `Int`. | [`int_range`](/book/reference/grammar/#rule-int_range) | — |
 | `bynk.types.record_pattern_on_non_record` | A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in). | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | `bynk.types.regex_not_literal` | A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.rejection_at_boundary` | `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |

@@ -1,0 +1,108 @@
+==========================
+int range patterns - closed, open and negative
+==========================
+
+commons d {
+	fn f(n: Int) -> Int {
+		match n {
+			..-1 => 0,
+			0..12 => 1,
+			-5..-1 => 2,
+			18.. => 3
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (base_type)
+      (block
+        (match_expr
+          (identifier)
+          (match_arm
+            (int_range
+              (number_literal))
+            (number_literal))
+          (match_arm
+            (int_range
+              (number_literal)
+              (number_literal))
+            (number_literal))
+          (match_arm
+            (int_range
+              (number_literal)
+              (number_literal))
+            (number_literal))
+          (match_arm
+            (int_range
+              (number_literal))
+            (number_literal)))))))
+
+==========================
+int range patterns - nested in variants, lists and let
+==========================
+
+commons d {
+	fn f(o: Option[Int], xs: List[Int]) -> Int {
+		let ..9 = 4 else { 0 }
+		match xs {
+			[0..9, ..rest] => 1
+			[..-1] => 2
+			_ => 3
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (base_type)))
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (base_type)))
+      (base_type)
+      (block
+        (let_else_stmt
+          (int_range
+            (number_literal))
+          (number_literal)
+          (block
+            (number_literal)))
+        (match_expr
+          (identifier)
+          (match_arm
+            (list_pattern
+              (int_range
+                (number_literal)
+                (number_literal))
+              (list_rest
+                (identifier)))
+            (number_literal))
+          (match_arm
+            (list_pattern
+              (int_range
+                (number_literal)))
+            (number_literal))
+          (match_arm
+            (wildcard_pattern)
+            (number_literal)))))))

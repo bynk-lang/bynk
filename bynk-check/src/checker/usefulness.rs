@@ -15,6 +15,8 @@
 //! ranges) adds a `Constructor` and teaches `Space` to split it, rather than
 //! adding a second algorithm. List lengths (#2680) were the first: a list
 //! column's constructors depend on the rows, as set out on [`Space::List`].
+//! Integer ranges (#2699) are the second, split at the rows' endpoints as set
+//! out on [`Space::Int`].
 //!
 //! Guards and refinement predicates are not understood: a guarded arm is never
 //! a row, and a refined pattern as a *prior* matches nothing (its predicate may
@@ -27,6 +29,7 @@
 
 use super::expressions::{extensible_enum, literal_base_of};
 use super::*;
+use bynk_syntax::lexer::MAX_SAFE_INT;
 
 /// Specialisation steps one coverage question may take before it gives up.
 /// Several times what the corpus needs (its heaviest match takes about 23,000).
@@ -36,8 +39,7 @@ pub(super) const STEP_BUDGET: usize = 200_000;
 #[derive(Debug)]
 pub(super) struct TooComplex;
 
-/// A way of building a value of a type. The extension point: range patterns add
-/// an interval.
+/// A way of building a value of a type.
 #[derive(Clone, PartialEq)]
 enum Constructor {
     /// The `i`th declared variant of a sum, `Result` or `Option`.
@@ -46,8 +48,11 @@ enum Constructor {
     /// order.
     Record,
     Bool(bool),
-    /// An `Int` or `String` literal. No finite set of these is complete.
+    /// A `String` literal. No finite set of these is complete.
     Literal(LiteralValue),
+    /// The `Int`s from `lo` to `hi`, inclusive (#2699). An `Int` literal `v` is
+    /// the singleton `IntRange(v, v)`, so literals and ranges are one family.
+    IntRange(i64, i64),
     /// A list of exactly this many elements; its columns are the elements.
     List(usize),
     /// A list of at least this many elements. Only its first `n` elements are
@@ -76,9 +81,41 @@ enum Space {
     List {
         elem: TyId,
     },
-    /// `Int`, `String` and anything without patterns of its own: only a
-    /// wildcard completes it.
+    /// An `Int` (or a refinement of one): the safe integers
+    /// `-MAX_SAFE_INT..=MAX_SAFE_INT`. Its constructors are intervals, split at
+    /// every endpoint the column's patterns use, so each pattern covers whole
+    /// intervals and the split is linear in the number of distinct endpoints.
+    /// A column that only spells single values (`1`, `404`) is not split: like
+    /// `String`, only a wildcard completes it, and the witness stays `_`.
+    Int,
+    /// `String` and anything without patterns of its own: only a wildcard
+    /// completes it.
     Infinite,
+}
+
+/// The least and greatest `Int`.
+const INT_MIN: i64 = -MAX_SAFE_INT;
+const INT_MAX: i64 = MAX_SAFE_INT;
+
+/// The disjoint intervals of the whole `Int` space cut at every endpoint in
+/// `ranges` (and at `extra` cut points), in ascending order. Each starts at a
+/// cut: the minimum, a range's low bound, or the value after a range's high
+/// bound.
+fn int_pieces(ranges: impl Iterator<Item = (i64, i64)>, extra: &[i64]) -> Vec<(i64, i64)> {
+    let mut cuts: Vec<i64> = vec![INT_MIN];
+    for (lo, hi) in ranges {
+        cuts.push(lo);
+        if hi < INT_MAX {
+            cuts.push(hi + 1);
+        }
+    }
+    cuts.extend_from_slice(extra);
+    cuts.sort_unstable();
+    cuts.dedup();
+    cuts.iter()
+        .enumerate()
+        .map(|(i, &lo)| (lo, cuts.get(i + 1).map_or(INT_MAX, |next| next - 1)))
+        .collect()
 }
 
 impl Space {
@@ -92,8 +129,28 @@ impl Space {
             }
             Space::Record { .. } => Some(vec![Constructor::Record]),
             Space::Bool => Some(vec![Constructor::Bool(true), Constructor::Bool(false)]),
+            Space::Int => {
+                let ranges = Self::int_ranges(rows);
+                // Only single values: no finite set completes it.
+                ranges.iter().any(|(lo, hi)| lo != hi).then(|| {
+                    int_pieces(ranges.into_iter(), &[])
+                        .into_iter()
+                        .map(|(lo, hi)| Constructor::IntRange(lo, hi))
+                        .collect()
+                })
+            }
             Space::Infinite => None,
         }
+    }
+
+    /// The intervals the first column's patterns spell.
+    fn int_ranges(rows: &[Row]) -> Vec<(i64, i64)> {
+        rows.iter()
+            .filter_map(|row| match &row[0] {
+                Pat::Ctor(Constructor::IntRange(lo, hi), _) => Some((*lo, *hi)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// The longest prefix a list pattern in the first column spells out.
@@ -124,6 +181,19 @@ impl Space {
                 (*n..=longest)
                     .map(Constructor::List)
                     .chain(std::iter::once(Constructor::ListAtLeast(longest + 1)))
+                    .collect()
+            }
+            // An interval splits along the column's, so each piece is wholly
+            // covered by a row or by none.
+            (Space::Int, Constructor::IntRange(lo, hi)) => {
+                let mut extra = vec![*lo];
+                if *hi < INT_MAX {
+                    extra.push(hi + 1);
+                }
+                int_pieces(Self::int_ranges(rows).into_iter(), &extra)
+                    .into_iter()
+                    .filter(|(plo, phi)| lo <= plo && phi <= hi)
+                    .map(|(plo, phi)| Constructor::IntRange(plo, phi))
                     .collect()
             }
             _ => vec![c.clone()],
@@ -167,6 +237,7 @@ impl Space {
             },
             (_, Constructor::Bool(b)) => Wit::Lit(b.to_string()),
             (_, Constructor::Literal(v)) => Wit::Lit(v.describe()),
+            (_, Constructor::IntRange(lo, hi)) => Wit::Range(*lo, *hi),
             _ => Wit::Wild,
         }
     }
@@ -190,6 +261,8 @@ enum Wit {
     /// covers it, but tagged so the caller can word it differently.
     Future(String),
     Lit(String),
+    /// The `Int`s from `lo` to `hi`, inclusive.
+    Range(i64, i64),
     Variant {
         name: String,
         args: Vec<Wit>,
@@ -217,6 +290,13 @@ impl Wit {
             Wit::Wild => "_".to_string(),
             Wit::Future(name) => format!("{FUTURE_VARIANT_OPEN}{name}{FUTURE_VARIANT_CLOSE}"),
             Wit::Lit(s) => s.clone(),
+            Wit::Range(lo, hi) => match (*lo, *hi) {
+                (INT_MIN, INT_MAX) => "_".to_string(),
+                (INT_MIN, hi) => format!("..{hi}"),
+                (lo, INT_MAX) => format!("{lo}.."),
+                (lo, hi) if lo == hi => lo.to_string(),
+                (lo, hi) => format!("{lo}..{hi}"),
+            },
             Wit::Variant { name, args } if args.is_empty() => name.clone(),
             Wit::Variant { name, args } => format!(
                 "{name}({})",
@@ -328,11 +408,22 @@ impl Lowering<'_, '_> {
                 (Space::Bool, LiteralValue::Bool(b)) => {
                     Some(Pat::Ctor(Constructor::Bool(*b), Vec::new()))
                 }
-                (Space::Infinite, LiteralValue::Int(_) | LiteralValue::Str(_)) => {
+                (Space::Int, LiteralValue::Int(v)) => {
+                    Some(Pat::Ctor(Constructor::IntRange(*v, *v), Vec::new()))
+                }
+                (Space::Infinite, LiteralValue::Str(_)) => {
                     Some(Pat::Ctor(Constructor::Literal(value.clone()), Vec::new()))
                 }
                 _ => None,
             },
+            Pattern::Range(r) => {
+                if !matches!(space_of(ty, self.ctx), Space::Int) {
+                    return None;
+                }
+                let (lo, hi) = (r.lo.unwrap_or(INT_MIN), r.hi.unwrap_or(INT_MAX));
+                // An inverted range is `empty_range_pattern`'s to report.
+                (lo <= hi).then(|| Pat::Ctor(Constructor::IntRange(lo, hi), Vec::new()))
+            }
             Pattern::Variant {
                 variant, bindings, ..
             } => {
@@ -449,6 +540,7 @@ fn space_of(ty: TyId, ctx: &Ctx) -> Space {
     }
     match literal_base_of(ty, tys) {
         Some(BaseType::Bool) => Space::Bool,
+        Some(BaseType::Int) => Space::Int,
         _ => Space::Infinite,
     }
 }
@@ -516,12 +608,15 @@ impl Engine<'_, '_> {
     }
 
     /// Whether a row's constructor `rc` matches every value `c` builds. They
-    /// are the same constructor, or `rc` is a list "`n` or more" and `c` is a
-    /// list of at least `n`.
+    /// are the same constructor, `rc` is a list "`n` or more" and `c` is a
+    /// list of at least `n`, or `rc` is an interval containing `c`.
     fn covers(rc: &Constructor, c: &Constructor) -> bool {
         match (rc, c) {
             (Constructor::ListAtLeast(n), Constructor::List(k) | Constructor::ListAtLeast(k)) => {
                 n <= k
+            }
+            (Constructor::IntRange(rlo, rhi), Constructor::IntRange(lo, hi)) => {
+                rlo <= lo && hi <= rhi
             }
             _ => rc == c,
         }
@@ -634,11 +729,13 @@ impl Engine<'_, '_> {
         tys: Vec<TyId>,
         top: bool,
     ) -> Result<Vec<Vec<Wit>>, TooComplex> {
-        let is_list = tys
-            .first()
-            .is_some_and(|t| matches!(space_of(*t, self.ctx), Space::List { .. }));
+        let space = tys.first().map(|t| space_of(*t, self.ctx));
         let out = self.missing_split(rows, tys, top)?;
-        Ok(if is_list { merge_open_lists(out) } else { out })
+        Ok(match space {
+            Some(Space::List { .. }) => merge_open_lists(out),
+            Some(Space::Int) => merge_adjacent_ranges(out),
+            _ => out,
+        })
     }
 
     fn missing_split(
@@ -746,6 +843,36 @@ impl Engine<'_, '_> {
         }
         Ok(out)
     }
+}
+
+/// An `Int` column's split can leave `0..4` and `5..9` both uncovered with the
+/// same other columns: one gap, written `0..9`.
+fn merge_adjacent_ranges(mut ws: Vec<Vec<Wit>>) -> Vec<Vec<Wit>> {
+    let tail = |w: &[Wit]| w[1..].iter().map(Wit::render).collect::<Vec<_>>();
+    let mut i = 0;
+    while i < ws.len() {
+        let Wit::Range(lo, hi) = ws[i][0] else {
+            i += 1;
+            continue;
+        };
+        let next = ws.iter().position(|other| {
+            matches!(other[0], Wit::Range(nlo, _) if hi < INT_MAX && nlo == hi + 1)
+                && tail(other) == tail(&ws[i])
+        });
+        let Some(j) = next else {
+            i += 1;
+            continue;
+        };
+        let Wit::Range(_, nhi) = ws[j][0] else {
+            unreachable!("matched a range")
+        };
+        ws[i][0] = Wit::Range(lo, nhi);
+        ws.remove(j);
+        if j < i {
+            i -= 1;
+        }
+    }
+    ws
 }
 
 /// A list column's split can leave `[a, b]` and `[a, b, _, ..]` both uncovered

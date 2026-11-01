@@ -14,8 +14,8 @@ Two directions are designed but not yet shipped:
   effects across contexts.
 - **Event replay** — re-delivering past events to a subscriber that joins late or
   recovers, with ordering across concurrent publishes. Events themselves have
-  shipped ([§5.7b](/book/spec/static-semantics/#events)); replay, and range
-  patterns in a `via schema(...)` clause, have not.
+  shipped ([§5.7b](/book/spec/static-semantics/#events)), range patterns in a
+  `via schema(...)` clause included; replay has not.
 
 Two named follow-ons extend [agent invariants](/book/spec/static-semantics/#541-invariants-v080)
 (shipped runtime-checked in v0.80):

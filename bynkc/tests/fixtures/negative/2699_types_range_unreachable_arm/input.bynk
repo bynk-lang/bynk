@@ -1,0 +1,18 @@
+commons demo
+
+// #2699: a range wholly covered by earlier arms is unreachable.
+fn f(n: Int) -> Int {
+  match n {
+    0..9 => 1
+    3..5 => 2
+    _ => 0
+  }
+}
+
+fn g(n: Int) -> Int {
+  match n {
+    ..-1 => 1
+    0.. => 2
+    7 => 3
+  }
+}

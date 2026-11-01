@@ -2297,15 +2297,18 @@ pub struct SchemaDispatch {
 }
 
 /// The pattern a `via schema(...)` clause matches `env.schemaVersion`
-/// against. A closed set of one variant today — literal only, mirroring
+/// against: a literal, an inclusive integer range, or `_`. Mirrors
 /// `@schema(N)`'s own permissive-parse-then-checker-validate split (a
-/// non-positive value is a checker error, not a parse error, for the same
-/// diagnostic style). A future slice's range patterns (`via schema(2..)`)
-/// are additive to this enum, not a breaking rename of every match site
-/// this slice creates.
+/// non-positive bound is a checker error, not a parse error, for the same
+/// diagnostic style). The range is the same [`IntRange`] a match pattern uses
+/// (events slice 4b, #990, with patterns slice 5, #2699).
 #[derive(Debug, Clone)]
 pub enum SchemaVersionPattern {
     Literal(i64),
+    /// `via schema(2..4)`, `(2..)`, `(..4)`; bounds are inclusive.
+    Range(IntRange),
+    /// `via schema(_)`: any version, the same as omitting the clause.
+    Wildcard,
 }
 
 /// The right-hand side of a `type` declaration. In v0/v0.1 only the
@@ -3754,6 +3757,10 @@ pub enum Pattern {
     /// a leading unary minus — strings, and booleans); `Float`/`()` are not
     /// admitted as patterns.
     Literal { value: LiteralValue, span: Span },
+    /// `lo..hi`, `lo..` or `..hi` — an inclusive integer range (patterns track,
+    /// slice 5, #2699). Matches an `Int` scrutinee by comparison. Binds nothing.
+    /// The one production `via schema(...)` shares ([`SchemaVersionPattern::Range`]).
+    Range(IntRange),
     /// `Variant` or `Variant(bindings)` or `TypeName.Variant(bindings)`. Each
     /// payload binding is itself a [`Pattern`] (ADR 0169), so payloads nest:
     /// `Some(Ok(x))`, `Err(PollClosed)`.
@@ -3812,6 +3819,29 @@ pub enum Pattern {
     Or(Vec<Pattern>, Span),
 }
 
+/// An inclusive integer range, `lo..hi`, `lo..` or `..hi` (patterns track,
+/// slice 5, #2699; events slice 4b, #990): the one production a match pattern
+/// and a `via schema(...)` clause share. At least one bound is present — a bare
+/// `..` is the rest marker, never a range. Each bound is an optionally negative
+/// `Int` literal, parsed permissively: whether it is in range and whether
+/// `lo <= hi` are checker questions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IntRange {
+    pub lo: Option<i64>,
+    pub hi: Option<i64>,
+    pub span: Span,
+}
+
+impl IntRange {
+    /// The range as written, `0..9`, `18..` or `..-1`; the form the formatter
+    /// prints and diagnostics quote.
+    pub fn describe(&self) -> String {
+        let lo = self.lo.map(|n| n.to_string()).unwrap_or_default();
+        let hi = self.hi.map(|n| n.to_string()).unwrap_or_default();
+        format!("{lo}..{hi}")
+    }
+}
+
 /// The trailing `..` of a list pattern, with the optional name that binds the
 /// remaining elements (`..rest`).
 #[derive(Debug, Clone)]
@@ -3849,6 +3879,7 @@ impl Pattern {
             Pattern::Wildcard(s) => *s,
             Pattern::Binding(id) => id.span,
             Pattern::Literal { span, .. } => *span,
+            Pattern::Range(r) => r.span,
             Pattern::Variant { span, .. } => *span,
             Pattern::Record { span, .. } => *span,
             Pattern::List { span, .. } => *span,
@@ -3867,7 +3898,7 @@ impl Pattern {
     /// violated, not a semantic choice among alternatives.
     pub fn bound_names(&self) -> Vec<&Ident> {
         match self {
-            Pattern::Wildcard(_) | Pattern::Literal { .. } => Vec::new(),
+            Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => Vec::new(),
             Pattern::Binding(id) => vec![id],
             Pattern::Variant { bindings, .. } => bindings
                 .iter()

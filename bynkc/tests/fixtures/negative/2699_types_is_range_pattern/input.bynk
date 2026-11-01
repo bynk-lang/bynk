@@ -1,0 +1,6 @@
+commons demo
+
+// #2699: a range directly after `is` is steered to `match`.
+fn f(n: Int) -> Bool {
+  n is 13..17
+}

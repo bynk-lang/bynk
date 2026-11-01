@@ -193,18 +193,26 @@ pub enum ProtocolIr {
     Events {
         event: TyId,
         pattern: Option<EventPatternIr>,
-        /// P6.40 (design/tracks/the-ir.md §6a): flattened to `Option<i64>` —
-        /// `SchemaVersionPattern` has exactly one variant (`Literal(i64)`),
-        /// so once a real consumer needed to match on it
-        /// (`emitter/emit.rs`'s `via schema(N)` guard prologue), mirroring
-        /// the single-payload `i64` directly was simpler than introducing a
-        /// one-variant IR-native enum purely to re-wrap it. A future range
-        /// pattern (`via schema(2..)`) widens this field's own shape when it
-        /// lands, not before. The `SchemaDispatch` wrapper itself stays
-        /// dropped — it carried only this `pattern` plus a parse-only
-        /// `span`.
-        schema_dispatch: Option<i64>,
+        /// P6.40 (design/tracks/the-ir.md §6a): the `SchemaDispatch` wrapper
+        /// is dropped — it carried only the pattern plus a parse-only `span`.
+        /// The pattern widened from a bare `i64` to [`SchemaVersionIr`] when
+        /// `via schema(...)` gained ranges and `_` (events slice 4b, #990).
+        schema_dispatch: Option<SchemaVersionIr>,
     },
+}
+
+/// What a `via schema(...)` clause matches the envelope's `schemaVersion`
+/// against (events slice 4b, #990; patterns slice 5, #2699). Both bounds of a
+/// range are inclusive, and an open end is `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchemaVersionIr {
+    /// `via schema(2)`.
+    Exact(i64),
+    /// `via schema(2..4)`, `(2..)`, `(..4)`.
+    Range { lo: Option<i64>, hi: Option<i64> },
+    /// `via schema(_)`: every version, so no guard, but the envelope is still
+    /// forwarded to the handler.
+    Any,
 }
 
 /// #1226/#1187 slice 6: the two facts a service's own event-subscriber
@@ -625,6 +633,8 @@ fn pattern_has_nested_test(pat: &Pattern) -> bool {
         Pattern::Record { .. } => true,
         // #2680: a list is tested by its length and indexed, never switched on.
         Pattern::List { .. } => true,
+        // #2699: a range is a pair of comparisons, never a `case` label.
+        Pattern::Range(_) => true,
         // #472: a refined pattern is never a top-level irrefutable/nested
         // payload today (the parser admits only `_` as `inner`, and only at a
         // match arm's top level), but keep this exhaustive and correct for

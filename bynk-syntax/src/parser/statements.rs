@@ -261,6 +261,10 @@ impl<'a> Parser<'a> {
                 | TokenKind::LBracket,
             ) => true,
             Some(TokenKind::Minus) => at(2) == Some(TokenKind::IntLit),
+            // #2699: a range opening on `..` (`let ..9 = …`); one opening on a
+            // literal is already covered above.
+            Some(TokenKind::DotDot) => matches!(at(2), Some(TokenKind::IntLit))
+                || (at(2) == Some(TokenKind::Minus) && at(3) == Some(TokenKind::IntLit)),
             Some(TokenKind::Ident) => match at(2) {
                 Some(TokenKind::LParen | TokenKind::Dot) => true,
                 // #2654: a capitalised name directly followed by `{` opens a

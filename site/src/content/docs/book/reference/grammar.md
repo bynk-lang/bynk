@@ -1034,9 +1034,10 @@ reaches every subscriber of the event type, and this is one more
 independently-evaluated guard inside the subscriber's own generated
 handler — sibling subscribers with the same or overlapping `N` are not
 diagnosed as ambiguous. `N`'s legality (a positive `Int` literal) is a
-checker concern (`bynk.event.bad_schema_dispatch`), not a grammar one.
-Literal only in this slice; a range pattern (`via schema(2..)`) is a future
-slice's unbuilt grammar.
+checker concern (`bynk.event.bad_schema_dispatch`), not a grammar one. The
+argument is also an inclusive range (`via schema(2..4)`, `(2..)`, `(..4)`), the
+same [`int_range`](#rule-int_range) a `match` pattern uses (events slice 4b,
+#990), or `_`, which matches every version.
 
 **See also.** [Understand events](/book/guides/events/understand-events/).
 
@@ -1684,7 +1685,7 @@ position; a match arm's pattern is always followed by a fixed terminator
 
 {{#grammar _pattern}}
 
-A pattern: a wildcard, a literal, a binding, a variant pattern, a record or
+A pattern: a wildcard, a literal, an integer range, a binding, a variant pattern, a record or
 list pattern, an or-pattern, or a parenthesized pattern. A lowercase-led identifier is a
 binding (it matches anything and binds the value); an uppercase-led one is a
 nullary variant — in the concrete grammar both parse as `variant_pattern`.
@@ -1774,9 +1775,25 @@ begins no other pattern, so a list pattern needs no parentheses after `is`. See
 
 The `..` that ends a [`list_pattern`](#rule-list_pattern), with the optional
 name that binds the remaining elements (`..rest`). After `..`, a lowercase name
-or nothing makes a rest marker (a capitalised name is reserved, like a literal); a literal would make the bound of a range pattern,
-which is not available yet (`bynk.parse.range_pattern_unsupported`). Anything
+or nothing makes a rest marker (a capitalised name is reserved); an integer
+makes the bound of a [range pattern](#rule-int_range) instead (`[..9]`). Anything
 after the rest is `bynk.parse.list_rest_not_last`.
+
+### int_range {#rule-int_range}
+
+{{#grammar int_range}}
+
+`lo..hi`, `lo..` and `..hi` (patterns track, slice 5, #2699) — an inclusive
+integer range, each bound an optionally negative number literal. A pattern in a
+`match` arm, a list element, a variant payload or a `let`, and the argument of
+`via schema(...)` ([`schema_dispatch_clause`](#rule-schema_dispatch_clause)). A
+bare `..` is never a range. The tree-sitter grammar does not admit a range
+directly after `is`, which the checker rejects anyway
+(`bynk.types.is_range_pattern`). See
+[Match on a range of numbers](/book/guides/type-system/match-on-a-range-of-numbers/).
+
+**Static semantics.**
+{{#grammar-semantics int_range}}
 
 ### record_pattern_field {#rule-record_pattern_field}
 
@@ -1909,7 +1926,8 @@ pattern, or a variant written with a payload or a qualifier. A bare name after
 `let` is always a binding, so a nullary variant is written `Status.Done` or
 `(Done)`. A [`record_pattern`](#rule-record_pattern) (`Item { sku, .. }`) also
 opens a `let` pattern: a capitalised name followed by `{`. So does a
-[`list_pattern`](#rule-list_pattern) (`[head, ..]`), which begins with `[`.
+[`list_pattern`](#rule-list_pattern) (`[head, ..]`), which begins with `[`, and an
+[`int_range`](#rule-int_range) (`0..9`, `..9`).
 
 ### let_variant_pattern {#rule-_let_variant_pattern}
 

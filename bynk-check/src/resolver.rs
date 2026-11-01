@@ -1933,7 +1933,10 @@ impl Gate<'_> {
                     self.pattern(a);
                 }
             }
-            Pattern::Wildcard(_) | Pattern::Binding(_) | Pattern::Literal { .. } => {}
+            Pattern::Wildcard(_)
+            | Pattern::Binding(_)
+            | Pattern::Literal { .. }
+            | Pattern::Range(_) => {}
         }
     }
     fn block(&mut self, b: &Block) {

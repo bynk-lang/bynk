@@ -65,9 +65,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   `via schema(N)` version-aware dispatch, filtering delivery by the
   envelope's version. See
   [Understand events](/book/guides/events/understand-events/).
-  Range-valued `via schema(...)` patterns (slice 4b,
-  [#990](https://github.com/bynk-lang/bynk/issues/990)) and
-  replay/backfill (split to a separate future track) are the track's only
+  Range-valued `via schema(...)` patterns and `via schema(_)` (slice 4b,
+  [#990](https://github.com/bynk-lang/bynk/issues/990), with integer range
+  patterns, [#2699](https://github.com/bynk-lang/bynk/issues/2699)) are in.
+  Replay/backfill (split to a separate future track) is the track's only
   remaining open work.
 - **State migrations.** The last of 1.0's three gates: a deployed agent's
   stored state must survive an upgrade. `bynk.schema.lock` now records each

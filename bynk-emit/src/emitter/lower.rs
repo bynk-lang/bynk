@@ -7448,6 +7448,9 @@ fn emit_match_case(
         Pattern::List { .. } => {
             unreachable!("a Pattern::List arm always routes through emit_match_if_chain")
         }
+        Pattern::Range(_) => {
+            unreachable!("a Pattern::Range arm always routes through emit_match_if_chain")
+        }
         Pattern::Variant {
             variant, bindings, ..
         } => {
@@ -7508,6 +7511,9 @@ fn emit_match_case(
                     }
                     Pattern::List { .. } => {
                         unreachable!("a list alternative routes through emit_match_if_chain")
+                    }
+                    Pattern::Range(_) => {
+                        unreachable!("a range alternative routes through emit_match_if_chain")
                     }
                     // #472/#474: the parser only ever wraps a *whole*,
                     // already-folded `|`-chain in `Refined` (never the other
@@ -7610,6 +7616,15 @@ fn pattern_match_tests(
         Pattern::Wildcard(_) | Pattern::Binding(_) => {}
         Pattern::Literal { value, .. } => {
             tests.push(format!("{path} === {}", literal_case_label(value)));
+        }
+        // #2699: `x >= lo && x <= hi`, or the one side an open range has.
+        Pattern::Range(r) => {
+            if let Some(lo) = r.lo {
+                tests.push(format!("{path} >= {}", lo));
+            }
+            if let Some(hi) = r.hi {
+                tests.push(format!("{path} <= {}", hi));
+            }
         }
         // #472: `p where predicate` — the inner pattern's own tests, then the
         // predicate as a boolean guard over the runtime value at `path`,
@@ -7810,7 +7825,7 @@ fn emit_pattern_bindings(
 ) {
     let tys = cx.commons().tys();
     match pattern {
-        Pattern::Wildcard(_) | Pattern::Literal { .. } => {}
+        Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => {}
         Pattern::Binding(id) => {
             let local = cx.bind_local_name(&id.name);
             write_line(out, indent, &format!("const {local} = {path};"));
@@ -7933,7 +7948,7 @@ fn pattern_binding_paths(
 ) {
     let tys = cx.commons().tys();
     match pattern {
-        Pattern::Wildcard(_) | Pattern::Literal { .. } => {}
+        Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => {}
         Pattern::Binding(id) => out.push((id.name.clone(), path.to_string())),
         Pattern::Variant {
             variant, bindings, ..
@@ -8128,7 +8143,7 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
         // `{ tag, value }` shape, so the nested test lands without a static type.
         // #2641: a record pattern is its fields' tests, `true` when every
         // field is irrefutable.
-        Pattern::Record { .. } | Pattern::List { .. } => {
+        Pattern::Record { .. } | Pattern::List { .. } | Pattern::Range(_) => {
             let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
             let mut tests = Vec::new();
             pattern_match_tests(&v, scrut_ty, pattern, cx, &mut tests);

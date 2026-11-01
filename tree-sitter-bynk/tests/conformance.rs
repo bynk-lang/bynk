@@ -517,14 +517,66 @@ const CASES: &[Case] = &[
         body: "fn f(xs: List[Int]) -> Int { match xs { [.., ..] => 0 _ => 1 } }",
         accept: false,
     },
+    // -- #2699 integer range patterns (patterns slice 5): `..` then an integer is
+    //    a range bound (Q7), not the rest marker. --
     Case {
-        what: "rest followed by a literal rejected",
-        body: "fn f(xs: List[Int]) -> Int { match xs { [..9] => 0 _ => 1 } }",
+        what: "closed range arm",
+        body: "fn f(n: Int) -> Int { match n { 0..9 => 0 _ => 1 } }",
+        accept: true,
+    },
+    Case {
+        what: "open-above range ends its arm",
+        body: "fn f(n: Int) -> Int { match n { 18.. => 0\n 5 => 1\n _ => 2 } }",
+        accept: true,
+    },
+    Case {
+        what: "open-below range with a negative bound",
+        body: "fn f(n: Int) -> Int { match n { ..-1 => 0 _ => 1 } }",
+        accept: true,
+    },
+    Case {
+        what: "negative closed range with digit separators",
+        body: "fn f(n: Int) -> Int { match n { -1_000..-5 => 0 _ => 1 } }",
+        accept: true,
+    },
+    Case {
+        what: "range with a guard",
+        body: "fn f(n: Int) -> Int { match n { 1..9 if n != 5 => 0 _ => 1 } }",
+        accept: true,
+    },
+    Case {
+        what: "or-pattern of ranges inside a variant",
+        body: "fn f(o: Option[Int]) -> Int { match o { Some(0..9 | 90..99) => 0\n _ => 1 } }",
+        accept: true,
+    },
+    Case {
+        what: "range in a record field pattern",
+        body: "type R = { n: Int }\nfn f(r: R) -> Int { match r { R { n: 1.., .. } => 0\n _ => 1 } }",
+        accept: true,
+    },
+    Case {
+        what: "range elements beside a rest",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [0..9, ..rest] => 0\n [18.., ..] => 1\n [..-1] => 2\n _ => 3 } }",
+        accept: true,
+    },
+    Case {
+        what: "range in a let with an else",
+        body: "fn f(n: Int) -> Int { let ..9 = n else { 0 }\n n }",
+        accept: true,
+    },
+    Case {
+        what: "bare dots are the rest marker, not a range",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [..] => 0 } }",
+        accept: true,
+    },
+    Case {
+        what: "rest followed by a string rejected",
+        body: "fn f(xs: List[Int]) -> Int { match xs { [..\"a\"] => 0 _ => 1 } }",
         accept: false,
     },
     Case {
-        what: "rest followed by a negative literal rejected",
-        body: "fn f(xs: List[Int]) -> Int { match xs { [a, ..-1] => 0 _ => 1 } }",
+        what: "two ranges joined without a separator rejected",
+        body: "fn f(n: Int) -> Int { match n { 0..9 1..2 => 0 _ => 1 } }",
         accept: false,
     },
     Case {
