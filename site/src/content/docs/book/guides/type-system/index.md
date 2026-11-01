@@ -18,6 +18,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/)
 - [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/)
 - [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/)
+- [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/)
 
 **See also:** [Reference — Type system](/book/reference/types/),
 [Refined-type API](/book/reference/refined-types/),

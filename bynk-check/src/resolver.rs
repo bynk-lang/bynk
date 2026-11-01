@@ -2250,6 +2250,26 @@ fn check_type_ref_resolves_in(
                         // requires a type's bound).
                         let scope: Vec<&str> = type_params.iter().map(String::as_str).collect();
                         for (tp, arg) in decl.type_params.iter().zip(args) {
+                            // Slice 1: an `Ord` bound requires an orderable argument.
+                            if crate::checker::equality::has_ord(&tp.bounds) {
+                                let mut visited = HashSet::new();
+                                if let Some(part) = crate::checker::ordering::typeref_not_ord(
+                                    arg,
+                                    &scope,
+                                    types,
+                                    &mut visited,
+                                ) {
+                                    errors.push(CompileError::new(
+                                        "bynk.types.not_orderable",
+                                        arg.span(),
+                                        format!(
+                                            "`{}` requires `{}: Ord`, but this makes `{}` `{part}`, which is not orderable",
+                                            name.name, tp.name.name, tp.name.name,
+                                        ),
+                                    ));
+                                    continue;
+                                }
+                            }
                             if !crate::checker::equality::has_eq(&tp.bounds) {
                                 continue;
                             }

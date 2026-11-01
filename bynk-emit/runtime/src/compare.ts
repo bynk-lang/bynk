@@ -72,11 +72,15 @@ export function __bynkCmpList<T>(c: __BynkCmp<T>): __BynkCmp<readonly T[]> {
 }
 
 /** One compared field: its property name and its comparator. */
-export type __BynkCmpField = readonly [string, __BynkCmp<any>];
+export type __BynkCmpField = readonly [string, __BynkCmp<never>];
 
-function cmpFields(fields: readonly __BynkCmpField[], a: any, b: any): number {
+function cmpFields(
+  fields: readonly __BynkCmpField[],
+  a: { readonly [name: string]: unknown },
+  b: { readonly [name: string]: unknown },
+): number {
   for (const [name, c] of fields) {
-    const r = c(a[name], b[name]);
+    const r = c(a[name] as never, b[name] as never);
     if (r !== 0) return r;
   }
   return 0;
@@ -84,7 +88,7 @@ function cmpFields(fields: readonly __BynkCmpField[], a: any, b: any): number {
 
 /** A record `derives Ord`: its fields, in declaration order. */
 export function __bynkCmpRecord<T>(fields: readonly __BynkCmpField[]): __BynkCmp<T> {
-  return (a, b) => cmpFields(fields, a, b);
+  return (a, b) => cmpFields(fields, a as never, b as never);
 }
 
 /**
@@ -98,7 +102,7 @@ export function __bynkCmpSum<T extends { readonly tag: string }>(
   return (a, b) => {
     if (a.tag !== b.tag) return order.indexOf(a.tag) < order.indexOf(b.tag) ? -1 : 1;
     const fields = payloads[a.tag];
-    return fields ? cmpFields(fields, a, b) : 0;
+    return fields ? cmpFields(fields, a as never, b as never) : 0;
   };
 }
 

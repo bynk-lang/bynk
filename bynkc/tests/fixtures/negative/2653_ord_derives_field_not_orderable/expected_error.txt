@@ -1,0 +1,1 @@
+bynk.types.derives_field_not_orderable `Index` derives `Ord`, but field `entries` has type `Map[String, Int]`

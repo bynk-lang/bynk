@@ -123,8 +123,9 @@ which compares in constant time.
 `==`/`!=` compare **by content**, byte for byte — so two independently-built
 `Bytes` with the same octets are equal (unlike the number-erased base types, a
 `Bytes` is not compared by host reference). Equality is structural throughout,
-so a record carrying a `Bytes` field compares that field by content too. `Bytes` is **not orderable** (no `<` / `sortBy` key; use
-`b.compare(other)`) and **not `Map`-keyable** — key on `b.toBase64()` (a
+so a record carrying a `Bytes` field compares that field by content too. `Bytes` is **orderable**, unsigned lexicographic by octet with a proper prefix
+first, so `<` and a `sortBy` key work on it (`b.compare(other)` returns the same
+order as an `Int`). It is **not `Map`-keyable** — key on `b.toBase64()` (a
 `String`) instead. It has no arithmetic.
 
 On the wire a `Bytes` **serialises as a base64 JSON string** (and deserialising
@@ -300,9 +301,10 @@ fn withTotal(ns: List[Int]) -> List[Int] {
 **Terminals**: `count`, `any`, `all`, `first`, `firstOrElse`, `sum`, `min`, `max`,
 `average`.
 
-Ordering keys (`sortBy`/`min`/`max`) come from the closed orderable base set —
-`Int`/`Float`/`String`/`Duration`/`Instant`, refined types widening, opaque keys
-rejected (`bynk.types.key_not_orderable`). Numeric keys (`sum`/`average`) are
+Ordering keys (`sortBy`/`min`/`max`) on a `List` are any [`Ord` type](#ordering-your-own-types)
+(`bynk.types.key_not_orderable` otherwise). On a lazy storage `Query` the key is
+still one of `Int`/`Float`/`String`/`Duration`/`Instant`, refined types widening,
+opaque keys rejected. Numeric keys (`sum`/`average`) are
 `Int`/`Float`/`Duration` (`bynk.query.sum_needs_numeric`), with `average -> Float`.
 **Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
 `sum` the zero. The first-party `bynk.list` free functions are the deprecated
@@ -670,6 +672,73 @@ type OrderId = opaque String
   (`bynk.resolve.opaque_record_construction`).
 - Construction and inspection are confined to the defining module/context.
 - Opaque types are **excluded** from [literal admission](/book/reference/refined-types/).
+- An opaque type is not [`Ord`](#ordering-your-own-types) outside its defining
+  unit unless it says `derives Ord`.
+
+## Ordering your own types
+
+`Ord` is the set of types with a total order: what `<` `<=` `>` `>=`, the
+`sortBy`/`min`/`max` keys on a `List`, `bynk.list`'s `sort`/`min`/`max` and a
+`T: Ord` [bound](/book/reference/generics/) accept. It is opt-in for your own types:
+end the declaration with `derives Ord`.
+
+```bynk
+commons demo.ordering
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+type Task = { priority: Priority, due: Instant, title: String } derives Ord
+
+type Maybe[T] =
+  | Missing
+  | Present(item: T)
+  derives Ord
+
+fn urgent(a: Task, b: Task) -> Bool { a.priority > b.priority }
+```
+
+`derives` is a contextual word that only means something after a type body, so it
+stays a valid identifier elsewhere. `derives Ord + …` is the list form; `Eq`,
+`Key` and `Codable` are derived automatically, so naming one is
+`bynk.types.derives_automatic` (a fix removes it). Any other name is
+`bynk.generics.unknown_constraint`.
+
+**Which types are `Ord`.** `Int`, `Float`, `String`, `Duration`, `Instant` and
+`Bytes`; a refined type over one of them; `Option[T]` and `List[T]` where `T` is
+`Ord`; a record, sum, enum or opaque type that `derives Ord`; and a type parameter
+declared `T: Ord`. `Bool`, `Result`, `Map`, `Set`, functions and held resources
+are not. A generic type that derives `Ord` is `Ord` at an instantiation whose
+arguments are (`Maybe[Int]`, not `Maybe[Bool]`). Every field and payload type of a
+type that derives `Ord` must be `Ord`, else
+`bynk.types.derives_field_not_orderable` names the field.
+
+**The order.**
+
+| Type | Order |
+|---|---|
+| `Int`, `Duration`, `Instant` | numeric |
+| `String` | UTF-16 code unit, element by element (not code point, not locale) |
+| `Bytes` | unsigned octets, lexicographic |
+| `Float` | total: `NaN` last and equal to itself, `-0` equal to `0` |
+| `Option[T]` | `None` first, then `Some` by payload |
+| `List[T]` | lexicographic, a proper prefix first |
+| record | by field, in declaration order |
+| sum, enum | by variant declaration order, then by payload |
+
+The `Float` total order applies to the ordering kernels and `Ord` witnesses. The
+operators keep IEEE behaviour on a `Float`: `NaN < x` is `false`, and `==` is
+unchanged.
+
+**Reordering changes the order.** A `derives Ord` type sorts by declaration
+order, so moving a field, or a variant, changes how its values sort. The wire
+contract hash ignores field and variant order, so the change does not appear as
+a contract change and `bynk` raises no diagnostic for it. Treat the declaration
+order of such a type as meaningful.
+
+**Not ordered by accident.** A type without `derives Ord` is never ordered
+implicitly. Using `<` or a sort key on one is `bynk.types.not_orderable`, whose
+"add `derives Ord`" suggestion is never applied by `bynk check --fix` or
+**Fix all**, because opting in is a decision about what the order is.
 
 ## Refined types
 

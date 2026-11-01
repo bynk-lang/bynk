@@ -55,7 +55,8 @@ through its API — `.of`, or `.unsafe` within the defining `commons`
 ([§6.4](#64-admission--construction)) — never with record syntax. The base value
 is recoverable only through `.raw`, and only within the defining `commons`. An
 opaque type MAY also carry a `where` refinement. Opaque types are **excluded**
-from literal admission.
+from literal admission. An opaque type is not `Ord` outside its defining unit
+unless its declaration says `derives Ord` (§5.2).
 
 ### §6.1.4 Sum types
 
@@ -74,6 +75,10 @@ named, immutable fields. A value is constructed by giving every field
 ([§4.6.9](/book/spec/syntactic-grammar/#469-field_access)), and updated by the spread form
 ([§4.6.13](/book/spec/syntactic-grammar/#4613-record_spread)), which copies and overrides.
 A record field MUST NOT directly have the record's own type.
+
+A record, sum or enum declaration MAY end with `derives Ord` ([§4.2.1](/book/spec/syntactic-grammar/#421-type_decl)),
+which makes the type `Ord`: its values are ordered by field, or by variant, in
+declaration order ([§5.2](/book/spec/static-semantics/#52-well-typedness)).
 
 ### §6.1.6 Enum types
 
@@ -242,7 +247,7 @@ returns, and locals; everywhere a value would serialise, persist, or cross a
 boundary they are rejected ([§5.8](/book/spec/static-semantics/#58-boundaries--cross-context),
 `bynk.types.function_at_boundary`). A generic function's type parameters are
 type variables, instantiated per call site and erased at emission — unconstrained
-unless they declare an `Eq` bound (§5.2); they never appear in a checked program's expression types outside
+unless they declare an `Eq` or `Ord` bound (§5.2); they never appear in a checked program's expression types outside
 the generic function's own body.
 
 ## §6.5 Type compatibility & boundaries

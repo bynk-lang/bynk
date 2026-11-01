@@ -276,6 +276,37 @@ mod tests {
         assert_eq!(legend.token_modifiers[4].as_str(), "documentation");
     }
 
+    /// Constrained generics slice 1: the names of a `derives Ord` clause are
+    /// `interface` tokens, with those of a bound; the contextual `derives`
+    /// itself gets none (keywords are the editor grammar's).
+    #[test]
+    fn derives_and_bound_constraint_names_are_interface_tokens() {
+        let text = "commons m\n\ntype P = Int derives Ord\nfn f[T: Eq + Ord](a: T) -> T { a }\n";
+        let syntax: Vec<(Span, u32)> = crate::symbols::constraint_token_spans(text)
+            .into_iter()
+            .map(|s| (s, TOK_INTERFACE))
+            .collect();
+        let tokens = semantic_tokens(
+            &ProjectIndex::default(),
+            &[],
+            &syntax,
+            Path::new("a.bynk"),
+            text,
+            None,
+        );
+        assert_eq!(tokens.len(), 3, "{tokens:?}");
+        assert!(tokens.iter().all(|t| t.token_type == TOK_INTERFACE));
+        // First token: `Ord` after `derives ` (line 2, char 21), length 3.
+        assert_eq!(
+            (
+                tokens[0].delta_line,
+                tokens[0].delta_start,
+                tokens[0].length
+            ),
+            (2, 21, 3)
+        );
+    }
+
     #[test]
     fn tokens_are_delta_encoded_with_modifier_bitsets() {
         // text:  line 0: "type Age = Int"   (def `Age` at 5..8, refined)

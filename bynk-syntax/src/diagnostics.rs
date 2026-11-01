@@ -1158,16 +1158,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A type parameter is ordered (`<`, `<=`, `>`, `>=`, an ordering kernel key), or passed to an `Ord`-bounded parameter of another generic, but is not declared `Ord` (`[T: Ord]`, or `where A: Ord` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Ord`, replacing an existing `Eq`, which `Ord` implies (constrained-generics slice 1).",
         &["fn_decl"],
     ),
-    warn(dg(
-        "bynk.generics.redundant_eq_bound",
-        "A type parameter is declared both `Eq` and `Ord`; `Ord` implies `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slice 1, warning).",
-        &["fn_decl"],
-    )),
     dg(
         "bynk.generics.recursive_generic_at_boundary",
         "A recursive generic record (one that transitively contains itself, through any wrapper or generic argument) appears at a boundary; it has no finite set of monomorphised codecs, so it is not yet boundary-serialisable (ADR 0197).",
         &[],
     ),
+    warn(dg(
+        "bynk.generics.redundant_eq_bound",
+        "A type parameter is declared both `Eq` and `Ord`; `Ord` implies `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slice 1, warning).",
+        &["fn_decl"],
+    )),
     dg(
         "bynk.generics.type_arg_count",
         "A user-declared generic type is applied to the wrong number of type arguments, or a generic type is named without its `[…]` arguments (v0.157, ADR 0183).",

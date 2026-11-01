@@ -95,6 +95,7 @@ Not lexer keywords: the lexer treats these as ordinary identifiers, and they car
 | Word | Meaning |
 |---|---|
 | `advance` | Move the test harness's clock forward in a `case` (`advance Clock by 15.minutes`). |
+| `derives` | After a type declaration's body, opts the type into a constraint (`type Priority = enum { Low, High } derives Ord`): the type is then ordered by declaration order. |
 | `drop` | Inside a `migrate` step, discard a stored field's value on purpose (`drop owner`). |
 | `key` | The agent's identity field — one per agent; keys the store. |
 | `migrate` | An agent's migration step: carries a stored record from an older schema version to the current shape (`migrate from 1 (old: CartV1) { … }`). |

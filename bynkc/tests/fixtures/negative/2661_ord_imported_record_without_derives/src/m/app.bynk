@@ -1,0 +1,7 @@
+commons m.app
+
+uses m.shapes
+
+// #2660: the declaring unit decides; an imported record without `derives Ord`
+// is not orderable, and no suggestion edits the other file.
+fn before(a: Pt, b: Pt) -> Bool { a < b }

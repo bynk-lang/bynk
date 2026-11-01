@@ -1,0 +1,10 @@
+commons demo
+
+fn first[T: Ord](xs: List[T]) -> Option[T] { xs.min((x) => x) }
+
+// #2660 (DECISION E): the expected function type does not fix `T`.
+fn viaLambda(f: (List[Int]) -> Option[Int]) -> Option[Int] { f([1]) }
+
+fn bad[U](g: (U) -> U) -> Int { 0 }
+
+fn use() -> Int { bad(first) }

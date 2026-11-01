@@ -372,7 +372,9 @@ Type declarations and the type references that appear in signatures.
 
 {{#grammar type_decl}}
 
-Names a type as a record, sum, enum, opaque, or refined type.
+Names a type as a record, sum, enum, opaque, or refined type, optionally followed
+by a `derives` clause: `derives Ord` makes the type orderable, in declaration
+order. See [Ordering your own types](/book/reference/types/#ordering-your-own-types).
 
 **Example.**
 ```bynk
@@ -636,8 +638,8 @@ commons demo {
 {{#grammar type_param}}
 
 A type parameter of a `fn`, `type` or capability operation, with optional bounds:
-`T`, `T: Eq`. The only constraint is `Eq` (`bynk.generics.unknown_constraint`
-otherwise). See [Generics and bounds](/book/reference/generics/).
+`T`, `T: Eq`, `T: Ord`. The constraints are `Eq` and `Ord`
+(`bynk.generics.unknown_constraint` otherwise). See [Generics and bounds](/book/reference/generics/).
 
 **Example.**
 ```bynk
