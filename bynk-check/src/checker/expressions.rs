@@ -3610,7 +3610,11 @@ pub(crate) fn check_match(
                 ctx.errors.push(with_fill(
                     CompileError::new(
                         "bynk.types.non_exhaustive_match",
-                        span,
+                        if let_else {
+                            let_else_arms_span(arms).unwrap_or(span)
+                        } else {
+                            span
+                        },
                         format!(
                             "cannot prove this `match` on `{}` exhaustive",
                             disc_ty.display(tys)
@@ -4411,11 +4415,21 @@ fn future_variant_witness(witness: &str) -> Option<(String, String)> {
     let start = witness.find(FUTURE_VARIANT_OPEN)?;
     let len = witness[start..].find(FUTURE_VARIANT_CLOSE)?;
     let name = witness[start + 1..start + len].to_string();
-    let shown = format!(
-        "{}_{}",
-        &witness[..start],
-        &witness[start + len + FUTURE_VARIANT_CLOSE.len_utf8()..]
-    );
+    // A multi-field witness can hold several (`Pair(<future>, <future>)`): all
+    // are shown as `_`, and the first names the enum.
+    let mut shown = String::new();
+    let mut in_marker = false;
+    for c in witness.chars() {
+        match c {
+            FUTURE_VARIANT_OPEN => {
+                in_marker = true;
+                shown.push('_');
+            }
+            FUTURE_VARIANT_CLOSE => in_marker = false,
+            _ if !in_marker => shown.push(c),
+            _ => {}
+        }
+    }
     Some((name, shown))
 }
 
@@ -5040,5 +5054,26 @@ mod join_ty_tests {
         assert!(join_ty(string, int, tys).is_none());
         let email = refined(tys, "Email", BaseType::String);
         assert!(join_ty(email, int, tys).is_none());
+    }
+}
+
+#[cfg(test)]
+mod future_witness_tests {
+    use super::*;
+
+    /// #2665: a multi-field witness can hold several future variants; every
+    /// marker is shown as `_`, so none leaks into a message or a fill-in arm.
+    #[test]
+    fn every_future_marker_is_shown_as_a_wildcard() {
+        let witness = format!(
+            "Pair({o}FetchError{c}, {o}Method{c})",
+            o = FUTURE_VARIANT_OPEN,
+            c = FUTURE_VARIANT_CLOSE
+        );
+        assert_eq!(
+            future_variant_witness(&witness),
+            Some(("FetchError".to_string(), "Pair(_, _)".to_string()))
+        );
+        assert_eq!(future_variant_witness("Pair(_, _)"), None);
     }
 }

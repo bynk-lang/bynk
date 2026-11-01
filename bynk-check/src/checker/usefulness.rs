@@ -569,7 +569,9 @@ impl Engine<'_, '_> {
                 let mut sub_tys = arg_tys.clone();
                 sub_tys.extend_from_slice(rest_tys);
                 let spec = Self::specialize(&rows, c, arg_tys.len());
-                for mut w in self.missing(spec, sub_tys, false)? {
+                let ws = self.missing(spec, sub_tys, false)?;
+                self.tick(ws.len())?;
+                for mut w in ws {
                     let tail = w.split_off(arg_tys.len());
                     out.push(with_rest(space.witness(c, w), tail));
                 }
@@ -578,6 +580,9 @@ impl Engine<'_, '_> {
                     absent_tail =
                         Some(self.missing(Self::default_rows(&rows), rest_tys.to_vec(), false)?);
                 }
+                // Charge for the witnesses built: their number multiplies with
+                // every column, long before the recursion itself does.
+                self.tick(absent_tail.as_ref().map_or(0, Vec::len))?;
                 for tail in absent_tail.as_ref().into_iter().flatten() {
                     out.push(with_rest(
                         space.witness(c, wilds(arg_tys.len())),
@@ -594,6 +599,7 @@ impl Engine<'_, '_> {
                 absent_tail =
                     Some(self.missing(Self::default_rows(&rows), rest_tys.to_vec(), false)?);
             }
+            self.tick(absent_tail.as_ref().map_or(0, Vec::len))?;
             for tail in absent_tail.into_iter().flatten() {
                 out.push(with_rest(Wit::Future(name.clone()), tail));
             }
