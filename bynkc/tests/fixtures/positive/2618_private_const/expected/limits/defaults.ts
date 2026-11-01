@@ -12,8 +12,11 @@ export interface Window {
 export const Window = {
 };
 
-export const Step: number = 5;
+var __const_Step: { v: number } | undefined;
+export function Step(): number { return (__const_Step ??= { v: 5 }).v; }
 
-export const Narrow: Window = { size: 2, offset: 1 };
+var __const_Narrow: { v: Window } | undefined;
+export function Narrow(): Window { return (__const_Narrow ??= { v: { size: 2, offset: 1 } }).v; }
 
-export const Retries: number = Step;
+var __const_Retries: { v: number } | undefined;
+export function Retries(): number { return (__const_Retries ??= { v: Step() }).v; }

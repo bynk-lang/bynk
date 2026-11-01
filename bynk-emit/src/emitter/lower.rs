@@ -5916,6 +5916,12 @@ fn emit_if_tail(
 }
 
 fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
+    // #2617: a constant is a hoisted, cached function (`emit_consts`), so a
+    // name the checker resolved to one reads it with a call. First, since the
+    // checker has already ruled out a local or any other meaning of the name.
+    if let Some(name) = cx.const_ref(e) {
+        return format!("{}()", ts_ident(name));
+    }
     // Constrained generics slice 1 (DECISION E): a generic function with `Ord`
     // bounds used as a value is instantiated at the reference, as a closure that
     // captures the comparator witnesses.
@@ -7341,8 +7347,9 @@ fn emit_match_tail(
     // is a stable reference (a variable or property path). A call discriminant
     // such as `ShortCode.of(raw)` is re-evaluated per arm and TypeScript cannot
     // narrow it (and re-evaluation could repeat side effects), so bind it to a
-    // fresh temp once and switch on that.
-    if !is_narrowable_path(discriminant) {
+    // fresh temp once and switch on that. #2617: a path rooted at a constant
+    // lowers to a call (`Fallback()`), so it is bound to a temp too.
+    if !is_narrowable_path(discriminant) || cx.roots_at_const(discriminant) {
         let tmp = cx.fresh();
         write_line(out, indent, &format!("const {tmp} = {disc};"));
         disc = tmp;

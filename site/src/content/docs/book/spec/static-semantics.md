@@ -2811,17 +2811,14 @@ is admitted to a refined `T` only when it satisfies the refinement
 Constants MAY refer to one another, across the files of a unit and to the
 constants of a commons the unit `uses`, but MUST NOT do so in a cycle
 (`bynk.resolve.const_cycle`, reported once per cycle, naming its members in
-order). Nor may the *files* of a unit form a cycle through their constants:
-where a constant initialiser in one file names a constant declared in another,
-the first file depends on the second, and a cycle of such dependencies among a
-unit's files is `bynk.resolve.const_file_cycle`, naming the files and the
-constants on it, even when no constant depends on itself. Each file emits as a
-module that imports the constants it names, so the modules would import each
-other and one would read a constant before it is defined. A function that reads
-a constant of another file adds no dependency. A constant MAY NOT yet appear in a compile-time position, such as a
-refinement bound (`InRange(1, MaxQty)`) or an annotation argument.
+order). The files of a unit MAY import each other in a cycle through their
+constants: a constant is emitted as a hoisted function, so the order in which
+the files' modules evaluate does not matter. A constant MAY NOT yet appear in
+a compile-time position, such as a refinement bound (`InRange(1, MaxQty)`) or
+an annotation argument.
 
-A constant is emitted as an exported `const` of the declaring module
+A constant is emitted as an exported, hoisted function of the declaring module
+that returns its cached value
 ([§7.3.1a](/book/spec/emission/#731a-named-constants)), imported like a function by a
 sibling file or a unit that `uses` it. A unit-tier `suite` case names the
 constants of its target and of the commons the target `uses`.

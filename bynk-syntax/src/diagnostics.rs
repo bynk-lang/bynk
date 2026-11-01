@@ -2186,11 +2186,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["const_decl"],
     ),
     dg(
-        "bynk.resolve.const_file_cycle",
-        "Constants in different files of one unit refer to each other in a cycle of files, so the files' modules would import each other and one would read a constant before it is defined.",
-        &["const_decl"],
-    ),
-    dg(
         "bynk.resolve.const_name_case",
         "A constant's name is not upper-camel case (`MaxRetries`, not `maxRetries`).",
         &["const_decl"],

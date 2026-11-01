@@ -40,10 +40,14 @@ export const Tier = {
   Silver: { tag: "Silver" } as Tier,
 };
 
-export const MaxItems: number = 20;
+var __const_MaxItems: { v: number } | undefined;
+export function MaxItems(): number { return (__const_MaxItems ??= { v: 20 }).v; }
 
-export const DefaultPage: Page = { size: 10, offset: 0 };
+var __const_DefaultPage: { v: Page } | undefined;
+export function DefaultPage(): Page { return (__const_DefaultPage ??= { v: { size: 10, offset: 0 } }).v; }
 
-export const SmallBatch: Quantity = (5 as Quantity);
+var __const_SmallBatch: { v: Quantity } | undefined;
+export function SmallBatch(): Quantity { return (__const_SmallBatch ??= { v: (5 as Quantity) }).v; }
 
-export const Preferred: Tier = Tier.Gold;
+var __const_Preferred: { v: Tier } | undefined;
+export function Preferred(): Tier { return (__const_Preferred ??= { v: Tier.Gold }).v; }

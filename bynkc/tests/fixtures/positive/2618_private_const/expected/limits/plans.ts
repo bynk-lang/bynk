@@ -7,9 +7,9 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 import { Narrow, Step } from "./defaults.js";
 
 export function retries(): number {
-  return Step * 2;
+  return Step() * 2;
 }
 
 export function span(): number {
-  return Narrow.size + Narrow.offset;
+  return Narrow().size + Narrow().offset;
 }

@@ -665,7 +665,7 @@ impl Walk {
                 self.opt_ty(ty);
                 self.expr(init);
             }
-            TsStmtKind::Let { name, ty, init } => {
+            TsStmtKind::Let { name, ty, init, .. } => {
                 self.binding(name);
                 self.opt_ty(ty);
                 if let Some(e) = init {

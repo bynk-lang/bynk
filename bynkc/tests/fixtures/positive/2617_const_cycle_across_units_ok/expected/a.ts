@@ -4,6 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
-export const Y: number = 1;
+var __const_X: { v: number } | undefined;
+export function X(): number { return (__const_X ??= { v: Y() }).v; }
 
-export const X: number = Y;
+var __const_Y: { v: number } | undefined;
+export function Y(): number { return (__const_Y ??= { v: 1 }).v; }

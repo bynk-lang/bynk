@@ -1,0 +1,35 @@
+---
+#2617: constants across a cycle of files, proved at run time.
+---
+suite app.limits
+
+case "constants name each other across files" {
+  expect A == 1
+  expect B == 1
+  expect C == 1
+}
+
+case "functions call each other across files and read constants" {
+  expect fromB() == 3
+  expect total() == 4
+  expect label() == "A is 1, C is 1"
+}
+
+case "an is test reads a constant" {
+  expect maybeOr(9) == 1
+  expect Maybe == Some(1)
+}
+
+case "falsy constants read the same every time" {
+  expect Zero == 0
+  expect Zero == 0
+  expect !Off
+  expect !Off
+  expect Nothing == None
+  expect Nothing == None
+}
+
+case "a match reads a constant and a field of one" {
+  expect maybeMatch() == 1
+  expect sizeOf() == 5
+}

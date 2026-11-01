@@ -42,8 +42,8 @@ async function test_the_private_constants() {
     const deps = {};
     const { Narrow, Retries, Step, Window, retries, span } = __ns_limits;
     type Window = __ns_limits.Window;
-    if (!(Step === 5)) { throw __bynkExpectFailure("tests/limits.test.bynk:4:12", 114, 123, "expect Step == 5\n  expected: Step == 5\n  actual:   " + __bynkShow((Step)) + " == " + __bynkShow((5))); }
-    if (!(Narrow.size === 2)) { throw __bynkExpectFailure("tests/limits.test.bynk:5:12", 135, 151, "expect Narrow.size == 2\n  expected: Narrow.size == 2\n  actual:   " + __bynkShow((Narrow.size)) + " == " + __bynkShow((2))); }
+    if (!(Step() === 5)) { throw __bynkExpectFailure("tests/limits.test.bynk:4:12", 114, 123, "expect Step == 5\n  expected: Step == 5\n  actual:   " + __bynkShow((Step())) + " == " + __bynkShow((5))); }
+    if (!(Narrow().size === 2)) { throw __bynkExpectFailure("tests/limits.test.bynk:5:12", 135, 151, "expect Narrow.size == 2\n  expected: Narrow.size == 2\n  actual:   " + __bynkShow((Narrow().size)) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
