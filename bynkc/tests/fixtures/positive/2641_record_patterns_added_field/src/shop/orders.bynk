@@ -1,0 +1,45 @@
+commons shop.orders {
+  type Status = enum { Pending, Paid, Cancelled }
+
+  // #2607: a field added later (here `note`) leaves every record pattern below compiling.
+  type Order = { id: String, status: Status, total: Int, note: String }
+
+  type Page[T] = { items: List[T], count: Int }
+
+  fn describe(o: Order) -> String {
+    match o {
+      Order { status: Paid, total, .. } if total > 100 => "large paid order"
+      Order { status: Paid, .. } => "paid"
+      Order { id: "vip", .. } => "vip"
+      Order { total, .. } => "other"
+    }
+  }
+
+  fn firstTotal(o: Option[Order]) -> Int {
+    match o {
+      Some(Order { total, .. }) => total
+      None => 0
+    }
+  }
+
+  fn paidTotal(o: Option[Order]) -> Int {
+    match o {
+      Some(Order { status: Paid, total: t, .. }) => t
+      _ => 0
+    }
+  }
+
+  fn cancelled(o: Order) -> Bool {
+    if o is (Order { status: Cancelled, .. }) { true } else { false }
+  }
+
+  fn billed(o: Order) -> Int {
+    if o is (Order { status: Paid, total, .. }) { total } else { 0 }
+  }
+
+  fn count(p: Page[Int]) -> Int {
+    match p {
+      Page { count, .. } => count
+    }
+  }
+}

@@ -1,0 +1,83 @@
+==========================
+record pattern — match arm with literal, shorthand and nested fields
+==========================
+
+commons d {
+	fn f(o: Option[Order]) -> Int {
+		match o {
+			Some(Order { status: Paid, total, .. }) => total
+			_ => 0
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (generic_type_ref
+          name: (builtin_type)
+          arg: (identifier)))
+      return_type: (base_type)
+      body: (block
+        tail: (match_expr
+          disc: (identifier)
+          (match_arm
+            pattern: (variant_pattern
+              variant: (identifier)
+              (record_pattern
+                type: (identifier)
+                (record_pattern_field
+                  name: (identifier)
+                  pattern: (variant_pattern
+                    variant: (identifier)))
+                (record_pattern_field
+                  name: (identifier))))
+            body: (identifier))
+          (match_arm
+            pattern: (wildcard_pattern)
+            body: (number_literal)))))))
+
+==========================
+record pattern — parenthesised after is, before the if block
+==========================
+
+commons d {
+	fn f(o: Order) -> Bool {
+		if o is (Order { status: Cancelled, .. }) { true } else { false }
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (identifier))
+      return_type: (base_type)
+      body: (block
+        tail: (if_expr
+          cond: (is_expr
+            value: (identifier)
+            pattern: (paren_pattern
+              (record_pattern
+                type: (identifier)
+                (record_pattern_field
+                  name: (identifier)
+                  pattern: (variant_pattern
+                    variant: (identifier))))))
+          then: (block
+            tail: (boolean_literal))
+          else: (block
+            tail: (boolean_literal)))))))

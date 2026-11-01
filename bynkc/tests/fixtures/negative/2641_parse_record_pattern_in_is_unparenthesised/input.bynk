@@ -1,0 +1,9 @@
+commons demo
+
+// #2641: after `is` the `{` would also open the `if` block, so the pattern is parenthesised.
+type Status = enum { Open, Paid }
+type Order = { id: String, status: Status, total: Int }
+
+fn f(o: Order) -> Bool {
+  if o is Order { status: Paid, .. } { true } else { false }
+}

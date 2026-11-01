@@ -1,0 +1,1 @@
+bynk.parse.record_pattern_in_is_unparenthesised a record pattern after `is` must be parenthesised

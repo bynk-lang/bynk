@@ -597,3 +597,70 @@ fn bynk_list_deprecation_quick_fix_rewrites_to_method() {
         "find fix yields filter(...).first(); got:\n{fixed}"
     );
 }
+
+/// #2641: the two record-pattern parse errors each carry a machine-applicable
+/// fix, offered as a quick fix and leaving the file clean once applied.
+#[test]
+fn record_pattern_parse_errors_offer_quick_fixes() {
+    const PRELUDE: &str = "\
+commons shop
+
+type Status = enum { Open, Paid }
+type Order = { id: String, status: Status, total: Int }
+
+";
+    let cases = [
+        (
+            "bynk.parse.record_pattern_without_rest",
+            "add the trailing `..`",
+            "fn f(o: Order) -> Int {\n  match o {\n    Order { total } => total\n  }\n}\n",
+            "fn f(o: Order) -> Int {\n  match o {\n    Order { total, .. } => total\n  }\n}\n",
+        ),
+        (
+            "bynk.parse.record_pattern_in_is_unparenthesised",
+            "parenthesise the record pattern",
+            "fn f(o: Order) -> Bool {\n  if o is Order { status: Paid, .. } { true } else { false }\n}\n",
+            "fn f(o: Order) -> Bool {\n  if o is (Order { status: Paid, .. }) { true } else { false }\n}\n",
+        ),
+    ];
+    for (n, (code, title, body, fixed_body)) in cases.into_iter().enumerate() {
+        let src = format!("{PRELUDE}{body}");
+        let root = setup_project(&format!("record-pattern-{n}"), &[("shop.bynk", &src)]);
+        let sources =
+            bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+        let result = bynk_ide::diagnose_project(&root, &sources);
+        let file = result
+            .files
+            .iter()
+            .find(|f| f.source_path == Path::new("shop.bynk"))
+            .expect("file analysed");
+        let diag = file
+            .diagnostics
+            .iter()
+            .find(|d| d.error.category == code)
+            .unwrap_or_else(|| panic!("{code} not reported: {:?}", file.diagnostics.len()));
+        let uri = Url::from_file_path(root.join("shop.bynk")).unwrap();
+        let actions =
+            code_actions::quick_fixes(&file.text, &file.diagnostics, diag.error.span, &uri, None);
+        assert_eq!(actions.len(), 1, "{code}: exactly one quick fix");
+        let CodeActionOrCommand::CodeAction(action) = &actions[0] else {
+            panic!("expected a CodeAction");
+        };
+        assert_eq!(action.title, title);
+        let Some(DocumentChanges::Edits(doc_edits)) =
+            &action.edit.as_ref().unwrap().document_changes
+        else {
+            panic!("expected document edits");
+        };
+        let fixed = apply_text_edits(&file.text, &doc_edits[0].edits);
+        assert_eq!(fixed, format!("{PRELUDE}{fixed_body}"));
+        let abs = root.join("shop.bynk");
+        let mut overlay = HashMap::new();
+        overlay.insert(abs.canonicalize().unwrap_or(abs), fixed);
+        let post = bynk_ide::diagnose_project(&root, &overlay);
+        assert!(
+            post.files.iter().all(|f| f.diagnostics.is_empty()),
+            "{code}: the applied fix re-diagnoses clean"
+        );
+    }
+}

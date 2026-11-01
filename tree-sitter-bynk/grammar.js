@@ -1603,9 +1603,44 @@ module.exports = grammar({
         $.wildcard_pattern,
         $.literal_pattern,
         $.variant_pattern,
+        $.record_pattern,
         $.or_pattern,
         $.paren_pattern,
       ),
+    // #2641 (patterns track, slice 1): `Order { status: Paid, total, .. }`. Always
+    // open, with the trailing `..` mandatory so that adding a field to the record
+    // never breaks a pattern — the rule `event_pattern` already applies to
+    // events. A field is a bare name (binding it to a local of the same name) or
+    // `name: pattern`. After `is` a record pattern must be parenthesised (see
+    // `_is_pattern`), because there the `{` would also open the `if`'s block.
+    record_pattern: ($) =>
+      seq(
+        field("type", $.identifier),
+        "{",
+        repeat(seq($.record_pattern_field, ",")),
+        "..",
+        "}",
+      ),
+    record_pattern_field: ($) =>
+      choice(
+        seq(field("name", $.identifier), ":", field("pattern", $._pattern)),
+        field("name", $.identifier),
+      ),
+    // #2641: the patterns an `is` accepts without parentheses — `_pattern`
+    // without a record pattern at its tail, at the top level or as an
+    // or-alternative. Parenthesised, a record pattern is allowed anywhere (the
+    // hand-written parser's `is_pattern_tail` restriction).
+    _is_base_pattern: ($) =>
+      choice(
+        $.wildcard_pattern,
+        $.literal_pattern,
+        $.variant_pattern,
+        $.paren_pattern,
+      ),
+    _is_pattern: ($) =>
+      choice($._is_base_pattern, alias($._is_or_pattern, $.or_pattern)),
+    _is_or_pattern: ($) =>
+      prec.left(1, seq($._is_pattern, "|", $._is_base_pattern)),
     // #474 §2.3.4: `p₁ | p₂ | … | pₙ` — an or-pattern, left-associative;
     // matches if any alternative matches. `|` is a pattern-position operator
     // only — not a valid expression operator, and lexically distinct from
@@ -1666,7 +1701,7 @@ module.exports = grammar({
     is_expr: ($) =>
       prec.left(
         PREC.is,
-        seq(field("value", $._expression), "is", field("pattern", $._pattern)),
+        seq(field("value", $._expression), "is", field("pattern", $._is_pattern)),
       ),
 
     binary_expr: ($) =>

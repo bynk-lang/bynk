@@ -174,6 +174,20 @@ pub fn complete_in(
     }
     // v0.124 (slice 3): the non-keyword clause/construction contexts, before the
     // generic type/keyword/expression cells they would otherwise fall into.
+    // 4a-pre. #2641: `Type { <cursor>` in a *pattern* — the fields not yet
+    //     listed, then `..` (a record pattern always ends with it).
+    if let Some((recv, listed)) = record_pattern_receiver(line_prefix) {
+        let mut fields = record_field_names(&recv, doc_text, files);
+        if !fields.is_empty() {
+            fields.retain(|c| !listed.contains(&c.label));
+            fields.push(Completion::item(
+                "..",
+                CompletionKind::Keyword,
+                Some("the rest of the fields — a record pattern is always open".to_string()),
+            ));
+            return fields;
+        }
+    }
     // 4a. `Type { <cursor>` — record field names on construction.
     if let Some(recv) = record_construction_receiver(line_prefix) {
         let fields = record_field_names(&recv, doc_text, files);
@@ -454,6 +468,66 @@ fn record_construction_receiver(line: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// #2641: the cursor is at a field-name position of a record *pattern* —
+/// `Type { <cursor>` where the text before `Type` is only pattern syntax (a
+/// match arm's start, `Some(`, `is (`, `field: `, `|`), never an expression
+/// (`let o = Type {`). Returns the type name and the fields already listed.
+fn record_pattern_receiver(line: &str) -> Option<(String, Vec<String>)> {
+    let recv = record_construction_receiver(line)?;
+    let open = line.rfind('{')?;
+    // Only the segment after `is` (the pattern) or the whole line (a match arm).
+    let head = line[..open].trim_end();
+    let head = head.strip_suffix(recv.as_str())?;
+    let after_is = head
+        .rsplit_once(" is ")
+        .map_or(head, |(_, pattern)| pattern);
+    // What precedes the type name must be pattern syntax only: separators, an
+    // uppercase constructor before `(`, or a field name before `:`.
+    let mut rest = after_is.trim_start();
+    loop {
+        let before = rest;
+        rest = rest.trim_start_matches(|c: char| c.is_whitespace() || c == '(' || c == '|');
+        let ident_end = rest
+            .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .unwrap_or(rest.len());
+        let (ident, tail) = rest.split_at(ident_end);
+        let tail_trim = tail.trim_start();
+        if !ident.is_empty()
+            && ((tail_trim.starts_with('(') && ident.starts_with(|c: char| c.is_ascii_uppercase()))
+                || (tail_trim.starts_with(':') && !tail_trim.starts_with("::")))
+        {
+            rest = &tail_trim[1..];
+        }
+        if rest == before {
+            break;
+        }
+    }
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    // The fields already listed at this brace's top level.
+    let mut listed = Vec::new();
+    let mut depth = 0i32;
+    let mut segment = String::new();
+    for c in line[open + 1..].chars() {
+        match c {
+            '(' | '{' | '[' => depth += 1,
+            ')' | '}' | ']' => depth -= 1,
+            ',' if depth == 0 => {
+                let name = segment.split(':').next().unwrap_or("").trim();
+                if !name.is_empty() {
+                    listed.push(name.to_string());
+                }
+                segment.clear();
+                continue;
+            }
+            _ => {}
+        }
+        segment.push(c);
+    }
+    Some((recv, listed))
 }
 
 /// v0.131: the CORS policy fields, offered at a field-name position inside a
@@ -3147,6 +3221,34 @@ mod tests {
             fields[1].detail.as_deref(),
             Some("field of `Opts`, default `3`")
         );
+    }
+
+    #[test]
+    fn record_pattern_offers_the_unlisted_fields_then_rest() {
+        let doc = "commons m {\n  type Order = { id: Int, total: Int, note: String }\n}\n";
+        for prefix in [
+            "    Order { ",
+            "    Some(Order { ",
+            "  if o is (Order { ",
+            "    Ok(Order { id: 1, ",
+        ] {
+            let got = labels(prefix, doc);
+            assert!(got.contains(&"..".to_string()), "{prefix}: {got:?}");
+            assert!(got.contains(&"total".to_string()), "{prefix}: {got:?}");
+        }
+        // Already-listed fields are not offered again; a nested comma is not a split.
+        let got = labels("    Order { id: Some(1, 2), total, ", doc);
+        assert!(!got.contains(&"id".to_string()), "{got:?}");
+        assert!(!got.contains(&"total".to_string()), "{got:?}");
+        assert!(got.contains(&"note".to_string()), "{got:?}");
+        // A construction keeps offering every field, and no `..`.
+        let got = labels("  let o = Order { ", doc);
+        assert!(
+            got.contains(&"id".to_string()) && !got.contains(&"..".to_string()),
+            "{got:?}"
+        );
+        let got = labels("  => Order { id: 1, ", doc);
+        assert!(!got.contains(&"..".to_string()), "{got:?}");
     }
 
     #[test]

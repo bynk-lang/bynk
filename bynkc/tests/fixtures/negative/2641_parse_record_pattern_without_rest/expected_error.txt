@@ -1,0 +1,1 @@
+bynk.parse.record_pattern_without_rest a record pattern must end with `..`

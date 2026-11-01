@@ -3741,6 +3741,19 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                 out.push(format!("const {local} = {payload}.{field};"));
             }
         }
+        // #2641: a record pattern's depth-1 names — shorthand fields and
+        // `f: name` — read straight off the receiver.
+        if let Pattern::Record { fields, .. } = pattern.as_ref() {
+            for (fname, sub) in fields {
+                let bound = match sub {
+                    None => fname,
+                    Some(Pattern::Binding(n)) => n,
+                    Some(_) => continue,
+                };
+                let local = cx.bind_local_name(&bound.name);
+                out.push(format!("const {local} = {value_text}.{};", fname.name));
+            }
+        }
         // #474 §2.3.6: an or-pattern's shared names can live at different
         // structural paths per alternative (`Held`'s field 2 vs
         // `Confirmed`'s field 4), so — like the `match` if-chain's
@@ -3792,6 +3805,23 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                             pairs.push((local, payload + "." + &field));
                         }
                         (Some(variant.name.clone()), pairs)
+                    }
+                    // #2641: a record alternative has no tag to test; its
+                    // depth-1 names read straight off the receiver.
+                    Pattern::Record { fields, .. } => {
+                        let mut pairs = Vec::new();
+                        for (fname, sub) in fields {
+                            let bound = match sub {
+                                None => fname,
+                                Some(Pattern::Binding(n)) => n,
+                                Some(_) => continue,
+                            };
+                            let local = cx
+                                .resolved_local_name(&bound.name)
+                                .unwrap_or_else(|| ts_ident(&bound.name));
+                            pairs.push((local, format!("{value_text}.{}", fname.name)));
+                        }
+                        (None, pairs)
                     }
                     _ => (None, Vec::new()),
                 };
@@ -5518,6 +5548,10 @@ fn pattern_is_has_bindings(pattern: &Pattern, value: &Expr, cx: &LowerCtx) -> bo
                 // even though the pattern carries none.
                 || (bindings.is_empty() && cx.is_refined_is_check(value, &variant.name))
         }
+        Pattern::Record { fields, .. } => fields.iter().any(|(_, sub)| {
+            sub.as_ref()
+                .is_none_or(|p| matches!(p, Pattern::Binding(_)))
+        }),
         // #474: Rule 1 guarantees every alternative binds the same names, so
         // any one alternative having bindings means the whole pattern does.
         Pattern::Or(alts, _) => alts
@@ -6958,6 +6992,11 @@ fn emit_match_case(
         Pattern::Refined { .. } => {
             unreachable!("a Pattern::Refined arm always routes through emit_match_if_chain")
         }
+        // #2641: a record has no tag to switch on, so a record pattern always
+        // trips `match_needs_if_chain`.
+        Pattern::Record { .. } => {
+            unreachable!("a Pattern::Record arm always routes through emit_match_if_chain")
+        }
         Pattern::Variant {
             variant, bindings, ..
         } => {
@@ -7013,6 +7052,9 @@ fn emit_match_case(
                         "pattern.is_irrefutable() is false, so no alternative is a wildcard or binding"
                     ),
                     Pattern::Or(..) => unreachable!("an Or's alternatives are always leaves"),
+                    Pattern::Record { .. } => {
+                        unreachable!("a record alternative routes through emit_match_if_chain")
+                    }
                     // #472/#474: the parser only ever wraps a *whole*,
                     // already-folded `|`-chain in `Refined` (never the other
                     // way — see `parse_pattern_where_suffix`), so an `Or`'s
@@ -7055,6 +7097,30 @@ fn emit_match_body(
     }
 }
 
+/// #2641: the type of field `field` of the record at static type `path_ty`, at
+/// that type's arguments. `None` when `path_ty` is not a known record (a loose
+/// scrutinee), so a nested multi-field variant under it falls back as it
+/// does for any untyped path.
+fn record_field_ty(path_ty: Option<TyId>, field: &str, cx: &LowerCtx) -> Option<TyId> {
+    let tys = cx.commons().tys();
+    let ty = path_ty?;
+    let Ty::Named {
+        name,
+        kind: NamedKind::Record,
+        args,
+    } = &*tys.get(ty)
+    else {
+        return None;
+    };
+    let types = &cx.commons().types;
+    let decl = types.get(name)?;
+    let TypeBody::Record(r) = &decl.body else {
+        return None;
+    };
+    let f = r.fields.iter().find(|f| f.name.name == field)?;
+    bynk_check::checker::instantiate_field_ty(decl, args, &f.type_ref, types, tys)
+}
+
 /// Emit the boolean tests that must hold for `pattern` to match the value at
 /// runtime `path` (static type `path_ty`). Irrefutable patterns add nothing;
 /// nested variant/literal payloads recurse into `path.<field>`.
@@ -7094,6 +7160,19 @@ fn pattern_match_tests(
                     )
                 });
             tests.push(refined_check_as_bool(path, base, Some(predicate)));
+        }
+        // #2641: test each refutable field sub-pattern against `path.field`;
+        // there is no tag test, since the checker proved the scrutinee is this
+        // record.
+        Pattern::Record { fields, .. } => {
+            for (name, sub) in fields {
+                let Some(sub) = sub else { continue };
+                if sub.is_irrefutable() {
+                    continue;
+                }
+                let field_ty = record_field_ty(path_ty, &name.name, cx);
+                pattern_match_tests(&format!("{path}.{}", name.name), field_ty, sub, cx, tests);
+            }
         }
         Pattern::Variant {
             variant, bindings, ..
@@ -7251,6 +7330,23 @@ fn emit_pattern_bindings(
         Pattern::Refined { inner, .. } => {
             emit_pattern_bindings(out, indent, path, path_ty, inner, cx);
         }
+        // #2641: a shorthand field binds a local of its own name; `f: p`
+        // recurses into `path.f`.
+        Pattern::Record { fields, .. } => {
+            for (name, sub) in fields {
+                let field_path = format!("{path}.{}", name.name);
+                match sub {
+                    Some(sub) => {
+                        let field_ty = record_field_ty(path_ty, &name.name, cx);
+                        emit_pattern_bindings(out, indent, &field_path, field_ty, sub, cx);
+                    }
+                    None => {
+                        let local = cx.bind_local_name(&name.name);
+                        write_line(out, indent, &format!("const {local} = {field_path};"));
+                    }
+                }
+            }
+        }
         Pattern::Variant {
             variant, bindings, ..
         } => {
@@ -7362,6 +7458,18 @@ fn pattern_binding_paths(
         // nothing today) — same recursion as `emit_pattern_bindings`'s
         // `Refined` arm.
         Pattern::Refined { inner, .. } => pattern_binding_paths(path, path_ty, inner, cx, out),
+        Pattern::Record { fields, .. } => {
+            for (name, sub) in fields {
+                let field_path = format!("{path}.{}", name.name);
+                match sub {
+                    Some(sub) => {
+                        let field_ty = record_field_ty(path_ty, &name.name, cx);
+                        pattern_binding_paths(&field_path, field_ty, sub, cx, out);
+                    }
+                    None => out.push((name.name.clone(), field_path)),
+                }
+            }
+        }
     }
 }
 
@@ -7385,6 +7493,7 @@ fn emit_match_if_chain(
     let has_catchall = arms
         .iter()
         .any(|a| a.guard.is_none() && a.pattern.is_irrefutable());
+    let mut declared_here: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for arm in arms {
         cx.record_span(out.len(), arm.span);
         // #908: this arm's bindings must resolve within its own body rather
@@ -7397,9 +7506,26 @@ fn emit_match_if_chain(
         let mut tests = Vec::new();
         pattern_match_tests(disc_var, *disc_ty, &arm.pattern, cx, &mut tests);
         let has_tests = !tests.is_empty();
+        // #2641: an arm with no tests declares its bindings at this level, so
+        // a second such arm (guarded ones fall through) binding the same name
+        // would redeclare it; wrap that one in its own block. The first, and
+        // every arm that emitted valid code before, is untouched.
+        let names: Vec<&str> = arm
+            .pattern
+            .bound_names()
+            .iter()
+            .map(|id| id.name.as_str())
+            .collect();
+        let needs_block = !has_tests && names.iter().any(|n| declared_here.contains(n));
+        if !has_tests && !needs_block {
+            declared_here.extend(names.iter().copied());
+        }
         if has_tests {
             write_line(out, indent, &format!("if ({}) {{", tests.join(" && ")));
+        } else if needs_block {
+            write_line(out, indent, "{");
         }
+        let has_tests = has_tests || needs_block;
         let body_indent = if has_tests {
             indent + INDENT_STEP
         } else {
@@ -7488,6 +7614,18 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
         // `_` payload is irrefutable). For a loose scrutinee — the `Wire`-call
         // outcome — the single-field `"value"` fallback matches the runtime
         // `{ tag, value }` shape, so the nested test lands without a static type.
+        // #2641: a record pattern is its fields' tests, `true` when every
+        // field is irrefutable.
+        Pattern::Record { .. } => {
+            let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
+            let mut tests = Vec::new();
+            pattern_match_tests(&v, scrut_ty, pattern, cx, &mut tests);
+            if tests.is_empty() {
+                "true".to_string()
+            } else {
+                tests.join(" && ")
+            }
+        }
         Pattern::Variant { .. } => {
             let scrut_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
             let mut tests = Vec::new();

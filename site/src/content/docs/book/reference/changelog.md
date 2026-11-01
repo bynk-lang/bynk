@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.454**.
+written against **v0.455**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.455.1** | "`bynk --help` lists its commands under five headings (Project, Run and deploy, Dependencies, Publishing, Help and tooling), each with a one-line summary; the longer description moves to `bynk <command> --help`" |
+| **v0.455.0** | "Record patterns: `TypeName { f1, f2: pattern, .. }` matches a record by its fields in a `match` arm, nested in a variant payload, or after `is` (parenthesised, `x is (T { .. })`). They are always open, so the trailing `..` is required and adding a field to a record never breaks a pattern. A record pattern covers its type only when every field is matched irrefutably (patterns track slice 1, [#2641](https://github.com/bynk-lang/bynk/issues/2641)). New diagnostics: `bynk.parse.record_pattern_without_rest`, `bynk.parse.record_pattern_in_is_unparenthesised`, `bynk.types.record_pattern_on_non_record` and `bynk.types.duplicate_pattern_field`, the two parse errors with one-click fixes" |
 | **v0.454.0** | "`bynk.cloudflare`'s `R2` gains streamed reads and writes: `getStream` gives an `R2Body` (the object's metadata and its body as a single-pass `Stream[Bytes]`, served with `RawStreamed`), and `putStream`/`putStreamWith` write a stream of a declared `size`, a mismatch faulting with nothing stored. Multipart uploads (`createUpload`, `uploadPart`, `completeUpload`, `abortUpload`) build one object from whole-`Bytes` parts across requests, through a plain `R2Upload` handle (standard-library P5b, [#2626](https://github.com/bynk-lang/bynk/issues/2626))" |
 | **v0.453.0** | "`bynk.Fetch` gains `receiveStream(req, options)` and `sendStream(req, body, options)`, which stream a body as `Stream[Bytes]` in a `StreamResponse` rather than buffering it, so a Worker can proxy or upload what doesn't fit in memory (both experimental). Their timeout bounds the response head only, and `sendStream` returns a redirect as it is (standard-library K5c, [#2627](https://github.com/bynk-lang/bynk/issues/2627))" |
 | **v0.452.0** | "`D1` call sites close their two gaps: `Json.decodeSql[T]` decodes a SQL row (or a `List` of rows) as `Json.decode` does, but also reads SQLite's `0`/`1` at a `Bool` field, and a `D1` statement's SQL must be a string literal (the first argument of `all`/`first`/`run`, and every `SqlStatement`'s `sql`), so data only reaches it as bound `SqlValue` parameters. `SqlStatement` is now non-storable and non-boundary. New diagnostics: `bynk.types.sql_not_literal`, `bynk.types.sql_statement_at_boundary` and `bynk.types.sql_row_shape` (standard-library P4c, [#2628](https://github.com/bynk-lang/bynk/issues/2628))" |

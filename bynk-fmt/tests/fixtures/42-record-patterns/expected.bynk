@@ -1,0 +1,32 @@
+commons shop.orders {
+	type Status = enum { Pending, Paid, Cancelled }
+
+	type Order = {
+		id: String,
+		status: Status,
+		total: Int,
+	}
+
+	fn describe(o: Order) -> String {
+		match o {
+			Order { status: Paid, total, .. } if total > 100 => "large",
+			Order { id: "vip", .. } | Order { status: Cancelled, .. } => "special",
+			Order { .. } => "other",
+		}
+	}
+
+	fn nested(o: Option[Order]) -> Int {
+		match o {
+			Some(Order { total, status: Paid, .. }) => total,
+			_ => 0,
+		}
+	}
+
+	fn cancelled(o: Order) -> Bool {
+		if o is (Order { status: Cancelled, .. }) { true } else { false }
+	}
+
+	fn either(o: Option[Order]) -> Bool {
+		o is None | Some(Order { status: Paid, .. })
+	}
+}

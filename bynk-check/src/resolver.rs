@@ -1643,6 +1643,16 @@ impl Gate<'_> {
                     }
                 }
             }
+            Pattern::Record {
+                type_name, fields, ..
+            } => {
+                self.name(type_name);
+                for (_, sub) in fields {
+                    if let Some(sub) = sub {
+                        self.pattern(sub);
+                    }
+                }
+            }
             Pattern::Refined { inner, .. } => self.pattern(inner),
             Pattern::Or(alts, _) => {
                 for a in alts {
@@ -3212,6 +3222,19 @@ fn collect_is_pattern_binding_names(pattern: &Pattern, into: &mut HashMap<String
             for b in bindings {
                 if let Pattern::Binding(name) = b.pattern() {
                     into.insert(name.name.clone(), ());
+                }
+            }
+        }
+        Pattern::Record { fields, .. } => {
+            for (name, sub) in fields {
+                match sub {
+                    None => {
+                        into.insert(name.name.clone(), ());
+                    }
+                    Some(Pattern::Binding(n)) => {
+                        into.insert(n.name.clone(), ());
+                    }
+                    Some(_) => {}
                 }
             }
         }

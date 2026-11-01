@@ -1,0 +1,26 @@
+commons demo
+
+type Status = enum { Open, Paid }
+type Order = { id: String, status: Status, total: Int }
+type Other = { id: String }
+
+fn mismatch(o: Order) -> Int {
+  match o {
+    Other { id, .. } => 1
+    _ => 2
+  }
+}
+
+fn refutable(o: Order) -> Int {
+  match o {
+    Order { status: Paid, total, .. } => total
+    Order { status: Open, .. } => 0
+  }
+}
+
+fn unreachable(o: Order) -> Int {
+  match o {
+    Order { total, .. } => total
+    Order { status: Paid, .. } => 1
+  }
+}
