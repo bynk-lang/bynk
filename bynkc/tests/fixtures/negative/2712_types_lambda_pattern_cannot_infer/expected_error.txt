@@ -1,0 +1,1 @@
+bynk.lambda.unannotated_param lambda parameter pattern `Box { .. }` needs its type arguments — no function type is expected here to infer them from

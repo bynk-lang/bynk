@@ -2834,16 +2834,12 @@ impl<'a> Formatter<'a> {
             }
             ExprKind::Block(b) => self.format_block_multiline(b),
             ExprKind::Lambda(lambda) => {
-                let params: Vec<String> = lambda
-                    .params
-                    .iter()
-                    .map(|p| match &p.type_ref {
-                        Some(tr) => format!("{}: {}", p.name.name, type_ref_to_string(tr)),
-                        None => p.name.name.clone(),
-                    })
-                    .collect();
+                let params: Vec<String> = lambda.params.iter().map(lambda_param_src).collect();
                 self.push(&format!("({}) => ", params.join(", ")));
-                self.format_expr_at(&lambda.body, 0, reserve);
+                match lambda_body_src(lambda) {
+                    LambdaBodySrc::Expr(body) => self.format_expr_at(body, 0, reserve),
+                    LambdaBodySrc::Block(block) => self.format_block_multiline(block),
+                }
             }
             // Single-argument wrappers: nothing to break at the wrapper itself,
             // so recurse and let the payload wrap inside the parentheses.
@@ -3589,17 +3585,13 @@ fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         ExprKind::Paren(inner) => format!("({})", expr_with_prec(inner, 0)),
         // v0.20a: a lambda prints as `(params) => body`.
         ExprKind::Lambda(lambda) => {
-            let params: Vec<String> = lambda
-                .params
-                .iter()
-                .map(|p| match &p.type_ref {
-                    Some(tr) => format!("{}: {}", p.name.name, type_ref_to_string(tr)),
-                    None => p.name.name.clone(),
-                })
-                .collect();
-            let body = match &lambda.body.kind {
-                ExprKind::Block(b) => format_block_oneline(b),
-                _ => expr_with_prec(&lambda.body, 0),
+            let params: Vec<String> = lambda.params.iter().map(lambda_param_src).collect();
+            let body = match lambda_body_src(lambda) {
+                LambdaBodySrc::Block(b) => format_block_oneline(b),
+                LambdaBodySrc::Expr(e) => match &e.kind {
+                    ExprKind::Block(b) => format_block_oneline(b),
+                    _ => expr_with_prec(e, 0),
+                },
             };
             format!("({}) => {}", params.join(", "), body)
         }
@@ -3937,6 +3929,51 @@ fn block_body_lines(b: &Block, out: &mut String) {
         out.push('\t');
         out.push_str(&expr_with_prec(&b.tail, 0));
         out.push('\n');
+    }
+}
+
+/// #2712: a lambda parameter as source — the author's record pattern when it
+/// has one (its hidden binder never prints), else the name and any annotation.
+fn lambda_param_src(p: &LambdaParam) -> String {
+    match (&p.pattern, &p.type_ref) {
+        (Some(pattern), _) => pattern_to_string(pattern),
+        (None, Some(tr)) => format!("{}: {}", p.name.name, type_ref_to_string(tr)),
+        (None, None) => p.name.name.clone(),
+    }
+}
+
+/// #2712: a lambda's body as the author wrote it.
+enum LambdaBodySrc<'a> {
+    Expr(&'a Expr),
+    Block(&'a Block),
+}
+
+/// #2712: the body a lambda with pattern parameters was written with. The
+/// parser wraps it, one level per pattern parameter (first outermost), in
+/// `{ let __letElse = __lambdaArg; match __letElse { P => { <rest> } } }`;
+/// this peels those back off. A lambda with no pattern parameter is untouched.
+fn lambda_body_src(lambda: &LambdaExpr) -> LambdaBodySrc<'_> {
+    let patterns = lambda.params.iter().filter(|p| p.pattern.is_some()).count();
+    if patterns == 0 {
+        return LambdaBodySrc::Expr(&lambda.body);
+    }
+    let ExprKind::Block(block) = &lambda.body.kind else {
+        return LambdaBodySrc::Expr(&lambda.body);
+    };
+    let mut block: &Block = block;
+    for _ in 0..patterns {
+        let ExprKind::Match { arms, .. } = &block.tail.kind else {
+            return LambdaBodySrc::Expr(&lambda.body);
+        };
+        let Some(MatchBody::Block(rest)) = arms.first().map(|a| &a.body) else {
+            return LambdaBodySrc::Expr(&lambda.body);
+        };
+        block = rest;
+    }
+    if lambda.block_body {
+        LambdaBodySrc::Block(block)
+    } else {
+        LambdaBodySrc::Expr(&block.tail)
     }
 }
 

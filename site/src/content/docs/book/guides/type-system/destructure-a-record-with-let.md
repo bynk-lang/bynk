@@ -76,6 +76,33 @@ fix that removes it.
 A `let` pattern carries no type annotation, and the pattern may be wrapped in
 parentheses (`let (Item { sku, .. }) = item`), though there is no need to.
 
+## Destructure a lambda's parameter
+
+A lambda parameter may be the same irrefutable pattern, which removes the
+throwaway name and the repeated `item.`:
+
+```bynk
+commons shop {
+  type Item = { sku: String, qty: Int, price: Int }
+
+  fn skus(items: List[Item]) -> List[String] {
+    items.map((Item { sku, .. }) => sku)
+  }
+
+  fn total(items: List[Item]) -> Int {
+    items.fold(0, (sum, Item { qty, price, .. }) => sum + qty * price)
+  }
+}
+```
+
+Name parameters and pattern parameters mix freely (`sum` above), and the pattern
+may nest. The parameter takes no annotation, because the type name already states
+the type; for a generic record the type arguments come from where the lambda is
+passed. A pattern that can fail (`status: Paid`) is
+`bynk.parse.lambda_pattern_refutable`: take a name and `match` in the body
+instead. Function and handler parameters stay plain names; start the body with a
+`let` pattern to destructure one.
+
 **See also:** [Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/),
 [Work with `Result` and optional values](/book/guides/type-system/result-and-optionals/#let-else),
 [Reference — Record patterns](/book/reference/types/#record-patterns).

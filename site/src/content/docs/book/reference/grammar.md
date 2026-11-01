@@ -1626,10 +1626,30 @@ wrapping the result in `Effect`).
 
 {{#grammar lambda_param}}
 
-One lambda parameter, with an optional type annotation.
+One lambda parameter: a name with an optional type annotation, or (#2712) an
+irrefutable [`record_pattern`](#rule-record_pattern) in the name's place,
+`(Item { qty, .. }) => qty`. A pattern parameter takes no annotation.
 
 **Static semantics.**
 {{#grammar-semantics lambda_param}}
+
+### lambda_record_pattern {#rule-_lambda_record_pattern}
+
+{{#grammar _lambda_record_pattern}}
+
+The record pattern a [`lambda_param`](#rule-lambda_param) admits: the type name,
+fields, and the required trailing `..` of a [`record_pattern`](#rule-record_pattern),
+with each field restricted to the forms that cannot fail (#2712).
+
+### lambda_record_field {#rule-_lambda_record_field}
+
+{{#grammar _lambda_record_field}}
+
+A field of a lambda parameter's record pattern: a bare name, `name: binding`,
+`name: _`, or a nested [lambda record pattern](#rule-_lambda_record_pattern). The
+grammar cannot see capitalisation, so a field naming a variant (`status: Paid`)
+parses here and is refused by the compiler
+(`bynk.parse.lambda_pattern_refutable`).
 
 ### list_literal {#rule-list_literal}
 

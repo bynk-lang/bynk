@@ -1,0 +1,1 @@
+bynk.parse.lambda_pattern_refutable a lambda parameter pattern must match every value of its type

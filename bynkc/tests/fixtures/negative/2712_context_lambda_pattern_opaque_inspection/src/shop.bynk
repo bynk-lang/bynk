@@ -1,0 +1,16 @@
+context shop
+
+// #2712: a record pattern reads the fields `.field` would, so an opaque export
+// refuses it as a lambda parameter too — at the pattern.
+consumes pay
+
+fn balances(accounts: List[Account]) -> List[Int] {
+  accounts.map((Account { balance, .. }) => balance)
+}
+
+service checkout {
+  on call() -> Effect[Int] {
+    let a <- pay.open()
+    Effect.pure(balances([a]).length())
+  }
+}

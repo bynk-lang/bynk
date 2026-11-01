@@ -962,7 +962,7 @@ fn check_generic_call(
         });
         let fully_annotated = matches!(
             &arg.kind,
-            ExprKind::Lambda(l) if l.params.iter().all(|p| p.type_ref.is_some())
+            ExprKind::Lambda(l) if l.params.iter().all(|p| lambda_param_is_typed(p, ctx))
         );
         if params_unconstrained && !fully_annotated {
             ctx.errors.push(
@@ -3164,7 +3164,7 @@ fn check_generic_method_call(
         });
         let fully_annotated = matches!(
             &arg.kind,
-            ExprKind::Lambda(l) if l.params.iter().all(|p| p.type_ref.is_some())
+            ExprKind::Lambda(l) if l.params.iter().all(|p| lambda_param_is_typed(p, ctx))
         );
         if params_unconstrained && !fully_annotated {
             ctx.errors.push(

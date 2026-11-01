@@ -1,0 +1,46 @@
+suite shop.orders {
+  case "map reads a field with no throwaway name" {
+    let a = Item { sku: "bolt", qty: 2, price: 5 }
+    let b = Item { sku: "nut", qty: 3, price: 1 }
+    expect skus([a, b]) == ["bolt", "nut"]
+  }
+
+  case "fold mixes a name and a pattern parameter" {
+    let a = Item { sku: "bolt", qty: 2, price: 5 }
+    let b = Item { sku: "nut", qty: 3, price: 1 }
+    expect total([a, b]) == 13
+  }
+
+  case "renamed and wildcard fields, with a block body" {
+    let a = Item { sku: "bolt", qty: 2, price: 5 }
+    let b = Item { sku: "nut", qty: 3, price: 1 }
+    expect lines([a, b]) == ["bolt x4", "nut x6"]
+  }
+
+  case "a nested record pattern filters" {
+    let ada = Customer { name: "Ada", vip: true }
+    let bob = Customer { name: "Bob", vip: false }
+    let orders = [
+      Order { id: "o1", customer: ada, total: 10 },
+      Order { id: "o2", customer: bob, total: 20 },
+    ]
+    expect vips(orders) == ["o1"]
+  }
+
+  case "a generic record is typed from the expected function type" {
+    expect unboxed([Box { value: 1, label: "x" }, Box { value: 2, label: "y" }]) == [2, 3]
+  }
+
+  case "two pattern parameters in one lambda" {
+    let a = Item { sku: "bolt", qty: 2, price: 5 }
+    let b = Item { sku: "nut", qty: 3, price: 1 }
+    let o = Order { id: "o", customer: Customer { name: "A", vip: false }, total: 100 }
+    expect pairUp([a], [o]) == 102
+  }
+
+  case "a held lambda with a pattern parameter" {
+    let a = Item { sku: "bolt", qty: 2, price: 5 }
+    let b = Item { sku: "nut", qty: 3, price: 1 }
+    expect held(a) == 10
+  }
+}

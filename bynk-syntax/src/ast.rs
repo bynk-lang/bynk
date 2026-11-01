@@ -2633,6 +2633,10 @@ pub struct LambdaExpr {
     pub params: Vec<LambdaParam>,
     pub body: Box<Expr>,
     pub span: Span,
+    /// #2712: whether the author wrote the body as a `{ … }` block. Only read
+    /// when a parameter is a pattern, whose desugaring wraps the body in a block
+    /// either way; the formatter needs the source form back.
+    pub block_body: bool,
 }
 
 /// A lambda parameter. A separate type from [`Param`] because its annotation
@@ -2642,7 +2646,20 @@ pub struct LambdaParam {
     pub name: Ident,
     pub type_ref: Option<TypeRef>,
     pub span: Span,
+    /// #2712: the irrefutable record pattern the author wrote in place of a name
+    /// — `(Item { qty, .. }) => …`. `name` is then the hidden
+    /// `__lambdaArg<offset>` (empty span, at the pattern), `type_ref` is `None`,
+    /// and the lambda's body is already desugared to
+    /// `{ let <pattern> = __lambdaArg<offset>; <body> }` through the `else`-less
+    /// `let` (ADR 0484, #2654). The pattern is kept here for the checker (the
+    /// parameter's type comes from its name) and to print the source form back.
+    pub pattern: Option<Pattern>,
 }
+
+/// #2712: the prefix of every hidden lambda-parameter binder. See
+/// [`LambdaParam::pattern`]; like [`LET_ELSE_BINDER_PREFIX`] it cannot collide
+/// with a user identifier.
+pub const LAMBDA_ARG_BINDER_PREFIX: &str = "__lambdaArg";
 
 #[derive(Debug, Clone)]
 pub struct FnDecl {
@@ -4342,6 +4359,7 @@ fn f(x: Int) -> Int {
                 params: _,
                 body,
                 span: _,
+                block_body: _,
             }) => out.push(("lambda.body", body)),
             ExprKind::BinOp(_, l, r) => {
                 out.push(("binop.left", l));

@@ -3,9 +3,9 @@
 - **Status:** Settled (#2637, merged 2026-11-01). Every question in §5 is
   closed; the maintainer confirmed the adopted answers on 2026-11-01. Q1 adopted
   open record patterns with a required `..`; Q8's tuple slice is dropped because
-  #2615 adopted the binding block. Slices 1–5 have shipped; slice 6
-  (lambda-parameter destructuring) is conditional, so the track moves to a
-  retirement review. Spine
+  #2615 adopted the binding block. Slices 1–6 have shipped (slice 6, lambda
+  parameters, was conditional and the maintainer asked for it, #2712), so the
+  track moves to its retirement review. Spine
   [#2616](https://github.com/bynk-lang/bynk/issues/2616).
 - **Realises:** the pattern grammar of `design/bynk-type-system.md` §2.3.4, and
   the next slice [ADR 0169](../decisions/0169-nested-payload-patterns-and-match-arm-guards.md)
@@ -311,7 +311,7 @@ context.
 - [x] Slice 3 — precise exhaustiveness (#2665)
 - [x] Slice 4 — list patterns (#2680)
 - [x] Slice 5 — range patterns (#2699, with events slice 4b #990)
-- [ ] Slice 6 — lambda-parameter destructuring (conditional)
+- [x] Slice 6 — lambda-parameter destructuring (#2712; was conditional, asked for by the maintainer)
 - Slice 7 — tuple patterns: **dropped** (#2615 adopted the binding block, not tuples)
 
 ## 10. Non-goals

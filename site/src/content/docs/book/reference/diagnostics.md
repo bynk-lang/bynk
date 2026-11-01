@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **685** codes in total.
+There are **688** codes in total.
 
 ## Agents
 
@@ -538,6 +538,9 @@ There are **685** codes in total.
 | `bynk.parse.generic_arg_count` | Wrong number of generic type arguments. | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
 | `bynk.parse.handler_in_agent` | A protocol handler (`on GET`/`schedule`/`message`) was declared in an agent. | [`handler`](/book/reference/grammar/#rule-handler) | — |
 | `bynk.parse.invariant_after_handler` | An `invariant` was declared after a handler; invariants precede handlers. |  | — |
+| `bynk.parse.lambda_pattern_annotation` | A lambda parameter with a record pattern carries a type annotation; the pattern's type name already gives the parameter's type. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
+| `bynk.parse.lambda_pattern_not_record` | A lambda parameter is a pattern other than a record pattern; only an irrefutable record pattern may stand in for a name. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
+| `bynk.parse.lambda_pattern_refutable` | A lambda parameter's record pattern can fail to match some value of its type, and a lambda has no `else` to fall back on. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
 | `bynk.parse.let_else_on_binding` | An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt), [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
 | `bynk.parse.let_pattern_annotation` | A `let` with a pattern carries a type annotation; the pattern's names take their types from the value. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
 | `bynk.parse.let_pattern_without_else` | A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |

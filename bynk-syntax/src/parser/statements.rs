@@ -4,6 +4,7 @@
 //! as ancestor privates via `self`.
 
 use super::*;
+use crate::error::Applicability;
 
 impl<'a> Parser<'a> {
     // -- function declarations --
@@ -841,20 +842,7 @@ impl<'a> Parser<'a> {
         let mut params = Vec::new();
         if self.peek_kind() != Some(TokenKind::RParen) {
             loop {
-                let name = self.expect_ident("as a lambda parameter name")?;
-                let mut p_span = name.span;
-                let type_ref = if self.eat(TokenKind::Colon).is_some() {
-                    let t = self.parse_type_ref("as the lambda parameter type")?;
-                    p_span = p_span.merge(t.span());
-                    Some(t)
-                } else {
-                    None
-                };
-                params.push(LambdaParam {
-                    name,
-                    type_ref,
-                    span: p_span,
-                });
+                params.push(self.parse_lambda_param()?);
                 if self.eat(TokenKind::Comma).is_none() {
                     break;
                 }
@@ -862,7 +850,8 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::RParen, "to close the lambda parameter list")?;
         self.expect(TokenKind::FatArrow, "after the lambda parameter list")?;
-        let body = if self.peek_kind() == Some(TokenKind::LBrace) {
+        let block_body = self.peek_kind() == Some(TokenKind::LBrace);
+        let body = if block_body {
             let block = self.parse_block("as the lambda body")?;
             let span = block.span;
             Expr {
@@ -874,15 +863,185 @@ impl<'a> Parser<'a> {
             self.parse_expr()?
         };
         let span = open.span.merge(body.span);
+        let body = self.desugar_lambda_patterns(&params, body);
         Ok(Expr {
             id: self.alloc_expr_id(),
             kind: ExprKind::Lambda(LambdaExpr {
                 params,
                 body: Box::new(body),
                 span,
+                block_body,
             }),
             span,
         })
+    }
+
+    /// One lambda parameter: a name with an optional annotation, or (#2712) an
+    /// irrefutable record pattern, `Item { qty, .. }`, which takes no annotation.
+    fn parse_lambda_param(&mut self) -> Result<LambdaParam, CompileError> {
+        let at = |k: usize| self.tokens.get(self.pos + k).map(|t| t.kind);
+        let capitalised = self.tokens.get(self.pos).is_some_and(|t| {
+            self.slice(t.span)
+                .starts_with(|c: char| c.is_ascii_uppercase())
+        });
+        let is_pattern = match at(0) {
+            Some(
+                TokenKind::Ok
+                | TokenKind::Err
+                | TokenKind::Some
+                | TokenKind::None
+                | TokenKind::IntLit
+                | TokenKind::StrLit
+                | TokenKind::True
+                | TokenKind::False
+                | TokenKind::LBracket
+                | TokenKind::DotDot,
+            ) => true,
+            Some(TokenKind::Minus) => at(1) == Some(TokenKind::IntLit),
+            Some(TokenKind::Ident) => {
+                matches!(at(1), Some(TokenKind::LParen | TokenKind::Dot))
+                    || (at(1) == Some(TokenKind::LBrace) && capitalised)
+            }
+            _ => false,
+        };
+        if !is_pattern {
+            let name = self.expect_ident("as a lambda parameter name")?;
+            let mut p_span = name.span;
+            let type_ref = if self.eat(TokenKind::Colon).is_some() {
+                let t = self.parse_type_ref("as the lambda parameter type")?;
+                p_span = p_span.merge(t.span());
+                Some(t)
+            } else {
+                None
+            };
+            return Ok(LambdaParam {
+                name,
+                type_ref,
+                span: p_span,
+                pattern: None,
+            });
+        }
+        let pattern = self.parse_pattern()?;
+        if !matches!(pattern, Pattern::Record { .. }) {
+            return Err(CompileError::new(
+                "bynk.parse.lambda_pattern_not_record",
+                pattern.span(),
+                "a lambda parameter pattern must be a record pattern",
+            )
+            .with_note(
+                "only `TypeName { field, .. }` can be a lambda parameter; take a name and `match` on it in the body for any other pattern",
+            ));
+        }
+        if !pattern.is_irrefutable() {
+            let mut err = CompileError::new(
+                "bynk.parse.lambda_pattern_refutable",
+                pattern.span(),
+                "a lambda parameter pattern must match every value of its type",
+            );
+            if let Some(field) = first_refutable_field(&pattern) {
+                err = err.with_note(format!(
+                    "`{}` can fail to match, so the pattern does not cover every value",
+                    self.slice(field)
+                ));
+            }
+            return Err(err.with_note(
+                "take a name for the parameter and `match` on it in the body to handle the other cases",
+            ));
+        }
+        if self.peek_kind() == Some(TokenKind::Colon) {
+            let colon = self.peek().unwrap().span;
+            self.bump();
+            let annotation = self.parse_type_ref("as the lambda parameter type");
+            let mut err = CompileError::new(
+                "bynk.parse.lambda_pattern_annotation",
+                colon,
+                "a lambda parameter with a pattern cannot carry a type annotation",
+            )
+            .with_note(
+                "the pattern's type name already says the parameter's type; its names take their types from that record",
+            );
+            if let Ok(t) = annotation {
+                err = err.with_suggestion(
+                    "remove the annotation",
+                    vec![(
+                        Span::new_in(colon.file, pattern.span().end, t.span().end),
+                        String::new(),
+                    )],
+                    Applicability::MachineApplicable,
+                );
+            }
+            return Err(err);
+        }
+        let span = pattern.span();
+        let at_pattern = Span::new_in(span.file, span.start, span.start);
+        Ok(LambdaParam {
+            name: Ident {
+                name: format!("{LAMBDA_ARG_BINDER_PREFIX}{}", span.start),
+                span: at_pattern,
+            },
+            type_ref: None,
+            span,
+            pattern: Some(pattern),
+        })
+    }
+
+    /// #2712: `(P) => body` is `(__lambdaArg<offset>) => { let P = __lambdaArg<offset>; body }`,
+    /// the `let` being #2654's `else`-less destructuring (so the same hidden
+    /// `let … else` binder and one-arm `match`). Parameters desugar last to
+    /// first so the first pattern's `let` is outermost. The binders' spans are
+    /// empty, at the pattern, so no editor surface lands on a name the author
+    /// never wrote.
+    fn desugar_lambda_patterns(&mut self, params: &[LambdaParam], body: Expr) -> Expr {
+        if params.iter().all(|p| p.pattern.is_none()) {
+            return body;
+        }
+        let mut rest = match body.kind {
+            ExprKind::Block(b) => b,
+            _ => Block {
+                span: body.span,
+                statements: Vec::new(),
+                tail: Box::new(body),
+                tail_leading_comments: Vec::new(),
+                implicit_tail: false,
+            },
+        };
+        for p in params.iter().rev() {
+            let Some(pattern) = &p.pattern else { continue };
+            let at = p.name.span;
+            let value = Expr {
+                id: self.alloc_expr_id(),
+                kind: ExprKind::Ident(p.name.clone()),
+                span: at,
+            };
+            let parts = LetElseParts {
+                kw: at,
+                pattern: pattern.clone(),
+                value,
+                effectful: false,
+                principal: None,
+                else_span: Span::new_in(at.file, p.span.end, p.span.end),
+                remove_else: Vec::new(),
+                otherwise: None,
+                span: p.span,
+                leading: Vec::new(),
+                trailing: None,
+            };
+            let span = rest.span;
+            let (binding, tail) = self.desugar_let_else(parts, rest);
+            rest = Block {
+                statements: vec![binding],
+                tail: Box::new(tail),
+                span,
+                tail_leading_comments: Vec::new(),
+                implicit_tail: false,
+            };
+        }
+        let span = rest.span;
+        Expr {
+            id: self.alloc_expr_id(),
+            kind: ExprKind::Block(rest),
+            span,
+        }
     }
 }
 

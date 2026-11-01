@@ -1,0 +1,10 @@
+commons demo
+
+type Status = enum { Pending, Paid }
+type Item = { sku: String, qty: Int, status: Status }
+type Other = { sku: String, qty: Int }
+type Box[T] = { value: T }
+
+fn skus(items: List[Item]) -> List[String] {
+  items.map((Item { sku, .. }: Item) => sku)
+}

@@ -636,6 +636,55 @@ fn record_construction_receiver(line: &str) -> Option<String> {
     }
 }
 
+/// #2712: `head` (the text before a record type name) ends inside a lambda's
+/// parameter list — `items.map((`, `items.fold(0, (total, ` — so a record type
+/// name there opens a pattern parameter. The lambda's `(` must itself be a call
+/// argument (preceded by `(` or `,`), which keeps a parenthesised record
+/// construction (`let o = (Order {`) out; the parameters before the cursor must
+/// each be a name or a braced pattern.
+fn lambda_param_position(head: &str) -> bool {
+    let mut depth = 0i32;
+    let mut open = None;
+    for (i, c) in head.char_indices().rev() {
+        match c {
+            ')' => depth += 1,
+            '(' if depth == 0 => {
+                open = Some(i);
+                break;
+            }
+            '(' => depth -= 1,
+            _ => {}
+        }
+    }
+    let Some(open) = open else { return false };
+    let before = head[..open].trim_end();
+    if !(before.ends_with('(') || before.ends_with(',')) {
+        return false;
+    }
+    let mut segments = Vec::new();
+    let mut depth = 0i32;
+    let mut segment = String::new();
+    for c in head[open + 1..].chars() {
+        match c {
+            '(' | '{' | '[' => depth += 1,
+            ')' | '}' | ']' => depth -= 1,
+            ',' if depth == 0 => {
+                segments.push(std::mem::take(&mut segment));
+                continue;
+            }
+            _ => {}
+        }
+        segment.push(c);
+    }
+    let current = segment.trim().is_empty();
+    current
+        && segments.iter().all(|seg| {
+            let seg = seg.trim();
+            seg.ends_with('}')
+                || (!seg.is_empty() && seg.chars().all(|c| c.is_alphanumeric() || c == '_'))
+        })
+}
+
 /// #2641: the cursor is at a field-name position of a record *pattern* —
 /// `Type { <cursor>` where the text before `Type` is only pattern syntax (a
 /// match arm's start, `Some(`, `is (`, `let `, `field: `, `|`), never an
@@ -675,7 +724,7 @@ fn record_pattern_receiver(line: &str) -> Option<(String, Vec<String>)> {
             break;
         }
     }
-    if !rest.trim().is_empty() {
+    if !rest.trim().is_empty() && !lambda_param_position(head) {
         return None;
     }
     // The fields already listed at this brace's top level.
@@ -3661,6 +3710,11 @@ mod tests {
             "  let Order { id, ",
             "  let (Order { ",
             "  let Some(Order { ",
+            // #2712: a lambda's pattern parameter, first or after other parameters.
+            "  items.map((Order { ",
+            "  items.map((Order { id, ",
+            "  items.fold(0, (total, Order { ",
+            "  items.fold(0, (total, Order { id, ",
         ] {
             let got = labels(prefix, doc);
             assert!(got.contains(&"..".to_string()), "{prefix}: {got:?}");
@@ -3684,6 +3738,14 @@ mod tests {
         assert!(!got.contains(&"..".to_string()), "{got:?}");
         let got = labels("  let Order { id, ", doc);
         assert!(!got.contains(&"id".to_string()), "{got:?}");
+        // #2712: a call-argument construction is still a construction, and so is
+        // a record type after something that is not a parameter list.
+        let got = labels("  items.map(Order { ", doc);
+        assert!(!got.contains(&"..".to_string()), "{got:?}");
+        let got = labels("  items.fold(0, f(1, Order { ", doc);
+        assert!(!got.contains(&"..".to_string()), "{got:?}");
+        let got = labels("  let o = (Order { ", doc);
+        assert!(!got.contains(&"..".to_string()), "{got:?}");
     }
 
     #[test]

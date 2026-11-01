@@ -1,0 +1,14 @@
+commons demo
+
+type Status = enum { Pending, Paid }
+type Item = { sku: String, qty: Int, status: Status }
+type Other = { sku: String, qty: Int }
+type Box[T] = { value: T }
+
+fn wrongRecord(xs: List[Other]) -> List[Int] {
+  xs.map((Item { qty, .. }) => qty)
+}
+
+fn notARecord(xs: List[Int]) -> List[Int] {
+  xs.map((Item { qty, .. }) => qty)
+}

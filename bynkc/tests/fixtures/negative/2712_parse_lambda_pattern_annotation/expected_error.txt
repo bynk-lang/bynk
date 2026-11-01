@@ -1,0 +1,1 @@
+bynk.parse.lambda_pattern_annotation a lambda parameter with a pattern cannot carry a type annotation

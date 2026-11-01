@@ -1,0 +1,1 @@
+bynk.parse.lambda_pattern_not_record a lambda parameter pattern must be a record pattern

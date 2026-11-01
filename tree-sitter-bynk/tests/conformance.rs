@@ -633,6 +633,59 @@ const CASES: &[Case] = &[
         body: "fn f(r: Result[Int, String]) -> Int { let (Ok(n)) = r\n n }",
         accept: false,
     },
+    // -- #2712 record patterns as lambda parameters (patterns track, slice 6): a
+    //    record pattern in a parameter list. The grammar admits only binding
+    //    fields; a bare capitalised name (a variant) is the compiler's to refuse. --
+    Case {
+        what: "a lambda with one record pattern parameter",
+        body: "type I = { a: Int }\nfn f(xs: List[I]) -> List[Int] { xs.map((I { a, .. }) => a) }",
+        accept: true,
+    },
+    Case {
+        what: "a lambda mixing name and record pattern parameters",
+        body: "type I = { a: Int, b: Int }\nfn f(xs: List[I]) -> Int { xs.fold(0, (acc, I { a, b: n, .. }) => acc + a + n) }",
+        accept: true,
+    },
+    Case {
+        what: "a lambda with a nested record pattern parameter and a wildcard field",
+        body: "type J = { x: Int }\ntype I = { j: J, k: Int }\nfn f(xs: List[I]) -> List[Int] { xs.map((I { j: J { x, .. }, k: _, .. }) => x) }",
+        accept: true,
+    },
+    Case {
+        what: "a lambda with a record pattern parameter and a block body",
+        body: "type I = { a: Int }\nfn f(xs: List[I]) -> List[Int] { xs.map((I { a, .. }) => { let b = a\n b }) }",
+        accept: true,
+    },
+    Case {
+        what: "a lambda record pattern parameter without the trailing ..",
+        body: "type I = { a: Int }\nfn f(xs: List[I]) -> List[Int] { xs.map((I { a }) => a) }",
+        accept: false,
+    },
+    Case {
+        what: "a lambda record pattern parameter with a type annotation",
+        body: "type I = { a: Int }\nfn f(xs: List[I]) -> List[Int] { xs.map((I { a, .. }: I) => a) }",
+        accept: false,
+    },
+    Case {
+        what: "a lambda variant pattern parameter",
+        body: "fn f(xs: List[Option[Int]]) -> List[Int] { xs.map((Some(n)) => n) }",
+        accept: false,
+    },
+    Case {
+        what: "a lambda list pattern parameter",
+        body: "fn f(xs: List[List[Int]]) -> List[Int] { xs.map(([a, ..]) => a) }",
+        accept: false,
+    },
+    Case {
+        what: "a lambda literal pattern parameter",
+        body: "fn f(xs: List[Int]) -> List[Int] { xs.map((1) => 2) }",
+        accept: false,
+    },
+    Case {
+        what: "a parenthesised record construction is still an expression",
+        body: "type I = { a: Int }\nfn f(n: Int) -> I { (I { a: n }) }",
+        accept: true,
+    },
     Case {
         what: "a plain let of a capitalised name is still a binding",
         body: "fn f(i: Int) -> Int { let Total = i\n Total }",
@@ -889,13 +942,22 @@ const EXCLUDED_PARSE_TIME_CATEGORIES: &[(&str, &str)] = &[
 /// Negative fixtures whose parse-time rejection depends on something a
 /// context-free grammar cannot see, named by directory so the rest of their
 /// category stays checked. Dropping an entry is a visible, deliberate act.
-const EXCLUDED_PARSE_TIME_FIXTURES: &[(&str, &str)] = &[(
-    "2654_parse_let_record_pattern_without_else",
-    "inexpressible: whether a record pattern's field is a binding (irrefutable) \
-     or a variant (refutable) is a matter of capitalisation, which the \
-     tree-sitter grammar's single `identifier` token cannot see; the \
-     `else`-less `let` is accepted for any record pattern there (#2654)",
-)];
+const EXCLUDED_PARSE_TIME_FIXTURES: &[(&str, &str)] = &[
+    (
+        "2654_parse_let_record_pattern_without_else",
+        "inexpressible: whether a record pattern's field is a binding (irrefutable) \
+         or a variant (refutable) is a matter of capitalisation, which the \
+         tree-sitter grammar's single `identifier` token cannot see; the \
+         `else`-less `let` is accepted for any record pattern there (#2654)",
+    ),
+    (
+        "2712_parse_lambda_pattern_refutable",
+        "inexpressible: a lambda parameter's field `status: Paid` is a variant \
+         (refutable) only by its capitalisation, which the tree-sitter grammar's \
+         single `identifier` token cannot see, so a record pattern parameter is \
+         accepted there whatever its fields are called (#2712)",
+    ),
+];
 
 #[test]
 fn totality_parse_error_negative_fixtures_rejected_by_both_parsers() {

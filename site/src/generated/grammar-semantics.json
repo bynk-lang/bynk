@@ -874,6 +874,20 @@
       "summary": "A lambda's parameter count, parameter annotations, or body type do not match the expected function type."
     }
   ],
+  "lambda_param": [
+    {
+      "code": "bynk.parse.lambda_pattern_annotation",
+      "summary": "A lambda parameter with a record pattern carries a type annotation; the pattern's type name already gives the parameter's type."
+    },
+    {
+      "code": "bynk.parse.lambda_pattern_not_record",
+      "summary": "A lambda parameter is a pattern other than a record pattern; only an irrefutable record pattern may stand in for a name."
+    },
+    {
+      "code": "bynk.parse.lambda_pattern_refutable",
+      "summary": "A lambda parameter's record pattern can fail to match some value of its type, and a lambda has no `else` to fall back on."
+    }
+  ],
   "let_else_stmt": [
     {
       "code": "bynk.parse.let_pattern_annotation",

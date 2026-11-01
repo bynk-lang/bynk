@@ -494,7 +494,12 @@ The `self` receiver of a method or handler.
 
 {{#grammar param}}
 
-One parameter: an identifier, `:`, and a type. Well-formedness: §5.
+One parameter: an identifier, `:`, and a type. Well-formedness: §5. A function,
+method or handler parameter is always a name: destructuring a record in a
+signature is a non-goal of the patterns track (it would put patterns into
+signatures, hover, signature help and the cross-context contract). Only a lambda
+parameter may be a record pattern (§4.6.9b); to destructure a `fn` parameter,
+write a `let` pattern as the first statement of the body.
 
 ### §4.3.6 capability_decl
 
@@ -1013,8 +1018,27 @@ arrow, shared with `match` arms — `->` stays the type arrow. Well-formedness
 
 {{#grammar lambda_param}}
 
-One lambda parameter with an optional type annotation — optional because an
-expected function type supplies it; required in unconstrained positions (§5).
+One lambda parameter: a name with an optional type annotation — optional because
+an expected function type supplies it; required in unconstrained positions (§5) —
+or, in the name's place, an **irrefutable record pattern** (#2712, patterns track
+slice 6), `(Item { qty, .. }) => qty`:
+
+{{#grammar _lambda_record_pattern}}
+
+{{#grammar _lambda_record_field}}
+
+A record pattern is irrefutable when every field is a bare name, `f: name`,
+`f: _`, or a nested irrefutable record pattern; a refutable one is
+`bynk.parse.lambda_pattern_refutable`, which names the first field that can fail,
+and any other pattern (`Some(x)`, `[x, ..]`, `0..9`, a literal) is
+`bynk.parse.lambda_pattern_not_record`. A pattern parameter carries no annotation
+(`bynk.parse.lambda_pattern_annotation`): the type name states the type. Name and
+pattern parameters mix freely, and a pattern counts as one parameter.
+
+The parser desugars `(P) => body` to
+`(__lambdaArg<offset>) => { let P = __lambdaArg<offset>; body }`, the `let` being
+the `else`-less destructuring of §4.8.4a. The hidden parameter has an empty span
+at the pattern and is never printed or named.
 
 ### §4.6.10 call
 

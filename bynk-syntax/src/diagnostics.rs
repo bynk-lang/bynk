@@ -1803,6 +1803,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `invariant` was declared after a handler; invariants precede handlers.",
     ),
     dg(
+        "bynk.parse.lambda_pattern_annotation",
+        "A lambda parameter with a record pattern carries a type annotation; the pattern's type name already gives the parameter's type.",
+        &["lambda_param"],
+    ),
+    dg(
+        "bynk.parse.lambda_pattern_not_record",
+        "A lambda parameter is a pattern other than a record pattern; only an irrefutable record pattern may stand in for a name.",
+        &["lambda_param"],
+    ),
+    dg(
+        "bynk.parse.lambda_pattern_refutable",
+        "A lambda parameter's record pattern can fail to match some value of its type, and a lambda has no `else` to fall back on.",
+        &["lambda_param"],
+    ),
+    dg(
         "bynk.parse.let_else_on_binding",
         "An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run.",
         &["let_stmt", "effect_let_stmt"],
