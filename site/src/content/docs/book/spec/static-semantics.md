@@ -1094,8 +1094,8 @@ operation of the same capability is unaffected.
 
 ## §5.6 Pattern matching
 
-A `match` MUST be **exhaustive** — every variant of the scrutinised sum,
-`Result`, or `Option` covered (`bynk.types.non_exhaustive_match`) — and its
+A `match` MUST be **exhaustive** — every value of the scrutinee covered by some
+unguarded arm (`bynk.types.non_exhaustive_match`) — and its
 scrutinee MUST be a sum type, a primitive, or a record matched by record
 patterns (`bynk.types.match_non_sum_discriminant`). Its arms
 MUST **join** to a common result type — their least upper bound, so a refined
@@ -1105,6 +1105,40 @@ variant (`bynk.types.duplicate_variant_arm`), and MUST NOT be unreachable
 (`bynk.types.unreachable_arm`): every arm MUST match some value that no earlier
 unguarded arm matches. A guarded arm or a refined pattern (`n where P`) never
 covers a later arm, since its guard or predicate may fail.
+
+**Coverage is usefulness** (patterns track, slice 3, #2665). Both rules are one
+question about a matrix whose rows are the earlier unguarded arms' patterns. A
+pattern is *useful* after those rows when it matches some value none of them
+does; a `match` is exhaustive exactly when `_` is not useful after all of its
+unguarded arms, and an arm is unreachable exactly when its pattern is not useful
+after the unguarded arms before it. The values a type has are its constructors:
+
+- a sum, `Result` or `Option` has its declared variants, whose payload fields are
+  its columns in declared order (named and positional bindings are the same
+  columns);
+- a record has one constructor whose columns are all its fields in declared
+  order, and a field a record pattern does not list matches anything;
+- `Bool` has `true` and `false`;
+- `Int` and `String` have a literal for every value, so no finite set of literals
+  is complete and only an irrefutable pattern covers them; a refined type has
+  its base's constructors, and an opaque type has no patterns.
+
+An or-pattern, at any depth, stands for each of its alternatives. A guarded arm
+contributes no row. A refined pattern contributes no row, and as the arm under
+test it is tested as the pattern it refines. So `Pair(true, _)`,
+`Pair(false, true)` and `Pair(false, false)` cover a `Pair(Bool, Bool)` with no
+wildcard, and the arms of `Order { status: Paid, .. }`, `Order { status: Pending, .. }`
+and `Order { status: Cancelled, .. }` cover an `Order` between them, after which
+an `Order { total, .. }` arm is `bynk.types.unreachable_arm`. Redundancy may be
+spread across several earlier arms.
+
+Each value no arm covers is reported as a pattern that can be written as an arm:
+`Pair(false, false)`, `Order { status: Cancelled, .. }`, or `_` for an unbounded
+type, with `_` standing for a field the uncovered values leave unconstrained. At
+most eight are reported for one `match`, followed by a count of the rest. A
+checker MAY bound the work it does: when a `match` is too complex to decide, it
+MUST report `bynk.types.non_exhaustive_match` (asking for a wildcard arm) rather
+than accept it, and MUST NOT report an arm unreachable.
 
 **Extensible enums** (standard-library S3, #1963). A standard-library enum
 marked extensible in the first-party registry (`FetchError`, `Method`) may gain
@@ -1135,12 +1169,8 @@ In `T { f, g: p, .. }`:
   NOT name a type the unit may not inspect, such as another context's
   `exports opaque` type (`bynk.context.opaque_inspection`, reported at the
   pattern).
-- **Coverage is conservative.** A record pattern covers its type only when every
-  field sub-pattern is irrefutable (a name or `_`); otherwise it is partial,
-  and a later irrefutable arm is needed for the `match` to be exhaustive
-  (`bynk.types.non_exhaustive_match`). An arm is `bynk.types.unreachable_arm`
-  when an earlier unguarded arm's record pattern is no more specific on any
-  field. Precise multi-field coverage is a later increment.
+- **Coverage is precise.** A record pattern is one constructor over the record's
+  fields, so several arms cover a record between them, as stated above.
 - After `is`, the names bound by a record pattern in scope are its flat fields:
   bare `f` and `f: name`, like a variant's flat payload bindings.
 

@@ -1,0 +1,10 @@
+commons demo
+
+type Pair = | Pair(left: Bool, right: Bool)
+
+fn name(p: Pair) -> String {
+  match p {
+    Pair(true, _) => "left"
+    Pair(false, true) => "right"
+  }
+}

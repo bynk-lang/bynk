@@ -15,9 +15,10 @@
 //!
 //! The action is offered only when **every** witness of the match has a
 //! suggestion. A result type with no default (a record, a user sum, a refined
-//! type), a `let … else match`, or a multi-field witness the checker can't
-//! write as a pattern means no action. Filling only some of the arms would
-//! still leave the match non-exhaustive.
+//! type) or a `let … else match` means no action, and so does a match with more
+//! missing cases than the checker lists (it reports the first eight and a count,
+//! with no suggestions). Filling only some of the arms would still leave the
+//! match non-exhaustive.
 //!
 //! Fill-arms rides the unfiltered lightbulb request, so it's listed without
 //! an edit (`data` names the match) and the edit is computed, and re-checked

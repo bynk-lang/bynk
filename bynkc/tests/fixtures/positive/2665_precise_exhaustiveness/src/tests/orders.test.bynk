@@ -1,0 +1,26 @@
+suite shop.orders {
+  case "a multi-field payload is exhaustive with no wildcard" {
+    expect pairName(Pair(true, true)) == "left"
+    expect pairName(Pair(true, false)) == "left"
+    expect pairName(Pair(false, true)) == "right"
+    expect pairName(Pair(false, false)) == "neither"
+  }
+
+  case "a record is exhaustive over a field's variants" {
+    expect statusCode(Order { id: "a", status: Paid, total: 1 }) == 1
+    expect statusCode(Order { id: "a", status: Pending, total: 1 }) == 2
+    expect statusCode(Order { id: "a", status: Cancelled, total: 1 }) == 3
+  }
+
+  case "a literal field of a multi-field payload" {
+    expect area(Circle(2)) == 12
+    expect area(Rect(0, 5)) == 0
+    expect area(Rect(3, 4)) == 12
+  }
+
+  case "a record inside a variant payload" {
+    expect billed(Some(Order { id: "a", status: Paid, total: 9 })) == 9
+    expect billed(Some(Order { id: "a", status: Pending, total: 9 })) == 0
+    expect billed(None) == 0
+  }
+}

@@ -752,6 +752,44 @@ A narrower arm may precede a wider one (`Some(Red)` then `Some(_)`), and a
 guarded arm never counts as covering, because its guard may fail. So an
 unguarded arm with the same pattern can always follow it.
 
+### Exhaustiveness and reachability
+
+Both checks are one rule (patterns track, slice 3, #2665): an arm is reachable
+when it matches some value the unguarded arms before it do not, and a `match` is
+exhaustive when nothing is left over. It applies at any depth, so a payload with
+several fields, a record, or a nested pattern needs no wildcard once its arms
+cover every case:
+
+```bynk,fragment
+match pair {
+  Pair(true, _) => "left"
+  Pair(false, true) => "right"
+  Pair(false, false) => "neither"
+}
+```
+
+```bynk,fragment
+match order {
+  Order { status: Paid, .. } => 1
+  Order { status: Pending, .. } => 2
+  Order { status: Cancelled, .. } => 3
+  Order { total, .. } => total   // bynk.types.unreachable_arm
+}
+```
+
+Redundancy is found across several earlier arms, not only one at a time. A
+guarded arm, and a refined pattern (`_ where …`), cover nothing, because the
+guard or predicate may fail. `Int` and `String` literals never complete their
+type, so those matches end in `_` or a name.
+
+A missing case is reported as a pattern you can paste as an arm:
+`variant Pair(false, false) of Pair is not covered`, or
+`Order { status: Cancelled, .. } is not covered`, where `_` stands for a field the
+missing values leave open. The editor's *add missing arms* fix inserts every
+reported pattern. At most eight are reported at once, with a count of the rest. A
+`match` too tangled to decide within the compiler's step budget is reported as
+non-exhaustive, with a note asking for a `_` arm; it is never accepted unproved.
+
 ### Record patterns
 
 A record is matched by its fields with a record pattern, `TypeName { f1, f2: pattern, .. }`
@@ -787,10 +825,10 @@ if o is (Order { status: Cancelled, .. }) { "cancelled" } else { "live" }
   taken from the matched value and are never written.
 - A record pattern reads fields as `.field` does, so it is refused on another
   context's `exports opaque` type (`bynk.context.opaque_inspection`).
-- **Exhaustiveness is conservative.** A record pattern covers its type only when
-  every field is matched by a name or `_`; one with a literal or variant field
-  is partial, so end the `match` with a `_` arm. Precise coverage across several
-  arms is a later increment.
+- **Exhaustiveness is precise.** Arms cover a record between them, so a `match`
+  on `Order { status: Paid, .. }`, `Order { status: Pending, .. }` and
+  `Order { status: Cancelled, .. }` needs no `_` arm. See
+  [Exhaustiveness and reachability](#exhaustiveness-and-reachability).
 
 A record pattern also destructures in a `let` (#2654):
 

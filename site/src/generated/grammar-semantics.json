@@ -901,7 +901,7 @@
     },
     {
       "code": "bynk.types.non_exhaustive_match",
-      "summary": "A `match` does not cover every variant."
+      "summary": "A `match` does not cover every value."
     }
   ],
   "method_call": [
