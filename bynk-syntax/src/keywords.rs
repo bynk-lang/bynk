@@ -342,6 +342,21 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
     ),
 ];
 
+/// #2620: ambient built-in functions — bare calls the compiler knows without a
+/// declaration. Not keywords: a `fn` (or any binding) of the same name shadows
+/// them, as `Json` is shadowed. Both have the bottom type, so a call fits any
+/// position, and both fault when evaluated. Keep it sorted.
+pub const BUILTIN_FUNCTIONS: &[KeywordInfo] = &[
+    k(
+        "todo",
+        "Placeholder for unfinished code, `todo(message: String)`: type-checks anywhere, faults when run, and raises the `bynk.fault.todo` warning so `check --deny-warnings` can refuse it.",
+    ),
+    k(
+        "unreachable",
+        "Mark a case that cannot happen, `unreachable(message: String)`: type-checks anywhere and faults when evaluated, so a broken assumption is loud instead of masked by a made-up default.",
+    ),
+];
+
 /// True when `name` is a compiler-known [built-in type name](BUILTIN_TYPE_NAMES).
 /// Used by the resolver to reject `type <name> = …` redeclarations.
 pub fn is_builtin_type_name(name: &str) -> bool {
@@ -367,7 +382,8 @@ pub fn render_markdown() -> String {
         "Bynk reserves names in four tiers. The first two are lexer keywords; the \
          third are words the lexer treats as plain identifiers; the fourth are \
          compiler-known type names. Only the **hard keywords** can never be used \
-         as an identifier.\n\n",
+         as an identifier. A last section lists the ambient built-in functions, \
+         which reserve nothing.\n\n",
     );
 
     // Tier 1 — hard keywords: every reserved token except the contextual ones.
@@ -427,6 +443,18 @@ pub fn render_markdown() -> String {
     );
     out.push_str("| Name | Meaning |\n|---|---|\n");
     for info in BUILTIN_TYPE_NAMES {
+        out.push_str(&format!("| `{}` | {} |\n", info.word, info.meaning));
+    }
+
+    // Ambient built-in functions: not reserved at all — a declaration of the
+    // same name shadows them.
+    out.push_str("\n## Built-in functions\n\n");
+    out.push_str(
+        "Functions the compiler provides without a declaration. They reserve \
+         nothing: a `fn`, parameter or local of the same name shadows the built-in.\n\n",
+    );
+    out.push_str("| Name | Meaning |\n|---|---|\n");
+    for info in BUILTIN_FUNCTIONS {
         out.push_str(&format!("| `{}` | {} |\n", info.word, info.meaning));
     }
     out

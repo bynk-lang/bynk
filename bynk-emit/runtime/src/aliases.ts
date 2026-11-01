@@ -8,7 +8,7 @@ import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispat
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { boundaryError, callService, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
-import { invariantViolation } from "./errors.ts";
+import { fault, invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, noStore, notModifiedIfMatch, renderRejection, requestHeaderPairs, requestHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter } from "./storage.ts";
@@ -35,6 +35,7 @@ export {
   edgeCacheGuard as __edgeCacheGuard,
   encodeAgentResult as __encodeAgentResult,
   faultResponse as __faultResponse,
+  fault as __fault,
   formatIcuDate as __formatIcuDate,
   formatIcuNumber as __formatIcuNumber,
   headResponse as __headResponse,

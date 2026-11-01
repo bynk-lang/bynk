@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **700** codes in total.
+There are **701** codes in total.
 
 ## Agents
 
@@ -350,6 +350,7 @@ There are **700** codes in total.
 | `bynk.event.unknown_annotation` | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
 | `bynk.event.unknown_subscription` | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
 | `bynk.exec.unavailable` | A call to, or reference to, a function that hands work to the execution context (`~>`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
+| `bynk.fault.todo` | A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning). |  | Warning |
 | `bynk.fmt.comment_loss` | The formatter would drop a comment, so it leaves the file unchanged. |  | — |
 | `bynk.fmt.mixed_comment_syntax` | A file mixes the retired `--` comment or `--|` doc spellings with a line that reads differently under the old and new comment rules (#2203), so the formatter leaves it unchanged. |  | — |
 | `bynk.fmt.roundtrip` | The formatter's output does not re-parse to the same program, so it leaves the file unchanged. |  | — |

@@ -47,5 +47,22 @@ export function invariantViolation(
   return e;
 }
 
+// #2620: a deliberate fault — `unreachable(msg)` / `todo(msg)`. Like
+// `invariantViolation` it rides the uncaught-fault channel, so a handler that
+// reaches one faults and the agent commit never happens (ADR 0109); the caller
+// observes a fault, not an outcome. `kind` and `location` ride on the thrown
+// error for the logged fault. Returns `never`, so it is an expression of any type.
+export interface Fault {
+  readonly kind: "Unreachable" | "Todo";
+  readonly message: string;
+  readonly location: string;
+}
+
+export function fault(kind: "Unreachable" | "Todo", message: string, location: string): never {
+  const e = new Error(`${kind}: ${message} (${location})`);
+  (e as { fault?: Fault }).fault = { kind, message, location };
+  throw e;
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { invariantViolation as __invariantViolation };
+export { fault as __fault, invariantViolation as __invariantViolation };

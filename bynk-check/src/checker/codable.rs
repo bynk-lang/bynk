@@ -48,7 +48,7 @@ pub(crate) fn json_codable(
         // R4.3: an already-diagnosed type doesn't also earn a
         // `bynk.types.json_uncodable` diagnostic — the resolution failure was
         // reported once, at its own site.
-        Ty::Error => true,
+        Ty::Error | Ty::Never => true,
         // K-streams (#2623): a record or sum carrying a `Stream` has no codec.
         Ty::Named { name, .. } if bynk_syntax::ast::type_carries_stream(name, types) => false,
         // v0.174 (#592): a generic record instantiation is boundary-serialisable

@@ -2001,6 +2001,15 @@ pub(crate) fn check_if(
     // would have no matching value. The synthesised block is typed against the
     // then-branch's type so its `()` lifts to `Effect[()]` when needed.
     if else_block.is_synth_unit() {
+        // #2620: a guard that only faults (`if n < 0 { unreachable("…") }`) has
+        // the bottom type; the `if` is `()` on the path where it is not taken.
+        if let Some(t) = then_ty
+            && matches!(&*tys.get(t), Ty::Never)
+        {
+            let unit = tys.intern(Ty::Unit);
+            let _ = type_of_block(else_block, Some(unit), ctx);
+            return Some(unit);
+        }
         if let Some(t) = then_ty {
             let is_unit = matches!(&*tys.get(t), Ty::Unit)
                 || matches!(&*tys.get(t), Ty::Effect(inner) if matches!(&*tys.get(*inner), Ty::Unit));
