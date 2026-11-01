@@ -90,9 +90,9 @@ pub fn lower_field_default_wire(
                     Some((type_name, "unsafe", [lit])) if type_name == id.name => {
                         lower_base_literal(*base, lit)
                     }
-                    Some((_, "unsafe", _)) => {
-                        Err(DefaultReason::from("`.unsafe` takes exactly one argument".to_string()))
-                    }
+                    Some((_, "unsafe", _)) => Err(DefaultReason::from(
+                        "`.unsafe` takes exactly one argument".to_string(),
+                    )),
                     _ => Err(DefaultReason::from(format!(
                         "an opaque type's default must be `{}.unsafe(<literal>)`",
                         id.name
@@ -108,7 +108,9 @@ pub fn lower_field_default_wire(
                 let v = lower_field_default_wire(e, inner, types)?;
                 Ok(format!("{{ kind: \"Some\", value: {v} }}"))
             }
-            _ => Err(DefaultReason::from("an `Option` field default must be `Some(...)` or `None`".to_string())),
+            _ => Err(DefaultReason::from(
+                "an `Option` field default must be `Some(...)` or `None`".to_string(),
+            )),
         },
         TypeRef::Result(ok, err, _) => match &init.kind {
             ExprKind::Ok(e) => {
@@ -119,7 +121,9 @@ pub fn lower_field_default_wire(
                 let v = lower_field_default_wire(e, err, types)?;
                 Ok(format!("{{ kind: \"Err\", error: {v} }}"))
             }
-            _ => Err(DefaultReason::from("a `Result` field default must be `Ok(...)` or `Err(...)`".to_string())),
+            _ => Err(DefaultReason::from(
+                "a `Result` field default must be `Ok(...)` or `Err(...)`".to_string(),
+            )),
         },
         TypeRef::List(elem, _) => match &init.kind {
             ExprKind::ListLit(items) => {
@@ -129,7 +133,9 @@ pub fn lower_field_default_wire(
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(format!("[{}]", parts.join(", ")))
             }
-            _ => Err(DefaultReason::from("a `List` field default must be a list literal".to_string())),
+            _ => Err(DefaultReason::from(
+                "a `List` field default must be a list literal".to_string(),
+            )),
         },
         // #2607 (Decision B): `Map.empty()` / `Set.empty()` are the only
         // closed-form map and set values. Both travel as a JSON array (a map
@@ -153,7 +159,9 @@ pub fn lower_field_default_wire(
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_)
-        | TypeRef::Fn(..) => Err(DefaultReason::from("this field type is not wire-representable".to_string())),
+        | TypeRef::Fn(..) => Err(DefaultReason::from(
+            "this field type is not wire-representable".to_string(),
+        )),
     }
 }
 
@@ -219,8 +227,13 @@ fn lower_base_literal(base: BaseType, e: &Expr) -> Result<String, DefaultReason>
         (BaseType::Duration, ExprKind::DurationLit { millis, .. }) if !negate => {
             Ok(millis.to_string())
         }
-        (BaseType::Bytes, _) => Err(DefaultReason::from("a `Bytes` field has no literal default form".to_string())),
-        _ => Err(DefaultReason::from(format!("expected a `{}` literal", base.name()))),
+        (BaseType::Bytes, _) => Err(DefaultReason::from(
+            "a `Bytes` field has no literal default form".to_string(),
+        )),
+        _ => Err(DefaultReason::from(format!(
+            "expected a `{}` literal",
+            base.name()
+        ))),
     }
 }
 
@@ -256,7 +269,9 @@ fn sum_default_parts<'a>(
         ExprKind::Ident(id) => (id.name.as_str(), &[]),
         ExprKind::FieldAccess { receiver, field } => {
             let ExprKind::Ident(recv) = &receiver.kind else {
-                return Err(DefaultReason::from(format!("expected a variant of `{sum_name}`")));
+                return Err(DefaultReason::from(format!(
+                    "expected a variant of `{sum_name}`"
+                )));
             };
             if recv.name != sum_name {
                 return Err(DefaultReason::from(format!(
@@ -270,13 +285,21 @@ fn sum_default_parts<'a>(
         _ => match qualified_call(init) {
             Some((recv, method, args)) if recv == sum_name => (method, args),
             Some((recv, ..)) => {
-                return Err(DefaultReason::from(format!("expected a variant of `{sum_name}`, not `{recv}`")));
+                return Err(DefaultReason::from(format!(
+                    "expected a variant of `{sum_name}`, not `{recv}`"
+                )));
             }
-            None => return Err(DefaultReason::from(format!("expected a variant of `{sum_name}`"))),
+            None => {
+                return Err(DefaultReason::from(format!(
+                    "expected a variant of `{sum_name}`"
+                )));
+            }
         },
     };
     let Some(variant) = body.variants.iter().find(|v| v.name.name == variant_name) else {
-        return Err(DefaultReason::from(format!("`{variant_name}` is not a variant of `{sum_name}`")));
+        return Err(DefaultReason::from(format!(
+            "`{variant_name}` is not a variant of `{sum_name}`"
+        )));
     };
     if args.len() != variant.payload.len() {
         return Err(DefaultReason::from(format!(
@@ -322,12 +345,9 @@ fn record_default_field<'a>(
                 f.name.name
             ))
         }),
-        None => f
-            .init
-            .as_ref()
-            .ok_or_else(|| {
-                DefaultReason::from(format!("record default is missing field `{}`", f.name.name))
-            }),
+        None => f.init.as_ref().ok_or_else(|| {
+            DefaultReason::from(format!("record default is missing field `{}`", f.name.name))
+        }),
     }
 }
 
@@ -409,7 +429,9 @@ pub fn lower_field_default_value(
                 let v = lower_field_default_value(e, inner, types)?;
                 Ok(format!("{{ tag: \"Some\", value: {v} }}"))
             }
-            _ => Err(DefaultReason::from("an `Option` field default must be `Some(...)` or `None`".to_string())),
+            _ => Err(DefaultReason::from(
+                "an `Option` field default must be `Some(...)` or `None`".to_string(),
+            )),
         },
         TypeRef::Result(ok, err, _) => match &init.kind {
             ExprKind::Ok(e) => {
@@ -420,7 +442,9 @@ pub fn lower_field_default_value(
                 let v = lower_field_default_value(e, err, types)?;
                 Ok(format!("{{ tag: \"Err\", error: {v} }}"))
             }
-            _ => Err(DefaultReason::from("a `Result` field default must be `Ok(...)` or `Err(...)`".to_string())),
+            _ => Err(DefaultReason::from(
+                "a `Result` field default must be `Ok(...)` or `Err(...)`".to_string(),
+            )),
         },
         TypeRef::List(elem, _) => match &init.kind {
             ExprKind::ListLit(items) => {
@@ -430,7 +454,9 @@ pub fn lower_field_default_value(
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(format!("[{}]", parts.join(", ")))
             }
-            _ => Err(DefaultReason::from("a `List` field default must be a list literal".to_string())),
+            _ => Err(DefaultReason::from(
+                "a `List` field default must be a list literal".to_string(),
+            )),
         },
         TypeRef::Map(..) => {
             empty_collection(init, "Map").map(|()| "new globalThis.Map()".to_string())
@@ -445,7 +471,9 @@ pub fn lower_field_default_value(
         // `Connection`, `History`, `Fn`, `Asset`, `RequestHeaders`,
         // `TokenClaims`, `BoundaryRejection`, `ValidationError`, `JsonError`
         // and `Unit`).
-        _ => Err(DefaultReason::from("this field type cannot carry a default".to_string())),
+        _ => Err(DefaultReason::from(
+            "this field type cannot carry a default".to_string(),
+        )),
     }
 }
 
