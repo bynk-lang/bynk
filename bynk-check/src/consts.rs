@@ -74,7 +74,7 @@ pub fn placement_error(c: &ConstDecl) -> CompileError {
         c.span,
         "`const` declarations are only allowed inside a context or a commons",
     )
-    .with_note("declare the constant in a commons the adapter's callers `use`, or in the context")
+    .with_note("an adapter is the host boundary; declare the constant in a commons or a context")
 }
 
 /// The name rule for constant `c`, given what its unit already declares under
