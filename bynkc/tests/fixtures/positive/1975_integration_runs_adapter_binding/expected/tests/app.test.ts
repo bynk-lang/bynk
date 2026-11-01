@@ -45,7 +45,7 @@ class __Stub_Greeter {
     return true;
   }
   async hello(name: string): globalThis.Promise<string> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -56,6 +56,7 @@ class __Stub_Greeter {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     if (this.__case === "the unit tier stubs the adapter") {
       return "stubbed";
@@ -77,7 +78,7 @@ class __Stub_Secrets {
     return true;
   }
   async get(name: string): globalThis.Promise<Option<string>> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -88,6 +89,7 @@ class __Stub_Secrets {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     if (this.__case === "the real binding runs at the integration tier") {
       return Some("hi");
@@ -145,7 +147,7 @@ async function test_the_real_binding_runs_at_the_integration_tier() {
   try {
     const deps = __makeIntegrationDeps("the real binding runs at the integration tier");
     const { welcome } = __ns_app;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -156,6 +158,7 @@ async function test_the_real_binding_runs_at_the_integration_tier() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await welcome.call("ann", deps);
     if (!(s === "hi, ann at 0")) { throw __bynkExpectFailure("tests/app.bynk:9:9", 387, 406, "expect s == \"hi, ann at 0\"\n  expected: s == \"hi, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hi, ann at 0"))); }
@@ -173,7 +176,7 @@ async function test_the_unit_tier_stubs_the_adapter() {
   try {
     const deps = __makeTestDeps("the unit tier stubs the adapter");
     const { welcome } = __ns_app;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -184,6 +187,7 @@ async function test_the_unit_tier_stubs_the_adapter() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await welcome.call("ann", deps);
     if (!(s === "stubbed")) { throw __bynkExpectFailure("tests/app.bynk:16:9", 594, 608, "expect s == \"stubbed\"\n  expected: s == \"stubbed\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("stubbed"))); }
@@ -201,7 +205,7 @@ async function test_a_case_calls_a_capability_directly() {
   try {
     const deps = __makeTestDeps("a case calls a capability directly");
     const { welcome } = __ns_app;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -212,6 +216,7 @@ async function test_a_case_calls_a_capability_directly() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await deps.Greeter.hello("ann");
     if (!(s === "direct")) { throw __bynkExpectFailure("tests/app.bynk:23:9", 788, 801, "expect s == \"direct\"\n  expected: s == \"direct\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("direct"))); }

@@ -98,6 +98,11 @@ pub(crate) struct RuntimeUse {
     time_ops: Cell<bool>,
     /// #2640: the module references the `par` block's join, `__bynkSettleAll`.
     settle_all: Cell<bool>,
+    /// #2683: the module references `e.within(d)`'s race, `__bynkWithin`.
+    within: Cell<bool>,
+    /// #2683: the test module runs on virtual time, so an addressed call is
+    /// driven by `__bynkSettleVirtual`.
+    virtual_time: Cell<bool>,
     /// K2 (#2594): the module references the percent-encoding helpers.
     url_ops: Cell<bool>,
     /// #2341 (L4): the module builds a `RequestHeaders` (`__requestHeaders`).
@@ -173,6 +178,21 @@ impl RuntimeUse {
     /// Record that the module references the `par` join (#2640).
     pub fn note_settle_all(&self) {
         self.settle_all.set(true);
+    }
+
+    /// Record that the test module runs on virtual time (#2683).
+    pub fn note_virtual_time(&self) {
+        self.virtual_time.set(true);
+    }
+
+    /// Whether the test module runs on virtual time (#2683).
+    pub fn virtual_time(&self) -> bool {
+        self.virtual_time.get()
+    }
+
+    /// Record that the module references the `within` race (#2683).
+    pub fn note_within(&self) {
+        self.within.set(true);
     }
 
     /// Record that the module builds a `RequestHeaders` value (#2341).
@@ -318,6 +338,11 @@ impl RuntimeUse {
     /// Whether the percent-encoding helpers must be imported (#2594).
     pub fn url_ops(&self) -> bool {
         self.url_ops.get()
+    }
+
+    /// Whether `__bynkWithin` must be imported (#2683).
+    pub fn within(&self) -> bool {
+        self.within.get()
     }
 
     /// Whether `__bynkSettleAll` must be imported (#2640).

@@ -178,8 +178,16 @@
             "link": "/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/"
           },
           {
+            "label": "What a timeout stops",
+            "link": "/book/guides/effects-and-capabilities/what-a-timeout-stops/"
+          },
+          {
             "label": "Run independent calls at the same time",
             "link": "/book/guides/effects-and-capabilities/run-independent-calls-at-the-same-time/"
+          },
+          {
+            "label": "Bound how long a call may take",
+            "link": "/book/guides/effects-and-capabilities/bound-how-long-a-call-may-take/"
           },
           {
             "label": "Compose a provider from other capabilities",

@@ -6304,12 +6304,41 @@
                     "type": "SYMBOL",
                     "name": "_expression"
                   }
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": "after"
+                        },
+                        {
+                          "type": "FIELD",
+                          "name": "after",
+                          "content": {
+                            "type": "SYMBOL",
+                            "name": "_expression"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
                 }
               ]
             },
             {
               "type": "STRING",
               "value": "fails"
+            },
+            {
+              "type": "STRING",
+              "value": "never"
             }
           ]
         }

@@ -1,3 +1,6 @@
+import { Ok, Err } from "./result.ts";
+import type { Result } from "./result.ts";
+
 // Concurrent effects, slice 0 (#2640): the join behind a `par { … }` block.
 //
 // Each effect of the block arrives as a thunk. `__bynkSettleAll` calls them in
@@ -48,5 +51,64 @@ export async function __bynkSettleAll<const T extends readonly (() => unknown)[]
   return settled.map((r) => (r as { value: unknown }).value) as {
     -readonly [P in keyof T]: Awaited<ReturnType<T[P]>>;
   };
+}
+
+// Concurrent effects, slice 3 (#2683): `e.within(d)`.
+//
+// Races the effect against a deadline of `ms` milliseconds. If the effect
+// settles first the timer is cleared and the call yields `Ok(value)` (an effect
+// that faults first faults the call). If the deadline passes first the call
+// yields `Err({ after: ms })` and the effect is handed, UNCANCELLED, to the
+// execution context's `waitUntil`, so it runs to completion and its side effects
+// still happen; a fault in it after that point is the platform's to log, not the
+// handler's, which has already moved on. A tie goes to the effect. Nothing is
+// cancelled (track Q7): `FetchOptions.timeout` is the tool when the work must
+// stop.
+//
+// A deadline outside (0, 2^31 - 1] ms faults the call, like
+// `FetchOptions.timeout`. The effect is already running by then, so it is handed
+// to `waitUntil` first: no work outlives the handler unseen.
+//
+// `exec.timers`, when present, replaces the host's `setTimeout`: the test
+// harness supplies virtual time through it. Not part of ADR 0310's published
+// ABI: it is codegen.
+export interface __BynkWithinExec {
+  waitUntil(promise: Promise<unknown>): void;
+  readonly timers?: {
+    set(fn: () => void, ms: number): unknown;
+    clear(handle: unknown): void;
+  };
+}
+const __BYNK_TIMED_OUT: unique symbol = Symbol("bynk.timedOut");
+export async function __bynkWithin<T>(
+  promise: Promise<T>,
+  ms: number,
+  exec: __BynkWithinExec,
+): Promise<Result<T, { readonly after: number }>> {
+  if (!(ms > 0 && ms <= 2147483647)) {
+    exec.waitUntil(promise);
+    throw new Error(
+      `\`within\` takes a Duration over zero and at most 2,147,483,647 ms, but got ${ms} ms`,
+    );
+  }
+  const timers = exec.timers ?? {
+    set: (fn: () => void, after: number): unknown => setTimeout(fn, after),
+    clear: (handle: unknown): void => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  };
+  let handle: unknown;
+  const deadline = new Promise<typeof __BYNK_TIMED_OUT>((resolve) => {
+    handle = timers.set(() => resolve(__BYNK_TIMED_OUT), ms);
+  });
+  let winner: T | typeof __BYNK_TIMED_OUT;
+  try {
+    winner = await Promise.race([promise, deadline]);
+  } finally {
+    timers.clear(handle);
+  }
+  if (winner === __BYNK_TIMED_OUT) {
+    exec.waitUntil(promise);
+    return Err({ after: ms });
+  }
+  return Ok(winner);
 }
 

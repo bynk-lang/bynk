@@ -1487,8 +1487,9 @@ whose leading items may be case-scoped `stub` and `env` clauses. Well-formedness
 
 A per-seam provider override: `stub`, a capability, `.`, a method, a
 parenthesised argument-pattern list (`_` or a value per parameter), and a
-right-hand side — `returns <value>`, `returns each [<outcome>, …]`, or `fails`.
-Legal at suite and case scope. Well-formedness: §5.
+right-hand side — `returns <value>` (optionally followed by `after <duration>`,
+#2683), `returns each [<outcome>, …]`, `fails`, or `never`. `after` and `never`
+are contextual. Legal at suite and case scope. Well-formedness: §5.
 
 ### §4.9.2a env_clause
 

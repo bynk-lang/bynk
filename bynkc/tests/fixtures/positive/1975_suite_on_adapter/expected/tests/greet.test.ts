@@ -44,7 +44,7 @@ class __Stub_Greeter {
     return true;
   }
   async hello(name: string): globalThis.Promise<string> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -55,6 +55,7 @@ class __Stub_Greeter {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     if (this.__case === "a stub on the adapter's capability answers instead") {
       return "stubbed";
@@ -73,7 +74,7 @@ class __Stub_Secrets {
     return true;
   }
   async get(name: string): globalThis.Promise<Option<string>> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -84,6 +85,7 @@ class __Stub_Secrets {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     if (this.__case === "the binding reads its secret") {
       return Some("hi");
@@ -138,7 +140,7 @@ function __makeTestDeps(__case?: string) {
 async function test_the_binding_reads_its_secret() {
   try {
     const deps = __makeTestDeps("the binding reads its secret");
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -149,6 +151,7 @@ async function test_the_binding_reads_its_secret() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await deps.Greeter.hello("ann");
     if (!(s === "hi, ann at 0")) { throw __bynkExpectFailure("tests/greet.bynk:8:9", 278, 297, "expect s == \"hi, ann at 0\"\n  expected: s == \"hi, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hi, ann at 0"))); }
@@ -165,7 +168,7 @@ async function test_the_binding_reads_its_secret() {
 async function test_the_binding_falls_back_without_one() {
   try {
     const deps = __makeTestDeps();
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -176,6 +179,7 @@ async function test_the_binding_falls_back_without_one() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await deps.Greeter.hello("ann");
     if (!(s === "hello, ann at 0")) { throw __bynkExpectFailure("tests/greet.bynk:13:9", 384, 406, "expect s == \"hello, ann at 0\"\n  expected: s == \"hello, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hello, ann at 0"))); }
@@ -192,7 +196,7 @@ async function test_the_binding_falls_back_without_one() {
 async function test_a_stub_on_the_adapter_s_capability_answers_instead() {
   try {
     const deps = __makeTestDeps("a stub on the adapter's capability answers instead");
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -203,6 +207,7 @@ async function test_a_stub_on_the_adapter_s_capability_answers_instead() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await deps.Greeter.hello("ann");
     if (!(s === "stubbed")) { throw __bynkExpectFailure("tests/greet.bynk:20:9", 621, 635, "expect s == \"stubbed\"\n  expected: s == \"stubbed\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("stubbed"))); }

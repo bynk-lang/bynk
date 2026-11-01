@@ -302,6 +302,8 @@ mod unstable_opt_in;
 mod wire_reference;
 #[path = "wire_shape_drift.rs"]
 mod wire_shape_drift;
+#[path = "within_behaviour.rs"]
+mod within_behaviour;
 #[path = "workers_fault_log.rs"]
 mod workers_fault_log;
 #[path = "workers_runtime_smoke.rs"]

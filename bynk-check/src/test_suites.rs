@@ -1134,7 +1134,20 @@ fn check_test_bodies(
                             }
                         }
                     }
-                    StubRhs::Fails(_) => {}
+                    StubRhs::Fails(_) | StubRhs::Never(_) => {}
+                }
+                // #2683: `after <d>` is a Duration.
+                if let Some(after) = &clause.after
+                    && !stub_after_typechecks(after, resolved, tys)
+                {
+                    errors.push(CompileError::new(
+                        "bynk.stub.after_type",
+                        after.span,
+                        format!(
+                            "`after` in a `stub` for `{}.{}` takes a `Duration`, such as `3.seconds`",
+                            rp.cap, op.name.name
+                        ),
+                    ));
                 }
             }
         }
@@ -1363,13 +1376,29 @@ fn stub_value_typechecks(
     resolved: &ResolvedCommons,
     tys: &Arc<Types>,
 ) -> bool {
+    value_typechecks(e, &op.return_type, &op.params, resolved, tys)
+}
+
+/// #2683: whether a `stub … after <d>` duration is a `Duration`.
+pub fn stub_after_typechecks(e: &Expr, resolved: &ResolvedCommons, tys: &Arc<Types>) -> bool {
+    let duration = TypeRef::Effect(Box::new(TypeRef::Base(BaseType::Duration, e.span)), e.span);
+    value_typechecks(e, &duration, &[], resolved, tys)
+}
+
+fn value_typechecks(
+    e: &Expr,
+    return_type: &TypeRef,
+    params: &[Param],
+    resolved: &ResolvedCommons,
+    tys: &Arc<Types>,
+) -> bool {
     let block = value_block(e);
     let mut expr_types: HashMap<ExprId, checker::TypedExpr> = HashMap::new();
     let mut callees: HashMap<ExprId, checker::Callee> = HashMap::new();
     let mut errs: Vec<CompileError> = Vec::new();
     checker::check_handler_body(
         resolved,
-        checker::HandlerBodyCheck::new(&block, &op.return_type, &op.params, &[]),
+        checker::HandlerBodyCheck::new(&block, return_type, params, &[]),
         checker::CheckSinks {
             tys,
             expr_types: &mut expr_types,
