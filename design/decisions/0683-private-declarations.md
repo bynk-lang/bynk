@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: "A `private` modifier on a commons or context `fn` (including a method), `type`, `messages`, `asset` or `embed` keeps it within its own unit: visible across the unit's files and to its suites, never through `uses`. A reference from another unit is `bynk.visibility.private_item`, a public signature naming a private type is `bynk.visibility.private_in_public`, `private` on any other declaration is `bynk.visibility.private_not_allowed`, and `private` on a `messages` block warns (`bynk.visibility.private_messages`), since negotiation reads only the `@reference` block's visibility. `private` is a contextual keyword, so `@cache(scope: private)` is unchanged ([#2618](https://github.com/bynk-lang/bynk/issues/2618))"
----
+# 0683 — Private declarations, a unit-local visibility for commons and context items
 
-## ADR: private-declarations
-title: Private declarations, a unit-local visibility for commons and context items
-summary: `private` hides a `fn`, `type`, `messages`, `asset` or `embed` from importers; importers do not see private names at all, a unit suite sees its target's, a public signature may not name a private type, and emission is unchanged
+- **Status:** Accepted (v0.467)
 
 **Context.** Every commons declaration was public. A library could not keep a
 helper to itself, so each helper became API: renaming it could break any unit
