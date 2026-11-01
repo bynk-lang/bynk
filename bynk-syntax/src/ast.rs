@@ -3005,12 +3005,12 @@ pub enum TypeRef {
     /// `List[T]` — the built-in generic immutable list type (v0.20b).
     List(Box<TypeRef>, Span),
     /// `Map[K, V]` — the built-in generic immutable map type (v0.20b).
-    /// Keys are confined to value-keyable types
-    /// (`bynk.types.unkeyable_map_key`).
+    /// Keys are confined to `Key` types
+    /// (`bynk.types.not_keyable`).
     Map(Box<TypeRef>, Box<TypeRef>, Span),
     /// `Set[T]` — the built-in generic immutable set type (standard-library
     /// K6a, #2596). Insertion-ordered like `Map`; elements are confined to the
-    /// `Map`-key rule (`bynk.types.unkeyable_set_element`).
+    /// `Map`-key rule (`bynk.types.not_keyable`).
     Set(Box<TypeRef>, Span),
     /// `Query[T]` — the built-in lazy storage-read description (v0.91, ADR 0115).
     /// Nameable in a pure helper's return type; non-storable and non-boundary

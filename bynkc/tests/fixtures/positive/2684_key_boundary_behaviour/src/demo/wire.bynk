@@ -1,0 +1,18 @@
+---
+#2684: a composite-keyed `Map` round-trips through the JSON boundary, and a wire
+`Set` with a repeated member is rejected.
+---
+commons demo.wire
+
+type OrderId = { region: String, n: Int }
+
+type Status = enum { Open, Shipped }
+
+type Ledger = { totals: Map[OrderId, Int], seen: Set[Status] }
+
+fn sample() -> Ledger {
+  Ledger {
+    totals: Map.empty().insert(OrderId { region: "eu", n: 7 }, 3),
+    seen: Set.of([Open, Shipped]),
+  }
+}

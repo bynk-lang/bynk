@@ -1,0 +1,2 @@
+bynk.types.not_keyable
+`index` requires `K: Key`

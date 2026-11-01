@@ -1,0 +1,16 @@
+context shop.ledger
+
+// #2684: a foreign caller's typed client carries a record-keyed `Map` and an
+// enum-membered `Set` across the boundary. The client decodes the reply into the
+// keyed collections, so a lookup by an equal `OrderId` finds the entry.
+actor Billing { auth = Foreign(secret = "BILLING_CALL_KEY", worker = "billing-svc") }
+
+type OrderId = { region: String, n: Int }
+
+type Status = enum { Open, Shipped }
+
+service tally {
+  on call(totals: Map[OrderId, Int], seen: Set[Status]) -> Effect[Map[OrderId, Int]] by Billing {
+    totals
+  }
+}

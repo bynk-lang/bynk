@@ -2364,9 +2364,10 @@ The claim types as `Bool`.
 static semantics. `Set[T]` (standard-library K6a, #2596) joins them, and like
 them `Set` is a reserved built-in type name (`bynk.resolve.reserved_builtin_type`
 for a `type Set`). Its
-element type MUST be value-keyable, by the `Map`-key rule
-(`bynk.types.unkeyable_set_element`), checked at a written `Set[T]` and at the
-inferred element of `Set.of`. `Set.empty()` obeys the empty-collection rule
+element type MUST be `Key` ([§6.2.1](/book/spec/type-system/#621-the-key-constraint),
+`bynk.types.not_keyable`), checked at a written `Set[T]` and at the
+inferred element of `Set.of`; a type parameter there MUST be declared `Key`
+(`bynk.generics.missing_key_bound`). `Set.empty()` obeys the empty-collection rule
 below; `insert` and `remove` propagate an expected `Set` down their receiver
 chain. A `Set`'s compatibility at a boundary requires its element type to match
 exactly, as a `Map` key's does.
@@ -2499,8 +2500,9 @@ comparator has no storage lowering; the same code is reported. **Numeric keys**
 (`sum`/`average`) are `Int`/`Float`/`Duration` (not `Instant` — instants are not
 summable), else `bynk.query.sum_needs_numeric`;
 `average` of a `Duration` is a `Duration` (integer-rounded millis), otherwise a
-`Float`. **`distinct`/`distinctBy`** need a value-keyable element/key (the
-`Map`-key rule, incl. opaque), else `bynk.types.unkeyable_distinct`. **Empty
+`Float`. **`distinct`/`distinctBy`** need a `Key` element/key on a `List`
+(`bynk.types.not_keyable`), and the `String`/`Int` rule (incl. refined and opaque)
+on a `Query`. **Empty
 aggregates are total**: `first`/`min`/`max`/`average` return `Option` (`None` on
 empty); `sum` returns the zero, `count` returns `0`. The aggregate terminals take
 a **projection** `T -> K`, uniform with the storage half where a record field is
@@ -2509,10 +2511,10 @@ the common key.
 *(v0.94, [ADR 0120](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0120-join-group-combiner-form.md))*
 **Joins & grouping take a combiner** — bynk has no pair type, so the join row
 exists only inside `into`, which names the result. `joinOn`/`leftJoin` are
-equi-joins hashing on a **value-keyable** key (the `Map`-key rule); the left and
+equi-joins hashing on a **`Key`** key (a `Query` keeps the `String`/`Int` rule); the left and
 right key functions MUST return the **same** key type, else
 `bynk.query.join_key_mismatch`. `join` is a general-predicate (nested-loop) join.
-`groupBy` partitions by a value-keyable key in **first-seen** key order, projecting
+`groupBy` partitions by a `Key` key in **first-seen** key order, projecting
 each `(K, List[T])` group through `into`. The `other` side is a `List`/`Query` of
 the **matching shape** (a `List` joins a `List`, a `Query` joins a `Query` — a bare
 `store Map` used as a value lifts to a `Query` over its values). The same names
@@ -2558,11 +2560,14 @@ is a **CPU** optimisation (the map loads whole regardless); the I/O scaling awai
 per-entry storage keys. The most-selective tie-break, and a note when two indexes
 could serve one filter, arrive with compound-predicate routing (a later slice).
 
-**Keys.** A `Map` key type MUST be value-keyable — `String`, `Int`, or a
-refined/opaque type over them; anything else is
-`bynk.types.unkeyable_map_key`, checked at every written `Map[K, V]`
-reference. A type parameter is admitted in key position: it can only be
-instantiated through a concrete reference elsewhere, which is checked.
+**Keys.** A `Map` key type MUST be `Key`
+([§6.2.1](/book/spec/type-system/#621-the-key-constraint)): a base type other than
+`Float`, `Option`/`List` of a key, a refined or opaque type over one, or a record,
+sum or enum of keys; anything else is `bynk.types.not_keyable`, checked at every
+written `Map[K, V]` reference. A type parameter in key position MUST be declared
+`K: Key`, on the function, on the type, or in a method's `where` clause
+(`bynk.generics.missing_key_bound`, with a machine-applicable fix). A store
+`Map`'s key is still `String`/`Int` (`bynk.store.unkeyable_key`).
 
 **Order.** A `List` is ordered by construction. A `Map` is
 **insertion-ordered**, normatively: `keys()` enumerates in insertion order,

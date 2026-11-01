@@ -6,6 +6,8 @@ code you saw.
 
 - [`bynk.generics.missing_eq_bound`](/book/troubleshooting/generics-missing-eq-bound/) — a generic compares a
   type parameter that is not declared `Eq`.
+- [`bynk.generics.missing_key_bound`](/book/troubleshooting/generics-missing-key-bound/) — a generic keys a `Map` or
+  `Set` by a type parameter that is not declared `Key`.
 - [`bynk.generics.missing_ord_bound`](/book/troubleshooting/generics-missing-ord-bound/) — a generic orders a
   type parameter that is not declared `Ord`.
 - [`bynk.refine.literal_violates`](/book/troubleshooting/refine-literal-violates/) — a literal didn't

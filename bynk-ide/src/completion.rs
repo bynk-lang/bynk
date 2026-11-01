@@ -344,13 +344,17 @@ fn is_constraint_position(line: &str) -> bool {
     false
 }
 
-/// The constraints a bound may name: `Eq` and `Ord`. Mirrors the checker's
+/// The constraints a bound may name: `Eq`, `Ord` and `Key`. Mirrors the checker's
 /// `CONSTRAINTS`; `constraint_names_match_the_checker` pins the two together.
 const BOUND_CONSTRAINTS: &[(&str, &str)] = &[
     ("Eq", "constraint: values of the type compare with `==`"),
     (
         "Ord",
         "constraint: values of the type are ordered (`<`, `<=`, `>`, `>=`); implies `Eq`",
+    ),
+    (
+        "Key",
+        "constraint: values of the type key a `Map` or `Set`; implies `Eq`",
     ),
 ];
 
@@ -2826,16 +2830,19 @@ mod tests {
                 .map(|c| c.label)
                 .collect::<Vec<_>>()
         };
-        assert_eq!(eq("fn same[T: "), ["Eq", "Ord"]);
-        assert_eq!(eq("fn same[T: E"), ["Eq", "Ord"]);
-        assert_eq!(eq("fn same[T: Eq + "), ["Eq", "Ord"]);
-        assert_eq!(eq("fn same[A, T: "), ["Eq", "Ord"]);
-        assert_eq!(eq("type Pair[T: "), ["Eq", "Ord"]);
+        assert_eq!(eq("fn same[T: "), ["Eq", "Ord", "Key"]);
+        assert_eq!(eq("fn same[T: E"), ["Eq", "Ord", "Key"]);
+        assert_eq!(eq("fn same[T: Eq + "), ["Eq", "Ord", "Key"]);
+        assert_eq!(eq("fn same[A, T: "), ["Eq", "Ord", "Key"]);
+        assert_eq!(eq("type Pair[T: "), ["Eq", "Ord", "Key"]);
         assert_eq!(
             eq("fn Box.has(self, x: A) -> Bool where A: "),
-            ["Eq", "Ord"]
+            ["Eq", "Ord", "Key"]
         );
-        assert_eq!(eq("fn f(self) -> Int where A: Eq, B: "), ["Eq", "Ord"]);
+        assert_eq!(
+            eq("fn f(self) -> Int where A: Eq, B: "),
+            ["Eq", "Ord", "Key"]
+        );
         // A parameter's type annotation and a refinement `where` are not bounds.
         assert!(eq("fn f(x: ").is_empty());
         assert!(eq("fn f(x: Int) -> ").is_empty());

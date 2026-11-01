@@ -196,6 +196,8 @@ mod interpolation;
 mod json_codec_behaviour;
 #[path = "kernel_registry.rs"]
 mod kernel_registry;
+#[path = "key_bound_fixes.rs"]
+mod key_bound_fixes;
 #[path = "keywords_reference.rs"]
 mod keywords_reference;
 #[path = "kv_behaviour.rs"]

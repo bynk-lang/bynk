@@ -1,0 +1,4 @@
+commons demo
+
+// #2684: a `Map` is not a `Key` (an order-independent encoding is a later increment).
+fn count(s: Set[Map[Int, Int]]) -> Int { s.length() }

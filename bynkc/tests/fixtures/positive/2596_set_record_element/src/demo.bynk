@@ -1,0 +1,15 @@
+context demo
+
+// #2596: a `Set` element must be `Key`. A record used to be refused (a JS `Set`
+// compares it by identity); since #2684 it is a `Key` and compares by value.
+type Point = { x: Int, y: Int }
+
+fn none() -> Set[Point] {
+	Set.empty()
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

@@ -611,7 +611,7 @@ pub fn describe_derives_at(source: &str, offset: usize) -> Option<String> {
     })
 }
 
-/// The doc for a constraint name (`Eq`, `Ord`), shown on hover wherever one
+/// The doc for a constraint name (`Eq`, `Ord`, `Key`), shown on hover wherever one
 /// appears in a bound or a `derives` clause.
 fn constraint_doc(name: &str) -> Option<&'static str> {
     match name {
@@ -620,6 +620,9 @@ fn constraint_doc(name: &str) -> Option<&'static str> {
         ),
         "Ord" => Some(
             "```bynk\nconstraint Ord\n```\n\nValues of the type are ordered: they compare with `<`, `<=`, `>` and `>=`, and can be sorted. Declare it on a type parameter (`T: Ord`) to order its values inside the function; `Ord` implies `Eq`. A type opts in with `derives Ord`, which orders it by declaration order.",
+        ),
+        "Key" => Some(
+            "```bynk\nconstraint Key\n```\n\nValues of the type can key a `Map` or be a `Set` member, and group under `distinct` and `groupBy`. Declare it on a type parameter (`K: Key`) to use it that way inside the function; `Key` implies `Eq`. Strings, ints, bytes, `Option` and `List` of a key, and records, sums and enums made of keys are `Key` automatically; a `Float` never is.",
         ),
         _ => None,
     }

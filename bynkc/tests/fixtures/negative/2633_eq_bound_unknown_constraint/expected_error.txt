@@ -1,2 +1,2 @@
 bynk.generics.unknown_constraint
-`Key` is not a constraint
+`Codable` is not a constraint

@@ -66,19 +66,26 @@ use crate::requirements::RequirementSink;
 use crate::resolver::ResolvedCommons;
 
 /// The constraint names a bound may use. Slice 0 admitted only `Eq`; slice 1
-/// adds `Ord`, and later slices of the constrained-generics track add `Key` and
-/// `Codable`.
-pub(crate) const CONSTRAINTS: &[&str] = &["Eq", "Ord"];
+/// added `Ord`, slice 2 adds `Key`, and a later slice of the constrained-generics
+/// track adds `Codable`.
+pub(crate) const CONSTRAINTS: &[&str] = &["Eq", "Ord", "Key"];
 
 /// Whether `bounds` includes `Ord`.
 pub(crate) fn has_ord(bounds: &[Ident]) -> bool {
     bounds.iter().any(|b| b.name == "Ord")
 }
 
-/// Whether `bounds` grants `Eq`: an explicit `Eq`, or `Ord`, which implies it
-/// (constrained-generics slice 1, DECISION C).
+/// Whether `bounds` includes `Key`.
+pub(crate) fn has_key(bounds: &[Ident]) -> bool {
+    bounds.iter().any(|b| b.name == "Key")
+}
+
+/// Whether `bounds` grants `Eq`: an explicit `Eq`, or `Ord` or `Key`, which imply
+/// it (constrained-generics slice 1 DECISION C; slice 2 DECISION G).
 pub(crate) fn has_eq(bounds: &[Ident]) -> bool {
-    bounds.iter().any(|b| b.name == "Eq" || b.name == "Ord")
+    bounds
+        .iter()
+        .any(|b| b.name == "Eq" || b.name == "Ord" || b.name == "Key")
 }
 
 /// Every bound name in `bounds` that is not a known constraint, as an
@@ -104,12 +111,16 @@ pub(crate) fn unknown_constraints(bounds: &[Ident], param: &str) -> Vec<CompileE
         .collect()
 }
 
-/// `T: Eq + Ord`: `Ord` implies `Eq` (DECISION C), so the `Eq` is redundant. A
-/// warning whose fix removes it.
+/// `T: Eq + Ord` or `T: Eq + Key`: `Ord` and `Key` imply `Eq`, so the `Eq` is
+/// redundant. A warning whose fix removes it.
 pub(crate) fn redundant_eq(bounds: &[Ident], param: &str) -> Option<CompileError> {
-    if !has_ord(bounds) {
+    let implied_by = if has_ord(bounds) {
+        "Ord"
+    } else if has_key(bounds) {
+        "Key"
+    } else {
         return None;
-    }
+    };
     let i = bounds.iter().position(|b| b.name == "Eq")?;
     let eq = &bounds[i];
     let remove = if i + 1 < bounds.len() {
@@ -121,7 +132,7 @@ pub(crate) fn redundant_eq(bounds: &[Ident], param: &str) -> Option<CompileError
         CompileError::new(
             "bynk.generics.redundant_eq_bound",
             eq.span,
-            format!("`{param}: Eq` is redundant: `Ord` implies `Eq`"),
+            format!("`{param}: Eq` is redundant: `{implied_by}` implies `Eq`"),
         )
         .with_suggestion(
             "remove `Eq`",
@@ -158,10 +169,13 @@ pub(crate) struct EqScope {
     declared: HashSet<String>,
     /// Parameters declared `Ord`.
     ord: HashSet<String>,
+    /// Parameters declared `Key`.
+    key: HashSet<String>,
     /// Shared by every clone (a function's contract clauses and its body check
     /// in separate contexts), so a parameter is reported once per function.
     reported: Rc<RefCell<HashSet<String>>>,
     reported_ord: Rc<RefCell<HashSet<String>>>,
+    reported_key: Rc<RefCell<HashSet<String>>>,
     fix: FixSite,
 }
 
@@ -171,6 +185,7 @@ impl EqScope {
     pub(crate) fn for_fn(f: &FnDecl, input: &ResolvedCommons) -> Self {
         let mut declared = HashSet::new();
         let mut ord = HashSet::new();
+        let mut key = HashSet::new();
         let mut fix = FixSite::default();
         for tp in &f.type_params {
             if has_eq(&tp.bounds) {
@@ -178,6 +193,9 @@ impl EqScope {
             }
             if has_ord(&tp.bounds) {
                 ord.insert(tp.name.name.clone());
+            }
+            if has_key(&tp.bounds) {
+                key.insert(tp.name.name.clone());
             }
             if let Some(eq) = tp.bounds.iter().find(|b| b.name == "Eq") {
                 fix.eq_bound.insert(tp.name.name.clone(), eq.span);
@@ -197,6 +215,9 @@ impl EqScope {
             }
             if has_ord(&wb.bounds) {
                 ord.insert(wb.param.name.clone());
+            }
+            if has_key(&wb.bounds) {
+                key.insert(wb.param.name.clone());
             }
             if let Some(eq) = wb.bounds.iter().find(|b| b.name == "Eq") {
                 fix.eq_bound.insert(wb.param.name.clone(), eq.span);
@@ -222,30 +243,35 @@ impl EqScope {
                 if has_ord(&tp.bounds) {
                     ord.insert(tp.name.name.clone());
                 }
+                if has_key(&tp.bounds) {
+                    key.insert(tp.name.name.clone());
+                }
             }
         }
         EqScope {
             declared,
             ord,
+            key,
             reported: Rc::default(),
             reported_ord: Rc::default(),
+            reported_key: Rc::default(),
             fix,
         }
     }
 
-    /// The edit that declares `constraint` (`Eq` or `Ord`) on `param`. A missing
-    /// `Ord` on a parameter already declared `Eq` replaces the `Eq`, which `Ord`
-    /// implies.
+    /// The edit that declares `constraint` (`Eq`, `Ord` or `Key`) on `param`. A
+    /// missing `Ord` or `Key` on a parameter already declared `Eq` replaces the
+    /// `Eq`, which both imply.
     pub(crate) fn fix_for(
         &self,
         param: &str,
         constraint: &str,
     ) -> Option<(String, Vec<(Span, String)>)> {
         let msg = format!("declare `{param}: {constraint}`");
-        if constraint == "Ord"
+        if constraint != "Eq"
             && let Some(at) = self.fix.eq_bound.get(param)
         {
-            return Some((msg, vec![(*at, "Ord".to_string())]));
+            return Some((msg, vec![(*at, constraint.to_string())]));
         }
         if let Some((at, bounded)) = self.fix.own.get(param) {
             let text = if *bounded {
@@ -333,6 +359,56 @@ pub(crate) fn require_ord_vars(ctx: &mut Ctx, ty: TyId, span: Span, site: &str) 
             err = err.with_suggestion(msg, edits, Applicability::MachineApplicable);
         }
         ctx.errors.push(err);
+    }
+    false
+}
+
+/// Require `Key` of every type parameter in `ty` that the enclosing function has
+/// not declared it for. Reports `bynk.generics.missing_key_bound`, once per
+/// parameter per function, and returns `false` when any was missing. The
+/// structural half of the requirement (is the concrete part a key?) is
+/// [`super::keying::check_key`].
+pub(crate) fn require_key_vars(ctx: &mut Ctx, ty: TyId, span: Span, site: &str) -> bool {
+    require_key_vars_in(ctx.tys, &ctx.type_vars, &ctx.eq, ctx.errors, ty, span, site)
+}
+
+/// [`require_key_vars`] over the pieces of a `Ctx` it needs, so a signature can
+/// be checked before any body context exists.
+pub(crate) fn require_key_vars_in(
+    tys: &Types,
+    type_vars: &HashSet<String>,
+    eq: &EqScope,
+    errors: &mut Vec<CompileError>,
+    ty: TyId,
+    span: Span,
+    site: &str,
+) -> bool {
+    let mut vars = HashSet::new();
+    collect_vars(ty, tys, &mut vars);
+    let mut missing: Vec<String> = vars
+        .into_iter()
+        .filter(|v| type_vars.contains(v) && !eq.key.contains(v))
+        .collect();
+    if missing.is_empty() {
+        return true;
+    }
+    missing.sort();
+    for param in missing {
+        if !eq.reported_key.borrow_mut().insert(param.clone()) {
+            continue;
+        }
+        let mut err = CompileError::new(
+            "bynk.generics.missing_key_bound",
+            span,
+            format!("{site}, but type parameter `{param}` has no `Key` bound"),
+        )
+        .with_note(format!(
+            "a type parameter that keys a `Map` or `Set` must say so: declare `{param}: Key`"
+        ));
+        if let Some((msg, edits)) = eq.fix_for(&param, "Key") {
+            err = err.with_suggestion(msg, edits, Applicability::MachineApplicable);
+        }
+        errors.push(err);
     }
     false
 }

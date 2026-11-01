@@ -1,0 +1,51 @@
+---
+#2684: `union`/`intersect`/`difference` over records (built in an erased generic),
+`==` between a keyed and an equal plain-built set, and the encoding's collision
+cases: field order, nested sums, `"1"` against `1` in different payloads,
+`Some("x")` against `"x"`, `Bytes`.
+---
+suite demo.gen
+
+case "set algebra over records" {
+  let a: Set[P] = Set.of([P { x: 1, y: 1 }, P { x: 2, y: 2 }])
+  let b: Set[P] = Set.of([P { x: 2, y: 2 }, P { x: 3, y: 3 }])
+  expect merge(a, b).toList() == [P { x: 1, y: 1 }, P { x: 2, y: 2 }, P { x: 3, y: 3 }]
+  expect common(a, b).toList() == [P { x: 2, y: 2 }]
+  expect difference(a, b).toList() == [P { x: 1, y: 1 }]
+  expect isSubsetOf(common(a, b), a)
+}
+
+case "equal sets compare equal whatever their build order" {
+  let a: Set[P] = Set.of([P { x: 1, y: 1 }, P { x: 2, y: 2 }])
+  let b: Set[P] = Set.of([P { y: 2, x: 2 }, P { y: 1, x: 1 }])
+  expect a == b
+  let empty: Set[P] = Set.empty()
+  expect difference(a, a) == empty
+  expect Set.of([P { x: 1, y: 1 }]).remove(P { x: 1, y: 1 }) == empty
+}
+
+case "a sum keeps its payload kinds apart" {
+  let m: Map[Tagged, Int] = Map.empty().insert(Num(1), 1).insert(Str("1"), 2)
+  expect m.length() == 2
+  expect m.get(Num(1)) == Some(1)
+  expect m.get(Str("1")) == Some(2)
+  let o: Map[Option[String], Int] = Map.empty().insert(Some("x"), 1).insert(None, 2)
+  expect o.length() == 2
+}
+
+case "Bytes with different contents stay distinct" {
+  let m: Map[Bytes, Int] = Map.empty()
+    .insert(Bytes.fromUtf8("a"), 1)
+    .insert(Bytes.fromUtf8("a"), 2)
+    .insert(Bytes.fromUtf8("b"), 3)
+  expect m.length() == 2
+  expect m.get(Bytes.fromUtf8("a")) == Some(2)
+}
+
+case "nested records and lists of records key by value" {
+  let m: Map[List[P], Int] = Map.empty()
+    .insert([P { x: 1, y: 2 }], 1)
+    .insert([P { x: 1, y: 2 }, P { x: 1, y: 2 }], 2)
+  expect m.length() == 2
+  expect m.get([P { y: 2, x: 1 }]) == Some(1)
+}
