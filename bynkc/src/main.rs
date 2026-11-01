@@ -41,7 +41,7 @@ fn main() -> ExitCode {
             emit,
             sources_stdin,
         ),
-        Command::Check { input, format } => run_check(input, format),
+        Command::Check { input, format, fix } => run_check(input, format, fix),
         Command::Fmt { args } => run_fmt(args),
         Command::Test { args } => run_test(args),
     }
@@ -226,7 +226,7 @@ fn overlay_from_stdin(
     )?)
 }
 
-fn run_check(input: PathBuf, format: DiagFormat) -> ExitCode {
+fn run_check(input: PathBuf, format: DiagFormat, fix: bool) -> ExitCode {
     // #521: the command body is shared with the `bynk` driver.
-    bynk_driver::run_check("bynkc", &input, format == DiagFormat::Short)
+    bynk_driver::run_check("bynkc", &input, format == DiagFormat::Short, fix)
 }
