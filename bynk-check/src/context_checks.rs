@@ -39,6 +39,7 @@ pub fn build_capability_op_info(
         return_ty: checker::resolve_type_ref_in(&op.return_type, types, &vars, tys)
             .unwrap_or_else(|| tys.intern(Ty::Unit)),
         codable_params: checker::codable::codable_op_params(op),
+        boundary_conflict: None,
     }
 }
 
@@ -505,7 +506,7 @@ pub fn check_context_declarations(
         // As the qualified `U.Cap.op` call does, resolve the signature against
         // the unit's own table; a name the consumer binds to a structurally
         // different type is refused (`bynk.boundary.structural_mismatch`)
-        // rather than read as the consumer's.
+        // rather than read as the consumer's. The refusal is per op, at its call.
         let unit_types = cross_context
             .consumed_types
             .get(unit)
@@ -513,47 +514,36 @@ pub fn check_context_declarations(
         let (receiving, _) = receiving_cache.get_or_insert_with(|| {
             checker::projected_types(&typed.types, &cross_context.consumed_types, tys)
         });
-        let mut conflicts: Vec<String> = Vec::new();
         let ops = xcap
             .ops
             .iter()
             .map(|op| {
                 let vars: HashSet<String> = op.type_params.iter().cloned().collect();
+                let mut conflict: Option<(String, String)> = None;
                 let mut resolve = |tr: &TypeRef| {
                     let ty = checker::resolve_type_ref_in(tr, unit_types, &vars, tys)
                         .unwrap_or_else(|| tys.intern(Ty::Unit));
-                    if let Some(name) =
-                        checker::rebrand_conflict(ty, unit_types, &typed.types, receiving, tys)
-                        && !conflicts.contains(&name)
+                    if conflict.is_none()
+                        && let Some(name) =
+                            checker::rebrand_conflict(ty, unit_types, &typed.types, receiving, tys)
                     {
-                        conflicts.push(name);
+                        conflict = Some((unit.clone(), name));
                     }
                     checker::rebrand_return_type(ty, &typed.types, tys)
                 };
+                let params = op.params.iter().map(|(_, tr)| resolve(tr)).collect();
+                let return_ty = resolve(&op.return_type);
                 CapabilityOpInfo {
                     name: op.name.clone(),
                     type_params: op.type_params.clone(),
-                    params: op.params.iter().map(|(_, tr)| resolve(tr)).collect(),
+                    params,
                     param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
-                    return_ty: resolve(&op.return_type),
+                    return_ty,
                     codable_params: op.codable_params.clone(),
+                    boundary_conflict: conflict,
                 }
             })
             .collect();
-        for name in conflicts {
-            errors.push(
-                CompileError::new(
-                    "bynk.boundary.structural_mismatch",
-                    typed.commons.span,
-                    format!(
-                        "capability `{cap}` from `{unit}` uses its type `{name}`, but `{name}` here is a different type"
-                    ),
-                )
-                .with_note(
-                    "a value crossing the boundary takes the receiving unit's type of the same name, so the two must be structurally compatible; rename one of them",
-                ),
-            );
-        }
         capability_info_map.insert(
             cap.clone(),
             CapabilityInfo {

@@ -1,0 +1,9 @@
+[project]
+name = "fetch-bytes-field"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.Fetch.receiveBytes"]

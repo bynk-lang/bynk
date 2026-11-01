@@ -1503,6 +1503,23 @@ pub(crate) fn check_static_call(
             }
             return None;
         };
+        // #2634: a flattened cross-unit op whose signature names a type the
+        // consumer binds to a different shape is refused at the call, as the
+        // qualified form refuses it.
+        if let Some((unit, name)) = &op.boundary_conflict {
+            let err = rebranded_return_mismatch(
+                &format!("{}.{}", type_name.name, method.name),
+                name,
+                unit,
+                span,
+                ctx,
+            );
+            ctx.errors.push(err);
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
         // v0.36 (ADR 0069, slice 2): the op is an index symbol keyed by the
         // compound `"Cap.op"` name; this local call is a reference. S4a
         // (#1966): a derived capability declares no operations, so its call
