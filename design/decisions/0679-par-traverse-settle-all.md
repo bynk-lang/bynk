@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`parTraverse`, `parTraverseAll` and `parTraverseTry` (on lists and on query/broadcast receivers) now settle all: when an element faults the call waits for every element to settle, then raises the first fault in input order, instead of the first fault to arrive with its siblings left running; no source change (concurrent effects, slice 0b, [#2662](https://github.com/bynk-lang/bynk/issues/2662))"
----
+# 0679 — The `parTraverse` family joins settle-all, raising the first fault in input order
 
-## ADR: par-traverse-settle-all
-title: The `parTraverse` family joins settle-all, raising the first fault in input order
-summary: parTraverse, parTraverseAll and parTraverseTry, on lists and on query/broadcast receivers, lower to `await __bynkSettleAll(xs.map((x) => () => f(x)))` instead of `Promise.all`, so a fault waits for every element to settle and the first fault in input order is raised
+- **Status:** Accepted (v0.463)
 
 **Context.** Slice 0 of the concurrent-effects track (spine #2615, ADR for the
 `par` block) adopted settle-all fault semantics for joins (Q3). The `parTraverse`
