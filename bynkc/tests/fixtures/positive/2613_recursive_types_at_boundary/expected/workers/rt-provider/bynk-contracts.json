@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "dirs": "925055b3a5fea763",
+    "trees": "d8dd08313c20865a"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "dirs": "Svc(\"dirs\",P(\"d\",Rec(\"Dir\",F(\"children\",L(Ref(\"Dir\"))),F(\"name\",B(\"String\")))),Ret(Rec(\"Dir\",F(\"children\",L(Ref(\"Dir\"))),F(\"name\",B(\"String\")))))",
+    "trees": "Svc(\"trees\",P(\"t\",Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))),Ret(Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))))"
+  }
+}

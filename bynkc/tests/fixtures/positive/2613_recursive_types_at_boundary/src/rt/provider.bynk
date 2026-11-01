@@ -1,0 +1,31 @@
+context rt.provider
+
+uses rt.shapes
+consumes bynk { Events }
+
+event Planted = { tree: Tree }
+
+service trees {
+  on call(t: Tree) -> Effect[Tree] {
+    Effect.pure(t)
+  }
+}
+
+service dirs {
+  on call(d: Dir) -> Effect[Dir] {
+    Effect.pure(d)
+  }
+}
+
+agent Keeper {
+  key id: String
+  store tree: Cell[Option[Tree]]
+
+  on call put(t: Tree) -> Effect[()] {
+    tree := Some(t)
+  }
+}
+
+fn roundTrip(t: Tree) -> Result[Tree, JsonError] {
+  Json.decode[Tree](Json.encode(t))
+}
