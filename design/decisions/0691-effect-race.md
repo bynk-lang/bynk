@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`a.race(b)`: the first of two `Effect[T]` to succeed wins, and the loser is handed to `waitUntil`, not cancelled, so it suits idempotent reads; if every side faults the first fault in source order is raised with the rest as `suppressed`; a same-instant tie goes to the receiver; legal where `within` is, and tested on virtual time with latency stubs; reopens track Q7 and adopts its option (b) (concurrent effects, slice 4, [#2711](https://github.com/bynk-lang/bynk/issues/2711))"
----
+# 0691 — `a.race(b)` takes the first effect to succeed and hands the loser to `waitUntil`, never cancelled
 
-## ADR: effect-race
-title: `a.race(b)` takes the first effect to succeed and hands the loser to `waitUntil`, never cancelled
-summary: `race(other: Effect[T]) -> Effect[T]` is a method of every `Effect[T]`, legal exactly where `within` is, lowered to `__bynkRace([a, b], deps.__exec)`; the first to succeed wins, all-fault raises the first fault in source order with the rest as `suppressed`, a same-instant tie goes to the receiver, and every loser goes to `waitUntil` uncancelled
+- **Status:** Accepted (v0.473)
 
 **Context.** A hedged read asks the same idempotent question of two sources and takes
 whichever answers first: `Promise.any` in TypeScript. Bynk could not write it: `<-`
