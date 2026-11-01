@@ -6183,6 +6183,78 @@ mod firstparty_injection_tests {
             .find(|l| l.contains("firstparty::") && (l.contains("_UNIT") || l.contains("_SRC")));
         assert_eq!(per_unit_constant, None, "references a per-unit constant");
     }
+
+    /// A consumer resolves an exported capability's operations against the
+    /// unit's exported types only, so an operation naming a type the unit
+    /// declares but does not export types as `()` there, with no diagnostic
+    /// at the cause. Every local type an exported capability's signatures name
+    /// is therefore in an `exports` clause.
+    #[test]
+    fn exported_capability_signatures_name_only_exported_types() {
+        use bynk_syntax::ast::{CommonsItem, ExportKind, SourceUnit};
+        use std::collections::HashSet;
+        let mut missing = Vec::new();
+        for unit in firstparty::UNITS
+            .iter()
+            .filter(|u| u.kind == firstparty::UnitKind::Adapter)
+        {
+            let toks = lexer::tokenize(unit.source).expect("lexes");
+            let (parsed, _) = parser::parse_unit_with_warnings_from(&toks, unit.source, &mut { 0 })
+                .expect("parses");
+            let SourceUnit::Adapter(adapter) = parsed else {
+                panic!("{} is registered as an adapter", unit.name);
+            };
+            let exported = |kind: fn(&ExportKind) -> bool| -> HashSet<&str> {
+                adapter
+                    .exports
+                    .iter()
+                    .filter(|c| kind(&c.kind))
+                    .flat_map(|c| c.names.iter().map(|e| e.name.name.as_str()))
+                    .collect()
+            };
+            let types = exported(|k| matches!(k, ExportKind::Type(_)));
+            let capabilities = exported(|k| matches!(k, ExportKind::Capability));
+            let local: HashSet<&str> = adapter
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    CommonsItem::Type(t) => Some(t.name.name.as_str()),
+                    CommonsItem::Event(e) => Some(e.name.name.as_str()),
+                    _ => None,
+                })
+                .collect();
+            for item in &adapter.items {
+                let CommonsItem::Capability(cap) = item else {
+                    continue;
+                };
+                if !capabilities.contains(cap.name.name.as_str()) {
+                    continue;
+                }
+                for op in &cap.ops {
+                    let vars = op
+                        .type_params
+                        .iter()
+                        .map(|p| p.name.name.as_str())
+                        .collect();
+                    let mut names = Vec::new();
+                    for p in &op.params {
+                        super::type_ref_names(&p.type_ref, &vars, &mut names);
+                    }
+                    super::type_ref_names(&op.return_type, &vars, &mut names);
+                    for name in names {
+                        if local.contains(name.as_str()) && !types.contains(name.as_str()) {
+                            missing.push(format!(
+                                "{}: `{}.{}` names `{name}`, which is not in an `exports` clause",
+                                unit.name, cap.name.name, op.name.name
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        missing.dedup();
+        assert!(missing.is_empty(), "{}", missing.join("\n"));
+    }
 }
 
 /// #2223: rewrite canonical dependency unit names in `error`'s text to the
