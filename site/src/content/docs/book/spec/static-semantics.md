@@ -1128,6 +1128,40 @@ too, so a join adds no interleaving a sequence of `<-`s does not already allow �
 the one thing it removes is the synchronous gap between two adjacent lines, which
 nothing inside the block can rely on, because no binding can read another's result.
 
+A **timeout** (`e.within(d)`; #2683) bounds how long an effect may take. It is a
+method of every `Effect[T]`: `d` MUST be a `Duration`, and the call has type
+`Effect[Result[T, TimedOut]]`, where `TimedOut { after: Duration }` is `bynk`'s (a
+unit that calls `within` MUST have `TimedOut` in scope, as `consumes bynk { TimedOut }` or an
+entry in its existing `consumes bynk { … }`, `bynk.within.timed_out_not_in_scope`).
+The effect is raced against `d`. If it settles first, the result is `Ok` of its
+value (a fault in it first faults the call, as it would unbounded), and the timer is
+cleared. If `d` passes first, the result is `Err(TimedOut { after: d })`. **The
+effect is not cancelled** (concurrent-effects Q7): it is handed to the execution
+context's `waitUntil`, so it runs to completion and its side effects — a write, a
+commit in another agent — still happen after the handler has moved on. A fault in it
+after the timeout is the platform's to log, not the handler's to catch. A tie, where
+the effect settles at the very instant `d` passes, goes to the effect. `d` MUST be
+over zero and at most 2,147,483,647 ms (about 24 days, the longest a platform timer
+takes); anything else faults the call, with the effect handed on as above. The type
+is the same whatever `T` is: `Effect[Result[T, E]]` becomes
+`Effect[Result[Result[T, E], TimedOut]]`, and the author unwraps both layers (there
+is no flattening form in this increment). `FetchOptions.timeout` remains the tool
+when the work must actually stop.
+
+Because the abandoned effect needs an execution context to be handed to, `within`
+is legal only where a service handler's `deps` carry one: in a **service handler's
+body**, a lambda written there included (`xs.parTraverse((x) => S.op(x).within(d))`
+closes over the handler's `deps`). It MUST NOT occur in an **agent handler**, a
+lambda within one included (`bynk.within.in_agent_handler`), for the reason a `~>`
+send MUST NOT (an agent handler has no execution context; the Durable Object's own
+`waitUntil` is a recorded follow-up). It MUST occur in an effectful position
+(`bynk.within.in_pure_context`), and it MUST NOT occur in an effectful `fn`, a
+provider operation or a WebSocket handler (`bynk.within.outside_handler`): no
+function has an execution context today (#2682), so the check is the same for every
+function and calls into one need no rule of their own, and a WebSocket handler runs
+in the connection's Durable Object, which has none either. A `within` in a `par` binding bounds its own effect
+alone, as the binding would be checked written outside the block.
+
 **Implicit unit tail (§4.8.1).** A block with no trailing expression has value
 `()`: the tail auto-lift (an `Effect[T]` context lifts a tail of type `T`) then
 lifts it to `Effect[()]` where the enclosing return type is `Effect[()]`, so an
@@ -1980,7 +2014,10 @@ a `case` body (`bynk.test.advance_outside_case`), MUST name `Clock`
 (`bynk.test.advance_not_duration`). It moves the case's harness clock, which
 starts at the epoch; the `Clock` test double reads it at `unit` and
 `integration`, and every participant's first-party `Clock` reads it at
-`system`. A negative amount faults the case at run time.
+`system`. A negative amount faults the case at run time. At `unit` and
+`integration`, in a module whose target calls `within` or whose `stub`s take time
+([§5.9d](#59d-test-double-provision--stub-v0118)), the clock is **virtual time**:
+`advance` also fires every timer that falls due by then, earliest first.
 
 In a `system`-tier `case`, a `svc.schedule("…", …)` address runs the cron
 handler through the participant Worker's `scheduled` entry point and yields the
@@ -2089,7 +2126,7 @@ ordinary identifiers.
 ### §5.9d Test-double provision — `stub` (v0.118)
 
 *(ADR 0154; keyword `stub` since #548, formerly a pun on `provides`)* A
-`stub Cap.method(<args>) returns <value> | fails` clause
+`stub Cap.method(<args>) returns <value> [after <d>] | fails | never` clause
 overrides one capability seam's provision under test. `as <tier>` sets the
 *default* provision of every seam; a `stub` clause overrides one. It names a
 consumed seam of the unit under test (`consumes` declares, `given` requires,
@@ -2115,10 +2152,37 @@ consumed seam of the unit under test (`consumes` declares, `given` requires,
 - **RHS typing (DECISION D2).** The right-hand side is a *value* or the fault atom
   `fails`, never a computed body. A `returns <value>` whose type disagrees with the
   operation's declared return type is `bynk.stub.rhs_type`.
+- **Latency and virtual time (#2683).** A stub can take time. `returns <value>
+  after <d>` completes only when the case's harness clock has reached `d` from the
+  call, and `never` does not complete at all; both are for testing a `within`. `d`
+  MUST be a `Duration` (`bynk.stub.after_type`); `after` is allowed on `returns`
+  only. The harness clock gains a timer queue, on which a `within` registers its
+  deadline in place of the host's `setTimeout`, and on which an `after` stub
+  registers its completion. A case's addressed call is then driven by
+  **auto-advance**: when it has not settled after the pending microtasks have run,
+  the harness moves the clock to the earliest queued timer — but only when every
+  capability call in flight is a harness stub waiting on `after` or `never`. A call
+  into a real provider holds the clock back, so work that is simply doing I/O is
+  never timed out by a test, and a case waiting on a host timer or I/O outside any
+  capability call waits in real time. The harness counts calls and stub waits, not
+  what a provider does between them: a provider operation that waits on a stub and
+  on real I/O at once is treated as waiting on the stub. Timers fire one at a time, the effect's
+  completion before a deadline at the same instant, so **a tie goes to the effect**.
+  When the call returns, the harness settles the effects `within` abandoned (an
+  abandoned `after` effect completes by moving the clock on; an abandoned `never`
+  is left), as it settles `~>` sends, so an expectation sees them. A call that can
+  never complete and has no `within` to end it faults the case. A module whose
+  target does not call `within` and whose stubs take no time keeps the plain counter
+  clock, byte for byte. Latency exists where `stub` does: at `system`, and under
+  `bynk test --against`, `within` reads real time.
 - **Sequenced provision (DECISION V).** `returns each [<outcome>, …]` supplies one
   outcome per call, in order; each outcome is a value, `fails`, or `ok(v)`. On
   **exhaustion the last outcome repeats** (steady state). A malformed sequence
   (e.g. empty) is `bynk.stub.bad_sequence`.
+
+A call that `within` abandoned is recorded when it is **issued**, like any call
+(#2683): `expect A.op before B.op` keeps comparing issue order, and a case sees the
+abandoned call once its effects have been settled at the end of the addressed call.
 
 Bare observation ([§5.9b](#59b-observation)) needs no `stub` — calls are
 recorded at the seam regardless; a `stub` is written only when a case depends on

@@ -1,0 +1,58 @@
+context shop.pricing
+
+consumes bynk
+
+// #2683: `within` against a capability the harness can hold back on the clock.
+
+capability Pricing {
+	fn quote(id: Int) -> Effect[Int]
+}
+
+capability Ledger {
+	fn book(id: Int) -> Effect[()]
+}
+
+provides Pricing = FixedPricing {
+	fn quote(id: Int) -> Effect[Int] { id }
+}
+
+provides Ledger = NoLedger {
+	fn book(id: Int) -> Effect[()] { () }
+}
+
+service quotes {
+	on call(id: Int) -> Effect[String] given Pricing {
+		let r <- Pricing.quote(id).within(2.seconds)
+		match r {
+			Ok(q) => Effect.pure("quoted \(q)")
+			Err(TimedOut { after, .. }) => Effect.pure("timed out after \(after.toMillis())")
+		}
+	}
+}
+
+// The abandoned effect keeps going: a slow ledger write that the handler gave
+// up on is still performed.
+service booking {
+	on call(id: Int) -> Effect[Bool] given Ledger {
+		let r <- Ledger.book(id).within(1.seconds)
+		Effect.pure(r.isOk())
+	}
+}
+
+service many {
+	on call(ids: List[Int]) -> Effect[Int] given Pricing {
+		let rs <- ids.parTraverseAll((id) => Pricing.quote(id).within(2.seconds))
+		Effect.pure(rs.length())
+	}
+}
+
+// Inside a `par` block each `within` bounds its own effect alone.
+service together {
+	on call(id: Int) -> Effect[String] given Pricing {
+		par {
+			let a <- Pricing.quote(id).within(2.seconds)
+			let b <- Pricing.quote(id + 1).within(2.seconds)
+		}
+		Effect.pure("\(a.isOk()) \(b.isOk())")
+	}
+}

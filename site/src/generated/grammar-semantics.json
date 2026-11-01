@@ -988,6 +988,22 @@
     {
       "code": "bynk.types.sql_row_shape",
       "summary": "`Json.decodeSql[T]`'s `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c)."
+    },
+    {
+      "code": "bynk.within.in_agent_handler",
+      "summary": "`e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to."
+    },
+    {
+      "code": "bynk.within.in_pure_context",
+      "summary": "`e.within(d)` was used in a pure (non-effectful) context."
+    },
+    {
+      "code": "bynk.within.outside_handler",
+      "summary": "`e.within(d)` was used outside a service handler's body (in a function or provider), where no execution context exists."
+    },
+    {
+      "code": "bynk.within.timed_out_not_in_scope",
+      "summary": "`e.within(d)` yields `Result[_, TimedOut]`, but the unit does not consume `bynk`, so `TimedOut` is not in scope."
     }
   ],
   "none_expr": [

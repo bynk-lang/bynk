@@ -11,6 +11,7 @@ adapter bynk {
 		StreamResponse,
 		FetchOptions,
 		Redirect,
+		TimedOut,
 		LogLevel,
 		EventEnvelope,
 	}
@@ -84,6 +85,17 @@ adapter bynk {
 	type FetchOptions = {
 		timeout: Option[Duration] = None,
 		redirect: Redirect = Redirect.Follow,
+	}
+
+	---
+	Why an `e.within(d)` produced no value: the deadline `after` passed first.
+	The abandoned effect is **not** cancelled. It is handed to the platform's
+	`waitUntil` and may still complete after the handler has returned, so its
+	side effects (a write, a commit in another agent) can still happen. Use
+	`FetchOptions.timeout` when the work must actually stop.
+	---
+	type TimedOut = {
+		after: Duration,
 	}
 
 	---

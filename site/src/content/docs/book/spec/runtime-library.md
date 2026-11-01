@@ -501,3 +501,30 @@ later reasons to it as a `suppressed` array, in input order, when the first is a
 object. Callers are the `par` block and, since #2662, the `parTraverse`, `parTraverseAll` and `parTraverseTry` lowerings (list and query/broadcast receivers), which pass `xs.map((x) => () => f(x))`; the result is then an array of the awaited values, in input order. The helper is codegen, not part of the published emit ABI (ADR 0310): it
 lives in the `settle` runtime module, which a project emits only when a module
 imports it.
+
+## §7.4.14 The `within` race (#2683)
+
+`__bynkWithin(promise, ms, exec)` is the runtime half of `e.within(d)` (§5.5). `promise`
+is the effect, `ms` the deadline in milliseconds, and `exec` the handler's execution
+context (`deps.__exec`).
+
+```typescript
+export async function __bynkWithin<T>(
+  promise: Promise<T>,
+  ms: number,
+  exec: { waitUntil(promise: Promise<unknown>): void },
+): Promise<Result<T, { readonly after: number }>>;
+```
+
+The contract: it races `promise` against `setTimeout(ms)`. If the promise settles first
+it clears the timer and yields `Ok(value)`, or rejects with the promise's own reason. If
+the timer fires first it yields `Err({ after: ms })` and calls `exec.waitUntil(promise)`
+**with the promise itself**: the effect is neither cancelled nor wrapped, so it runs to
+completion and a fault in it after that point is the platform's to report, not the
+caller's. A tie goes to the promise. A deadline that is not over zero and at most
+2,147,483,647 ms hands the promise to `waitUntil` and then throws, so the effect
+already running is not left unseen. The helper reads `exec.timers` (`set(fn, ms)` and
+`clear(handle)`) in place of `setTimeout` when it is present: the test harness supplies
+virtual time that way, and no emitted handler does. Like `__bynkSettleAll`, it is
+codegen, not part of the published emit ABI (ADR 0310), and lives in the `settle`
+runtime module.

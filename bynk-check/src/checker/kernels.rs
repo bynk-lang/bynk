@@ -1987,6 +1987,98 @@ pub(crate) fn check_string_kernel_method(
     Some(tys.intern(ret))
 }
 
+/// #2683: `e.within(d)` on any `Effect[T]` — `within(d: Duration) ->
+/// Effect[Result[T, TimedOut]]`. It races `e` against a deadline and hands the
+/// abandoned effect to the execution context's `waitUntil` (it is never
+/// cancelled, track Q7), so it is legal only where a service handler's `deps`
+/// supply that context: a service handler's body, lambdas included. An agent
+/// handler (like `~>`, #2017) and every function or provider body are refused.
+/// The check order is agent handler, pure context, then outside a handler, so
+/// each position reports the remedy that applies to it.
+pub(crate) fn check_effect_within_method(
+    method: &Ident,
+    args: &[Expr],
+    inner: TyId,
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let mut refused = false;
+    if ctx.in_agent_handler {
+        refused = true;
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.within.in_agent_handler",
+                span,
+                "`within` cannot be used in an agent handler: an agent handler has no execution context to hand the abandoned effect to",
+            )
+            .with_note(
+                "move the `within` to the service handler that calls the agent, or bound the work another way, such as `FetchOptions.timeout`",
+            ),
+        );
+    } else if !ctx.effectful {
+        refused = true;
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.within.in_pure_context",
+                span,
+                "`within` can only be used inside an effectful body (one returning `Effect[T]`)",
+            )
+            .with_label(
+                ctx.return_ty_span,
+                format!("enclosing return type is `{}`", ctx.return_ty.display(tys)),
+            )
+            .with_note("change the enclosing handler's return type to `Effect[...]`"),
+        );
+    } else if !ctx.in_service_handler {
+        refused = true;
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.within.outside_handler",
+                span,
+                "`within` can only be used in a service handler's body: a function, a provider operation or a WebSocket handler has no execution context to hand the abandoned effect to",
+            )
+            .with_note(
+                "a test `case` body is not a service handler either: address a service whose handler calls `within`, and test it with `stub … after`. A function has no execution context (#2682), and a WebSocket handler runs in the connection's Durable Object, which has none either; call the `within` from a service handler (not a WebSocket one) that uses this function, and pass the function the bounded effect, not the work",
+            ),
+        );
+    }
+    let duration = tys.intern(Ty::Base(BaseType::Duration));
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!("`Effect.within` takes 1 argument, got {}", args.len()),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    check_arg(&args[0], duration, "the `Effect.within` deadline", ctx);
+    let timed_out_ref = TypeRef::Named(Ident {
+        name: "TimedOut".to_string(),
+        span: method.span,
+    });
+    let Some(timed_out) = resolve_type_ref(&timed_out_ref, &ctx.input.types, tys) else {
+        if !refused {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.within.timed_out_not_in_scope",
+                    method.span,
+                    "`within` yields `Result[_, TimedOut]`, but `TimedOut` is not in scope here",
+                )
+                .with_note(
+                    "add the line `consumes bynk { TimedOut }` to this unit, or add `TimedOut` to its existing `consumes bynk { … }` list",
+                ),
+            );
+        }
+        return None;
+    };
+    let result = tys.intern(Ty::Result(inner, timed_out));
+    Some(tys.intern(Ty::Effect(result)))
+}
+
 /// v0.22a: type a function-valued kernel argument (the 0048 combinators —
 /// `map`/`andThen`/`mapErr`). Parameter types are known from the receiver;
 /// the return is read from the actual: an expected return carrying a

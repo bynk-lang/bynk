@@ -139,3 +139,48 @@ suite commerce.payment {
           (variant_pattern
             (identifier)
             (wildcard_pattern)))))))
+
+================================================================================
+stub latency — `returns … after` and `never` (#2683)
+================================================================================
+
+suite shop.pricing {
+  case "times out" {
+    stub Pricing.quote(_) returns 7 after 3.seconds
+    stub Ledger.book(_) never
+    let r <- quotes.call(1)
+    expect r == "late"
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (case
+      (string_literal)
+      (stub_clause
+        (identifier)
+        (identifier)
+        (wildcard)
+        (number_literal)
+        (field_access
+          (number_literal)
+          (identifier)))
+      (stub_clause
+        (identifier)
+        (identifier)
+        (wildcard))
+      (effect_let_stmt
+        (identifier)
+        (method_call
+          (identifier)
+          (identifier)
+          (number_literal)))
+      (expect_expr
+        (binary_expr
+          (identifier)
+          (string_literal))))))
