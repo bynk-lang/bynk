@@ -1313,6 +1313,10 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("encode", "encode(value) -> String"),
             ("decode", "decode[T](s: String) -> Result[T, JsonError]"),
+            (
+                "decodeSql",
+                "decodeSql[T](s: String) -> Result[T, JsonError]",
+            ),
         ],
     ),
     ("List", &[("empty", "empty() -> List[T]")]),

@@ -1,0 +1,6 @@
+[project]
+name = "2628-d1-sql-row-shape"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.cloudflare.D1"]

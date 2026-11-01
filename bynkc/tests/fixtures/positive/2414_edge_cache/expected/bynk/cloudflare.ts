@@ -213,7 +213,10 @@ export const SqlValue = {
 };
 
 /**
- * One statement of a `D1.batch`: its SQL and its positional parameters.
+ * One statement of a `D1.batch`: its SQL, a string literal, and its
+ * positional parameters. It stays where it is built: it is never stored,
+ * sent or decoded, since one from outside would carry SQL that was never a
+ * literal.
  */
 export interface SqlStatement {
   readonly sql: string;
@@ -448,18 +451,20 @@ export const __EdgeCacheToken: symbol = globalThis.Symbol("EdgeCache");
 
 /**
  * A D1 database: SQLite, queried with SQL text and positional parameters
- * (`?1`, `?2`, …) bound from `SqlValue`s, never spliced into the text. Used
+ * (`?1`, `?2`, …) bound from `SqlValue`s, never spliced into the text. The
+ * SQL is a string literal, so data reaches a statement only as a parameter. Used
  * only through a named instance, `capability Orders = D1`, which binds as
  * `D1_ORDERS`; a bare `given D1` names no database and is refused.
  * `bynk deploy` creates the database, named `<worker>-<capability, kebab>`
  * and environment-qualified, and records its id.
  *
- * Rows come back as JSON text for `Json.decode`: `all` gives every row as an
- * array of objects keyed by column name (`Json.decode[List[Row]]`), `first`
- * the first row as one object, or `None` when there is none. A blob column
- * arrives as base64, so a `Bytes` field decodes it. SQLite has no boolean:
- * a flag column arrives as `0` or `1`, so declare that field `Int`. An
- * integer past ±2^53 cannot be represented and fails the decode.
+ * Rows come back as JSON text for `Json.decodeSql`: `all` gives every row as
+ * an array of objects keyed by column name (`Json.decodeSql[List[Row]]`),
+ * `first` the first row as one object, or `None` when there is none. A blob
+ * column arrives as base64, so a `Bytes` field decodes it. SQLite has no
+ * boolean: a flag column arrives as `0` or `1`, which `Json.decodeSql` reads
+ * at a `Bool` field. An integer past ±2^53 cannot be represented and fails
+ * the decode.
  *
  * `run` executes a write and reports what it changed. `batch` runs its
  * statements in order in one transaction: all apply, or none do and the

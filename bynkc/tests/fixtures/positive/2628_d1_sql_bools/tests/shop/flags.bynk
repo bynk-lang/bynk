@@ -1,0 +1,56 @@
+suite shop.flags
+
+// #2628: the unit double is real SQLite, so flags come back as `0`/`1`.
+
+case "flag columns decode as Bool" {
+	let ok <- setup.call()
+	expect ok
+	let _ <- save.call("a", true, Some(false))
+	let _ <- save.call("b", false, None)
+	let rows <- listing.call()
+	expect rows == Ok([
+		Flag { id: "a", active: true, seen: Some(false) },
+		Flag { id: "b", active: false, seen: None },
+	])
+	let a <- lookup.call("a")
+	expect a == Some(Flag { id: "a", active: true, seen: Some(false) })
+}
+
+case "a flag that is not 0 or 1 does not decode" {
+	let _ <- setup.call()
+	let decoded <- strange.call("x")
+	expect decoded == false
+}
+
+case "a batch built with map runs every statement" {
+	let _ <- setup.call()
+	let ran <- stock.call([Item { id: "a", qty: 1 }, Item { id: "b", qty: 2 }])
+	expect ran == Ok(2)
+	let rows <- listing.call()
+	expect rows == Ok([
+		Flag { id: "a", active: false, seen: None },
+		Flag { id: "b", active: false, seen: None },
+	])
+}
+
+case "a case body decodes a row with Json.decodeSql" {
+	let row = Json.decodeSql[Flag]("{\"id\":\"a\",\"active\":1,\"seen\":null}")
+	expect row == Ok(Flag { id: "a", active: true, seen: None })
+}
+
+case "a refined Bool column decodes from 0/1" {
+	let badge = Json.decodeSql[Badge]("{\"id\":\"a\",\"shown\":1,\"hidden\":0}")
+	let encoded = match badge {
+		Ok(b) => Json.encode(b)
+		Err(_) => "did not decode"
+	}
+	expect encoded == "{\"id\":\"a\",\"shown\":true,\"hidden\":{\"kind\":\"Some\",\"value\":false}}"
+}
+
+case "a flag at integration reads back as Bool" as integration {
+	let ok <- setup.call()
+	expect ok
+	let _ <- save.call("a", true, Some(true))
+	let rows <- listing.call()
+	expect rows == Ok([Flag { id: "a", active: true, seen: Some(true) }])
+}

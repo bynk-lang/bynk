@@ -5055,6 +5055,15 @@ pub fn reject_fn_types(
                 .with_note("store or send the asset's `.url` (a `String`) instead"),
             );
         }
+        // P4c (#2628): a `SqlStatement` restored or received from outside
+        // would carry SQL that was never a literal. `D1.batch` takes one, so a
+        // capability operation's signature is exempt, as for keys.
+        TypeRef::Named(id)
+            if what != CAPABILITY_SIGNATURE
+                && crate::checker::is_sql_statement_type(&id.name, types) =>
+        {
+            errors.push(crate::checker::statement_at_boundary(id.span, what));
+        }
         // K4: a `bynk.crypto` key holds a non-extractable platform key. It is
         // imported where it is used and lives for that call: persisting,
         // serialising or sending it would either leak the secret or be

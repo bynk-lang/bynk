@@ -39,6 +39,7 @@ use bynk_syntax::span::Span;
 pub use bynk_syntax::ast::ExprId;
 
 mod calls;
+mod d1;
 mod equality;
 mod expressions;
 mod kernels;
@@ -53,6 +54,8 @@ use kernels::*;
 use refinements::*;
 
 pub use calls::{check_event_field_default, check_state_initialiser};
+pub use d1::row_bool_fields;
+pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
 pub use refinements::{locale_tag_accepts, locale_tag_pattern, zero_value_ts};
 
 // ==== Type representation ====
@@ -4221,7 +4224,10 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
         ExprKind::None => check_none(expr.span, expected, ctx),
         ExprKind::Question(inner) => check_question(inner, expr.span, ctx),
         ExprKind::RecordConstruction { type_name, fields } => {
-            check_record_construction(type_name, fields, expected, expr.span, ctx)
+            let ty = check_record_construction(type_name, fields, expected, expr.span, ctx)?;
+            // P4c (#2628): a `SqlStatement`'s `sql` is a literal.
+            d1::check_statement_fields(ty, fields, ctx);
+            Some(ty)
         }
         ExprKind::FieldAccess { receiver, field } if is_run_id(receiver, field, ctx) => {
             // #2138 (track §3.7): `run.id`, the test run's identity, in a test
@@ -4503,14 +4509,18 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             type_name,
             base,
             overrides,
-        } => check_record_spread(
-            type_name.as_ref(),
-            base,
-            overrides,
-            expr.span,
-            expected,
-            ctx,
-        ),
+        } => {
+            let ty = check_record_spread(
+                type_name.as_ref(),
+                base,
+                overrides,
+                expr.span,
+                expected,
+                ctx,
+            )?;
+            d1::check_statement_fields(ty, overrides, ctx);
+            Some(ty)
+        }
         ExprKind::Expect(inner) => check_expect(inner, expr.span, ctx),
         ExprKind::Val { type_ref, args } => check_val(type_ref, args, expr.span, ctx),
         ExprKind::Observation(o) => check_observation(o, expr.span, ctx),

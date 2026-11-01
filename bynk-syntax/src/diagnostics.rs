@@ -3010,6 +3010,20 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `Some` payload has the wrong type.",
         &["some_expr"],
     ),
+    dg(
+        "bynk.types.sql_not_literal",
+        "A `D1` statement's SQL (the first argument of `all`, `first` or `run`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c).",
+        &["method_call", "record_construction", "record_spread"],
+    ),
+    dg(
+        "bynk.types.sql_row_shape",
+        "`Json.decodeSql[T]`'s `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c).",
+        &["method_call"],
+    ),
+    d(
+        "bynk.types.sql_statement_at_boundary",
+        "A `bynk.cloudflare` `SqlStatement` appears in a storable or boundary-crossing position, or as a `Json` codec target — a statement from outside would carry SQL that was never a literal (standard-library P4c).",
+    ),
     d(
         "bynk.types.stream_at_boundary",
         "A `Stream` type, or a record or sum carrying one in a field, appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0; #2623 admits it in capability signatures and record fields).",
