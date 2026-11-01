@@ -1,0 +1,12 @@
+context demo
+
+// #2621: the bitwise methods take an `Int`; there is no numeric coercion.
+fn mask(n: Int) -> Int {
+	n.and(1.5)
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

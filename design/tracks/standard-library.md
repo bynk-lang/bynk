@@ -29,6 +29,8 @@
   K6a done (#2596): a built-in immutable `Set[T]` and the `bynk.set`
   combinators.
   K6b done (#2598): integer `div`/`rem`/`mod`/`pow` and `Float` functions.
+  Int bitwise operations done (#2621): `and`/`or`/`xor`/`andNot`/`shl`/`shr`
+  as value methods over the full safe range; operators are a possible follow-on.
   K6c done (#2600): literal-pattern regex methods on `String`.
   P4a done (#2602): a context queries a D1 database through a named `D1`.
 - **Realises:** `design/bynk-design-notes.md` "Three-tier output" (the runtime

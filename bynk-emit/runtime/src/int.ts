@@ -75,3 +75,65 @@ export function __bynkIntPow(base: number, exp: number): number {
   }
   return result;
 }
+
+// Bitwise operations on `Int` (#2621). JS's `&`, `|`, `^`, `<<` and `>>`
+// truncate to 32-bit signed integers, which would silently corrupt a Bynk
+// `Int` (a 53-bit safe integer) at 2^31, so the full-range cases split each
+// operand into a high part (below 2^21) and a low 32 bits and combine the
+// halves. Operands below 2^31 take the native fast path. A negative operand
+// has no natural bit pattern in a sign-magnitude domain, so it faults.
+
+const TWO_32 = 4294967296;
+const TWO_31 = 2147483648;
+
+function nonNegative(v: number, op: string): void {
+  if (v < 0) throw new Error(`Int.${op}: a negative operand (${v}) has no bit pattern`);
+}
+
+function bitwise(l: number, r: number, op: string, f: (a: number, b: number) => number): number {
+  nonNegative(l, op);
+  nonNegative(r, op);
+  if (l < TWO_31 && r < TWO_31) return f(l, r);
+  const hi = f(Math.floor(l / TWO_32), Math.floor(r / TWO_32)) >>> 0;
+  const lo = f(l % TWO_32, r % TWO_32) >>> 0;
+  return hi * TWO_32 + lo;
+}
+
+export function __bynkIntAnd(l: number, r: number): number {
+  return bitwise(l, r, "and", (a, b) => a & b);
+}
+
+export function __bynkIntOr(l: number, r: number): number {
+  return bitwise(l, r, "or", (a, b) => a | b);
+}
+
+export function __bynkIntXor(l: number, r: number): number {
+  return bitwise(l, r, "xor", (a, b) => a ^ b);
+}
+
+// `l` with the bits of `mask` cleared: `not` is omitted, as its width is
+// arbitrary, so the mask-clearing form is the primitive.
+export function __bynkIntAndNot(l: number, r: number): number {
+  return bitwise(l, r, "andNot", (a, b) => a & ~b);
+}
+
+function shiftCount(n: number, op: string): void {
+  if (n < 0 || n > 52) throw new Error(`Int.${op}: a shift count of ${n} is outside 0..52`);
+}
+
+// Multiplying by a power of two is exact in a double, so the only check is
+// that the result is still a safe integer.
+export function __bynkIntShl(l: number, n: number): number {
+  nonNegative(l, "shl");
+  shiftCount(n, "shl");
+  const r = l * 2 ** n;
+  if (!Number.isSafeInteger(r)) throw new Error(`Int.shl: ${l} shifted left by ${n} is past the safe Int range`);
+  return r;
+}
+
+// Dividing by a power of two and flooring is exact too.
+export function __bynkIntShr(l: number, n: number): number {
+  nonNegative(l, "shr");
+  shiftCount(n, "shr");
+  return Math.floor(l / 2 ** n);
+}

@@ -295,6 +295,14 @@ pub const INT_METHODS: &[KernelMethod] = &[
     m("rem", "rem(other: Int) -> Int"),
     m("mod", "mod(other: Int) -> Int"),
     m("pow", "pow(exp: Int) -> Int"),
+    // #2621: bitwise operations over the whole safe-integer range, faulting
+    // on a negative operand or a shift count outside 0..52.
+    m("and", "and(other: Int) -> Int"),
+    m("or", "or(other: Int) -> Int"),
+    m("xor", "xor(other: Int) -> Int"),
+    m("andNot", "andNot(mask: Int) -> Int"),
+    m("shl", "shl(count: Int) -> Int"),
+    m("shr", "shr(count: Int) -> Int"),
 ];
 
 /// The `Float` numeric kernel (v0.21).

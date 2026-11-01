@@ -4120,8 +4120,8 @@ pub(crate) const BYTES_OPS_RUNTIME_IMPORTS: &str = ", __bynkBytesConcat, __bynkB
 pub(crate) const EQ_RUNTIME_IMPORTS: &str = ", __bynkEq";
 
 /// #1657: the `Int` domain traps (`bynk-emit/runtime/src/int.ts`).
-pub(crate) const INT_RUNTIME_IMPORTS: &str =
-    ", __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow";
+pub(crate) const INT_RUNTIME_IMPORTS: &str = ", __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, \
+     __bynkIntAnd, __bynkIntOr, __bynkIntXor, __bynkIntAndNot, __bynkIntShl, __bynkIntShr";
 
 /// message-bundles slice 3 (#878, Decision G): the ICU-formatting runtime
 /// helpers, appended to a module's import list when an emitted `messages`

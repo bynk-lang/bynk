@@ -887,6 +887,7 @@ module already has:
 | `x.clamp(lo, hi)` | `Math.min(Math.max(x, lo), hi)` |
 | `f.isNaN()`/`f.isFinite()` | `Number.isNaN`/`Number.isFinite` |
 | `a.div(b)`/`a.rem(b)`/`a.mod(b)`/`a.pow(n)` on `Int` (#2598) | the runtime's `__bynkIntDivFloor`/`__bynkIntRem`/`__bynkIntMod`/`__bynkIntPow`, each faulting on a zero divisor or a result past the safe range |
+| `a.and(b)`/`or`/`xor`/`andNot`/`shl(n)`/`shr(n)` on `Int` (#2621) | the runtime's `__bynkIntAnd`/`__bynkIntOr`/`__bynkIntXor`/`__bynkIntAndNot`/`__bynkIntShl`/`__bynkIntShr`, which split each operand into hi/lo halves (native operators only below 2^31) and fault on a negative operand, a shift count outside 0..52 or an `shl` past the safe range |
 | `Float` functions (#2598) | `Math.sqrt`/`pow`/`exp`/`log` (for `ln`)/`log10`/`log2`/`sin`/`cos`/`tan`/`asin`/`acos`/`atan`/`atan2`; `Float.pi()`/`Float.e()` are `Math.PI`/`Math.E` |
 | `Int.parse`/`Float.parse` | a typed IIFE over `Number(s)` (full-string), rejecting empty/whitespace input, non-safe-integers (`Int`) and non-finite values (`Float`) |
 
