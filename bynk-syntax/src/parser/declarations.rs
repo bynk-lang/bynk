@@ -158,6 +158,7 @@ impl<'a> Parser<'a> {
             // Optional doc block and leading line comments before the next item.
             let (mut leading, item_doc) = self.collect_item_lead();
             self.item_start = Some(self.pos);
+            let private = self.take_private_modifier(true)?;
             match self.peek_kind() {
                 Some(TokenKind::RBrace) if brace => {
                     // Doc not attachable; treat as orphan if present. Any
@@ -231,6 +232,10 @@ impl<'a> Parser<'a> {
                     match self.parse_type_decl() {
                         Ok(mut t) => {
                             t.documentation = doc;
+                            if let Some(sp) = private {
+                                t.private = Some(sp);
+                                t.span = sp.merge(t.span);
+                            }
                             t.trivia.leading = leading;
                             t.trivia.trailing = self.take_trailing_trivia();
                             last_span = t.span;
@@ -246,6 +251,10 @@ impl<'a> Parser<'a> {
                     match self.parse_fn_decl() {
                         Ok(mut f) => {
                             f.documentation = doc;
+                            if let Some(sp) = private {
+                                f.private = Some(sp);
+                                f.span = sp.merge(f.span);
+                            }
                             f.trivia.leading = leading;
                             f.trivia.trailing = self.take_trailing_trivia();
                             last_span = f.span;
@@ -261,6 +270,10 @@ impl<'a> Parser<'a> {
                     match self.parse_messages_decl() {
                         Ok(mut m) => {
                             m.documentation = doc;
+                            if let Some(sp) = private {
+                                m.private = Some(sp);
+                                m.span = sp.merge(m.span);
+                            }
                             m.trivia.leading = leading;
                             m.trivia.trailing = self.take_trailing_trivia();
                             last_span = m.span;
@@ -299,6 +312,10 @@ impl<'a> Parser<'a> {
                     match self.parse_asset_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -318,6 +335,10 @@ impl<'a> Parser<'a> {
                     match self.parse_embed_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -1128,6 +1149,7 @@ impl<'a> Parser<'a> {
         loop {
             let (mut leading, item_doc) = self.collect_item_lead();
             self.item_start = Some(self.pos);
+            let private = self.take_private_modifier(true)?;
             match self.peek_kind() {
                 Some(TokenKind::RBrace) if brace => {
                     if let Some(doc) = item_doc {
@@ -1271,6 +1293,10 @@ impl<'a> Parser<'a> {
                     match self.parse_type_decl() {
                         Ok(mut t) => {
                             t.documentation = doc;
+                            if let Some(sp) = private {
+                                t.private = Some(sp);
+                                t.span = sp.merge(t.span);
+                            }
                             t.trivia.leading = leading;
                             t.trivia.trailing = self.take_trailing_trivia();
                             last_span = t.span;
@@ -1286,6 +1312,10 @@ impl<'a> Parser<'a> {
                     match self.parse_fn_decl() {
                         Ok(mut f) => {
                             f.documentation = doc;
+                            if let Some(sp) = private {
+                                f.private = Some(sp);
+                                f.span = sp.merge(f.span);
+                            }
                             f.trivia.leading = leading;
                             f.trivia.trailing = self.take_trailing_trivia();
                             last_span = f.span;
@@ -1408,6 +1438,10 @@ impl<'a> Parser<'a> {
                     match self.parse_messages_decl() {
                         Ok(mut m) => {
                             m.documentation = doc;
+                            if let Some(sp) = private {
+                                m.private = Some(sp);
+                                m.span = sp.merge(m.span);
+                            }
                             m.trivia.leading = leading;
                             m.trivia.trailing = self.take_trailing_trivia();
                             last_span = m.span;
@@ -1442,6 +1476,10 @@ impl<'a> Parser<'a> {
                     match self.parse_asset_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -1461,6 +1499,10 @@ impl<'a> Parser<'a> {
                     match self.parse_embed_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -1576,6 +1618,7 @@ impl<'a> Parser<'a> {
         loop {
             let (mut leading, item_doc) = self.collect_item_lead();
             self.item_start = Some(self.pos);
+            let private = self.take_private_modifier(false)?;
             match self.peek_kind() {
                 Some(TokenKind::RBrace) if brace => {
                     if let Some(doc) = item_doc {
@@ -1666,6 +1709,10 @@ impl<'a> Parser<'a> {
                     match self.parse_type_decl() {
                         Ok(mut t) => {
                             t.documentation = doc;
+                            if let Some(sp) = private {
+                                t.private = Some(sp);
+                                t.span = sp.merge(t.span);
+                            }
                             t.trivia.leading = leading;
                             t.trivia.trailing = self.take_trailing_trivia();
                             last_span = t.span;
@@ -1680,6 +1727,10 @@ impl<'a> Parser<'a> {
                     match self.parse_fn_decl() {
                         Ok(mut f) => {
                             f.documentation = doc;
+                            if let Some(sp) = private {
+                                f.private = Some(sp);
+                                f.span = sp.merge(f.span);
+                            }
                             f.trivia.leading = leading;
                             f.trivia.trailing = self.take_trailing_trivia();
                             last_span = f.span;
@@ -1769,6 +1820,10 @@ impl<'a> Parser<'a> {
                     match self.parse_messages_decl() {
                         Ok(mut m) => {
                             m.documentation = doc;
+                            if let Some(sp) = private {
+                                m.private = Some(sp);
+                                m.span = sp.merge(m.span);
+                            }
                             m.trivia.leading = leading;
                             m.trivia.trailing = self.take_trailing_trivia();
                             last_span = m.span;
@@ -1801,6 +1856,10 @@ impl<'a> Parser<'a> {
                     match self.parse_asset_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -1819,6 +1878,10 @@ impl<'a> Parser<'a> {
                     match self.parse_embed_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
+                            if let Some(sp) = private {
+                                a.private = Some(sp);
+                                a.span = sp.merge(a.span);
+                            }
                             a.trivia.leading = leading;
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
@@ -3695,6 +3758,7 @@ impl<'a> Parser<'a> {
             documentation: None,
             span: kw.span.merge(end),
             trivia: Trivia::default(),
+            private: None,
         })
     }
 
@@ -3714,6 +3778,7 @@ impl<'a> Parser<'a> {
             documentation: None,
             span: kw.span.merge(path_span),
             trivia: Trivia::default(),
+            private: None,
         })
     }
 
@@ -3798,6 +3863,7 @@ impl<'a> Parser<'a> {
             documentation: None,
             span: kw.span.merge(close.span),
             trivia: Trivia::default(),
+            private: None,
         })
     }
 

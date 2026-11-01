@@ -1,0 +1,5 @@
+commons labels
+
+fn label(text: String) -> String {
+  "[\(text)]"
+}

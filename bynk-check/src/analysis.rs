@@ -525,6 +525,8 @@ pub fn analyse_project_with_policy(
         &groups,
         &mut errors,
     );
+    // -- 6.1. #2618: a public signature naming a private type. --
+    project_model::phase_private_in_public(&parsed, &groups, &mut errors);
 
     // -- 6a0. #1883, slice 1b: every declared asset names a file in the
     //         `assets/` folder, listed from disk as discovery already reads

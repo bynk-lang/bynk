@@ -1,0 +1,11 @@
+context counter
+
+// #2618: `private` does not apply to an agent.
+private agent Counter {
+  key id: String
+  store n: Cell[Int]
+
+  on call zero() -> Effect[Int] {
+    0
+  }
+}

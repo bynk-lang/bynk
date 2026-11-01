@@ -1,0 +1,9 @@
+context shop.till
+
+uses shop.pricing
+
+service api from http {
+  on GET("/tea") () -> Effect[HttpResult[String]] by Visitor {
+    Ok(describe(Item { name: "tea", price: 3 }))
+  }
+}

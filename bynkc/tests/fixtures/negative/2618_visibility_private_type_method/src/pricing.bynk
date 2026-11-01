@@ -1,0 +1,17 @@
+commons pricing
+
+private type Tally = { lines: Int, sum: Int }
+
+// #2618 (Decision G): neither method is marked `private`, but `Tally` is, so
+// both are hidden with it.
+fn Tally.zero() -> Tally {
+  Tally { lines: 0, sum: 0 }
+}
+
+fn Tally.mean(self) -> Int {
+  if self.lines == 0 { 0 } else { self.sum / self.lines }
+}
+
+fn emptyMean() -> Int {
+  Tally.zero().mean()
+}

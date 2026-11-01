@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **677** codes in total.
+There are **681** codes in total.
 
 ## Agents
 
@@ -404,7 +404,7 @@ There are **677** codes in total.
 | `bynk.package.unsupported_in_dependency` | A dependency declares an `asset` or an `embed`, which would resolve against the consuming project's `assets/` or `embeds/`; a per-package namespace for either isn't designed yet. |  | — |
 | `bynk.package.version_conflict` | One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package. |  | — |
 | `bynk.par.invalid_statement` | A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
-| `bynk.par.question_in_join` | A `?` appears inside a `par { … }` binding. Propagating a failure in source order across a join is a later increment, so the block takes no `?` yet; match on the result after the block. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
+| `bynk.par.question_in_join` | A `?` appears inside a `par { … }` binding. `?` takes a `Result` value, not an effect, so a binding's own result is unwrapped after the block (`let user = userR?`), where the `?` lines run in source order; a `?` on an argument is computed before the block. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
 | `bynk.par.sibling_name` | A `par { … }` binding mentions a name another binding in the same block binds, or binds a name twice. The bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
 | `bynk.par.single_binding` | A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning). | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | Warning |
 | `bynk.query.join_key_mismatch` | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
@@ -487,6 +487,10 @@ There are **677** codes in total.
 | `bynk.tier.cross_context_needs_system` | A `unit` or `integration` case, or a `property`, reaches another context's service, directly or through a target service or agent handler that calls one; below `system` no other context is stood up to call, so the flow belongs in a `suite … as system`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.tier.mixed_system_suite` | A suite mixes `system` cases with `unit` or `integration` ones; a `system` case runs against deployed Workers and addresses services by context path, so it needs a `suite … as system` of its own. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.tier.system_needs_wire` | An `as system` test stands up fewer than two contexts; the system tier wires across contexts. |  | — |
+| `bynk.visibility.private_in_public` | A public declaration's signature names a `private` type of its own unit, which an importer could neither name nor build. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
+| `bynk.visibility.private_item` | A reference from another unit names a `private` declaration, which is visible only within its own unit and that unit's suites. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
+| `bynk.visibility.private_messages` | A `messages` block in a commons is `private`. A bundle whose `@reference` block is private is never negotiated by a context that uses the commons, and `private` on another block of a bundle whose reference is public has no effect (warning). | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | Warning |
+| `bynk.visibility.private_not_allowed` | `private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset` or `embed` in a commons or context. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
 | `bynk.wasm.panic` | The in-browser compiler panicked internally (a compiler bug, reported as a diagnostic instead of crashing the page). |  | — |
 | `bynk.wasm.strip_failed` | The in-browser compiler could not strip the emitted TypeScript to JavaScript. |  | — |
 | `bynk.within.in_agent_handler` | `e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |

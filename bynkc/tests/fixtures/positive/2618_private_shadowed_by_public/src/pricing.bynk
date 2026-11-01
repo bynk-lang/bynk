@@ -1,0 +1,14 @@
+commons pricing
+
+// #2618: `label` is private to `pricing`; `labels` declares a public `label`
+// of its own.
+
+type Item = { name: String, price: Int }
+
+private fn label(i: Item) -> String {
+  "\(i.name): \(i.price)"
+}
+
+fn describe(i: Item) -> String {
+  label(i)
+}

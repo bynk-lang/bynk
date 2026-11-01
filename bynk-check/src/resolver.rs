@@ -78,6 +78,7 @@ mod compute_is_uses_commons_type_tests {
             documentation: None,
             span: Span::default(),
             trivia: Trivia::default(),
+            private: None,
         })
     }
 
@@ -941,6 +942,102 @@ pub fn split_broken_decl_echoes(
         !(ECHO_CODES.contains(&e.category)
             && subject(e).is_some_and(|s| broken_decl_names.contains(&s)))
     })
+}
+
+/// #2618: a `private` declaration of a commons this unit `uses`, which the
+/// unit cannot see. Keyed (in [`private_imports_in`]) by the subject an
+/// unknown-name diagnostic names it by: `f`, `T`, or a method as `T.m`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrivateImport {
+    /// The commons that declares it.
+    pub unit: String,
+    /// `"function"`, `"type"`, `"method"`, `"asset"` or `"embed"`.
+    pub kind: &'static str,
+}
+
+/// #2618: the `private` declarations of the commons `local` uses that a
+/// reference in `local` could be reaching for. A name `local` declares itself
+/// is left out, since a reference to it is the unit's own; so is a method of a
+/// type `local` declares. The first `uses` target to declare a subject wins.
+pub fn private_imports_in<'a>(
+    local: &crate::symbols::UnitTable,
+    uses: impl Iterator<Item = (&'a String, &'a crate::symbols::UnitTable)>,
+) -> HashMap<String, PrivateImport> {
+    let mut out: HashMap<String, PrivateImport> = HashMap::new();
+    for (unit, table) in uses {
+        for (subject, kind) in table.private_subjects() {
+            let owner = subject.split('.').next().unwrap_or(&subject);
+            let local_decl = local.types.contains_key(owner)
+                || (kind != "method"
+                    && crate::symbols::local_value_kind(local, &subject).is_some());
+            if local_decl {
+                continue;
+            }
+            out.entry(subject).or_insert(PrivateImport {
+                unit: unit.clone(),
+                kind,
+            });
+        }
+    }
+    out
+}
+
+/// #2618: report a reference to a used commons' `private` declaration as
+/// `bynk.visibility.private_item` rather than as the unknown name it resolves
+/// as. An importer does not see private declarations at all (they are left
+/// out of its composed tables, so its own declaration of the same name is no
+/// conflict), so the reference first fails as `unknown_*`; this names the
+/// real reason instead. The subject is read from the message exactly as
+/// [`split_broken_decl_echoes`] reads it.
+pub fn rewrite_private_references(
+    errors: Vec<CompileError>,
+    private: &HashMap<String, PrivateImport>,
+) -> Vec<CompileError> {
+    if private.is_empty() {
+        return errors;
+    }
+    const UNKNOWN_CODES: &[&str] = &[
+        "bynk.resolve.unknown_type",
+        "bynk.resolve.unknown_name",
+        "bynk.resolve.unknown_function",
+        "bynk.resolve.unknown_static_member",
+        "bynk.types.unknown_static_member",
+        "bynk.types.method_not_found",
+        "bynk.val.unknown_type",
+    ];
+    errors
+        .into_iter()
+        .map(|e| {
+            if !UNKNOWN_CODES.contains(&e.category) {
+                return e;
+            }
+            let names: Vec<&str> = e.message.split('`').skip(1).step_by(2).collect();
+            let subject = match e.category {
+                "bynk.resolve.unknown_static_member"
+                | "bynk.types.unknown_static_member"
+                | "bynk.types.method_not_found" => match (names.first(), names.last()) {
+                    (Some(t), Some(m)) => format!("{t}.{m}"),
+                    _ => return e,
+                },
+                _ => match names.last() {
+                    Some(n) => (*n).to_string(),
+                    None => return e,
+                },
+            };
+            let Some(p) = private.get(&subject) else {
+                return e;
+            };
+            CompileError::new(
+                "bynk.visibility.private_item",
+                e.span,
+                format!("`{subject}` is a private {} of `{}`", p.kind, p.unit),
+            )
+            .with_note(format!(
+                "a `private` declaration is visible only within its own unit and that unit's suites; use what `{}` declares without `private`, or remove the modifier there",
+                p.unit
+            ))
+        })
+        .collect()
 }
 
 /// #1663 (Decision A): the checker's diagnostics after a resolve that reported

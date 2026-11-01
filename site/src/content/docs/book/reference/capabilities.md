@@ -83,7 +83,7 @@ value; it is a statement. These are refused:
 | In the block | Code | Why |
 |---|---|---|
 | a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, or nothing at all | `bynk.par.invalid_statement` | each has no effect to overlap, nothing to join, or must stay sequential |
-| `?` in a binding | `bynk.par.question_in_join` | propagating the first `Err` in source order across a join is not available yet; match on the result after the block |
+| `?` in a binding | `bynk.par.question_in_join` | `?` takes a `Result`, not an effect: bind the `Result` in the block and apply `?` after it (`let user = userR?`), where the first `Err` in source order propagates; compute a `?` on an argument before the block |
 | a binding that mentions a name another binding of the block binds, or two bindings of one name | `bynk.par.sibling_name` | the bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding |
 
 A block with one binding is the warning `bynk.par.single_binding`: it is a plain

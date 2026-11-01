@@ -336,6 +336,264 @@ pub fn canon_storage_type(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -
     (render(Mode::StorageStructure), render(Mode::StorageFull))
 }
 
+/// #2676 (Decision B): every position in a stored value of type `t`, as
+/// `(path, shallow structure, has a default)`, starting from `prefix` (the
+/// `store` field's name). It expands exactly what [`canon_storage_type`]'s
+/// structure does (records and sums by field and variant name, containers by
+/// their element, recursion closed by `@N`), but node by node, so two values
+/// have the same structure exactly when their path sets agree. That lets the
+/// schema reconcile see *where* a change is, and admit only a record field
+/// added with a default.
+pub fn storage_paths(
+    t: &TypeRef,
+    prefix: &str,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> Vec<StoragePath> {
+    let mut out = Vec::new();
+    paths_in(t, prefix, false, None, types, &mut Vec::new(), &mut out);
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    out
+}
+
+/// One position [`storage_paths`] yields: its path, its shallow structure,
+/// the same with predicates kept, and whether it is a record field that
+/// declares a default.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoragePath {
+    pub path: String,
+    pub structure: String,
+    pub full: String,
+    pub default: bool,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn paths_in(
+    t: &TypeRef,
+    path: &str,
+    default: bool,
+    // A record field's inline refinement, which belongs to the field's node.
+    inline: Option<&Refinement>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    seen: &mut Vec<String>,
+    out: &mut Vec<StoragePath>,
+) {
+    let with_inline = |full: String| match inline {
+        Some(r) => format!("{full} {}", canon_refinement(Some(r))),
+        None => full,
+    };
+    // A container or a record/sum node: its predicates live on its children.
+    let node = |ty: String, out: &mut Vec<StoragePath>| {
+        out.push(StoragePath {
+            path: path.to_string(),
+            full: with_inline(ty.clone()),
+            structure: ty,
+            default,
+        });
+    };
+    // A leaf: both renderings of the whole type.
+    let leaf = |out: &mut Vec<StoragePath>| {
+        let (structure, full) = canon_storage_type(t, types);
+        out.push(StoragePath {
+            path: path.to_string(),
+            full: with_inline(full),
+            structure,
+            default,
+        });
+    };
+    match t {
+        TypeRef::Effect(inner, _) => paths_in(inner, path, default, inline, types, seen, out),
+        TypeRef::List(a, _) => {
+            node("List".to_string(), out);
+            paths_in(a, &format!("{path}[]"), false, None, types, seen, out);
+        }
+        TypeRef::Set(a, _) => {
+            node("Set".to_string(), out);
+            paths_in(a, &format!("{path}[]"), false, None, types, seen, out);
+        }
+        TypeRef::Option(a, _) => {
+            node("Option".to_string(), out);
+            paths_in(a, &format!("{path}?"), false, None, types, seen, out);
+        }
+        TypeRef::Result(a, b, _) => {
+            node("Result".to_string(), out);
+            paths_in(a, &format!("{path}|Ok"), false, None, types, seen, out);
+            paths_in(b, &format!("{path}|Err"), false, None, types, seen, out);
+        }
+        TypeRef::Map(k, v, _) => {
+            // A key is text on disk, so it has no positions of its own: its
+            // whole structure is part of the map node.
+            node(format!("Map[{}]", canon_storage_type(k, types).0), out);
+            paths_in(v, &format!("{path}{{}}"), false, None, types, seen, out);
+        }
+        TypeRef::Named(id) => {
+            let name = id.name.as_str();
+            let Some(decl) = types.get(name) else {
+                return leaf(out);
+            };
+            match &decl.body {
+                TypeBody::Record(r) => {
+                    let fields: Vec<StoredField> = r
+                        .fields
+                        .iter()
+                        .map(|f| StoredField {
+                            name: f.name.name.clone(),
+                            ty: f.type_ref.clone(),
+                            default: f.init.is_some(),
+                            inline: f.refinement.clone(),
+                        })
+                        .collect();
+                    record_paths(name, &fields, path, default, types, seen, out);
+                }
+                TypeBody::Sum(s) => {
+                    let variants: Vec<(String, Vec<(String, TypeRef)>)> = s
+                        .variants
+                        .iter()
+                        .map(|v| {
+                            let payload = v
+                                .payload
+                                .iter()
+                                .map(|p| (p.name.name.clone(), p.type_ref.clone()))
+                                .collect();
+                            (v.name.name.clone(), payload)
+                        })
+                        .collect();
+                    sum_paths(name, &variants, path, default, types, seen, out);
+                }
+                // A refined or opaque type is its base on disk.
+                TypeBody::Refined { .. } | TypeBody::Opaque { .. } => leaf(out),
+            }
+        }
+        TypeRef::App { name, args, .. } => {
+            let name = name.name.as_str();
+            if let Some(fields) = crate::wire::record_inst_fields(name, args, types) {
+                // The instantiation substitutes each field's type; its
+                // default and inline refinement are the declaration's.
+                let declared: HashMap<&str, (bool, Option<Refinement>)> =
+                    match types.get(name).map(|d| &d.body) {
+                        Some(TypeBody::Record(r)) => r
+                            .fields
+                            .iter()
+                            .map(|f| {
+                                (
+                                    f.name.name.as_str(),
+                                    (f.init.is_some(), f.refinement.clone()),
+                                )
+                            })
+                            .collect(),
+                        _ => HashMap::new(),
+                    };
+                let fields: Vec<StoredField> = fields
+                    .into_iter()
+                    .map(|(n, ty)| {
+                        let (default, inline) =
+                            declared.get(n.as_str()).cloned().unwrap_or_default();
+                        StoredField {
+                            name: n,
+                            ty,
+                            default,
+                            inline,
+                        }
+                    })
+                    .collect();
+                record_paths(name, &fields, path, default, types, seen, out);
+            } else if let Some(variants) = crate::wire::sum_inst_variants(name, args, types) {
+                sum_paths(name, &variants, path, default, types, seen, out);
+            } else {
+                leaf(out);
+            }
+        }
+        _ => leaf(out),
+    }
+}
+
+/// A record field as the path walk sees it.
+struct StoredField {
+    name: String,
+    ty: TypeRef,
+    default: bool,
+    inline: Option<Refinement>,
+}
+
+/// The back-reference [`canon_named_in`] writes on revisiting `name`, if it is
+/// already being expanded.
+fn storage_back_reference(name: &str, seen: &[String]) -> Option<String> {
+    seen.iter()
+        .position(|n| n == name)
+        .map(|at| format!("@{}", seen.len() - at))
+}
+
+fn record_paths(
+    name: &str,
+    fields: &[StoredField],
+    path: &str,
+    default: bool,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    seen: &mut Vec<String>,
+    out: &mut Vec<StoragePath>,
+) {
+    if let Some(back) = storage_back_reference(name, seen) {
+        out.push(StoragePath {
+            path: path.to_string(),
+            full: back.clone(),
+            structure: back,
+            default,
+        });
+        return;
+    }
+    out.push(StoragePath {
+        path: path.to_string(),
+        structure: "{}".to_string(),
+        full: "{}".to_string(),
+        default,
+    });
+    seen.push(name.to_string());
+    for f in fields {
+        let at = format!("{path}.{}", f.name);
+        paths_in(&f.ty, &at, f.default, f.inline.as_ref(), types, seen, out);
+    }
+    seen.pop();
+}
+
+fn sum_paths(
+    name: &str,
+    variants: &[(String, Vec<(String, TypeRef)>)],
+    path: &str,
+    default: bool,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    seen: &mut Vec<String>,
+    out: &mut Vec<StoragePath>,
+) {
+    if let Some(back) = storage_back_reference(name, seen) {
+        out.push(StoragePath {
+            path: path.to_string(),
+            full: back.clone(),
+            structure: back,
+            default,
+        });
+        return;
+    }
+    out.push(StoragePath {
+        path: path.to_string(),
+        structure: "|".to_string(),
+        full: "|".to_string(),
+        default,
+    });
+    seen.push(name.to_string());
+    for (variant, payload) in variants {
+        let at = format!("{path}|{variant}");
+        out.push(StoragePath {
+            path: at.clone(),
+            structure: "variant".to_string(),
+            full: "variant".to_string(),
+            default: false,
+        });
+        for (field, ty) in payload {
+            paths_in(ty, &format!("{at}.{field}"), false, None, types, seen, out);
+        }
+    }
+    seen.pop();
+}
+
 /// Predicates canonicalise as a **sorted set**.
 ///
 /// This is not a nicety adjacent to the hash; it is a precondition for it.

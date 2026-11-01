@@ -15,6 +15,10 @@ capability Audit {
   fn touch(id: Int) -> Effect[()]
 }
 
+capability Lookup {
+  fn find(id: Int) -> Effect[Result[Int, String]]
+}
+
 provides Users = FixedUsers {
   fn get(id: Int) -> Effect[String] { "ada" }
 }
@@ -25,6 +29,14 @@ provides Orders = FixedOrders {
 
 provides Audit = NoAudit {
   fn touch(id: Int) -> Effect[()] { () }
+}
+
+provides Lookup = FixedLookup {
+  fn find(id: Int) -> Effect[Result[Int, String]] { Ok(id) }
+}
+
+fn positive(x: Int) -> Result[Int, String] {
+  if x > 0 { Ok(x) } else { Err("not positive") }
 }
 
 service board {
@@ -87,5 +99,33 @@ service hoist {
       let b: Int <- Orders.forUser(match id { 0 => 1, _ => id })
     }
     Effect.pure(a + b)
+  }
+}
+
+// `?` takes a `Result`, not an effect, so a binding's `Result` is unwrapped
+// after the block (track Q2; slice 1 dropped). The block has waited for both,
+// and the `?` lines run in source order, so the first `Err` in source order
+// propagates.
+service unwrap {
+  on call(id: Int) -> Effect[Result[Int, String]] given Lookup {
+    par {
+      let aR <- Lookup.find(id)
+      let bR <- Lookup.find(id + 1)
+    }
+    let a = aR?
+    let b = bR?
+    Effect.pure(Ok(a + b))
+  }
+}
+
+// A `?` on an argument is computed before the block, not inside it.
+service hoisted {
+  on call(id: Int) -> Effect[Result[Int, String]] given Orders {
+    let key = positive(id)?
+    par {
+      let a <- Orders.forUser(key)
+      let b <- Orders.forUser(key + 1)
+    }
+    Effect.pure(Ok(a + b))
   }
 }

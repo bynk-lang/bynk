@@ -18,6 +18,14 @@ declarations, parameters, fields, and bindings. A source word that matches a
 [keyword](/book/reference/keywords/) is lexed as that keyword, not as an
 identifier.
 
+Some words are **contextual keywords**: they always lex as identifiers, and
+the syntactic grammar gives them a keyword's meaning only in one position. For
+example, `private` is the visibility modifier only immediately before a
+`type`, `fn`, `messages`, `asset` or `embed` declaration
+([§4.1.12d](/book/spec/syntactic-grammar/#4112d-visibility_modifier)); a
+binding named `private`, or the `private` in `@cache(scope: private)`, is an
+ordinary identifier.
+
 ### §3.1.2 constant_name
 
 {{#grammar constant_name}}

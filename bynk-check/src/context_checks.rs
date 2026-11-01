@@ -3526,6 +3526,7 @@ fn check_agent_decls(
             documentation: None,
             span: agent.span,
             trivia: Trivia::default(),
+            private: None,
         };
         let mut types_for_handler = typed.types.clone();
         types_for_handler.insert(agent_state_name.clone(), Arc::new(synthetic_state.clone()));
@@ -3634,6 +3635,7 @@ fn check_agent_decls(
             documentation: None,
             span: agent.span,
             trivia: Trivia::default(),
+            private: None,
         };
         let mut types_for_handler = resolved_for_handler.types.clone();
         types_for_handler.insert(agent_self_name.clone(), Arc::new(self_decl.clone()));

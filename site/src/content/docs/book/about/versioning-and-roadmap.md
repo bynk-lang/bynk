@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.465) rather than in large releases.
+steps (the book is written against v0.467) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -44,10 +44,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   for a member, if the doc-above form proves too tall for short records; today a
   `---` after code is three `-` operators. Record field defaults
   ([#2607](https://github.com/bynk-lang/bynk/issues/2607)) name three possible
-  follow-ups: the agent schema lock counting a defaulted nested field as an
-  additive change, as the event registry does; a service contract hash that
-  ignores an added defaulted field; and defaults on a field whose type applies a
-  user generic.
+  follow-ups: a service contract hash that ignores an added defaulted field, and
+  defaults on a field whose type applies a user generic. The agent schema lock now
+  counts a defaulted field added inside stored state as additive
+  ([#2676](https://github.com/bynk-lang/bynk/issues/2676)); adding a sum variant to
+  stored state is the next candidate there.
 - **Events.** Slices 0–2, 3a–3c, and 4 have shipped — `event` declarations,
   `given Events` emission with owner-only enforcement, `from Events(E)`
   subscription across contexts on every platform, structural pattern
@@ -115,10 +116,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   together and waits for all of them, raising the first fault in source order.
   `parTraverse`, `parTraverseAll` and `parTraverseTry` now wait for every
   element before they raise, the same way
-  ([#2662](https://github.com/bynk-lang/bynk/issues/2662)). `e.within(d)` now bounds
+  ([#2662](https://github.com/bynk-lang/bynk/issues/2662)). A `Result` bound in
+  the block is unwrapped with `?` after it, in source order. `e.within(d)` now bounds
   how long an effect may take, and tests drive it on virtual time
   ([#2683](https://github.com/bynk-lang/bynk/issues/2683)); it is for service
-  handlers, and does not cancel the work it gives up on. Next: `?` inside a block
+  handlers, and does not cancel the work it gives up on
   ([#2615](https://github.com/bynk-lang/bynk/issues/2615)).
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.

@@ -2019,19 +2019,26 @@ fn free_function_candidates(
     // its assets (name + declaration), and its `uses` targets.
     struct UnitFns {
         name: String,
-        fns: Vec<(String, String)>,
-        assets: Vec<(String, String, Option<String>)>,
-        embeds: Vec<(String, String, Option<String>)>,
+        fns: Vec<(String, String, bool)>,
+        assets: Vec<(String, String, Option<String>, bool)>,
+        embeds: Vec<(String, String, Option<String>, bool)>,
         uses: Vec<String>,
     }
     let mut units: Vec<UnitFns> = Vec::new();
     for_each_unit(doc_text, files, |unit| {
         let (items, uses) = unit_items_and_uses(unit);
+        // #2618: a `private` item stays out of another unit's candidates, but
+        // the pass cannot tell yet whether this unit is the current one, so
+        // each carries its visibility and the filter runs below.
         let fns = items
             .iter()
             .filter_map(|it| match it {
                 CommonsItem::Fn(f) => match &f.name {
-                    FnName::Free(id) => Some((id.name.clone(), free_fn_signature(&id.name, f))),
+                    FnName::Free(id) => Some((
+                        id.name.clone(),
+                        free_fn_signature(&id.name, f),
+                        f.private.is_some(),
+                    )),
                     FnName::Method { .. } => None,
                 },
                 _ => None,
@@ -2051,6 +2058,7 @@ fn free_function_candidates(
                             .unwrap_or_default()
                     ),
                     a.documentation.as_deref().map(str::to_string),
+                    a.private.is_some(),
                 )),
                 _ => None,
             })
@@ -2067,6 +2075,7 @@ fn free_function_candidates(
                         bynk_fmt::escape_string(&e.path)
                     ),
                     e.documentation.as_deref().map(str::to_string),
+                    e.private.is_some(),
                 )),
                 // #2617: a constant rides the same pass and gate as an embed.
                 CommonsItem::Const(c) => Some((
@@ -2077,6 +2086,8 @@ fn free_function_candidates(
                         crate::symbols::type_ref_str(&c.ty)
                     ),
                     c.documentation.as_deref().map(str::to_string),
+                    // A constant cannot be `private` yet (#2618 decision N).
+                    false,
                 )),
                 _ => None,
             })
@@ -2106,7 +2117,10 @@ fn free_function_candidates(
             continue;
         }
         let origin = if own { "this unit" } else { u.name.as_str() };
-        for (name, sig) in &u.fns {
+        for (name, sig, private) in &u.fns {
+            if *private && !own {
+                continue;
+            }
             if seen.insert(name.clone()) {
                 let marked = !own && experimental(&format!("{}.{name}", u.name));
                 out.push(Completion::item(
@@ -2116,7 +2130,10 @@ fn free_function_candidates(
                 ));
             }
         }
-        for (name, decl, doc) in u.assets.iter().chain(&u.embeds) {
+        for (name, decl, doc, private) in u.assets.iter().chain(&u.embeds) {
+            if *private && !own {
+                continue;
+            }
             if seen.insert(name.clone()) {
                 out.push(
                     Completion::item(
@@ -2161,6 +2178,8 @@ fn type_candidates(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> 
             out.push(Completion::item(name, CompletionKind::Type, detail));
         }
     }
+    // #2618: another unit's `private` types are not nameable here.
+    let current = current_unit_name(doc_text);
     for_each_unit(doc_text, files, |unit| {
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
@@ -2168,8 +2187,10 @@ fn type_candidates(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> 
             SourceUnit::Adapter(a) => &a.items,
             _ => return,
         };
+        let own = current.as_deref() == Some(unit.name().joined().as_str());
         for item in items {
             if let CommonsItem::Type(t) = item
+                && (own || t.private.is_none())
                 && seen.insert(t.name.name.clone())
             {
                 out.push(Completion::item(
@@ -3002,6 +3023,43 @@ mod tests {
             assert!(
                 find(&items, name, CompletionKind::Function).is_none(),
                 "bynk.list.{name} offered without `uses bynk.list`"
+            );
+        }
+    }
+
+    #[test]
+    fn another_units_private_items_are_not_offered() {
+        // #2618: a used commons' `private` fns, assets and types are not in
+        // scope here, so completion leaves them out; the unit's own are.
+        let doc = "commons app {\n  uses lib\n  private fn mine() -> Int { 1 }\n}\n";
+        let mut files = HashMap::new();
+        files.insert(
+            PathBuf::from("/p/lib.bynk"),
+            "commons lib {\n  fn open() -> Int { 1 }\n  private fn hidden() -> Int { 2 }\n  private asset secret = \"s.css\"\n  type Shown = Int\n  private type Kept = Int\n}\n"
+                .to_string(),
+        );
+        let items = complete("  let y = ", doc, Some(&files));
+        let labels = || items.iter().map(|i| &i.label).collect::<Vec<_>>();
+        assert!(
+            find(&items, "open", CompletionKind::Function).is_some(),
+            "{:?}",
+            labels()
+        );
+        assert!(
+            find(&items, "mine", CompletionKind::Function).is_some(),
+            "{:?}",
+            labels()
+        );
+        assert!(
+            find(&items, "Shown", CompletionKind::Type).is_some(),
+            "{:?}",
+            labels()
+        );
+        for hidden in ["hidden", "secret", "Kept"] {
+            assert!(
+                !items.iter().any(|i| i.label == hidden),
+                "a used unit's private `{hidden}` leaked: {:?}",
+                labels()
             );
         }
     }

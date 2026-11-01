@@ -1,0 +1,16 @@
+commons shop
+
+uses pricing
+uses labels
+
+// #2618: `shop` uses two commons that both declare `label`, but `pricing`'s
+// is private, so it is neither a name conflict nor a `private_item`: `label`
+// here is `labels`'s public one, although `pricing` is used first.
+
+fn heading(text: String) -> String {
+  label(text)
+}
+
+fn line(i: Item) -> String {
+  label(describe(i))
+}
