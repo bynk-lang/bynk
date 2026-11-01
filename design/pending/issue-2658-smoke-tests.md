@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: "`bynk test --smoke` smoke-tests every `from http` route without a test written for it: each route is called with arguments `Val` fabricates and must not answer a 5xx or a body that doesn't decode as its declared type, a route with a JSON body must reject a malformed one, and a route behind an actor must refuse a call with no credential. It runs in process, against `dev`, or against a named target (`GET` routes only unless `--smoke-unsafe`); a route `Val` can't fill is skipped and named, and `--print` prints the synthesised suites. Also fixed: bare `Val[T]` of a record now honours an inline `where` on a field, so `qty: Int where Positive` is `1`, not `0` ([#2658](https://github.com/bynk-lang/bynk/issues/2658))"
+changelog: "`bynk test --smoke` smoke-tests every `from http` route without a test written for it: each route is called with arguments `Val` fabricates and must not answer a 5xx or a body that doesn't decode as its declared type, a route with a JSON body must reject a malformed one, and a route behind an actor must refuse a call with no credential. It runs in process, against `dev`, or against a named target (`GET` routes only unless `--smoke-unsafe`); a route `Val` can't fill is skipped and named, and `--print` prints the synthesised suites. Also fixed: bare `Val[T]` of a record now honours an inline `where` on a field, so `qty: Int where Positive` is `1`, not `0`, and a field `where Matches(…)` needs a pin (`bynk.val.needs_pin`) as a `Matches` type does ([#2658](https://github.com/bynk-lang/bynk/issues/2658))"
 ---
 
 ## ADR: derived-smoke-suites
@@ -74,7 +74,9 @@ derived from the declarations, needing no author input.
 - **A `Val` fix the smoke needed.** Bare `Val[T]` of a record ignored an inline
   `where` on a field (`qty: Int where Positive` fabricated `0`), so a smoke
   body failed its own boundary. A field's inline refinement now narrows the
-  default exactly as a declared refined type's does.
+  default exactly as a declared refined type's does, and an inline `Matches`
+  on a field makes the record need a pin (`bynk.val.needs_pin`) as a declared
+  `Matches` type does, rather than fabricating a value that fails it.
 
 **Consequences.** `bynk test --smoke --against dev` replaces most of a
 hand-written route-by-route script, and stays current as routes are added. A

@@ -7,6 +7,8 @@ type Sku = String where NonEmpty && MaxLength(8)
 type Code = String where Matches("[A-Z]{3}")
 // An inline field refinement: `Val[Item]` must fabricate a `qty` of 1.
 type Item = { sku: Sku, qty: Int where Positive }
+// An inline `Matches` on a field has no generator either.
+type Tag = { code: String where Matches("[a-z]+") }
 
 service api from http {
   on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
@@ -18,6 +20,10 @@ service api from http {
   // No generator for a `Matches` type: skipped, and named.
   on GET("/code/:c") (c: Code) -> Effect[HttpResult[String]] by v: Visitor {
     Ok(c)
+  }
+  // Its body can't be fabricated, but a malformed one can still be sent.
+  on POST("/tag") (body: Tag) -> Effect[HttpResult[Tag]] by v: Visitor {
+    Created(body)
   }
   // The defect a smoke exists to find.
   on GET("/boom") () -> Effect[HttpResult[String]] by v: Visitor {

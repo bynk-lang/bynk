@@ -120,15 +120,17 @@ fn assert_smoke_outcomes(doc: &serde_json::Value) {
             ("smoke: GET /boom answers", "fail"),
             ("smoke: GET /code/:c answers", "skipped"),
             ("smoke: GET /ping answers", "pass"),
+            ("smoke: POST /tag answers", "skipped"),
+            ("smoke: POST /tag rejects a malformed body", "pass"),
             ("smoke: PUT /cart/:sku answers", "pass"),
             ("smoke: PUT /cart/:sku refuses no credential", "pass"),
             ("smoke: PUT /cart/:sku rejects a malformed body", "pass"),
         ]),
         "{doc:#}"
     );
-    assert_eq!(doc["passed"], 4, "{doc:#}");
+    assert_eq!(doc["passed"], 5, "{doc:#}");
     assert_eq!(doc["failed"], 1, "{doc:#}");
-    assert_eq!(doc["skipped"], 1, "{doc:#}");
+    assert_eq!(doc["skipped"], 2, "{doc:#}");
 }
 
 #[test]
@@ -177,7 +179,7 @@ fn a_smoke_run_in_process_calls_every_route_and_leaves_the_projects_suites_out()
     assert_smoke_outcomes(&doc);
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
-        stderr.contains("smoke: 5 cases from 4 routes, 1 skipped"),
+        stderr.contains("smoke: 6 cases from 5 routes, 2 skipped"),
         "{stderr}"
     );
 }

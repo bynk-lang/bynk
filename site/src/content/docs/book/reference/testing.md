@@ -861,7 +861,7 @@ case "a hold older than fifteen minutes has expired" {
 | `String where MinLength(k)` / `Length(k)` | a string of length `k` |
 | `String where Matches(…)` | **error** — must pin (`bynk.val.needs_pin`) |
 | sum | the first variant (payloads recursively fabricated) |
-| record | every field fabricated, an inline `where` on a field narrowing it as a refined type's does (`qty: Int where Positive` is `1`) |
+| record | every field fabricated, an inline `where` on a field narrowing it as a refined type's does (`qty: Int where Positive` is `1`; a field `where Matches(…)` must pin) |
 | opaque | `.unsafe(<base zero>)` |
 
 `Val[T]` is test-only (`bynk.val.outside_test`). A pin must be a compile-time

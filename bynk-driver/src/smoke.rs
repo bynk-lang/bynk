@@ -763,6 +763,66 @@ service web from http {
     }
 
     #[test]
+    fn a_refinement_actor_acts_with_its_base_actors_identity() {
+        let src = sources(&[(
+            "/p/src/a.bynk",
+            r#"context a
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = "S"), identity = UserId }
+actor Admin = User where hasClaim("admin")
+
+service web from http {
+  on GET("/admin") () -> Effect[HttpResult[String]] by a: Admin {
+    Ok("a")
+  }
+}
+"#,
+        )]);
+        let mut smoke = Smoke::collect(&src, Methods::All);
+        let text = smoke.overlay(&src)[&PathBuf::from("/p/src/a.smoke.bynk")].clone();
+        assert!(
+            text.contains(r#"web.GET("/admin") by Admin(Val[UserId])"#),
+            "{text}"
+        );
+        assert!(
+            text.contains("smoke: GET /admin refuses no credential"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn two_http_services_in_one_context_name_their_service() {
+        let src = sources(&[(
+            "/p/src/a.bynk",
+            r#"context a
+
+service web from http {
+  on GET("/x") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}
+
+service admin from http {
+  on GET("/y") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("y")
+  }
+}
+"#,
+        )]);
+        let mut smoke = Smoke::collect(&src, Methods::All);
+        let text = smoke.overlay(&src)[&PathBuf::from("/p/src/a.smoke.bynk")].clone();
+        assert!(
+            text.contains(r#"case "smoke: web GET /x answers""#),
+            "{text}"
+        );
+        assert!(
+            text.contains(r#"case "smoke: admin GET /y answers""#),
+            "{text}"
+        );
+    }
+
+    #[test]
     fn skippable_codes_match_by_prefix() {
         assert!(skippable("bynk.val.needs_pin"));
         assert!(skippable("bynk.test.remote_unsupported_call"));

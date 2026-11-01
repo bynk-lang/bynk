@@ -693,7 +693,7 @@ test("responseToHttpResult: strict, a status no HttpResult carries fails", async
 });
 
 // #2341 (decision C): a router rejection rendered through `on rejected`.
-const rawError =(status: number, text: string) =>
+const rawError = (status: number, text: string) =>
   HttpResult.RawError(status, new TextEncoder().encode(text), "text/plain");
 
 test("renderRejection: a RawError of the rejection's status replaces the body", async () => {

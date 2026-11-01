@@ -421,9 +421,12 @@ fn can_mock_bare(
                             .is_some_and(|t| can_mock_bare(t, types, depth - 1, tys))
                     })
                 }),
+                // #2658: an inline `where` on a field needs a pin exactly as
+                // a declared refined type's does.
                 TypeBody::Record(r) => r.fields.iter().all(|f| {
-                    resolve_type_ref(&f.type_ref, types, tys)
-                        .is_some_and(|t| can_mock_bare(t, types, depth - 1, tys))
+                    !f.refinement.as_ref().is_some_and(refinement_needs_pin)
+                        && resolve_type_ref(&f.type_ref, types, tys)
+                            .is_some_and(|t| can_mock_bare(t, types, depth - 1, tys))
                 }),
             }
         }
