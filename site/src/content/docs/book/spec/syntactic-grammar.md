@@ -136,6 +136,20 @@ project root (an interpolated string is a parse error here). The grammar admits
 an `embed` in any body. Placement (contexts and commons only), the path rules,
 and the declared name's type are well-formedness: §5.12a.
 
+### §4.1.12c visibility_modifier {#4112c-visibility_modifier}
+
+{{#grammar visibility_modifier}}
+
+`private`, written immediately before a `type`, `fn` (a free function or a
+method), `messages`, `asset` or `embed` declaration, makes that declaration
+unit-private. `private` is a contextual keyword (§3): it is the modifier only
+in that position and an ordinary identifier everywhere else, so
+`@cache(scope: private)` and a binding named `private` are unaffected. The
+compiler also recognises `private` before a `service`, `agent`, `capability`,
+`provides`, `actor` or `event` declaration, and in an adapter, in order to
+reject it precisely (`bynk.visibility.private_not_allowed`). Visibility is
+well-formedness: §5.1.
+
 ### §4.1.13 messages_decl (v0.228) {#4113-messages_decl}
 
 {{#grammar messages_decl}}

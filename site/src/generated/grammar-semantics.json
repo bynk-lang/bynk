@@ -1415,5 +1415,19 @@
       "code": "bynk.types.unknown_variant_in_pattern",
       "summary": "A pattern names a variant the sum type does not have."
     }
+  ],
+  "visibility_modifier": [
+    {
+      "code": "bynk.visibility.private_in_public",
+      "summary": "A public declaration's signature names a `private` type of its own unit, which an importer could neither name nor build."
+    },
+    {
+      "code": "bynk.visibility.private_item",
+      "summary": "A reference from another unit names a `private` declaration, which is visible only within its own unit and that unit's suites."
+    },
+    {
+      "code": "bynk.visibility.private_not_allowed",
+      "summary": "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset` or `embed` in a commons or context."
+    }
   ]
 }

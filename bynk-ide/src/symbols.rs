@@ -586,6 +586,36 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
     )
 }
 
+/// #2618: a hover for the contextual `private` modifier under the cursor:
+/// an identifier spelled `private` immediately before a `fn`, `type`,
+/// `messages`, `asset` or `embed` keyword, the one position the parser reads
+/// it as the modifier. `None` anywhere else, where `private` is an ordinary
+/// name.
+pub fn describe_private_at(source: &str, offset: usize) -> Option<String> {
+    use bynk_syntax::lexer::TokenKind;
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let t = tokens.get(idx)?;
+    if t.kind != TokenKind::Ident || &source[t.span.start..t.span.end] != "private" {
+        return None;
+    }
+    let next = tokens.get(idx + 1)?.kind;
+    if !matches!(
+        next,
+        TokenKind::Fn | TokenKind::Type | TokenKind::Messages | TokenKind::Asset | TokenKind::Embed
+    ) {
+        return None;
+    }
+    let doc = bynk_syntax::keywords::CONTEXTUAL_KEYWORDS
+        .iter()
+        .find(|k| k.word == "private")
+        .map(|k| k.meaning)
+        .unwrap_or_default();
+    Some(format!("```bynk\nprivate\n```\n\n{doc}"))
+}
+
 /// #2138: the doc `run.id` shows on hover and in completion.
 pub const RUN_ID_DOC: &str = "**`run.id`** — this test run's identity, a `String`. In process it is always `\"local\"`; each `bynk test --against` run gets a fresh one, so a key built from it (`\"order-\\(run.id)\"`) doesn't collide with an earlier run's data on a shared deployment.";
 
@@ -865,6 +895,27 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
         }
     }
     spans
+}
+
+/// #2618: the span of every `private` modifier on the unit's declarations,
+/// for the `keyword` semantic token. `private` is contextual, so an editor
+/// grammar that matches keywords by spelling cannot tell the modifier from a
+/// binding named `private`; the parse can.
+pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
+    let Ok(tokens) = tokenize(source) else {
+        return Vec::new();
+    };
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let Some(unit) = unit else {
+        return Vec::new();
+    };
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    items.iter().filter_map(CommonsItem::private_span).collect()
 }
 
 /// The `Cache-Control` value a well-formed `@cache` emits — the same reading
@@ -1933,6 +1984,10 @@ pub(crate) fn describe_type(t: &TypeDecl) -> String {
             .collect();
         format!("[{}]", names.join(", "))
     };
+    // #2618: the unit-private modifier, as written.
+    if t.private.is_some() {
+        out.push_str("private ");
+    }
     out.push_str(&format!("type {}{} = ", t.name.name, params));
     match &t.body {
         // v0.123 (slice 2): render the refined/opaque `where` predicate (was
@@ -2027,6 +2082,10 @@ fn describe_event(e: &EventDecl) -> String {
 pub(crate) fn describe_fn(f: &FnDecl) -> String {
     let mut out = String::new();
     out.push_str("```bynk\n");
+    // #2618: the unit-private modifier, as written.
+    if f.private.is_some() {
+        out.push_str("private ");
+    }
     out.push_str("fn ");
     out.push_str(&f.name.display());
     out.push('(');
@@ -2206,7 +2265,12 @@ pub(crate) fn describe_derived_capability(
 /// concern, not hover's), and its declared codes.
 pub(crate) fn describe_messages(m: &MessagesDecl) -> String {
     let mut out = String::new();
-    out.push_str("```bynk\nmessages ");
+    out.push_str("```bynk\n");
+    // #2618: the unit-private modifier, as written.
+    if m.private.is_some() {
+        out.push_str("private ");
+    }
+    out.push_str("messages ");
     out.push('"');
     out.push_str(&m.tag);
     out.push('"');
@@ -2251,7 +2315,8 @@ pub(crate) fn describe_messages(m: &MessagesDecl) -> String {
 /// text is compiled into the code as a `String`, never served.
 pub(crate) fn describe_embed(e: &EmbedDecl) -> String {
     let mut out = format!(
-        "```bynk\nembed {} = \"{}\"\n```\n\nPrivate: the file's text, compiled into the code as a `String`; never served.\n",
+        "```bynk\n{}embed {} = \"{}\"\n```\n\nPrivate: the file's text, compiled into the code as a `String`; never served.\n",
+        if e.private.is_some() { "private " } else { "" },
         e.name.name,
         bynk_fmt::escape_string(&e.path)
     );
@@ -2283,7 +2348,8 @@ pub(crate) fn describe_asset(a: &AssetDecl) -> String {
         ),
     };
     let mut out = format!(
-        "```bynk\nasset {} = \"{}\"{at}\n```\n\n{served} Public: served by the platform, never by the Worker.\n",
+        "```bynk\n{}asset {} = \"{}\"{at}\n```\n\n{served} Public: served by the platform, never by the Worker.\n",
+        if a.private.is_some() { "private " } else { "" },
         a.name.name,
         bynk_fmt::escape_string(&a.path)
     );

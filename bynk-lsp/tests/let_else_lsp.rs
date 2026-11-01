@@ -141,7 +141,7 @@ fn semantic_tokens_cover_pattern_names_and_none_is_empty() {
         );
     }
     let tokens =
-        index_queries::semantic_tokens(&result.index, &local_tokens, &[], &path, SRC, None);
+        index_queries::semantic_tokens(&result.index, &local_tokens, &[], &[], &path, SRC, None);
     assert!(
         tokens.iter().all(|t| t.length > 0),
         "no empty tokens: {tokens:?}"

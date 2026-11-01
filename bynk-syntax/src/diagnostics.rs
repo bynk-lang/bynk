@@ -3178,6 +3178,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`Val[T]` cannot fabricate a value for this kind of type.",
         &["val_expr"],
     ),
+    dg(
+        "bynk.visibility.private_in_public",
+        "A public declaration's signature names a `private` type of its own unit, which an importer could neither name nor build.",
+        &["visibility_modifier"],
+    ),
+    dg(
+        "bynk.visibility.private_item",
+        "A reference from another unit names a `private` declaration, which is visible only within its own unit and that unit's suites.",
+        &["visibility_modifier"],
+    ),
+    dg(
+        "bynk.visibility.private_not_allowed",
+        "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset` or `embed` in a commons or context.",
+        &["visibility_modifier"],
+    ),
     d(
         "bynk.wasm.panic",
         "The in-browser compiler panicked internally (a compiler bug, reported as a diagnostic instead of crashing the page).",

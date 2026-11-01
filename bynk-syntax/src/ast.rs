@@ -702,6 +702,30 @@ impl CommonsItem {
         }
     }
 
+    /// #2618: the span of the item's `private` modifier, when it has one.
+    /// Only the kinds that may carry the modifier (`fn`, `type`, `messages`,
+    /// `asset`, `embed`) ever answer `Some`.
+    pub fn private_span(&self) -> Option<Span> {
+        match self {
+            CommonsItem::Type(t) => t.private,
+            CommonsItem::Fn(f) => f.private,
+            CommonsItem::Messages(m) => m.private,
+            CommonsItem::Asset(a) => a.private,
+            CommonsItem::Embed(e) => e.private,
+            CommonsItem::Capability(_)
+            | CommonsItem::Provider(_)
+            | CommonsItem::Service(_)
+            | CommonsItem::Agent(_)
+            | CommonsItem::Actor(_)
+            | CommonsItem::Event(_) => None,
+        }
+    }
+
+    /// #2618: is the item unit-private?
+    pub fn is_private(&self) -> bool {
+        self.private_span().is_some()
+    }
+
     /// The whole declaration's span, from its first token to its last.
     pub fn span(&self) -> Span {
         match self {
@@ -741,6 +765,10 @@ pub struct AssetDecl {
     /// content-hashed path under `/_assets/`. With its span, for diagnostics.
     pub at: Option<(String, Span)>,
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -760,6 +788,10 @@ pub struct EmbedDecl {
     pub path: String,
     pub path_span: Span,
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -780,6 +812,10 @@ pub struct MessagesDecl {
     pub annotations: Vec<Annotation>,
     pub entries: Vec<MessageEntry>,
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -2039,6 +2075,10 @@ pub struct TypeDecl {
     pub body: TypeBody,
     /// Documentation block attached to this declaration (v0.3).
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -2095,6 +2135,7 @@ impl EventDecl {
             documentation: self.documentation.clone(),
             span: self.span,
             trivia: self.trivia.clone(),
+            private: None,
         }
     }
 
@@ -2563,6 +2604,10 @@ pub struct FnDecl {
     pub has_self: bool,
     /// Documentation block attached to this declaration (v0.3).
     pub documentation: Option<Doc>,
+    /// #2618: the span of a leading `private` modifier, when the declaration
+    /// is unit-private: visible across its own unit's files (and to that
+    /// unit's suites), never through `uses`. `None` is the default, public.
+    pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
 }

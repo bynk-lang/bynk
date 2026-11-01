@@ -1,0 +1,8 @@
+context api
+
+// #2618: `private` does not apply to a service; a context's exports govern it.
+private service api {
+  on call(n: Int) -> Effect[Int] {
+    n
+  }
+}

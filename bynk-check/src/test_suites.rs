@@ -257,6 +257,29 @@ pub fn phase_test_bodies(
             locals,
             tys,
         );
+        // #2618: the suite sees its target's private declarations, but not
+        // those of a commons the target or the suite uses: a reference to one
+        // of those reads as `bynk.visibility.private_item`.
+        let bodies_errs = match unit_tables.get(target_name) {
+            Some(local) => {
+                let mut used: Vec<String> = unit_uses.get(target_name).cloned().unwrap_or_default();
+                for &i in indices {
+                    for u in parsed[i].uses() {
+                        let q = u.target.joined();
+                        if !used.contains(&q) {
+                            used.push(q);
+                        }
+                    }
+                }
+                let private = resolver::private_imports_in(
+                    local,
+                    used.iter()
+                        .filter_map(|t| unit_tables.get(t).map(|u| (t, u))),
+                );
+                resolver::rewrite_private_references(bodies_errs, &private)
+            }
+            None => bodies_errs,
+        };
         let bodies_failed = !bodies_errs.is_empty();
         errors.extend(bodies_errs);
 
@@ -2491,6 +2514,7 @@ pub fn register_call_record_types(
                     documentation: None,
                     span: op.name.span,
                     trivia: Trivia::default(),
+                    private: None,
                 }),
             );
         }
@@ -3477,6 +3501,7 @@ pub fn check_history_binding(
             documentation: None,
             span,
             trivia: Trivia::default(),
+            private: None,
         }),
     );
 
@@ -3524,6 +3549,7 @@ pub fn check_history_binding(
             documentation: None,
             span,
             trivia: Trivia::default(),
+            private: None,
         }),
     );
 
@@ -3604,6 +3630,7 @@ pub fn check_history_binding(
             documentation: None,
             span,
             trivia: Trivia::default(),
+            private: None,
         }),
     );
 
@@ -3907,14 +3934,21 @@ impl SuiteView {
         unit_tables: &HashMap<String, UnitTable>,
         unit_uses: &HashMap<String, Vec<String>>,
     ) {
-        let own = unit_tables.get(unit).into_iter();
+        // #2618: `unit`'s own `private` embeds are visible; a used commons'
+        // stay in it.
+        let own = unit_tables.get(unit).into_iter().map(|t| (t, true));
         let used = unit_uses
             .get(unit)
             .into_iter()
             .flatten()
-            .filter_map(|u| unit_tables.get(u));
-        for table in own.chain(used) {
-            for (name, decl) in &table.embeds {
+            .filter_map(|u| unit_tables.get(u))
+            .map(|t| (t, false));
+        for (table, is_own) in own.chain(used) {
+            for (name, decl) in table
+                .embeds
+                .iter()
+                .filter(|(_, d)| is_own || d.private.is_none())
+            {
                 self.embeds
                     .entry(name.clone())
                     .or_insert_with(|| decl.clone());
@@ -3941,14 +3975,21 @@ impl SuiteView {
         unit_uses: &HashMap<String, Vec<String>>,
         keep: impl Fn(&bynk_syntax::ast::AssetDecl) -> bool,
     ) {
-        let own = unit_tables.get(unit).into_iter();
+        // #2618: `unit`'s own `private` assets are visible; a used commons'
+        // stay in it.
+        let own = unit_tables.get(unit).into_iter().map(|t| (t, true));
         let used = unit_uses
             .get(unit)
             .into_iter()
             .flatten()
-            .filter_map(|u| unit_tables.get(u));
-        for table in own.chain(used) {
-            for (name, decl) in table.assets.iter().filter(|(_, d)| keep(d)) {
+            .filter_map(|u| unit_tables.get(u))
+            .map(|t| (t, false));
+        for (table, is_own) in own.chain(used) {
+            for (name, decl) in table
+                .assets
+                .iter()
+                .filter(|(_, d)| keep(d) && (is_own || d.private.is_none()))
+            {
                 self.assets
                     .entry(name.clone())
                     .or_insert_with(|| decl.clone());
@@ -4037,7 +4078,9 @@ pub fn privileged_view(
     let mut imported: Vec<String> = Vec::new();
     for t in unit_uses.get(owning_unit).into_iter().flatten() {
         if let Some(used) = unit_tables.get(t) {
-            view.merge(used, true, true);
+            // #2618: the target's own `private` declarations are in the view
+            // (its table, above); a commons it uses keeps its own.
+            view.merge(&used.importable(), true, true);
             imported.push(t.clone());
         }
     }
@@ -4089,7 +4132,13 @@ pub fn integration_view(
     for (units, with_fns) in [(uses_targets, true), (participants, false)] {
         for u in units {
             if let Some(t) = unit_tables.get(u) {
-                view.merge(t, with_fns, true);
+                // #2618: a commons the suite uses keeps its `private`
+                // declarations; a participant is the system under test.
+                if with_fns {
+                    view.merge(&t.importable(), with_fns, true);
+                } else {
+                    view.merge(t, with_fns, true);
+                }
                 imported.push(u.clone());
             }
         }

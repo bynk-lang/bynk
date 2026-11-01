@@ -1,0 +1,24 @@
+commons pricing
+
+private type Tally = { lines: Int, sum: Int }
+
+// #2618: a public function may not return a private type.
+fn tally(n: Int) -> Tally {
+  Tally { lines: n, sum: n }
+}
+
+// Nor may a public type carry one in a field or a variant payload.
+type Report = { tally: Tally }
+
+type Outcome =
+  | Counted(t: Tally)
+  | Empty
+
+// A private function, or a method of the private type, may.
+private fn fresh() -> Tally {
+  Tally { lines: 0, sum: 0 }
+}
+
+fn Tally.double(self) -> Tally {
+  Tally { lines: self.lines * 2, sum: self.sum * 2 }
+}

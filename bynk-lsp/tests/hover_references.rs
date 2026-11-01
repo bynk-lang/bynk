@@ -744,7 +744,8 @@ fn asset_reference_gets_the_asset_semantic_token() {
         .iter()
         .position(|t| t.as_str() == "asset")
         .expect("`asset` is in the legend") as u32;
-    let tokens = bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &rel, &text, None);
+    let tokens =
+        bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &[], &rel, &text, None);
     // Decode the LSP delta encoding to absolute (line, column) positions.
     let off = at(&text, "style.url", "style");
     let want_line = text[..off].matches('\n').count() as u32;
@@ -807,7 +808,8 @@ fn embed_reference_gets_the_embed_semantic_token() {
         .iter()
         .position(|t| t.as_str() == "embed")
         .expect("`embed` is in the legend") as u32;
-    let tokens = bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &rel, &text, None);
+    let tokens =
+        bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &[], &rel, &text, None);
     let off = at(&text, "Ok(shell)", "shell");
     let want_line = text[..off].matches('\n').count() as u32;
     let want_col = (off - text[..off].rfind('\n').map_or(0, |n| n + 1)) as u32;

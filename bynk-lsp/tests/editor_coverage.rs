@@ -68,7 +68,19 @@ fn every_contextual_keyword_has_a_hover_path() {
             "advance: no hover path — describe_advance_at returned None"
         );
     }
-    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word != "advance") {
+    // #2618: `private` is a keyword only before a declaration keyword.
+    let modifier = "commons Scaffold\n\nprivate fn f() -> Int { 0 }\n";
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "private") {
+        let offset = modifier.find(kw.word).expect("`private` is in the fixture");
+        assert!(
+            symbols::describe_private_at(modifier, offset).is_some(),
+            "private: no hover path — describe_private_at returned None"
+        );
+    }
+    for kw in CONTEXTUAL_KEYWORDS
+        .iter()
+        .filter(|k| k.word != "advance" && k.word != "private")
+    {
         let offset = source
             .find(kw.word)
             .expect("contextual keyword is in the fixture");

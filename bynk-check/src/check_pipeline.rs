@@ -105,6 +105,11 @@ pub struct UnitCheckCtx {
     pub shadowed: crate::project_model::ShadowedReaches,
     /// S3 (#1963): the project's `[unstable]` policy, one per project.
     pub policy: Arc<crate::stability::StabilityPolicy>,
+    /// #2618: the `private` declarations of the commons this unit `uses`,
+    /// which it cannot see; a reference to one is reported as
+    /// `bynk.visibility.private_item` rather than as an unknown name
+    /// (`resolver::rewrite_private_references`).
+    pub private_imports: HashMap<String, resolver::PrivateImport>,
 }
 
 /// Build the per-unit prelude [`check_file_core`] shares across every file
@@ -166,6 +171,17 @@ pub fn prepare_unit_check_ctx(
         hidden_types: reached_types.hidden.clone(),
         shadowed: reached_types.shadowed.clone(),
         policy: policy.clone(),
+        private_imports: unit_info
+            .get(name)
+            .map(|info| {
+                resolver::private_imports_in(
+                    &info.table,
+                    info.uses
+                        .iter()
+                        .filter_map(|t| unit_info.get(t).map(|u| (t, &u.table))),
+                )
+            })
+            .unwrap_or_default(),
     }
 }
 
@@ -450,7 +466,10 @@ pub fn check_file_core(
         // still counts as a resolve error below (Decision A).
         let (shown, _hidden) =
             resolver::split_broken_decl_echoes(resolve_errors.clone(), &ctx.visible_broken_names);
-        errors.extend_for(Some(&pf.identity_path()), shown);
+        errors.extend_for(
+            Some(&pf.identity_path()),
+            resolver::rewrite_private_references(shown, &ctx.private_imports),
+        );
     }
     // Every diagnostic past the resolver goes out through this: the checker's
     // errors and warnings, and the declaration stages' (`ours`, below).
@@ -464,7 +483,10 @@ pub fn check_file_core(
             Some(r) => resolver::without_resolve_echoes(errs, r, &item_spans),
             None => errs,
         };
-        resolver::split_broken_decl_echoes(errs, &ctx.visible_broken_names).0
+        resolver::rewrite_private_references(
+            resolver::split_broken_decl_echoes(errs, &ctx.visible_broken_names).0,
+            &ctx.private_imports,
+        )
     };
     // #1663: the declaration stages walk the whole unit's handlers, so a file's
     // pass also meets another file's faults — and attributes them to this

@@ -65,6 +65,10 @@ const TOK_LOCAL: u32 = 6;
 /// Legend index of the `decorator` token type (handler annotations; ADR 0163).
 const TOK_DECORATOR: u32 = 10;
 
+/// Legend index of the `keyword` token type (#2618: `private` in modifier
+/// position, a contextual keyword the editor grammars may not know).
+const TOK_KEYWORD: u32 = 15;
+
 const MOD_DECLARATION: u32 = 1 << 0;
 const MOD_REFINED: u32 = 1 << 1;
 const MOD_OPAQUE: u32 = 1 << 2;
@@ -90,6 +94,7 @@ pub fn semantic_tokens(
     index: &ProjectIndex,
     local_tokens: &[(Span, bool)],
     decorator_tokens: &[Span],
+    keyword_tokens: &[Span],
     path: &Path,
     text: &str,
     range: Option<Span>,
@@ -138,6 +143,13 @@ pub fn semantic_tokens(
     for &span in decorator_tokens {
         if in_scope(span) {
             raw.push((span, TOK_DECORATOR, 0));
+        }
+    }
+    // #2618: a `private` modifier, precomputed from the parsed unit like the
+    // annotations; a keyword, never a symbol, so disjoint from the rest.
+    for &span in keyword_tokens {
+        if in_scope(span) {
+            raw.push((span, TOK_KEYWORD, 0));
         }
     }
     // Name segments never overlap (the index invariant), so a position
@@ -235,6 +247,7 @@ mod tests {
                 "comment",   // #1888: `--|` doc lines — appended
                 "asset",     // #1883: static asset names — appended
                 "embed",     // #2387: embedded-text names — appended
+                "keyword",   // #2618: contextual `private` modifier — appended
             ]
         );
         let modifiers: Vec<&str> = legend.token_modifiers.iter().map(|m| m.as_str()).collect();
@@ -258,6 +271,7 @@ mod tests {
         let text = "commons m\n\n  --- A doc.\n// a comment\ntype T = Int\n";
         let tokens = semantic_tokens(
             &ProjectIndex::default(),
+            &[],
             &[],
             &[],
             Path::new("a.bynk"),
@@ -288,7 +302,7 @@ mod tests {
             refined: true,
             ..Default::default()
         };
-        let tokens = semantic_tokens(&index, &[], &[], Path::new("a.bynk"), text, None);
+        let tokens = semantic_tokens(&index, &[], &[], &[], Path::new("a.bynk"), text, None);
         assert_eq!(tokens.len(), 3);
         // Def: line 0 char 5, length 3, type `type` (0), declaration|refined.
         assert_eq!(
@@ -342,7 +356,7 @@ mod tests {
                 ..Default::default()
             },
         });
-        let all = semantic_tokens(&index, &[], &[], Path::new("a.bynk"), text, None);
+        let all = semantic_tokens(&index, &[], &[], &[], Path::new("a.bynk"), text, None);
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].token_type, 2); // capability
         assert_eq!(all[0].token_modifiers_bitset, 0b1000); // platformNative
@@ -351,16 +365,18 @@ mod tests {
             &index,
             &[],
             &[],
+            &[],
             Path::new("a.bynk"),
             text,
             Some(Span::new(0, 10)),
         );
         assert_eq!(ranged.len(), 1);
         // Other files and empty indexes yield nothing.
-        assert!(semantic_tokens(&index, &[], &[], Path::new("b.bynk"), text, None).is_empty());
+        assert!(semantic_tokens(&index, &[], &[], &[], Path::new("b.bynk"), text, None).is_empty());
         assert!(
             semantic_tokens(
                 &ProjectIndex::default(),
+                &[],
                 &[],
                 &[],
                 Path::new("a.bynk"),

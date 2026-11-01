@@ -967,6 +967,78 @@ impl<'a> Parser<'a> {
         self.peek().map(|t| t.kind)
     }
 
+    /// #2618: consume a leading `private` modifier at item position and return
+    /// its span. `private` is contextual, not reserved: it is a modifier only
+    /// when it is an identifier spelled `private` immediately followed by a
+    /// declaration keyword, so `@cache(scope: private)` and a binding named
+    /// `private` keep their meaning.
+    ///
+    /// The modifier applies to `fn`, `type`, `messages`, `asset` and `embed`
+    /// in a commons or context (`allowed`). On any other declaration, or in an
+    /// adapter, it is `bynk.visibility.private_not_allowed`: an error in
+    /// recovery mode that leaves the declaration to parse as if unmodified,
+    /// and the parse's error otherwise.
+    fn take_private_modifier(&mut self, allowed: bool) -> Result<Option<Span>, CompileError> {
+        let Some(t) = self.peek() else {
+            return Ok(None);
+        };
+        if t.kind != TokenKind::Ident || self.slice(t.span) != "private" {
+            return Ok(None);
+        }
+        let Some(next) = self.nth(1) else {
+            return Ok(None);
+        };
+        let modifiable = matches!(
+            next.kind,
+            TokenKind::Fn
+                | TokenKind::Type
+                | TokenKind::Messages
+                | TokenKind::Asset
+                | TokenKind::Embed
+        );
+        let declaration = modifiable
+            || matches!(
+                next.kind,
+                TokenKind::Service
+                    | TokenKind::Agent
+                    | TokenKind::Capability
+                    | TokenKind::Provides
+                    | TokenKind::Actor
+                    | TokenKind::Event
+            );
+        if !declaration {
+            return Ok(None);
+        }
+        self.bump();
+        if modifiable && allowed {
+            return Ok(Some(t.span));
+        }
+        let what = self.slice(next.span);
+        let err = if allowed {
+            CompileError::new(
+                "bynk.visibility.private_not_allowed",
+                t.span,
+                format!("`private` does not apply to `{what}` declarations"),
+            )
+            .with_note(
+                "`private` applies to `fn`, `type`, `messages`, `asset` and `embed`; a context's `exports` and `consumes` govern how far its services, agents, capabilities, providers, actors and events reach",
+            )
+        } else {
+            CompileError::new(
+                "bynk.visibility.private_not_allowed",
+                t.span,
+                "`private` applies only to declarations in a commons or context, not in an adapter",
+            )
+            .with_note("an adapter's `exports` governs what its consumers see")
+        };
+        if self.recover_mode {
+            self.recovered_errors.push(err);
+            Ok(None)
+        } else {
+            Err(err)
+        }
+    }
+
     /// The token `n` positions ahead of the cursor (`nth(0)` == `peek()`).
     fn nth(&self, n: usize) -> Option<Token> {
         self.tokens.get(self.pos + n).copied()
@@ -3532,6 +3604,31 @@ mod tests {
             "{:?}",
             f.documentation
         );
+    }
+
+    /// #2618: `private` before a declaration keyword is the modifier, its span
+    /// recorded and folded into the declaration's; a doc above it still
+    /// attaches. Elsewhere `private` is an ordinary identifier.
+    #[test]
+    fn private_modifier_is_contextual() {
+        let src = "commons m\n\n--- Hidden.\nprivate type T = Int\n\nprivate fn T.get(self) -> Int { 1 }\n\nfn f(private: Int) -> Int { private }\n";
+        let c = parse_str(src).unwrap();
+        let t = type_at(&c, 0);
+        let at = src.find("private type").unwrap();
+        assert_eq!(t.private.map(|s| s.start), Some(at));
+        assert_eq!(t.span.start, at);
+        assert_eq!(doc_of(&t.documentation), Some(("Hidden.", DocForm::Lines)));
+        assert!(c.items[1].is_private());
+        assert!(!c.items[2].is_private());
+    }
+
+    /// #2618: `private` on a declaration it does not apply to is rejected.
+    #[test]
+    fn private_on_a_service_is_rejected() {
+        let src = "context m\n\nprivate service s {\n  on call() -> Effect[Int] { 1 }\n}\n";
+        let tokens = crate::lexer::tokenize(src).unwrap();
+        let errs = parse_units(&tokens, src).unwrap_err();
+        assert_eq!(errs[0].category, "bynk.visibility.private_not_allowed");
     }
 
     /// The `TypeDecl` at `items[i]`.

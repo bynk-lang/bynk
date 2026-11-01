@@ -1,0 +1,4 @@
+bynk.visibility.private_in_public public function `tally` names `Tally`, a private type of `pricing`
+bynk.visibility.private_in_public public type `Report` names `Tally`, a private type of `pricing`
+bynk.visibility.private_in_public public type `Outcome` names `Tally`, a private type of `pricing`
+# exact

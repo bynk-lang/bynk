@@ -5892,6 +5892,7 @@ mod pure_helper_pins {
             documentation: None,
             span: sp(),
             trivia: bynk_syntax::ast::Trivia::default(),
+            private: None,
         }
     }
     fn record_decl(name: &str) -> TypeDecl {
@@ -5906,6 +5907,7 @@ mod pure_helper_pins {
             documentation: None,
             span: sp(),
             trivia: bynk_syntax::ast::Trivia::default(),
+            private: None,
         }
     }
 

@@ -1,0 +1,26 @@
+commons shop.basket
+
+uses pricing
+
+// #2618: an importer calls `pricing`'s public functions and method, which
+// reach its private helpers internally. It does not see those helpers at all,
+// so its own `lineTotal` is no conflict with `pricing`'s private one.
+
+fn lineTotal(label: String) -> String {
+  "line: \(label)"
+}
+
+fn checkout(items: List[Item]) -> Int {
+  total(items)
+}
+
+fn firstCost(items: List[Item]) -> Int {
+  match items.first() {
+    Some(i) => i.cost()
+    None => 0
+  }
+}
+
+fn describe(items: List[Item]) -> String {
+  lineTotal(summary(items))
+}

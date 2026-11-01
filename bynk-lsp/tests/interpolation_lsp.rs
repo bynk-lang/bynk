@@ -142,7 +142,7 @@ fn semantic_tokens_cover_a_hole_symbol() {
     let index = &result.index;
     let path = PathBuf::from("demo/text.bynk");
 
-    let tokens = index_queries::semantic_tokens(index, &[], &[], &path, SRC, None);
+    let tokens = index_queries::semantic_tokens(index, &[], &[], &[], &path, SRC, None);
     assert!(
         !tokens.is_empty(),
         "the `shout` call inside the hole should yield at least one semantic token"

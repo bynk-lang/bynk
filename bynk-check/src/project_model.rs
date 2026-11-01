@@ -2355,6 +2355,129 @@ pub fn phase_consumes_aliases(
     unit_consumes_aliases
 }
 
+/// #2618 (decision C): a public declaration may not name a `private` type of
+/// its own unit in its signature, since a unit that `uses` it could neither
+/// name nor build a value of that type. Checked positions: a public `fn`'s
+/// parameter and return types (a method's too, unless its type is itself
+/// private, when the method is out of an importer's reach with it), a public
+/// type's record fields and variant payloads, and a context's `exports` list.
+/// Each is `bynk.visibility.private_in_public`.
+///
+/// A service, agent, capability, provider, actor or event signature is not
+/// checked: how far those reach is a context's `exports` question, and the
+/// cross-context structural rule (§6.5) is unchanged.
+pub fn phase_private_in_public(
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    errors: &mut ErrorSink,
+) {
+    for (unit, indices) in groups {
+        let mut private_types: HashSet<String> = HashSet::new();
+        let mut type_params: HashMap<String, Vec<TypeParam>> = HashMap::new();
+        for &i in indices {
+            for item in parsed[i].items() {
+                if let CommonsItem::Type(t) = item {
+                    if t.private.is_some() {
+                        private_types.insert(t.name.name.clone());
+                    }
+                    type_params.insert(t.name.name.clone(), t.type_params.clone());
+                }
+            }
+        }
+        if private_types.is_empty() {
+            continue;
+        }
+        for &i in indices {
+            let file = parsed[i].identity_path();
+            let mut report = |at: Span, decl: &str, ty: &str| {
+                errors.push_for(
+                    Some(&file),
+                    CompileError::new(
+                        "bynk.visibility.private_in_public",
+                        at,
+                        format!("public {decl} names `{ty}`, a private type of `{unit}`"),
+                    )
+                    .with_note(format!(
+                        "a unit that uses `{unit}` could neither name nor build a `{ty}`; make `{ty}` public, or mark the declaration `private` too"
+                    )),
+                );
+            };
+            let first_private = |r: &TypeRef, vars: &HashSet<&str>| -> Option<String> {
+                let mut names = Vec::new();
+                type_ref_names(r, vars, &mut names);
+                names.into_iter().find(|n| private_types.contains(n))
+            };
+            for item in parsed[i].items() {
+                match item {
+                    CommonsItem::Fn(f) if f.private.is_none() => {
+                        let (decl, attached) = match &f.name {
+                            FnName::Free(id) => (format!("function `{}`", id.name), &[][..]),
+                            FnName::Method {
+                                type_name,
+                                method_name,
+                            } => {
+                                if private_types.contains(&type_name.name) {
+                                    continue;
+                                }
+                                (
+                                    format!("method `{}.{}`", type_name.name, method_name.name),
+                                    type_params
+                                        .get(&type_name.name)
+                                        .map(Vec::as_slice)
+                                        .unwrap_or_default(),
+                                )
+                            }
+                        };
+                        let vars: HashSet<&str> = f
+                            .type_params
+                            .iter()
+                            .chain(attached)
+                            .map(|p| p.name.name.as_str())
+                            .collect();
+                        let positions = f
+                            .params
+                            .iter()
+                            .map(|p| &p.type_ref)
+                            .chain(std::iter::once(&f.return_type));
+                        for r in positions {
+                            if let Some(ty) = first_private(r, &vars) {
+                                report(r.span(), &decl, &ty);
+                            }
+                        }
+                    }
+                    CommonsItem::Type(t) if t.private.is_none() => {
+                        let vars: HashSet<&str> =
+                            t.type_params.iter().map(|p| p.name.name.as_str()).collect();
+                        let decl = format!("type `{}`", t.name.name);
+                        let positions: Vec<&TypeRef> = match &t.body {
+                            TypeBody::Record(r) => r.fields.iter().map(|f| &f.type_ref).collect(),
+                            TypeBody::Sum(s) => s
+                                .variants
+                                .iter()
+                                .flat_map(|v| v.payload.iter().map(|p| &p.type_ref))
+                                .collect(),
+                            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => Vec::new(),
+                        };
+                        for r in positions {
+                            if let Some(ty) = first_private(r, &vars) {
+                                report(r.span(), &decl, &ty);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            for e in parsed[i].exports() {
+                for n in &e.names {
+                    if private_types.contains(&n.name.name) {
+                        report(n.name.span, "`exports` list", &n.name.name);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Phase 6: for each unit, detect when two `uses`-imported commons declare the
 /// same (non-shadowed) type or function name — an unrenamable conflict at the use
 /// site. Diagnostics go into `errors`.
@@ -2369,7 +2492,11 @@ pub fn phase_uses_name_conflicts(
         let local = unit_tables.get(name).expect("unit table present");
         let mut imported: HashMap<String, String> = HashMap::new();
         for t in targets {
-            let used = unit_tables.get(t).expect("used unit table present");
+            // #2618: `private` declarations never come in, so never conflict.
+            let used = unit_tables
+                .get(t)
+                .expect("used unit table present")
+                .importable();
             for type_name in used.types.keys() {
                 // Unlike the fn and asset loops below, a local service, agent,
                 // provider or asset does not skip this (#1927, review of
@@ -5187,7 +5314,12 @@ pub fn compose_unit_symbols(
     let mut imported_from_kind: HashMap<String, UnitKind> = HashMap::new();
 
     for t in unit_info.get(name).into_iter().flat_map(|i| &i.uses) {
-        let used = &unit_info.get(t).expect("used unit present").table;
+        // #2618: an importer never sees a used unit's `private` declarations.
+        let used = unit_info
+            .get(t)
+            .expect("used unit present")
+            .table
+            .importable();
         for (type_name, decl) in &used.types {
             if !combined_types.contains_key(type_name) {
                 combined_types.insert(type_name.clone(), decl.clone());
@@ -5296,6 +5428,8 @@ pub fn shadowed_imports_in<'a>(
 ) -> HashMap<String, crate::resolver::ShadowedImport> {
     let mut out = HashMap::new();
     for (t, used) in uses {
+        // #2618: a `private` declaration is never imported, so it hides nothing.
+        let used = used.importable();
         // #1927: an imported type too. A local type or event over it is
         // #1824's type shadowing, not this.
         let imports = used

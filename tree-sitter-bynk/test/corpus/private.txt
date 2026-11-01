@@ -1,0 +1,92 @@
+==========================
+private declarations in a commons (#2618)
+==========================
+
+commons pricing
+
+fn total(n: Int) -> Int { lineTotal(n) }
+
+private fn lineTotal(n: Int) -> Int { n }
+
+private type Scratch = { n: Int }
+
+private fn Scratch.size(self) -> Int { self.n }
+
+private asset logo = "assets/logo.png"
+
+private embed notice = "embeds/notice.txt"
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (base_type)
+      (block
+        (call
+          (identifier)
+          (identifier))))
+    (fn_decl
+      (visibility_modifier)
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (base_type)
+      (block
+        (identifier)))
+    (type_decl
+      (visibility_modifier)
+      (identifier)
+      (record_type
+        (record_field
+          (identifier)
+          (base_type))))
+    (fn_decl
+      (visibility_modifier)
+      (method_name
+        (identifier)
+        (identifier))
+      (self_param)
+      (base_type)
+      (block
+        (field_access
+          (self_expr)
+          (identifier))))
+    (asset_decl
+      (visibility_modifier)
+      (identifier)
+      (string_literal))
+    (embed_decl
+      (visibility_modifier)
+      (identifier)
+      (string_literal))))
+
+==========================
+private as an ordinary identifier outside modifier position (#2618)
+==========================
+
+commons p
+
+fn f(private: Int) -> Int { private }
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (base_type)
+      (block
+        (identifier)))))

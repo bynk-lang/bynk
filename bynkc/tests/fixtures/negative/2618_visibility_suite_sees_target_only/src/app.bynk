@@ -1,0 +1,11 @@
+commons app
+
+uses lib
+
+fn quadruple(n: Int) -> Int {
+  helper(double(n))
+}
+
+private fn helper(n: Int) -> Int {
+  double(n)
+}

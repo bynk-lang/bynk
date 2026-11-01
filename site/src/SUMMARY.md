@@ -37,6 +37,7 @@
     - [How a Bynk program is shaped](guides/program-structure/how-a-program-is-shaped.md)
     - [Consume another context's services](guides/program-structure/consume-services.md)
     - [Document your code](guides/program-structure/document-your-code.md)
+    - [Design a library's public surface](guides/program-structure/design-a-public-surface.md)
   - [Effects & capabilities](guides/effects-and-capabilities/index.md)
     - [Understand the capability model](guides/effects-and-capabilities/understand-the-capability-model.md)
     - [Synchronous and asynchronous sends](guides/effects-and-capabilities/synchronous-and-asynchronous-sends.md)

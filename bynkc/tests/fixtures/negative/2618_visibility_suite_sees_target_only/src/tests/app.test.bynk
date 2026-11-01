@@ -1,0 +1,8 @@
+suite app {
+  // #2618: the target's own private `helper` is in scope here; `lib`'s
+  // private `twice` is not, since the exception covers the target alone.
+  case "helpers" {
+    expect helper(1) == 4
+    expect twice(1) == 2
+  }
+}

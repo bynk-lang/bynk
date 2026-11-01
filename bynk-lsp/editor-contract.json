@@ -218,7 +218,8 @@
       "messages",
       "comment",
       "asset",
-      "embed"
+      "embed",
+      "keyword"
     ]
   }
 }

@@ -10316,6 +10316,7 @@ mod tests {
             documentation: None,
             span: Span::default(),
             trivia: Trivia::default(),
+            private: None,
         }
     }
 
@@ -10334,6 +10335,7 @@ mod tests {
             documentation: None,
             span: Span::default(),
             trivia: Trivia::default(),
+            private: None,
         }
     }
 
@@ -10461,6 +10463,7 @@ mod tests {
             documentation: None,
             span: Span::default(),
             trivia: Trivia::default(),
+            private: None,
         }
     }
 
