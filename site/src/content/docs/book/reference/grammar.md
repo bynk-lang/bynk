@@ -611,7 +611,9 @@ depends on, and the providers that implement them.
 
 {{#grammar fn_decl}}
 
-A function or method: a name, parameters, a return type, and a block body.
+A function or method: a name, an optional type-parameter list (each parameter
+may carry bounds), parameters, a return type, an optional `where` clause, and a
+block body.
 
 **Example.**
 ```bynk
@@ -628,6 +630,43 @@ commons demo {
 {{#grammar-semantics fn_decl}}
 
 **See also.** [Operators & built-ins](/book/reference/operators/).
+
+### type_param {#rule-type_param}
+
+{{#grammar type_param}}
+
+A type parameter of a `fn`, `type` or capability operation, with optional bounds:
+`T`, `T: Eq`. The only constraint is `Eq` (`bynk.generics.unknown_constraint`
+otherwise). See [Generics and bounds](/book/reference/generics/).
+
+**Example.**
+```bynk
+commons demo {
+  fn same[T: Eq](a: T, b: T) -> Bool {
+    a == b
+  }
+}
+```
+
+**Static semantics.**
+{{#grammar-semantics type_param}}
+
+### where_clause {#rule-where_clause}
+
+{{#grammar where_clause}}
+
+A method's `where` clause: bounds on the receiver type's type parameters, between
+the return type and any contract clause (`fn Box.has(self, x: A) -> Bool where A:
+Eq`).
+
+**Static semantics.**
+{{#grammar-semantics where_clause}}
+
+### where_bound {#rule-where_bound}
+
+{{#grammar where_bound}}
+
+One `A: Eq` entry of a `where` clause.
 
 ### requires_clause {#rule-requires_clause}
 
@@ -1891,6 +1930,25 @@ forward. `advance` is contextual: it opens a statement only before
 **Static semantics.**
 {{#grammar-semantics advance_stmt}}
 
+### par_stmt {#rule-par_stmt}
+
+{{#grammar par_stmt}}
+
+`par { … }` (#2640) is a concurrent binding block: it issues every effect it holds
+before awaiting any, and completes when all have settled. `par` is contextual: it
+opens a statement only before `{`. See
+[Joining independent effects](/book/reference/capabilities/#par).
+
+**Static semantics.**
+{{#grammar-semantics par_stmt}}
+
+### par_statement {#rule-_par_statement}
+
+{{#grammar _par_statement}}
+
+What a [`par_stmt`](#rule-par_stmt) may hold in the grammar: every statement but a
+`let … else`. The compiler narrows it to `let x <- e` and `do e`.
+
 ### expect_expr {#rule-expect_expr}
 
 {{#grammar expect_expr}}
@@ -1941,9 +1999,10 @@ surface. A test-only builtin.
 
 {{#grammar _contextual_identifier}}
 
-`trace` and `advance` used as ordinary names. Both are contextual keywords —
-`trace` only in [`trace_expr`](#rule-trace_expr) and `advance` only in
-[`advance_stmt`](#rule-advance_stmt) — so outside those shapes each is an
+`trace`, `advance` and `par` used as ordinary names. Each is a contextual keyword —
+`trace` only in [`trace_expr`](#rule-trace_expr), `advance` only in
+[`advance_stmt`](#rule-advance_stmt) and `par` only in
+[`par_stmt`](#rule-par_stmt) — so outside those shapes each is an
 [`identifier`](#rule-identifier) like any other: a binding, a parameter, a call,
 or an assignment target.
 

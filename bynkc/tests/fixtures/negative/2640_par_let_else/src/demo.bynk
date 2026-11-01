@@ -1,0 +1,21 @@
+context demo
+
+// #2640: a refutable `let … else` would need a branch per binding.
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+  fn touch(id: Int) -> Effect[()]
+}
+
+service dash {
+  on call(id: Int) -> Effect[Int] given Users, Orders {
+    par {
+      let Ok(a) <- Users.get(id) else { Effect.pure(0) }
+      let b <- Orders.forUser(id)
+    }
+    Effect.pure(0)
+  }
+}

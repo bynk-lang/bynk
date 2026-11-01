@@ -18,13 +18,26 @@
 //! `Option[Connection[F]]`, `List[(Int) -> Int]`, a record with an `Effect`
 //! field, and `Box[(Int) -> Int]` were all accepted.
 //!
-//! Inside a generic function a type variable is equality-supporting, so `==`
-//! on `T` there is accepted; the bound moves to the call site instead (#1688).
-//! [`compared_type_params`] infers which of a generic function's type
-//! parameters it compares — directly with `==`/`!=`, or by passing them to a
-//! compared parameter of another generic function — and the call checks each
-//! such argument with [`not_comparable`]. Bynk generics are not monomorphised,
-//! so the instantiation is the only place the concrete type is known.
+//! Inside a generic function a type variable is equality-supporting only when
+//! its declaration says so: `T: Eq` on the function, or `where A: Eq` for a
+//! method's receiver parameter (constrained-generics slice 0, which replaced
+//! ADR 0430's inferred bound with a declared one). `==` on a type that mentions
+//! an undeclared type parameter is `bynk.generics.missing_eq_bound`
+//! ([`require_eq`]), and so is passing one to an `Eq`-bounded parameter of
+//! another generic. At a call, [`check_declared_eq_args`] checks each
+//! `Eq`-bounded type parameter's instantiation with [`not_comparable`]. Bynk
+//! generics are not monomorphised, so the instantiation is the only place the
+//! concrete type is known.
+//!
+//! ADR 0430's inference is kept for one purpose: [`compared_type_params`] still
+//! computes which type parameters a generic compares — directly with
+//! `==`/`!=`, or by passing them to a compared parameter of another generic,
+//! across units — so that a call to a generic that compares a parameter it has
+//! not declared yet is held to it too. One pass then reports every link of a
+//! chain that needs the bound, each with its fix, and a single fix-all migrates
+//! the lot; without it each round of fixes would expose the next caller. It
+//! never decides acceptance: a program it flags already has the
+//! `missing_eq_bound` in the callee's own body.
 //!
 //! One gap remains, and it is permissive (the runtime walker then compares the
 //! offending part by identity): a record imported from another unit is absent
@@ -41,7 +54,9 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use bynk_syntax::ast::{CommonsItem, FnDecl, FnName, TypeBody, TypeRef};
+use bynk_syntax::ast::{CommonsItem, FnDecl, FnName, Ident, TypeBody, TypeDecl, TypeRef};
+use bynk_syntax::error::{Applicability, CompileError};
+use bynk_syntax::span::Span;
 
 use super::{Ctx, Ty, TyId, Types};
 use crate::hints::HintSink;
@@ -49,6 +64,167 @@ use crate::index::RefSink;
 use crate::locals::LocalsSink;
 use crate::requirements::RequirementSink;
 use crate::resolver::ResolvedCommons;
+
+/// The constraint names a bound may use. Slice 0 admits only `Eq`; later slices
+/// of the constrained-generics track add `Ord`, `Key` and `Codable`.
+pub(crate) const CONSTRAINTS: &[&str] = &["Eq"];
+
+/// Whether `bounds` includes `Eq`.
+pub(crate) fn has_eq(bounds: &[Ident]) -> bool {
+    bounds.iter().any(|b| b.name == "Eq")
+}
+
+/// Every bound name in `bounds` that is not a known constraint, as an
+/// `unknown_constraint` error at its own span.
+pub(crate) fn unknown_constraints(bounds: &[Ident], param: &str) -> Vec<CompileError> {
+    bounds
+        .iter()
+        .filter(|b| !CONSTRAINTS.contains(&b.name.as_str()))
+        .map(|b| {
+            CompileError::new(
+                "bynk.generics.unknown_constraint",
+                b.span,
+                format!(
+                    "`{}` is not a constraint (type parameter `{param}`)",
+                    b.name
+                ),
+            )
+            .with_note(format!(
+                "the only constraint is `{}`",
+                CONSTRAINTS.join("`, `")
+            ))
+        })
+        .collect()
+}
+
+/// Where a `missing_eq_bound` fix inserts its bound, for one function.
+#[derive(Default, Clone)]
+struct FixSite {
+    /// An own type parameter: the end of its name, or of its last bound.
+    own: HashMap<String, (Span, bool)>,
+    /// A receiver parameter already named in the `where` clause: the end of its
+    /// entry.
+    where_entry: HashMap<String, Span>,
+    /// The end of the last `where` entry, when there is a clause.
+    where_end: Option<Span>,
+    /// The end of the return type, where a new clause goes.
+    ret_end: Option<Span>,
+}
+
+/// The equality bounds in scope while a body is checked: which type parameters
+/// are declared `Eq`, and where a missing one would be added. Empty outside a
+/// generic function.
+#[derive(Default, Clone)]
+pub(crate) struct EqScope {
+    declared: HashSet<String>,
+    /// Shared by every clone (a function's contract clauses and its body check
+    /// in separate contexts), so a parameter is reported once per function.
+    reported: Rc<RefCell<HashSet<String>>>,
+    fix: FixSite,
+}
+
+impl EqScope {
+    /// The scope of `f`'s body: its own `T: Eq` bounds, `where A: Eq` entries,
+    /// and the bounds its receiver type declares on its own parameters.
+    pub(crate) fn for_fn(f: &FnDecl, input: &ResolvedCommons) -> Self {
+        let mut declared = HashSet::new();
+        let mut fix = FixSite::default();
+        for tp in &f.type_params {
+            if has_eq(&tp.bounds) {
+                declared.insert(tp.name.name.clone());
+            }
+            let end = tp.bounds.last().map_or(tp.name.span, |b| b.span);
+            fix.own.insert(
+                tp.name.name.clone(),
+                (
+                    Span::new_in(end.file, end.end, end.end),
+                    !tp.bounds.is_empty(),
+                ),
+            );
+        }
+        for wb in &f.where_bounds {
+            if has_eq(&wb.bounds) {
+                declared.insert(wb.param.name.clone());
+            }
+            let end = wb.span;
+            fix.where_entry.insert(
+                wb.param.name.clone(),
+                Span::new_in(end.file, end.end, end.end),
+            );
+        }
+        if let Some(last) = f.where_bounds.last() {
+            fix.where_end = Some(Span::new_in(last.span.file, last.span.end, last.span.end));
+        }
+        let ret = f.return_type.span();
+        fix.ret_end = Some(Span::new_in(ret.file, ret.end, ret.end));
+        if let FnName::Method { type_name, .. } = &f.name
+            && let Some(decl) = input.types.get(&type_name.name)
+        {
+            for tp in &decl.type_params {
+                if has_eq(&tp.bounds) {
+                    declared.insert(tp.name.name.clone());
+                }
+            }
+        }
+        EqScope {
+            declared,
+            reported: Rc::default(),
+            fix,
+        }
+    }
+
+    /// The edit that declares `Eq` on `param`.
+    pub(crate) fn fix_for(&self, param: &str) -> Option<(String, Vec<(Span, String)>)> {
+        let msg = format!("declare `{param}: Eq`");
+        if let Some((at, bounded)) = self.fix.own.get(param) {
+            let text = if *bounded { " + Eq" } else { ": Eq" };
+            return Some((msg, vec![(*at, text.to_string())]));
+        }
+        if let Some(at) = self.fix.where_entry.get(param) {
+            return Some((msg, vec![(*at, " + Eq".to_string())]));
+        }
+        if let Some(at) = self.fix.where_end {
+            return Some((msg, vec![(at, format!(", {param}: Eq"))]));
+        }
+        let at = self.fix.ret_end?;
+        Some((msg, vec![(at, format!(" where {param}: Eq"))]))
+    }
+}
+
+/// Require `Eq` of every type parameter in `ty` that the enclosing function
+/// has not declared it for (`ctx.eq`). `site` says why, as a clause (`` `==`
+/// compares values ``). Reports `bynk.generics.missing_eq_bound`, once per
+/// parameter per function, and returns `false` when any was missing.
+pub(crate) fn require_eq(ctx: &mut Ctx, ty: TyId, span: Span, site: &str) -> bool {
+    let mut vars = HashSet::new();
+    collect_vars(ty, ctx.tys, &mut vars);
+    let mut missing: Vec<String> = vars
+        .into_iter()
+        .filter(|v| ctx.type_vars.contains(v) && !ctx.eq.declared.contains(v))
+        .collect();
+    if missing.is_empty() {
+        return true;
+    }
+    missing.sort();
+    for param in missing {
+        if !ctx.eq.reported.borrow_mut().insert(param.clone()) {
+            continue;
+        }
+        let mut err = CompileError::new(
+            "bynk.generics.missing_eq_bound",
+            span,
+            format!("{site}, but type parameter `{param}` has no `Eq` bound"),
+        )
+        .with_note(format!(
+            "a type parameter that is compared must say so: declare `{param}: Eq`"
+        ));
+        if let Some((msg, edits)) = ctx.eq.fix_for(&param) {
+            err = err.with_suggestion(msg, edits, Applicability::MachineApplicable);
+        }
+        ctx.errors.push(err);
+    }
+    false
+}
 
 thread_local! {
     /// #1688: one frame per generic body being scanned by
@@ -271,6 +447,7 @@ pub(crate) fn not_comparable(ty: TyId, ctx: &Ctx) -> Option<NotComparable> {
 
 fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComparable> {
     let tys = ctx.tys;
+    let types = &ctx.input.types;
     match &*tys.get(ty) {
         Ty::Stream(_) => Some(NotComparable::Stream),
         Ty::Connection(_) => Some(NotComparable::Held(tys.display(ty))),
@@ -291,7 +468,7 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
                     return Some(found);
                 }
             }
-            walk_decl(&name, ctx, visited)
+            walk_decl(&name, types, visited)
         }
         // Base types, `()`, the built-in error and verdict types, actor
         // bindings, and type variables (`T` inside a generic body) compare as
@@ -316,11 +493,15 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
 /// Walk a named type's declared fields. Each name is walked once per check,
 /// which keeps recursive types finite and makes the walk linear in the number of
 /// types reachable from the operand.
-fn walk_decl(name: &str, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComparable> {
+pub(crate) fn walk_decl(
+    name: &str,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    visited: &mut HashSet<String>,
+) -> Option<NotComparable> {
     if !visited.insert(name.to_string()) {
         return None;
     }
-    let decl = ctx.input.types.get(name)?;
+    let decl = types.get(name)?;
     let params: Vec<&str> = decl
         .type_params
         .iter()
@@ -337,13 +518,13 @@ fn walk_decl(name: &str, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<Not
     };
     fields
         .into_iter()
-        .find_map(|t| walk_ref(t, &params, ctx, visited))
+        .find_map(|t| walk_ref(t, &params, types, visited))
 }
 
-fn walk_ref(
+pub(crate) fn walk_ref(
     t: &TypeRef,
     params: &[&str],
-    ctx: &Ctx,
+    types: &HashMap<String, Arc<TypeDecl>>,
     visited: &mut HashSet<String>,
 ) -> Option<NotComparable> {
     let display = || render(t);
@@ -357,18 +538,18 @@ fn walk_ref(
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _)
         | TypeRef::HttpResult(a, _)
-        | TypeRef::History(a, _) => walk_ref(a, params, ctx, visited),
+        | TypeRef::History(a, _) => walk_ref(a, params, types, visited),
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
-            walk_ref(a, params, ctx, visited).or_else(|| walk_ref(b, params, ctx, visited))
+            walk_ref(a, params, types, visited).or_else(|| walk_ref(b, params, types, visited))
         }
         // A type parameter is checked through the applied argument at the use
         // site (`walk_ty`'s `Named` arm), not here.
         TypeRef::Named(id) if params.contains(&id.name.as_str()) => None,
-        TypeRef::Named(id) => walk_decl(&id.name, ctx, visited),
+        TypeRef::Named(id) => walk_decl(&id.name, types, visited),
         TypeRef::App { name, args, .. } => args
             .iter()
-            .find_map(|a| walk_ref(a, params, ctx, visited))
-            .or_else(|| walk_decl(&name.name, ctx, visited)),
+            .find_map(|a| walk_ref(a, params, types, visited))
+            .or_else(|| walk_decl(&name.name, types, visited)),
         TypeRef::Base(..)
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
@@ -384,7 +565,7 @@ fn walk_ref(
 /// Render a declared field type as the author wrote it, for the diagnostic.
 /// (`context_checks::type_ref_to_display` covers only the shapes its own callers
 /// meet; this walk needs every `TypeRef`.)
-fn render(t: &TypeRef) -> String {
+pub(crate) fn render(t: &TypeRef) -> String {
     let one = |name: &str, a: &TypeRef| format!("{name}[{}]", render(a));
     match t {
         TypeRef::Base(b, _) => b.name().to_string(),
@@ -419,74 +600,85 @@ fn render(t: &TypeRef) -> String {
     }
 }
 
-/// #1688: at a call to a generic function or method, check that every type
-/// parameter the callee compares (`compared`) is instantiated (`subst`) with an
-/// equality-supporting type. `params` lists the callee's parameters in report
-/// order with their declaration spans; `callee` names it in the message. Also
-/// records each compared argument, so a scan of a generic caller sees the bound
-/// pass through. Returns `false` after reporting the first violation.
-pub(crate) fn check_compared_args(
+/// The diagnostic code and reason for a non-comparable `blocker`; `top` is
+/// whether the type itself (not a part of it) is the offender.
+pub(crate) fn explain(blocker: NotComparable, top: bool) -> (&'static str, String) {
+    let it = if top { "it is" } else { "it contains" };
+    match blocker {
+        NotComparable::Stream => (
+            "bynk.types.stream_not_comparable",
+            format!("{it} a `Stream`, a live value-over-time source, not a comparable value"),
+        ),
+        NotComparable::Held(held) => (
+            "bynk.types.held_not_comparable",
+            format!("{it} a held `{held}`, which has identity, not value-equality"),
+        ),
+        NotComparable::Computation(part) if top => (
+            "bynk.types.not_comparable",
+            format!(
+                "a function, `Effect` or `Query` like `{part}` is a computation, which has no value equality"
+            ),
+        ),
+        NotComparable::Computation(part) => (
+            "bynk.types.not_comparable",
+            format!("it contains `{part}`, which has no value equality"),
+        ),
+    }
+}
+
+/// At a call to a generic function or method, check that every `Eq`-bounded
+/// type parameter of the callee (`eq_params`, in report order with its
+/// declaration span) is instantiated (`subst`) with an equality-supporting type
+/// the caller can vouch for: a concrete one that [`not_comparable`] accepts, or
+/// type parameters the caller itself declares `Eq` (`ctx.eq`;
+/// `bynk.generics.missing_eq_bound` otherwise). `callee` names it in the
+/// message. Returns `false` after reporting the first violation.
+pub(crate) fn check_declared_eq_args(
     callee: &str,
-    call_span: bynk_syntax::span::Span,
-    params: &[(String, Option<bynk_syntax::span::Span>)],
-    compared: &HashSet<String>,
+    call_span: Span,
+    eq_params: &[(String, Option<Span>)],
     subst: &HashMap<String, TyId>,
     ctx: &mut Ctx,
 ) -> bool {
     let tys = ctx.tys;
-    for (param, decl_span) in params {
-        if !compared.contains(param) {
-            continue;
-        }
+    for (param, decl_span) in eq_params {
         let Some(&arg_ty) = subst.get(param) else {
             continue;
         };
+        // A scan of a generic caller sees the requirement pass through.
         record_compared(arg_ty, tys);
-        let Some(blocker) = not_comparable(arg_ty, ctx) else {
-            continue;
-        };
-        let shown = arg_ty.display(tys);
-        let top = matches!(
-            &*tys.get(arg_ty),
-            Ty::Stream(_) | Ty::Connection(_) | Ty::Fn { .. } | Ty::Effect(_) | Ty::Query(_)
-        );
-        let it = if top { "it is" } else { "it contains" };
-        let (code, why) = match blocker {
-            NotComparable::Stream => (
-                "bynk.types.stream_not_comparable",
-                format!("{it} a `Stream`, a live value-over-time source, not a comparable value"),
-            ),
-            NotComparable::Held(held) => (
-                "bynk.types.held_not_comparable",
-                format!("{it} a held `{held}`, which has identity, not value-equality"),
-            ),
-            NotComparable::Computation(part) if top => (
-                "bynk.types.not_comparable",
+        if let Some(blocker) = not_comparable(arg_ty, ctx) {
+            let shown = arg_ty.display(tys);
+            let top = matches!(
+                &*tys.get(arg_ty),
+                Ty::Stream(_) | Ty::Connection(_) | Ty::Fn { .. } | Ty::Effect(_) | Ty::Query(_)
+            );
+            let (code, why) = explain(blocker, top);
+            let mut err = CompileError::new(
+                code,
+                call_span,
                 format!(
-                    "a function, `Effect` or `Query` like `{part}` is a computation, which has no value equality"
+                    "`{callee}` requires `{param}: Eq`, but this call makes `{param}` `{shown}` — {why}"
                 ),
-            ),
-            NotComparable::Computation(part) => (
-                "bynk.types.not_comparable",
-                format!("it contains `{part}`, which has no value equality"),
-            ),
-        };
-        let mut err = bynk_syntax::error::CompileError::new(
-            code,
-            call_span,
-            format!(
-                "`{callee}` compares values of its type parameter `{param}`, but this call makes `{param}` `{shown}` — {why}"
-            ),
-        );
-        // A label renders against the caller's file, so point at the parameter
-        // only when the callee is declared in that same file.
-        if let Some(span) = decl_span
-            && span.file == call_span.file
-        {
-            err = err.with_label(*span, "compared inside the function");
+            );
+            // A label renders against the caller's file, so point at the
+            // parameter only when the callee is declared in that same file.
+            if let Some(span) = decl_span
+                && span.file == call_span.file
+            {
+                err = err.with_label(*span, "declared `Eq` here");
+            }
+            ctx.errors.push(err);
+            return false;
         }
-        ctx.errors.push(err);
-        return false;
+        if !require_eq(
+            ctx,
+            arg_ty,
+            call_span,
+            &format!("`{callee}` requires `{param}: Eq`"),
+        ) {
+            return false;
+        }
     }
     true
 }

@@ -2519,6 +2519,20 @@ pub fn in_check_order<T>(preds: &[T], kind: impl Fn(&T) -> &PredKind) -> Vec<&T>
 #[derive(Debug, Clone)]
 pub struct TypeParam {
     pub name: Ident,
+    /// Declared constraints, `T: C1 + C2` (constrained-generics slice 0). Empty
+    /// for an unbounded parameter. Slice 0 admits only `Eq`; the checker
+    /// reports any other name as `bynk.generics.unknown_constraint`.
+    pub bounds: Vec<Ident>,
+    pub span: Span,
+}
+
+/// One `A: C1 + C2` entry of a method's `where` clause (constrained-generics
+/// slice 0): bounds a type parameter the method does not declare itself — the
+/// receiver type's (`fn Box.has(self, x: A) -> Bool where A: Eq`).
+#[derive(Debug, Clone)]
+pub struct WhereBound {
+    pub param: Ident,
+    pub bounds: Vec<Ident>,
     pub span: Span,
 }
 
@@ -2549,6 +2563,10 @@ pub struct FnDecl {
     pub name: FnName,
     pub params: Vec<Param>,
     pub return_type: TypeRef,
+    /// `where A: Eq, …`, parsed between the return type and the contract
+    /// clauses; empty when absent. Bounds receiver type parameters (and may
+    /// restate the method's own).
+    pub where_bounds: Vec<WhereBound>,
     /// v0.115: preconditions (`requires <name>: <pred>`), parsed between the
     /// return type and the body. A contract clause is the invariant predicate
     /// attached to a function (ADR 0144 — one predicate surface); `requires`
@@ -2671,6 +2689,11 @@ pub enum Statement {
     /// (#2137, end-to-end testing track §3.4). `advance` is contextual: it
     /// opens a statement only before `<Ident> by`. Only valid in a `case` body.
     Advance(AdvanceStmt),
+    /// `par { let a <- e1  let b <- e2 }` — a concurrent binding block (#2640,
+    /// concurrent-effects slice 0). `par` is contextual: it opens a statement
+    /// only before `{`. The parser admits any statements inside; the checker
+    /// accepts only `let x <- e` and `do e`.
+    Par(ParStmt),
 }
 
 impl Statement {
@@ -2682,8 +2705,24 @@ impl Statement {
             Statement::Do(d) => d.span,
             Statement::Assign(a) => a.span,
             Statement::Advance(a) => a.span,
+            Statement::Par(p) => p.span,
         }
     }
+}
+
+/// #2640: a `par { … }` block. `statements` is what the author wrote between
+/// the braces, unvalidated: the checker rejects every form but the effectful
+/// `let` and `do` (`bynk.par.invalid_statement`), so the editor still sees the
+/// rejected statement in place.
+#[derive(Debug, Clone)]
+pub struct ParStmt {
+    /// The contextual `par` keyword.
+    pub keyword: Span,
+    pub statements: Vec<Statement>,
+    /// Comments between the last statement and the closing `}`.
+    pub closing_comments: Vec<Comment>,
+    pub span: Span,
+    pub trivia: Trivia,
 }
 
 /// #2137: `advance <Cap> by <amount>` — moves the case's harness clock forward
@@ -3504,6 +3543,7 @@ pub fn statement_exprs<'a>(s: &'a Statement, out: &mut Vec<&'a Expr>) {
         Statement::Do(d) => out.push(&d.value),
         Statement::Assign(a) => out.push(&a.value),
         Statement::Advance(a) => out.push(&a.amount),
+        Statement::Par(p) => p.statements.iter().for_each(|s| statement_exprs(s, out)),
     }
 }
 
@@ -4084,6 +4124,19 @@ fn f(x: Int) -> Int {
                 span: _,
                 trivia: _,
             }) => out.push(("advance.amount", amount)),
+            Statement::Par(ParStmt {
+                keyword: _,
+                statements,
+                closing_comments: _,
+                span: _,
+                trivia: _,
+            }) => {
+                for s in statements {
+                    for (slot, e) in oracle_statement(s) {
+                        out.push((slot, e));
+                    }
+                }
+            }
         }
         out
     }

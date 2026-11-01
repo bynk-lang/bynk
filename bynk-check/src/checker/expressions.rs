@@ -1003,11 +1003,22 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
             // the operand's type makes it non-comparable. Before #1652 only the
             // top-level type was checked, so `Option[Connection[F]]` and
             // `List[(Int) -> Int]` slipped through to a reference `===`.
-            // #1688: inside a generic body, note which type variables are
-            // compared, so a call site can check what they are instantiated
-            // with.
+            // Constrained generics slice 0: inside a generic body a type
+            // parameter is comparable only when declared `Eq`. The type
+            // variables compared are also noted, for the scan that computes
+            // the bound a fix declares (ADR 0430's inference, kept for that).
             super::equality::record_compared(lt, tys);
             super::equality::record_compared(rt, tys);
+            for operand in [lt, rt] {
+                if !super::equality::require_eq(
+                    ctx,
+                    operand,
+                    span,
+                    "`==` compares values of this type",
+                ) {
+                    return None;
+                }
+            }
             for operand in [lt, rt] {
                 let Some(blocker) = super::equality::not_comparable(operand, ctx) else {
                     continue;
@@ -1380,6 +1391,7 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
                 }
                 // #2137: moving the harness clock is an effect on the case.
                 Statement::Advance(_) => return true,
+                Statement::Par(_) => return true,
             }
         }
         body_performs_effects(&b.tail, ctx)

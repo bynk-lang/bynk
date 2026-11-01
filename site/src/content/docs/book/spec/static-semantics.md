@@ -200,15 +200,18 @@ container element, or a generic argument written in the type, such as
 `Box[(Int) -> Int]`) is not equality-supporting, and `==` on it is rejected
 (`bynk.types.not_comparable`, `bynk.types.stream_not_comparable`,
 `bynk.types.held_not_comparable`). Inside a generic function or method, `==` on
-a type parameter is accepted; the bound moves to the call. A generic function
-*compares* a type parameter when `==`/`!=` reaches a value of it, directly or by
-passing it to a compared parameter of another generic function — through any
-number of calls and units. A method compares its own type parameters and its
-receiver type's the same way. Each call MUST instantiate a compared parameter
-with an equality-supporting type (the same codes, reported at the call:
-`same(f, h)` on two functions is rejected for
-`fn same[T](a: T, b: T) -> Bool { a == b }`, and `b.has(dec)` for
-`fn Box.has(self, x: A) -> Bool { self.value == x }` on a `Box[(Int) -> Int]`). One case is not yet checked, and
+a type that mentions a type parameter is accepted only when that parameter is
+**declared `Eq`**: by a `T: Eq` bound on the function, a `where A: Eq` entry on
+a method (for its receiver type's parameter), or a bound its receiver type
+declares; otherwise it is `bynk.generics.missing_eq_bound`. Passing a type
+parameter to an `Eq`-bounded parameter of another generic is the same rule,
+reported at the call, so a bound is declared at every link of a chain of calls.
+Each call MUST instantiate an `Eq`-bounded parameter with an equality-supporting
+type (the same codes, reported at the call: `same(f, h)` on two functions is
+rejected for `fn same[T: Eq](a: T, b: T) -> Bool { a == b }`, and `b.has(dec)`
+for `fn Box.has(self, x: A) -> Bool where A: Eq { self.value == x }` on a
+`Box[(Int) -> Int]`). Every `missing_eq_bound` carries a machine-applicable fix
+that adds the bound. One case is not yet checked, and
 falls back to comparing such values by identity: a record imported from another
 unit is not walked through its fields. A nullary variant read from storage or decoded
 from JSON equals the same variant written in source.
@@ -494,12 +497,22 @@ neither inferable nor given explicitly (`name[T](…)`) is rejected
 as a value. There is no inference between lambdas and none from the call's
 own expected type. Only a record or sum *type* declaration may be generic — type
 parameters on a refined or opaque body are rejected
-(`bynk.generics.generic_non_record`) — and parameter *bounds* are rejected
-(`bynk.generics.no_bounds`); a
+(`bynk.generics.generic_non_record`); a
 type parameter MUST NOT shadow a declared type. Within a generic function's
 body its type parameters are rigid: equal only to themselves. The checker
 maintains the invariant that a type-variable-bearing expected type imposes
 no constraint on expression checking.
+
+**Bounds** (constrained generics, slice 0). A type parameter MAY carry bounds,
+`T: Eq` or `T: C1 + C2`, on a `fn`, a `type` declaration or — as a `where`
+clause — a method (§4.3.1b). `Eq` is the only constraint; any other name is
+`bynk.generics.unknown_constraint`. A bound on a generic capability operation's
+type parameter is `bynk.generics.bound_on_capability_op`, and a `where` entry
+that names no type parameter of the method or its receiver type is
+`bynk.generics.unknown_where_param`. A bound on a type declaration is checked
+where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
+`Set2[(Int) -> Int]` with the equality diagnostics below. Bounds are erased; they
+add nothing to emission.
 
 {{#grammar-semantics if_expr}}
 
@@ -912,6 +925,40 @@ the enclosing computation — `do e` is exactly `let _ <- e` when the awaited va
 is unit. The unit gate is the send's error gate transplanted: a **valued** reply
 (`Effect[T]`, `T ≠ ()`) is rejected so that discarding a real value stays the
 explicit `let _ <- e`.
+
+A **`par` block** (`par { … }`, §4.8.7b; #2640) joins independent effects: it
+issues every effect it holds, in source order, before awaiting any of them, and
+completes when all have settled. It MUST occur in an effectful position
+(`bynk.effect.bind_in_pure_context`) and holds only `let x <- e` (optionally typed)
+and `do e`; each binding is checked exactly as the same statement written outside
+the block, against the scope *outside* it. Anything else is
+`bynk.par.invalid_statement`, naming the statement: a `let` with a refutable
+pattern and an `else`, a plain `let` (it has no effect to overlap), `~>` (a
+fire-and-forget send has nothing to join), `:=` or a mutating `store` operation
+(`store` writes stay sequential), `expect`, `advance`, a nested `par`, and an
+empty block. A `?` in a binding is `bynk.par.question_in_join` (a `?` inside a
+lambda belongs to the lambda); propagating the first `Err` in source order across a
+join is a later increment. The bindings run together, so **no binding may mention
+a name another binding of the block binds, and no two bind one name**
+(`bynk.par.sibling_name`) — even where the name would also resolve to a binding from
+before the block, so a stale value is never picked up silently. A binding's own name
+is not a sibling: `let n <- F(n + 1)` reads the earlier `n`. The bound names are in
+scope after the closing brace, and re-binding an earlier name follows §5.1. A block
+with one binding is `bynk.par.single_binding`, a non-failing warning (ADR 0117). The
+block has no value; it is a statement.
+
+*Faults.* If any effect of the block faults, the block still waits for every other
+to settle, then raises the **first fault in source order**, whichever faulted first
+in time; later faults are attached to it for the log and cannot be caught
+separately. Nothing the block started is still running when it completes or
+raises, so no work outlives the handler, and the fault a program sees does not
+depend on timing. Effects that completed before the fault keep their effects
+(ADR 0109 D4: a cross-agent `<-` call commits as it returns; `store` writes are
+staged and discarded; `~>` sends stand). A `par` block is legal in an agent handler:
+an input gate that is open while a handler awaits a subrequest is open for a join
+too, so a join adds no interleaving a sequence of `<-`s does not already allow —
+the one thing it removes is the synchronous gap between two adjacent lines, which
+nothing inside the block can rely on, because no binding can read another's result.
 
 **Implicit unit tail (§4.8.1).** A block with no trailing expression has value
 `()`: the tail auto-lift (an `Effect[T]` context lifts a tail of type `T`) then
@@ -1899,6 +1946,15 @@ capability and one of its operations, named not called). Well-formedness:
   (`bynk.observe.with_not_bool`) and MUST be pure (`bynk.observe.impure_with`);
 - a call count is `once` or a non-negative integer literal followed by `times`
   (the grammar admits nothing else) — `called once` desugars to a count of one.
+
+**Issue order.** The recorder logs a call when it is *made*, so `A.op before B.op`
+compares **issue** order, not completion order. Inside a `par` block (§4.8.7b) the
+first capability call of each binding is issued in source order, so between two
+bindings' first calls it is source order. A later call inside a composite binding —
+a user function that makes several calls — is issued when the earlier ones complete,
+so its place against another binding's calls follows completion and microtask
+order. Neither is evidence that one effect *finished* first; a test that needs
+completion order is testing a race and belongs against a stub that controls it.
 
 `trace(Cap.op)` is a **test-only builtin** yielding `List[<CallRecord>]`, where
 `<CallRecord>` is a synthetic record of the operation's parameters at their declared

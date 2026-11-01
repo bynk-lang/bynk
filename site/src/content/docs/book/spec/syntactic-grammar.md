@@ -399,10 +399,30 @@ implement them.
 {{#grammar fn_decl}}
 
 `fn`, a function name or a `Type.method` name, an optional `[A, B]`
-**type-parameter list** (v0.20a — free functions only; a type parameter is an
-unconstrained, bound-free name scoped to the signature and body), a parameter
-list, `->`, a return type, any number of **contract clauses** (v0.115), and a
-block body. Well-formedness: §5.
+**type-parameter list** (v0.20a; each parameter may carry bounds, §4.3.1b), a
+parameter list, `->`, a return type, an optional **`where` clause** (§4.3.1b), any
+number of **contract clauses** (v0.115), and a block body. Well-formedness: §5.
+
+### §4.3.1b type_param / where_clause (constrained generics, slice 0)
+
+{{#grammar type_param}}
+
+A type parameter: a name, optionally followed by `:` and one or more
+**constraint** names joined by `+` (`T`, `T: Eq`, `T: Eq + C`). The same form
+appears on `fn`, `type` and capability-operation type-parameter lists. The
+grammar admits any constraint name; the checker admits only `Eq`
+(`bynk.generics.unknown_constraint`), and rejects a bound on a capability
+operation (`bynk.generics.bound_on_capability_op`). Well-formedness: §5.2.
+
+{{#grammar where_clause}}
+
+{{#grammar where_bound}}
+
+A method's **`where` clause** follows the return type and precedes any contract
+clause. Each entry bounds a type parameter of the method or of its receiver
+type, which the method does not declare itself: `fn Box.has(self, x: A) -> Bool
+where A: Eq`. An entry naming anything else is
+`bynk.generics.unknown_where_param`.
 
 ### §4.3.1a requires_clause / ensures_clause (v0.115)
 
@@ -459,7 +479,8 @@ distinct instance of the base. Well-formedness: §5.5.
 One operation in a capability: `fn`, a name, an optional `[T, …]` type-parameter
 list (v0.235, ADR 0281), parameters, `->`, and a return type — no body. A type
 parameter is resolved only from an explicit type argument at the call site
-(`Cap.op[SomeType](…)`), never inferred. Well-formedness: §5.
+(`Cap.op[SomeType](…)`), never inferred, and carries no bound
+(`bynk.generics.bound_on_capability_op`). Well-formedness: §5.
 
 ### §4.3.8 provider_decl
 
@@ -1216,7 +1237,7 @@ implicit value `()` (unit) — the parser synthesises a `()` tail (v0.146, ADR
 {{#grammar _statement}}
 
 A statement: a `let`, an effectful `let`, an asynchronous send (`~>`), a `do`
-effect statement, a `:=` store write, or an assertion.
+effect statement, a `:=` store write, a `par` block, or an assertion.
 
 ### §4.8.3 let_stmt
 
@@ -1299,6 +1320,20 @@ The contextual word `advance`, a capability name, `by`, and an expression — a
 move of the test case's harness clock. `advance` opens a statement only before
 `<Ident> by`. Well-formedness — only in a `case` body, only on `Clock`, by a
 `Duration`: §5.
+
+### §4.8.7b par_stmt (#2640)
+
+{{#grammar par_stmt}}
+
+{{#grammar _par_statement}}
+
+The contextual word `par`, `{`, statements, `}` — a **concurrent binding block**
+(concurrent effects slice 0, #2640). `par` opens a statement only before `{`;
+anywhere else it is an ordinary identifier, so no existing name is taken. The
+grammar admits every statement but a `let … else` (which would take the rest of
+the block as its arm, and so is `bynk.par.invalid_statement` at parse time); the
+checker narrows the contents to `let x <- e` and `do e`. Well-formedness and
+meaning: [§5.5](/book/spec/static-semantics/#55-effects-capabilities--providers).
 
 ### §4.8.8 expect_expr
 

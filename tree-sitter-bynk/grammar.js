@@ -324,6 +324,26 @@ module.exports = grammar({
         "}",
       ),
 
+    // -- Type parameters and bounds (constrained generics slice 0) --
+
+    // `T` or `T: Eq + C`. The constraint names are validated by the checker.
+    type_param: ($) =>
+      seq(
+        field("name", $.identifier),
+        optional(seq(":", sep1($.constraint, "+"))),
+      ),
+
+    constraint: ($) => $.identifier,
+
+    where_clause: ($) => seq("where", sep1($.where_bound, ",")),
+
+    where_bound: ($) =>
+      seq(
+        field("param", $.identifier),
+        ":",
+        sep1($.constraint, "+"),
+      ),
+
     // -- Type declarations --
 
     type_decl: ($) =>
@@ -332,7 +352,7 @@ module.exports = grammar({
         field("name", $.identifier),
         // v0.157 (ADR 0183): optional `[A, B]` type parameters — only a record
         // body may be generic (enforced by the checker, not the grammar).
-        optional(seq("[", sep1(field("type_param", $.identifier), ","), "]")),
+        optional(seq("[", sep1(field("type_param", $.type_param), ","), "]")),
         "=",
         field("body", $._type_body),
       ),
@@ -620,12 +640,15 @@ module.exports = grammar({
         "fn",
         field("name", choice($.method_name, $.identifier)),
         // v0.20a: optional `[A, B]` type parameters (functions only).
-        optional(seq("[", sep1(field("type_param", $.identifier), ","), "]")),
+        optional(seq("[", sep1(field("type_param", $.type_param), ","), "]")),
         "(",
         optional($._params),
         ")",
         "->",
         field("return_type", $._type_ref),
+        // Constrained generics slice 0: a method's `where A: Eq` clause bounds
+        // a receiver type's parameter.
+        optional($.where_clause),
         // v0.115: contract clauses between the return type and the body.
         repeat($.requires_clause),
         repeat($.ensures_clause),
@@ -681,7 +704,7 @@ module.exports = grammar({
         // #926: optional `[T, …]` type parameters on the op itself — resolved
         // only from an explicit type argument at the call site (mirroring
         // `fn_decl`'s own `[A, B]` slot, `grammar.js:525`).
-        optional(seq("[", sep1(field("type_param", $.identifier), ","), "]")),
+        optional(seq("[", sep1(field("type_param", $.type_param), ","), "]")),
         "(",
         optional(sep1($.param, ",")),
         optional(","),
@@ -1343,6 +1366,7 @@ module.exports = grammar({
         $.do_stmt,
         $.assign_stmt,
         $.advance_stmt,
+        $.par_stmt,
         prec(1, $.expect_expr),
       ),
 
@@ -1454,6 +1478,28 @@ module.exports = grammar({
         field("capability", $.identifier),
         "by",
         field("amount", $._expression),
+      ),
+
+    // #2640 (concurrent effects, slice 0): `par { let a <- e1  let b <- e2 }` —
+    // issue every effect, then wait for them all. `par` is contextual: it opens
+    // a statement only before `{`. The grammar stays permissive about the
+    // block's contents (any statement parses); the compiler admits only
+    // `let x <- e` and `do e` (`bynk.par.invalid_statement`).
+    par_stmt: ($) => seq("par", "{", repeat($._par_statement), "}"),
+
+    // Any statement but `let … else`, which would take the rest of the block as
+    // its arm and so has no room inside a `par` (the compiler's parser refuses
+    // it with `bynk.par.invalid_statement`).
+    _par_statement: ($) =>
+      choice(
+        $.let_stmt,
+        $.effect_let_stmt,
+        $.effect_send_stmt,
+        $.do_stmt,
+        $.assign_stmt,
+        $.advance_stmt,
+        $.par_stmt,
+        prec(1, $.expect_expr),
       ),
 
     // A let/effect-let may bind the discard name `_`.
@@ -1752,7 +1798,7 @@ module.exports = grammar({
         $._contextual_identifier,
       ),
 
-    // `trace` and `advance` are contextual in the compiler — ordinary
+    // `trace`, `advance` and `par` are contextual in the compiler — ordinary
     // identifiers outside `trace(Cap.op)` / `advance Clock by …`. Here, as
     // `word`-shaped literals, they are extracted as keyword tokens, and where an
     // identifier and the keyword are both valid (an expression or statement
@@ -1760,7 +1806,8 @@ module.exports = grammar({
     // `identifier` in exactly those positions. The next tokens decide: `advance`
     // followed by an identifier can only open an `advance_stmt`, and `trace (`
     // is a declared conflict that `trace_expr`'s dynamic precedence settles.
-    _contextual_identifier: ($) => alias(choice("trace", "advance"), $.identifier),
+    _contextual_identifier: ($) =>
+      alias(choice("trace", "advance", "par"), $.identifier),
 
     // v0.20a: a lambda — `(params) => expr | block`. Conflicts with
     // paren_expr/unit_literal until the `=>` disambiguates (GLR conflict

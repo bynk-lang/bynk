@@ -522,8 +522,9 @@ Hover, completion and the documentation page show it. See
 
 ## Generic record types
 
-A record type may take **type parameters** — an unconstrained, bound-free name
-scoped to the declaration — so one shape serves many element types. The common
+A record type may take **type parameters** — a name scoped to the declaration,
+optionally bounded (see [Generics and bounds](/book/reference/generics/)) — so one
+shape serves many element types. The common
 case is an API envelope:
 
 ```bynk

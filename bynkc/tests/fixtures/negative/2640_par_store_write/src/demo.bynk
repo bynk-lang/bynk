@@ -1,0 +1,22 @@
+context demo
+
+// #2640: `store` writes stay sequential: neither `:=` nor `.update` may sit in a join.
+
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+agent Room {
+  key id: String
+
+  store hits: Cell[Int] = 0
+
+  on call bump(n: Int) -> Effect[Int] given Users {
+    par {
+      let a <- Users.get(n)
+      hits := n
+      do hits.update((x) => x + 1)
+    }
+    Effect.pure(n)
+  }
+}

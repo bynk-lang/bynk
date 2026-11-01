@@ -74,6 +74,9 @@ pub enum CompletionKind {
     /// A named constant value at expression position — an `asset` (#1883),
     /// in scope by the same rule as a free function.
     Constant,
+    /// A constraint name after `T:` or `where A:` (constrained generics
+    /// slice 0).
+    Constraint,
 }
 
 pub struct Completion {
@@ -215,6 +218,11 @@ pub fn complete_in(
     if after_clause_keyword(line_prefix, "provides") {
         return in_scope_capabilities(doc_text, &split());
     }
+    // 4f'. Constrained generics slice 0: `fn f[T: <cursor>` / `where A: <cursor>`
+    //      — the constraint names.
+    if is_constraint_position(line_prefix) {
+        return constraint_candidates();
+    }
     // 4g. `where <cursor>` — the closed refinement-predicate vocabulary.
     // Shared by a type declaration's `type X = Base where <cursor>` and
     // (#472) a match arm's `_ where <cursor>`; both reuse the same closed
@@ -292,6 +300,49 @@ fn is_uses_target(line: &str) -> bool {
         return false;
     };
     after.starts_with(char::is_whitespace) && after.split_whitespace().count() <= 1
+}
+
+/// Constrained generics slice 0: the cursor follows the `:` (or a `+`) of a
+/// bound — inside a `fn`/`type` type-parameter list (`fn f[T: <cursor>`), or in
+/// a method's `where` clause (`-> Bool where A: <cursor>`). The partial
+/// constraint name being typed is stripped first.
+fn is_constraint_position(line: &str) -> bool {
+    let head = line
+        .trim_end_matches(|c: char| c.is_alphanumeric() || c == '_')
+        .trim_end();
+    if !(head.ends_with(':') && !head.ends_with("::") || head.ends_with('+')) {
+        return false;
+    }
+    // Inside a still-open `[ … ]` that a `fn name` / `type Name` opened.
+    if let Some(open) = head.rfind('[')
+        && !head[open..].contains(']')
+    {
+        let before = head[..open].trim_end();
+        let name_start = before
+            .rfind(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '.')))
+            .map_or(0, |i| i + 1);
+        let decl = before[..name_start].trim_end();
+        return decl.ends_with("fn") || decl.ends_with("type");
+    }
+    // A `where` clause after a return type: only names, `:`, `,`, `+` since it.
+    if let Some(w) = head.rfind("where")
+        && line[..w].contains("->")
+        && head[..w].chars().last().is_none_or(char::is_whitespace)
+    {
+        return head[w + "where".len()..]
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | ':' | ',' | '+' | ' ' | '\t'));
+    }
+    false
+}
+
+/// The constraint names (slice 0: `Eq` only).
+fn constraint_candidates() -> Vec<Completion> {
+    vec![Completion::item(
+        "Eq",
+        CompletionKind::Constraint,
+        Some("constraint: values of the type compare with `==`".to_string()),
+    )]
 }
 
 /// The cursor is inside a `given` list (after `given`, before the `{` body).
@@ -640,6 +691,53 @@ fn word_before_brace(text: &str, open: usize) -> &str {
         .rfind(|&(_, c)| !(c.is_alphanumeric() || c == '_'))
         .map_or(0, |(i, c)| i + c.len_utf8());
     &head[start..]
+}
+
+/// #2640: the cursor is directly inside a `par { … }` block — the innermost open
+/// brace is opened by the word `par`.
+pub fn in_par_block_position(text: &str, offset: usize) -> bool {
+    innermost_open_brace(text, offset).is_some_and(|open| word_before_brace(text, open) == "par")
+}
+
+/// #2640: what a `par { … }` block can hold, so nothing else is offered there:
+/// the effectful binding and the unit effect (DECISION B).
+pub fn par_block_candidates() -> Vec<Completion> {
+    vec![
+        Completion::snippet("let x <-", "let ${1:name} <- ${2:effect}"),
+        Completion::item(
+            "do",
+            CompletionKind::Keyword,
+            Some("run a unit effect alongside the others in this `par` block".to_string()),
+        ),
+    ]
+}
+
+/// #2640: whether `offset` sits in an effectful body, the only place a `par`
+/// block is legal. Lexical, like the other position cells: walk the enclosing
+/// braces outwards; the first one whose header declares a return type decides —
+/// effectful when that type is `Effect[…]`. A brace with no `->` (an `if`, a
+/// `match` arm, a bare block) defers to the one around it.
+pub fn in_effectful_body_position(text: &str, offset: usize) -> bool {
+    let mut at = offset.min(text.len());
+    while let Some(open) = innermost_open_brace(text, at) {
+        let before = &text[..open];
+        let header_start = before.rfind(['{', '}']).map_or(0, |i| i + 1);
+        let header = &before[header_start..];
+        if let Some(arrow) = header.rfind("->") {
+            return header[arrow + 2..].trim_start().starts_with("Effect[");
+        }
+        at = open;
+    }
+    false
+}
+
+/// #2640: the `par` block snippet, offered at statement position in an
+/// effectful body.
+pub fn par_snippet() -> Completion {
+    Completion::snippet(
+        "par",
+        "par {\n\tlet ${1:first} <- ${2:effect}\n\tlet ${3:second} <- ${4:effect}\n}",
+    )
 }
 
 /// v0.131: the cursor is at a field-*name* position inside a `cors { … }` block —
@@ -1768,7 +1866,7 @@ fn stability_suffix(experimental: bool) -> &'static str {
 
 /// Render a free function's signature for the completion detail, the same way
 /// hover and signature help do (`symbols::type_ref_str`) — one format, never
-/// divergent. Mirrors signature help: no generic-parameter list.
+/// divergent. Mirrors signature help, bounds included.
 fn free_fn_signature(name: &str, f: &bynk_syntax::ast::FnDecl) -> String {
     let params = f
         .params
@@ -1776,7 +1874,12 @@ fn free_fn_signature(name: &str, f: &bynk_syntax::ast::FnDecl) -> String {
         .map(|p| format!("{}: {}", p.name.name, type_ref_str(&p.type_ref)))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("{name}({params}) -> {}", type_ref_str(&f.return_type))
+    format!(
+        "{name}{}({params}) -> {}{}",
+        crate::symbols::fn_type_params_str(f),
+        type_ref_str(&f.return_type),
+        crate::symbols::fn_where_str(f)
+    )
 }
 
 /// Free-function candidates at expression position: the current unit's own
@@ -2509,6 +2612,33 @@ mod tests {
             .into_iter()
             .map(|c| c.label)
             .collect()
+    }
+
+    /// Constrained generics slice 0: the constraint names are offered after the
+    /// `:` / `+` of a bound, in a type-parameter list and in a `where` clause,
+    /// and only there.
+    #[test]
+    fn constraint_names_follow_a_bound_colon() {
+        let doc = "commons m\n";
+        let eq = |line: &str| {
+            complete(line, doc, None)
+                .into_iter()
+                .filter(|c| c.kind == CompletionKind::Constraint)
+                .map(|c| c.label)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(eq("fn same[T: "), ["Eq"]);
+        assert_eq!(eq("fn same[T: E"), ["Eq"]);
+        assert_eq!(eq("fn same[T: Eq + "), ["Eq"]);
+        assert_eq!(eq("fn same[A, T: "), ["Eq"]);
+        assert_eq!(eq("type Pair[T: "), ["Eq"]);
+        assert_eq!(eq("fn Box.has(self, x: A) -> Bool where A: "), ["Eq"]);
+        assert_eq!(eq("fn f(self) -> Int where A: Eq, B: "), ["Eq"]);
+        // A parameter's type annotation and a refinement `where` are not bounds.
+        assert!(eq("fn f(x: ").is_empty());
+        assert!(eq("fn f(x: Int) -> ").is_empty());
+        assert!(eq("type Age = Int where ").is_empty());
+        assert!(eq("fn f[T](x: ").is_empty());
     }
 
     #[test]
@@ -3352,6 +3482,35 @@ mod tests {
         // Not inside a `cors` block (an ordinary record construction) — no.
         let doc3 = "let x = Order {\n    ";
         assert!(!in_cors_field_position(doc3, doc3.len()));
+    }
+
+    /// #2640: inside `par { }` only the two statement forms are offered, and the
+    /// `par` snippet appears only where a body is effectful.
+    #[test]
+    fn par_block_positions_and_candidates() {
+        let inside = "service s {\n  on call() -> Effect[Int] {\n    par {\n      ";
+        assert!(in_par_block_position(inside, inside.len()));
+        let labels: Vec<String> = par_block_candidates()
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(labels, ["let x <-", "do"]);
+        // After the closing brace the statement is an ordinary one again.
+        let after =
+            "service s {\n  on call() -> Effect[Int] {\n    par {\n      let a <- f()\n    }\n    ";
+        assert!(!in_par_block_position(after, after.len()));
+        assert!(in_effectful_body_position(after, after.len()));
+    }
+
+    #[test]
+    fn par_snippet_is_for_effectful_bodies_only() {
+        let effectful = "fn f() -> Effect[Int] {\n  if true {\n    ";
+        assert!(in_effectful_body_position(effectful, effectful.len()));
+        let pure = "fn f() -> Int {\n  ";
+        assert!(!in_effectful_body_position(pure, pure.len()));
+        let top = "context c\n\n";
+        assert!(!in_effectful_body_position(top, top.len()));
+        assert!(par_snippet().insert_text.unwrap().starts_with("par {"));
     }
 
     #[test]

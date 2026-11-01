@@ -508,6 +508,9 @@ pub fn canon_fn_signature(f: &FnSignature, types: &HashMap<String, Arc<TypeDecl>
         " -> {}",
         canon_type(&f.return_type, types, &mut Vec::new())
     );
+    if !f.where_bounds.is_empty() {
+        let _ = write!(out, " where {}", f.where_bounds.join(", "));
+    }
     if f.has_self {
         out.push_str(" self");
     }

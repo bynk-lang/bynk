@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.455**.
+written against **v0.458**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.458.0** | "`bynk.cloudflare.D1` is stable: it no longer needs an `[unstable] allow` entry, and a leftover `\"bynk.cloudflare.D1\"` entry is a `bynk.project.unstable_not_experimental` warning (standard-library P4d, [#2652](https://github.com/bynk-lang/bynk/issues/2652))" |
+| **v0.457.0** | "`par { let a <- e1  let b <- e2 }`: a concurrent binding block that issues every effect, in source order, before awaiting any of them, and completes when all have settled; the first fault in source order is raised after the rest have settled (concurrent effects, slice 0, [#2640](https://github.com/bynk-lang/bynk/issues/2640))" |
+| **v0.456.0** | "`bynk check --fix` and `bynkc check --fix` apply the compiler's machine-applicable fix suggestions from the command line, repeated to a fixpoint and written only when the whole run is sound; the selection rule moves into `bynk-syntax` and is shared with the editor's fix all" |
 | **v0.455.1** | "`bynk --help` lists its commands under five headings (Project, Run and deploy, Dependencies, Publishing, Help and tooling), each with a one-line summary; the longer description moves to `bynk <command> --help`" |
 | **v0.455.0** | "Record patterns: `TypeName { f1, f2: pattern, .. }` matches a record by its fields in a `match` arm, nested in a variant payload, or after `is` (parenthesised, `x is (T { .. })`). They are always open, so the trailing `..` is required and adding a field to a record never breaks a pattern. A record pattern covers its type only when every field is matched irrefutably (patterns track slice 1, [#2641](https://github.com/bynk-lang/bynk/issues/2641)). New diagnostics: `bynk.parse.record_pattern_without_rest`, `bynk.parse.record_pattern_in_is_unparenthesised`, `bynk.types.record_pattern_on_non_record` and `bynk.types.duplicate_pattern_field`, the two parse errors with one-click fixes" |
 | **v0.454.0** | "`bynk.cloudflare`'s `R2` gains streamed reads and writes: `getStream` gives an `R2Body` (the object's metadata and its body as a single-pass `Stream[Bytes]`, served with `RawStreamed`), and `putStream`/`putStreamWith` write a stream of a declared `size`, a mismatch faulting with nothing stored. Multipart uploads (`createUpload`, `uploadPart`, `completeUpload`, `abortUpload`) build one object from whole-`Bytes` parts across requests, through a plain `R2Upload` handle (standard-library P5b, [#2626](https://github.com/bynk-lang/bynk/issues/2626))" |

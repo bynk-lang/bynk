@@ -586,6 +586,24 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
     )
 }
 
+/// #2640 (ADR 0156): hover for the contextual `par` keyword of a `par { … }`
+/// binding block. `None` anywhere else, so an ordinary identifier named `par`
+/// keeps its own hover.
+pub fn describe_par_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let text = |i: usize| tokens.get(i).map(|t| &source[t.span.start..t.span.end]);
+    if text(idx)? != "par" || tokens.get(idx + 1)?.kind != bynk_syntax::lexer::TokenKind::LBrace {
+        return None;
+    }
+    Some(
+        "```bynk\npar {\n  let a <- first()\n  let b <- second()\n}\n```\n\nIssues every effect in the block, in source order, before awaiting any of them, and completes when all have settled. The names bound inside are in scope after the closing brace; no binding may mention a name a sibling binds. If any effect faults, the block waits for the rest, then raises the first fault in source order. Holds only `let x <- e` and `do e`."
+            .to_string(),
+    )
+}
+
 /// #2138: the doc `run.id` shows on hover and in completion.
 pub const RUN_ID_DOC: &str = "**`run.id`** — this test run's identity, a `String`. In process it is always `\"local\"`; each `bynk test --against` run gets a fresh one, so a key built from it (`\"order-\\(run.id)\"`) doesn't collide with an earlier run's data on a shared deployment.";
 
@@ -629,6 +647,13 @@ fn run_bound_in_block(block: &Block, at: usize, bound: &mut Vec<String>) -> Opti
         // A `let`'s own value doesn't see its name; what follows does.
         if let Statement::Let(l) | Statement::EffectLet(l) = stmt {
             bound.push(l.name.name.clone());
+        }
+        // #2640: a `par` block's names enter scope after its closing brace.
+        if let Statement::Par(p) = stmt {
+            bound.extend(p.statements.iter().filter_map(|s| match s {
+                Statement::EffectLet(l) => Some(l.name.name.clone()),
+                _ => None,
+            }));
         }
     }
     let found = found.or_else(|| run_bound_in_expr(&block.tail, at, bound));
@@ -861,6 +886,50 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
                         spans.push(label.span);
                     }
                 }
+            }
+        }
+    }
+    spans
+}
+
+/// Constrained generics slice 0: the span of every constraint name in a bound
+/// — a type parameter's (`T: Eq` on a `fn`, `type` or capability operation)
+/// and a method's `where A: Eq` entries — so the editor can classify them as
+/// `interface` tokens.
+pub fn constraint_token_spans(source: &str) -> Vec<Span> {
+    let Ok(tokens) = tokenize(source) else {
+        return Vec::new();
+    };
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let Some(unit) = unit else {
+        return Vec::new();
+    };
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    let mut spans = Vec::new();
+    fn params(tps: &[TypeParam], spans: &mut Vec<Span>) {
+        for tp in tps {
+            spans.extend(tp.bounds.iter().map(|b| b.span));
+        }
+    }
+    for item in items {
+        match item {
+            CommonsItem::Fn(f) => params(&f.type_params, &mut spans),
+            CommonsItem::Type(t) => params(&t.type_params, &mut spans),
+            CommonsItem::Capability(c) => {
+                for op in &c.ops {
+                    params(&op.type_params, &mut spans);
+                }
+            }
+            _ => {}
+        }
+        if let CommonsItem::Fn(f) = item {
+            for wb in &f.where_bounds {
+                spans.extend(wb.bounds.iter().map(|b| b.span));
             }
         }
     }
@@ -1926,10 +1995,10 @@ pub(crate) fn describe_type(t: &TypeDecl) -> String {
     let params = if t.type_params.is_empty() {
         String::new()
     } else {
-        let names: Vec<&str> = t
+        let names: Vec<String> = t
             .type_params
             .iter()
-            .map(|tp| tp.name.name.as_str())
+            .map(|tp| bound_str(&tp.name.name, &tp.bounds))
             .collect();
         format!("[{}]", names.join(", "))
     };
@@ -2024,11 +2093,47 @@ fn describe_event(e: &EventDecl) -> String {
     base.replacen(&from, &to, 1)
 }
 
+/// `[T: Eq, U]`, or empty for a non-generic function: the declared bounds, so
+/// hover shows what a caller must satisfy (constrained generics slice 0).
+pub(crate) fn fn_type_params_str(f: &FnDecl) -> String {
+    if f.type_params.is_empty() {
+        return String::new();
+    }
+    let ps: Vec<String> = f
+        .type_params
+        .iter()
+        .map(|tp| bound_str(&tp.name.name, &tp.bounds))
+        .collect();
+    format!("[{}]", ps.join(", "))
+}
+
+/// ` where A: Eq`, or empty without a `where` clause.
+pub(crate) fn fn_where_str(f: &FnDecl) -> String {
+    if f.where_bounds.is_empty() {
+        return String::new();
+    }
+    let ps: Vec<String> = f
+        .where_bounds
+        .iter()
+        .map(|wb| bound_str(&wb.param.name, &wb.bounds))
+        .collect();
+    format!(" where {}", ps.join(", "))
+}
+
+fn bound_str(name: &str, bounds: &[Ident]) -> String {
+    if bounds.is_empty() {
+        return name.to_string();
+    }
+    let names: Vec<&str> = bounds.iter().map(|b| b.name.as_str()).collect();
+    format!("{name}: {}", names.join(" + "))
+}
+
 pub(crate) fn describe_fn(f: &FnDecl) -> String {
     let mut out = String::new();
     out.push_str("```bynk\n");
     out.push_str("fn ");
     out.push_str(&f.name.display());
+    out.push_str(&fn_type_params_str(f));
     out.push('(');
     let mut parts: Vec<String> = Vec::new();
     if f.has_self {
@@ -2040,6 +2145,7 @@ pub(crate) fn describe_fn(f: &FnDecl) -> String {
     out.push_str(&parts.join(", "));
     out.push_str(") -> ");
     out.push_str(&type_ref_str(&f.return_type));
+    out.push_str(&fn_where_str(f));
     // v0.123 (slice 2): the contract clauses (v0.115), beneath the signature —
     // rendered through the formatter's own predicate renderer.
     for c in &f.requires {
@@ -2591,6 +2697,18 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #2640: `par` hovers only as the head of a `par { … }` block.
+    #[test]
+    fn par_hover_is_for_the_block_keyword_only() {
+        let block =
+            "fn f() -> Effect[Int] {\n  par {\n    let a <- g()\n  }\n  Effect.pure(a)\n}\n";
+        let at = block.find("par").unwrap();
+        assert!(describe_par_at(block, at).unwrap().contains("par {"));
+        let ident = "fn f(par: Int) -> Int {\n  par\n}\n";
+        assert!(describe_par_at(ident, ident.find("par").unwrap()).is_none());
+        assert!(describe_par_at(ident, ident.rfind("par").unwrap()).is_none());
+    }
+
     use super::*;
 
     /// #2136: the `system` cron/queue hover answers only when the receiver is
@@ -3128,6 +3246,40 @@ mod tests {
         );
         assert!(out.contains("requires p_nonneg: p >= 0"), "{out}");
         assert!(out.contains("ensures never_negative: result >= 0"), "{out}");
+    }
+
+    // Constrained generics slice 0: hover shows a generic's declared bounds and
+    // a method's `where` clause.
+    #[test]
+    fn describe_fn_renders_bounds_and_where() {
+        let src = "commons demo.m\n\ntype Box[A] = { value: A }\n\nfn same[T: Eq, U](a: T, b: T, u: U) -> Bool { a == b }\n\nfn Box.has(self, x: A) -> Bool where A: Eq { self.value == x }\n";
+        let out = describe_symbol(src, "same").unwrap();
+        assert!(
+            out.contains("fn same[T: Eq, U](a: T, b: T, u: U) -> Bool"),
+            "{out}"
+        );
+        let method = describe_symbol(src, "Box.has").unwrap();
+        assert!(
+            method.contains("fn Box.has(self, x: A) -> Bool where A: Eq"),
+            "{method}"
+        );
+        let ty =
+            describe_symbol("commons demo.m\n\ntype Pair[T: Eq] = { a: T }\n", "Pair").unwrap();
+        assert!(ty.contains("type Pair[T: Eq] = "), "{ty}");
+    }
+
+    // Constrained generics slice 0: every constraint name in a bound is a token
+    // span — a `fn`'s, a `type`'s and a method's `where` entries — and a bare
+    // parameter has none.
+    #[test]
+    fn constraint_token_spans_cover_every_bound() {
+        let src = "commons demo.m\n\ntype P[T: Eq] = { a: T }\n\nfn f[T: Eq + Eq, U](a: T, u: U) -> T { a }\n\nfn P.g(self) -> Int where T: Eq { 0 }\n";
+        let names: Vec<&str> = constraint_token_spans(src)
+            .into_iter()
+            .map(|s| &src[s.start..s.end])
+            .collect();
+        assert_eq!(names, ["Eq", "Eq", "Eq", "Eq"]);
+        assert!(constraint_token_spans("commons m\n\nfn f[T](a: T) -> T { a }\n").is_empty());
     }
 
     // v0.123 (slice 2): a service renders its protocol header and route lines.

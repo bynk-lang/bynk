@@ -451,3 +451,27 @@ deliberate `ServerError(m)` decodes as `ServerError(m)`. An empty message is the
 only difference, and `ServerError("")` is itself a legal return, so it does not
 reliably tell the two apart: by design (#1811), a `system` case observes
 responses, not faults.
+
+## §7.4.13 The `par` join (#2640)
+
+`__bynkSettleAll(thunks)` is the runtime half of a `par` block (§4.8.7b). `thunks` is
+the tuple of functions the block compiled, one per binding in source order, each
+returning the effect's promise (or value); the result is the tuple of their values,
+in the same order.
+
+```typescript
+export async function __bynkSettleAll<const T extends readonly (() => unknown)[]>(
+  thunks: T,
+): Promise<{ -readonly [P in keyof T]: Awaited<ReturnType<T[P]>> }>;
+```
+
+The contract: it calls **every** thunk, in order, before awaiting any, so each effect
+is issued before the next binding is evaluated. A thunk that throws synchronously is
+a rejected entry; later thunks are still called. It then waits for **every** entry to
+settle (`Promise.allSettled`), so nothing the block started is running when it
+returns or throws. If none rejected it returns the values. If any rejected it throws
+the **first rejection in input order** — not the first in time — and attaches the
+later reasons to it as a `suppressed` array, in input order, when the first is an
+object. The helper is codegen, not part of the published emit ABI (ADR 0310): it
+lives in the `settle` runtime module, which a project emits only when a module
+imports it.

@@ -22,9 +22,8 @@ impl<'a> Parser<'a> {
         } else {
             FnName::Free(first)
         };
-        // v0.20a: optional `[A, B]` type parameters (free functions only —
-        // generic methods are checked semantically; bounds are rejected here
-        // with `bynk.generics.no_bounds`).
+        // v0.20a: optional `[A, B]` type parameters, each optionally bounded
+        // (`[A: Eq]`); the checker validates the constraint names.
         let type_params = self.parse_optional_type_params()?;
         self.expect(TokenKind::LParen, "after the function name")?;
         // For methods, the first parameter may be the special `self` keyword.
@@ -63,6 +62,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RParen, "to close the parameter list")?;
         self.expect(TokenKind::Arrow, "before the return type")?;
         let return_type = self.parse_type_ref("as the return type")?;
+        let where_bounds = self.parse_optional_where_bounds()?;
         // v0.115: contract clauses ride between the return type and the body —
         // any number of `requires <name>: <pred>` then `ensures <name>: <pred>`.
         // The two-list split is by keyword, not order; the checker enforces the
@@ -83,6 +83,7 @@ impl<'a> Parser<'a> {
             name,
             params,
             return_type,
+            where_bounds,
             requires,
             ensures,
             body,
@@ -162,7 +163,8 @@ impl<'a> Parser<'a> {
                     | Some(TokenKind::TildeArrow)
                     | Some(TokenKind::Do)
             ) || self.assign_ahead()
-                || self.advance_ahead();
+                || self.advance_ahead()
+                || self.par_ahead();
             if self.peek_kind() == Some(TokenKind::Let) && self.let_pattern_ahead() {
                 self.enter_recursion("this chain of `let … else` steps")?;
                 *let_else_depth += 1;
@@ -175,32 +177,7 @@ impl<'a> Parser<'a> {
             if is_statement {
                 let mut stmt = self.parse_statement()?;
                 let trailing = self.take_trailing_trivia();
-                match &mut stmt {
-                    Statement::Let(l) | Statement::EffectLet(l) => {
-                        l.trivia.leading = leading;
-                        l.trivia.trailing = trailing;
-                    }
-                    Statement::Expect(a) => {
-                        a.trivia.leading = leading;
-                        a.trivia.trailing = trailing;
-                    }
-                    Statement::Send(s) => {
-                        s.trivia.leading = leading;
-                        s.trivia.trailing = trailing;
-                    }
-                    Statement::Do(d) => {
-                        d.trivia.leading = leading;
-                        d.trivia.trailing = trailing;
-                    }
-                    Statement::Assign(a) => {
-                        a.trivia.leading = leading;
-                        a.trivia.trailing = trailing;
-                    }
-                    Statement::Advance(a) => {
-                        a.trivia.leading = leading;
-                        a.trivia.trailing = trailing;
-                    }
-                }
+                attach_trivia(&mut stmt, leading, trailing);
                 statements.push(stmt);
             } else {
                 tail_leading = leading;
@@ -456,6 +433,80 @@ impl<'a> Parser<'a> {
             && kind(2) == Some(TokenKind::By)
     }
 
+    /// #2640: `par {` opens a concurrent binding block. `par` is contextual, and
+    /// `<Ident> {` is no other statement or expression start, so the lookahead
+    /// is unambiguous.
+    fn par_ahead(&self) -> bool {
+        self.peek_kind() == Some(TokenKind::Ident)
+            && self
+                .tokens
+                .get(self.pos)
+                .is_some_and(|t| self.slice(t.span) == "par")
+            && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::LBrace)
+    }
+
+    /// #2640: `par { <statement>* }`. Any statement parses here; the checker
+    /// admits only `let x <- e` and `do e`. A `let` with a refutable pattern
+    /// would desugar into a `match` over the rest of the block, which a `par`
+    /// has no room for, so it is refused here rather than mis-parsed.
+    fn parse_par_stmt(&mut self) -> Result<Statement, CompileError> {
+        let keyword = self.expect_ident("to start a `par` block")?.span;
+        self.expect(TokenKind::LBrace, "to open the `par` block")?;
+        let mut statements = Vec::new();
+        let closing_comments = loop {
+            let leading = self.take_leading_trivia();
+            if self.peek_kind() == Some(TokenKind::RBrace) {
+                break leading;
+            }
+            let is_statement = matches!(
+                self.peek_kind(),
+                Some(TokenKind::Let)
+                    | Some(TokenKind::Expect)
+                    | Some(TokenKind::TildeArrow)
+                    | Some(TokenKind::Do)
+            ) || self.assign_ahead()
+                || self.advance_ahead()
+                || self.par_ahead();
+            if !is_statement {
+                let (span, found) = match self.peek() {
+                    Some(t) => (t.span, t.kind.describe().to_string()),
+                    None => (self.eof_span(), "end of file".to_string()),
+                };
+                return Err(CompileError::new(
+                    "bynk.par.invalid_statement",
+                    span,
+                    format!("a `par` block holds only `let x <- e` and `do e`, found {found}"),
+                )
+                .with_note("a `par` block has no value; bind each result with `let x <- e`"));
+            }
+            if self.peek_kind() == Some(TokenKind::Let) && self.let_pattern_ahead() {
+                return Err(CompileError::new(
+                    "bynk.par.invalid_statement",
+                    self.peek().unwrap().span,
+                    "a `let` with a pattern and an `else` cannot appear in a `par` block",
+                )
+                .with_note(
+                    "bind the effect with a plain `let x <- e` in the block, then match on `x` after it",
+                ));
+            }
+            self.enter_recursion("this nesting of `par` blocks")?;
+            let parsed = self.parse_statement();
+            self.depth -= 1;
+            let mut stmt = parsed?;
+            let trailing = self.take_trailing_trivia();
+            attach_trivia(&mut stmt, leading, trailing);
+            statements.push(stmt);
+        };
+        let close = self.expect(TokenKind::RBrace, "to close the `par` block")?;
+        Ok(Statement::Par(ParStmt {
+            keyword,
+            statements,
+            closing_comments,
+            span: keyword.merge(close.span),
+            trivia: Trivia::default(),
+        }))
+    }
+
     pub(crate) fn assign_ahead(&self) -> bool {
         self.peek_kind() == Some(TokenKind::Ident)
             && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::ColonEq)
@@ -508,6 +559,9 @@ impl<'a> Parser<'a> {
                 span,
                 trivia: Trivia::default(),
             }));
+        }
+        if self.par_ahead() {
+            return self.parse_par_stmt();
         }
         if self.advance_ahead() {
             let keyword = self.expect_ident("to start an advance statement")?.span;
@@ -754,4 +808,19 @@ struct LetElseParts {
 enum LetElseOtherwise {
     Block(Block),
     Arms(Vec<MatchArm>),
+}
+
+/// Set a statement's own leading and trailing comments.
+fn attach_trivia(stmt: &mut Statement, leading: Vec<Comment>, trailing: Option<String>) {
+    let trivia = match stmt {
+        Statement::Let(l) | Statement::EffectLet(l) => &mut l.trivia,
+        Statement::Expect(a) => &mut a.trivia,
+        Statement::Send(s) => &mut s.trivia,
+        Statement::Do(d) => &mut d.trivia,
+        Statement::Assign(a) => &mut a.trivia,
+        Statement::Advance(a) => &mut a.trivia,
+        Statement::Par(p) => &mut p.trivia,
+    };
+    trivia.leading = leading;
+    trivia.trailing = trailing;
 }

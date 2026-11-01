@@ -4,7 +4,7 @@ commons m
 // receiver's type argument is bound at the call like a generic function's.
 type Box[A] = { value: A }
 
-fn Box.has(self, x: A) -> Bool { self.value == x }
+fn Box.has(self, x: A) -> Bool where A: Eq { self.value == x }
 
 fn dec(n: Int) -> Int { n - 1 }
 

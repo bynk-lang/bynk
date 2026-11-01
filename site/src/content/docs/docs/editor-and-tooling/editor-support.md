@@ -68,6 +68,11 @@ the unit names it declares and every `uses`/`consumes` that refers to them. VS
 Code shows the edit for review first. Moving units into a different project is
 left for you to fix by hand.
 
+The editor's **fix all** applies a file's auto-fixable problems as one edit. The
+same fixes are available without an editor as
+[`bynk check --fix`](/docs/bynk-cli/#applying-fixes), which repeats them until
+none remain across a project.
+
 To serve the project while you edit, run **Bynk: Start Dev Server** from the
 Command Palette. It runs `bynk dev` in a terminal, and a status-bar item shows
 each context's URL. The [extension reference](/docs/tooling/vscode-bynk/) lists

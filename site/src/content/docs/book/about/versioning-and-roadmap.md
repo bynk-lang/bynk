@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.455) rather than in large releases.
+steps (the book is written against v0.458) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -79,6 +79,13 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   be retired (S4). The track is complete and the gate is met: its live checks
   on Cloudflare are recorded on
   [#2188](https://github.com/bynk-lang/bynk/issues/2188).
+- **Constrained generics.** In progress. Slice 0 has shipped and is the 1.0
+  prerequisite: a type parameter may carry a declared bound, and `Eq` is the first
+  constraint (`fn same[T: Eq](a: T, b: T)`, or `where A: Eq` on a method for its
+  receiver type's parameter), replacing the equality requirement the compiler used
+  to infer. It is a breaking change with a machine-applicable fix; see
+  [Generics and bounds](/book/reference/generics/). Next: `Ord`, `Key` and
+  `Codable` as further constraints, then static methods on generic types.
 - **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its
   model views (sequence diagram, documentation, architecture map, wire
@@ -103,6 +110,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   [approves them](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
   Next: the hosted first-party registry
   ([#843](https://github.com/bynk-lang/bynk/issues/843)).
+- **Concurrent effects.** In progress: a
+  [`par` block](/book/reference/capabilities/#par) issues independent effects
+  together and waits for all of them, raising the first fault in source order.
+  Next: making `parTraverse` wait for every element before it raises
+  ([#2615](https://github.com/bynk-lang/bynk/issues/2615)), then `?` inside a block.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 
