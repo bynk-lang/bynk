@@ -63,7 +63,7 @@ async function test_sortBy_an_Option_key_puts_None_first() {
 }
 
 // case tier: unit
-async function test_min_and_max_over_Float_keys_holding_a_NaN() {
+async function test_max_over_Float_keys_holding_a_NaN() {
   try {
     __ns_demo_gaps.__resetAgents();
     const deps = __makeTestDeps();
@@ -74,10 +74,31 @@ async function test_min_and_max_over_Float_keys_holding_a_NaN() {
     await __makeShelf("n").add("x", None, 2.5, 1.0, 1, deps);
     await __makeShelf("n").add("y", None, 0.0, 0.0, 2, deps);
     await __makeShelf("n").add("z", None, 1.5, 1.0, 3, deps);
-    const lo = await __makeShelf("n").minScore(deps);
-    if (!(__bynkEq(lo, Some(1.5)))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:16:10", 499, 514, "expect lo == Some(1.5)\n  expected: lo == Some(1.5)\n  actual:   " + __bynkShow((lo)) + " == " + __bynkShow((Some(1.5)))); }
     const hi = await __makeShelf("n").maxScore(deps);
-    if (!(__bynkEq(((__o: Option<number>, __f: (x: number) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(hi, (f) => f !== f), Some(true)))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:18:10", 558, 593, "expect hi.map((f) => f != f) == Some(true)\n  expected: hi.map((f) => f != f) == Some(true)\n  actual:   " + __bynkShow((((__o: Option<number>, __f: (x: number) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(hi, (f) => f !== f))) + " == " + __bynkShow((Some(true)))); }
+    if (!(__bynkEq(((__o: Option<number>, __f: (x: number) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(hi, (f) => f !== f), Some(true)))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:16:10", 491, 526, "expect hi.map((f) => f != f) == Some(true)\n  expected: hi.map((f) => f != f) == Some(true)\n  actual:   " + __bynkShow((((__o: Option<number>, __f: (x: number) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(hi, (f) => f !== f))) + " == " + __bynkShow((Some(true)))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_min_over_Float_keys_with_the_NaN_first() {
+  try {
+    __ns_demo_gaps.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Frame, Item, Shelf, Tag, __makeShelf, keyed } = __ns_demo_gaps;
+    type Frame = __ns_demo_gaps.Frame;
+    type Item = __ns_demo_gaps.Item;
+    type Tag = __ns_demo_gaps.Tag;
+    await __makeShelf("m").add("y", None, 0.0, 0.0, 2, deps);
+    await __makeShelf("m").add("x", None, 2.5, 1.0, 1, deps);
+    await __makeShelf("m").add("z", None, 1.5, 1.0, 3, deps);
+    const lo = await __makeShelf("m").minScore(deps);
+    if (!(__bynkEq(lo, Some(1.5)))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:24:10", 753, 768, "expect lo == Some(1.5)\n  expected: lo == Some(1.5)\n  actual:   " + __bynkShow((lo)) + " == " + __bynkShow((Some(1.5)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -100,7 +121,7 @@ async function test_sortBy_an_opaque_Ord_key() {
     await __makeShelf("t").add("y", None, 1.0, 1.0, 10, deps);
     await __makeShelf("t").add("z", None, 1.0, 1.0, 20, deps);
     const names = await __makeShelf("t").byTag(deps);
-    if (!(__bynkEq(names, ["y", "z", "x"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:26:10", 809, 833, "expect names == [\"y\", \"z\", \"x\"]\n  expected: names == [\"y\", \"z\", \"x\"]\n  actual:   " + __bynkShow((names)) + " == " + __bynkShow((["y", "z", "x"]))); }
+    if (!(__bynkEq(names, ["y", "z", "x"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:32:10", 984, 1008, "expect names == [\"y\", \"z\", \"x\"]\n  expected: names == [\"y\", \"z\", \"x\"]\n  actual:   " + __bynkShow((names)) + " == " + __bynkShow((["y", "z", "x"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -121,8 +142,8 @@ async function test_a_T__Ord_generic_key_through_its_witness() {
     type Tag = __ns_demo_gaps.Tag;
     const a = { name: "a", rank: None, score: 1.0, div: 1.0, tag: Tag.unsafe(2) };
     const b = { name: "b", rank: None, score: 1.0, div: 1.0, tag: Tag.unsafe(1) };
-    if (!(__bynkEq(keyed([a, b], (i) => i.tag, __bynkCmpInt), ["b", "a"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:32:10", 1062, 1103, "expect keyed([a, b], (i) => i.tag) == [\"b\", \"a\"]\n  expected: keyed([a, b], (i) => i.tag) == [\"b\", \"a\"]\n  actual:   " + __bynkShow((keyed([a, b], (i) => i.tag, __bynkCmpInt))) + " == " + __bynkShow((["b", "a"]))); }
-    if (!(__bynkEq(keyed([a, b], (i) => i.name, __bynkCmpString), ["a", "b"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:33:10", 1113, 1155, "expect keyed([a, b], (i) => i.name) == [\"a\", \"b\"]\n  expected: keyed([a, b], (i) => i.name) == [\"a\", \"b\"]\n  actual:   " + __bynkShow((keyed([a, b], (i) => i.name, __bynkCmpString))) + " == " + __bynkShow((["a", "b"]))); }
+    if (!(__bynkEq(keyed([a, b], (i) => i.tag, __bynkCmpInt), ["b", "a"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:38:10", 1237, 1278, "expect keyed([a, b], (i) => i.tag) == [\"b\", \"a\"]\n  expected: keyed([a, b], (i) => i.tag) == [\"b\", \"a\"]\n  actual:   " + __bynkShow((keyed([a, b], (i) => i.tag, __bynkCmpInt))) + " == " + __bynkShow((["b", "a"]))); }
+    if (!(__bynkEq(keyed([b, a], (i) => i.name, __bynkCmpString), ["a", "b"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:39:10", 1288, 1330, "expect keyed([b, a], (i) => i.name) == [\"a\", \"b\"]\n  expected: keyed([b, a], (i) => i.name) == [\"a\", \"b\"]\n  actual:   " + __bynkShow((keyed([b, a], (i) => i.name, __bynkCmpString))) + " == " + __bynkShow((["a", "b"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -142,7 +163,7 @@ async function test_a_held_connection_source_sorts_by_a_non_base_key() {
     type Item = __ns_demo_gaps.Item;
     type Tag = __ns_demo_gaps.Tag;
     const n = await __makeShelf("c").openCount(deps);
-    if (!(n === 0)) { throw __bynkExpectFailure("tests/demo/gaps.bynk:38:10", 1260, 1266, "expect n == 0\n  expected: n == 0\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((0))); }
+    if (!(n === 0)) { throw __bynkExpectFailure("tests/demo/gaps.bynk:44:10", 1435, 1441, "expect n == 0\n  expected: n == 0\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -166,7 +187,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["sortBy an Option key puts None first", "min and max over Float keys holding a NaN", "sortBy an opaque Ord key", "a T: Ord generic key through its witness", "a held-connection source sorts by a non-base key"];
+export const __bynkCases: readonly string[] = ["sortBy an Option key puts None first", "max over Float keys holding a NaN", "min over Float keys with the NaN first", "sortBy an opaque Ord key", "a T: Ord generic key through its witness", "a held-connection source sorts by a non-base key"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -177,9 +198,15 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("min and max over Float keys holding a NaN")) {
+  if (want("max over Float keys holding a NaN")) {
     const started = __bynkCaseNow();
-    const r = { name: "min and max over Float keys holding a NaN", ...(await test_min_and_max_over_Float_keys_holding_a_NaN()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "max over Float keys holding a NaN", ...(await test_max_over_Float_keys_holding_a_NaN()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("min over Float keys with the NaN first")) {
+    const started = __bynkCaseNow();
+    const r = { name: "min over Float keys with the NaN first", ...(await test_min_over_Float_keys_with_the_NaN_first()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

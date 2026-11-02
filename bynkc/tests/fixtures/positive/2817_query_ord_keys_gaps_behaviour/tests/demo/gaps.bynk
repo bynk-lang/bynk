@@ -8,14 +8,20 @@ case "sortBy an Option key puts None first" {
   expect names == ["y", "z", "x"]
 }
 
-case "min and max over Float keys holding a NaN" {
+case "max over Float keys holding a NaN" {
   do Shelf("n").add("x", None, 2.5, 1.0, 1)
   do Shelf("n").add("y", None, 0.0, 0.0, 2)
   do Shelf("n").add("z", None, 1.5, 1.0, 3)
-  let lo <- Shelf("n").minScore()
-  expect lo == Some(1.5)
   let hi <- Shelf("n").maxScore()
   expect hi.map((f) => f != f) == Some(true)
+}
+
+case "min over Float keys with the NaN first" {
+  do Shelf("m").add("y", None, 0.0, 0.0, 2)
+  do Shelf("m").add("x", None, 2.5, 1.0, 1)
+  do Shelf("m").add("z", None, 1.5, 1.0, 3)
+  let lo <- Shelf("m").minScore()
+  expect lo == Some(1.5)
 }
 
 case "sortBy an opaque Ord key" {
@@ -30,7 +36,7 @@ case "a T: Ord generic key through its witness" {
   let a = Item { name: "a", rank: None, score: 1.0, div: 1.0, tag: Tag.unsafe(2) }
   let b = Item { name: "b", rank: None, score: 1.0, div: 1.0, tag: Tag.unsafe(1) }
   expect keyed([a, b], (i) => i.tag) == ["b", "a"]
-  expect keyed([a, b], (i) => i.name) == ["a", "b"]
+  expect keyed([b, a], (i) => i.name) == ["a", "b"]
 }
 
 case "a held-connection source sorts by a non-base key" {
