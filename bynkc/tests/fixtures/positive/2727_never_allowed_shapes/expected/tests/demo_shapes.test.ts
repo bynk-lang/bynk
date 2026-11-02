@@ -40,7 +40,7 @@ function __makeTestDeps() {
 async function test_the_allowed_shapes_run_when_the_fault_is_not_reached() {
   try {
     const deps = {};
-    const { annotated, apply, joined, pick, tail, viaLambda } = __ns_demo_shapes;
+    const { annotated, annotated_map, apply, joined, mapped_err, pick, prices, tail, viaLambda } = __ns_demo_shapes;
     if (!(annotated(1) === 2)) { throw __bynkExpectFailure("tests/shapes.test.bynk:3:12", 95, 112, "expect annotated(1) == 2\n  expected: annotated(1) == 2\n  actual:   " + __bynkShow((annotated(1))) + " == " + __bynkShow((2))); }
     if (!(tail(3) === 3)) { throw __bynkExpectFailure("tests/shapes.test.bynk:4:12", 124, 136, "expect tail(3) == 3\n  expected: tail(3) == 3\n  actual:   " + __bynkShow((tail(3))) + " == " + __bynkShow((3))); }
     if (!(joined(3) === 4)) { throw __bynkExpectFailure("tests/shapes.test.bynk:5:12", 148, 162, "expect joined(3) == 4\n  expected: joined(3) == 4\n  actual:   " + __bynkShow((joined(3))) + " == " + __bynkShow((4))); }

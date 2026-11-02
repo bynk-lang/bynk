@@ -3962,7 +3962,7 @@ pub(super) fn check_effect_let(l: &LetStmt, check_context: bool, ctx: &mut Ctx) 
                 l.value.span,
                 &format!("`{}`", l.name.name),
                 &rhs.display(tys),
-                "annotate the binding (`let x: T <- …`) so the value has a type to stand in for",
+                "annotate the binding (`let x: T <- …`); for a lambda, annotate it with a function type (`let f: (Int) -> T = …`)",
             ));
             return None;
         }
@@ -4071,7 +4071,7 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                             l.value.span,
                             &format!("`{}`", l.name.name),
                             &rhs.display(tys),
-                            "annotate the binding (`let x: T = …`) so the value has a type to stand in for",
+                            "annotate the binding (`let x: T = …`); for a lambda, annotate it with a function type (`let f: (Int) -> T = …`)",
                         ));
                         ctx.bind(l.name.name.clone(), tys.intern(Ty::Error));
                         continue;

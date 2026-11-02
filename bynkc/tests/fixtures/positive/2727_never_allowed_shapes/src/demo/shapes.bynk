@@ -40,3 +40,19 @@ An annotated result gives an explicit lambda its expected type, too.
 fn pick() -> (Int) -> String {
   (n: Int) => unreachable("never called")
 }
+
+---
+A combinator whose lambda only faults takes its type from the result position.
+---
+fn prices(xs: List[Int]) -> List[Int] {
+  xs.map((o) => unreachable("prices are filled in later"))
+}
+
+fn annotated_map(xs: List[Int]) -> Int {
+  let ys: List[Int] = xs.map((o) => unreachable("never called"))
+  ys.length()
+}
+
+fn mapped_err(r: Result[Int, String]) -> Result[Int, String] {
+  r.mapErr((e) => unreachable("errors are impossible here"))
+}

@@ -1,1 +1,1 @@
-bynk.types.never_inferred this lambda's result would have the type
+bynk.types.never_inferred `f` would have the type `Int -> never returns`
