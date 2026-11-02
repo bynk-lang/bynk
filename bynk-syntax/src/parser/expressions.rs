@@ -28,7 +28,9 @@ impl<'a> Parser<'a> {
         // the precedence ladder via [`parse_cond_expr`], which bypasses this.
         let prev = self.no_record_literal;
         self.no_record_literal = false;
+        let prev_guard = std::mem::replace(&mut self.in_guard, false);
         let result = self.parse_expr_inner();
+        self.in_guard = prev_guard;
         self.no_record_literal = prev;
         self.depth -= 1;
         result
@@ -78,6 +80,19 @@ impl<'a> Parser<'a> {
         self.no_record_literal = true;
         let result = self.parse_expr_inner();
         self.no_record_literal = prev;
+        result
+    }
+
+    /// A match-arm guard (#2721): like [`parse_expr`] but with `in_guard` set
+    /// for the spine, so `lambda_ahead` is not consulted at a `(`.
+    fn parse_guard_expr(&mut self) -> Result<Expr, CompileError> {
+        self.enter_recursion("this expression")?;
+        let prev = self.no_record_literal;
+        self.no_record_literal = false;
+        self.in_guard = true;
+        let result = self.parse_expr_inner();
+        self.no_record_literal = prev;
+        self.depth -= 1;
         result
     }
 
@@ -847,7 +862,7 @@ impl<'a> Parser<'a> {
                 // v0.20a: `(params) => …` — a lambda. Token-level scan to the
                 // matching `)` then a one-token peek for `=>`; only paren
                 // depth matters (strings are single tokens).
-                if self.lambda_ahead() {
+                if !self.in_guard && self.lambda_ahead() {
                     return self.parse_lambda();
                 }
                 self.bump();
@@ -1321,7 +1336,13 @@ impl<'a> Parser<'a> {
         // arm-position `if` can only be a guard.
         let guard = if self.peek_kind() == Some(TokenKind::If) {
             self.bump();
-            Some(self.parse_expr()?)
+            // #2721: the guard's spine is followed by the arm's `=>`, so a
+            // leading `(…)` is a parenthesised expression, not lambda params.
+            // A lambda in a guard needs its own parentheses.
+            let prev = self.in_guard;
+            let r = self.parse_guard_expr();
+            self.in_guard = prev;
+            Some(r?)
         } else {
             None
         };
@@ -1634,7 +1655,8 @@ impl<'a> Parser<'a> {
     /// Parse a list pattern (#2680): `[]`, `[p, …]`, `[p, …, ..]` or
     /// `[p, …, ..rest]`; the cursor is on the `[`. The `..` is the final
     /// element, at most once, and followed by a name or nothing; `..` followed
-    /// by an integer is a range element instead (#2699, patterns track Q7).
+    /// by an integer is a range element instead (#2699; the patterns track's
+    /// Q7 in `design/archive/retired-tracks.md`).
     fn parse_list_pattern(&mut self) -> Result<Pattern, CompileError> {
         let open = self.expect(TokenKind::LBracket, "to open a list pattern")?;
         let mut elems = Vec::new();

@@ -1,1 +1,2 @@
 bynk.generics.method_on_generic_type
+never mentions `T`

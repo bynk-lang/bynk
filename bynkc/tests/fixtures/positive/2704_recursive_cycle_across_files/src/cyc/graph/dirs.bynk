@@ -1,0 +1,20 @@
+// #2704: a second cycle (`Dir` -> `Entry` -> `Dir`) declared across two files
+// of one context, and carried over its boundary next to the commons cycle.
+context cyc.graph
+
+uses cyc.shapes
+exports transparent { Dir, Entry }
+
+type Dir = { name: String, entries: List[Entry] }
+
+service dirs {
+  on call(d: Dir) -> Effect[Dir] {
+    Effect.pure(d)
+  }
+}
+
+service exprs {
+  on call(e: Expr) -> Effect[Expr] {
+    Effect.pure(e)
+  }
+}

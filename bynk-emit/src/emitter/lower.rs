@@ -2986,13 +2986,24 @@ fn lower_method_call(
         let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
         // #2719: a static method in the needs-context set takes the context last.
         let mut needs_exec = false;
-        if let Some(Callee::Static(decl)) = cx.commons().callees.get(&e.id)
-            && cx.commons().exec_plan.fn_needs(decl)
-        {
-            args_lowered.push(cx.exec_expr());
-            needs_exec = true;
+        if let Some(Callee::Static(decl, witnesses)) = cx.commons().callees.get(&e.id) {
+            // Constrained generics slice 4: the call's witnesses follow the
+            // ordinary arguments, as for an instance method.
+            args_lowered.extend(cx.witness_args(decl, witnesses));
+            if cx.commons().exec_plan.fn_needs(decl) {
+                args_lowered.push(cx.exec_expr());
+                needs_exec = true;
+            }
         }
-        let call = format!("{}.{}({})", id.name, method.name, args_lowered.join(", "));
+        // Slice 4 (DECISION B): explicit type arguments (`Box.empty[Int]()`) are
+        // kept, so a call with no argument of type `T` still types as written.
+        let call = format!(
+            "{}.{}{}({})",
+            id.name,
+            method.name,
+            capability_call_type_args_ts(type_args, None),
+            args_lowered.join(", ")
+        );
         return pre.finish(if needs_exec {
             settle_exec_call(call, cx)
         } else {

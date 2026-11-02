@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "gardener": "dbff9be948887cfc",
+    "trees": "d8dd08313c20865a"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "gardener": "Svc(\"gardener\",P(\"t\",Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))),Ret(U()))",
+    "trees": "Svc(\"trees\",P(\"t\",Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))),Ret(Sum(\"Tree\",V(\"Leaf\"),V(\"Node\",F(\"left\",Ref(\"Tree\")),F(\"right\",Ref(\"Tree\")),F(\"value\",B(\"Int\"))))))"
+  }
+}

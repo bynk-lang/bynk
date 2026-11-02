@@ -192,12 +192,20 @@ pub(crate) fn emit_client(
     let mut declared: BTreeSet<String> = closure.iter().cloned().collect();
     declared.extend(generic_bases.iter().cloned());
     let mut subst: HashMap<String, String> = HashMap::new();
+    let mut taken: BTreeSet<String> = declared.clone();
     for name in &declared {
-        if SURFACE_TYPES.contains(&name.as_str()) {
-            let mut to = name.clone();
-            while SURFACE_TYPES.contains(&to.as_str()) || declared.contains(&to) {
+        // #2750: a consumed context's type is filed under a qualified key
+        // (`shop_order__Code`, #2087). The client is read by a person, so it
+        // declares the type under the plain name a user reads, adding a
+        // trailing `_` only when that name is already taken.
+        let plain = bynk_check::symbols::display_type_name(name);
+        let qualified = plain != name.as_str();
+        if qualified || SURFACE_TYPES.contains(&name.as_str()) {
+            let mut to = plain.to_string();
+            while SURFACE_TYPES.contains(&to.as_str()) || taken.contains(&to) {
                 to.push('_');
             }
+            taken.insert(to.clone());
             subst.insert(name.clone(), to);
         }
     }
@@ -205,16 +213,21 @@ pub(crate) fn emit_client(
     let types: HashMap<String, Arc<TypeDecl>> = if subst.is_empty() {
         own_types.clone()
     } else {
-        own_types
+        // Types the signatures never reach go in first, so a declared type
+        // renamed onto the same key (`Code`) wins; the closure never sees them.
+        let mut out: HashMap<String, Arc<TypeDecl>> = own_types
             .iter()
-            .map(|(k, d)| {
-                let decl = super::rename_in_decl(d, &subst);
-                (
-                    subst.get(k).cloned().unwrap_or_else(|| k.clone()),
-                    Arc::new(decl),
-                )
-            })
-            .collect()
+            .filter(|(k, _)| !declared.contains(*k))
+            .map(|(k, d)| (k.clone(), d.clone()))
+            .collect();
+        for (k, d) in own_types.iter().filter(|(k, _)| declared.contains(*k)) {
+            let decl = super::rename_in_decl(d, &subst);
+            out.insert(
+                subst.get(k).cloned().unwrap_or_else(|| k.clone()),
+                Arc::new(decl),
+            );
+        }
+        out
     };
     let roots: Vec<TypeRef> = roots.iter().map(renamed).collect();
     let (names, insts) = serialisation::collect_codec_closure(&roots, &types);

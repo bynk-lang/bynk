@@ -1867,6 +1867,29 @@ fn member_candidates_from(
                 CommonsItem::Capability(c) if c.name.name == receiver && c.derived.is_some() => {
                     derived_base = c.derived.as_ref().map(|d| d.base.name.clone());
                 }
+                // Constrained generics slice 4: a user static (`fn Box.of(…)`, no
+                // `self`) completes after `Box.`, generic type or not. The type's
+                // parameters are written in the signature as declared; the hidden
+                // witnesses are not.
+                CommonsItem::Fn(f) => {
+                    if let FnName::Method {
+                        type_name,
+                        method_name,
+                    } = &f.name
+                        && !f.has_self
+                        && type_name.name == receiver
+                        && seen.insert(method_name.name.clone())
+                    {
+                        out.push(
+                            Completion::item(
+                                method_name.name.clone(),
+                                CompletionKind::Member,
+                                Some(free_fn_signature(&method_name.name, f)),
+                            )
+                            .with_doc(f.documentation.as_deref()),
+                        );
+                    }
+                }
                 CommonsItem::Capability(c) if c.name.name == receiver => {
                     for op in &c.ops {
                         if seen.insert(op.name.name.clone()) {
@@ -3479,6 +3502,24 @@ mod tests {
             at.detail.as_deref(),
             Some("at(t: Int) -> Effect[()] — operation of `Timer`")
         );
+    }
+
+    #[test]
+    fn statics_of_a_generic_type_are_offered() {
+        // Constrained generics slice 4: `Box.` offers the type's statics, with
+        // the signature as declared, and not its instance methods.
+        let doc = "commons a.b
+
+type Box[T] = { value: T }
+
+fn Box.of(value: T) -> Box[T] { Box { value } }
+
+fn Box.size(self) -> Int { 1 }
+";
+        let items = complete("  Box.", doc, None);
+        let of = find(&items, "of", CompletionKind::Member).expect("`of` offered");
+        assert_eq!(of.detail.as_deref(), Some("of(value: T) -> Box[T]"));
+        assert!(find(&items, "size", CompletionKind::Member).is_none());
     }
 
     #[test]

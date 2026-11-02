@@ -1,0 +1,25 @@
+// #2087: `shop.ledger` declares its own opaque `Code` and takes `shop.order`'s
+// `Order`, whose `code` is `shop.order`'s `Code`, reached through the
+// signature under a qualified key.
+context shop.ledger
+
+consumes shop.order
+
+type Code = opaque Int
+
+// #2750: a declared foreign caller of a service that names a consumed
+// context's type, so `client.ts` and the manifest's `foreign` record both
+// hash it.
+actor Legacy { auth = Foreign(secret = "LEGACY_CALL_KEY") }
+
+service orderId {
+  on call(o: Order) -> Effect[String] {
+    o.id
+  }
+}
+
+service echo {
+  on call(o: Order) -> Effect[Order] by who: Caller | Legacy {
+    o
+  }
+}

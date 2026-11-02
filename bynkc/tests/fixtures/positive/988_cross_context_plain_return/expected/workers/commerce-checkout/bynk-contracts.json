@@ -1,7 +1,7 @@
 {
   "version": 1,
   "provides": {
-    "pay": "a5ade10cd4426ad3"
+    "pay": "9b6708efbc4754ed"
   },
   "expects": {
     "commerce.payment": {
@@ -9,7 +9,7 @@
     }
   },
   "provides_shapes": {
-    "pay": "Svc(\"pay\",P(\"id\",B(\"String\")),Ret(N(\"Receipt\")))"
+    "pay": "Svc(\"pay\",P(\"id\",B(\"String\")),Ret(Rec(\"Receipt\",F(\"id\",B(\"String\")))))"
   },
   "expects_shapes": {
     "commerce.payment": {

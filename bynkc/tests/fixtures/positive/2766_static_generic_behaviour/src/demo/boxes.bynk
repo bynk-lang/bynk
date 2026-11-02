@@ -1,0 +1,49 @@
+---
+#2766: static methods on generic types. A static's generic parameters are the type's
+own, then its own; they come from the arguments, then the expected type, or an
+explicit `Box.empty[Int]()`. A bound the type declares supplies a hidden witness.
+---
+commons demo.boxes
+
+uses bynk.list
+
+type Box[T] = { value: T }
+
+fn Box.of(value: T) -> Box[T] { Box { value } }
+
+fn Box.empty() -> Box[Option[T]] { Box { value: None } }
+
+fn Box.mapped[U](value: T, f: (T) -> U) -> Box[U] { Box { value: f(value) } }
+
+type Sorted[T: Ord] = { items: List[T] }
+
+fn Sorted.empty() -> Sorted[T] { Sorted { items: [] } }
+
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: sort(xs) } }
+
+fn Sorted.rebuilt(xs: List[T]) -> Sorted[T] { Sorted.fromList(xs) }
+
+type Keyed[K: Key, V] = { entries: Map[K, V] }
+
+fn Keyed.single(k: K, v: V) -> Keyed[K, V] { Keyed { entries: Map.empty().insert(k, v) } }
+
+type P = { x: Int }
+
+type Packed[T: Codable] = { json: String }
+
+fn Packed.pack(v: T) -> Packed[T] { Packed { json: Json.encode(v) } }
+
+fn Packed.unpack(w: Packed[T]) -> Result[T, JsonError] { Json.decode[T](w.json) }
+
+fn none[T]() -> Option[T] { None }
+
+fn rebuild[T: Ord](xs: List[T]) -> Sorted[T] { Sorted.fromList(xs) }
+
+fn Box.wrapIn[U](self, other: U) -> Box[U] { Box { value: other } }
+
+fn Box.cast[U](self) -> Option[U] { None }
+
+
+fn pick[T](f: (T) -> Bool) -> Option[T] { None }
+
+fn Box.probe(f: (T) -> Bool) -> Box[Option[T]] { Box { value: None } }

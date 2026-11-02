@@ -1,0 +1,12 @@
+commons bad
+
+type P = { x: Int }
+
+type Sorted[T: Ord] = { items: List[T] }
+
+fn Sorted.empty() -> Sorted[T] { Sorted { items: [] } }
+
+fn misuse() -> Int {
+  let s = Sorted.empty[P]()
+  0
+}

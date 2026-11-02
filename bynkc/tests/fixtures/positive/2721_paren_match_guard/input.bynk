@@ -1,0 +1,12 @@
+commons test {
+  // #2721: a parenthesised guard is an expression, not a lambda head; the
+  // `=>` after its `)` is the arm's own arrow.
+  fn pick(n: Int, flag: Bool) -> Int {
+    match n {
+      m if (flag) => m
+      m if (m > 0 && flag) => m + 1
+      m if (m > 5) && flag => m + 2
+      _ => 0
+    }
+  }
+}

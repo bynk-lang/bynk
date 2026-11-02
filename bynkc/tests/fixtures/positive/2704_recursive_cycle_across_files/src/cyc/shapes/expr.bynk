@@ -1,0 +1,7 @@
+// #2704: one cycle (`Expr` -> `Stmt` -> `Expr`) whose two halves are declared
+// in two files of one commons. Each file's codecs call the other's.
+commons cyc.shapes
+
+type Expr =
+  | Lit(value: Int)
+  | Block(stmts: List[Stmt])

@@ -573,8 +573,10 @@ pub enum Callee {
     Refine(Arc<TypeDecl>),
     /// `T.unsafe(value)` — the opaque constructor, defining-unit only.
     Unsafe(Arc<TypeDecl>),
-    /// A user-declared static method (`Type.method(...)`).
-    Static(Arc<FnDecl>),
+    /// A user-declared static method (`Type.method(...)`). The `Vec<TyId>` is
+    /// the call's witnesses, as for [`Callee::Fn`] (constrained generics
+    /// slice 4); empty for a static on a non-generic type.
+    Static(Arc<FnDecl>, Vec<TyId>),
     /// A user-declared instance method (UFCS), generic or not. The `Vec<TyId>`
     /// is the call's comparator witnesses, as for [`Callee::Fn`].
     Method(Arc<FnDecl>, Vec<TyId>),

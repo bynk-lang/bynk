@@ -623,10 +623,15 @@ struct Parser<'a> {
     /// delimited sub-expression (parentheses, call arguments, list, record
     /// field). Mirrors Rust's `NO_STRUCT_LITERAL` restriction.
     no_record_literal: bool,
+    /// #2721: set while parsing a match-arm guard's spine, where a `(` is never a
+    /// lambda head: the `=>` after `)` is the arm's own arrow. Cleared by
+    /// `parse_expr` on entry to any delimited sub-expression.
+    in_guard: bool,
     /// True while parsing the tail of an `is` pattern that sits outside every
     /// delimiter — `x is P`, `x is A | B`. A record pattern there would be
     /// ambiguous with the block that follows an `if` condition, so it must be
-    /// parenthesised (`x is (T { .. })`, patterns track Q2, #2641). Cleared by
+    /// parenthesised (`x is (T { .. })`, #2641; the patterns track's Q2 in
+    /// `design/archive/retired-tracks.md`). Cleared by
     /// [`Parser::parse_pattern`], the entry every delimited (nested) pattern
     /// goes through.
     is_pattern_tail: bool,
@@ -684,6 +689,7 @@ impl<'a> Parser<'a> {
             trivia,
             depth: 0,
             no_record_literal: false,
+            in_guard: false,
             is_pattern_tail: false,
             brace_depth: 0,
             item_loop_baseline: Vec::new(),
@@ -4260,5 +4266,36 @@ mod tests {
             &r.trailing_comments[..],
             [Comment::OrphanDoc(d)] if d.as_str() == "Dangling."
         ));
+    }
+}
+
+#[cfg(test)]
+mod paren_guard_2721 {
+    use super::*;
+    use crate::lexer::tokenize;
+
+    fn ok(src: &str) {
+        let toks = tokenize(src).unwrap();
+        parse(&toks, src).unwrap_or_else(|e| panic!("{src}\n{e:?}"));
+    }
+
+    fn wrap(guard: &str) -> String {
+        format!(
+            "commons t {{\n  fn f(n: Int, flag: Bool) -> Int {{\n    match n {{\n      n if {guard} => n,\n      _ => 0,\n    }}\n  }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn parenthesised_guards_parse() {
+        ok(&wrap("(flag)"));
+        ok(&wrap("(n > 0 && flag)"));
+        ok(&wrap("(n > 0) && flag"));
+        ok(&wrap("!(flag)"));
+        ok(&wrap("()"));
+    }
+
+    #[test]
+    fn lambda_still_parses_when_parenthesised_in_guard() {
+        ok(&wrap("pred(((x: Int) => x > 0))"));
     }
 }

@@ -1,0 +1,14 @@
+---
+#2766: a bounded generic type declared in one unit; its statics take hidden
+comparators that a caller in another unit builds, concretely and from a rigid
+type parameter of its own.
+---
+commons demo.sorted
+
+uses bynk.list
+
+type Sorted[T: Ord] = { items: List[T] }
+
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: sort(xs) } }
+
+fn Sorted.empty() -> Sorted[T] { Sorted { items: [] } }

@@ -238,6 +238,10 @@ mod query_kernel_registry;
 mod readme_layering;
 #[path = "recovery_never_emits.rs"]
 mod recovery_never_emits;
+#[path = "recursive_boundary_behaviour.rs"]
+mod recursive_boundary_behaviour;
+#[path = "recursive_codec_depth_agreement.rs"]
+mod recursive_codec_depth_agreement;
 #[path = "reference_index.rs"]
 mod reference_index;
 #[path = "refinement_auth.rs"]

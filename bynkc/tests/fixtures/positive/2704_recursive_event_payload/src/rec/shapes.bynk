@@ -1,0 +1,6 @@
+// #2704: a recursive sum shared by a publisher and its subscriber.
+commons rec.shapes
+
+type Tree =
+  | Leaf
+  | Node(left: Tree, value: Int, right: Tree)

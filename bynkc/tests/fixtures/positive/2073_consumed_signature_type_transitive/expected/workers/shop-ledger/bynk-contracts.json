@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "take": "c13ad8dc4537a718"
+    "take": "0cb3df41e793ac30"
   },
   "expects": {},
   "provides_shapes": {
-    "take": "Svc(\"take\",P(\"o\",N(\"Order\")),Ret(B(\"Int\")))"
+    "take": "Svc(\"take\",P(\"o\",Rec(\"Order\",F(\"b\",Rec(\"Base\",F(\"n\",B(\"Int\")))),F(\"id\",B(\"String\")))),Ret(B(\"Int\")))"
   }
 }

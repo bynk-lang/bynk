@@ -1,0 +1,14 @@
+commons bad
+
+type Box[T] = { value: T }
+
+fn Box.of(value: T) -> Box[T] { Box { value } }
+
+fn Box.empty() -> Box[Option[T]] { Box { value: None } }
+
+fn Box.cast[U](self) -> Option[U] { None }
+
+fn misuse() -> Int {
+  let b = Box.of[Int, String](1)
+  0
+}

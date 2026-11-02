@@ -1,0 +1,13 @@
+context cyc.graph
+
+uses cyc.shapes
+
+type Entry =
+  | File(name: String)
+  | Sub(dir: Dir)
+
+service entries {
+  on call(e: Entry) -> Effect[Entry] {
+    Effect.pure(e)
+  }
+}

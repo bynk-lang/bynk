@@ -703,29 +703,47 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
                     // #594: an *instance* method on a generic type is a generic
                     // method — the receiver's type arguments supply the type's
                     // parameters (`self: Box[A]`), so it resolves and emits as an
-                    // erased TS generic method. A *static* method has no receiver
-                    // to supply those parameters, so it stays deferred (it would
-                    // need free-function-style inference of the type's params);
-                    // reject it rather than emit an under-applied `Box` signature.
+                    // erased TS generic method. Constrained generics slice 4
+                    // (DECISION A): a *static* method is generic over the type's
+                    // parameters too, inferred from its arguments, the expected
+                    // type, or explicit type arguments. DECISION H: one whose
+                    // signature never mentions a type parameter leaves it
+                    // undeterminable at every call, so it is rejected here.
                     if !f.has_self
-                        && types
-                            .get(&type_name.name)
-                            .is_some_and(|d| !d.type_params.is_empty())
+                        && let Some(d) = types.get(&type_name.name)
                     {
-                        errors.push(
-                            CompileError::new(
-                                "bynk.generics.method_on_generic_type",
-                                type_name.span,
-                                format!(
-                                    "static method `{}.{}` is attached to generic type `{}` — static methods on generic types are deferred (instance methods are supported)",
-                                    type_name.name, method_name.name, type_name.name
-                                ),
-                            )
-                            .with_note(
-                                "give the method a `self` receiver, or use a free function taking the generic value as a parameter instead",
-                            ),
-                        );
-                        continue;
+                        let sig: Vec<&TypeRef> = f
+                            .params
+                            .iter()
+                            .map(|p| &p.type_ref)
+                            .chain(std::iter::once(&f.return_type))
+                            .collect();
+                        let missing = d.type_params.iter().find(|tp| {
+                            !sig.iter().any(|t| {
+                                crate::checker::codable::mentions_any(
+                                    t,
+                                    std::slice::from_ref(&tp.name.name),
+                                )
+                            })
+                        });
+                        if let Some(tp) = missing {
+                            errors.push(
+                                CompileError::new(
+                                    "bynk.generics.method_on_generic_type",
+                                    type_name.span,
+                                    format!(
+                                        "static method `{}.{}` never mentions `{}`, a type parameter of `{}` — no call could determine it",
+                                        type_name.name, method_name.name, tp.name.name, type_name.name
+                                    ),
+                                )
+                                .with_label(tp.span, "type parameter declared here")
+                                .with_note(format!(
+                                    "make it a free function, or mention `{}` in the signature",
+                                    tp.name.name
+                                )),
+                            );
+                            continue;
+                        }
                     }
                     let table = methods.entry(type_name.name.clone()).or_default();
                     let bucket = if f.has_self {

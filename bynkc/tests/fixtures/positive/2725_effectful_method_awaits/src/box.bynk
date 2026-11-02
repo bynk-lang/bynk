@@ -1,0 +1,22 @@
+context box
+
+// #2725: an effectful method that awaits is `async`, as a free fn is.
+
+type Box = { n: Int }
+
+fn Box.bump(self, d: Int) -> Effect[Int] {
+	let x <- Effect.pure(d)
+	Effect.pure(self.n + x)
+}
+
+fn Box.same(self) -> Effect[Int] {
+	Effect.pure(self.n)
+}
+
+service run {
+	on call(n: Int) -> Effect[Int] {
+		let b = Box { n: n }
+		let r <- b.bump(1)
+		Effect.pure(r)
+	}
+}

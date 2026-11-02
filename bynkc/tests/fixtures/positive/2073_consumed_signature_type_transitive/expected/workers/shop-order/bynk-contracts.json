@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "place": "9be82b9ba7b3b237"
+    "place": "8168b2b203446bfe"
   },
   "expects": {},
   "provides_shapes": {
-    "place": "Svc(\"place\",P(\"id\",B(\"String\")),Ret(Rec(\"Order\",F(\"b\",N(\"Base\")),F(\"id\",B(\"String\")))))"
+    "place": "Svc(\"place\",P(\"id\",B(\"String\")),Ret(Rec(\"Order\",F(\"b\",Rec(\"Base\",F(\"n\",B(\"Int\")))),F(\"id\",B(\"String\")))))"
   }
 }
