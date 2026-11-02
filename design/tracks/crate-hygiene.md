@@ -1,6 +1,8 @@
 # Crate hygiene — dependency edges, crate boundaries, the system model, and the installables
 
-- **Status:** Draft (settling). Direction not yet merged; no slice authorised.
+- **Status:** Settled (#2776). Every question in §11 is closed; the maintainer confirmed the
+  adopted answers on 2026-11-02. Slicing next: A1–A3, C1–C2 and B1 can start at once, and no slice
+  is authorised until its proposal is accepted.
 - **Spine:** [#2775](https://github.com/bynk-lang/bynk/issues/2775).
 - **Supersedes:** `post-trajectory-crate-hygiene.md` (spine
   [#1533](https://github.com/bynk-lang/bynk/issues/1533)), withdrawn before it settled. §1.1 says
@@ -71,7 +73,7 @@ The graph has four kinds of residue:
 
 | #1533 workstream | Disposition | Why |
 |---|---|---|
-| 1 — crate READMEs | **Done** | Every workspace crate has a `README.md` today. The layering diagrams are re-checked by §11's slices as they change the graph. |
+| 1 — crate READMEs | **Done** | Every workspace crate has a `README.md` today. The layering diagrams are re-checked by §12's slices as they change the graph. |
 | 2 — crate-local unit tests | **Not carried** | Its `bynk-ir` → `bynk-check` finding (its S7) moves into §6 Q1. The rest needs fresh `test_density` numbers and its own proposal. |
 | 3 — comment rewrite | **Not carried** | It is independent of crate shape. Re-propose it on its own if still wanted. |
 | 4 — module decomposition | **Not carried as a workstream** | Its numbers are stale: files over 2,000 lines went from 20 to 42, and `bynk-lsp/src/lib.rs` from 6,535 to 10,926. Two files move with §8's slices and split as they move (`tests_emit.rs`, 11,022 lines, and `project.rs`, 6,604). The rest needs a fresh survey. |
