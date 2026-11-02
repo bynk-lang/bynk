@@ -1604,18 +1604,18 @@ pub fn check_handler_body(
         assert_expr_types_disjoint_in_block(body, ctx.expr_types, &mut seen);
     }
     if !compatible(body_ty, return_ty, tys) {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.return_mismatch",
-                body.tail.span,
-                format!(
-                    "handler body has type `{}`, but the declared return type is `{}`",
-                    body_ty.display(tys),
-                    return_ty.display(tys)
-                ),
-            )
-            .with_label(return_ty_span, "declared return type"),
-        );
+        let err = CompileError::new(
+            "bynk.types.return_mismatch",
+            body.tail.span,
+            format!(
+                "handler body has type `{}`, but the declared return type is `{}`",
+                body_ty.display(tys),
+                return_ty.display(tys)
+            ),
+        )
+        .with_label(return_ty_span, "declared return type");
+        ctx.errors
+            .push(calls::with_of_hint(err, body_ty, return_ty, &ctx));
     }
     // Bidirectional `given` check.
     // 1) Every used capability is declared. (Handled in capability-call site.)

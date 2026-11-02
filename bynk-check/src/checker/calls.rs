@@ -218,18 +218,17 @@ pub(crate) fn check_fn(
         tys,
     );
     if !compatible(body_ty, return_ty, tys) {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.return_mismatch",
-                f.body.tail.span,
-                format!(
-                    "function body has type `{}`, but the declared return type is `{}`",
-                    body_ty.display(tys),
-                    return_ty.display(tys)
-                ),
-            )
-            .with_label(f.return_type.span(), "declared return type"),
-        );
+        let err = CompileError::new(
+            "bynk.types.return_mismatch",
+            f.body.tail.span,
+            format!(
+                "function body has type `{}`, but the declared return type is `{}`",
+                body_ty.display(tys),
+                return_ty.display(tys)
+            ),
+        )
+        .with_label(f.return_type.span(), "declared return type");
+        ctx.errors.push(with_of_hint(err, body_ty, return_ty, &ctx));
     }
 }
 
@@ -942,7 +941,7 @@ fn check_value_application(
         if let Some(a) = arg_ty
             && !compatible(a, *param_ty, tys)
         {
-            ctx.errors.push(CompileError::new(
+            let err = CompileError::new(
                 "bynk.types.argument_mismatch",
                 arg.span,
                 format!(
@@ -951,7 +950,8 @@ fn check_value_application(
                     name.name,
                     param_ty.display(tys)
                 ),
-            ));
+            );
+            ctx.errors.push(with_of_hint(err, a, *param_ty, ctx));
         }
     }
     Some(ret)
@@ -1185,7 +1185,7 @@ fn check_generic_call(
         };
         let ground = substitute(*pattern, &subst, tys);
         if !compatible(*arg_ty, ground, tys) {
-            ctx.errors.push(CompileError::new(
+            let err = CompileError::new(
                 "bynk.types.argument_mismatch",
                 arg.span,
                 format!(
@@ -1195,7 +1195,8 @@ fn check_generic_call(
                     arg_ty.display(tys),
                     ground.display(tys)
                 ),
-            ));
+            );
+            ctx.errors.push(with_of_hint(err, *arg_ty, ground, ctx));
             ok = false;
         }
     }
@@ -1332,21 +1333,20 @@ fn check_call_against_fn(
             continue;
         };
         if !compatible(arg_ty, param_ty, tys) {
-            ctx.errors.push(
-                CompileError::new(
-                    "bynk.types.argument_mismatch",
-                    arg.span,
-                    format!(
-                        "argument {} to `{}` has type `{}`, but parameter `{}` expects `{}`",
-                        i + 1,
-                        name.name,
-                        arg_ty.display(tys),
-                        param.name.name,
-                        param_ty.display(tys)
-                    ),
-                )
-                .with_label(param.span, "parameter declared here"),
-            );
+            let err = CompileError::new(
+                "bynk.types.argument_mismatch",
+                arg.span,
+                format!(
+                    "argument {} to `{}` has type `{}`, but parameter `{}` expects `{}`",
+                    i + 1,
+                    name.name,
+                    arg_ty.display(tys),
+                    param.name.name,
+                    param_ty.display(tys)
+                ),
+            )
+            .with_label(param.span, "parameter declared here");
+            ctx.errors.push(with_of_hint(err, arg_ty, param_ty, ctx));
             ok = false;
         }
     }
@@ -2023,7 +2023,7 @@ fn check_method_args(
             continue;
         };
         if !compatible(actual, expected, tys) {
-            ctx.errors.push(CompileError::new(
+            let err = CompileError::new(
                 "bynk.types.argument_mismatch",
                 arg.span,
                 format!(
@@ -2035,7 +2035,8 @@ fn check_method_args(
                     param.name.name,
                     expected.display(tys)
                 ),
-            ));
+            );
+            ctx.errors.push(with_of_hint(err, actual, expected, ctx));
             ok = false;
         }
     }
@@ -5883,6 +5884,41 @@ fn check_cross_context_call(
         return None;
     }
     Some(rebrand_return_type(raw_ret, &ctx.input.types, tys))
+}
+
+/// #2808: a `String`, `Int`, … handed to a refined or opaque type over that
+/// base is the commonest way to meet a mismatch, and `<Type>.of(…)` is the way
+/// across. The hint is withheld when `.of` would be refused: a type consumed
+/// from another context is the owner's to construct (`external_construction`),
+/// so only a type declared here or imported from a commons is offered.
+pub(crate) fn with_of_hint(
+    err: CompileError,
+    actual: TyId,
+    expected: TyId,
+    ctx: &Ctx,
+) -> CompileError {
+    let Ty::Base(base) = *ctx.tys.get(actual) else {
+        return err;
+    };
+    let ty = ctx.tys.get(expected);
+    let Ty::Named {
+        name,
+        kind: NamedKind::Refined(b) | NamedKind::Opaque(b),
+        args,
+    } = &*ty
+    else {
+        return err;
+    };
+    if *b != base
+        || !args.is_empty()
+        || !(ctx.input.is_local_type(name) || ctx.input.is_uses_commons_type(name))
+    {
+        return err;
+    }
+    err.with_note(format!(
+        "to make a `{name}` from a `{}`, use `{name}.of(value)`, which checks the value and returns a `Result`",
+        base.name()
+    ))
 }
 
 #[cfg(test)]

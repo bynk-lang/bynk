@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.488.2** | "`return_mismatch` and `argument_mismatch` suggest `<Type>.of(…)` for a refined or opaque type over the value's base, and `+` on a `String` suggests string interpolation, with a machine-applicable fix for simple operands (#2808)" |
 | **v0.488.1** | Fixtures for explicit type arguments on a built-in or call-result receiver, and for `Query` `sortBy`/`min`/`max` over `Option`, `NaN`, opaque and generic `Ord` keys (#2817) |
 | **v0.488.0** | "**Breaking:** a context can no longer decode a type another context owns and exports `opaque`: `Json.decode`, `Json.decodeSql`, a `T: Codable` instantiation and an HTTP or queue handler input that reaches one are `bynk.context.external_decode`. Decoding created a value from the base type alone (the owner's predicate is not re-checked in the consumer), which the language otherwise forbids (`bynk.context.external_construction`). **Migration:** take the value from a service of the owning context, which returns it already validated, instead of decoding it; to accept raw input, take the base type and pass it to a service of the owner that builds the value. A reply from the owner's own service decodes as before (#2794)" |
 | **v0.487.0** | A `Query`'s `sortBy`, `min` and `max` keys take any `Ord` type, as a `List`'s do |
