@@ -4358,18 +4358,26 @@ fn maybe_auto_lift(ty: Option<TyId>, expected: Option<TyId>, tys: &Types) -> Opt
 }
 
 /// Whether a value of type `ty` may fill an interpolation hole (v0.43, ADR
-/// 0075): a base scalar, or a refinement of one (which widens to its base for
-/// display). Opaque types are excluded — their base is hidden, so a value must
-/// be `.raw`-ed out first.
+/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, or `Decimal` (ADR
+/// 0698: its canonical text) — or a refinement of one (which widens to its base
+/// for display). `Bytes`, `Duration` and `Instant` have no implicit string form
+/// — each has an explicit rendering method — and opaque types are excluded,
+/// their base being hidden (`.raw` it first).
 fn interpolable(ty: TyId, tys: &Types) -> bool {
-    matches!(
-        &*tys.get(ty),
-        Ty::Base(_)
-            | Ty::Named {
-                kind: NamedKind::Refined(_),
-                ..
-            }
-    )
+    let scalar = |b: BaseType| {
+        matches!(
+            b,
+            BaseType::String | BaseType::Int | BaseType::Float | BaseType::Bool | BaseType::Decimal
+        )
+    };
+    match &*tys.get(ty) {
+        Ty::Base(b) => scalar(*b),
+        Ty::Named {
+            kind: NamedKind::Refined(b),
+            ..
+        } => scalar(*b),
+        _ => false,
+    }
 }
 
 pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Option<TyId> {
@@ -4422,7 +4430,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                             format!("type `{}` has no string form here", other.display(tys)),
                         )
                         .with_note(
-                            "interpolation holes accept the base scalar types (String, Int, Float, Bool) or a refinement of one; map other values to a String first",
+                            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`, `Duration` via `toString()`, `Instant` via `toIso()`/`toString()`",
                         ),
                     ),
                     // The hole already produced its own error — don't pile on.

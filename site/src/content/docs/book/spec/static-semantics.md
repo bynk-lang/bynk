@@ -545,13 +545,15 @@ method widen to the base like any other argument.
 
 **String interpolation** (v0.43, ADR 0075). An interpolated string
 `"… \(e) …"` has type `String`. Each hole expression `e` must have type
-`String`, `Int`, `Float`, `Bool`, or a **refinement** of one of those (which
+`String`, `Int`, `Float`, `Bool`, `Decimal`, or a **refinement** of one of those (which
 widens to its base for display) — these are the types with a well-defined
 string form (`Int`/`Float` via the ADR 0074 `toString` contract, `Bool` as
-`true`/`false`). Any other hole type — `record`, `sum`, `Option`, `Result`,
+`true`/`false`, `Decimal` as its canonical text per ADR 0698). Any other hole type — `record`, `sum`, `Option`, `Result`,
 `List`, an opaque type (whose base is hidden — `.raw` it first), … — is a
 static error (`bynk.types.interpolation_non_scalar`): map the value to a
-`String` first. The conversion is implicit only here, in a display context; it
+`String` first. This includes the remaining base types — `Bytes` (`toHex()`,
+`toBase64()`), `Duration` (`toString()`) and `Instant` (`toIso()`,
+`toString()`) — whose string form is a choice, not a default. The conversion is implicit only here, in a display context; it
 does **not** generalise to arithmetic or comparison (ADR 0046 is unchanged —
 `+` stays numeric, `concat` stays a method).
 
