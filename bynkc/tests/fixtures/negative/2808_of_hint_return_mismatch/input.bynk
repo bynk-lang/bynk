@@ -1,0 +1,9 @@
+// #2808: a bare `Int` where a refined `Age` is expected. The help note
+// (`Age.of(value)`) is pinned in `bynkc/tests/diagnostic_hints.rs`.
+commons demo {
+  type Age = Int where Positive
+
+  fn age(n: Int) -> Age {
+    n
+  }
+}

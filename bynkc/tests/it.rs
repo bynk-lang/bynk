@@ -94,6 +94,8 @@ mod decisions_index;
 mod deterministic_diagnostic_order_behaviour;
 #[path = "diagnose_project.rs"]
 mod diagnose_project;
+#[path = "diagnostic_hints.rs"]
+mod diagnostic_hints;
 #[path = "diagnostics_registry.rs"]
 mod diagnostics_registry;
 #[path = "doc_diagnostics.rs"]

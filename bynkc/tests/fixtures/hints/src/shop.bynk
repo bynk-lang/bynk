@@ -1,0 +1,15 @@
+context shop
+
+consumes pay
+
+// #2808: `Amount` is owned by `pay`, so `Amount.of` is refused here and the
+// mismatch must not suggest it.
+fn price(n: Int) -> Amount {
+  n
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(1)
+  }
+}

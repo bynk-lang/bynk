@@ -1,0 +1,2 @@
+# exact
+bynk.types.type_mismatch operator `+` requires `Int` or `Float` operands; left operand has type `String` @ 5:5
