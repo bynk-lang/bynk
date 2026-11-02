@@ -1,7 +1,7 @@
 {
   "version": 1,
   "provides": {
-    "relayDir": "4765a47af3a486b7",
+    "relayDir": "f8b0f93449dbdbf7",
     "relayExpr": "fe73b1a0b22d8c5a"
   },
   "expects": {
@@ -11,7 +11,7 @@
     }
   },
   "provides_shapes": {
-    "relayDir": "Svc(\"relayDir\",P(\"d\",N(\"Dir\")),Ret(N(\"Dir\")))",
+    "relayDir": "Svc(\"relayDir\",P(\"d\",Rec(\"Dir\",F(\"entries\",L(Sum(\"Entry\",V(\"File\",F(\"name\",B(\"String\"))),V(\"Sub\",F(\"dir\",Ref(\"Dir\")))))),F(\"name\",B(\"String\")))),Ret(Rec(\"Dir\",F(\"entries\",L(Sum(\"Entry\",V(\"File\",F(\"name\",B(\"String\"))),V(\"Sub\",F(\"dir\",Ref(\"Dir\")))))),F(\"name\",B(\"String\")))))",
     "relayExpr": "Svc(\"relayExpr\",P(\"e\",Sum(\"Expr\",V(\"Block\",F(\"stmts\",L(Sum(\"Stmt\",V(\"Eval\",F(\"expr\",Ref(\"Expr\"))),V(\"Skip\"))))),V(\"Lit\",F(\"value\",B(\"Int\"))))),Ret(Sum(\"Expr\",V(\"Block\",F(\"stmts\",L(Sum(\"Stmt\",V(\"Eval\",F(\"expr\",Ref(\"Expr\"))),V(\"Skip\"))))),V(\"Lit\",F(\"value\",B(\"Int\"))))))"
   },
   "expects_shapes": {

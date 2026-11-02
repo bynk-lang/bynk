@@ -176,18 +176,15 @@ impl Compiled {
             .text()
     }
 
-    /// The contract hash `workers/<context_dir>/index.ts` enforces for
-    /// `service`, read out of the entry rather than the manifest: for a service
-    /// naming a consumed context's type the manifest's `provides` hash differs
-    /// from it (#2750).
+    /// `service`'s contract hash in `workers/<context_dir>`'s manifest.
     fn contract(&self, context_dir: &str, service: &str) -> String {
-        let entry = self.doc(&format!("workers/{context_dir}/index.ts"));
-        let marker = format!("{{ service: \"{service}\", expected: \"");
-        let at = entry
-            .find(&marker)
-            .unwrap_or_else(|| panic!("{context_dir} enforces no contract for `{service}`"))
-            + marker.len();
-        entry[at..].split('"').next().unwrap().to_string()
+        let manifest: serde_json::Value =
+            serde_json::from_str(&self.doc(&format!("workers/{context_dir}/bynk-contracts.json")))
+                .unwrap();
+        manifest["provides"][service]
+            .as_str()
+            .unwrap_or_else(|| panic!("{context_dir} provides no `{service}`"))
+            .to_string()
     }
 
     /// Stage the emitted tree and `driver`, type-check it and run it.
