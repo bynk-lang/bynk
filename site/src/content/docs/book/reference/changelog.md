@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.490.1** | A service's refined or opaque return value now type-checks in the emitted TypeScript when the calling context declares a type of the same name; the call result is cast to the caller's declaration ([#2825](https://github.com/bynk-lang/bynk/issues/2825)) |
 | **v0.490.0** | `List` and `Query` gain `sortByDescending`: the exact reverse of `sortBy`'s order, stable on ties (#2805) |
 | **v0.489.1** | A lexical error no longer hides the rest of its file's diagnostics (#2807) |
 | **v0.489.0** | `List[Result[T, E]]` gains `sequenceAll()` (every error) and `sequenceTry()` (first error) (#2806) |
