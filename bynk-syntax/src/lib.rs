@@ -13,6 +13,7 @@
 //! API is preserved.
 
 pub mod ast;
+pub mod decimal;
 pub mod diagnostics;
 pub mod error;
 pub mod fix;

@@ -231,6 +231,7 @@
 (escape_sequence) @string.escape
 (number_literal) @number
 (float_literal) @number
+(decimal_literal) @number
 (unit_literal) @constant.builtin
 
 ; -- Refinement predicates --

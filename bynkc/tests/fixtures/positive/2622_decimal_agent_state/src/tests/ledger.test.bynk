@@ -1,0 +1,23 @@
+// #2622: write a decimal, reload the same key, read it back with its scale.
+suite ledger {
+  case "a balance accumulates exactly across reloads" {
+    do Account("a").deposit(0.10d)
+    do Account("a").deposit(0.20d)
+    let text <- Account("a").balanceText()
+    expect text == "0.30"
+  }
+
+  case "a decimal in a stored map keeps its scale" {
+    do Account("b").quote("tea", 4.50d)
+    let text <- Account("b").priceText("tea")
+    expect text == "4.50"
+    let missing <- Account("b").priceText("coffee")
+    expect missing == "none"
+  }
+
+  case "an optional refined decimal reads back" {
+    do Account("c").remember(12.00d)
+    let text <- Account("c").lastText()
+    expect text == "12.00"
+  }
+}

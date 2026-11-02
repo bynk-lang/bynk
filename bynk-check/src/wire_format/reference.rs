@@ -51,6 +51,14 @@ type Line = {
   rush: Bool,
 }
 
+type Price = Decimal where Positive
+
+service cost {
+  on call(unit: Price) -> Effect[Result[Price, String]] {
+    Ok(unit)
+  }
+}
+
 service quote {
   on call(line: Line, size: Qty) -> Effect[Result[Shape, String]] {
     Ok(Dot)
@@ -206,6 +214,55 @@ pub const EXAMPLES: &[Example] = &[
         note: "A named refined type is its base value, checked against its predicates.",
     },
     Example {
+        ty: "Price",
+        codec: "Price",
+        json: r#""12.50""#,
+        outcome: Outcome::Accepted {
+            encodes_as: r#""12.50""#,
+        },
+        note: "A `Decimal` is its canonical text, and keeps its scale: `\"12.50\"` re-encodes as `\"12.50\"`, not `\"12.5\"`.",
+    },
+    Example {
+        ty: "Price",
+        codec: "Price",
+        json: r#""1e3""#,
+        outcome: Outcome::Rejected {
+            kind: "StructuralMismatch",
+            path: "$",
+        },
+        note: "No exponent form: a `Decimal` is plain digits, so every client reads it exactly.",
+    },
+    Example {
+        ty: "Price",
+        codec: "Price",
+        json: r#""007""#,
+        outcome: Outcome::Rejected {
+            kind: "StructuralMismatch",
+            path: "$",
+        },
+        note: "The wire form is canonical, so a leading zero is refused. `Decimal.parse` in a program is lenient about it.",
+    },
+    Example {
+        ty: "Price",
+        codec: "Price",
+        json: "12.5",
+        outcome: Outcome::Rejected {
+            kind: "StructuralMismatch",
+            path: "$",
+        },
+        note: "A JSON number is refused: parsing it as a float is how money loses precision.",
+    },
+    Example {
+        ty: "Price",
+        codec: "Price",
+        json: r#""0.00""#,
+        outcome: Outcome::Rejected {
+            kind: "RefinementViolation",
+            path: "$",
+        },
+        note: "The text parses, then the refinement is checked on the decoded value.",
+    },
+    Example {
         ty: "Tagged[String]",
         codec: "Tagged_String",
         json: r#"{"n":0,"v":"x"}"#,
@@ -317,7 +374,7 @@ fn json_kind_name(k: JsonKind) -> &'static str {
 /// The base-type rows of the encoding table, read off [`crate::wire`]'s model:
 /// the JSON kind each base type wires as and the guards its decode applies.
 fn base_type_rows(out: &mut String) {
-    const BASES: [(BaseType, &str); 7] = [
+    const BASES: [(BaseType, &str); 8] = [
         (BaseType::Int, "an integer"),
         (BaseType::Float, "a number"),
         (BaseType::Bool, "`true` or `false`"),
@@ -326,6 +383,7 @@ fn base_type_rows(out: &mut String) {
             BaseType::Bytes,
             "standard base64 with padding (RFC 4648 §4)",
         ),
+        (BaseType::Decimal, "plain decimal text, such as `\"12.50\"`"),
         (BaseType::Duration, "whole milliseconds"),
         (BaseType::Instant, "milliseconds since the Unix epoch"),
     ];
@@ -333,6 +391,9 @@ fn base_type_rows(out: &mut String) {
         let kind = json_kind_of(base);
         let rule = if base == BaseType::Bytes {
             "valid base64; anything else is `StructuralMismatch` (`expected: \"base64 string\"`)"
+                .to_string()
+        } else if base == BaseType::Decimal {
+            "an optional `-`, digits with no leading zero (`0` or `1`-`9` first), and optionally `.` and digits (at most 1000 characters and 100 fraction digits, the most any `Decimal` has); an exponent, a leading `+`, a leading zero (`007`), whitespace, `.5` or `5.` is `StructuralMismatch` (`expected: \"decimal string\"`), and so is a JSON number. The scale is the number of fraction digits written, and is kept"
                 .to_string()
         } else {
             let mut rule = format!("JSON {}", json_kind_name(kind));

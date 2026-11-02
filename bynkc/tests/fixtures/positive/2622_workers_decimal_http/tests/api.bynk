@@ -1,0 +1,23 @@
+// #2622: a refined or inline-refined Decimal refused at the router is a 400
+// RefinementViolation, not a fault while writing the response body.
+suite shop as system {
+	case "a good quote is accepted" {
+		let r <- api.POST("/quote", Wire("{\"sku\": \"a\", \"unit\": \"2.50\", \"total\": \"1\"}")) by Visitor
+		expect r is Handled(_)
+	}
+
+	case "a non-positive unit is refused at its path" {
+		let r <- api.POST("/quote", Wire("{\"sku\": \"a\", \"unit\": \"-1.00\", \"total\": \"1\"}")) by Visitor
+		expect r is Rejected(RefinementViolation(_))
+	}
+
+	case "a negative total is refused by its inline refinement" {
+		let r <- api.POST("/quote", Wire("{\"sku\": \"a\", \"unit\": \"1.00\", \"total\": \"-3\"}")) by Visitor
+		expect r is Rejected(RefinementViolation(_))
+	}
+
+	case "a leading zero is a structural mismatch" {
+		let r <- api.POST("/quote", Wire("{\"sku\": \"a\", \"unit\": \"007\", \"total\": \"1\"}")) by Visitor
+		expect r is Rejected(StructuralMismatch(_))
+	}
+}

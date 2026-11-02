@@ -919,6 +919,162 @@ fn emit_bytes_named_codec(name: &str, qual: &Qual, ru: &RuntimeUse) -> Vec<TsDec
     vec![serialise, deserialise]
 }
 
+/// #2622: the codec for a named type over `Decimal`. It serialises to the
+/// canonical decimal text and deserialises by parsing that text (a non-string or
+/// a malformed string is a `StructuralMismatch` at the path), then applies the
+/// declared predicates: through the owner's `.of` for a type this module owns,
+/// inline for a transparent type it consumes, not at all for a consumed opaque
+/// type (whose predicate is the owner's secret, as for every other base).
+fn emit_decimal_named_codec(
+    name: &str,
+    scalar: &bynk_check::wire::WireScalar,
+    qual: &Qual,
+    owned: bool,
+    ru: &RuntimeUse,
+) -> Vec<TsDecl> {
+    ru.note_decimal("__bynkDecimalToString");
+    ru.note_decimal("__bynkDecimalParseWire");
+    let ty = qual_type(qual, name);
+
+    let serialise = TsDecl::Export(Box::new(TsDecl::Function {
+        name: format!("__serialise_{name}"),
+        generics: Vec::new(),
+        params: vec![TsParam {
+            name: "value".to_string(),
+            ty: Some(TsType::named(ty.clone())),
+            optional: false,
+        }],
+        return_type: Some(TsType::named("__JsonValue")),
+        body: vec![return_(as_expr(
+            call(
+                ident("__bynkDecimalToString"),
+                vec![as_expr(
+                    as_expr(ident("value"), TsType::named("unknown")),
+                    TsType::named(crate::emitter::DECIMAL_TS_TYPE),
+                )],
+            ),
+            TsType::named("__JsonValue"),
+        ))],
+        is_async: false,
+        inline: false,
+    }));
+
+    let mut body = vec![
+        if_(
+            strict_neq(typeof_expr(ident("json")), str_lit("string")),
+            block(vec![return_(err_structural_mismatch_top(
+                "decimal string",
+                typeof_expr(ident("json")),
+            ))]),
+        ),
+        const_(
+            "__d",
+            call(ident("__bynkDecimalParseWire"), vec![ident("json")]),
+        ),
+        if_(
+            strict_eq(member(ident("__d"), "tag"), str_lit("None")),
+            block(vec![return_(err_structural_mismatch_top(
+                "decimal string",
+                str_lit("invalid decimal"),
+            ))]),
+        ),
+    ];
+    let cast_ok = || {
+        return_(call(
+            ident("Ok"),
+            vec![as_expr(
+                as_expr(member(ident("__d"), "value"), TsType::named("unknown")),
+                TsType::named(ty.clone()),
+            )],
+        ))
+    };
+    if scalar.predicates.is_empty() || (!owned && scalar.opaque) {
+        body.push(cast_ok());
+    } else if owned {
+        // The owner's own `.of` applies the refinement.
+        body.push(TsStmt::raw(
+            format!(
+                "  const validated = (typeof ({name} as unknown as {{ of?: (json: unknown) => Result<unknown, ValidationError> }}).of === \"function\")\n    ? ({name} as unknown as {{ of: (json: unknown) => Result<unknown, ValidationError> }}).of(__d.value)\n    : (Ok(__d.value as unknown as {name}) as Result<unknown, ValidationError>);\n"
+            ),
+            None,
+        ));
+        body.push(if_(
+            strict_eq(member(ident("validated"), "tag"), str_lit("Err")),
+            block(vec![return_(call(
+                ident("Err"),
+                vec![TsExpr::object_entries(vec![
+                    TsObjectEntry::Prop("kind".to_string(), str_lit("RefinementViolation")),
+                    TsObjectEntry::Shorthand("path".to_string()),
+                    TsObjectEntry::Prop(
+                        "violation".to_string(),
+                        member(ident("validated"), "error"),
+                    ),
+                ])],
+            ))]),
+        ));
+        body.push(return_(call(
+            ident("Ok"),
+            vec![as_expr(
+                member(ident("validated"), "value"),
+                TsType::named(name.to_string()),
+            )],
+        )));
+    } else {
+        // A consumed transparent type: the predicates inline, over the parsed
+        // value, as the same `RefinementViolation` the owner's `.of` would raise.
+        let field = ty.rsplit('.').next().unwrap_or(name);
+        body.push(const_("__v", member(ident("__d"), "value")));
+        for pred in bynk_syntax::ast::in_check_order(&scalar.predicates, |p| p) {
+            let (cond, msg) = super::pred_condition_and_message_for(
+                pred,
+                "__v",
+                Some(bynk_syntax::ast::BaseType::Decimal),
+            );
+            body.push(if_(
+                not_expr(TsExpr::Paren(Box::new(cond))),
+                block(vec![return_(call(
+                    ident("Err"),
+                    vec![TsExpr::object_entries(vec![
+                        TsObjectEntry::Prop("kind".to_string(), str_lit("RefinementViolation")),
+                        TsObjectEntry::Shorthand("path".to_string()),
+                        TsObjectEntry::Prop(
+                            "violation".to_string(),
+                            TsExpr::object(vec![
+                                ("field".to_string(), str_lit(field)),
+                                (
+                                    "message".to_string(),
+                                    TsExpr::Lit(TsLit::Raw(format!("\"{msg}\""))),
+                                ),
+                                ("value".to_string(), ident("json")),
+                            ]),
+                        ),
+                    ])],
+                ))]),
+            ));
+        }
+        body.push(cast_ok());
+    }
+
+    let deserialise = TsDecl::Export(Box::new(TsDecl::Function {
+        name: format!("__deserialise_{name}"),
+        generics: Vec::new(),
+        params: vec![
+            TsParam {
+                name: "json".to_string(),
+                ty: Some(TsType::named("__JsonValue")),
+                optional: false,
+            },
+            deserialise_path_param(),
+        ],
+        return_type: Some(TsType::named(format!("Result<{ty}, __BoundaryError>"))),
+        body,
+        is_async: false,
+        inline: false,
+    }));
+
+    vec![serialise, deserialise]
+}
+
 /// #855 (Phase 2 step 5): which of the four TS shapes a named scalar's codec
 /// takes — owner `.of`, consumed-opaque structural cast, consumed-transparent
 /// inline re-check, or the dedicated `Bytes` base64 codec — is now read off a
@@ -961,6 +1117,7 @@ fn emit_refined(
 ) -> Vec<TsDecl> {
     let ty = qual_type(qual, name);
     let prov = qual_provenance(qual, name);
+    let owned = matches!(prov, Provenance::Owned);
     let scalar = match wire_type(name, decl, types, prov) {
         Some(WireType {
             body: WireBody::Scalar(s),
@@ -970,6 +1127,13 @@ fn emit_refined(
             "emit_refined is only ever called for a non-generic Refined/Opaque declaration"
         ),
     };
+
+    // #2622: a `Decimal`-based opaque/refined type has a bespoke codec: the
+    // wire value is a decimal string, parsed (never cast) and then checked
+    // against the declared predicates.
+    if scalar.revalidation == Revalidation::DecimalParse {
+        return emit_decimal_named_codec(name, &scalar, qual, owned, ru);
+    }
 
     // v0.110: a `Bytes`-based opaque/refined type has a bespoke base64 codec —
     // `emit_refined`'s early return to it, mirrored from `Revalidation` rather
@@ -1102,7 +1266,9 @@ fn emit_refined(
                 )],
             )));
         }
-        Revalidation::Base64Decode => unreachable!("handled by the early return above"),
+        Revalidation::Base64Decode | Revalidation::DecimalParse => {
+            unreachable!("handled by the early return above")
+        }
     }
 
     let deserialise = TsDecl::Export(Box::new(TsDecl::Function {
@@ -1219,8 +1385,18 @@ fn emit_field_refinement_checks(
     fname: &str,
     predicates: &[PredKind],
     path_expr: &str,
+    base: Option<BaseType>,
+    ru: &RuntimeUse,
 ) -> Vec<TsStmt> {
     let value = format!("__{fname}");
+    // #2622: a `Decimal` violation reports its canonical text; the decoded
+    // value holds a `bigint`, which cannot be JSON-stringified.
+    let shown = if base == Some(BaseType::Decimal) {
+        ru.note_decimal("__bynkDecimalToString");
+        ident(format!("__bynkDecimalToString({value})"))
+    } else {
+        ident(value.clone())
+    };
     let violation = |msg: &str| -> TsStmt {
         return_(call(
             ident("Err"),
@@ -1235,7 +1411,7 @@ fn emit_field_refinement_checks(
                             "message".to_string(),
                             TsExpr::Lit(TsLit::Raw(format!("\"{msg}\""))),
                         ),
-                        ("value".to_string(), ident(value.clone())),
+                        ("value".to_string(), shown.clone()),
                     ]),
                 ),
             ])],
@@ -1243,7 +1419,7 @@ fn emit_field_refinement_checks(
     };
     let mut stmts = Vec::new();
     for pred in bynk_syntax::ast::in_check_order(predicates, |p| p) {
-        let (cond, msg) = super::pred_condition_and_message(pred, &value);
+        let (cond, msg) = super::pred_condition_and_message_for(pred, &value, base);
         stmts.push(if_(
             not_expr(TsExpr::Paren(Box::new(cond))),
             block(vec![violation(&msg)]),
@@ -1540,6 +1716,12 @@ fn emit_record_codec(
             fname,
             &field.predicates,
             &sub_path,
+            match &field.shape {
+                WireRef::Base { base, .. } => Some(*base),
+                WireRef::Decimal => Some(BaseType::Decimal),
+                _ => None,
+            },
+            ru,
         ));
     }
     // Review of #1444: a *zero-field* record — `type X = {}`, parse-legal
@@ -2008,6 +2190,37 @@ fn emit_field_deserialise_wire(
                 ),
             ]
         }
+        // #2622: a bare `Decimal` field is a canonical decimal JSON string -
+        // require a string, then parse it (rejecting any other spelling).
+        WireRef::Decimal => {
+            ru.note_decimal("__bynkDecimalParseWire");
+            vec![
+                if_(
+                    strict_neq(typeof_expr(ident(json)), str_lit("string")),
+                    block(vec![return_(err_structural_mismatch(
+                        path_expr,
+                        "decimal string",
+                        typeof_expr(ident(json)),
+                    ))]),
+                ),
+                const_(
+                    format!("__b_{name}"),
+                    call(ident("__bynkDecimalParseWire"), vec![ident(json)]),
+                ),
+                if_(
+                    strict_eq(member(ident(format!("__b_{name}")), "tag"), str_lit("None")),
+                    block(vec![return_(err_structural_mismatch(
+                        path_expr,
+                        "decimal string",
+                        str_lit("invalid decimal"),
+                    ))]),
+                ),
+                const_(
+                    format!("__{name}"),
+                    member(ident(format!("__b_{name}")), "value"),
+                ),
+            ]
+        }
         WireRef::Base {
             json: kind, guards, ..
         } => {
@@ -2428,6 +2641,15 @@ fn serialise_field_expr_wire(
                 TsType::named("__JsonValue"),
             )
         }
+        // #2622: a `Decimal` is written as its canonical text, never as a
+        // `bigint` (which `JSON.stringify` rejects).
+        WireRef::Decimal => {
+            ru.note_decimal("__bynkDecimalToString");
+            as_expr(
+                call(ident("__bynkDecimalToString"), vec![ident(value)]),
+                TsType::named("__JsonValue"),
+            )
+        }
         WireRef::Base { .. } => as_expr(ident(value), TsType::named("__JsonValue")),
         // The runtime-owned error types have no *generated* codec — they are
         // declared by the runtime, not by a `TypeDecl` this emitter can walk, so
@@ -2481,11 +2703,11 @@ pub(crate) use bynk_check::wire::collect_codec_closure;
 /// other `Key` type decodes into the keyed collections (`keys.ts`).
 fn is_plain_key_ref(t: &TypeRef, types: &std::collections::HashMap<String, Arc<TypeDecl>>) -> bool {
     match t {
-        TypeRef::Base(b, _) => !matches!(b, BaseType::Bytes),
+        TypeRef::Base(b, _) => !matches!(b, BaseType::Bytes | BaseType::Decimal),
         TypeRef::Named(id) => matches!(
             types.get(&id.name).map(|d| &d.body),
             Some(TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. })
-                if !matches!(base, BaseType::Bytes)
+                if !matches!(base, BaseType::Bytes | BaseType::Decimal)
         ),
         _ => false,
     }
@@ -2810,8 +3032,14 @@ pub(crate) fn deserialise_expr_via(
         TypeRef::Asset(_) => ok_unknown_cast("{ readonly url: string }"),
         // v0.110 (ADR 0142 D5): a `Bytes` wires as a base64 string; decode it
         // (rejecting a non-string or invalid base64) to a `Uint8Array`.
-        TypeRef::Base(BaseType::Bytes, _) => {
-            ru.note_bytes();
+        TypeRef::Base(base @ (BaseType::Bytes | BaseType::Decimal), _) => {
+            let (parse, expected, invalid) = if *base == BaseType::Decimal {
+                ru.note_decimal("__bynkDecimalParseWire");
+                ("__bynkDecimalParseWire", "decimal string", "invalid decimal")
+            } else {
+                ru.note_bytes();
+                ("__bynkBytesFromBase64", "base64 string", "invalid base64")
+            };
             call(
                 TsExpr::Arrow {
                     params: vec![TsParam {
@@ -2853,16 +3081,16 @@ pub(crate) fn deserialise_expr_via(
                                             vec![member(ident("__b"), "value")],
                                         )),
                                         alternate: Box::new(structural_mismatch(
-                                            "base64 string",
-                                            str_lit("invalid base64"),
+                                            expected,
+                                            str_lit(invalid),
                                         )),
                                     },
                                 ))),
                             },
-                            vec![call(ident("__bynkBytesFromBase64"), vec![ident("__v")])],
+                            vec![call(ident(parse), vec![ident("__v")])],
                         )),
                         alternate: Box::new(structural_mismatch(
-                            "base64 string",
+                            expected,
                             TsExpr::Unary {
                                 op: TsUnaryOp::Typeof,
                                 expr: Box::new(ident("__v")),
@@ -2880,8 +3108,8 @@ pub(crate) fn deserialise_expr_via(
                 BaseType::Bool => "boolean",
                 BaseType::Float => "number",
                 BaseType::Duration | BaseType::Instant => "number",
-                // Unreachable: handled by the dedicated `Bytes` arm above.
-                BaseType::Bytes => "string",
+                // Unreachable: handled by the dedicated `Bytes`/`Decimal` arm above.
+                BaseType::Bytes | BaseType::Decimal => "string",
             };
             // `Some(predicate)`: the arm needs a second, narrower runtime check
             // beyond `typeof` — a real `TsExpr`, not text, now that `extra`'s

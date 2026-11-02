@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.479) rather than in large releases.
+steps (the book is written against v0.480) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -48,7 +48,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   defaults on a field whose type applies a user generic. The agent schema lock now
   counts a defaulted field added inside stored state as additive
   ([#2676](https://github.com/bynk-lang/bynk/issues/2676)); adding a sum variant to
-  stored state is the next candidate there.
+  stored state is the next candidate there. The exact `Decimal` type
+  ([#2622](https://github.com/bynk-lang/bynk/issues/2622)) ships without a
+  currency: a `bynk.money` commons that pairs a `Decimal` with an ISO 4217 code
+  is planned as a follow-on, along with `average` over a `List[Decimal]`, `Decimal`
+  in a `Query` aggregate and a first-class `RoundingMode`.
 - **Events.** Slices 0–2, 3a–3c, and 4 have shipped — `event` declarations,
   `given Events` emission with owner-only enforcement, `from Events(E)`
   subscription across contexts on every platform, structural pattern

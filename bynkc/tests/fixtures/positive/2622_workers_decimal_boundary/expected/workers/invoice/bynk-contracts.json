@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "lines": "8e1ac678a581e695",
+    "totals": "9b9252e7d5974a84"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "lines": "Svc(\"lines\",P(\"sku\",B(\"String\")),P(\"unit\",Rf(\"Price\",\"Decimal\",\"Positive\")),P(\"qty\",B(\"Int\")),Ret(R(Rec(\"Line\",F(\"discount\",B(\"Decimal\"),\"NonNegative\"),F(\"qty\",B(\"Int\")),F(\"sku\",B(\"String\")),F(\"unit\",Rf(\"Price\",\"Decimal\",\"Positive\"))),U())))",
+    "totals": "Svc(\"totals\",P(\"unit\",Rf(\"Price\",\"Decimal\",\"Positive\")),P(\"qty\",B(\"Int\")),Ret(R(B(\"Decimal\"),U())))"
+  }
+}

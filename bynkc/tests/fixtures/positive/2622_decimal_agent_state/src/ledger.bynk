@@ -1,0 +1,46 @@
+context ledger
+
+// #2622: a `Decimal` in stored state is written as its canonical text and read
+// back with its scale, across a reload of the same key.
+
+type Price = Decimal where Positive
+
+agent Account {
+  key id: String
+
+  store balance: Cell[Decimal] = 0.00d
+  store prices: Map[String, Decimal]
+  store last: Cell[Option[Price]] = None
+
+  on call deposit(amount: Decimal) -> Effect[()] {
+    balance.update((b) => b + amount)
+  }
+
+  on call quote(sku: String, price: Price) -> Effect[()] {
+    prices.put(sku, price)
+  }
+
+  on call remember(price: Price) -> Effect[()] {
+    last := Some(price)
+  }
+
+  on call balanceText() -> Effect[String] {
+    let b = balance
+    b.toString()
+  }
+
+  on call priceText(sku: String) -> Effect[String] {
+    let p <- prices.get(sku)
+    match p {
+      Some(d) => d.toString()
+      None => "none"
+    }
+  }
+
+  on call lastText() -> Effect[String] {
+    match last {
+      Some(d) => d.toString()
+      None => "none"
+    }
+  }
+}

@@ -2066,6 +2066,67 @@ pub fn raw_error_status(arg: &Expr) -> Option<u16> {
     }
 }
 
+/// A `Decimal` rounding mode (#2622) — the closed set `round`/`div` accept.
+/// Written `RoundingMode.HalfEven`; read syntactically at that argument (it is
+/// not a first-class value in this slice), so it lowers to its name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoundingMode {
+    /// Toward zero (truncate).
+    Down,
+    /// Away from zero.
+    Up,
+    /// Toward negative infinity.
+    Floor,
+    /// Toward positive infinity.
+    Ceiling,
+    /// To nearest; a tie goes away from zero.
+    HalfUp,
+    /// To nearest; a tie goes toward zero.
+    HalfDown,
+    /// To nearest; a tie goes to the even neighbour (banker's rounding).
+    HalfEven,
+}
+
+impl RoundingMode {
+    pub const ALL: [RoundingMode; 7] = [
+        RoundingMode::Down,
+        RoundingMode::Up,
+        RoundingMode::Floor,
+        RoundingMode::Ceiling,
+        RoundingMode::HalfUp,
+        RoundingMode::HalfDown,
+        RoundingMode::HalfEven,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            RoundingMode::Down => "Down",
+            RoundingMode::Up => "Up",
+            RoundingMode::Floor => "Floor",
+            RoundingMode::Ceiling => "Ceiling",
+            RoundingMode::HalfUp => "HalfUp",
+            RoundingMode::HalfDown => "HalfDown",
+            RoundingMode::HalfEven => "HalfEven",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.name() == name)
+    }
+}
+
+/// #2622: the rounding mode a `Decimal` `round`/`div` argument names —
+/// `RoundingMode.HalfEven`. `None` for any other expression.
+pub fn rounding_mode(arg: &Expr) -> Option<RoundingMode> {
+    match &arg.kind {
+        ExprKind::FieldAccess { receiver, field } => match &receiver.kind {
+            ExprKind::Ident(r) if r.name == "RoundingMode" => RoundingMode::from_name(&field.name),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// Payload shape of a `QueueResult` variant (v0.44). Non-generic — a verdict
 /// carries no value; `Retry` carries a `String` reason for the log path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2440,6 +2501,12 @@ pub enum BaseType {
     /// by content (real emitter codegen, not host `===`); wires as a base64
     /// JSON string; not `Map`-keyable and not orderable.
     Bytes,
+    /// `Decimal` (#2622) — an exact base-10 number: an arbitrary-precision
+    /// integer coefficient with a non-negative scale. Like `Bytes` it does not
+    /// erase to a JS primitive (it lowers to a frozen `{ coefficient, scale }`
+    /// object over `BigInt`); `==`/`<` compare by numeric value; it wires as a
+    /// canonical JSON string (`"1.20"`).
+    Decimal,
 }
 
 impl BaseType {
@@ -2452,6 +2519,7 @@ impl BaseType {
             BaseType::Duration => "Duration",
             BaseType::Instant => "Instant",
             BaseType::Bytes => "Bytes",
+            BaseType::Decimal => "Decimal",
         }
     }
 
@@ -2465,6 +2533,7 @@ impl BaseType {
             "Duration" => BaseType::Duration,
             "Instant" => BaseType::Instant,
             "Bytes" => BaseType::Bytes,
+            "Decimal" => BaseType::Decimal,
             _ => return None,
         })
     }
@@ -2540,6 +2609,16 @@ pub struct FloatBound {
     pub span: Span,
 }
 
+/// A decimal refinement bound (#2622): `InRange(0.00d, 100.00d)`. The
+/// coefficient keeps any leading `-`; the lexeme is the signed source text.
+#[derive(Debug, Clone)]
+pub struct DecimalBound {
+    pub coef: String,
+    pub scale: u32,
+    pub lexeme: String,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct Refinement {
     pub predicates: Vec<RefinementPred>,
@@ -2561,6 +2640,8 @@ pub enum PredKind {
     /// lexemes (including any sign) so emitted runtime checks are
     /// byte-stable.
     InRangeF(FloatBound, FloatBound),
+    /// `InRange` with decimal bounds (#2622): `InRange(0.00d, 100.00d)`.
+    InRangeD(DecimalBound, DecimalBound),
     MinLength(i64),
     MaxLength(i64),
     Length(i64),
@@ -2573,7 +2654,7 @@ impl PredKind {
     pub fn name(&self) -> &'static str {
         match self {
             PredKind::Matches(_) => "Matches",
-            PredKind::InRange(..) | PredKind::InRangeF(..) => "InRange",
+            PredKind::InRange(..) | PredKind::InRangeF(..) | PredKind::InRangeD(..) => "InRange",
             PredKind::MinLength(_) => "MinLength",
             PredKind::MaxLength(_) => "MaxLength",
             PredKind::Length(_) => "Length",
@@ -3359,6 +3440,17 @@ pub enum ExprKind {
         value: f64,
         lexeme: String,
     },
+    /// A decimal literal (#2622): `1.20d`, `5d`. Typed `Decimal`; the scale is
+    /// the number of fraction digits as written, so `1.20d` keeps scale 2.
+    DecimalLit {
+        /// The coefficient: the digits with the `.` and `_` separators removed
+        /// (`120` for `1.20d`), as an arbitrary-precision base-10 string.
+        coef: String,
+        /// The number of fraction digits as written (`2` for `1.20d`).
+        scale: u32,
+        /// The lexeme as written, `d` suffix included (formatting is verbatim).
+        lexeme: String,
+    },
     /// A duration literal `<int>.<unit>` (v0.86, ADR 0112): `5.minutes`,
     /// `30.days`. The parser recognises the `IntLit . <unit>` shape and records
     /// the magnitude, the unit, and the resolved milliseconds (the value the
@@ -3542,6 +3634,7 @@ pub fn expr_children(e: &Expr) -> Vec<&Expr> {
     match &e.kind {
         ExprKind::IntLit { .. }
         | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
         | ExprKind::DurationLit { .. }
         | ExprKind::StrLit(_)
         | ExprKind::BoolLit(_)
@@ -4329,6 +4422,11 @@ fn f(x: Int) -> Int {
             }
             | ExprKind::FloatLit {
                 value: _,
+                lexeme: _,
+            }
+            | ExprKind::DecimalLit {
+                coef: _,
+                scale: _,
                 lexeme: _,
             }
             | ExprKind::DurationLit {

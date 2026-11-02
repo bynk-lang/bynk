@@ -228,6 +228,7 @@ pub enum WcRef {
         expected: WcExpected,
     },
     Bytes,
+    Decimal,
     Named {
         name: String,
     },
@@ -328,6 +329,7 @@ fn revalidation_str(r: Revalidation) -> &'static str {
         Revalidation::Inline => "Inline",
         Revalidation::StructuralOnly => "StructuralOnly",
         Revalidation::Base64Decode => "Base64Decode",
+        Revalidation::DecimalParse => "DecimalParse",
     }
 }
 
@@ -351,6 +353,7 @@ fn pred_kind_str(p: &PredKind) -> String {
         PredKind::Matches(re) => format!("Matches(\"{}\")", bynk_fmt::escape_string(re)),
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::InRangeD(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::MinLength(n) => format!("MinLength({n})"),
         PredKind::MaxLength(n) => format!("MaxLength({n})"),
         PredKind::Length(n) => format!("Length({n})"),
@@ -395,6 +398,7 @@ fn wc_ref(r: &WireRef) -> WcRef {
             expected: expected_wire(expected),
         },
         WireRef::Bytes => WcRef::Bytes,
+        WireRef::Decimal => WcRef::Decimal,
         WireRef::Named { name } => WcRef::Named {
             name: bynk_check::symbols::display_type_name(name).to_string(),
         },

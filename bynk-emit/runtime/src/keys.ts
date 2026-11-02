@@ -18,6 +18,8 @@
 // `__bynkEq` tests `instanceof Map`/`instanceof Set` and reads through `has` and
 // `get`, so it compares the subclasses structurally without change.
 //
+import { __bynkDecimalKey, __bynkIsDecimal } from "./decimal.ts";
+
 // Everything here is internal, not part of the published ABI (ADR 0310).
 // `serialiseAgentKey` (agent.ts) is deliberately a separate function: it
 // addresses stored durable objects and must stay byte-identical.
@@ -32,6 +34,8 @@
  * `-0` and `0` encode alike, matching `==`; a `Float` never reaches the encoder.
  */
 function canonical(v: unknown): unknown {
+  // #2622: a `Decimal` is its value-canonical text, so `1.20` and `1.2` are one key.
+  if (__bynkIsDecimal(v)) return "d:" + __bynkDecimalKey(v);
   if (v instanceof Uint8Array) {
     let hex = "";
     for (let i = 0; i < v.length; i++) hex += (v[i] < 16 ? "0" : "") + v[i].toString(16);

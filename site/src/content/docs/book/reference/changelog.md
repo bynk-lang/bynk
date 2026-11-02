@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.479**.
+written against **v0.480**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.0** | A built-in exact `Decimal` base type for money and fractional arithmetic: `1.20d` literals, exact `+`/`-`/`*`, `div` and `round` with a stated scale and rounding mode, ordering by value, and a canonical JSON string on the wire |
 | **v0.479.2** | A flattened capability (`consumes U { Cap }`) whose operation names a type `U` declares but does not export now resolves that type, as the qualified form does, instead of silently typing the call as `()`; calling an operation whose signature names a type the consumer declares with a different shape is refused with `bynk.boundary.structural_mismatch` |
 | **v0.479.1** | A `workers` handler (call, http, queue) whose parameters name a consumed adapter type such as `R2Upload` now type-checks |
 | **v0.479.0** | "`unreachable(message)` and `todo(message)` fault deliberately: ambient built-ins of a bottom type that fits any position; `todo` warns with `bynk.fault.todo`" |

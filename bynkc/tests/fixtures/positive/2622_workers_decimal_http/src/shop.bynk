@@ -1,0 +1,21 @@
+context shop
+
+// #2622: a `Decimal` request body and response body travel as JSON strings. A
+// path parameter is text, so a `Decimal` there is parsed by hand.
+
+type Price = Decimal where Positive
+
+type Quote = { sku: String, unit: Price, total: Decimal where NonNegative }
+
+service api from http {
+  on POST("/quote") (body: Quote) -> Effect[HttpResult[Decimal]] by v: Visitor {
+    Ok(body.unit * 2d)
+  }
+
+  on GET("/price/:amount") (amount: String) -> Effect[HttpResult[Decimal]] by v: Visitor {
+    match Decimal.parse(amount) {
+      Some(d) => Ok(d)
+      None => BadRequest("not a decimal")
+    }
+  }
+}

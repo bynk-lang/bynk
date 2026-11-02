@@ -85,7 +85,7 @@ pub fn json_kind_of(b: BaseType) -> JsonKind {
         BaseType::Int | BaseType::Float | BaseType::Duration | BaseType::Instant => {
             JsonKind::Number
         }
-        BaseType::String | BaseType::Bytes => JsonKind::String,
+        BaseType::String | BaseType::Bytes | BaseType::Decimal => JsonKind::String,
         BaseType::Bool => JsonKind::Boolean,
     }
 }
@@ -150,6 +150,10 @@ pub enum Revalidation {
     /// provenance, mirroring `emit_refined`'s early return to the dedicated
     /// `Bytes` codec before the owned/consumed split is even considered.
     Base64Decode,
+    /// `Decimal` (#2622): a canonical decimal string on the wire, parsed (never
+    /// cast) into the runtime's `{ coefficient, scale }` value. Like `Bytes`,
+    /// it takes a dedicated codec before the owned/consumed split.
+    DecimalParse,
 }
 
 /// A named boundary type's declared shape, refinement-independent of who is
@@ -282,6 +286,9 @@ pub enum WireRef {
     /// `Bytes`: base64 string on the wire, decoded (never cast) into a
     /// `Uint8Array`-shaped value.
     Bytes,
+    /// `Decimal` (#2622): a canonical decimal string on the wire, parsed into
+    /// a `{ coefficient, scale }` value.
+    Decimal,
     /// A named boundary type — resolve further via the model's own
     /// `WireType` table.
     Named { name: String },
@@ -1415,6 +1422,7 @@ pub fn wire_ref(t: &TypeRef, _types: &HashMap<String, Arc<TypeDecl>>) -> WireRef
         // v0.110 (ADR 0142 D5): a bare `Bytes` field is a base64 JSON string,
         // decoded (not cast) into a `Uint8Array`.
         TypeRef::Base(BaseType::Bytes, _) => WireRef::Bytes,
+        TypeRef::Base(BaseType::Decimal, _) => WireRef::Decimal,
         TypeRef::Base(b, _) => {
             let json = json_kind_of(*b);
             WireRef::Base {
@@ -1535,6 +1543,8 @@ fn wire_scalar(
         .unwrap_or_default();
     let revalidation = if base == BaseType::Bytes {
         Revalidation::Base64Decode
+    } else if base == BaseType::Decimal {
+        Revalidation::DecimalParse
     } else {
         match prov {
             Provenance::Owned => Revalidation::ViaConstructor,
