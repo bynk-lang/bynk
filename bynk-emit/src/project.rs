@@ -3554,7 +3554,7 @@ fn build_output(
                     .unwrap_or_default();
                 // v0.177 (#643): the callee's own view of each of its `on call`
                 // contracts, hashed from *its own* namespace — the same table
-                // (`combined_types_for`) a caller reaches through
+                // (`contract_types_for`) a caller reaches through
                 // `consumed_types[ctx_name]`, so the two sides cannot disagree.
                 let own_types = bynk_check::symbols::contract_types_for(
                     ctx_name,
@@ -3853,8 +3853,11 @@ fn build_output(
                 // v0.177 (#643): the contract hashes this context's entry
                 // enforces, written where `deploy` can read them — so a skew is
                 // refused at the push rather than discovered by live traffic.
-                let own_types =
-                    bynk_check::symbols::combined_types_for(ctx_name, &unit_tables, &unit_uses);
+                // #2750: the SAME table the entry's hashes (`own_contracts`
+                // above) and every caller's `expects` are computed from —
+                // `own_types`, bound once from `contract_types_for`. A second
+                // binding from `combined_types_for` here left a consumed
+                // context's exported type unresolved in `provides`.
                 // What this context expects of each dependency — the same hash
                 // it stamps at each call site, computed the same way: in the
                 // *dependency's* namespace, from the dependency's own table.

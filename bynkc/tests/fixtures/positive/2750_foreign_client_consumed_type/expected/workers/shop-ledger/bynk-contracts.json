@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "provides": {
+    "echo": "52c52cc15798950d",
+    "orderId": "70f6781a321de289"
+  },
+  "expects": {},
+  "foreign": {
+    "Legacy": {
+      "echo": "52c52cc15798950d"
+    }
+  },
+  "provides_shapes": {
+    "echo": "Svc(\"echo\",P(\"o\",Rec(\"Order\",F(\"code\",Op(\"shop_order__Code\",\"String\")),F(\"id\",B(\"String\")))),Ret(Rec(\"Order\",F(\"code\",Op(\"shop_order__Code\",\"String\")),F(\"id\",B(\"String\")))))",
+    "orderId": "Svc(\"orderId\",P(\"o\",Rec(\"Order\",F(\"code\",Op(\"shop_order__Code\",\"String\")),F(\"id\",B(\"String\")))),Ret(B(\"String\")))"
+  }
+}

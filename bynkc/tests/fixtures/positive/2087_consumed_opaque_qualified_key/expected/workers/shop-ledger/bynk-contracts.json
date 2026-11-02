@@ -1,12 +1,12 @@
 {
   "version": 1,
   "provides": {
-    "echo": "afd64a7da8d0ad67",
-    "orderId": "1d4af87f575402de"
+    "echo": "52c52cc15798950d",
+    "orderId": "70f6781a321de289"
   },
   "expects": {},
   "provides_shapes": {
-    "echo": "Svc(\"echo\",P(\"o\",N(\"Order\")),Ret(N(\"Order\")))",
-    "orderId": "Svc(\"orderId\",P(\"o\",N(\"Order\")),Ret(B(\"String\")))"
+    "echo": "Svc(\"echo\",P(\"o\",Rec(\"Order\",F(\"code\",Op(\"shop_order__Code\",\"String\")),F(\"id\",B(\"String\")))),Ret(Rec(\"Order\",F(\"code\",Op(\"shop_order__Code\",\"String\")),F(\"id\",B(\"String\")))))",
+    "orderId": "Svc(\"orderId\",P(\"o\",Rec(\"Order\",F(\"code\",Op(\"shop_order__Code\",\"String\")),F(\"id\",B(\"String\")))),Ret(B(\"String\")))"
   }
 }

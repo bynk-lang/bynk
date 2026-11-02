@@ -1,14 +1,14 @@
 {
   "version": 1,
   "provides": {
-    "active": "92a3268f1140b35f",
-    "held": "1e5718b225f0c170",
-    "hold": "cb48c5a9844bd729"
+    "active": "cbc57093110e9eec",
+    "held": "06ac269a6c4020d3",
+    "hold": "673cedb038c7fd83"
   },
   "expects": {},
   "provides_shapes": {
-    "active": "Svc(\"active\",Ret(N(\"Status\")))",
-    "held": "Svc(\"held\",P(\"b\",N(\"Batch\")),Ret(B(\"Bool\")))",
-    "hold": "Svc(\"hold\",P(\"id\",B(\"String\")),P(\"b\",N(\"Batch\")),Ret(O(N(\"Batch\"))))"
+    "active": "Svc(\"active\",Ret(Sum(\"Status\",V(\"Active\"),V(\"Held\",F(\"reason\",B(\"String\"))))))",
+    "held": "Svc(\"held\",P(\"b\",Rec(\"Batch\",F(\"code\",Rf(\"Code\",\"Int\",\"NonNegative\")),F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")),F(\"status\",Sum(\"Status\",V(\"Active\"),V(\"Held\",F(\"reason\",B(\"String\"))))))),Ret(B(\"Bool\")))",
+    "hold": "Svc(\"hold\",P(\"id\",B(\"String\")),P(\"b\",Rec(\"Batch\",F(\"code\",Rf(\"Code\",\"Int\",\"NonNegative\")),F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")),F(\"status\",Sum(\"Status\",V(\"Active\"),V(\"Held\",F(\"reason\",B(\"String\"))))))),Ret(O(Rec(\"Batch\",F(\"code\",Rf(\"Code\",\"Int\",\"NonNegative\")),F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")),F(\"status\",Sum(\"Status\",V(\"Active\"),V(\"Held\",F(\"reason\",B(\"String\")))))))))"
   }
 }
