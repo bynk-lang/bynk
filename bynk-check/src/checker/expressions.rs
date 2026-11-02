@@ -1619,6 +1619,9 @@ pub(crate) fn check_lambda(
         // let the caller's unify bind the variable.
         Some((eps, _)) if !ret_constrained => {
             let bt = body_ty?;
+            if never_result(bt, lambda, ctx) {
+                return None;
+            }
             let ret = if body_effectful && !bt.is_effect(tys) {
                 tys.intern(Ty::Effect(bt))
             } else {
@@ -1651,6 +1654,9 @@ pub(crate) fn check_lambda(
         }
         None => {
             let bt = body_ty?;
+            if never_result(bt, lambda, ctx) {
+                return None;
+            }
             let ret = if body_effectful && !bt.is_effect(tys) {
                 tys.intern(Ty::Effect(bt))
             } else {
@@ -1662,6 +1668,21 @@ pub(crate) fn check_lambda(
             }))
         }
     }
+}
+
+/// #2727: a lambda whose result type is not fixed by an expected type and whose
+/// body is the bottom type would give its caller a `Never` return. Refuse it,
+/// as an unannotated parameter is refused.
+fn never_result(body_ty: TyId, lambda: &LambdaExpr, ctx: &mut Ctx) -> bool {
+    if !matches!(&*ctx.tys.get(body_ty), Ty::Never) {
+        return false;
+    }
+    ctx.errors.push(crate::checker::never_inferred(
+        lambda.body.span,
+        "this lambda's result",
+        "pass the lambda where a function type is expected, or have the body return a value of a named type",
+    ));
+    true
 }
 
 /// v0.20a: the syntactic pre-scan deciding a lambda's effectfulness in an

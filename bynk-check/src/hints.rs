@@ -66,6 +66,11 @@ impl HintSink {
     /// Record an inferred-**type** hint at `span` (binding types, generic-call
     /// type arguments). Dropped when muted or before any `enter_file`.
     pub fn record(&mut self, span: Span, label: String) {
+        // #2727: the bottom type is not source syntax, so a hint carrying it
+        // could be accepted as an annotation that does not parse.
+        if label.contains(crate::checker::NEVER_DISPLAY) {
+            return;
+        }
         self.push(span, label, HintKind::Type);
     }
 
@@ -95,5 +100,30 @@ impl HintSink {
             hints.sort_by_key(|h| (h.span.start, h.span.end));
         }
         files
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #2727: the bottom type is not source syntax, so no type hint may carry it.
+    #[test]
+    fn type_hints_never_offer_the_bottom_type() {
+        let mut sink = HintSink::new();
+        sink.enter_file(Path::new("a.bynk"), false);
+        sink.record(
+            Span::new(4, 5),
+            format!(": {}", crate::checker::NEVER_DISPLAY),
+        );
+        sink.record(
+            Span::new(8, 9),
+            format!(": List[{}]", crate::checker::NEVER_DISPLAY),
+        );
+        sink.record(Span::new(12, 13), ": Int".to_string());
+        let files = sink.take_files();
+        let hints = &files[Path::new("a.bynk")];
+        assert_eq!(hints.len(), 1);
+        assert_eq!(hints[0].label, ": Int");
     }
 }

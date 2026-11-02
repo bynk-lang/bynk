@@ -276,3 +276,34 @@ fn hints_survive_a_transient_error_at_reached_sites() {
         Some(": Int")
     );
 }
+
+/// #2727: a binding whose value only faults is refused, and no hint offers the
+/// bottom type (`never returns`) as source; a joined fault keeps its real type.
+#[test]
+fn a_never_binding_is_refused_and_offers_no_hint() {
+    let result = bynk_ide::diagnose_project(
+        &fixture_root("never"),
+        &bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(
+            (fixture_root("never")).to_path_buf(),
+        )),
+    );
+    let (hints, text) = hints_for(&result, "demo.bynk");
+    assert!(
+        hints.iter().all(|(_, l)| !l.contains("never returns")),
+        "{hints:?}"
+    );
+    assert_eq!(
+        label_at(&hints, &text, "let bad =", "bad"),
+        None,
+        "the refused binding has no hint"
+    );
+    assert_eq!(label_at(&hints, &text, "let ok =", "ok"), Some(": Int"));
+    assert!(
+        result
+            .files
+            .iter()
+            .flat_map(|f| f.diagnostics.iter())
+            .any(|d| d.error.category == "bynk.types.never_inferred"),
+        "the binding is refused"
+    );
+}

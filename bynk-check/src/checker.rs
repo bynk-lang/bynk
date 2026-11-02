@@ -429,7 +429,7 @@ impl Ty {
             // diagnostic that happens to mention the type (e.g. a mismatch one
             // level up) reads as "type error" rather than a blank or `unknown`.
             Ty::Error => "<type error>".to_string(),
-            Ty::Never => "never returns".to_string(),
+            Ty::Never => NEVER_DISPLAY.to_string(),
             Ty::Base(b) => b.name().to_string(),
             // #2087: a qualified key reads as the declaration's own name.
             Ty::Named { name, args, .. } if args.is_empty() => {
@@ -3824,6 +3824,21 @@ pub(super) fn check_do(d: &DoStmt, check_context: bool, ctx: &mut Ctx) {
 /// principal. Returns the bound type, or `None` when the value failed to type
 /// (already reported). Binding the name is the caller's job, so a `par` block can
 /// bind its names only after every binding is checked.
+/// How [`Ty::Never`] reads in a message or hover. It is not source syntax, so
+/// no inlay hint or inserted annotation may carry it (#2727).
+pub const NEVER_DISPLAY: &str = "never returns";
+
+/// #2727: the diagnostic for an unannotated binding or lambda result whose
+/// inferred type is the bottom type, which would otherwise stand in for any type.
+pub(super) fn never_inferred(span: Span, what: &str, hint: &str) -> CompileError {
+    CompileError::new(
+        "bynk.types.never_inferred",
+        span,
+        format!("{what} would have the type `never returns`, which cannot be named in source"),
+    )
+    .with_note(hint)
+}
+
 pub(super) fn check_effect_let(l: &LetStmt, check_context: bool, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     if check_context && !ctx.effectful {
@@ -3919,6 +3934,14 @@ pub(super) fn check_effect_let(l: &LetStmt, check_context: bool, ctx: &mut Ctx) 
             annot
         }
         (Some(annot), None) => annot,
+        (None, Some(rhs)) if matches!(&*tys.get(rhs), Ty::Never) && l.name.name != "_" => {
+            ctx.errors.push(never_inferred(
+                l.value.span,
+                &format!("`{}`", l.name.name),
+                "annotate the binding (`let x: T <- …`) so the value has a type to stand in for",
+            ));
+            return None;
+        }
         (None, Some(rhs)) => rhs,
         // #1663: the value failed to type (already reported).
         // Bind the name to the error type anyway, so its uses
@@ -4017,6 +4040,19 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                         annot
                     }
                     (Some(annot), None) => annot,
+                    // #2727: with no annotation the binding would be `Never`,
+                    // assignable anywhere. Bind it to the error type instead.
+                    (None, Some(rhs))
+                        if matches!(&*tys.get(rhs), Ty::Never) && l.name.name != "_" =>
+                    {
+                        ctx.errors.push(never_inferred(
+                            l.value.span,
+                            &format!("`{}`", l.name.name),
+                            "annotate the binding (`let x: T = …`) so the value has a type to stand in for",
+                        ));
+                        ctx.bind(l.name.name.clone(), tys.intern(Ty::Error));
+                        continue;
+                    }
                     (None, Some(rhs)) => rhs,
                     // #1663: the value failed to type (already reported).
                     // Bind the name to the error type anyway, so its uses

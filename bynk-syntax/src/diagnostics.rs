@@ -3175,6 +3175,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["refinement"],
     ),
     dg(
+        "bynk.types.never_inferred",
+        "An unannotated `let` or a lambda's result has the bottom type (`never returns`) because its value only faults; the type cannot be written in source, so an annotation or an expected type is needed.",
+        &["let_stmt", "lambda_expr"],
+    ),
+    dg(
         "bynk.types.no_numeric_coercion",
         "`Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds.",
         &["binary_expr", "refinement"],
