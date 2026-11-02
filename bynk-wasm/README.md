@@ -48,6 +48,35 @@ the diagnostic index section for its category. `bynk_explain(code)` returns
 `summary: string | null; href: string` on `Diagnostic`;
 `bynk_explain(code: string): string` (JSON).
 
+`bynk_reference()` returns the standard library as the compiler knows it, in one
+call (JSON, built once per page load, ~45 KB), so a reference browser needs no
+completion probes and keeps no copy of the tables. It reads the same sources as
+completion and hover: the kernel method tables, the built-in statics and the
+embedded first-party `.bynk` surface (whose `---` doc blocks become `doc`).
+`experimental` marks items that need `[unstable] allow` (e.g. `bynk.crypto`);
+`deprecated` carries the replacement (the `bynk.list` free functions with a
+`List` method form). Kernel methods and statics carry a signature but no `doc`.
+TS:
+
+```ts
+interface Member {
+  name: string;
+  signature: string;
+  doc?: string;          // Markdown, from the `---` block
+  experimental?: true;   // absent when stable
+  deprecated?: string;   // what to use instead
+}
+interface Reference {
+  types: { name: string; statics: Member[]; methods: Member[] }[];
+  capabilities: { name: string; unit: string; doc?: string; experimental: boolean; operations: Member[] }[];
+  modules: { name: string; doc?: string; experimental: boolean; functions: Member[] }[];
+}
+// bynk_reference(): string  (JSON of Reference)
+```
+
+`Effect[Result[T, E]]` is its own `types` entry (it has extra combinators over
+plain `Effect`).
+
 The pipeline reuses the on-disk compile path wholesale (first-party injection,
 the per-platform binding, the strip-only emitter), so the in-browser result
 matches the CLI's.
