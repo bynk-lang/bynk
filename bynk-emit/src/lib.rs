@@ -91,8 +91,11 @@ fn check_single_file(
     // file is still refused.
     let (tokens, lex_errors) = lexer::tokenize_recovering(source);
     if !lex_errors.is_empty() {
-        return Err(bynk_check::recovery::diagnose_unparsable(
-            &tokens, source, lex_errors,
+        return Err(bynk_check::recovery::diagnose_unlexable(
+            &tokens,
+            source,
+            lex_errors,
+            Vec::new(),
         ));
     }
     // ADR 0117: parse-time warnings (orphan doc blocks) ride alongside the

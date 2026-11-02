@@ -1,0 +1,10 @@
+commons demo
+
+fn sql() -> String {
+  """
+    SELECT 1
+  FROM t
+    """
+}
+
+fn label() -> String { 1 }

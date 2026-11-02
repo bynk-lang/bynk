@@ -618,6 +618,45 @@ fn skip_line(bytes: &[u8], from: usize) -> usize {
     }
 }
 
+/// Where lexing resumes after `err`, a failed string literal opened at `pos`.
+/// An unterminated literal has no closer, so the rest of its line goes. Any
+/// other fault (a bad escape, an under-indented body line, a bad hole) leaves a
+/// literal that does close: resume after its real closer, found by rescanning
+/// with escapes skipped, so the body and the closing quote are not lexed as code.
+/// No closer on the line (or at all, for a multi-line literal) falls back to
+/// skipping the line.
+fn string_error_resume(bytes: &[u8], pos: usize, err: &CompileError) -> usize {
+    let fallback = skip_line(bytes, err.span.end.max(pos + 1));
+    if err.category == "bynk.lex.unterminated_string" {
+        return fallback;
+    }
+    let Some(open) = string_open(bytes, pos) else {
+        return fallback;
+    };
+    let mut p = open.body;
+    while p < bytes.len() {
+        match bytes[p] {
+            b'\\' if !open.raw => p += 2,
+            b'\n' if !open.multi => return fallback,
+            b'"' if open.multi => {
+                if bytes[p..].starts_with(b"\"\"\"") {
+                    return p + 3;
+                }
+                p += 1;
+            }
+            b'"' => {
+                let hashes = &bytes[p + 1..];
+                if hashes.len() >= open.hashes && hashes[..open.hashes].iter().all(|&b| b == b'#') {
+                    return p + 1 + open.hashes;
+                }
+                p += 1;
+            }
+            _ => p += 1,
+        }
+    }
+    fallback
+}
+
 fn tokenize_mode_recovering(
     source: &str,
     file: FileId,
@@ -731,9 +770,9 @@ fn tokenize_mode_recovering(
             let (end, segments) = match lex_string(source, pos, 0, file) {
                 Ok(lexed) => lexed,
                 Err(e) => {
-                    // The rest of the line is the literal's remains; lexing it
-                    // as code would only echo the error.
-                    pos = skip_line(bytes, e.span.end.max(pos + 1));
+                    // The literal's remains are not code; lexing them as such
+                    // would only echo the error.
+                    pos = string_error_resume(bytes, pos, &e);
                     errors.push(e);
                     continue;
                 }
@@ -880,7 +919,9 @@ fn tokenize_mode_recovering(
 /// literal or character stood and complains about it at the same spot. An error
 /// that starts in a lex error's span, or at the token right after it, is that
 /// echo and is dropped; every other syntax error stays. `tokens` is the
-/// recovering lex's token list.
+/// recovering lex's token list. A heuristic: a genuine syntax error at that next
+/// token (the `fn` after a stray character on its own line) is dropped with the
+/// echo, and surfaces once the lexical error is fixed.
 pub fn without_lex_echoes(
     lex_errors: &[CompileError],
     tokens: &[Token],

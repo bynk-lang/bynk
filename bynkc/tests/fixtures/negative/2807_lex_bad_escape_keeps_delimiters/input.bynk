@@ -1,0 +1,9 @@
+commons demo
+
+fn show(s: String, n: Int) -> String { s }
+
+fn bad() -> String {
+  show("a\q", 1)
+}
+
+fn label() -> String { 1 }
