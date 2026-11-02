@@ -513,7 +513,9 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
           // Streamed: the first chunk is readable while the server still holds
           // the rest of the body open.
           const first = await within(it.next(), 5000, "first chunk");
-          assert.deepEqual([...first.value], [...bytes.subarray(0, 64)]);
+          // Chunk boundaries aren't guaranteed: any non-empty prefix will do.
+          assert.ok(first.value.length > 0 && first.value.length <= 64);
+          assert.deepEqual([...first.value], [...bytes.subarray(0, first.value.length)]);
           // Wait out the timeout (measured from before the request began),
           // with the body still open. A timeout that covered the body would
           // abort it here.
