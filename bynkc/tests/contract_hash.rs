@@ -229,6 +229,16 @@ fn manifest_provides_equals_the_hash_the_entry_enforces() {
             let worker = d.file_name().to_string_lossy().to_string();
             for (svc, h) in provides {
                 checked += 1;
+                // A foreign caller's recorded hash is the one the entry enforces.
+                if let Some(actors) = manifest["foreign"].as_object() {
+                    for (actor, svcs) in actors {
+                        if let Some(fh) = svcs.get(svc).filter(|fh| *fh != h) {
+                            problems.push(format!(
+                                "{fx}/{worker}: foreign {actor}.{svc}={fh} differs from provides {h}"
+                            ));
+                        }
+                    }
+                }
                 if enforced.get(svc).map(String::as_str) != h.as_str() {
                     problems.push(format!(
                         "{fx}/{worker}: manifest provides {svc}={h}, index.ts enforces {:?}",
