@@ -1,0 +1,10 @@
+commons shop
+
+uses pricing
+uses labels
+
+// #2702: `Tag` here is `labels`'s public one, although `pricing` is used first.
+
+fn tag_name(t: Tag) -> String {
+  t.name
+}

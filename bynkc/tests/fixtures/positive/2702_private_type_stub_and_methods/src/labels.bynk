@@ -1,0 +1,7 @@
+commons labels
+
+type Tag = { name: String }
+
+fn Tag.label(self) -> String {
+  self.name
+}

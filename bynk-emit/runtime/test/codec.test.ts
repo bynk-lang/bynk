@@ -5,6 +5,7 @@ import { Ok, Err, None, Some } from "../src/result.ts";
 import type { Result } from "../src/result.ts";
 import type { BoundaryError, JsonValue } from "../src/boundary.ts";
 import { __BynkKeySet, __BynkKeyMap } from "../src/keys.ts";
+import { __bynkDecimalParseWire, __bynkDecimalToString } from "../src/decimal.ts";
 import {
   __bynkCodecList,
   __bynkCodecMap,
@@ -129,4 +130,35 @@ test("map: entries, a composite key held in a keyed map, and entry errors", () =
   });
   const plain = __bynkCodecMap(str, int).decode([["a", 1]], "$");
   assert.ok(plain.tag === "Ok" && !(plain.value instanceof __BynkKeyMap) && plain.value.get("a") === 1);
+});
+
+test("map: a repeated key is refused, not last-entry-wins (#2707)", () => {
+  const dup = (path: string) => ({
+    tag: "Err",
+    error: { kind: "StructuralMismatch", path, expected: "a distinct map key", actual: "a duplicate" },
+  });
+  assert.deepEqual(__bynkCodecMap(str, int).decode([["a", 1], ["b", 2], ["a", 3]], "$"), dup("$[2][0]"));
+  assert.deepEqual(__bynkCodecMap(point, int).decode([[{ x: 1 }, 1], [{ x: 1 }, 2]], "$"), dup("$[1][0]"));
+  // Distinct keys still decode, in insertion order.
+  const ok = __bynkCodecMap(str, int).decode([["a", 1], ["b", 2]], "$");
+  assert.ok(ok.tag === "Ok" && [...ok.value.keys()].join() === "a,b");
+});
+
+test("map: duplicates are detected on the canonical key, not the wire text (#2707)", () => {
+  const dec = {
+    encode: (v: unknown): JsonValue => __bynkDecimalToString(v as never),
+    decode: (j: JsonValue, path: string): Result<unknown, BoundaryError> => {
+      const r = typeof j === "string" ? __bynkDecimalParseWire(j) : None;
+      return r.tag === "Some"
+        ? Ok(r.value)
+        : Err({ kind: "StructuralMismatch", path, expected: "Decimal", actual: String(j) });
+    },
+  };
+  const c = __bynkCodecMap(dec, int);
+  assert.deepEqual(c.decode([["1.20", 1], ["1.2", 2]], "$"), {
+    tag: "Err",
+    error: { kind: "StructuralMismatch", path: "$[1][0]", expected: "a distinct map key", actual: "a duplicate" },
+  });
+  const ok = c.decode([["1.20", 1], ["1.3", 2]], "$");
+  assert.ok(ok.tag === "Ok" && ok.value.size === 2);
 });

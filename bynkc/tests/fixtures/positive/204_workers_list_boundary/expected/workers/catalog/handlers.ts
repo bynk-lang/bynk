@@ -137,6 +137,9 @@ export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "
     return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
   }
   const __k = entryK;
+  if (out.has(__k as string)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+  }
   if (typeof entryV !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
   }
