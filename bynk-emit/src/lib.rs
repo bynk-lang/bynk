@@ -87,7 +87,14 @@ fn check_single_file(
     source: &str,
     mode: SingleFileMode,
 ) -> Result<(checker::CheckedProgram, Vec<CompileError>), Vec<CompileError>> {
-    let tokens = lexer::tokenize(source).map_err(|e| vec![e])?;
+    // #2807: a lexical error is reported with the rest of the file's, but the
+    // file is still refused.
+    let (tokens, lex_errors) = lexer::tokenize_recovering(source);
+    if !lex_errors.is_empty() {
+        return Err(bynk_check::recovery::diagnose_unparsable(
+            &tokens, source, lex_errors,
+        ));
+    }
     // ADR 0117: parse-time warnings (orphan doc blocks) ride alongside the
     // AST — they surface with the build's warnings instead of failing it.
     let (commons, mut warnings) = match parser::parse_with_warnings(&tokens, source) {

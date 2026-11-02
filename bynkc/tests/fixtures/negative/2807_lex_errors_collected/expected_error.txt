@@ -1,0 +1,5 @@
+# exact
+bynk.lex.unexpected_character unexpected character `$`
+bynk.lex.unexpected_character unexpected character `~`
+bynk.types.return_mismatch function body has type `Int`, but the declared return type is `String`
+bynk.types.return_mismatch function body has type `String`, but the declared return type is `Bool`

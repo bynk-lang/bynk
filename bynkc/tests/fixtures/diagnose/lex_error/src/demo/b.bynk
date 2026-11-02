@@ -1,0 +1,3 @@
+commons demo.b
+
+fn flag() -> Bool { "x" }

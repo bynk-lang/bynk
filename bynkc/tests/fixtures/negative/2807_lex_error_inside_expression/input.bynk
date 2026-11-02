@@ -1,0 +1,7 @@
+commons demo
+
+fn total(a: Int, b: Int) -> Int {
+  a + # b
+}
+
+fn label() -> String { 1 }

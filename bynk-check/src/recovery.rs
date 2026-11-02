@@ -26,6 +26,13 @@ pub fn diagnose_unparsable(
         broken_decl_names,
     } = parser::parse_units_recovering(tokens, source);
     let (recovered, _warnings) = bynk_syntax::partition_by_severity(errors);
+    // #2807: lexical errors among `strict` left gaps the parser tripped over.
+    let lex_errors: Vec<CompileError> = strict
+        .iter()
+        .filter(|e| e.category.starts_with("bynk.lex."))
+        .cloned()
+        .collect();
+    let recovered = bynk_syntax::lexer::without_lex_echoes(&lex_errors, tokens, recovered);
     let mut out = parser::merge_syntax_errors(strict, recovered);
     if let Some(SourceUnit::Commons(commons)) = units.into_iter().next() {
         let item_spans: Vec<_> = commons.items.iter().map(|i| i.span()).collect();

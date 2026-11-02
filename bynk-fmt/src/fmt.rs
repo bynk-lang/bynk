@@ -4521,6 +4521,27 @@ mod tests {
         );
     }
 
+    /// #2807: the lexer recovers past a bad character, but the formatter must
+    /// not: a recovered token list has a gap where the character stood, and
+    /// printing from it would delete the user's text. A file with any lexical
+    /// error is refused, and the error is the lexer's.
+    #[test]
+    fn a_file_with_a_lex_error_is_refused_not_formatted() {
+        for src in [
+            "commons d\n\n$\n\nfn f() -> Int { 1 }\n",
+            "commons d\n\nfn f() -> Int { 1 }\n\nfn g() -> String { \"open }\n",
+            "commons d\n\nfn f() -> Int { 99999999999999999999 }\n",
+        ] {
+            let errs = format_source(src, &FormatOptions::default())
+                .expect_err("a file with a lex error must not format");
+            assert!(
+                errs.errors[0].category.starts_with("bynk.lex."),
+                "{:?}",
+                errs.errors
+            );
+        }
+    }
+
     fn fmt(src: &str) -> String {
         format_source(src, &FormatOptions::default()).expect("format failed")
     }

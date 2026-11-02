@@ -225,22 +225,29 @@ fn cached_parse_in(
     }
 
     let mut recovered = None;
-    let result = match lexer::tokenize_in(content, id) {
-        Ok(tokens) => {
-            match parser::parse_units_with_warnings_from(&tokens, content, &mut state.next_expr_id)
-            {
-                Ok((units, warnings)) => Ok((Arc::new(units), Arc::new(warnings))),
-                Err(errors) => {
-                    recovered = Some(Arc::new(parser::parse_units_recovering_from(
-                        &tokens,
-                        content,
-                        &mut state.next_expr_id,
-                    )));
-                    Err(Arc::new(errors))
-                }
+    // #2807: a lexical error no longer ends the file's analysis. The lexer
+    // recovers past it, so the parser (and, through `recovered`, the checker)
+    // still see everything the lexer could read. The strict result is the
+    // lexical errors then, the build's `Err`, as a syntax error's is.
+    let (tokens, lex_errors) = lexer::tokenize_recovering_in(content, id);
+    let result = if lex_errors.is_empty() {
+        match parser::parse_units_with_warnings_from(&tokens, content, &mut state.next_expr_id) {
+            Ok((units, warnings)) => Ok((Arc::new(units), Arc::new(warnings))),
+            Err(errors) => {
+                recovered = Some(Arc::new(parser::parse_units_recovering_from(
+                    &tokens,
+                    content,
+                    &mut state.next_expr_id,
+                )));
+                Err(Arc::new(errors))
             }
         }
-        Err(e) => Err(Arc::new(vec![e])),
+    } else {
+        let mut rec =
+            parser::parse_units_recovering_from(&tokens, content, &mut state.next_expr_id);
+        rec.errors = lexer::without_lex_echoes(&lex_errors, &tokens, rec.errors);
+        recovered = Some(Arc::new(rec));
+        Err(Arc::new(lex_errors))
     };
     debug_assert!(
         state.next_expr_id < FIRSTPARTY_ID_BASE,
@@ -385,14 +392,15 @@ mod tests {
         assert!(cached_recovery(&clean, "commons demo\n\nfn one() -> Int { 1 }\n").is_none());
     }
 
-    /// #1710: source that doesn't lex has no recovery (there are no tokens to
-    /// recover from); the strict result carries the lexer's error.
+    /// #2807: source that doesn't lex recovers too: the strict result carries
+    /// the lexer's errors, and the recovering parse covers the rest of the file.
     #[test]
-    fn source_that_does_not_lex_has_no_recovery() {
+    fn source_that_does_not_lex_still_recovers() {
         let p = unique_path("unlexable");
-        let src = "commons demo\n\nfn s() -> String { \"unterminated }\n";
+        let src = "commons demo\n\nfn s() -> String { \"unterminated }\n\nfn t() -> Int { 1 }\n";
         assert!(cached_parse(&p, src).1.is_err());
-        assert!(cached_recovery(&p, src).is_none());
+        let rec = cached_recovery(&p, src).expect("a lex error recovers");
+        assert_eq!(rec.units.len(), 1);
     }
 
     /// [DECISION E]: broken syntax is cached too — as an `Err`, not silently

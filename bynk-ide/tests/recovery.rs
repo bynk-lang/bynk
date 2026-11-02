@@ -80,3 +80,35 @@ fn unrelated() -> Int { Other.m() }
         ]
     );
 }
+
+/// #2807: a lexical error used to be the file's only diagnostic. Now the lexer
+/// recovers, so a stray character is reported with the type error beyond it,
+/// and the parse error the skipped character would have caused is not echoed.
+#[test]
+fn a_lex_error_does_not_hide_the_rest_of_the_file() {
+    let src = "commons demo\n\n$\n\nfn label() -> String { 1 }\n";
+    assert_eq!(
+        diagnostics(src),
+        [
+            "bynk.lex.unexpected_character @ 3:1",
+            "bynk.types.return_mismatch @ 5:24"
+        ]
+    );
+    // A character inside an expression: `a + # b` loses the `#` and reads as
+    // `a + b`, with no syntax error beside the lexical one.
+    let src = "commons demo\n\nfn total(a: Int, b: Int) -> Int { a + # b }\n";
+    assert_eq!(diagnostics(src), ["bynk.lex.unexpected_character @ 3:39"]);
+}
+
+/// #2807: every lexical error is reported, not just the first.
+#[test]
+fn every_lex_error_is_reported() {
+    let src = "commons demo\n\n$\n\nfn big() -> Int { 1 }\n\n~\n";
+    assert_eq!(
+        diagnostics(src),
+        [
+            "bynk.lex.unexpected_character @ 3:1",
+            "bynk.lex.unexpected_character @ 7:1"
+        ]
+    );
+}

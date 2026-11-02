@@ -463,12 +463,11 @@ pub fn firstparty_parsed(
 
 /// #1663: every syntax error in `source`, from a recovering parse, when the
 /// strict parse failed with `strict` (its first), merged with it
-/// ([`bynk_syntax::parser::merge_syntax_errors`]). A lex error has no recovery.
+/// ([`bynk_syntax::parser::merge_syntax_errors`]). #2807: a lex error recovers too.
 fn all_syntax_errors(source: &str, strict: Vec<CompileError>) -> Vec<CompileError> {
-    let Ok(tokens) = bynk_syntax::lexer::tokenize(source) else {
-        return strict;
-    };
+    let (tokens, lex_errors) = bynk_syntax::lexer::tokenize_recovering(source);
     let recovered = bynk_syntax::parser::parse_units_recovering(&tokens, source).errors;
+    let recovered = bynk_syntax::lexer::without_lex_echoes(&lex_errors, &tokens, recovered);
     bynk_syntax::parser::merge_syntax_errors(strict, recovered)
 }
 
