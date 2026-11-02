@@ -2066,3 +2066,170 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/patterns.md`, is removed. Code comments that cited its questions
   now cite this entry. Retired 1 November 2026.
+
+- **`idempotency-capability.md`** — spine [#921](https://github.com/bynk-lang/bynk/issues/921):
+  the `Idempotency` capability, mechanical dedup for at-least-once delivery (design notes §4, §12).
+  It scoped the `Idempotency` item of [#554](https://github.com/bynk-lang/bynk/issues/554) out of that
+  review finding.
+  - **The problem.** At-least-once producers (queues, cron, `~>`, and later events) had shipped, but the
+    dedup mechanism the consistency model rests on had not. `Idempotency` did not exist, and §12's
+    worked example did not parse against the shipped grammar in three places: labelled arguments, the
+    `24h` duration literal, and a `?` that could not short-circuit to another invocation's outcome.
+  - **Settling.** The settling PR (#922) was merged without review. A genuine re-settling pass (#924,
+    #927) then closed §3.1, §3.2 and §3.4 and deferred §3.3.
+  - **What the build found.** The settled single-op closure shape does not compile: a closure cannot
+    cross the capability boundary (`bynk.types.function_at_boundary`). The capability shipped as two
+    ops instead. Slice 0 also shipped without the call-site key scoping §3.4 had settled, and a
+    follow-up closed that gap.
+
+  **What shipped** (v0.236.0–v0.237.0):
+  - **Generic capability methods** ([#926](https://github.com/bynk-lang/bynk/issues/926),
+    [ADR 0281](../decisions/0281-generic-capability-methods.md)), the prerequisite cut out of §3.1.
+  - **Slice 0, `dedup`/`remember` and the in-memory provider** ([#929](https://github.com/bynk-lang/bynk/issues/929),
+    v0.236.0, [ADR 0282](../decisions/0282-idempotency-capability-slice0.md)).
+    `dedup[T](key: String) -> Effect[Option[T]]` and
+    `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]`, with the type argument
+    always explicit. Proven by a real `tsc --strict` pass over
+    `bynkc/tests/fixtures/positive/924_idempotency_dedup_basic`.
+  - **Call-site key scoping** ([#934](https://github.com/bynk-lang/bynk/issues/934), v0.237.0,
+    [ADR 0283](../decisions/0283-idempotency-key-scoping.md)). This is a correctness fix to slice 0,
+    not a slice of its own. Pinned by `934_idempotency_key_scoping`.
+  - **Slice 1, event-subscriber sugar.** Settled as a documented convention, with no syntax
+    ([ADR 0294](../decisions/0294-events-idempotency-idiom-is-documented-convention.md)). Nothing was
+    built.
+
+  **Settled decisions** (the sections code comments and the Book cite):
+  - **§3.1, the short-circuit.** No new control-flow construct. The caller `match`es the
+    `Effect[Option[T]]` that `dedup` returns, and on `None` it computes the outcome and calls
+    `remember`. Where the call goes relative to the handler's other effects is convention, not
+    enforced, the same trade-off §13 accepts for `Sagas.compensate`.
+  - **§3.2, one provider, scope narrowed.** There is a single ambient in-memory provider, identical on
+    every platform, so ADR 0016 (no selectable providers) is not implicated. §12's durable half is
+    deferred, not dropped. The direction it points to is a capability with a portable default that a
+    specific platform adapter (`bynk.cloudflare`) may override at the composition root. That is a
+    different axis from the cross-platform portability ADR 0016 rejected, and it would leave the
+    `given Idempotency` call site unchanged. No track was filed: there is no concrete durable-storage
+    design to hang one on yet.
+  - **§3.3, joining the agent's atomic commit.** Deferred with the durable provider. A durable provider
+    would need capability state that commits or aborts with an agent it does not own, and services
+    have no `store` to join at all.
+  - **§3.4, keys and eviction.** Keys are `String`s, usually `Json.encode(...)` at the call site, and
+    calls are positional. Eviction is lazy, matching `Cache` (decision 0113). Every key is prefixed
+    with the calling handler's qualified name (`<unit>.<service or agent>.<handler>`), so two
+    unrelated call sites can never collide. Two callers of the *same* handler can still collide on a
+    key they choose, and keeping those apart is the caller's documented responsibility.
+
+  **Named follow-ons:**
+  - The durable, platform-native provider and the default-plus-platform-override model (§3.2), with
+    §3.3's transactional question. These are unfiled.
+  - Enforcing where the `dedup` call is placed, for example with a lint (§3.1).
+
+  This track's doc, `design/tracks/idempotency-capability.md`, is removed. Code comments that cited
+  its sections now cite this entry or its ADRs. Retired 2 November 2026.
+
+- **`events.md`** — spine [#936](https://github.com/bynk-lang/bynk/issues/936): in-system pub-sub
+  for cross-context decoupling (design notes §7, and the §12 event-subscriber idiom).
+  - **The problem.** Contexts could call each other but not publish facts to an open set of
+    subscribers. §7 was a large, opinionated spec, so settling was mostly triage. The two
+    substrate-level unknowns, the fan-out substrate and per-publisher ordering on Cloudflare, were
+    the genuinely open questions.
+  - **What it built.** `event` declarations, `given Events` emission, and `from Events(E)` subscriber
+    services. Subscriptions filter by payload pattern and by `via schema(...)` version. Every delivery
+    carries an envelope, and additive versioning rests on a cross-build schema registry.
+  - **What the build found.** The pattern filter is an Events-local node, not the shared
+    refined-pattern machinery §3.3 claimed. Delivery is filtered, but the handler's parameter is not
+    statically narrowed. `publisherId` is the emitting *context*, because a keyless service handler
+    can emit too. Per-publisher FIFO is narrower than §7 asserted. Two defects were found and fixed
+    along the way: on Workers, an event's payload and envelope were never validated on receipt
+    ([#973](https://github.com/bynk-lang/bynk/issues/973)), and a consumed type nested in a generic
+    was emitted unqualified in a subscriber's codec
+    ([#977](https://github.com/bynk-lang/bynk/issues/977)).
+
+  **What shipped** (v0.238.0–v0.244.0, then v0.471.0):
+  - **Foundational ADRs, before slice 0:**
+    [ADR 0284](../decisions/0284-events-fanout-substrate.md) (the substrate),
+    [ADR 0285](../decisions/0285-events-protocol-set-extension.md) (the sixth protocol),
+    [ADR 0286](../decisions/0286-events-pattern-dispatch-deliver-and-filter.md) (deliver-and-filter)
+    and [ADR 0287](../decisions/0287-events-replay-out-of-scope.md) (replay split out).
+  - **Slice 0, the emit/subscribe loop** ([#939](https://github.com/bynk-lang/bynk/issues/939),
+    [ADR 0288](../decisions/0288-events-slice0-fanout-implementation.md),
+    [ADR 0289](../decisions/0289-events-owner-only-emission-check.md)), on all three platforms.
+  - **Per-publisher FIFO, measured** ([ADR 0290](../decisions/0290-events-per-publisher-fifo-scope.md)),
+    by `bynkc/tests/events_ordering_workerd.rs` on real `workerd`.
+  - **Slice 1, subscription pattern filtering** ([#966](https://github.com/bynk-lang/bynk/issues/966),
+    [ADR 0291](../decisions/0291-events-subscription-pattern-local-node.md)).
+  - **Slice 2, the envelope and the idempotency idiom** ([#968](https://github.com/bynk-lang/bynk/issues/968),
+    [ADR 0292](../decisions/0292-events-envelope-publisher-id-amendment.md),
+    [ADR 0293](../decisions/0293-events-envelope-mint-once-and-minting-mechanism.md),
+    [ADR 0294](../decisions/0294-events-idempotency-idiom-is-documented-convention.md)).
+  - **Boundary validation** ([#973](https://github.com/bynk-lang/bynk/issues/973),
+    [ADR 0295](../decisions/0295-events-boundary-validation.md)).
+  - **Slice 3a, event field defaults** ([#972](https://github.com/bynk-lang/bynk/issues/972),
+    [ADR 0297](../decisions/0297-events-field-defaults.md)).
+  - **Slice 3b, `@schema(N)`** ([#978](https://github.com/bynk-lang/bynk/issues/978),
+    [ADR 0298](../decisions/0298-events-schema-annotation.md)).
+  - **Slice 3c, the cross-build schema registry** ([#980](https://github.com/bynk-lang/bynk/issues/980),
+    [ADR 0299](../decisions/0299-events-schema-registry.md)). This is `bynk.schema.lock`. An
+    additive change bumps the version automatically, and any other change fails the build.
+  - **Slice 4, `via schema(N)` dispatch** ([#985](https://github.com/bynk-lang/bynk/issues/985),
+    [ADR 0300](../decisions/0300-events-schema-dispatch.md)), on literal versions only.
+  - **Slice 4b, range patterns and `_` in `via schema(...)`** ([#990](https://github.com/bynk-lang/bynk/issues/990)).
+    This was built jointly with patterns slice 5 ([#2699](https://github.com/bynk-lang/bynk/issues/2699),
+    v0.471.0, [ADR 0689](../decisions/0689-range-patterns.md)) through one shared range production. The
+    earlier, separate implementation ([#1601](https://github.com/bynk-lang/bynk/pull/1601)) was closed
+    as superseded.
+
+  **Settled decisions** (the sections code comments and design docs cite):
+  - **§3.0, what §7 already settled.**
+    - **Type-as-topic routing:** every emission of `E` is offered to every subscriber of `E`.
+    - **Owner-only emission:** only the context that declares `E` may emit it.
+    - **Release-at-commit:** emission is buffered and flushed when the handler commits, so an aborted
+      handler emits nothing (as for outbound agent calls, ADR 0106).
+    - **Subscribers are services, not agents.**
+    - **Failure isolation:** each subscriber has its own invocation and transaction.
+    - **Additive versioning:** by field defaults; breaking changes are new event types by convention.
+    - **At-least-once:** effectful subscribers dedup on `env.eventId` with `Idempotency`.
+  - **§3.1, the substrate.** Emission fans out through a Durable Object. It is the only candidate that
+    can honestly deliver per-publisher ordering and failure isolation, and it is the natural owner of
+    a future replay log. Queue-per-topic stays a documented future optimisation for the high-fan-out,
+    ordering-relaxed case (ADR 0284).
+  - **§3.2, the protocol set.** Events is the sixth member of ADR 0079's closed protocol set, and its
+    header takes an event-type argument (ADR 0285).
+  - **§3.3, subscription patterns.** Deliver-and-filter. The guard is generated from the type-checked
+    pattern and runs as the first line of the subscriber's body. There is no cross-subscriber
+    ambiguity check and no static narrowing (ADRs 0286, 0291).
+  - **§3.4, per-publisher FIFO.** Ordering holds within one emission batch and across successive,
+    non-overlapping calls to one agent. It does **not** hold across concurrent invocations of the same
+    agent. The fan-out DO is a stateless router that yields at every delivery, and the publisher's
+    flush runs after `commitState` reopens the agent's storage gate. There is no cross-publisher
+    ordering. The emitter was deliberately left unchanged (ADR 0290), so a subscriber that must not
+    see those reorderings carries its own sequence number.
+  - **§3.5, the schema registry.** `bynk.schema.lock` is written on a clean build. A declared
+    `@schema(N)` is verified against the registry, not trusted (ADR 0299).
+  - **§3.6, replay and backfill.** Split out to a future, unfiled track, together with the actors Q8
+    ([#260](https://github.com/bynk-lang/bynk/issues/260)). Replay needs a durable event log and the
+    durable `Idempotency` provider, and neither exists. This track ships the seams: `eventId` and
+    `schemaVersion` on every envelope, and a substrate that can own a log (ADR 0287).
+  - **§6, the threat model.**
+    - **Owner-only emission** is a compile error, and the primary boundary guarantee: a context cannot
+      fabricate a peer's facts.
+    - **Pattern filtering** is proven in both directions by `events_pattern_behaviour.rs`.
+    - **Validation:** payload and envelope are validated at the receiving `/_bynk/event/` route.
+      Anything malformed gets a `400`, which the fan-out DO's per-subscriber catch logs. That one
+      delivery is lost, and its siblings are unaffected. There is no dead-letter policy for Events;
+      that exists only for a native `on queue` consumer.
+    - **Missing keys:** a missing key for a field with a default is filled, not rejected.
+    - **Dedup across restarts:** the in-memory `Idempotency` provider does not survive a crash, so a
+      duplicate across an isolate restart is not deduped.
+
+  **Named follow-ons:**
+  - Replay and backfill, and the actors Q8 (§3.6, #260).
+  - Queue-per-topic as a high-fan-out optimisation (§3.1).
+  - Server-side pre-filtering of subscriptions, which would preserve semantics (§3.3).
+  - Static narrowing of a matched subscription's fields (§3.3).
+  - Ordering across concurrent invocations of one agent, which would need a substrate change (§3.4).
+
+  Every "done when" item in the track doc was met. The one unticked box, stating that replay is not
+  delivered, is satisfied by §3.6 and ADR 0287. This track's doc, `design/tracks/events.md`, is
+  removed. Code comments that cited its sections now cite this entry or its ADRs. Retired
+  2 November 2026.

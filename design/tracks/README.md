@@ -83,7 +83,6 @@ each track's spine issue; this table is deliberately just the map.
 | [`concurrent-effects.md`](concurrent-effects.md) | [#2615](https://github.com/bynk-lang/bynk/issues/2615) | Settled (#2635); slicing next — slice 0 first | Concurrent effect composition: a block that issues several independent effects and waits for them all, settle-all fault and source-order error semantics, joins in agent handlers and tests, and a general timeout; cancellation a non-goal |
 | [`constrained-generics.md`](constrained-generics.md) | [#2614](https://github.com/bynk-lang/bynk/issues/2614) | Settled (#2630); slicing next — slice 0 first | Constrained generics: declared bounds on type parameters — a closed constraint set (`Eq`, `Ord`, `Key`, `Codable`), how types satisfy it, witness passing under erasure, and what must land before the 1.0 freeze |
 | [`first-party-registry.md`](first-party-registry.md) | [#2308](https://github.com/bynk-lang/bynk/issues/2308) | Settled (#2309); slicing next — R0, L1, L2 and R5b can start at once | The first-party registry (packaging slice 4b): a hosted Bynk service written in Bynk, in this repo until go-live; its `bynk-std` prerequisites, accounts and organisations, key custody, conformance, and setting `FIRST_PARTY` |
-| [`idempotency-capability.md`](idempotency-capability.md) | [#921](https://github.com/accuser/bynk/issues/921) | Slicing (slice 0 shipped, #929; call-site key scoping follow-up shipped, #934) | The `Idempotency` capability: mechanical dedup for at-least-once delivery, per design notes §4, §12 |
 | [`packaging.md`](packaging.md) | [#843](https://github.com/bynk-lang/bynk/issues/843) | Settled (#2199); slice 1 (manifest & workspace surface, #2207) shipped, slice 2 (resolution) next | Packaging & distribution: the package unit, `org/package` identity without renaming units, single-version resolution and `bynk.lock`, and a registry *protocol* run first-party and privately, with only the `bynk` driver touching the network |
 | [`post-trajectory-crate-hygiene.md`](post-trajectory-crate-hygiene.md) | [#1533](https://github.com/accuser/bynk/issues/1533) | Settling | READMEs, crate-local unit tests, comment rewrite, and module decomposition left open after the compiler-trajectory's eight phases closed — internal-architecture theme, not language surface, continuing the posture `compiler-architecture.md`/`crate-decomposition.md`/`content-ownership.md` took |
 | [`standard-library.md`](standard-library.md) | [#1936](https://github.com/accuser/bynk/issues/1936) | Slicing (S0 shipped, #1940) | The standard library: its four layers (kernel, commons, the `bynk` surface, `bynk.cloudflare`), its placement in a `bynk-std` crate and its 1.0 promise, derived capabilities for context-owned platform resources (`capability Sessions = Kv`), and the order in which the Workers surface is admitted |
@@ -94,7 +93,7 @@ was opened retroactively. `lsp-foundations.md` (now retired) was the first
 track to run the ADR 0167 flow from the start — spine issue first, doc via a
 settling draft PR; `testing-the-boundary.md` (now retired) was the second;
 `locale-capability.md` (now retired) was the third; `message-bundles.md`
-(now retired) was the fourth; `idempotency-capability.md` is the fifth;
+(now retired) was the fourth; `idempotency-capability.md` (now retired) was the fifth;
 `compiler-architecture.md` (now retired) was the sixth, and its theme was
 internal architecture rather than language surface — as `crate-decomposition.md`
 and `increment-allocation.md`, both retired, were before it.
@@ -229,6 +228,21 @@ A retired track's closing summary — what shipped, which ADRs carry its
 decisions, the named follow-ons — is kept for the record in
 [`../archive/retired-tracks.md`](../archive/retired-tracks.md):
 
+- **`events.md`** — spine [#936](https://github.com/bynk-lang/bynk/issues/936): in-system
+  pub-sub for cross-context decoupling. `event` declarations with owner-only emission (ADR 0289),
+  `given Events` releasing at handler commit, and `from Events(E)` subscriber services as the sixth
+  protocol (ADR 0285), over a fan-out Durable Object (ADRs 0284, 0288). Subscriptions filter by
+  payload pattern (ADRs 0286, 0291) and by `via schema(...)` version (ADR 0300); the envelope carries
+  a once-minted `eventId` for the `Idempotency` idiom (ADRs 0292–0294); additive versioning rests on
+  field defaults, `@schema(N)` and the `bynk.schema.lock` registry (ADRs 0297–0299). Per-publisher
+  FIFO was measured and scoped narrower than asserted (ADR 0290). Replay is split out (ADR 0287).
+  Slices 0–4 shipped v0.238.0–v0.244.0; 4b with patterns slice 5. Retired 2 November 2026.
+- **`idempotency-capability.md`** — spine [#921](https://github.com/bynk-lang/bynk/issues/921):
+  mechanical dedup for at-least-once delivery. `given Idempotency` is two ordinary generic capability
+  methods, `dedup[T]` and `remember[T]` (ADRs 0281, 0282), with one in-memory provider and every key
+  prefixed by the calling handler's qualified name (ADR 0283). The event-subscriber idiom is a
+  documented convention (ADR 0294). The durable provider is out of scope. Shipped v0.236.0–v0.237.0.
+  Retired 2 November 2026.
 - **`patterns.md`** — spine [#2616](https://github.com/bynk-lang/bynk/issues/2616):
   destructuring and richer patterns. Records are matched and destructured by field, always open
   with a required `..` (ADRs 0669, 0670), in `match`, `is`, `let` (ADR 0675) and lambda parameters

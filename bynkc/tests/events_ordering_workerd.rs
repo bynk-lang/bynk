@@ -1,4 +1,4 @@
-//! Events track (spine #936), `design/tracks/events.md` §3.4 — empirical
+//! Events track (spine #936, retired; §3.4 in `design/archive/retired-tracks.md`, ADR 0290) — empirical
 //! per-publisher FIFO ordering on a real Cloudflare Durable Object.
 //!
 //! Slice 0 (#939, PR #951) shipped the fan-out DO but explicitly left §3.4
