@@ -1,0 +1,35 @@
+---
+#2825: a service returns refined values and the consumer declares a type of the
+same name. The brands are per context, so the consumer's lowering of the call
+casts the result to its own declaration, bare, nested in a `List`, and beside a
+provider type the consumer does not declare (which stays provider-qualified).
+---
+context boundary.provider
+
+type Reply = String where MaxLength(8)
+type Fault = { code: Int }
+type Handle = opaque String where MaxLength(8)
+
+service reply {
+  on call(n: Int) -> Effect[Result[Reply, Int]] {
+    Effect.pure(Err(n))
+  }
+}
+
+service replies {
+  on call(n: Int) -> Effect[List[Reply]] {
+    Effect.pure([])
+  }
+}
+
+service mixed {
+  on call(n: Int) -> Effect[Result[Reply, Fault]] {
+    Effect.pure(Err(Fault { code: n }))
+  }
+}
+
+service handle {
+  on call(n: Int) -> Effect[Result[Handle, Int]] {
+    Effect.pure(Err(n))
+  }
+}
