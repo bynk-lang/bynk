@@ -1,0 +1,7 @@
+commons demo
+
+fn wrap(a: Int, b: Int, size: Int) -> Int {
+  (a + b) % size
+}
+
+fn label() -> String { 1 }

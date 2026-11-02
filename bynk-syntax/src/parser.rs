@@ -2115,6 +2115,37 @@ mod tests {
         assert_eq!(c.uses[0].target.joined(), "other.lib");
     }
 
+    /// #2804: `%` is a targeted error, with a fix to `.rem` only for simple operands.
+    #[test]
+    fn percent_is_a_targeted_error_with_a_fix_for_simple_operands() {
+        let err = |expr: &str| {
+            let src = format!("commons m\n\nfn f(n: Int, k: Int) -> Int {{ {expr} }}\n");
+            let errs = parse_str(&src).unwrap_err();
+            assert_eq!(
+                errs[0].category, "bynk.parse.no_remainder_operator",
+                "{expr}"
+            );
+            errs.into_iter().next().unwrap()
+        };
+        let fix = err("n % 2");
+        assert_eq!(fix.suggestions.len(), 1);
+        assert_eq!(fix.suggestions[0].edits[0].1, "n.rem(2)");
+        assert_eq!(
+            fix.suggestions[0].applicability,
+            crate::error::Applicability::MaybeIncorrect
+        );
+        assert_eq!(err("n % k").suggestions[0].edits[0].1, "n.rem(k)");
+        for complex in [
+            "(n + 1) % k",
+            "n * 2 % k",
+            "n % (k + 1)",
+            "-n % k",
+            "n % -k",
+        ] {
+            assert!(err(complex).suggestions.is_empty(), "{complex}");
+        }
+    }
+
     fn parse_unit_str(src: &str) -> Result<SourceUnit, Vec<CompileError>> {
         let toks = tokenize(src).map_err(|e| vec![e])?;
         parse_unit(&toks, src)

@@ -1,0 +1,7 @@
+commons demo
+
+fn parity(n: Int) -> Int {
+  n % 2
+}
+
+fn label() -> String { 1 }

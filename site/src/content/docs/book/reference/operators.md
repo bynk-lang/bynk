@@ -5,7 +5,7 @@ title: Operators & built-ins
 
 | Operator | Arity | Operands | Result | Notes |
 |---|---|---|---|---|
-| `+` `-` `*` `/` | binary | `Int` (or `Float`; or `Decimal` for `+` `-` `*`) | `Int` | arithmetic; no `%`; `/` on `Int` truncates and on `Float` divides, but is not defined on `Decimal` ([below](#decimal-arithmetic)) |
+| `+` `-` `*` `/` | binary | `Int` (or `Float`; or `Decimal` for `+` `-` `*`) | `Int` | arithmetic; no `%` (a `%` is the error `bynk.parse.no_remainder_operator`, which points at `Int.rem` and `Int.mod`, [below](#remainder)); `/` on `Int` truncates and on `Float` divides, but is not defined on `Decimal` ([below](#decimal-arithmetic)) |
 | `-` | unary | `Int` (or `Decimal`) | `Int` | negation |
 | `==` `!=` | binary | same equality-supporting type (compared structurally) | `Bool` | non-associative |
 | `<` `<=` `>` `>=` | binary | two operands of the same [`Ord`](/book/reference/types/#ordering-your-own-types) type | `Bool` | comparison; IEEE on `Float` (`NaN < x` is `false`) |
@@ -35,6 +35,21 @@ Lowest to highest:
 10. postfix: `?`, `.field`, `.method(…)`, calls
 
 So `expect x == 1` parses as `expect (x == 1)`, and `a + b * c` as `a + (b * c)`.
+
+## Remainder {#remainder}
+
+Bynk has no `%` operator. Writing one is the error `bynk.parse.no_remainder_operator`,
+which names the two methods that do the work (`Int.rem` and `Int.mod`, ADR 0660):
+
+| Write | Sign of the result | Same as |
+|---|---|---|
+| `a.rem(b)` | the dividend's (`(-7).rem(2)` is `-1`) | C, Java and JavaScript's `%` |
+| `a.mod(b)` | the divisor's (`(-7).mod(2)` is `1`) | Python's `%` |
+
+When both operands are plain names or integer literals, the error offers a quick fix (never applied automatically, since only `Int` has `rem`) that
+rewrites `n % 2` to `n.rem(2)`; check that you wanted the dividend's sign, and change
+it to `.mod` for a cyclic index. Any other operand, such as `(a + b) % size`, gets the
+explanation without a fix.
 
 ## Decimal arithmetic
 
