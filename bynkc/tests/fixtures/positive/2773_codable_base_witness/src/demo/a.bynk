@@ -1,0 +1,11 @@
+---
+#2773: a `Codable` witness over a base type is built inline and names the codec
+types, so the importing module must bring them in even with no codec root.
+---
+commons demo.a
+
+fn enc[T: Codable](v: T) -> String { Json.encode(v) }
+
+type Packed[T: Codable] = { json: String }
+
+fn Packed.pack(v: T) -> Packed[T] { Packed { json: Json.encode(v) } }

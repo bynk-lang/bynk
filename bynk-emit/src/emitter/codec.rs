@@ -116,6 +116,12 @@ impl<'a> CodecGen<'a> {
         let tys = self.commons.tys();
         let tref: TypeRef = super::ty_to_type_ref(ty, tys)
             .unwrap_or_else(|| unreachable!("bynk internal error: no TypeRef for a codec target"));
+        // #2773: the pair's signatures and inline base-type arms name `Result`,
+        // `JsonValue` and `BoundaryError`, whether or not the type yields a
+        // codec root; a module that curates its imports (a test module) needs
+        // them brought in.
+        self.runtime_use.note_json_codec();
+        self.runtime_use.note_boundary_codec();
         bynk_ts::print_expr(&serialisation::witness_codec_expr(&tref, self.runtime_use))
     }
 }

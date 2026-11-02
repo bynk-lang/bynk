@@ -1,0 +1,9 @@
+suite demo.a
+
+case "a base-type witness in a test module" {
+  expect enc(7) == "7"
+}
+
+case "a base-type witness at a static" {
+  expect Packed.pack(7).json == "7"
+}
