@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.10** | Regression fixtures pin that a flattened `Locale.current()` types as `LocaleTag` without `uses bynk.locale.types` (#2697, resolved by #2634) |
+| **v0.480.9** | "A handler parameter named like its service no longer shadows the service in the generated `__makeSurface` method; the surface renames the parameter to `__id_<name>`" |
+| **v0.480.8** | "`bynk_compile` reports each service's `on call` handler signature (`entries`) from the checker's resolved types, so the playground can build a run's arguments without its own source scanner" |
 | **v0.480.7** | "`bynk test --smoke` warns (`bynk.test.smoke_undeclared_status`) when a route answers a non-5xx status its handler does not declare, on stderr and as a `warnings` array on the case in `json` and `ndjson`" |
 | **v0.480.6** | A troubleshooting page for `bynk.agent.non_additive_state_change` |
 | **v0.480.5** | "Agent schema lock: tests pin the gained-default version bump and the unexplained-difference refusal, and the path backfill is guarded on a snapshot with no recorded paths" |
