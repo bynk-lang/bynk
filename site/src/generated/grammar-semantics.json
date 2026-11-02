@@ -338,6 +338,10 @@
       "summary": "A test body addresses an http route / cron schedule / queue message the service does not declare."
     },
     {
+      "code": "bynk.test.smoke_undeclared_status",
+      "summary": "A smoke case (`bynk test --smoke`) gets a non-5xx answer whose status is not among those its route's handler declares; the case still passes (warning)."
+    },
+    {
       "code": "bynk.test.stale_needs_timestamp",
       "summary": "A case drives `by Stale` at a `Signature` route whose actor declares no `timestamp` header and `tolerance`, so there is no replay window for the seam to refuse a stale signature by."
     },

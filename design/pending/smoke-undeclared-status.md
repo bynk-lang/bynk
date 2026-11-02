@@ -1,5 +1,6 @@
 ---
 level: patch
+probes: ts_writes, diagnostic_coverage
 changelog: "`bynk test --smoke` warns (`bynk.test.smoke_undeclared_status`) when a route answers a non-5xx status its handler does not declare, on stderr and as a `warnings` array on the case in `json` and `ndjson`"
 ---
 
