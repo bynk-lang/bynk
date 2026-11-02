@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "**Breaking:** a `bynk.crypto` `SigningKey` or `VerifyKey` is no longer `Codable`, at any depth: `Json.encode`, `Json.decode`, a `T: Codable` bound and `Queue.sendValue` refuse one (`bynk.types.json_uncodable` / `bynk.types.not_codable`, with a note naming the key), so a key can no longer be encoded and sent. A program that encoded or decoded a key must keep the key bytes in `Secrets` and import the key again where it is used. The declaration-position check (`bynk.types.key_at_boundary`) and in-process uses such as `Crypto.sign(key, …)` are unchanged (#2784)"
----
+# 0704 — A crypto key is not Codable
 
-## ADR: crypto-keys-are-not-codable
-title: A crypto key is not Codable
-summary: The shared Codable predicate rejects SigningKey and VerifyKey at any depth
+- **Status:** Accepted (v0.482)
 
 **Context.** `bynk.crypto` documents `SigningKey` and `VerifyKey` as never
 stored, logged or sent. That held only in declaration positions

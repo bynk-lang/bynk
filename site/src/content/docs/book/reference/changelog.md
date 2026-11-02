@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.481**.
+written against **v0.482**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.482.0** | "**Breaking:** a `bynk.crypto` `SigningKey` or `VerifyKey` is no longer `Codable`, at any depth: `Json.encode`, `Json.decode`, a `T: Codable` bound and `Queue.sendValue` refuse one (`bynk.types.json_uncodable` / `bynk.types.not_codable`, with a note naming the key), so a key can no longer be encoded and sent. A program that encoded or decoded a key must keep the key bytes in `Secrets` and import the key again where it is used. The declaration-position check (`bynk.types.key_at_boundary`) and in-process uses such as `Crypto.sign(key, …)` are unchanged (#2784)" |
 | **v0.481.6** | An unannotated `let`, `<-` binding whose type is or contains the bottom type (a value that only faults, including a faulting lambda bound that way) (`unreachable`, `todo`) is refused with `bynk.types.never_inferred`, and no inlay hint offers `never returns` |
 | **v0.481.5** | "`consumes bynk { TimedOut }` is accepted — a `consumes U { … }` list may name a type U exports, as the `timed_out_not_in_scope` note recommends" |
 | **v0.481.4** | "A test module that calls a `Codable`-bounded generic (or generic static) with a base type such as `Int` now imports the `JsonValue`/`BoundaryError`/`Result` names the inline witness codec uses, instead of failing `tsc` with `Cannot find name '__JsonValue'`" |

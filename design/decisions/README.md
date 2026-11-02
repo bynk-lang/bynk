@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0704](0704-crypto-keys-are-not-codable.md) | **A crypto key is not Codable** (v0.482) — The shared Codable predicate rejects SigningKey and VerifyKey at any depth | Accepted (v0.482) |
 | [0703](0703-never-binding-needs-annotation.md) | **A binding that would infer the bottom type needs an annotation** (v0.481.6) — Where `Ty::Never` may be inferred, and the diagnostic that refuses it elsewhere | Accepted (v0.481.6) |
 | [0702](0702-static-methods-on-generic-types.md) | **A static method on a generic type is generic over the type's parameters, and the expected type is the last source of a generic call's type arguments** (v0.481) — statics on generic types, explicit type arguments `Box.empty[Int]()`, call-site witnesses for statics, the narrowed `method_on_generic_type`, and the expected-type rule for every generic call except capability operations (constrained-generics slice 4) | Accepted (v0.481) |
 | [0701](0701-map-decoder-rejects-duplicate-keys.md) | **The Map boundary decoder rejects a repeated key** (v0.480.16) — A wire Map entries array that repeats a key is a StructuralMismatch, not last-entry-wins | Accepted (v0.480.16) |
