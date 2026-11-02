@@ -4048,6 +4048,7 @@ fn lower_cross_context_service_call(
                         &consumed,
                         cx.cross_context(),
                         &cx.commons().types,
+                        cx.consumed_type_ns(),
                         method,
                         call,
                         cx.in_test_scaffold(),

@@ -1,0 +1,43 @@
+---
+#2828: the return types the #2825 cast did not reach. `Cents` is a commons type
+both contexts `use`, which each rebrands as its own; `Envelope` is a record
+both declare whose field is a refined type of its own, and so is a sum `Outcome`
+whose payload is. `Tagged` names a type the provider owns and exports, which stays
+provider-qualified and needs no cast. Both brands differ per
+context, so the consumer casts each result to its own declarations.
+---
+context boundary.provider
+
+uses lib.money
+
+exports opaque { Token }
+
+type Reply = String where MaxLength(8)
+type Envelope = { reply: Reply }
+type Outcome = | Done(reply: Reply) | Failed(code: Int)
+type Token = opaque String where MaxLength(8)
+type Tagged = { token: Token, n: Int }
+
+service price {
+  on call(n: Int) -> Effect[Result[Cents, Int]] {
+    Effect.pure(Err(n))
+  }
+}
+
+service wrapped {
+  on call(n: Int) -> Effect[Result[Envelope, Int]] {
+    Effect.pure(Err(n))
+  }
+}
+
+service outcome {
+  on call(n: Int) -> Effect[Result[Outcome, Int]] {
+    Effect.pure(Err(n))
+  }
+}
+
+service tagged {
+  on call(n: Int) -> Effect[Result[Tagged, Int]] {
+    Effect.pure(Err(n))
+  }
+}
