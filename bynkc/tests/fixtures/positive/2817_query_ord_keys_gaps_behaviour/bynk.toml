@@ -1,0 +1,6 @@
+[project]
+name = "query-ord-keys-gaps"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

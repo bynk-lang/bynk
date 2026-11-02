@@ -1,0 +1,8 @@
+commons bad
+
+// A built-in receiver: `List.map` takes no explicit type arguments. The
+// post-`type_of` check in `check_method_call` refuses this before the kernel
+// method dispatch ever sees it.
+fn misuse(xs: List[Int]) -> List[Int] {
+  xs.map[Int]((n) => n + 1)
+}

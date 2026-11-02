@@ -1,0 +1,39 @@
+suite demo.gaps
+
+case "sortBy an Option key puts None first" {
+  do Shelf("o").add("x", Some(3), 1.0, 1.0, 1)
+  do Shelf("o").add("y", None, 1.0, 1.0, 2)
+  do Shelf("o").add("z", Some(1), 1.0, 1.0, 3)
+  let names <- Shelf("o").byRank()
+  expect names == ["y", "z", "x"]
+}
+
+case "min and max over Float keys holding a NaN" {
+  do Shelf("n").add("x", None, 2.5, 1.0, 1)
+  do Shelf("n").add("y", None, 0.0, 0.0, 2)
+  do Shelf("n").add("z", None, 1.5, 1.0, 3)
+  let lo <- Shelf("n").minScore()
+  expect lo == Some(1.5)
+  let hi <- Shelf("n").maxScore()
+  expect hi.map((f) => f != f) == Some(true)
+}
+
+case "sortBy an opaque Ord key" {
+  do Shelf("t").add("x", None, 1.0, 1.0, 30)
+  do Shelf("t").add("y", None, 1.0, 1.0, 10)
+  do Shelf("t").add("z", None, 1.0, 1.0, 20)
+  let names <- Shelf("t").byTag()
+  expect names == ["y", "z", "x"]
+}
+
+case "a T: Ord generic key through its witness" {
+  let a = Item { name: "a", rank: None, score: 1.0, div: 1.0, tag: Tag.unsafe(2) }
+  let b = Item { name: "b", rank: None, score: 1.0, div: 1.0, tag: Tag.unsafe(1) }
+  expect keyed([a, b], (i) => i.tag) == ["b", "a"]
+  expect keyed([a, b], (i) => i.name) == ["a", "b"]
+}
+
+case "a held-connection source sorts by a non-base key" {
+  let n <- Shelf("c").openCount()
+  expect n == 0
+}

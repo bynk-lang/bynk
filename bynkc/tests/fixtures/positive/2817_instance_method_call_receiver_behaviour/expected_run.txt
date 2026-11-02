@@ -1,0 +1,2 @@
+# #2817: call-result receiver.
+passed=3 failed=0

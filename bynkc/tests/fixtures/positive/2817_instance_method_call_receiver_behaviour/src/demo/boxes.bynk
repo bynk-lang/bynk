@@ -1,0 +1,14 @@
+---
+#2817: an explicit type-argument list on a method whose receiver is a call result,
+not an identifier chain. The checker admits it through `flatten_ident_chain(receiver)
+.is_none()`.
+---
+commons demo.boxes
+
+type Box[T] = { value: T }
+
+fn Box.cast[U](self) -> Option[U] { None }
+
+fn Box.mapped[U](self, f: (T) -> U) -> Box[U] { Box { value: f(self.value) } }
+
+fn boxed(s: String) -> Box[String] { Box { value: s } }
