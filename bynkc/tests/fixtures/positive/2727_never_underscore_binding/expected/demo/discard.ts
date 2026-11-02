@@ -8,11 +8,12 @@ import { type ValidationError, __fault } from "../__bynk_runtime/errors.js";
  * A discarded binding names nothing that could stand in for another type.
  */
 export function pure_discard(n: number): number {
-  const __r0 = (n < 0 ? __fault("Unreachable", "negative", "demo/discard.bynk:7:22") : undefined);
+  const __r0 = __fault("Unreachable", "discarded", "demo/discard.bynk:7:11");
+  const __r1 = [__fault("Unreachable", "discarded", "demo/discard.bynk:8:12")];
   return n;
 }
 
 export async function effect_discard(n: number): globalThis.Promise<number> {
-  const __r0 = await (n < 0 ? __fault("Unreachable", "negative", "demo/discard.bynk:12:23") : globalThis.Promise.resolve(n));
+  const __r0 = await __fault("Unreachable", "discarded", "demo/discard.bynk:13:12");
   return n;
 }
