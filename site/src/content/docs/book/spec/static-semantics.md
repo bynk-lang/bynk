@@ -1143,6 +1143,18 @@ need to wait" are independent: to *await* a unit-returning effect (a durable
 write that must join the commit) keep the `<-` bind; to await and discard a
 **valued** reply, write `let _ <- e`. A send is a statement, never an expression.
 
+**Delivery guarantee.** A send is **immediate and best-effort**
+([ADR 0106](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0106-async-message-send.md)).
+The effect starts when the statement executes, not at the handler's commit. It is **not
+retried**, and a delivery that fails, or never completes, is **never observed by the
+sender**: the send binds nothing, the handler's result does not depend on it, and a fault in
+it cannot fail or alter the handler. A program MUST NOT rely on a send having been delivered.
+Unlike the producers that promise **at-least-once** delivery, a queue
+message ([ADR 0122](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0122-queue-is-a-delivery-concern.md))
+and an `Events` emission ([§5.7b](#events)), which are redelivered until handled and whose
+consumers are therefore written to be idempotent. A `~>` send carries no such promise. To
+await the effect, or to have its fault reach the handler, use `<-` or `do`.
+
 A send MUST NOT occur in an **agent handler** body, a closure within one included
 (`bynk.send.in_agent_handler`): an agent handler runs inside the agent's Durable
 Object and has no execution context to keep a fire-and-forget effect alive past
