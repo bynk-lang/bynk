@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0713](0713-sort-by-descending.md) | **sortByDescending on List and Query** (v0.490) — Stable exact-reverse sort over any Ord key; discharges ADR 0116's deferral | Accepted (v0.490) |
+| [0712](0712-lexer-error-recovery.md) | **The lexer recovers from a lexical error and reports them all** (v0.489.1) — Skip the offending text, keep lexing, drop the syntax errors it causes, and keep the formatter strict | Accepted (v0.489.1) |
 | [0711](0711-result-sequence.md) | **List sequenceAll and sequenceTry, pure Result accumulation** (v0.489) — Pure kernel methods collecting a List of Results, all errors or the first | Accepted (v0.489) |
 | [0710](0710-no-decode-of-external-opaque.md) | **A context cannot decode a type another context owns and exports opaque** (v0.488) — Json.decode, Codable witnesses and HTTP or queue inputs refuse an externally-owned opaque type; owner service replies keep the structural cast | Accepted (v0.488) |
 | [0709](0709-query-ord-keys.md) | **A Query's sortBy, min and max keys are Ord** (v0.487) — Query shares List's Ord rule and comparators; Float keys take the total order | Accepted (v0.487) |

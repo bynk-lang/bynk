@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: `List` and `Query` gain `sortByDescending`: the exact reverse of `sortBy`'s order, stable on ties (#2805)
----
+# 0713 — sortByDescending on List and Query
 
-## ADR: sort-by-descending
-title: sortByDescending on List and Query
-summary: Stable exact-reverse sort over any Ord key; discharges ADR 0116's deferral
+- **Status:** Accepted (v0.490)
 
 **Context.** ADR 0116 D2 left `sortByDescending` "deferred, not dropped" and said descending is `sortBy` then a reverse. That reverse is not equivalent: it reverses equal keys, breaking the stability `sortBy` has. Probes worked around it with `0 - x` keys. The key set it waited on is now open: any `Ord` type is a key on both `List` and `Query` (ADR 0681, #2787).
 

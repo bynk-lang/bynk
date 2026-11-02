@@ -1,12 +1,6 @@
----
-level: patch
-changelog: A lexical error no longer hides the rest of its file's diagnostics (#2807)
-probes: emit_diagnostics
----
+# 0712 — The lexer recovers from a lexical error and reports them all
 
-## ADR: lexer-error-recovery
-title: The lexer recovers from a lexical error and reports them all
-summary: Skip the offending text, keep lexing, drop the syntax errors it causes, and keep the formatter strict
+- **Status:** Accepted (v0.489.1)
 
 **Context.** `tokenize` returned the tokens or the first lexical error, so one stray
 character, or a half-typed one in the editor, hid every other diagnostic in its file

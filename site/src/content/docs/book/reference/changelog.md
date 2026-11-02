@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.489**.
+written against **v0.490**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.490.0** | `List` and `Query` gain `sortByDescending`: the exact reverse of `sortBy`'s order, stable on ties (#2805) |
+| **v0.489.1** | A lexical error no longer hides the rest of its file's diagnostics (#2807) |
 | **v0.489.0** | `List[Result[T, E]]` gains `sequenceAll()` (every error) and `sequenceTry()` (first error) (#2806) |
 | **v0.488.2** | "`return_mismatch` and `argument_mismatch` suggest `<Type>.of(…)` for a refined or opaque type over the value's base, and `+` on a `String` suggests string interpolation, with a machine-applicable fix for simple operands (#2808)" |
 | **v0.488.1** | Fixtures for explicit type arguments on a built-in or call-result receiver, and for `Query` `sortBy`/`min`/`max` over `Option`, `NaN`, opaque and generic `Ord` keys (#2817) |
