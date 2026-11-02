@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0699](0699-system-tier-call-address-refused.md) | **A system-tier case can't call an `on call` service** (v0.480.2) — bynk.test.call_needs_in_process closes the `/* unknown */` hole for `svc.call(…)` at `system` | Accepted (v0.480.2) |
 | [0698](0698-decimal-base-type.md) | **A built-in exact Decimal base type** (v0.480) — Decimal is an arbitrary-precision base-10 base type with a kept scale, no `/`, a `d` literal, value equality and a JSON-string wire form | Accepted (v0.480) |
 | [0697](0697-explicit-fault-unreachable-todo.md) | **A program can fault deliberately — `unreachable` and `todo`, with a bottom type** (v0.479) — Two ambient built-ins of an internal bottom type raise a runtime fault; `todo` warns | Accepted (v0.479) |
 | [0696](0696-codable-codec-witnesses-and-typed-capability-writes.md) | **`Codable` gives generic code the boundary codec through a hidden witness, and capability operations take `Codable` parameters encoded at the call site** (v0.478) — the `Codable` constraint, `__codec_T` witnesses, container combinators, `Codable` capability-operation parameters encoded at the call site, `Queue.sendValue`, and the amendment of Part 14 clause (iv) and standard-library D4 (constrained-generics slice 3) | Accepted (v0.478) |
