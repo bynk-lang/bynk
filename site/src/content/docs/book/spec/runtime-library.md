@@ -186,8 +186,10 @@ This is internal to the runtime and not part of the published ABI.
   reaches the encoder. A sum's `tag` takes part, so payloads of different variants
   never collide.
 - `__bynkEq` compares the subclasses structurally through `has`/`get`.
-- The set decoder rejects a repeated member by value. The map decoder keeps
-  last-entry-wins.
+- The set decoder rejects a repeated member by value. The map decoder likewise
+  rejects an entry whose decoded key equals an earlier one, as
+  `StructuralMismatch` ("a distinct map key") at `$[i][0]`; the comparison is on
+  the canonical key, so `Decimal` `1.20` and `1.2` collide.
 
 `serialiseAgentKey` (§7.4.4) is a separate function and unchanged: it addresses
 stored durable objects.

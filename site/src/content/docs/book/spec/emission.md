@@ -874,7 +874,11 @@ and **insertion-ordered**, normatively. Per-instantiation helpers
 (`__serialise_List_<T>`, `__deserialise_Map_<K>_<V>`) follow the existing
 `Result`/`Option` pattern: element and entry deserialisation validates
 structurally, re-validates refined types, and reports
-`StructuralMismatch` with an indexed path (`$.orders[3].tags[0][1]`).
+`StructuralMismatch` with an indexed path (`$.orders[3].tags[0][1]`). A `Map`
+entries array that repeats a key is refused the same way, at the repeated key's
+path (`$.orders[3][0]`, expected "a distinct map key"): duplicates are detected
+on the decoded key (for a `Decimal` key, its value, so `"1.20"` and `"1.2"` are
+one key), never on the wire text, and the last entry does not win.
 
 ### §7.3.8 The stdlib kernels (v0.22a)
 

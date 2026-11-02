@@ -370,8 +370,8 @@ obligations follow from Q6 and Q7:
     byte-identically. `serialiseAgentKey` is unchanged.
   - Unchanged on purpose: store `Map`/`Set`/`Cache` and `@indexed` keys (their
     persisted key encoding would be a new frozen format), `Query` keys, and the
-    boundary `Map` decoder's last-entry-wins on a repeated key (#2707, a
-    follow-up).
+    boundary `Map` decoder's last-entry-wins on a repeated key (#2707, since
+    changed to a rejection).
   - `Key` is the one bound a capability operation's type parameter may carry.
 - [x] Slice 3 — `Codable` (#2715)
   - `Codable` is automatic and means exactly what `Json.decode` accepts, as one

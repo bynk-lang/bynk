@@ -117,9 +117,11 @@ export function __bynkCodecMap<K, V>(ck: __BynkCodec<K>, cv: __BynkCodec<V>): __
         }
         const rk = ck.decode(entry[0], `${path}[${i}][0]`);
         if (rk.tag === "Err") return rk;
+        out ??= plainKey(rk.value) ? new Map<K, V>() : new __BynkKeyMap<K, V>();
+        // #2707: a repeated key is refused (by value, on the canonical key), not last-entry-wins.
+        if (out.has(rk.value)) return mismatch(`${path}[${i}][0]`, "a distinct map key", "a duplicate");
         const rv = cv.decode(entry[1], `${path}[${i}][1]`);
         if (rv.tag === "Err") return rv;
-        out ??= plainKey(rk.value) ? new Map<K, V>() : new __BynkKeyMap<K, V>();
         out.set(rk.value, rv.value);
       }
       return Ok(out ?? new Map<K, V>());
