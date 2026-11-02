@@ -1,0 +1,12 @@
+context auth.sessions
+
+consumes tokens { Jwt }
+
+type Token = { id: Int }
+
+service check {
+  on call() -> Effect[Bool] given Jwt {
+    let ok <- Jwt.verify(Token { id: 1 })
+    ok
+  }
+}

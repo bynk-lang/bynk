@@ -39,6 +39,7 @@ pub fn build_capability_op_info(
         return_ty: checker::resolve_type_ref_in(&op.return_type, types, &vars, tys)
             .unwrap_or_else(|| tys.intern(Ty::Unit)),
         codable_params: checker::codable::codable_op_params(op),
+        boundary_conflict: None,
     }
 }
 
@@ -491,6 +492,7 @@ pub fn check_context_declarations(
     // v0.17: flattened capabilities (`consumes U { Cap }`) enter the local map
     // under their bare names, resolved from the consumed unit's exported
     // capability so bare `given Cap` / `Cap.op(…)` type-check as if local.
+    let mut receiving_cache: Option<checker::Projection> = None;
     for (cap, unit) in &cross_context.flattened_caps {
         let Some(xcap) = cross_context
             .consumed_capabilities
@@ -499,31 +501,46 @@ pub fn check_context_declarations(
         else {
             continue;
         };
+        // #2634: an operation may name a type the unit declares but does not
+        // export (an adapter's `Token`), or one the consumer also declares.
+        // As the qualified `U.Cap.op` call does, resolve the signature against
+        // the unit's own table; a name the consumer binds to a structurally
+        // different type is refused (`bynk.boundary.structural_mismatch`)
+        // rather than read as the consumer's. The refusal is per op, at its call.
+        let unit_types = cross_context
+            .consumed_types
+            .get(unit)
+            .unwrap_or(&typed.types);
+        let (receiving, _) = receiving_cache.get_or_insert_with(|| {
+            checker::projected_types(&typed.types, &cross_context.consumed_types, tys)
+        });
         let ops = xcap
             .ops
             .iter()
             .map(|op| {
                 let vars: HashSet<String> = op.type_params.iter().cloned().collect();
+                let mut conflict: Option<(String, String, bool)> = None;
+                let mut resolve = |tr: &TypeRef, in_param: bool| {
+                    let ty = checker::resolve_type_ref_in(tr, unit_types, &vars, tys)
+                        .unwrap_or_else(|| tys.intern(Ty::Unit));
+                    if conflict.is_none()
+                        && let Some(name) =
+                            checker::rebrand_conflict(ty, unit_types, &typed.types, receiving, tys)
+                    {
+                        conflict = Some((unit.clone(), name, in_param));
+                    }
+                    checker::rebrand_return_type(ty, &typed.types, tys)
+                };
+                let params = op.params.iter().map(|(_, tr)| resolve(tr, true)).collect();
+                let return_ty = resolve(&op.return_type, false);
                 CapabilityOpInfo {
                     name: op.name.clone(),
                     type_params: op.type_params.clone(),
-                    params: op
-                        .params
-                        .iter()
-                        .map(|(_, tr)| {
-                            checker::resolve_type_ref_in(tr, &typed.types, &vars, tys)
-                                .unwrap_or_else(|| tys.intern(Ty::Unit))
-                        })
-                        .collect(),
+                    params,
                     param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
-                    return_ty: checker::resolve_type_ref_in(
-                        &op.return_type,
-                        &typed.types,
-                        &vars,
-                        tys,
-                    )
-                    .unwrap_or_else(|| tys.intern(Ty::Unit)),
+                    return_ty,
                     codable_params: op.codable_params.clone(),
+                    boundary_conflict: conflict,
                 }
             })
             .collect();

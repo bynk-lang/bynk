@@ -1,0 +1,9 @@
+[project]
+name = "2647-adapter-type-call-param"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.cloudflare.R2"]
