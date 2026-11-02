@@ -595,6 +595,28 @@ export class WorkersQueue implements Queue {
     await this.producer().send(this.parsed(JSON.stringify(message)), { contentType: "json" });
   }
 
+  // `sendValueWith[T: Codable]`: `sendValue` with `sendWith`'s delay.
+  async sendValueWith(message: unknown, options: QueueSend): Promise<void> {
+    const delaySeconds = this.delaySeconds(options.delay);
+    await this.producer().send(
+      this.parsed(JSON.stringify(message)),
+      delaySeconds === undefined ? { contentType: "json" } : { contentType: "json", delaySeconds },
+    );
+  }
+
+  // `sendValueBatch[T: Codable]`: the call site has encoded the whole list, so
+  // `messages` is a JSON array. Each element goes through `JSON.stringify` and
+  // `JSON.parse` as `sendValue`'s does, and all are parsed before anything is
+  // sent, as `sendBatch` does.
+  async sendValueBatch(messages: unknown): Promise<void> {
+    const encoded = (messages as readonly unknown[]).map((m) => ({
+      body: this.parsed(JSON.stringify(m)),
+      contentType: "json" as const,
+    }));
+    if (encoded.length === 0) return;
+    await this.producer().sendBatch(encoded);
+  }
+
   // All or none: every body is parsed before anything is sent.
   async sendBatch(bodies: readonly string[]): Promise<void> {
     const messages = bodies.map((b) => ({ body: this.parsed(b), contentType: "json" as const }));

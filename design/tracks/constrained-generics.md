@@ -449,7 +449,10 @@ nothing.
   - `Codable` in capability operation return types (`Kv.get[T]`, `query[T]`, and
     standard-library D4's read side): #2791.
   - A user generic type at a rigid parameter (`codec_generic_at_rigid`): #2792.
-  - `Queue` batch and delayed `sendValue`, and `Analytics.write[T]`: #2793.
+  - `Queue` batch and delayed `sendValue`, and `Analytics.write[T]`: #2793
+    (done: `sendValueWith` and `sendValueBatch`; `Analytics.write[T]` was not
+    adopted, as `Codable` gives a record no column mapping and `DataPoint` is
+    already the typed record).
   - The opaque `StructuralOnly` decode gap: #2794.
   - Crypto keys satisfying `Codable` and `Json.*`: #2784.
 - **Slice 4 (static methods, ADR 0702)**

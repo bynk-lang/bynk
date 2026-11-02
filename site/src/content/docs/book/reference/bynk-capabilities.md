@@ -622,6 +622,11 @@ on POST("/orders") (order: Order) -> Effect[HttpResult[String]] by Visitor given
 - `sendValue(message)` takes any `Codable` value and sends exactly the message
   `send(Json.encode(message))` would. The call site does the encoding, so nothing
   can go wrong with the text: `OrderEvents.sendValue(order)`.
+- `sendValueWith(message, QueueSend { delay: Some(30.seconds) })` is `sendWith`
+  for a `Codable` value, with the same delay rules. `sendValueBatch(messages)`
+  is `sendBatch` for a `List` of `Codable` values: all or none, and a message
+  that cannot be encoded faults before anything is sent. The message type is
+  inferred from the arguments.
 
 Text that is not JSON faults the send, and so does going over the platform's
 caps: 128 KB a message, and 100 messages or 256 KB a batch. Delivery is at least

@@ -1,0 +1,6 @@
+[project]
+name = "2793-queue-batch-not-codable"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.crypto", "bynk.cloudflare.Queue"]

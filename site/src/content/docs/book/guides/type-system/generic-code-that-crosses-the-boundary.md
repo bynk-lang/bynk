@@ -49,7 +49,9 @@ service api from http {
 ```
 
 `sendValue(order)` puts exactly the message `send(Json.encode(order))` puts on the
-queue, so a consumer decodes it unchanged.
+queue, so a consumer decodes it unchanged. `sendValueWith(order, options)` adds a
+delay, as `sendWith` does, and `sendValueBatch(orders)` sends a whole `List` in one
+call, as `sendBatch` does.
 
 ## What to know
 

@@ -833,6 +833,49 @@ t("WorkersQueue.sendWith: a delay over 12 hours or below zero faults", async () 
   assert.equal(q.sends.length, 0);
 });
 
+t("WorkersQueue.sendValueWith: puts on the wire exactly what sendWith(Json.encode(v), options) does", async () => {
+  const encoded = { id: 7, note: { kind: "None" }, f: -0, gone: undefined, tags: [["a"], []] };
+  for (const options of [{ delay: Some(90_000) }, { delay: Some(1_500) }, { delay: None }]) {
+    const viaWith = fakeQueue();
+    await new WorkersQueue({ QUEUE_ORDERS: viaWith }, "QUEUE_ORDERS").sendWith(JSON.stringify(encoded), options);
+    const viaValue = fakeQueue();
+    await new WorkersQueue({ QUEUE_ORDERS: viaValue }, "QUEUE_ORDERS").sendValueWith(encoded, options);
+    assert.deepStrictEqual(viaValue.sends, viaWith.sends);
+  }
+});
+
+t("WorkersQueue.sendValueWith: a delay over 12 hours or below zero faults, and a missing binding names it", async () => {
+  const q = fakeQueue();
+  const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");
+  await assert.rejects(queue.sendValueWith(1, { delay: Some(43_201_000) }), /between 0 seconds and 12 hours/);
+  await assert.rejects(queue.sendValueWith(1, { delay: Some(-500) }), /between 0 seconds and 12 hours/);
+  assert.equal(q.sends.length, 0);
+  await assert.rejects(
+    new WorkersQueue({}, "QUEUE_ORDERS").sendValueWith(1, { delay: None }),
+    /requires a queue producer binding \(env\.QUEUE_ORDERS\)/,
+  );
+});
+
+t("WorkersQueue.sendValueBatch: puts on the wire exactly what sendBatch(xs.map(Json.encode)) does", async () => {
+  const items = [{ id: 1, note: { kind: "None" }, f: -0, gone: undefined }, { id: 2, tags: [[], ["x"]] }];
+  const viaBatch = fakeQueue();
+  await new WorkersQueue({ QUEUE_ORDERS: viaBatch }, "QUEUE_ORDERS").sendBatch(items.map((m) => JSON.stringify(m)));
+  const viaValue = fakeQueue();
+  await new WorkersQueue({ QUEUE_ORDERS: viaValue }, "QUEUE_ORDERS").sendValueBatch(items);
+  assert.deepStrictEqual(viaValue.batches, viaBatch.batches);
+  assert.equal(viaValue.batches.length, 1);
+});
+
+t("WorkersQueue.sendValueBatch: an empty list sends nothing, and a missing binding names it", async () => {
+  const q = fakeQueue();
+  await new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS").sendValueBatch([]);
+  assert.equal(q.batches.length, 0);
+  await assert.rejects(
+    new WorkersQueue({}, "QUEUE_ORDERS").sendValueBatch([1]),
+    /requires a queue producer binding \(env\.QUEUE_ORDERS\)/,
+  );
+});
+
 t("WorkersQueue.sendBatch: one call, every body parsed; all or none", async () => {
   const q = fakeQueue();
   const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");

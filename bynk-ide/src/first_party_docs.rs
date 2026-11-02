@@ -91,7 +91,14 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "bynk.cloudflare",
         "Queue",
         "sending-to-a-queue-queue",
-        &["send", "sendWith", "sendBatch", "sendValue"],
+        &[
+            "send",
+            "sendWith",
+            "sendBatch",
+            "sendValue",
+            "sendValueWith",
+            "sendValueBatch",
+        ],
     ),
     (
         "bynk.cloudflare",

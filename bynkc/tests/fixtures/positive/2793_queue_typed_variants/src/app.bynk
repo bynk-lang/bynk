@@ -1,0 +1,21 @@
+context app
+
+consumes bynk.cloudflare { Queue }
+
+type Placed = {
+	id: String,
+	total: Int where NonNegative,
+}
+
+capability Orders = Queue @name("orders")
+
+// #2793: the typed variants of `sendWith` and `sendBatch`, as `sendValue` is of
+// `send`. `T` is inferred from the message and from the list's elements.
+service publish {
+	on call(order: Placed, orders: List[Placed], options: QueueSend) -> Effect[()] given Orders {
+		let _ <- Orders.sendValue(order)
+		let _ <- Orders.sendValueWith(order, options)
+		let _ <- Orders.sendValueBatch(orders)
+		Effect.pure(())
+	}
+}
