@@ -1,0 +1,11 @@
+context auth.sessions
+
+consumes tokens { Jwt }
+
+service login {
+  on call(secret: String) -> Effect[Bool] given Jwt {
+    let token <- Jwt.sign("u1", secret)
+    let ok <- Jwt.verify(token)
+    ok
+  }
+}

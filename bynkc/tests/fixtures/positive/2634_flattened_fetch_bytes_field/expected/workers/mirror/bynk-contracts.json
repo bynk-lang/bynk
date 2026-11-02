@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "note": "3e76afb80fd56834"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "note": "Svc(\"note\",P(\"url\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}
