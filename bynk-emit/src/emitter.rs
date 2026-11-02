@@ -2435,6 +2435,27 @@ fn emit_context_rebrands(
                 None,
             );
             stmts.push(const_decl);
+        } else if ctx
+            .imported_methods
+            .get(name)
+            .is_some_and(|m| !m.is_empty())
+        {
+            // #2751: a record/sum commons type has no `.of`, but its
+            // attached methods are still called as `Type.method(recv)`, which
+            // needs a value `Type` in the context (the rebrand above is only
+            // a type). The value is the commons' own, re-exported unbranded:
+            // its methods already speak types the context's optionally-branded
+            // ones fit, and — unlike a re-declared forwarder — it carries a
+            // generic type's parameters, a bounded method's hidden comparator
+            // and codec witnesses, and a sum's variants unchanged.
+            stmts.push(bynk_ts::TsStmt::decl(
+                bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
+                    name: name.clone(),
+                    ty: None,
+                    init: bynk_ts::TsExpr::Ident(format!("__Commons{name}")),
+                })),
+                None,
+            ));
         }
     }
     // #1486: no explicit trailing blank stmt here — the printer's automatic

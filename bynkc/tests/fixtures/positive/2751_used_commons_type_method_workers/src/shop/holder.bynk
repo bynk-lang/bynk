@@ -1,0 +1,14 @@
+context shop.holder
+
+uses labels
+
+// Only mentions the generic type; no method of it is called here.
+fn size(b: Bag[Int]) -> Int {
+  b.items.count()
+}
+
+service holder {
+  on call(n: Int) -> Effect[Int] {
+    size(Bag { items: [n, n] })
+  }
+}
