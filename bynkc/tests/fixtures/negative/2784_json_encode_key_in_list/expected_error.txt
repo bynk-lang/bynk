@@ -1,0 +1,1 @@
+bynk.types.json_uncodable `List[VerifyKey]` cannot be encoded as JSON

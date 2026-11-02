@@ -5250,7 +5250,7 @@ fn stream_carrying_at_boundary(
 /// types ([`crate::firstparty::CRYPTO_KEY_TYPES`]). Found by the declaration's
 /// span file, which is the unit's reserved first-party id, so a user type that
 /// happens to share the name is not mistaken for one.
-fn is_crypto_key_type(
+pub(crate) fn is_crypto_key_type(
     name: &str,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
 ) -> bool {

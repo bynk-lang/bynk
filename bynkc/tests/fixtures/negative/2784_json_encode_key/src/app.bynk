@@ -1,0 +1,14 @@
+context app
+
+consumes bynk.crypto { Crypto }
+
+// #2784: a key is never sent, so `Json.encode` refuses it.
+service probe {
+	on call(pkcs8: Bytes) -> Effect[String] given Crypto {
+		let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
+		match imported {
+			Err(_) => Effect.pure("error")
+			Ok(key) => Effect.pure(Json.encode(key))
+		}
+	}
+}

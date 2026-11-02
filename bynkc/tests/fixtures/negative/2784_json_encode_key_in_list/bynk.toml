@@ -1,0 +1,6 @@
+[project]
+name = "2784-json-encode-key-in-list"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.crypto"]
