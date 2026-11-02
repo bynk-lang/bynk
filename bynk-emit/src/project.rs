@@ -3428,10 +3428,9 @@ fn build_output(
             kinds.get(*unit) == Some(&UnitKind::Context)
                 && idxs.iter().any(|i| !parsed[*i].is_synthetic())
         })
-        .map(|(unit, _)| {
+        .flat_map(|(unit, _)| {
             bynk_check::entry_signature::entry_handlers(unit, &unit_tables, &unit_uses)
         })
-        .flatten()
         .collect();
     // The integration runnables follow the unit ones.
     let unit_count = runnable_tests.len();
