@@ -1,0 +1,10 @@
+commons pricing
+
+// #2702: `Tag` is private to `pricing`; `labels` declares a public `Tag` of
+// a different shape.
+
+private type Tag = { code: Int }
+
+private fn tag_code(t: Tag) -> Int {
+  t.code
+}
