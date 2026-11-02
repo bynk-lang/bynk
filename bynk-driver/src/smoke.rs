@@ -358,6 +358,19 @@ impl Smoke {
 /// declared type, where an author's own case gets the raw value to judge.
 pub const STRICT_WIRE_ENV: &str = "BYNK_TEST_STRICT_WIRE";
 
+/// #2685: the environment variable `bynk test --smoke` sets for `bynkc`, a JSON
+/// object from each route's key (`<context> <service> <METHOD> <path>`) to the
+/// statuses its handler can answer. `bynk` computes it, since the response set
+/// is walked by `bynk-ide`, which the `bynkc` binary does not carry; the test
+/// runtime warns (`bynk.test.smoke_undeclared_status`) when a smoke case gets a
+/// non-5xx answer outside its route's set. Without it, as in a direct `bynkc
+/// test --smoke`, a smoke run compares nothing.
+pub const DECLARED_ENV: &str = "BYNK_SMOKE_DECLARED";
+
+/// #2685: the code of the warning a smoke case carries for an answer its route
+/// does not declare.
+pub const UNDECLARED_STATUS_CODE: &str = "bynk.test.smoke_undeclared_status";
+
 /// A smoke run ready to build: the options with the synthesised suites in place
 /// of the project's own, and the skips to report.
 pub struct Prepared {

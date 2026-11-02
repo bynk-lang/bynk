@@ -1332,7 +1332,10 @@ case "smoke: PUT /cart/:sku refuses no credential" {
 In a smoke run decoding is strict: a status no `HttpResult` carries, or a JSON
 body that doesn't decode as the route's declared type, fails the case. A route
 `Val` can't fill (a `Matches` type, a principal it can't build) is skipped and
-named with the checker's reason. See
+named with the checker's reason. An `answers` case that gets a non-5xx status
+its route doesn't declare still passes, with a
+`bynk.test.smoke_undeclared_status` warning naming the route, the status and
+the declared statuses. See
 [Smoke-testing every route](/docs/bynk-cli/#smoke-testing-every-route) for
 the flags, and for which routes run against a deployment.
 

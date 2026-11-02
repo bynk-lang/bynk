@@ -150,6 +150,7 @@ fn discover_all(bynkc: &Path, members: &[PathBuf]) -> Option<Vec<(String, String
 
 /// Shell `bynkc test` for one project.
 fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
+    let input = args.input.clone();
     let mut argv: Vec<OsString> = vec!["test".into(), args.input.into_os_string()];
     if let Some(output) = args.output {
         argv.push("--output".into());
@@ -207,20 +208,30 @@ fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
     if args.smoke_unsafe {
         argv.push("--smoke-unsafe".into());
     }
+    // #2685: the statuses each route can answer, which a smoke case's answer is
+    // compared against. The walk is `bynk-ide`'s, so `bynk` makes it and hands
+    // `bynkc` the result; the table is only for a run that calls routes.
+    let declared = (args.smoke && !args.print).then(|| {
+        let table = crate::openapi::declared_statuses(&input);
+        serde_json::to_string(&table).unwrap_or_default()
+    });
+    let mut me = None;
+    let mut env: Vec<(&str, &std::ffi::OsStr)> = Vec::new();
+    if let Some(declared) = &declared {
+        env.push((
+            bynk_driver::smoke::DECLARED_ENV,
+            std::ffi::OsStr::new(declared),
+        ));
+    }
     if starts_dev {
         let me = match std::env::current_exe() {
-            Ok(me) => me,
+            Ok(path) => me.insert(path),
             Err(e) => {
                 eprintln!("bynk test: could not find this `bynk` binary to start `bynk dev`: {e}");
                 return ExitCode::FAILURE;
             }
         };
-        return crate::shell::delegate_with_env(
-            bynkc,
-            argv,
-            &[(bynk_driver::remote::DEV_COMMAND_ENV, me.as_os_str())],
-        );
+        env.push((bynk_driver::remote::DEV_COMMAND_ENV, me.as_os_str()));
     }
-
-    crate::shell::delegate(bynkc, argv)
+    crate::shell::delegate_with_env(bynkc, argv, &env)
 }

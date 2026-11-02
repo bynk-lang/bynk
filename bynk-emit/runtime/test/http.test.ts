@@ -692,6 +692,75 @@ test("responseToHttpResult: strict, a status no HttpResult carries fails", async
   });
 });
 
+// #2685: a smoke run warns when a route answers a non-5xx status outside the
+// set its handler declares (`BYNK_SMOKE_DECLARED`), and never fails the call.
+async function smokeLines(
+  declared: string | undefined,
+  format: string | undefined,
+  answers: Array<[string, number]>,
+): Promise<{ logged: string[]; errored: string[] }> {
+  const env = (globalThis as any).process.env;
+  const console_ = (globalThis as any).console;
+  const was = { declared: env.BYNK_SMOKE_DECLARED, format: env.BYNK_TEST_FORMAT, log: console_.log, error: console_.error };
+  const logged: string[] = [];
+  const errored: string[] = [];
+  if (declared === undefined) delete env.BYNK_SMOKE_DECLARED;
+  else env.BYNK_SMOKE_DECLARED = declared;
+  if (format === undefined) delete env.BYNK_TEST_FORMAT;
+  else env.BYNK_TEST_FORMAT = format;
+  console_.log = (l: string) => logged.push(l);
+  console_.error = (l: string) => errored.push(l);
+  try {
+    await withStrictWire(async () => {
+      for (const [route, status] of answers) {
+        await responseToHttpResult(new Response("", { status }), (j) => ({ tag: "Ok", value: j }) as never, route);
+      }
+    });
+  } finally {
+    console_.log = was.log;
+    console_.error = was.error;
+    for (const [k, v] of [["BYNK_SMOKE_DECLARED", was.declared], ["BYNK_TEST_FORMAT", was.format]] as const) {
+      if (v === undefined) delete env[k];
+      else env[k] = v;
+    }
+  }
+  return { logged, errored };
+}
+
+const SMOKE_TABLE = JSON.stringify({ "shop.api api GET /a": [200, 404] });
+
+test("responseToHttpResult: smoke, an undeclared status warns on stderr", async () => {
+  const { logged, errored } = await smokeLines(SMOKE_TABLE, undefined, [["shop.api api GET /a", 409]]);
+  assert.deepEqual(logged, []);
+  assert.deepEqual(errored, [
+    "warning[bynk.test.smoke_undeclared_status]: `GET /a` (shop.api, service `api`) answered 409 Conflict, which it does not declare; it declares 200, 404",
+  ]);
+});
+
+test("responseToHttpResult: smoke, under ndjson the warning is an event line", async () => {
+  const { logged, errored } = await smokeLines(SMOKE_TABLE, "ndjson", [["shop.api api GET /a", 409]]);
+  assert.deepEqual(errored, []);
+  assert.equal(logged.length, 1);
+  const event = JSON.parse(logged[0]);
+  assert.equal(event.type, "warning");
+  assert.equal(event.code, "bynk.test.smoke_undeclared_status");
+  assert.equal(event.route, "GET /a");
+  assert.equal(event.status, 409);
+  assert.deepEqual(event.declared, [200, 404]);
+});
+
+test("responseToHttpResult: smoke, a declared status, a 5xx, an unknown route and no table are quiet", async () => {
+  const quiet = async (declared: string | undefined, route: string, status: number) => {
+    const { logged, errored } = await smokeLines(declared, undefined, [[route, status]]);
+    assert.deepEqual([logged, errored], [[], []], `${route} ${status}`);
+  };
+  await quiet(SMOKE_TABLE, "shop.api api GET /a", 404);
+  await quiet(SMOKE_TABLE, "shop.api api GET /a", 500);
+  await quiet(SMOKE_TABLE, "shop.api api GET /other", 409);
+  await quiet(undefined, "shop.api api GET /a", 409);
+  await quiet("{not json", "shop.api api GET /a", 409);
+});
+
 // #2341 (decision C): a router rejection rendered through `on rejected`.
 const rawError = (status: number, text: string) =>
   HttpResult.RawError(status, new TextEncoder().encode(text), "text/plain");

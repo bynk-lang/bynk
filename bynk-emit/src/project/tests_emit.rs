@@ -774,8 +774,18 @@ fn emit_integration_module(
 
     // Slice B: the test-only signer + per-route drivers for the target's http
     // service, and the set of http service names so the lowering calls a driver.
-    let http_support =
-        emit_system_http_support(suite, unit_tables, &runtime_use, with_env, remote.is_some());
+    // #2685: a smoke suite (the synthesised `<stem>.smoke.bynk`) names each typed
+    // route to the decoder, so a run can compare an answer with what the route
+    // declares. No other build is changed by it.
+    let smoke = cases.iter().any(|c| c.map_source.ends_with(".smoke.bynk"));
+    let http_support = emit_system_http_support(
+        suite,
+        unit_tables,
+        &runtime_use,
+        with_env,
+        remote.is_some(),
+        smoke,
+    );
     // #1486: `http_support.code`'s own elements print glued (no blank between
     // any of them — the same shape `extend_printed_at` gave them pre-
     // conversion), so every element but the first suppresses the printer's
@@ -1483,6 +1493,8 @@ fn emit_system_http_support(
     // #2138: a remote run signs with the secrets the runner's environment
     // holds, so the fixed test secrets are not assigned over them.
     remote: bool,
+    // #2685: whether the typed drivers name their route to the decoder.
+    smoke: bool,
 ) -> SystemHttpSupport {
     use bynk_syntax::ast::{HandlerKind, ServiceProtocol};
     let mut http_services: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -1835,6 +1847,18 @@ fn emit_system_http_support(
                 Some(p) => crate::emitter::ts_ident(&p.name.name),
                 None => "\"\"".to_string(),
             };
+            // #2685: the typed driver names its route to the decoder, which a
+            // smoke run checks the answer's status against: the context, the
+            // service, the method and the path, as the driver's smoke table
+            // keys them. It reads that table only in a smoke run.
+            let typed_payload = if smoke {
+                format!(
+                    "{payload_deser}, {:?}",
+                    format!("{target} {sname} {} {path}", method.as_str())
+                )
+            } else {
+                payload_deser.clone()
+            };
             routes.push(sysdrive_driver(
                 "",
                 sname,
@@ -1845,7 +1869,7 @@ fn emit_system_http_support(
                 typed_options.clone(),
                 &binding,
                 "__responseToHttpResult",
-                &payload_deser,
+                &typed_payload,
                 signs_claims,
                 signing_stmts(&lone_sig, &sum, typed_body),
                 sum.is_some(),

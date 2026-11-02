@@ -149,6 +149,63 @@ pub fn run(
     }
 }
 
+/// #2685: the statuses each `from http` route of the project at `root` can
+/// answer — the response set `bynk openapi` documents, boundary-implicit
+/// statuses included — keyed `<context> <service> <METHOD> <path>`, the key the
+/// smoke runner's typed call names its route by. Empty when the project does
+/// not check: a smoke run then has nothing to compare an answer against, and
+/// says nothing.
+pub fn declared_statuses(root: &Path) -> BTreeMap<String, Vec<u16>> {
+    let analysis = analyse(root);
+    let mut out = BTreeMap::new();
+    if !errors_of(&analysis).is_empty() {
+        return out;
+    }
+    let context_count = real_context_count(&analysis.boundary_info, &analysis.unit_sources);
+    for (unit, ctx) in &analysis.boundary_info {
+        if !analysis.unit_sources.contains_key(unit) {
+            continue;
+        }
+        let expr_types = unit_expr_types(&analysis, unit);
+        for svc in ctx.services.values() {
+            if !matches!(svc.protocol, ServiceProtocol::Http) {
+                continue;
+            }
+            for h in &svc.handlers {
+                if !matches!(h.kind, bynk_syntax::ast::HandlerKind::Http { .. }) {
+                    continue;
+                }
+                let Some(model) = wire_contract_for_service(
+                    unit,
+                    "",
+                    &svc.name.name,
+                    h,
+                    ctx,
+                    &expr_types,
+                    &analysis.ty_intern,
+                    context_count,
+                ) else {
+                    continue;
+                };
+                let BoundaryKind::Http { method, path } = &model.kind else {
+                    continue;
+                };
+                let mut statuses: Vec<u16> = model.responses.iter().map(|r| r.status).collect();
+                statuses.sort_unstable();
+                statuses.dedup();
+                // Two contexts' services of one name, method and path share a
+                // key: the union is the conservative set.
+                let key = format!("{unit} {} {} {path}", svc.name.name, method.as_str());
+                let entry: &mut Vec<u16> = out.entry(key).or_default();
+                entry.extend(statuses);
+                entry.sort_unstable();
+                entry.dedup();
+            }
+        }
+    }
+    out
+}
+
 /// The project's analysis from the files on disk — the round `bynk check` and
 /// the language server run.
 fn analyse(root: &Path) -> ProjectDiagnostics {
