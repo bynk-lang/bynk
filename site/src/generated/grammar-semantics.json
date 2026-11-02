@@ -1040,6 +1040,10 @@
       "summary": "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time."
     },
     {
+      "code": "bynk.types.sequence_needs_result",
+      "summary": "`sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`."
+    },
+    {
       "code": "bynk.types.sql_not_literal",
       "summary": "A `D1` statement's SQL (the first argument of `all`, `first` or `run`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c)."
     },

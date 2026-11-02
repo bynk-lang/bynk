@@ -374,6 +374,17 @@ combinator vocabulary as kernel methods, so a chain reads
 **Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `take`,
 `skip`, `distinct`, `distinctBy`.
 
+**Collecting `Result`s** (pure; the receiver is a `List[Result[T, E]]`): `sequenceAll()`
+returns `Ok` of every value, or `Err` of the list of **every** error in input order;
+`sequenceTry()` returns `Ok` of every value, or the **first** `Err`. `xs.map(validate).sequenceAll()`
+reports every failing field of a form at once. The empty list is `Ok([])`.
+`bynk.types.sequence_needs_result` flags a list that is not of `Result`s. The effectful
+counterparts are `traverseAll` and `traverseTry`.
+
+```bynk
+fn checkAll(rs: List[Result[Int, String]]) -> Result[List[Int], List[String]] { rs.sequenceAll() }
+```
+
 **Adding items** (return a new `List`; the receiver is unchanged): `prepend(x)`
 puts `x` at the front, `append(x)` puts it at the end, and `concat(other)`
 joins `other` after the receiver. A fold that builds a list in order uses
