@@ -2245,8 +2245,11 @@ fn lower_method_call(
                     method,
                     &a,
                     cx.commons().expr_types.get(&e.id).map(|te| te.ty),
-                    &f_ts,
-                    &other_elem_ts,
+                    &QueryShape {
+                        elem_ts: &f_ts,
+                        other_elem_ts: &other_elem_ts,
+                        keyed: query_keyed(e, method, args, cx),
+                    },
                     tys,
                 )
             }
@@ -2362,8 +2365,11 @@ fn lower_method_call(
                     method,
                     &a,
                     cx.commons().expr_types.get(&e.id).map(|te| te.ty),
-                    &elem_ts,
-                    &other_elem_ts,
+                    &QueryShape {
+                        elem_ts: &elem_ts,
+                        other_elem_ts: &other_elem_ts,
+                        keyed: query_keyed(e, method, args, cx),
+                    },
                     tys,
                 )
                 .unwrap_or_else(|| format!("(/* unsupported Map op {} */ undefined)", method.name))
@@ -2516,8 +2522,11 @@ fn lower_method_call(
                     method,
                     &a,
                     cx.commons().expr_types.get(&e.id).map(|te| te.ty),
-                    &elem_ts,
-                    &other_elem_ts,
+                    &QueryShape {
+                        elem_ts: &elem_ts,
+                        other_elem_ts: &other_elem_ts,
+                        keyed: query_keyed(e, method, args, cx),
+                    },
                     tys,
                 )
                 .unwrap_or_else(|| format!("(/* unsupported Log op {} */ undefined)", method.name))
@@ -3477,8 +3486,11 @@ fn lower_method_call(
                     method,
                     &a,
                     result_ty,
-                    &elem_ts,
-                    &other_elem_ts,
+                    &QueryShape {
+                        elem_ts: &elem_ts,
+                        other_elem_ts: &other_elem_ts,
+                        keyed: query_keyed(e, method, args, cx),
+                    },
                     tys,
                 ) {
                     return pre.finish(s);
@@ -4910,15 +4922,53 @@ const STREAM_CLAIM: &str = "const __m = __s as unknown as { [k: symbol]: boolean
 /// clippy's argument-count lint; every caller already has `args`/`cx` in
 /// scope and guards the empty-args case (`distinct`/`collect`/etc. have no
 /// `other` to derive one from — `other_elem_ts` is simply unused there).
+/// What `lower_query_method` needs to know about the receiver beyond its
+/// already-lowered arguments: the rendered element types, and whether a key-based
+/// method (`distinct`, `distinctBy`, `groupBy`, `joinOn`, `leftJoin`) has a key
+/// that is not a JS primitive and so goes through the keyed helpers (#2789).
+struct QueryShape<'a> {
+    elem_ts: &'a str,
+    other_elem_ts: &'a str,
+    keyed: bool,
+}
+
+/// Whether this `Query` method's key is a non-primitive `Key` type, noting the
+/// `keys` runtime helper it then calls. Mirrors `lower_list_kernel`'s
+/// `key_is_plain` / `key_fn_is_plain` choice.
+fn query_keyed(e: &Expr, method: &Ident, args: &[Expr], cx: &LowerCtx) -> bool {
+    let tys = cx.commons().tys();
+    let (helper, plain) = match (method.name.as_str(), args) {
+        ("distinct", []) => (
+            "__bynkDistinct",
+            cx.commons().expr_types.get(&e.id).is_none_or(
+                |te| !matches!(&*tys.get(te.ty), Ty::Query(el) if !key_is_plain(*el, tys)),
+            ),
+        ),
+        ("distinctBy", [key]) => ("__bynkDistinctBy", key_fn_is_plain(key, cx)),
+        ("groupBy", [key, _]) => ("__bynkGroupBy", key_fn_is_plain(key, cx)),
+        ("joinOn", [_, left, ..]) => ("__bynkJoinOn", key_fn_is_plain(left, cx)),
+        ("leftJoin", [_, left, ..]) => ("__bynkLeftJoin", key_fn_is_plain(left, cx)),
+        _ => return false,
+    };
+    if !plain {
+        cx.runtime_use().note_key(helper);
+    }
+    !plain
+}
+
 fn lower_query_method(
     source: String,
     method: &Ident,
     a: &[String],
     result_ty: Option<TyId>,
-    elem_ts: &str,
-    other_elem_ts: &str,
+    shape: &QueryShape,
     tys: &Arc<Types>,
 ) -> Option<String> {
+    let QueryShape {
+        elem_ts,
+        other_elem_ts,
+        keyed,
+    } = *shape;
     let elem_el = ts_array_elem(elem_ts);
     let other_elem_el = ts_array_elem(other_elem_ts);
     let thunk = |body: String| format!("(() => {body})");
@@ -4933,6 +4983,17 @@ fn lower_query_method(
         )),
         ("take", [n]) => thunk(format!("{source}.slice(0, globalThis.Math.max(0, {n}))")),
         ("skip", [n]) => thunk(format!("{source}.slice(globalThis.Math.max(0, {n}))")),
+        ("distinct", []) if keyed => thunk(format!("__bynkDistinct({source})")),
+        ("distinctBy", [key]) if keyed => thunk(format!("__bynkDistinctBy({source}, {key})")),
+        ("groupBy", [key, into]) if keyed => {
+            thunk(format!("__bynkGroupBy({source}, {key}, {into})"))
+        }
+        ("joinOn", [other, left, right, into]) if keyed => thunk(format!(
+            "__bynkJoinOn({source}, ({other})(), {left}, {right}, {into})"
+        )),
+        ("leftJoin", [other, left, right, into]) if keyed => thunk(format!(
+            "__bynkLeftJoin({source}, ({other})(), {left}, {right}, {into})"
+        )),
         ("distinct", []) => thunk(format!("[...new globalThis.Set({source})]")),
         // Review of #1460: narrowed, not deferred. A first attempt used
         // `unknown[]` here and broke real `tsc --strict` fixtures (228/231) —

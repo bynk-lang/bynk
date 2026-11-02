@@ -22,9 +22,8 @@
 //! The runtime holds a composite key under a canonical encoding
 //! (`__bynkKeyEncode`); `Key` needs no witness, so it adds no hidden argument.
 //!
-//! The store rule (`store m: Map[K, V]`, `Cache`, `@indexed`) and `Query`'s
-//! `distinct`/`groupBy`/join keys keep their own `String`/`Int` predicates: both
-//! persist or hash keys through `String(k)`.
+//! The store rule (`store m: Map[K, V]`, `Cache`, `@indexed`) keeps its own
+//! `String`/`Int` predicate: those keys persist through `String(k)`.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -170,7 +169,7 @@ pub(crate) enum KeySite<'a> {
     MapKey,
     /// A `Set` member.
     SetElement,
-    /// A `List` kernel's element or key (`distinct`, `distinctBy`, `groupBy`,
+    /// A `List` or `Query` kernel's element or key (`distinct`, `distinctBy`, `groupBy`,
     /// `joinOn`, `leftJoin`).
     Kernel(&'a str),
     /// A call to a `Key`-bounded callee: `callee` requires `param: Key`.

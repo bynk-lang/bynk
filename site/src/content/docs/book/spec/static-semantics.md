@@ -2607,7 +2607,7 @@ the common key.
 *(v0.94, [ADR 0120](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0120-join-group-combiner-form.md))*
 **Joins & grouping take a combiner** — bynk has no pair type, so the join row
 exists only inside `into`, which names the result. `joinOn`/`leftJoin` are
-equi-joins hashing on a **`Key`** key (a `Query` keeps the `String`/`Int` rule); the left and
+equi-joins hashing on a **`Key`** key; the left and
 right key functions MUST return the **same** key type, else
 `bynk.query.join_key_mismatch`. `join` is a general-predicate (nested-loop) join.
 `groupBy` partitions by a `Key` key in **first-seen** key order, projecting

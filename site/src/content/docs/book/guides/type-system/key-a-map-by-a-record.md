@@ -62,6 +62,9 @@ fn countBy[K: Key, V](xs: List[V], key: (V) -> K) -> Map[K, Int] {
 Without `K: Key` the compiler reports `bynk.generics.missing_key_bound`; its fix
 adds the bound, and `bynk check --fix` applies it across a project.
 
+A store `Query`'s `distinct`, `distinctBy`, `groupBy` and join keys take any `Key`
+type too, so `visits.groupBy((v) => v.site, ...)` groups by a record by value.
+
 ## Stored collections are different
 
 A `store` map, set or cache still keys by `String` or `Int`. A value `Map` or `Set`
