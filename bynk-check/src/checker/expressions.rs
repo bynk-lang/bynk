@@ -5341,14 +5341,7 @@ pub(crate) fn collect_is_bindings_when(
     for test in crate::narrowing::matched_is_tests(expr, when_true) {
         // A test's own bindings are the same as asking for the `is` node itself
         // when true, so they share that key.
-        if let Some(cached) = ctx.is_binding_cache.get(&(test.id, true)) {
-            out.extend(cached.iter().cloned());
-            continue;
-        }
-        let mut own = Vec::new();
-        bindings_of_is_test(test, ctx, &mut own);
-        ctx.is_binding_cache.insert((test.id, true), own.clone());
-        out.extend(own);
+        out.extend(own_is_bindings(test, ctx));
     }
     ctx.is_binding_cache
         .insert((expr.id, when_true), out.clone());
@@ -5367,15 +5360,7 @@ fn record_is_locals(cond: &Expr, when_true: bool, scope: Span, ctx: &mut Ctx) {
         let ExprKind::Is { pattern, .. } = &test.kind else {
             continue;
         };
-        let own = match ctx.is_binding_cache.get(&(test.id, true)) {
-            Some(cached) => cached.clone(),
-            None => {
-                let mut own = Vec::new();
-                bindings_of_is_test(test, ctx, &mut own);
-                ctx.is_binding_cache.insert((test.id, true), own.clone());
-                own
-            }
-        };
+        let own = own_is_bindings(test, ctx);
         for id in pattern.bound_names() {
             let Some((_, ty)) = own.iter().rev().find(|(n, _)| *n == id.name) else {
                 continue;
@@ -5392,6 +5377,17 @@ fn record_is_locals(cond: &Expr, when_true: bool, scope: Span, ctx: &mut Ctx) {
             );
         }
     }
+}
+
+/// One `is` test's own bindings, memoised under `(test, true)`.
+fn own_is_bindings(test: &Expr, ctx: &mut Ctx) -> Vec<(String, TyId)> {
+    if let Some(cached) = ctx.is_binding_cache.get(&(test.id, true)) {
+        return cached.clone();
+    }
+    let mut own = Vec::new();
+    bindings_of_is_test(test, ctx, &mut own);
+    ctx.is_binding_cache.insert((test.id, true), own.clone());
+    own
 }
 
 /// The bindings one `is` test introduces when it has matched.

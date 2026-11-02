@@ -102,6 +102,8 @@ impl LocalsSink {
             let prev: &mut LocalBinding = &mut entries[i];
             if prev.scope.start <= scope.end && scope.start <= prev.scope.end {
                 prev.scope = prev.scope.merge(scope);
+                prev.ty = ty;
+                prev.kind = kind;
                 return;
             }
         }
@@ -169,6 +171,32 @@ mod tests {
             ty: "Int".to_string(),
             scope: Span::new(scope.0, scope.1),
         }
+    }
+
+    #[test]
+    fn record_merges_overlapping_scopes_keeps_disjoint_ones_apart_and_last_wins() {
+        let mut sink = LocalsSink::new();
+        sink.enter_file(Path::new("a.bynk"), false);
+        let def = Span::new(10, 11);
+        let rec = |sink: &mut LocalsSink, ty: &str, lo: usize, hi: usize| {
+            sink.record(
+                "v".to_string(),
+                def,
+                LocalKind::Let,
+                ty.to_string(),
+                Span::new(lo, hi),
+            );
+        };
+        rec(&mut sink, "Int", 20, 30);
+        rec(&mut sink, "String", 25, 40); // overlaps: merges, last type wins
+        rec(&mut sink, "Bool", 60, 70); // disjoint: its own entry
+        let files = sink.take_files();
+        let got = &files[Path::new("a.bynk")];
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert_eq!((got[0].scope.start, got[0].scope.end), (20, 40));
+        assert_eq!(got[0].ty, "String");
+        assert_eq!((got[1].scope.start, got[1].scope.end), (60, 70));
+        assert_eq!(got[1].ty, "Bool");
     }
 
     #[test]
