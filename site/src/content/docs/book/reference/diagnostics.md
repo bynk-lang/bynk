@@ -812,7 +812,7 @@ There are **709** codes in total.
 | `bynk.types.is_unknown_variant` | `is` names a variant the type does not have. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.json_uncodable` | A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, `bynk.crypto` keys, error builtins). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.key_at_boundary` | A `bynk.crypto` `SigningKey` or `VerifyKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4). |  | — |
-| `bynk.types.key_not_orderable` | A `sortBy`/`min`/`max` key function does not return an orderable type. The key must be an `Ord` type, on a `List` and on a storage `Query` alike. |  | — |
+| `bynk.types.key_not_orderable` | A `sortBy`/`sortByDescending`/`min`/`max` key function does not return an orderable type. The key must be an `Ord` type, on a `List` and on a storage `Query` alike. |  | — |
 | `bynk.types.lambda_mismatch` | A lambda's parameter count, parameter annotations, or body type do not match the expected function type. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
 | `bynk.types.let_annotation_mismatch` | A `let` value does not match its type annotation. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
 | `bynk.types.list_element_mismatch` | A list-literal element has a different type from the list's element type. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |

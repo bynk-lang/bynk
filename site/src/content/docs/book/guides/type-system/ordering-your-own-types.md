@@ -77,6 +77,16 @@ A store `Query` takes the same keys, so the order holds before a `skip` or `take
 jobs.sortBy((j) => j.priority).skip(1).take(2).collect()
 ```
 
+## Largest first
+
+`sortByDescending` takes the same keys and puts the largest first, on a `List` and on a
+`Query`. Equal keys keep their input order (unlike `reverse(xs.sortBy(k))`, which
+reverses them), and a `Float` `NaN` stays last in both directions:
+
+```bynk,fragment
+fn leaders(ts: List[Task]) -> List[Task] { ts.sortByDescending((t) => t.priority) }
+```
+
 ## Generic code: `T: Ord`
 
 A generic function that orders its parameter says so, the same way `Eq` is

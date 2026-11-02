@@ -5093,6 +5093,11 @@ impl<'a> LowerCtx<'a> {
         cmp::CmpGen::new(self.commons(), self.runtime_use(), &self.cmp_scope).for_ty(ty)
     }
 
+    /// The descending comparator for `ty` (`sortByDescending`, #2805): `NaN` last.
+    pub(crate) fn comparator_desc(&self, ty: bynk_check::checker::TyId) -> String {
+        cmp::CmpGen::new(self.commons(), self.runtime_use(), &self.cmp_scope).for_ty_desc(ty)
+    }
+
     // ---- `ModuleCtx` passthroughs -----------------------------------------
     //
     // Returned with the `'a` module lifetime rather than the `&self` borrow, so

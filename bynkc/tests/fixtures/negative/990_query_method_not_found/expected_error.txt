@@ -6,4 +6,4 @@
 # message, so a dropped or reordered entry fails this line — the harness
 # matches it as a substring of `category message`, so a pure append to the
 # registry (a new entry with nothing removed or reordered) would not.
-bynk.types.method_not_found the built-in `Query[Int]` type has no method `definitelyNotAMethod` — the kernel is `map`, `filter`, `flatMap`, `sortBy`, `take`, `skip`, `distinct`, `distinctBy`, `joinOn`, `leftJoin`, `join`, `groupBy`, `collect`, `first`, `firstOrElse`, `count`, `fold`, `any`, `all`, `sum`, `min`, `max`, `average`, `forEach`, `parTraverse`, `traverseAll`, `parTraverseAll`, `traverseTry`, `parTraverseTry`
+bynk.types.method_not_found the built-in `Query[Int]` type has no method `definitelyNotAMethod` — the kernel is `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`, `take`, `skip`, `distinct`, `distinctBy`, `joinOn`, `leftJoin`, `join`, `groupBy`, `collect`, `first`, `firstOrElse`, `count`, `fold`, `any`, `all`, `sum`, `min`, `max`, `average`, `forEach`, `parTraverse`, `traverseAll`, `parTraverseAll`, `traverseTry`, `parTraverseTry`

@@ -1,0 +1,13 @@
+context probe
+
+// #2805: a `Query.sortByDescending` key must be `Ord`, like `sortBy`'s.
+type Rank = { a: Int, b: Int }
+
+agent Probe {
+  key id: String
+  store ranks: Map[String, Rank]
+
+  on call f() -> Effect[Int] {
+    ranks.sortByDescending((r) => r).count()
+  }
+}

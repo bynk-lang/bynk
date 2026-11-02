@@ -752,12 +752,14 @@ pub(crate) fn check_list_kernel_method(
         // `Ty::base()` (so Opaque keys, whose base is hidden, are rejected —
         // ordering an opaque id is meaningless). Empty aggregates are total:
         // min/max/average -> Option, sum -> the zero (D4).
-        "sortBy" => {
+        "sortBy" | "sortByDescending" => {
             if !arity(1, ctx) {
                 return None;
             }
-            let key = check_kernel_fn_arg(&args[0], vec![elem], "the `List.sortBy` key", ctx)?;
-            require_key_ord(key, "List.sortBy", args[0].span, ctx);
+            let name = &method.name;
+            let what = format!("the `List.{name}` key");
+            let key = check_kernel_fn_arg(&args[0], vec![elem], &what, ctx)?;
+            require_key_ord(key, &format!("List.{name}"), args[0].span, ctx);
             Some(tys.intern(Ty::List(elem)))
         }
         "distinct" => {
@@ -871,6 +873,7 @@ pub(crate) fn is_query_op(name: &str) -> bool {
             | "filter"
             | "flatMap"
             | "sortBy"
+            | "sortByDescending"
             | "take"
             | "skip"
             | "distinct"
@@ -981,12 +984,14 @@ pub(crate) fn check_query_kernel_method(
                 }
             }
         }
-        "sortBy" => {
+        "sortBy" | "sortByDescending" => {
             if !arity(1, ctx) {
                 return None;
             }
-            let key = check_kernel_fn_arg(&args[0], vec![elem], "the `Query.sortBy` key", ctx)?;
-            require_key_ord(key, "Query.sortBy", args[0].span, ctx);
+            let name = &method.name;
+            let what = format!("the `Query.{name}` key");
+            let key = check_kernel_fn_arg(&args[0], vec![elem], &what, ctx)?;
+            require_key_ord(key, &format!("Query.{name}"), args[0].span, ctx);
             Some(query(elem))
         }
         "take" | "skip" => {

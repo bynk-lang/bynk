@@ -15,6 +15,8 @@
 //   compare equal, and `NaN` compares equal to itself and greater than every
 //   other value. The comparison operators keep their IEEE meaning (`NaN < x` is
 //   `false`); only the ordering kernels and `Ord` witnesses use this.
+// - `sortByDescending` reverses an order, but keeps `NaN` last: `__bynkCmpDesc`
+//   swaps the arguments of a comparator whose `Float` leaves put `NaN` first.
 // - `Decimal` is numeric order, ignoring scale (#2622).
 // - `Bytes` is unsigned lexicographic (`__bynkBytesCompare`).
 // - `Option` puts `None` first; `List` is lexicographic.
@@ -43,6 +45,25 @@ export function __bynkCmpFloat(a: number, b: number): number {
   const bNaN = b !== b;
   if (aNaN || bNaN) return aNaN ? (bNaN ? 0 : 1) : -1;
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * `Float` with `NaN` first. Only `__bynkCmpDesc` uses it: a descending sort
+ * swaps its arguments, which puts `NaN` last again (`sortByDescending`, #2805).
+ */
+export function __bynkCmpFloatNanFirst(a: number, b: number): number {
+  const aNaN = a !== a;
+  const bNaN = b !== b;
+  if (aNaN || bNaN) return aNaN ? (bNaN ? 0 : -1) : 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * The descending order of a comparator built with `__bynkCmpFloatNanFirst` at
+ * its `Float` leaves: the exact reverse, except that `NaN` stays last.
+ */
+export function __bynkCmpDesc<T>(c: __BynkCmp<T>): __BynkCmp<T> {
+  return (a, b) => c(b, a);
 }
 
 /** `Bytes`. */

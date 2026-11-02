@@ -2512,6 +2512,7 @@ existing (ADR 0037). The whole kernel:
 | `List[T]` | `filter(p: T -> Bool)` | `List[T]` |
 | `List[T]` | `flatMap(f: T -> List[U])` | `List[U]` |
 | `List[T]` | `sortBy(key: T -> K)` | `List[T]` |
+| `List[T]` | `sortByDescending(key: T -> K)` | `List[T]` |
 | `List[T]` | `take(n: Int)` / `skip(n: Int)` | `List[T]` |
 | `List[T]` | `distinct()` | `List[T]` |
 | `List[T]` | `distinctBy(key: T -> K)` | `List[T]` |
@@ -2594,8 +2595,10 @@ broadcast.
 The builder/terminal rows above are the **eager in-memory half** of the query
 algebra ([design notes §11](https://github.com/bynk-lang/bynk/blob/main/design/bynk-design-notes.md)) —
 the same combinator names a lazy storage `Query[T]` will carry. **Ordering keys**
-(`sortBy`/`min`/`max`), on a `List` and on a storage `Query`, are any `Ord` type
-(§5.2) — else `bynk.types.key_not_orderable`. **Numeric keys**
+(`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a storage `Query`, are any `Ord` type
+(§5.2) — else `bynk.types.key_not_orderable`. **`sortByDescending`** orders the largest key first;
+it is stable (equal keys keep input order) and keeps a `Float` `NaN` last (§5.2), also inside a
+`derives Ord` key. **Numeric keys**
 (`sum`/`average`) are `Int`/`Float`/`Duration` (not `Instant` — instants are not
 summable), else `bynk.query.sum_needs_numeric`;
 `average` of a `Duration` is a `Duration` (integer-rounded millis), otherwise a

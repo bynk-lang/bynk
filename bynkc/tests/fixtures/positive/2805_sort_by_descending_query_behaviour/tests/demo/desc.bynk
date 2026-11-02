@@ -1,0 +1,39 @@
+---
+#2805: descending order on a store query.
+---
+suite demo.desc
+
+case "sortByDescending a derives Ord enum" {
+  do Board("a").add("x", High, 1, 0.0, 1.0)
+  do Board("a").add("y", Low, 2, 0.0, 1.0)
+  do Board("a").add("z", Medium, 3, 0.0, 1.0)
+  let names <- Board("a").byPriority()
+  expect names == ["x", "z", "y"]
+}
+
+case "ties keep the query's own order, as sortBy keeps them" {
+  do Board("t").add("s", Low, 9, 0.0, 1.0)
+  do Board("t").add("p", Low, 5, 0.0, 1.0)
+  do Board("t").add("q", Low, 9, 0.0, 1.0)
+  do Board("t").add("r", Low, 5, 0.0, 1.0)
+  let descending <- Board("t").byDue()
+  let ascending <- Board("t").byDueAscending()
+  expect descending == ["s", "q", "p", "r"]
+  expect ascending == ["p", "r", "s", "q"]
+}
+
+case "NaN is last in a descending Float key" {
+  do Board("f").add("x", Low, 1, 2.5, 1.0)
+  do Board("f").add("y", Low, 1, 0.0, 0.0)
+  do Board("f").add("z", Low, 1, 1.5, 1.0)
+  let names <- Board("f").byScore()
+  expect names == ["x", "z", "y"]
+}
+
+case "sortByDescending stays lazy for take" {
+  do Board("k").add("a", Low, 1, 0.0, 1.0)
+  do Board("k").add("b", Low, 3, 0.0, 1.0)
+  do Board("k").add("c", Low, 2, 0.0, 1.0)
+  let names <- Board("k").topTwo()
+  expect names == ["b", "c"]
+}

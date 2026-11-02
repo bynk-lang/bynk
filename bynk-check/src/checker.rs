@@ -703,6 +703,7 @@ fn is_query_builder_name(name: &str) -> bool {
             | "filter"
             | "flatMap"
             | "sortBy"
+            | "sortByDescending"
             | "take"
             | "skip"
             | "distinct"
