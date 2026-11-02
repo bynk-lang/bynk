@@ -1,0 +1,14 @@
+commons pricing
+
+// #2702: `Tag` and its `label` method are private to `pricing`; `labels`
+// declares a public `Tag` (another shape) with a `label` method of another type.
+
+private type Tag = { code: Int }
+
+private fn Tag.label(self) -> Int {
+  self.code
+}
+
+private fn code_of(t: Tag) -> Int {
+  t.label()
+}

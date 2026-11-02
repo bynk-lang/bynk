@@ -5162,10 +5162,13 @@ fn synthetic_typed_commons_for_target(
     // them (`emit_test_scope_setup`), and the lowering qualifies a bare
     // nullary variant (`Domestic` → `Region.Domestic`) only when its sum is
     // here, as a handler body's lowering does from the context's own view.
+    // #2702: only the public ones, the filter the codec qualifier uses.
     for unit in unit_consumes.get(target_name).into_iter().flatten() {
         if let Some(t) = unit_tables.get(unit) {
             for (n, d) in &t.types {
-                types.entry(n.clone()).or_insert_with(|| d.clone());
+                if d.private.is_none() {
+                    types.entry(n.clone()).or_insert_with(|| d.clone());
+                }
             }
         }
     }
@@ -6677,7 +6680,8 @@ fn emit_test_scope_setup(
                 Some(UnitKind::Adapter)
             );
             if let Some(table) = unit_tables.get(q) {
-                let types = aliased_types(table, |_| true);
+                // #2702: not a consumed context's `private` types.
+                let types = aliased_types(table, |n| is_public_type(table, n));
                 let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
                 bound.extend(names.iter().cloned());
                 crate::emitter::extend_printed_at(out, emit_ns_destructure(&ns, &names, &types), 2);

@@ -1,0 +1,6 @@
+[project]
+name = "test-json-consumed-type"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
