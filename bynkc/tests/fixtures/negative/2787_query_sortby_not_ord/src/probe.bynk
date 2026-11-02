@@ -1,0 +1,13 @@
+context probe
+
+// #2787: a `Query` key must be `Ord`; a record without `derives Ord` is not.
+type Rank = { a: Int, b: Int }
+
+agent Probe {
+  key id: String
+  store ranks: Map[String, Rank]
+
+  on call f() -> Effect[Int] {
+    ranks.sortBy((r) => r).count()
+  }
+}

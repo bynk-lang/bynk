@@ -1,0 +1,39 @@
+---
+#2787: a store `Query`'s `sortBy`, `min` and `max` take any `Ord` key: a `derives Ord`
+enum or record, `Option`, and a `Float` under the total order (`NaN` last, here from `0.0 / 0.0` in the key).
+---
+context demo.ord
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+type Rank = { priority: Priority, due: Int } derives Ord
+
+type Job = { name: String, priority: Priority, due: Int, score: Float, div: Float }
+
+agent Board {
+  key id: String
+  store jobs: Map[String, Job]
+
+  on call add(name: String, priority: Priority, due: Int, score: Float, div: Float) -> Effect[()] {
+    let _ <- jobs.put(name, Job { name: name, priority: priority, due: due, score: score, div: div })
+    ()
+  }
+  on call byPriority() -> Effect[List[String]] {
+    jobs.sortBy((j) => j.priority).map((j) => j.name).collect()
+  }
+  on call byRank() -> Effect[List[String]] {
+    jobs.sortBy((j) => Rank { priority: j.priority, due: j.due }).map((j) => j.name).collect()
+  }
+  on call topPriority() -> Effect[Option[Priority]] {
+    jobs.max((j) => j.priority)
+  }
+  on call lowestRank() -> Effect[Option[Rank]] {
+    jobs.min((j) => Rank { priority: j.priority, due: j.due })
+  }
+  on call byScore() -> Effect[List[String]] {
+    jobs.sortBy((j) => j.score / j.div).map((j) => j.name).collect()
+  }
+  on call topTwo() -> Effect[List[String]] {
+    jobs.sortBy((j) => j.priority).skip(1).take(2).map((j) => j.name).collect()
+  }
+}

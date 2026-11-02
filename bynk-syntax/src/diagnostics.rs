@@ -3111,7 +3111,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.key_not_orderable",
-        "A `sortBy`/`min`/`max` key function does not return an orderable type. For a `List` that is any `Ord` type; a storage `Query` keeps `Int`, `Float`, `String`, `Duration`, `Instant` and refined types over them.",
+        "A `sortBy`/`min`/`max` key function does not return an orderable type. The key must be an `Ord` type, on a `List` and on a storage `Query` alike.",
         &[],
     ),
     dg(

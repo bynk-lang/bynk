@@ -71,6 +71,12 @@ fn byTitle(ts: List[Task]) -> List[Task] { ts.sortBy((t) => t.title) }
 and `max` methods take any orderable key too, so a key can be a whole `Task` or
 an `Option[Int]`.
 
+A store `Query` takes the same keys, so the order holds before a `skip` or `take`:
+
+```bynk,fragment
+jobs.sortBy((j) => j.priority).skip(1).take(2).collect()
+```
+
 ## Generic code: `T: Ord`
 
 A generic function that orders its parameter says so, the same way `Eq` is

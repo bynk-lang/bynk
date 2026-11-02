@@ -2593,11 +2593,8 @@ broadcast.
 The builder/terminal rows above are the **eager in-memory half** of the query
 algebra ([design notes §11](https://github.com/bynk-lang/bynk/blob/main/design/bynk-design-notes.md)) —
 the same combinator names a lazy storage `Query[T]` will carry. **Ordering keys**
-(`sortBy`/`min`/`max`) on a `List` are any `Ord` type (§5.2) — else
-`bynk.types.key_not_orderable`. On a storage `Query` the key is still drawn from
-the closed base set — `Int`, `Float`, `String`, `Duration`, `Instant` (refined
-types widening; an opaque key is **not** orderable) — because a user-type
-comparator has no storage lowering; the same code is reported. **Numeric keys**
+(`sortBy`/`min`/`max`), on a `List` and on a storage `Query`, are any `Ord` type
+(§5.2) — else `bynk.types.key_not_orderable`. **Numeric keys**
 (`sum`/`average`) are `Int`/`Float`/`Duration` (not `Instant` — instants are not
 summable), else `bynk.query.sum_needs_numeric`;
 `average` of a `Duration` is a `Duration` (integer-rounded millis), otherwise a
