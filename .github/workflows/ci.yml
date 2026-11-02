@@ -984,6 +984,7 @@ jobs:
           export function bynk_analyze(source: string, platform?: string | null): string;
           export function bynk_hover(source: string, offset: number, platform?: string | null): string;
           export function bynk_complete(source: string, offset: number, platform?: string | null): string;
+          export function bynk_reference(): string;
           EOF
           exit "${failed:-0}"
 

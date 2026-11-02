@@ -19,6 +19,8 @@
 //! (the `cdylib`); the same logic is exercised natively (the `rlib`) by the
 //! slice-3 tests, with the browser harness deferred to the REPL shell (slice 4).
 
+pub mod reference;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -891,6 +893,18 @@ pub fn bynk_analyze(source: &str, platform: Option<String>) -> String {
 pub fn bynk_explain(code: &str) -> String {
     install_panic_hook();
     explain_to_json(code)
+}
+
+/// The wasm entry point for the standard-library reference: every built-in
+/// type's statics and methods, every first-party capability's operations and
+/// every first-party module's functions, with signatures, docs and
+/// `experimental`/`deprecated` marks, as `{ types, capabilities, modules }`
+/// (#2698). Takes no input; fixed per build.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn bynk_reference() -> String {
+    install_panic_hook();
+    reference::reference_to_json()
 }
 
 /// The wasm entry point for the editor's hover tooltip: the inferred type at a

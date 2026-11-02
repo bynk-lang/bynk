@@ -1665,7 +1665,23 @@ fn actor_candidates(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) ->
 /// (`builtin_statics_are_reachable`).
 pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
     ("Int", &[("parse", "parse(s: String) -> Option[Int]")]),
-    ("Float", &[("parse", "parse(s: String) -> Option[Float]")]),
+    (
+        "Float",
+        &[
+            ("parse", "parse(s: String) -> Option[Float]"),
+            ("pi", "pi: Float"),
+            ("e", "e: Float"),
+        ],
+    ),
+    // #2698: `Duration.`/`Instant.` completed to nothing; both have statics.
+    ("Duration", &[("millis", "millis(n: Int) -> Duration")]),
+    (
+        "Instant",
+        &[
+            ("fromEpochMillis", "fromEpochMillis(n: Int) -> Instant"),
+            ("fromIso", "fromIso(s: String) -> Option[Instant]"),
+        ],
+    ),
     (
         "Decimal",
         &[
@@ -1857,30 +1873,12 @@ fn member_candidates_from(
                             // Typed signature (params + return), the same
                             // `type_ref_str` rendering hover/signature help use —
                             // not bare param names (slice 5 detail polish).
-                            let params = op
-                                .params
-                                .iter()
-                                .map(|p| format!("{}: {}", p.name.name, type_ref_str(&p.type_ref)))
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            // #926: `[T, …]` type parameters on the op itself.
-                            let type_params = if op.type_params.is_empty() {
-                                String::new()
-                            } else {
-                                let names: Vec<&str> = op
-                                    .type_params
-                                    .iter()
-                                    .map(|tp| tp.name.name.as_str())
-                                    .collect();
-                                format!("[{}]", names.join(", "))
-                            };
                             out.push(Completion::item(
                                 op.name.name.clone(),
                                 CompletionKind::Member,
                                 Some(format!(
-                                    "{}{type_params}({params}) -> {} — operation of `{receiver}`",
-                                    op.name.name,
-                                    type_ref_str(&op.return_type)
+                                    "{} — operation of `{receiver}`",
+                                    capability_op_signature(op)
                                 )),
                             ));
                         }
@@ -2083,10 +2081,38 @@ fn stability_suffix(experimental: bool) -> &'static str {
     }
 }
 
+/// A capability operation's signature (`now() -> Effect[Instant]`,
+/// `get[T](key: String) -> …`), typed the way hover and signature help render
+/// types (`type_ref_str`). Shared with the wasm `bynk_reference` catalogue.
+pub fn capability_op_signature(op: &bynk_syntax::ast::CapabilityOp) -> String {
+    let params = op
+        .params
+        .iter()
+        .map(|p| format!("{}: {}", p.name.name, type_ref_str(&p.type_ref)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    // #926: `[T, …]` type parameters on the op itself.
+    let type_params = if op.type_params.is_empty() {
+        String::new()
+    } else {
+        let names: Vec<&str> = op
+            .type_params
+            .iter()
+            .map(|tp| tp.name.name.as_str())
+            .collect();
+        format!("[{}]", names.join(", "))
+    };
+    format!(
+        "{}{type_params}({params}) -> {}",
+        op.name.name,
+        type_ref_str(&op.return_type)
+    )
+}
+
 /// Render a free function's signature for the completion detail, the same way
 /// hover and signature help do (`symbols::type_ref_str`) — one format, never
 /// divergent. Mirrors signature help, bounds included.
-fn free_fn_signature(name: &str, f: &bynk_syntax::ast::FnDecl) -> String {
+pub fn free_fn_signature(name: &str, f: &bynk_syntax::ast::FnDecl) -> String {
     let params = f
         .params
         .iter()
