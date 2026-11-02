@@ -3176,8 +3176,8 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.never_inferred",
-        "An unannotated `let` or a lambda's result has the bottom type (`never returns`) because its value only faults; the type cannot be written in source, so an annotation or an expected type is needed.",
-        &["let_stmt", "lambda_expr"],
+        "An unannotated `let` or `<-` binding has a type that is, or contains, the bottom type (`never returns`) because its value only faults (a faulting lambda bound this way included); the type cannot be written in source, so an annotation is needed.",
+        &["let_stmt"],
     ),
     dg(
         "bynk.types.no_numeric_coercion",
