@@ -4670,7 +4670,11 @@ pub(crate) fn param_cast(
 /// the owning context's namespace, since the value keeps that type.
 ///
 /// Only a return type that mentions a caller-declared refined or opaque type
-/// is cast; every other call lowers as before.
+/// that is not shared with the provider is cast; every other call lowers as
+/// before. Two cases are not covered and are tracked in #2828: a commons type
+/// both contexts `use` (rebranded per context, but its caller-side name exists
+/// only where the module references it), and a brand reached through a record
+/// or sum the return type names.
 pub(crate) fn return_cast(
     consumed: &str,
     info: &bynk_check::resolver::CrossContextInfo,
@@ -4688,9 +4692,8 @@ pub(crate) fn return_cast(
     };
     let mut names = HashSet::new();
     type_ref_names(&service.return_type, &mut names);
-    // A declaration both contexts share (a commons type) is one declaration,
-    // and it already type-checks; only a same-named declaration of the caller's
-    // own, distinct from the provider's, is branded differently.
+    // A declaration both contexts share is skipped (#2828): only a same-named
+    // declaration of the caller's own, distinct from the provider's, is cast.
     let provider_types = info.consumed_types.get(consumed);
     let branded = names.iter().any(|n| {
         let Some(decl) = caller_types.get(n) else {
