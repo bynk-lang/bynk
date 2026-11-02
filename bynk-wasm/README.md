@@ -38,6 +38,53 @@ for live on-type checking; `bynk_hover` returns the inferred type at an offset;
 returns the source in house style (`{ok, formatted}` / `{ok:false, error}`). Every entry
 compiles for the `browser` platform.
 
+### Entry handler signatures
+
+`bynk_compile` also reports each `service`'s `on call(…)` handler as `entries`
+(empty on failure), so a host can build a run's arguments without parsing the
+source. It is derived from the checker's resolved types, and only the program's
+own contexts are listed (never injected first-party units). A named type's fields are resolved in the scope of the unit that declares it.
+Within one parameter each record/sum is expanded once (its first occurrence)
+and nested at most 6 deep (a wide DAG would otherwise grow exponentially);
+later occurrences and anything deeper are reported by name, so look a name up
+at its first occurrence. The field is additive:
+the rest of the result is unchanged.
+
+```ts
+interface CompileResult {
+  ok: boolean;
+  files: EmittedFile[];
+  diagnostics: Diagnostic[];
+  entries: Entry[]; // new
+}
+interface Entry {
+  unit: string;       // the context, e.g. "app.demo"
+  service: string;
+  params: EntryParam[];
+  returns: string;    // the declared return type, e.g. "Effect[String]"
+}
+interface EntryParam {
+  name: string;
+  type: string;           // as declared, e.g. "Slug", "List[Point]"
+  base: string | null;    // what it is, refines or wraps ("String" for Slug); null for records, sums, collections
+  refined: boolean;       // a named refined type: a `base` value its `T.of` accepts
+  shape: Shape;
+}
+type Shape =
+  | { kind: "base"; base: string }                     // Int, String, Bool, Float, Duration, Instant, Bytes, Decimal
+  | { kind: "refined"; name: string; base: string }
+  | { kind: "opaque"; name: string; base: string }
+  | { kind: "record"; name: string; fields: { name: string; shape: Shape }[] }
+  | { kind: "sum"; name: string; variants: { name: string; fields: { name: string; shape: Shape }[] }[] }
+  | { kind: "list" | "set" | "option"; element: Shape }
+  | { kind: "map"; key: Shape; value: Shape }
+  | { kind: "result"; ok: Shape; err: Shape }
+  | { kind: "unit" }
+  | { kind: "named"; name: string }                    // a record/sum already expanded earlier in this parameter, or nested deeper than 6 levels: not expanded again
+  | { kind: "recursive"; name: string }                // a type already being described above it
+  | { kind: "other"; display: string };               // a generic record instance, a function, ...: no value to build
+```
+
 Each diagnostic (in `bynk_compile`, `bynk_analyze` and `bynk_analyze_project`)
 carries, besides `category` and `message`, the registry's one-line `summary`
 (`null` only for an unregistered code) and an `href`: the curated Book
