@@ -44,7 +44,7 @@ use bynk_lower::{
 use bynk_syntax::ast::{
     AgentDecl, BaseType, BinOp, Block, CommonsItem, Expr, ExprKind, FnDecl, FnName, Ident,
     InterpPart, MatchBody, MessagesDecl, ObservationMatcher, Param, Pattern, PredKind, ServiceDecl,
-    Statement, TypeBody, TypeDecl, TypeRef,
+    ServiceProtocol, Statement, TypeBody, TypeDecl, TypeRef,
 };
 
 pub mod client;
@@ -2639,9 +2639,23 @@ fn collect_external_references(commons: &TypedCommons, ctx: &EmitProjectCtx) -> 
                 }
             }
             CommonsItem::Service(s) => {
+                // #2720: a `via schema(...)` subscriber whose handler declares
+                // no `env` gets a synthetic `EventEnvelope` parameter at emit
+                // time (`emit_service`); that parameter's type must be imported
+                // exactly as a declared `env: EventEnvelope` would be.
+                let synthesises_envelope = matches!(
+                    &s.protocol,
+                    ServiceProtocol::Events {
+                        schema_dispatch: Some(_),
+                        ..
+                    }
+                );
                 for h in &s.handlers {
                     for p in &h.params {
                         collect_refs_in_typeref(&p.type_ref, &local_to_file, ctx, &mut refs);
+                    }
+                    if synthesises_envelope && h.params.len() < 2 {
+                        record_name_ref("EventEnvelope", &local_to_file, ctx, &mut refs);
                     }
                     collect_refs_in_typeref(&h.return_type, &local_to_file, ctx, &mut refs);
                     collect_refs_in_block(&h.body, &local_to_file, commons, ctx, &mut refs);
