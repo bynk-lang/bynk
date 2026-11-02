@@ -844,6 +844,12 @@ pub fn phase_integration_bodies(
                     &case_callees,
                     &mut body_errs,
                 );
+                check_call_address_tier(
+                    case,
+                    case_effective_tier(case, d),
+                    &case_callees,
+                    &mut body_errs,
+                );
                 if case_effective_tier(case, d) == bynk_syntax::ast::TestTier::System {
                     check_unsigned_route_at_system(
                         case,
@@ -1901,6 +1907,49 @@ fn check_event_address_tier(
             )
             .with_note(
                 "at `system` an event reaches a subscriber only through its publisher's fan-out; drive the handler that emits it, or deliver the event at `unit` or `integration`",
+            ),
+        );
+    }
+}
+
+/// #2649: report a `system`-tier case that addresses an `on call` service with
+/// `svc.call(…)`. An `on call` service has no public route to drive: it is
+/// internal to the deployment and its calls are signed per caller (#2004), so
+/// the system driver has nothing to send, and lowering would emit no call at
+/// all. The case drives an `http` route that reaches the handler, or runs the
+/// call at `unit` or `integration`.
+fn check_call_address_tier(
+    case: &Case,
+    tier: bynk_syntax::ast::TestTier,
+    callees: &HashMap<ExprId, checker::Callee>,
+    errors: &mut Vec<CompileError>,
+) {
+    if tier != bynk_syntax::ast::TestTier::System {
+        return;
+    }
+    let mut services: Vec<&str> = callees
+        .values()
+        .filter_map(|c| match c {
+            checker::Callee::TestService { service, address } if address == "call" => {
+                Some(service.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    services.sort_unstable();
+    services.dedup();
+    for service in services {
+        errors.push(
+            CompileError::new(
+                "bynk.test.call_needs_in_process",
+                case.name_span,
+                format!(
+                    "case `\"{}\"` calls the `on call` service `{service}` with `{service}.call(…)`, but is a `system`-tier case",
+                    case.name
+                ),
+            )
+            .with_note(
+                "an `on call` service is internal to a deployment and has no public route for a `system` case to drive; drive an `http` route that reaches it, or call it at `unit` or `integration`",
             ),
         );
     }

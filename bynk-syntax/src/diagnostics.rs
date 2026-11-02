@@ -2666,6 +2666,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.call_needs_in_process",
+        "A `system`-tier case calls an `on call` service with `svc.call(…)`; an `on call` service is internal to a deployment and has no public route for a `system` case to drive, so the case drives an `http` route that reaches it, or calls it at `unit` or `integration`.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.credential_needs_system",
         "A case drives `by Nobody` (the no-credential principal, which tests the auth seam's 401) outside a `system`-tier case, where there is no real seam to reject it.",
         &["case"],

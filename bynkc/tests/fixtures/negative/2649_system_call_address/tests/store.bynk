@@ -1,0 +1,6 @@
+suite media.store {
+	case "a call service from the system tier" as system {
+		let n <- save.call("abc")
+		expect n == 3
+	}
+}
