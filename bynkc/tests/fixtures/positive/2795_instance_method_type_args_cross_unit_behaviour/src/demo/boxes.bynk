@@ -1,0 +1,9 @@
+commons demo.boxes
+
+uses demo.items
+
+type Box[T] = { value: T }
+
+fn Box.cast[U](self) -> Option[U] { None }
+
+fn boxed(sku: String) -> Box[Item] { Box { value: Item { sku } } }

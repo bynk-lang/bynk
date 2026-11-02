@@ -24,12 +24,12 @@ export const Box = {
     return sort(xs, __cmp_U);
   },
   castInside<T, V>(self: Box<T>): Option<string> {
-    const c = Box.cast<T, string>(self);
+    const c = Box.cast<any, string>(self);
     return c;
   },
 };
 
 export function castFn(b: Box<(a0: number) => number>): Option<string> {
-  const c = Box.cast<(a0: number) => number, string>(b);
+  const c = Box.cast<any, string>(b);
   return c;
 }
