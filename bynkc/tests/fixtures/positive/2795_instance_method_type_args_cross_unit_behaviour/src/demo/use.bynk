@@ -1,0 +1,11 @@
+commons demo.use
+
+uses demo.boxes
+
+// `Item` is never named here: the receiver's `Box[Item]` comes from `boxed`, so
+// the emitted explicit list must not spell it.
+fn castIt(sku: String) -> Option[String] {
+  let b = boxed(sku)
+  let c = b.cast[String]()
+  c
+}

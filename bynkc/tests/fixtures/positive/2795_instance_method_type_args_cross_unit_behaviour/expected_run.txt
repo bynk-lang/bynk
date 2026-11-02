@@ -1,0 +1,2 @@
+# #2795: the receiver type argument is imported by no caller.
+passed=1 failed=0

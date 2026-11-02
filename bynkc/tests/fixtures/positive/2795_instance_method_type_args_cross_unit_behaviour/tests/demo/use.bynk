@@ -1,0 +1,5 @@
+suite demo.use
+
+case "an explicit list on a receiver whose element type is never named here" {
+  expect castIt("a") == None
+}

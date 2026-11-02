@@ -1,0 +1,6 @@
+[project]
+name = "instance-method-type-args-cross-unit-behaviour"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

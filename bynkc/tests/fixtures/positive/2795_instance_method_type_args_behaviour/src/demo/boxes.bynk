@@ -1,0 +1,28 @@
+commons demo.boxes
+
+uses bynk.list
+
+type Box[T] = { value: T }
+
+// No argument or return of type `U` is inferable at a call without a binding.
+fn Box.cast[U](self) -> Option[U] { None }
+
+fn Box.mapped[U](self, f: (T) -> U) -> Box[U] { Box { value: f(self.value) } }
+
+fn Box.get(self) -> T { self.value }
+
+// A bound on the method's own parameter: its comparator witness follows the
+// ordinary arguments, as when `U` is inferred.
+fn Box.sortedWith[U: Ord](self, xs: List[U]) -> List[U] { sort(xs) }
+
+// A receiver whose type arguments include a type variable or a function type:
+// the explicit list still names every argument, so `cast` types as written.
+fn Box.castInside[V](self) -> Option[String] {
+  let c = self.cast[String]()
+  c
+}
+
+fn castFn(b: Box[(Int) -> Int]) -> Option[String] {
+  let c = b.cast[String]()
+  c
+}

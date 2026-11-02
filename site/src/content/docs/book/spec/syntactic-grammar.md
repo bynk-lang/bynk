@@ -995,8 +995,9 @@ v0.22b: a method call accepts **explicit type arguments** —
 `Json.decode[Order](s)` — under the same same-line-`[` rule as `call` type
 application (0039): a `[` opening a new line is a list literal. In v0.22b
 only the `Json.decode` static consumes them; type arguments on any other
-method are `bynk.generics.type_arg_mismatch` (generic *user* methods remain
-deferred). The bare `name[T]` value form stays reserved.
+method are `bynk.generics.type_arg_mismatch`. A generic user static takes the
+type's parameters then its own (ADR 0702); a generic user *instance* method takes
+its own parameters only, the receiver's being already known. The bare `name[T]` value form stays reserved.
 
 ### §4.6.9 field_access
 

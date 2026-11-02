@@ -68,7 +68,8 @@ pub fn value_receiver_rewrite(
     cursor: usize,
 ) -> Option<(String, usize)> {
     let (recv, _) = value_receiver_method(callee)?;
-    let callee_start = open_paren.checked_sub(callee.len())?;
+    let before = strip_type_args(text.get(..open_paren)?).trim_end();
+    let callee_start = before.len().checked_sub(callee.len())?;
     let dot = callee_start + recv.len();
     let rewritten = format!("{}{}", &text[..dot], &text[cursor..]);
     Some((rewritten, dot.saturating_sub(1)))
@@ -127,9 +128,33 @@ fn top_level_commas(s: &str) -> usize {
     n
 }
 
+/// #2795: drop a trailing explicit type-argument list — `b.map[String]` →
+/// `b.map` — so `name[T](` finds the same callee as `name(`. The list's commas
+/// are inside the brackets and never counted as argument separators.
+fn strip_type_args(s: &str) -> &str {
+    let t = s.trim_end();
+    if !t.ends_with(']') {
+        return s;
+    }
+    let mut depth = 0i32;
+    for (i, c) in t.char_indices().rev() {
+        match c {
+            ']' => depth += 1,
+            '[' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &t[..i];
+                }
+            }
+            _ => {}
+        }
+    }
+    s
+}
+
 /// The callee immediately before the `(` — a bare `name` or `Recv.member`.
 fn callee_before(s: &str) -> Option<String> {
-    let s = s.trim_end();
+    let s = strip_type_args(s).trim_end();
     // Advance past the matched char by its UTF-8 length; a multi-byte
     // non-identifier char (`"`, `€`, `—`, …) would make `i + 1` land
     // mid-codepoint and panic the slice.
@@ -409,6 +434,22 @@ mod tests {
         let ctx = call_context(t, t.len()).unwrap();
         assert_eq!(ctx.callee, "f");
         assert_eq!(ctx.active_param, 1); // after one comma
+    }
+
+    #[test]
+    fn an_explicit_type_argument_list_is_not_the_callee_or_an_argument() {
+        // #2795: `b.map[String](` resolves like `b.map(`, and the list's comma
+        // is not an argument separator.
+        let t = "  b.map[String](f, ";
+        let ctx = call_context(t, t.len()).unwrap();
+        assert_eq!(ctx.callee, "b.map");
+        assert_eq!(ctx.active_param, 1);
+        let t = "  b.pair[Int, String](";
+        let ctx = call_context(t, t.len()).unwrap();
+        assert_eq!(ctx.callee, "b.pair");
+        assert_eq!(ctx.active_param, 0);
+        let (rw, _) = value_receiver_rewrite(t, &ctx.callee, ctx.open_paren, t.len()).unwrap();
+        assert_eq!(rw, "  b");
     }
 
     #[test]

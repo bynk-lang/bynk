@@ -3728,12 +3728,64 @@ fn lower_method_call(
             needs_exec = true;
         }
     }
-    let call = format!("{ns}.{}({})", method.name, all.join(", "));
+    // #2795: explicit type arguments on a generic instance method are kept, the
+    // receiver's own parameters first (the emitted `<A, U>` order), so a call
+    // with no argument of type `U` still types as written. The method's own
+    // arguments are what the author wrote; a receiver argument is spelled only
+    // when it is a base or built-in type, which is in scope everywhere, and is
+    // `any` otherwise (a type the calling module may never import, or a type
+    // variable that may not be this function's). The checker has already typed
+    // the call, so `any` in a receiver slot loses nothing.
+    let explicit = if type_args.is_empty() {
+        String::new()
+    } else {
+        let recv_args: Option<Vec<TyId>> =
+            cx.commons()
+                .expr_types
+                .get(&receiver.id)
+                .and_then(|te| match &*tys.get(te.ty) {
+                    Ty::Named { args, .. } => Some(args.clone()),
+                    _ => None,
+                });
+        match recv_args {
+            Some(recv_args) => {
+                let parts: Vec<String> = recv_args
+                    .iter()
+                    .map(|a| {
+                        if ts_spelling_in_scope_everywhere(*a, tys) {
+                            ty_to_type_ref(*a, tys)
+                                .map(|r| ts_type_ref(&r))
+                                .unwrap_or_else(|| "any".to_string())
+                        } else {
+                            "any".to_string()
+                        }
+                    })
+                    .chain(type_args.iter().map(ts_type_ref))
+                    .collect();
+                format!("<{}>", parts.join(", "))
+            }
+            None => String::new(),
+        }
+    };
+    let call = format!("{ns}.{}{explicit}({})", method.name, all.join(", "));
     pre.finish(if needs_exec {
         settle_exec_call(call, cx)
     } else {
         call
     })
+}
+
+/// #2795: whether a type's TypeScript spelling is in scope in every emitted
+/// module: base types, `Unit` and the built-in containers over them.
+fn ts_spelling_in_scope_everywhere(t: TyId, tys: &Arc<Types>) -> bool {
+    match &*tys.get(t) {
+        Ty::Base(_) | Ty::Unit => true,
+        Ty::Option(a) | Ty::List(a) | Ty::Set(a) => ts_spelling_in_scope_everywhere(*a, tys),
+        Ty::Result(a, b) | Ty::Map(a, b) => {
+            ts_spelling_in_scope_everywhere(*a, tys) && ts_spelling_in_scope_everywhere(*b, tys)
+        }
+        _ => false,
+    }
 }
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the

@@ -1,0 +1,7 @@
+commons demo.boxes
+
+type Box[T] = { value: T }
+
+fn Box.probe[U](self) -> Bool { true }
+
+fn Box.empty() -> Box[Option[T]] { Box { value: None } }
