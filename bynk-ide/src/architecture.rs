@@ -238,18 +238,30 @@ pub fn architecture_model(
                 let target = info
                     .and_then(|i| i.cross_context.resolve_prefix(&decl.target.joined()))
                     .unwrap_or_else(|| decl.target.joined());
-                let cap_labels: Vec<String> = decl
+                // #2765: the braces may also name an exported type
+                // (`consumes bynk { TimedOut }`); only capabilities count here.
+                let selected_caps: Vec<&Ident> = decl
                     .selected
-                    .as_ref()
-                    .map(|sel| sel.iter().map(|id| id.name.clone()).collect())
-                    .unwrap_or_default();
+                    .iter()
+                    .flatten()
+                    .filter(|id| {
+                        info.is_none_or(|i| {
+                            i.cross_context
+                                .consumed_capabilities
+                                .get(&target)
+                                .is_some_and(|m| m.contains_key(&id.name))
+                        })
+                    })
+                    .collect();
+                let cap_labels: Vec<String> =
+                    selected_caps.iter().map(|id| id.name.clone()).collect();
 
                 // A selected capability flattens into the consumer's own
                 // namespace regardless of whether `target` itself becomes a
                 // node (the built-in `bynk` surface never does) — record the
                 // binding on the node either way.
-                if let Some(selected) = &decl.selected {
-                    for id in selected {
+                {
+                    for id in selected_caps {
                         capabilities.push(ArchCapability {
                             name: id.name.clone(),
                             origin: CapabilityOrigin::Consumed {
@@ -414,6 +426,25 @@ service api from http {
   }
 }
 "#;
+
+    /// #2765: a type in the braces (`consumes bynk { Clock, TimedOut }`) is
+    /// not a capability binding.
+    #[test]
+    fn a_selected_type_is_not_a_consumed_capability() {
+        let src = RATELIMIT_SRC.replace(
+            "consumes bynk { Clock }",
+            "consumes bynk { Clock, TimedOut }",
+        );
+        let root = setup_project("type-selection", &[("ratelimit.bynk", &src)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let model = build_model(&diag);
+        let names: Vec<&str> = model.nodes[0]
+            .capabilities
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["Clock"]);
+    }
 
     #[test]
     fn single_context_binds_a_builtin_capability_with_no_dangling_edge() {

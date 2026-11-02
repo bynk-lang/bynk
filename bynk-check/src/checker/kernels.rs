@@ -2202,8 +2202,15 @@ fn check_kernel_fn_arg(arg: &Expr, params: Vec<TyId>, label: &str, ctx: &mut Ctx
     };
     let actual = type_of(arg, Some(tys.intern(expected.clone())), ctx)?;
     let mut subst: HashMap<String, TyId> = HashMap::new();
+    // #2727: `unify` never binds a variable to the bottom type, so a lambda
+    // that only faults leaves the return unbound; its return is `Never`, and the
+    // combinator's result takes its type from the position it appears in.
+    let faulting_ret = match &*tys.get(actual) {
+        Ty::Fn { ret, .. } if matches!(&*tys.get(*ret), Ty::Never) => Some(*ret),
+        _ => None,
+    };
     if unify(tys.intern(expected), actual, &mut subst, tys)
-        && let Some(ret) = subst.get(RET_VAR).cloned()
+        && let Some(ret) = subst.get(RET_VAR).cloned().or(faulting_ret)
     {
         // `unify` is permissive ground-vs-ground; re-check the whole shape.
         let want = Ty::Fn { params, ret };

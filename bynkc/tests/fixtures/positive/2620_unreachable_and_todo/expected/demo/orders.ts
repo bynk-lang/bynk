@@ -264,7 +264,7 @@ export const reads = {
  */
 export const awaits = {
   async call(deps: {}): globalThis.Promise<number> {
-    const n = await __fault("Todo", "awaiting", "demo/orders.bynk:184:16");
+    const n: number = await __fault("Todo", "awaiting", "demo/orders.bynk:184:21");
     return n;
   },
 };

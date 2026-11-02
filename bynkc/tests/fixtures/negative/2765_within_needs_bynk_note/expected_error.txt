@@ -1,0 +1,1 @@
+bynk.within.timed_out_not_in_scope `within` yields `Result[_, TimedOut]`

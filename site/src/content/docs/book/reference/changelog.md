@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.481.6** | An unannotated `let`, `<-` binding whose type is or contains the bottom type (a value that only faults, including a faulting lambda bound that way) (`unreachable`, `todo`) is refused with `bynk.types.never_inferred`, and no inlay hint offers `never returns` |
+| **v0.481.5** | "`consumes bynk { TimedOut }` is accepted — a `consumes U { … }` list may name a type U exports, as the `timed_out_not_in_scope` note recommends" |
 | **v0.481.4** | "A test module that calls a `Codable`-bounded generic (or generic static) with a base type such as `Int` now imports the `JsonValue`/`BoundaryError`/`Result` names the inline witness codec uses, instead of failing `tsc` with `Cannot find name '__JsonValue'`" |
 | **v0.481.3** | A bare `Val` of a refined `Int` with a wholly negative `InRange` lands inside the range instead of at `0` |
 | **v0.481.2** | The `tree-sitter-bynk` npm package declares the `tree-sitter` runtime it can load. Its parser is generated at ABI 15, but the peer dependency still said `^0.21`, and that runtime only loads ABI 14 and below, so `parser.setLanguage` threw. The peer range is now `^0.25` (#15). |

@@ -181,7 +181,7 @@ context demo.orders {
   ---
   service awaits {
     on call() -> Effect[Int] {
-      let n <- todo("awaiting")
+      let n: Int <- todo("awaiting")
       n
     }
   }

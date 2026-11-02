@@ -2028,6 +2028,20 @@ pub fn phase_resolve_consumes(
     // v0.17: `consumes U { Cap, … }` flattens selected caps into the consumer's
     // local namespace. unit → bare-cap → consumed unit providing it.
     let mut unit_flattened: HashMap<String, HashMap<String, String>> = HashMap::new();
+    // #2765: does `target` export the type `name` (`exports transparent|opaque`)?
+    let exports_type = |target: &str, name: &str| {
+        groups.get(target).is_some_and(|files| {
+            files.iter().any(|&j| {
+                parsed[j].exports().iter().any(|clause| {
+                    matches!(clause.kind, ExportKind::Type(_))
+                        && clause.names.iter().any(|e| e.name.name == name)
+                })
+            })
+        })
+    };
+    // #2765: type names already selected, per (file, target), so a repeat in
+    // one file is refused as a repeated capability is.
+    let mut type_selected: HashSet<(usize, String, String)> = HashSet::new();
     for (name, indices) in groups {
         let kind = *kinds.get(name).unwrap();
         let mut consumes_targets: Vec<String> = Vec::new();
@@ -2046,7 +2060,17 @@ pub fn phase_resolve_consumes(
                 // v0.18: an adapter's `consumes` is the braced capability-selection
                 // form only — an adapter has no services to RPC-call, so the
                 // whole-unit and `as Alias` forms are meaningless inside one.
-                if kind == UnitKind::Adapter && c.selected.is_none() {
+                // #2765: braces that select only types name no capability, so
+                // they trip the same guard.
+                let selects_only_types = c.selected.as_ref().is_some_and(|names| {
+                    let caps = unit_tables.get(&target).map(|t| &t.exported_capabilities);
+                    !names.is_empty()
+                        && names.iter().all(|n| {
+                            !caps.is_some_and(|c| c.contains(&n.name))
+                                && exports_type(&target, &n.name)
+                        })
+                });
+                if kind == UnitKind::Adapter && (c.selected.is_none() || selects_only_types) {
                     errors.push_for(Some(&parsed[i].identity_path()),
                         CompileError::new(
                             "bynk.adapter.consumes_requires_selection",
@@ -2147,6 +2171,29 @@ pub fn phase_resolve_consumes(
                                 policy.check(&format!("{target}.{}", cap.name), cap.span)
                         {
                             errors.push_for(Some(&parsed[i].identity_path()), err);
+                        }
+                        // #2765: the braces may also name a type `U` exports
+                        // (`consumes bynk { TimedOut }`). Exported types are
+                        // already in scope for any `consumes U`, so a type
+                        // selection has nothing to flatten; it only states the
+                        // dependency.
+                        if !exported.contains(&cap.name) && exports_type(&target, &cap.name) {
+                            if !type_selected.insert((i, target.clone(), cap.name.clone())) {
+                                errors.push_for(
+                                    Some(&parsed[i].identity_path()),
+                                    CompileError::new(
+                                        "bynk.consumes.capability_name_clash",
+                                        cap.span,
+                                        format!(
+                                            "`{}` is selected from `{target}` more than once in this file",
+                                            cap.name
+                                        ),
+                                    ),
+                                );
+                                continue;
+                            }
+                            refs.record_in_unit(cap.span, SymbolKind::Type, &cap.name, &target);
+                            continue;
                         }
                         if !exported.contains(&cap.name) {
                             errors.push_for(
@@ -6282,6 +6329,69 @@ mod shadowed_import_tests {
         assert_eq!(
             e.error.message,
             "`thing` names this unit's type, which hides the function `thing` from `lib.util`"
+        );
+    }
+
+    const WITHIN_SVC: &str = "\nservice s {\n  on call() -> Effect[String] {\n    let r <- Effect.pure(1).within(2.seconds)\n    Effect.pure(\"x\")\n  }\n}\n";
+
+    /// #2765: the braces may name a type the target exports, so the form the
+    /// `timed_out_not_in_scope` note recommends is accepted.
+    #[test]
+    fn consumes_bynk_may_select_an_exported_type() {
+        for consumes in [
+            "consumes bynk { TimedOut }",
+            "consumes bynk { Clock, TimedOut }",
+        ] {
+            let src = format!("context app\n\n{consumes}\n{WITHIN_SVC}");
+            let r = analyse(&[("app.bynk", &src)]);
+            assert!(
+                r.error_categories().is_empty(),
+                "{consumes}: {:?}",
+                r.error_categories()
+            );
+        }
+    }
+
+    /// A type repeated in one file is refused, as a repeated capability is.
+    #[test]
+    fn a_repeated_type_selection_is_refused() {
+        let src = format!("context app\n\nconsumes bynk {{ TimedOut, TimedOut }}\n{WITHIN_SVC}");
+        let r = analyse(&[("app.bynk", &src)]);
+        assert_eq!(
+            r.error_categories(),
+            vec!["bynk.consumes.capability_name_clash"]
+        );
+    }
+
+    /// A braced name that is neither an exported capability nor an exported
+    /// type is still refused.
+    #[test]
+    fn consumes_bynk_still_refuses_an_unknown_name() {
+        let r = analyse(&[("app.bynk", "context app\n\nconsumes bynk { NoSuchThing }\n")]);
+        assert_eq!(
+            r.error_categories(),
+            vec!["bynk.given.cross_context_unknown_capability"]
+        );
+    }
+
+    /// The note recommends only forms that work.
+    #[test]
+    fn timed_out_not_in_scope_note_names_the_accepted_form() {
+        let src = format!("context app\n{WITHIN_SVC}");
+        let r = analyse(&[("app.bynk", &src)]);
+        let e = r
+            .analysis
+            .errors
+            .iter()
+            .find(|e| e.error.category == "bynk.within.timed_out_not_in_scope")
+            .expect("TimedOut is not in scope without `consumes bynk`");
+        assert!(
+            e.error
+                .notes
+                .iter()
+                .any(|n| n.contains("consumes bynk { TimedOut }")),
+            "{:?}",
+            e.error.notes
         );
     }
 }
