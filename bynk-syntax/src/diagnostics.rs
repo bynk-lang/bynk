@@ -3307,6 +3307,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622).",
     ),
     dg(
+        "bynk.types.sequence_needs_result",
+        "`sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.some_value_mismatch",
         "A `Some` payload has the wrong type.",
         &["some_expr"],

@@ -1,0 +1,35 @@
+---
+#2806: accumulating and first-error collection of `Result`s.
+---
+suite demo.seq
+
+case "all Ok: both return every value in order" {
+  expect all([1, 2, 3]) == Ok([1, 2, 3])
+  expect first([1, 2, 3]) == Ok([1, 2, 3])
+}
+
+case "the empty list is Ok of the empty list" {
+  let none: List[Result[Int, String]] = []
+  expect allOf(none) == Ok([])
+  expect firstOf(none) == Ok([])
+}
+
+case "mixed: sequenceAll gathers every error in input order" {
+  expect all([1, -1, 2, 20, 3]) == Err(["negative", "too big"])
+}
+
+case "mixed: sequenceTry returns the first error" {
+  expect first([1, -1, 2, 20, 3]) == Err("negative")
+  expect first([1, 20, -1]) == Err("too big")
+}
+
+case "all Err: sequenceAll keeps every error, sequenceTry the first" {
+  expect all([-1, 20, -2]) == Err(["negative", "too big", "negative"])
+  expect first([-1, 20, -2]) == Err("negative")
+}
+
+case "sequence works on an existing list of Results" {
+  let rs: List[Result[Int, String]] = [Ok(1), Err("a"), Ok(2), Err("b")]
+  expect allOf(rs) == Err(["a", "b"])
+  expect firstOf(rs) == Err("a")
+}

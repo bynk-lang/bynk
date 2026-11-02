@@ -1143,6 +1143,18 @@ need to wait" are independent: to *await* a unit-returning effect (a durable
 write that must join the commit) keep the `<-` bind; to await and discard a
 **valued** reply, write `let _ <- e`. A send is a statement, never an expression.
 
+**Delivery guarantee.** A send is **immediate and best-effort**
+([ADR 0106](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0106-async-message-send.md)).
+The effect starts when the statement executes, not at the handler's commit. It is **not
+retried**, and a delivery that fails, or never completes, is **never observed by the
+sender**: the send binds nothing, the handler's result does not depend on it, and a fault in
+it cannot fail or alter the handler. A program MUST NOT rely on a send having been delivered.
+Unlike the producers that promise **at-least-once** delivery, a queue
+message ([ADR 0122](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0122-queue-is-a-delivery-concern.md))
+and an `Events` emission ([§5.7b](#events)), which are redelivered until handled and whose
+consumers are therefore written to be idempotent. A `~>` send carries no such promise. To
+await the effect, or to have its fault reach the handler, use `<-` or `do`.
+
 A send MUST NOT occur in an **agent handler** body, a closure within one included
 (`bynk.send.in_agent_handler`): an agent handler runs inside the agent's Durable
 Object and has no execution context to keep a fire-and-forget effect alive past
@@ -2508,6 +2520,8 @@ existing (ADR 0037). The whole kernel:
 | `List[T]` | `parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` |
 | `List[T]` | `traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` |
 | `List[T]` | `parTraverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` |
+| `List[Result[T, E]]` | `sequenceAll()` | `Result[List[T], List[E]]` |
+| `List[Result[T, E]]` | `sequenceTry()` | `Result[List[T], E]` |
 | `List[T]` | `map(f: T -> U)` | `List[U]` |
 | `List[T]` | `filter(p: T -> Bool)` | `List[T]` |
 | `List[T]` | `flatMap(f: T -> List[U])` | `List[U]` |
@@ -2589,6 +2603,14 @@ faulted, in which case the fault (first in input order) is raised instead, whate
 the `Err` positions. They are the fault-**propagating** counterpart to the fault-gathering
 `traverseAll`/`parTraverseAll`, and likewise apply over the `Query`/`Map`
 broadcast.
+
+The **pure** pair `sequenceAll` / `sequenceTry` collect a `List[Result[T, E]]` that
+already exists, with no function and no effect. `sequenceAll` returns `Ok` of every
+value, or `Err` of **every** error in input order (`Result[List[T], List[E]]`);
+`sequenceTry` returns `Ok` of every value, or the **first** `Err`
+(`Result[List[T], E]`). The empty list is `Ok([])`. Calling either on a list whose
+elements are not `Result`s is `bynk.types.sequence_needs_result`. They are defined on
+a `List` receiver only; a `Query` is `collect`ed first.
 
 *(v0.88, [ADR 0116](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0116-query-vocabulary-and-ordering.md))*
 The builder/terminal rows above are the **eager in-memory half** of the query
