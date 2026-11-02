@@ -1,0 +1,10 @@
+---
+#2773: an ordinary src module that only calls the generics with base types.
+---
+commons demo.b
+
+uses demo.a
+
+fn seven() -> String { enc(7) }
+
+fn packed() -> String { Packed.pack(true).json }
