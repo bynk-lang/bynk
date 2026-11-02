@@ -6,8 +6,6 @@ import {
   __bynkCmpInt,
   __bynkCmpString,
   __bynkCmpFloat,
-  __bynkCmpFloatNanFirst,
-  __bynkCmpDesc,
   __bynkCmpBytes,
   __bynkCmpOption,
   __bynkCmpList,
@@ -35,21 +33,6 @@ test("Float is a total order: NaN last and equal to itself, -0 equal to 0", () =
   assert.equal(__bynkCmpFloat(-0, 0), 0);
   assert.equal(sign(__bynkCmpFloat(-1, 0)), -1);
   assert.deepEqual([3, NaN, 1, NaN, 2].sort(__bynkCmpFloat).map(String), ["1", "2", "3", "NaN", "NaN"]);
-});
-
-test("a descending Float order is reversed, with NaN still last (#2805)", () => {
-  const desc = __bynkCmpDesc(__bynkCmpFloatNanFirst);
-  assert.deepEqual([3, NaN, 1, NaN, 2].sort(desc).map(String), ["3", "2", "1", "NaN", "NaN"]);
-  assert.equal(desc(NaN, NaN), 0);
-  assert.equal(__bynkCmpDesc(__bynkCmpFloatNanFirst)(-0, 0), 0);
-});
-
-test("a descending record order keeps NaN last at its Float leaf (#2805)", () => {
-  type R = { f: number; n: number };
-  const asc = __bynkCmpRecord<R>([["f", __bynkCmpFloatNanFirst], ["n", __bynkCmpInt]]);
-  const desc = __bynkCmpDesc(asc);
-  const rs: R[] = [{ f: 1, n: 1 }, { f: NaN, n: 9 }, { f: 2, n: 1 }, { f: 1, n: 2 }];
-  assert.deepEqual(rs.sort(desc).map((r) => `${r.f}:${r.n}`), ["2:1", "1:2", "1:1", "NaN:9"]);
 });
 
 test("Bytes are unsigned lexicographic", () => {

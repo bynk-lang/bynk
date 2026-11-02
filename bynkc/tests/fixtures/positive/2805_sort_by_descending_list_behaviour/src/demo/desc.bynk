@@ -1,7 +1,7 @@
 ---
-#2805: `List.sortByDescending` is stable (equal keys keep input order, unlike
-`reverse(sortBy)`) and keeps `NaN` last, in a bare `Float` key and inside a
-`derives Ord` record key. It takes every `Ord` key `sortBy` does.
+#2805: `List.sortByDescending` is the exact reverse of `sortBy`'s order, and stable
+(equal keys keep input order, unlike `reverse(sortBy)`), so `NaN` comes first, in a bare
+`Float` key, inside a `derives Ord` record key and through a type parameter alike.
 ---
 commons demo.desc
 
@@ -32,5 +32,7 @@ fn byName(xs: List[Item]) -> List[Item] { xs.sortByDescending((i) => i.name) }
 fn byRank(xs: List[Item]) -> List[Item] {
   xs.sortByDescending((i) => Rank { score: i.score, tier: i.tier })
 }
+
+fn floatsLargestFirst(xs: List[Float]) -> List[Float] { largestFirst(xs) }
 
 fn largestFirst[T: Ord](xs: List[T]) -> List[T] { xs.sortByDescending((x) => x) }

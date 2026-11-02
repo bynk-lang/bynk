@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
-import { __bynkCmpInt, __bynkCmpString } from "../__bynk_runtime/compare.js";
+import { __bynkCmpFloat, __bynkCmpInt, __bynkCmpString } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import * as __ns_demo_desc from "./../demo/desc.js";
 import * as __ns_bynk_list from "./../bynk/list.js";
@@ -43,12 +43,12 @@ function __makeTestDeps() {
 async function test_largest_key_first() {
   try {
     const deps = {};
-    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
+    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, floatsLargestFirst, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
     type Item = __ns_demo_desc.Item;
     type Rank = __ns_demo_desc.Rank;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const xs: readonly Item[] = [item("a", 0.0, 1), item("b", 0.0, 3), item("c", 0.0, 2)];
-    if (!(__bynkEq(names(byTier(xs)), ["b", "c", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:8:10", 179, 215, "expect names(byTier(xs)) == [\"b\", \"c\", \"a\"]\n  expected: names(byTier(xs)) == [\"b\", \"c\", \"a\"]\n  actual:   " + __bynkShow((names(byTier(xs)))) + " == " + __bynkShow((["b", "c", "a"]))); }
+    if (!(__bynkEq(names(byTier(xs)), ["b", "c", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:8:10", 180, 216, "expect names(byTier(xs)) == [\"b\", \"c\", \"a\"]\n  expected: names(byTier(xs)) == [\"b\", \"c\", \"a\"]\n  actual:   " + __bynkShow((names(byTier(xs)))) + " == " + __bynkShow((["b", "c", "a"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -62,13 +62,13 @@ async function test_largest_key_first() {
 async function test_ties_keep_input_order__unlike_reverse_of_sortBy() {
   try {
     const deps = {};
-    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
+    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, floatsLargestFirst, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
     type Item = __ns_demo_desc.Item;
     type Rank = __ns_demo_desc.Rank;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const xs: readonly Item[] = [item("a", 0.0, 1), item("b", 0.0, 2), item("c", 0.0, 1), item("d", 0.0, 2)];
-    if (!(__bynkEq(names(byTier(xs)), ["b", "d", "a", "c"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:13:10", 385, 426, "expect names(byTier(xs)) == [\"b\", \"d\", \"a\", \"c\"]\n  expected: names(byTier(xs)) == [\"b\", \"d\", \"a\", \"c\"]\n  actual:   " + __bynkShow((names(byTier(xs)))) + " == " + __bynkShow((["b", "d", "a", "c"]))); }
-    if (!(__bynkEq(names(byTierReversed(xs)), ["d", "b", "c", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:14:10", 436, 485, "expect names(byTierReversed(xs)) == [\"d\", \"b\", \"c\", \"a\"]\n  expected: names(byTierReversed(xs)) == [\"d\", \"b\", \"c\", \"a\"]\n  actual:   " + __bynkShow((names(byTierReversed(xs)))) + " == " + __bynkShow((["d", "b", "c", "a"]))); }
+    if (!(__bynkEq(names(byTier(xs)), ["b", "d", "a", "c"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:13:10", 386, 427, "expect names(byTier(xs)) == [\"b\", \"d\", \"a\", \"c\"]\n  expected: names(byTier(xs)) == [\"b\", \"d\", \"a\", \"c\"]\n  actual:   " + __bynkShow((names(byTier(xs)))) + " == " + __bynkShow((["b", "d", "a", "c"]))); }
+    if (!(__bynkEq(names(byTierReversed(xs)), ["d", "b", "c", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:14:10", 437, 486, "expect names(byTierReversed(xs)) == [\"d\", \"b\", \"c\", \"a\"]\n  expected: names(byTierReversed(xs)) == [\"d\", \"b\", \"c\", \"a\"]\n  actual:   " + __bynkShow((names(byTierReversed(xs)))) + " == " + __bynkShow((["d", "b", "c", "a"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -82,12 +82,12 @@ async function test_ties_keep_input_order__unlike_reverse_of_sortBy() {
 async function test_a_String_key_sorts_descending() {
   try {
     const deps = {};
-    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
+    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, floatsLargestFirst, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
     type Item = __ns_demo_desc.Item;
     type Rank = __ns_demo_desc.Rank;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const xs: readonly Item[] = [item("b", 0.0, 1), item("c", 0.0, 1), item("a", 0.0, 1)];
-    if (!(__bynkEq(names(byName(xs)), ["c", "b", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:19:10", 618, 654, "expect names(byName(xs)) == [\"c\", \"b\", \"a\"]\n  expected: names(byName(xs)) == [\"c\", \"b\", \"a\"]\n  actual:   " + __bynkShow((names(byName(xs)))) + " == " + __bynkShow((["c", "b", "a"]))); }
+    if (!(__bynkEq(names(byName(xs)), ["c", "b", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:19:10", 619, 655, "expect names(byName(xs)) == [\"c\", \"b\", \"a\"]\n  expected: names(byName(xs)) == [\"c\", \"b\", \"a\"]\n  actual:   " + __bynkShow((names(byName(xs)))) + " == " + __bynkShow((["c", "b", "a"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -98,15 +98,15 @@ async function test_a_String_key_sorts_descending() {
 }
 
 // case tier: unit
-async function test_NaN_is_last_in_a_descending_Float_key() {
+async function test_NaN_is_first_in_a_descending_Float_key() {
   try {
     const deps = {};
-    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
+    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, floatsLargestFirst, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
     type Item = __ns_demo_desc.Item;
     type Rank = __ns_demo_desc.Rank;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const xs: readonly Item[] = [item("a", 1.0, 1), item("n", nan(), 1), item("b", 3.0, 1), item("m", nan(), 1), item("c", 2.0, 1)];
-    if (!(__bynkEq(names(byScore(xs)), ["b", "c", "a", "n", "m"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:24:10", 837, 884, "expect names(byScore(xs)) == [\"b\", \"c\", \"a\", \"n\", \"m\"]\n  expected: names(byScore(xs)) == [\"b\", \"c\", \"a\", \"n\", \"m\"]\n  actual:   " + __bynkShow((names(byScore(xs)))) + " == " + __bynkShow((["b", "c", "a", "n", "m"]))); }
+    if (!(__bynkEq(names(byScore(xs)), ["n", "m", "b", "c", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:24:10", 839, 886, "expect names(byScore(xs)) == [\"n\", \"m\", \"b\", \"c\", \"a\"]\n  expected: names(byScore(xs)) == [\"n\", \"m\", \"b\", \"c\", \"a\"]\n  actual:   " + __bynkShow((names(byScore(xs)))) + " == " + __bynkShow((["n", "m", "b", "c", "a"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -117,15 +117,15 @@ async function test_NaN_is_last_in_a_descending_Float_key() {
 }
 
 // case tier: unit
-async function test_a_derives_Ord_record_key__fields_in_order__reversed__NaN_still_last() {
+async function test_a_derives_Ord_record_key__fields_in_order__reversed__NaN_first() {
   try {
     const deps = {};
-    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
+    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, floatsLargestFirst, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
     type Item = __ns_demo_desc.Item;
     type Rank = __ns_demo_desc.Rank;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const xs: readonly Item[] = [item("a", 1.0, 1), item("b", 1.0, 2), item("n", nan(), 9), item("c", 2.0, 1), item("d", 2.0, 1), item("m", nan(), 3)];
-    if (!(__bynkEq(names(byRank(xs)), ["c", "d", "b", "a", "n", "m"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:32:10", 1128, 1179, "expect names(byRank(xs)) == [\"c\", \"d\", \"b\", \"a\", \"n\", \"m\"]\n  expected: names(byRank(xs)) == [\"c\", \"d\", \"b\", \"a\", \"n\", \"m\"]\n  actual:   " + __bynkShow((names(byRank(xs)))) + " == " + __bynkShow((["c", "d", "b", "a", "n", "m"]))); }
+    if (!(__bynkEq(names(byRank(xs)), ["n", "m", "c", "d", "b", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:32:10", 1125, 1176, "expect names(byRank(xs)) == [\"n\", \"m\", \"c\", \"d\", \"b\", \"a\"]\n  expected: names(byRank(xs)) == [\"n\", \"m\", \"c\", \"d\", \"b\", \"a\"]\n  actual:   " + __bynkShow((names(byRank(xs)))) + " == " + __bynkShow((["n", "m", "c", "d", "b", "a"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -139,14 +139,36 @@ async function test_a_derives_Ord_record_key__fields_in_order__reversed__NaN_sti
 async function test_a_type_parameter_key_reverses_its_witness() {
   try {
     const deps = {};
-    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
+    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, floatsLargestFirst, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
     type Item = __ns_demo_desc.Item;
     type Rank = __ns_demo_desc.Rank;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const ints: readonly number[] = [2, 3, 1];
     const strs: readonly string[] = ["b", "c", "a"];
-    if (!(__bynkEq(largestFirst(ints, __bynkCmpInt), [3, 2, 1]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:38:10", 1320, 1351, "expect largestFirst(ints) == [3, 2, 1]\n  expected: largestFirst(ints) == [3, 2, 1]\n  actual:   " + __bynkShow((largestFirst(ints, __bynkCmpInt))) + " == " + __bynkShow(([3, 2, 1]))); }
-    if (!(__bynkEq(largestFirst(strs, __bynkCmpString), ["c", "b", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:39:10", 1361, 1398, "expect largestFirst(strs) == [\"c\", \"b\", \"a\"]\n  expected: largestFirst(strs) == [\"c\", \"b\", \"a\"]\n  actual:   " + __bynkShow((largestFirst(strs, __bynkCmpString))) + " == " + __bynkShow((["c", "b", "a"]))); }
+    if (!(__bynkEq(largestFirst(ints, __bynkCmpInt), [3, 2, 1]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:38:10", 1317, 1348, "expect largestFirst(ints) == [3, 2, 1]\n  expected: largestFirst(ints) == [3, 2, 1]\n  actual:   " + __bynkShow((largestFirst(ints, __bynkCmpInt))) + " == " + __bynkShow(([3, 2, 1]))); }
+    if (!(__bynkEq(largestFirst(strs, __bynkCmpString), ["c", "b", "a"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:39:10", 1358, 1395, "expect largestFirst(strs) == [\"c\", \"b\", \"a\"]\n  expected: largestFirst(strs) == [\"c\", \"b\", \"a\"]\n  actual:   " + __bynkShow((largestFirst(strs, __bynkCmpString))) + " == " + __bynkShow((["c", "b", "a"]))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_generic_helper_sorts_exactly_like_the_inlined_call__NaN_first() {
+  try {
+    const deps = {};
+    const { Item, Rank, byName, byRank, byScore, byTier, byTierReversed, floatsLargestFirst, isNaN, item, largestFirst, names, nan } = __ns_demo_desc;
+    type Item = __ns_demo_desc.Item;
+    type Rank = __ns_demo_desc.Rank;
+    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
+    const fs: readonly number[] = [1.0, nan(), 3.0];
+    const out = floatsLargestFirst(fs);
+    if (!(isNaN(((__xs: readonly number[], __d: number) => __xs.length > 0 ? __xs[0] : __d)(out, 0.0)))) { throw __bynkExpectFailure("tests/demo/desc.bynk:45:10", 1558, 1585, "expect isNaN(out.firstOrElse(0.0))"); }
+    if (!(__bynkEq((out).slice(globalThis.Math.max(0, 1)), [3.0, 1.0]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:46:10", 1595, 1620, "expect out.skip(1) == [3.0, 1.0]\n  expected: out.skip(1) == [3.0, 1.0]\n  actual:   " + __bynkShow(((out).slice(globalThis.Math.max(0, 1)))) + " == " + __bynkShow(([3.0, 1.0]))); }
+    if (!(__bynkEq(([...fs].sort((__a: number, __b: number) => __bynkCmpFloat(((x) => x)(__b), ((x) => x)(__a)))).slice(globalThis.Math.max(0, 1)), [3.0, 1.0]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:47:10", 1630, 1681, "expect fs.sortByDescending((x) => x).skip(1) == [3.0, 1.0]\n  expected: fs.sortByDescending((x) => x).skip(1) == [3.0, 1.0]\n  actual:   " + __bynkShow((([...fs].sort((__a: number, __b: number) => __bynkCmpFloat(((x) => x)(__b), ((x) => x)(__a)))).slice(globalThis.Math.max(0, 1)))) + " == " + __bynkShow(([3.0, 1.0]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -170,7 +192,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["largest key first", "ties keep input order, unlike reverse of sortBy", "a String key sorts descending", "NaN is last in a descending Float key", "a derives Ord record key: fields in order, reversed, NaN still last", "a type-parameter key reverses its witness"];
+export const __bynkCases: readonly string[] = ["largest key first", "ties keep input order, unlike reverse of sortBy", "a String key sorts descending", "NaN is first in a descending Float key", "a derives Ord record key: fields in order, reversed, NaN first", "a type-parameter key reverses its witness", "a generic helper sorts exactly like the inlined call, NaN first"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -193,21 +215,27 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("NaN is last in a descending Float key")) {
+  if (want("NaN is first in a descending Float key")) {
     const started = __bynkCaseNow();
-    const r = { name: "NaN is last in a descending Float key", ...(await test_NaN_is_last_in_a_descending_Float_key()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "NaN is first in a descending Float key", ...(await test_NaN_is_first_in_a_descending_Float_key()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("a derives Ord record key: fields in order, reversed, NaN still last")) {
+  if (want("a derives Ord record key: fields in order, reversed, NaN first")) {
     const started = __bynkCaseNow();
-    const r = { name: "a derives Ord record key: fields in order, reversed, NaN still last", ...(await test_a_derives_Ord_record_key__fields_in_order__reversed__NaN_still_last()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "a derives Ord record key: fields in order, reversed, NaN first", ...(await test_a_derives_Ord_record_key__fields_in_order__reversed__NaN_first()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
   if (want("a type-parameter key reverses its witness")) {
     const started = __bynkCaseNow();
     const r = { name: "a type-parameter key reverses its witness", ...(await test_a_type_parameter_key_reverses_its_witness()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a generic helper sorts exactly like the inlined call, NaN first")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic helper sorts exactly like the inlined call, NaN first", ...(await test_a_generic_helper_sorts_exactly_like_the_inlined_call__NaN_first()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

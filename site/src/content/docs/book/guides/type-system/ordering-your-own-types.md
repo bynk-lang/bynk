@@ -80,8 +80,8 @@ jobs.sortBy((j) => j.priority).skip(1).take(2).collect()
 ## Largest first
 
 `sortByDescending` takes the same keys and puts the largest first, on a `List` and on a
-`Query`. Equal keys keep their input order (unlike `reverse(xs.sortBy(k))`, which
-reverses them), and a `Float` `NaN` stays last in both directions:
+`Query`. It is the exact reverse of `sortBy`'s order, so a `Float` `NaN` comes first, but equal keys keep their
+input order (unlike `reverse(xs.sortBy(k))`, which reverses them):
 
 ```bynk,fragment
 fn leaders(ts: List[Task]) -> List[Task] { ts.sortByDescending((t) => t.priority) }

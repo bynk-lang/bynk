@@ -398,10 +398,10 @@ fn withTotal(ns: List[Int]) -> List[Int] {
 `average`.
 
 Ordering keys (`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a lazy storage `Query`, are any
-[`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). `sortByDescending` is `sortBy` largest key first. It is **stable**: equal keys keep their input
-order, which `reverse(xs.sortBy(k))` does not. A `Float` `NaN` stays **last** in both directions,
-including inside a `derives Ord` key. (In generic code, a key of type parameter `T: Ord` is
-reversed through its comparator, so a `Float` `T` puts `NaN` first.) Numeric keys (`sum`/`average`) are
+[`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). `sortByDescending` is `sortBy` largest key first: the exact reverse of the ascending order, so a
+`Float` `NaN` comes **first** (`None` last, a longer list first). It is **stable**: equal keys keep
+their input order, which `reverse(xs.sortBy(k))` does not. It behaves the same for a concrete,
+`derives Ord` or type-parameter key. Numeric keys (`sum`/`average`) are
 `Int`/`Float`/`Duration` (`bynk.query.sum_needs_numeric`), with `average -> Float`.
 **Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
 `sum` the zero. The first-party `bynk.list` free functions are the deprecated

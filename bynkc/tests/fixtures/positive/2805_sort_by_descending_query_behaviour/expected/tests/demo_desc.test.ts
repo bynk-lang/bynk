@@ -86,7 +86,7 @@ async function test_ties_keep_the_query_s_own_order__as_sortBy_keeps_them() {
 }
 
 // case tier: unit
-async function test_NaN_is_last_in_a_descending_Float_key() {
+async function test_NaN_is_first_in_a_descending_Float_key() {
   try {
     __ns_demo_desc.__resetAgents();
     const deps = __makeTestDeps();
@@ -97,7 +97,7 @@ async function test_NaN_is_last_in_a_descending_Float_key() {
     await __makeBoard("f").add("y", Priority.Low, 1, 0.0, 0.0, deps);
     await __makeBoard("f").add("z", Priority.Low, 1, 1.5, 1.0, deps);
     const names = await __makeBoard("f").byScore(deps);
-    if (!(__bynkEq(names, ["x", "z", "y"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:30:10", 953, 977, "expect names == [\"x\", \"z\", \"y\"]\n  expected: names == [\"x\", \"z\", \"y\"]\n  actual:   " + __bynkShow((names)) + " == " + __bynkShow((["x", "z", "y"]))); }
+    if (!(__bynkEq(names, ["y", "x", "z"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:30:10", 954, 978, "expect names == [\"y\", \"x\", \"z\"]\n  expected: names == [\"y\", \"x\", \"z\"]\n  actual:   " + __bynkShow((names)) + " == " + __bynkShow((["y", "x", "z"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -119,7 +119,7 @@ async function test_sortByDescending_stays_lazy_for_take() {
     await __makeBoard("k").add("b", Priority.Low, 3, 0.0, 1.0, deps);
     await __makeBoard("k").add("c", Priority.Low, 2, 0.0, 1.0, deps);
     const names = await __makeBoard("k").topTwo(deps);
-    if (!(__bynkEq(names, ["b", "c"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:38:10", 1200, 1219, "expect names == [\"b\", \"c\"]\n  expected: names == [\"b\", \"c\"]\n  actual:   " + __bynkShow((names)) + " == " + __bynkShow((["b", "c"]))); }
+    if (!(__bynkEq(names, ["b", "c"]))) { throw __bynkExpectFailure("tests/demo/desc.bynk:38:10", 1201, 1220, "expect names == [\"b\", \"c\"]\n  expected: names == [\"b\", \"c\"]\n  actual:   " + __bynkShow((names)) + " == " + __bynkShow((["b", "c"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -143,7 +143,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["sortByDescending a derives Ord enum", "ties keep the query's own order, as sortBy keeps them", "NaN is last in a descending Float key", "sortByDescending stays lazy for take"];
+export const __bynkCases: readonly string[] = ["sortByDescending a derives Ord enum", "ties keep the query's own order, as sortBy keeps them", "NaN is first in a descending Float key", "sortByDescending stays lazy for take"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -160,9 +160,9 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("NaN is last in a descending Float key")) {
+  if (want("NaN is first in a descending Float key")) {
     const started = __bynkCaseNow();
-    const r = { name: "NaN is last in a descending Float key", ...(await test_NaN_is_last_in_a_descending_Float_key()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "NaN is first in a descending Float key", ...(await test_NaN_is_first_in_a_descending_Float_key()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

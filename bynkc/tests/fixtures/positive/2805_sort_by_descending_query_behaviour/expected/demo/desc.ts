@@ -2,14 +2,15 @@
 // context demo.desc
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import { __bynkCmpDesc, __bynkCmpFloatNanFirst, __bynkCmpSum } from "../__bynk_runtime/compare.js";
+import { __bynkCmpFloat, __bynkCmpSum } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 /**
- * #2805: a store `Query`'s `sortByDescending` is stable and keeps `NaN` last, and
+ * #2805: a store `Query`'s `sortByDescending` is stable and the exact reverse of
+ * `sortBy`'s order (so `NaN` is first), and
  * composes lazily with `take`/`skip`.
  */
 
@@ -83,7 +84,7 @@ export class Board {
 
   async byPriority(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((__c) => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __c(((j) => j.priority)(__a), ((j) => j.priority)(__b))))(__bynkCmpDesc(__bynkCmpSum(["Low", "Medium", "High"], {})))))().map((__x) => ((j) => j.name)(__x))))();
+    return ((() => ((() => ((__c) => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __c(((j) => j.priority)(__b), ((j) => j.priority)(__a))))(__bynkCmpSum(["Low", "Medium", "High"], {}))))().map((__x) => ((j) => j.name)(__x))))();
   }
 
   async byDue(deps: {}): globalThis.Promise<readonly string[]> {
@@ -98,7 +99,7 @@ export class Board {
 
   async byScore(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((__c) => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __c(((j) => j.score / j.div)(__a), ((j) => j.score / j.div)(__b))))(__bynkCmpDesc(__bynkCmpFloatNanFirst))))().map((__x) => ((j) => j.name)(__x))))();
+    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __bynkCmpFloat(((j) => j.score / j.div)(__b), ((j) => j.score / j.div)(__a)))))().map((__x) => ((j) => j.name)(__x))))();
   }
 
   async topTwo(deps: {}): globalThis.Promise<readonly string[]> {

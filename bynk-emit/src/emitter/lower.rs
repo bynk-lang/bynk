@@ -4726,11 +4726,10 @@ fn lower_list_kernel(
                 ),
             })
         }
-        // #2805: `sortByDescending`: stable, and `NaN` stays last, so the
-        // comparator is the reversed one from `comparator_desc`, not a bare
-        // `cmp(b, a)` over the ascending witness.
+        // #2805: `sortByDescending` is the exact reverse of `sortBy`'s order
+        // (the comparator's arguments swapped, so `NaN` is first), and stable.
         ("sortByDescending", [key]) => {
-            let cmp = kernel_key_comparator_desc(&args[0], cx);
+            let cmp = kernel_key_comparator(&args[0], cx);
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
             Some(match cmp {
@@ -4738,10 +4737,10 @@ fn lower_list_kernel(
                     "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; }})"
                 ),
                 Some(cmp) if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') => format!(
-                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp}(({key})(__a), ({key})(__b)))"
+                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp}(({key})(__b), ({key})(__a)))"
                 ),
                 Some(cmp) => format!(
-                    "((__c, __r: readonly {elem_el}[]) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})(__a), ({key})(__b))))({cmp}, {recv})"
+                    "((__c, __r: readonly {elem_el}[]) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})(__b), ({key})(__a))))({cmp}, {recv})"
                 ),
             })
         }
@@ -4981,7 +4980,7 @@ struct QueryShape<'a> {
 fn query_key_cmp(method: &Ident, args: &[Expr], cx: &LowerCtx) -> Option<String> {
     match (method.name.as_str(), args) {
         ("sortBy" | "min" | "max", [key]) => kernel_key_comparator(key, cx),
-        ("sortByDescending", [key]) => kernel_key_comparator_desc(key, cx),
+        ("sortByDescending", [key]) => kernel_key_comparator(key, cx),
         _ => None,
     }
 }
@@ -5077,7 +5076,7 @@ fn lower_query_method(
         )),
         ("sortByDescending", [key]) if let Some(cmp) = key_cmp => {
             thunk(with_comparator(cmp, |c| {
-                format!("[...{source}].sort((__a, __b) => {c}(({key})(__a), ({key})(__b)))")
+                format!("[...{source}].sort((__a, __b) => {c}(({key})(__b), ({key})(__a)))")
             }))
         }
         ("sortByDescending", [key]) => thunk(format!(
@@ -7038,10 +7037,6 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
 /// instead of making the sort inconsistent. A key type the checker did not record
 /// keeps the bare operators.
 fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<String> {
-    key_comparator(key, cx, false)
-}
-
-fn key_comparator(key: &Expr, cx: &LowerCtx, descending: bool) -> Option<String> {
     let tys = cx.commons().tys();
     let fn_ty = cx.commons().expr_types.get(&key.id)?.ty;
     let Ty::Fn { ret, .. } = &*tys.get(fn_ty) else {
@@ -7051,20 +7046,7 @@ fn key_comparator(key: &Expr, cx: &LowerCtx, descending: bool) -> Option<String>
         ret.base(tys),
         Some(BaseType::Int | BaseType::String | BaseType::Duration | BaseType::Instant)
     );
-    (!plain).then(|| {
-        if descending {
-            cx.comparator_desc(*ret)
-        } else {
-            cx.comparator(*ret)
-        }
-    })
-}
-
-/// The comparator `sortByDescending` needs (#2805): `None` for a plain base key,
-/// which swaps the bare operators; otherwise the key type's descending
-/// comparator, which keeps `NaN` last.
-fn kernel_key_comparator_desc(key: &Expr, cx: &LowerCtx) -> Option<String> {
-    key_comparator(key, cx, true)
+    (!plain).then(|| cx.comparator(*ret))
 }
 
 /// Constrained generics slice 2: whether a `Map` key / `Set` element of this

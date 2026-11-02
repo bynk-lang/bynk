@@ -2,15 +2,15 @@
 // commons demo.desc
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import { __bynkCmpDesc, __bynkCmpFloatNanFirst, __bynkCmpInt, __bynkCmpRecord } from "../__bynk_runtime/compare.js";
+import { __bynkCmpFloat, __bynkCmpInt, __bynkCmpRecord } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 import { reverse } from "../bynk/list.js";
 
 /**
- * #2805: `List.sortByDescending` is stable (equal keys keep input order, unlike
- * `reverse(sortBy)`) and keeps `NaN` last, in a bare `Float` key and inside a
- * `derives Ord` record key. It takes every `Ord` key `sortBy` does.
+ * #2805: `List.sortByDescending` is the exact reverse of `sortBy`'s order, and stable
+ * (equal keys keep input order, unlike `reverse(sortBy)`), so `NaN` comes first, in a bare
+ * `Float` key, inside a `derives Ord` record key and through a type parameter alike.
  */
 
 export interface Rank {
@@ -55,7 +55,7 @@ export function byTierReversed(xs: readonly Item[]): readonly Item[] {
 }
 
 export function byScore(xs: readonly Item[]): readonly Item[] {
-  return ((__c, __r: readonly Item[]) => [...__r].sort((__a: Item, __b: Item) => __c(((i) => i.score)(__a), ((i) => i.score)(__b))))(__bynkCmpDesc(__bynkCmpFloatNanFirst), xs);
+  return [...xs].sort((__a: Item, __b: Item) => __bynkCmpFloat(((i) => i.score)(__b), ((i) => i.score)(__a)));
 }
 
 export function byName(xs: readonly Item[]): readonly Item[] {
@@ -63,9 +63,13 @@ export function byName(xs: readonly Item[]): readonly Item[] {
 }
 
 export function byRank(xs: readonly Item[]): readonly Item[] {
-  return ((__c, __r: readonly Item[]) => [...__r].sort((__a: Item, __b: Item) => __c(((i) => ({ score: i.score, tier: i.tier }))(__a), ((i) => ({ score: i.score, tier: i.tier }))(__b))))(__bynkCmpDesc(__bynkCmpRecord([["score", __bynkCmpFloatNanFirst], ["tier", __bynkCmpInt]])), xs);
+  return ((__c, __r: readonly Item[]) => [...__r].sort((__a: Item, __b: Item) => __c(((i) => ({ score: i.score, tier: i.tier }))(__b), ((i) => ({ score: i.score, tier: i.tier }))(__a))))(__bynkCmpRecord([["score", __bynkCmpFloat], ["tier", __bynkCmpInt]]), xs);
+}
+
+export function floatsLargestFirst(xs: readonly number[]): readonly number[] {
+  return largestFirst(xs, __bynkCmpFloat);
 }
 
 export function largestFirst<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): readonly T[] {
-  return ((__c, __r: readonly T[]) => [...__r].sort((__a: T, __b: T) => __c(((x) => x)(__a), ((x) => x)(__b))))(__bynkCmpDesc(__cmp_T), xs);
+  return [...xs].sort((__a: T, __b: T) => __cmp_T(((x) => x)(__b), ((x) => x)(__a)));
 }

@@ -22,12 +22,12 @@ case "ties keep the query's own order, as sortBy keeps them" {
   expect ascending == ["p", "r", "s", "q"]
 }
 
-case "NaN is last in a descending Float key" {
+case "NaN is first in a descending Float key" {
   do Board("f").add("x", Low, 1, 2.5, 1.0)
   do Board("f").add("y", Low, 1, 0.0, 0.0)
   do Board("f").add("z", Low, 1, 1.5, 1.0)
   let names <- Board("f").byScore()
-  expect names == ["x", "z", "y"]
+  expect names == ["y", "x", "z"]
 }
 
 case "sortByDescending stays lazy for take" {

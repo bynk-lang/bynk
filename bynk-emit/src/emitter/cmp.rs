@@ -49,10 +49,6 @@ pub(crate) struct CmpGen<'a> {
     commons: &'a TypedCommons,
     runtime_use: &'a RuntimeUse,
     scope: &'a HashMap<String, String>,
-    /// Building the leaves of a descending comparator (`sortByDescending`,
-    /// #2805): a `Float` leaf puts `NaN` first, so that swapping the arguments
-    /// at the top ([`CmpGen::for_ty_desc`]) puts it last.
-    descending: bool,
 }
 
 impl<'a> CmpGen<'a> {
@@ -65,20 +61,7 @@ impl<'a> CmpGen<'a> {
             commons,
             runtime_use,
             scope,
-            descending: false,
         }
-    }
-
-    /// The descending comparator for `ty`: the exact reverse of its order, except
-    /// that `NaN` stays last at every `Float` leaf (#2805). A type parameter's
-    /// witness is erased, so it is reversed exactly.
-    pub(crate) fn for_ty_desc(self, ty: TyId) -> String {
-        let leaves = CmpGen {
-            descending: true,
-            ..self
-        };
-        let inner = leaves.for_ty(ty);
-        leaves.wrap("__bynkCmpDesc", inner)
     }
 
     /// The comparator expression for `ty`.
@@ -91,7 +74,6 @@ impl<'a> CmpGen<'a> {
         let name = match b {
             BaseType::Int | BaseType::Duration | BaseType::Instant => "__bynkCmpInt",
             BaseType::String => "__bynkCmpString",
-            BaseType::Float if self.descending => "__bynkCmpFloatNanFirst",
             BaseType::Float => "__bynkCmpFloat",
             BaseType::Bytes => "__bynkCmpBytes",
             BaseType::Decimal => "__bynkCmpDecimal",
