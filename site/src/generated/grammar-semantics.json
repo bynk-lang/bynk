@@ -898,6 +898,10 @@
     {
       "code": "bynk.types.lambda_mismatch",
       "summary": "A lambda's parameter count, parameter annotations, or body type do not match the expected function type."
+    },
+    {
+      "code": "bynk.types.never_inferred",
+      "summary": "An unannotated `let` or a lambda's result has the bottom type (`never returns`) because its value only faults; the type cannot be written in source, so an annotation or an expected type is needed."
     }
   ],
   "lambda_param": [
@@ -940,6 +944,10 @@
     {
       "code": "bynk.types.let_annotation_mismatch",
       "summary": "A `let` value does not match its type annotation."
+    },
+    {
+      "code": "bynk.types.never_inferred",
+      "summary": "An unannotated `let` or a lambda's result has the bottom type (`never returns`) because its value only faults; the type cannot be written in source, so an annotation or an expected type is needed."
     }
   ],
   "list_literal": [
