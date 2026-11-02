@@ -1914,4 +1914,27 @@ mod tests {
         assert_eq!(depth, 6);
         assert_eq!(shape, &serde_json::json!({"kind": "named", "name": "R1"}));
     }
+
+    #[test]
+    fn compile_expands_a_shared_record_once_per_parameter() {
+        let v = compile_json(
+            "context app.fan\n\
+             \n\
+             type P = { n: Int }\n\
+             type W = { a: P, b: P, c: P }\n\
+             \n\
+             service s {\n\
+             \x20 on call(w: W, p: P) -> Effect[Int] { 1 }\n\
+             }\n",
+        );
+        assert_eq!(v["ok"], true, "{v}");
+        let params = v["entries"][0]["params"].as_array().unwrap();
+        let f = &params[0]["shape"]["fields"];
+        assert_eq!(f[0]["shape"]["kind"], "record");
+        let named = serde_json::json!({"kind": "named", "name": "P"});
+        assert_eq!(f[1]["shape"], named);
+        assert_eq!(f[2]["shape"], named);
+        // The next parameter starts afresh.
+        assert_eq!(params[1]["shape"]["kind"], "record");
+    }
 }

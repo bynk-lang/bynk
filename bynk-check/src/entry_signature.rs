@@ -90,6 +90,8 @@ struct Scopes<'a> {
     unit_tables: &'a HashMap<String, UnitTable>,
     unit_uses: &'a HashMap<String, Vec<String>>,
     cache: HashMap<String, Arc<Scope>>,
+    /// (declaring unit, name) already expanded within the current parameter.
+    seen: std::collections::HashSet<(String, String)>,
     tys: Types,
 }
 
@@ -135,6 +137,7 @@ pub fn entry_handlers(
         unit_tables,
         unit_uses,
         cache: HashMap::new(),
+        seen: Default::default(),
         tys: Types::new(),
     };
     let entry_scope = sc.scope(unit);
@@ -155,6 +158,7 @@ pub fn entry_handlers(
                 .params
                 .iter()
                 .map(|p| {
+                    sc.seen.clear();
                     let resolved = resolve_type_ref(&p.type_ref, &entry_scope, &sc.tys);
                     EntryParam {
                         name: p.name.name.clone(),
@@ -234,7 +238,7 @@ fn shape_of(id: TyId, scope_unit: &str, sc: &mut Scopes, open: &mut Open) -> Ent
                     if open.contains(&key) {
                         return EntryShape::Recursive(name.clone());
                     }
-                    if open.len() >= MAX_DEPTH {
+                    if open.len() >= MAX_DEPTH || !sc.seen.insert(key.clone()) {
                         return EntryShape::Named(name.clone());
                     }
                     open.push(key);

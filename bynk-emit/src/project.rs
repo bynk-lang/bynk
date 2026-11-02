@@ -6569,4 +6569,32 @@ mod entry_scope_tests {
             other => panic!("expected Code, got {other:?}"),
         }
     }
+
+    /// A sum payload typed from a used unit resolves in the sum's own scope.
+    #[test]
+    fn a_sum_payload_from_a_used_unit_resolves() {
+        let es = entries(&[
+            (
+                "lib/a.bynk",
+                "commons lib.a\n\ntype Code = Int where InRange(0, 9)\n",
+            ),
+            (
+                "lib/b.bynk",
+                "commons lib.b\n\nuses lib.a\n\ntype Ev = | Empty | Coded(code: Code)\n",
+            ),
+            (
+                "app/web.bynk",
+                "context app.web\n\nuses lib.b\n\nservice s {\n  on call(e: Ev) -> Effect[Int] { 1 }\n}\n",
+            ),
+        ]);
+        match &es[0].params[0].shape {
+            EntryShape::Sum { variants, .. } => match &variants[1].1[0].1 {
+                EntryShape::Refined { name, base } => {
+                    assert_eq!((name.as_str(), *base), ("Code", "Int"));
+                }
+                other => panic!("expected Code, got {other:?}"),
+            },
+            other => panic!("expected a sum, got {other:?}"),
+        }
+    }
 }

@@ -44,8 +44,10 @@ compiles for the `browser` platform.
 (empty on failure), so a host can build a run's arguments without parsing the
 source. It is derived from the checker's resolved types, and only the program's
 own contexts are listed (never injected first-party units). A named type's fields are resolved in the scope of the unit that declares it.
-Expansion is capped at 6 nested records/sums (a wide DAG would otherwise grow
-exponentially); past that a type is reported by name. The field is additive:
+Within one parameter each record/sum is expanded once (its first occurrence)
+and nested at most 6 deep (a wide DAG would otherwise grow exponentially);
+later occurrences and anything deeper are reported by name, so look a name up
+at its first occurrence. The field is additive:
 the rest of the result is unchanged.
 
 ```ts
@@ -78,7 +80,7 @@ type Shape =
   | { kind: "map"; key: Shape; value: Shape }
   | { kind: "result"; ok: Shape; err: Shape }
   | { kind: "unit" }
-  | { kind: "named"; name: string }                    // a record/sum nested deeper than 6 levels: not expanded
+  | { kind: "named"; name: string }                    // a record/sum already expanded earlier in this parameter, or nested deeper than 6 levels: not expanded again
   | { kind: "recursive"; name: string }                // a type already being described above it
   | { kind: "other"; display: string };               // a generic record instance, a function, ...: no value to build
 ```
