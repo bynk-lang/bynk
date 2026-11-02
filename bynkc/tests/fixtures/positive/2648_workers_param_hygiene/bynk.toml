@@ -1,0 +1,6 @@
+[project]
+name = "2648-workers-param-hygiene"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
