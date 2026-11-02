@@ -1,0 +1,13 @@
+context auth.sessions
+
+consumes tokens { Jwt }
+
+// An unrelated local `Token`: only `Jwt.sign` names it, and it is not called.
+type Token = { id: Int }
+
+service login {
+  on call() -> Effect[Int] given Jwt {
+    let n <- Jwt.ping()
+    n
+  }
+}
