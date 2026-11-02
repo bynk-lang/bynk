@@ -84,9 +84,8 @@ pub fn local_sites_at(locals: &[LocalBinding], text: &str, offset: usize) -> Opt
         if is_dot_preceded(text, t.span.start) {
             continue;
         }
-        if t.span.start < target.scope.start || t.span.end > target.scope.end {
-            continue; // outside the binding's scope
-        }
+        // (Outside every scope range of the binding: `locals_at` below no
+        // longer resolves the use to it, so it is skipped there.)
         // Does this use resolve to `target` (not a shadowing inner binding)?
         let resolves = locals_at(locals, t.span.start)
             .into_iter()
