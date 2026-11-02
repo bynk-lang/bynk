@@ -545,6 +545,18 @@ pub(crate) fn refuse_experimental_import(name: &Ident, ctx: &mut Ctx) {
     }
 }
 
+/// The deprecated `bynk.list` free functions and the `List` method form each
+/// rewrites to. One table, read by the warning below and by the wasm
+/// `bynk_reference` catalogue so the two cannot drift. `reverse`/`traverse`
+/// have no method form yet and stay.
+pub const BYNK_LIST_DEPRECATED: &[(&str, &str)] = &[
+    ("map", "xs.map(f)"),
+    ("filter", "xs.filter(p)"),
+    ("any", "xs.any(p)"),
+    ("all", "xs.all(p)"),
+    ("find", "xs.filter(p).first()"),
+];
+
 /// v0.91 (ADR 0116 D6): the `bynk.list` free functions whose method forms
 /// shipped with slice 1 are **deprecated** in favour of the method-chain
 /// vocabulary. `reverse`/`traverse` stay (no method form yet). Emits a
@@ -555,13 +567,11 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
         return;
     }
     // The method-form spelling each free function rewrites to.
-    let method_form: &str = match name.name.as_str() {
-        "map" => "xs.map(f)",
-        "filter" => "xs.filter(p)",
-        "any" => "xs.any(p)",
-        "all" => "xs.all(p)",
-        "find" => "xs.filter(p).first()",
-        _ => return, // reverse / traverse keep their free-function form for now
+    let Some(&(_, method_form)) = BYNK_LIST_DEPRECATED
+        .iter()
+        .find(|(f, _)| *f == name.name.as_str())
+    else {
+        return; // reverse / traverse keep their free-function form for now
     };
     let mut err = CompileError::new(
         "bynk.list.deprecated_function",
