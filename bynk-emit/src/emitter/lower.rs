@@ -4037,10 +4037,20 @@ fn lower_cross_context_service_call(
                             )
                         })
                         .collect();
-                    Some(format!(
+                    let call = format!(
                         "deps.surface.{key}.{}({})",
                         method.name,
                         args_lowered.join(", ")
+                    );
+                    // #2825: the result takes the caller's declaration of a
+                    // same-named refined or opaque type, whose brand differs.
+                    Some(return_cast(
+                        &consumed,
+                        cx.cross_context(),
+                        &cx.commons().types,
+                        method,
+                        call,
+                        cx.in_test_scaffold(),
                     ))
                 }
                 BuildTarget::Workers => {

@@ -4657,6 +4657,88 @@ pub(crate) fn param_cast(
     arg
 }
 
+/// #2825: cast the result of a bundle-mode cross-context call to the *caller's*
+/// view of the service's return type.
+///
+/// A returned value is projected by name (spec §6.5): where the caller declares
+/// a type of the same name, the value takes it. A refined or opaque type is
+/// branded per context (`"a.Reply"` against `"b.Reply"`), so the callee's value
+/// is not assignable to the caller's declaration of the same name under
+/// `tsc --strict`, although the checker proved the two compatible. Route the
+/// call through `unknown` to the type as the caller names it, exactly as
+/// [`param_cast`] does for an argument. Names the caller does not declare keep
+/// the owning context's namespace, since the value keeps that type.
+///
+/// Only a return type that mentions a caller-declared refined or opaque type
+/// is cast; every other call lowers as before.
+pub(crate) fn return_cast(
+    consumed: &str,
+    info: &bynk_check::resolver::CrossContextInfo,
+    caller_types: &HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    method: &Ident,
+    call: String,
+    in_test_scaffold: bool,
+) -> String {
+    let Some(service) = info
+        .consumed_services
+        .get(consumed)
+        .and_then(|svcs| svcs.get(&method.name))
+    else {
+        return call;
+    };
+    let mut names = HashSet::new();
+    type_ref_names(&service.return_type, &mut names);
+    // A declaration both contexts share (a commons type) is one declaration,
+    // and it already type-checks; only a same-named declaration of the caller's
+    // own, distinct from the provider's, is branded differently.
+    let provider_types = info.consumed_types.get(consumed);
+    let branded = names.iter().any(|n| {
+        let Some(decl) = caller_types.get(n) else {
+            return false;
+        };
+        let shared = provider_types
+            .and_then(|t| t.get(n))
+            .is_some_and(|p| std::sync::Arc::ptr_eq(p, decl));
+        !shared
+            && matches!(
+                decl.body,
+                bynk_syntax::ast::TypeBody::Refined { .. }
+                    | bynk_syntax::ast::TypeBody::Opaque { .. }
+            )
+    });
+    if !branded {
+        return call;
+    }
+    let ns_of = |owner: &str| {
+        if in_test_scaffold {
+            test_scaffold_ns(owner)
+        } else {
+            qualified_to_ns(owner)
+        }
+    };
+    let type_ns: HashMap<String, String> = names
+        .iter()
+        .filter(|n| !caller_types.contains_key(*n))
+        .map(|n| {
+            let owner = info
+                .consumed_type_owners
+                .get(consumed)
+                .and_then(|o| o.get(n))
+                .map(String::as_str)
+                .unwrap_or(consumed);
+            (n.clone(), ns_of(owner))
+        })
+        .collect();
+    let ty = crate::emitter::ts_type_ref_qualified_multi_ts_type(&service.return_type, &type_ns);
+    bynk_ts::print_expr(&bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
+        expr: Box::new(bynk_ts::TsExpr::As {
+            expr: Box::new(bynk_ts::TsExpr::Ident(call)),
+            ty: bynk_ts::TsType::named("unknown"),
+        }),
+        ty,
+    })))
+}
+
 /// #2039: the user type names `r` mentions, at any depth.
 fn type_ref_names(r: &TypeRef, out: &mut HashSet<String>) {
     match r {
