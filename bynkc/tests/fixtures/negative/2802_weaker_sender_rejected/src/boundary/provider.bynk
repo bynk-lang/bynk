@@ -1,0 +1,12 @@
+---
+#2802: the reverse of the positive fixture — the caller sends up to 8 characters, the callee accepts at most 4, so the call must not cross.
+---
+context boundary.provider
+
+type Token = String where MaxLength(4)
+
+service verify {
+  on call(token: Token) -> Effect[Result[Int, Int]] {
+    Effect.pure(Ok(0))
+  }
+}

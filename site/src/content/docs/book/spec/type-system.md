@@ -358,16 +358,36 @@ came from, so when two consumed contexts declare differently shaped types of
 one name, neither of which the receiver declares, a value of that name cannot
 cross back: it is rejected, with a note saying why.
 
-Two **refinements** match when their predicate *sets* are equal (v0.177). A
-refinement is a conjunction of side-effect-free predicates, so their order
-carries no meaning: `String where NonEmpty && MaxLength(10)` and
-`String where MaxLength(10) && NonEmpty` are the same type and MUST match.
-(Before v0.177 they were compared positionally and spuriously failed to.)
-Duplicates are idempotent. The comparison is otherwise unchanged and remains
-conservative: a *more* restrictive sending side is admitted into a more permissive
-receiving one, but not the reverse. The same canonical form backs the
+A refinement on the **sending** side is admitted where the **receiving** side
+expects another when it *entails* it (#2802): every predicate of the receiver
+follows from the conjunction of the sender's predicates. A refinement is a
+conjunction of side-effect-free predicates, so their order carries no meaning
+(`String where NonEmpty && MaxLength(10)` and `String where MaxLength(10) &&
+NonEmpty` are the same type) and duplicates are idempotent; equal predicate sets
+are the degenerate case of entailment, and `NonEmpty` is `MinLength(1)`. A
+*more* restrictive sending side is therefore admitted into a more permissive
+receiving one, `String where MaxLength(4)` into `MaxLength(8)`, and never the
+reverse. An unrefined receiver is the empty conjunction, which anything entails;
+an unrefined sender entails no predicate, so a refined receiver rejects it. The
+bases MUST be equal.
+
+Entailment is decided over the closed predicate vocabulary of
+[§6.3](#63-refinement-predicates), per base, and is sound but not complete:
+
+| Base | Predicates | Decided by |
+|---|---|---|
+| `Int`, `Float`, `Decimal` | `Positive`, `NonNegative`, `InRange` | containment of intervals; the sender's conjunction is their intersection. `Positive` is `[1, ∞)` on `Int` and the open `(0, ∞)` on `Float` and `Decimal`. `Decimal` bounds compare by value, not scale |
+| `String` | `NonEmpty`, `MinLength`, `MaxLength`, `Length` | containment of intervals of the length |
+| `String` | `Matches` | none: only an identical pattern satisfies a `Matches`. A `Matches` on the sender is otherwise ignored, so `Matches(p) && MaxLength(4)` entails `MaxLength(8)` |
+
+`Int` is modelled as unbounded, so a conclusion that holds only because of the
+safe-integer limit is not drawn. This applies **across a context boundary
+only**: within a context, named types remain nominal and a stronger refined type
+is not assignable to a weaker one. It does not apply to unification, so a generic
+call's type arguments still agree exactly. The same canonical form backs the
 cross-context contract hash ([emission §7.3.4c](/book/spec/emission/#734c-the-contract-seam-v0177)),
-so the matcher and the hash cannot disagree about what "the same refinement" is.
+which covers the callee's own contract and so is unchanged by admitting a
+stronger caller.
 
 A context's `exports` clause controls what the boundary reveals: an
 `exports transparent` type shares its structure with consumers — including

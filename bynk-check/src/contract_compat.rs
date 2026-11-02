@@ -38,7 +38,6 @@
 //! "compatible" lets a breaking deploy through; a wrong "breaking" only names a
 //! skew the gate already refuses.
 
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
@@ -46,6 +45,7 @@ use std::sync::Arc;
 use bynk_syntax::ast::{TypeBody, TypeDecl, TypeRef};
 
 use crate::contract::canon_pred_set;
+use crate::entailment::unmet;
 use crate::resolver::CrossContextService;
 
 /// One type as it appears on the wire. Mirrors the `Contract` rendering of
@@ -1160,10 +1160,7 @@ impl Cx {
             return;
         }
         let (s, r) = self.roles();
-        let unmet: Vec<&String> = receiver
-            .iter()
-            .filter(|q| !entailed(base, sender, q))
-            .collect();
+        let unmet = unmet(base, sender, receiver);
         if unmet.is_empty() {
             self.note(
                 path,
@@ -1211,183 +1208,6 @@ fn leaf(s: &Shape, field_preds: &[String]) -> Option<(String, Vec<String>)> {
     preds.sort();
     preds.dedup();
     Some((base, preds))
-}
-
-// ---- predicate entailment --------------------------------------------------------
-
-#[derive(Clone, Copy)]
-struct Interval<T> {
-    lo: Option<(T, bool)>,
-    hi: Option<(T, bool)>,
-}
-
-impl<T: PartialOrd + Copy> Interval<T> {
-    const ALL: Self = Interval { lo: None, hi: None };
-
-    fn intersect(self, o: Self) -> Self {
-        Interval {
-            lo: tighter(self.lo, o.lo, Ordering::Greater),
-            hi: tighter(self.hi, o.hi, Ordering::Less),
-        }
-    }
-
-    /// Every value of `self` lies in `outer`.
-    fn within(self, outer: Self) -> bool {
-        let lo_ok = match (self.lo, outer.lo) {
-            (_, None) => true,
-            (None, Some(_)) => false,
-            (Some((s, so)), Some((o, oo))) => match s.partial_cmp(&o) {
-                Some(Ordering::Greater) => true,
-                Some(Ordering::Equal) => so || !oo,
-                _ => false,
-            },
-        };
-        let hi_ok = match (self.hi, outer.hi) {
-            (_, None) => true,
-            (None, Some(_)) => false,
-            (Some((s, so)), Some((o, oo))) => match s.partial_cmp(&o) {
-                Some(Ordering::Less) => true,
-                Some(Ordering::Equal) => so || !oo,
-                _ => false,
-            },
-        };
-        lo_ok && hi_ok
-    }
-}
-
-/// The tighter of two bounds; `want` is `Greater` for lower bounds.
-fn tighter<T: PartialOrd + Copy>(
-    a: Option<(T, bool)>,
-    b: Option<(T, bool)>,
-    want: Ordering,
-) -> Option<(T, bool)> {
-    match (a, b) {
-        (None, x) | (x, None) => x,
-        (Some((av, ao)), Some((bv, bo))) => match av.partial_cmp(&bv) {
-            Some(o) if o == want => Some((av, ao)),
-            Some(Ordering::Equal) => Some((av, ao || bo)),
-            _ => Some((bv, bo)),
-        },
-    }
-}
-
-/// `args` of `Name(a, b)`, split on the top-level comma.
-fn pred_args<'a>(p: &'a str, name: &str) -> Option<Vec<&'a str>> {
-    let inner = p.strip_prefix(name)?.strip_prefix('(')?.strip_suffix(')')?;
-    Some(inner.split(", ").collect())
-}
-
-fn closed<T>(lo: T, hi: T) -> Interval<T> {
-    Interval {
-        lo: Some((lo, false)),
-        hi: Some((hi, false)),
-    }
-}
-
-/// A predicate as a bound on the numeric domain (`Int` or `Float`) or the
-/// length domain.
-enum Domain {
-    Int(Interval<i128>),
-    Float(Interval<f64>),
-    Length(Interval<i128>),
-}
-
-fn domain(base: &str, p: &str) -> Option<Domain> {
-    let int_pred = || -> Option<Interval<i128>> {
-        Some(match p {
-            "Positive" => Interval {
-                lo: Some((1, false)),
-                hi: None,
-            },
-            "NonNegative" => Interval {
-                lo: Some((0, false)),
-                hi: None,
-            },
-            _ => {
-                let a = pred_args(p, "InRange")?;
-                closed(a.first()?.parse().ok()?, a.get(1)?.parse().ok()?)
-            }
-        })
-    };
-    let float_pred = || -> Option<Interval<f64>> {
-        Some(match p {
-            "Positive" => Interval {
-                lo: Some((0.0, true)),
-                hi: None,
-            },
-            "NonNegative" => Interval {
-                lo: Some((0.0, false)),
-                hi: None,
-            },
-            _ => {
-                let a = pred_args(p, "InRangeF")?;
-                closed(a.first()?.parse().ok()?, a.get(1)?.parse().ok()?)
-            }
-        })
-    };
-    if let Some(a) = pred_args(p, "MinLength") {
-        return Some(Domain::Length(Interval {
-            lo: Some((a.first()?.parse().ok()?, false)),
-            hi: None,
-        }));
-    }
-    if let Some(a) = pred_args(p, "MaxLength") {
-        return Some(Domain::Length(Interval {
-            lo: None,
-            hi: Some((a.first()?.parse().ok()?, false)),
-        }));
-    }
-    if let Some(a) = pred_args(p, "Length") {
-        let n = a.first()?.parse().ok()?;
-        return Some(Domain::Length(closed(n, n)));
-    }
-    match base {
-        "Int" => int_pred().map(Domain::Int),
-        "Float" => float_pred().map(Domain::Float),
-        _ => None,
-    }
-}
-
-/// Does the conjunction `sender` guarantee the predicate `q`?
-fn entailed(base: &str, sender: &[String], q: &str) -> bool {
-    if sender.iter().any(|p| p == q) {
-        return true;
-    }
-    let Some(want) = domain(base, q) else {
-        // `Matches`, or a predicate this version cannot reason about: only an
-        // identical predicate satisfies it.
-        return false;
-    };
-    let given = sender.iter().filter_map(|p| domain(base, p));
-    match want {
-        Domain::Int(w) => {
-            let mut have = Interval::ALL;
-            for d in given {
-                if let Domain::Int(i) = d {
-                    have = have.intersect(i);
-                }
-            }
-            have.within(w)
-        }
-        Domain::Float(w) => {
-            let mut have = Interval::ALL;
-            for d in given {
-                if let Domain::Float(i) = d {
-                    have = have.intersect(i);
-                }
-            }
-            have.within(w)
-        }
-        Domain::Length(w) => {
-            let mut have = Interval::ALL;
-            for d in given {
-                if let Domain::Length(i) = d {
-                    have = have.intersect(i);
-                }
-            }
-            have.within(w)
-        }
-    }
 }
 
 #[cfg(test)]
