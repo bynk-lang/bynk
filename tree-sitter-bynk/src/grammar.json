@@ -9364,7 +9364,12 @@
                 "type": "SEQ",
                 "members": [
                   {
-                    "type": "STRING",
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_type_app_open"
+                    },
+                    "named": false,
                     "value": "["
                   },
                   {
@@ -9615,7 +9620,12 @@
               }
             },
             {
-              "type": "STRING",
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_type_app_open"
+              },
+              "named": false,
               "value": "["
             },
             {
@@ -10549,10 +10559,6 @@
       "_let_paren_record_pattern"
     ],
     [
-      "_primary",
-      "call"
-    ],
-    [
       "record_construction",
       "record_spread",
       "_primary"
@@ -10605,6 +10611,10 @@
     {
       "type": "SYMBOL",
       "name": "raw_string"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_type_app_open"
     }
   ],
   "inline": [],

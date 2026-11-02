@@ -60,3 +60,104 @@ commons d {
             (list_pattern
               (list_rest))
             (number_literal)))))))
+
+==========================
+list pattern — field-access arm body, no comma before the next arm (#2700)
+==========================
+
+commons d {
+	fn f(xs: List[Option[Int]]) -> Int {
+		match xs {
+			[only] => only.sku
+			[] => 0
+			[a, ..] => a.get(0)
+			[..] => g[Int](1)
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (generic_type_ref
+            (builtin_type)
+            (base_type))))
+      (base_type)
+      (block
+        (match_expr
+          (identifier)
+          (match_arm
+            (list_pattern
+              (variant_pattern
+                (identifier)))
+            (field_access
+              (identifier)
+              (identifier)))
+          (match_arm
+            (list_pattern)
+            (number_literal))
+          (match_arm
+            (list_pattern
+              (variant_pattern
+                (identifier))
+              (list_rest))
+            (method_call
+              (identifier)
+              (identifier)
+              (number_literal)))
+          (match_arm
+            (list_pattern
+              (list_rest))
+            (call
+              (identifier)
+              (base_type)
+              (number_literal))))))))
+
+==========================
+type arguments still apply on the same line (#2700)
+==========================
+
+commons d {
+	fn f() -> Int {
+		let a = g [Int](1)
+		let b = Json.decode[Int](s)
+		g[Int](2)
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (base_type)
+      (block
+        (let_stmt
+          (identifier)
+          (call
+            (identifier)
+            (base_type)
+            (number_literal)))
+        (let_stmt
+          (identifier)
+          (method_call
+            (identifier)
+            (identifier)
+            (base_type)
+            (identifier)))
+        (call
+          (identifier)
+          (base_type)
+          (number_literal))))))

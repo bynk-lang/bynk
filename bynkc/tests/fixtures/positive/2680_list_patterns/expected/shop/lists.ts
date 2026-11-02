@@ -182,19 +182,19 @@ export function big(xs: readonly number[]): string {
 }
 
 export function headOrZero(jobs: readonly number[]): number {
-  const __letElse2431 = jobs;
-  if (__letElse2431.length >= 1) {
-    const head = __letElse2431[0];
+  const __letElse2430 = jobs;
+  if (__letElse2430.length >= 1) {
+    const head = __letElse2430[0];
     return head;
   }
   return 0;
 }
 
 export function pairSum(xs: readonly number[]): number {
-  const __letElse2519 = xs;
-  if (__letElse2519.length === 2) {
-    const a = __letElse2519[0];
-    const b = __letElse2519[1];
+  const __letElse2518 = xs;
+  if (__letElse2518.length === 2) {
+    const a = __letElse2518[0];
+    const b = __letElse2518[1];
     return a + b;
   }
   return -1;

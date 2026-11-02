@@ -169,9 +169,9 @@ lambda_param ::= (identifier | contextual_identifier) (":" type_ref)? | lambda_r
 lambda_record_pattern ::= identifier "{" (lambda_record_field ",")* ".." "}"
 lambda_record_field ::= identifier ":" (identifier | wildcard_pattern | lambda_record_pattern) | identifier
 paren_expr ::= "(" expression ")"
-method_call ::= primary "." identifier ("[" type_ref ("," type_ref)* "]")? "(" (expression ("," expression)*)? ","? ")"
+method_call ::= primary "." identifier (type_app_open type_ref ("," type_ref)* "]")? "(" (expression ("," expression)*)? ","? ")"
 field_access ::= primary "." identifier
-call ::= (identifier | contextual_identifier) "(" (expression ("," expression)*)? ","? ")" | (identifier | contextual_identifier) "[" type_ref ("," type_ref)* "]" "(" (expression ("," expression)*)? ","? ")"
+call ::= (identifier | contextual_identifier) "(" (expression ("," expression)*)? ","? ")" | (identifier | contextual_identifier) type_app_open type_ref ("," type_ref)* "]" "(" (expression ("," expression)*)? ","? ")"
 list_literal ::= "[" (expression ("," expression)* ","?)? "]"
 record_construction ::= identifier "{" (field_init ("," field_init)*)? ","? "}"
 field_init ::= identifier ":" expression | identifier
@@ -203,4 +203,4 @@ line_comment ::= "//" /[^\n]*/
 
 - **Word token:** `identifier`
 - **Ignored between tokens:** `/\s+/`, `doc_line`, `line_comment`, `doc_block`
-- **External tokens:** `doc_block`, `doc_line`, `raw_string`
+- **External tokens:** `doc_block`, `doc_line`, `raw_string`, `_type_app_open`
