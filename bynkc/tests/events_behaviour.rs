@@ -3,7 +3,7 @@
 //!
 //! The e2e goldens and `tsc --strict` prove the emitted shape is *type-safe*;
 //! neither proves a publisher's `Events.emit` actually *reaches* a subscriber's
-//! `on event` handler at runtime, nor that release-at-commit (events.md §3.0)
+//! `on event` handler at runtime, nor that release-at-commit (the retired events track's §3.0)
 //! really does suppress delivery when the emitting handler throws. This file
 //! composes a real two-context project and runs it under node, observing the
 //! subscriber's own side effect (a `Logger.info` call, captured via stdout)
@@ -15,7 +15,7 @@
 //! - `bumpLedger` calls an agent (`Ledger`) whose handler emits *then* writes
 //!   a `Cell` that violates a declared invariant — `commitState` throws before
 //!   the flush is ever reached, so the subscriber must **not** run for that
-//!   call. This is the edge the design explicitly promises (events.md §3.0,
+//!   call. This is the edge the design explicitly promises (the retired events track's §3.0 in `design/archive/retired-tracks.md`,
 //!   "an aborted handler emits nothing") and the one a golden diff or a type
 //!   check cannot tell apart from a bug that flushes unconditionally.
 //!

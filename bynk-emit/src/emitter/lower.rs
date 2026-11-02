@@ -2866,7 +2866,7 @@ fn lower_method_call(
     }
     // Events track, slice 0 (spine #936): `Events.emit[E](event)` never
     // calls through a provider like an ordinary capability op — release-
-    // at-commit (events.md §3.0) buffers it into the handler's own
+    // at-commit (the retired events track's §3.0, `design/archive/retired-tracks.md`) buffers it into the handler's own
     // `__events` local instead, flushed only if the handler completes
     // without throwing. The local is declared by the outer body wrapper
     // whenever `block_uses_emit` is true (the same syntactic check this

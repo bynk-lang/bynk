@@ -3327,8 +3327,9 @@ pub(crate) fn emit_service(
             ty: Some(bynk_ts::TsType::Object(deps_members)),
             optional: false,
         });
-        // Events track, slice 0 (spine #936): release-at-commit (events.md
-        // §3.0) needs a completion boundary services never had before — the
+        // Events track, slice 0 (spine #936): release-at-commit (the retired
+        // events track's §3.0, `design/archive/retired-tracks.md`) needs a
+        // completion boundary services never had before — the
         // body runs inside an IIFE so its own `return`s resolve `__result`
         // rather than the outer method, and only a handler that completes
         // without throwing reaches past it, then flushes `__events` to

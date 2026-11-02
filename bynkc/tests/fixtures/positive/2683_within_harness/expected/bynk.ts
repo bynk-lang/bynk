@@ -206,7 +206,7 @@ export const StreamResponse = {
 
 /**
  * Runtime metadata carried alongside an event payload (Events track, slice
- * 2; design/tracks/events.md, spine #936), available as an `on event`
+ * 2; ADR 0293, spine #936), available as an `on event`
  * handler's optional second parameter. `eventId` is minted once per
  * emission — every subscriber of that emission sees the same value, making
  * it the dedup key for the `Idempotency` capability's `dedup`/`remember`
@@ -328,7 +328,7 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  * reserved keyword), which the caller must call to actually cache anything
  * — a `dedup` miss with no matching `remember` call simply recomputes every
  * time. `expiresAfter` sets the retention window a call to `remember`
- * establishes. Slice 0 (design/tracks/idempotency-capability.md): a single
+ * establishes. Slice 0 (ADR 0282): a single
  * in-memory provider, lost on process restart — no durability guarantee yet.
  */
 export interface Idempotency {
@@ -340,7 +340,7 @@ export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");
 
 /**
  * Emits an event declared by the calling context (Events track, slice 0;
- * design/tracks/events.md, spine #936). Owner-only: the compiler rejects
+ * ADRs 0288, 0289, spine #936). Owner-only: the compiler rejects
  * `emit[E]` when `E` is not an event declared in the emitting context, even
  * when `E` is otherwise visible via `consumes`. Fire-and-forget: releases at
  * handler commit, so an aborted handler emits nothing — a `dedup`/`remember`-

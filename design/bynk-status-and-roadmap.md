@@ -193,10 +193,10 @@ These are **not** gaps; the specs schedule them. *(Corrected October 2026: most 
 this list has since shipped, marked ✅; sagas are the remaining deferral.)*
 
 - **Events / subscriptions** — ✅ the pub-sub model in design notes §7 shipped in
-  v0.238–v0.244 (events track [`tracks/events.md`](tracks/events.md), slices 0–4:
+  v0.238–v0.244 (events track, retired — [`archive/retired-tracks.md`](archive/retired-tracks.md); slices 0–4:
   emission, pattern filtering, the envelope, versioning, the schema registry,
-  `via schema(N)` dispatch). Still open: range patterns (slice 4b, #990) and
-  replay/backfill with the actors **Q8**, split to a future track.
+  `via schema(N)` dispatch), and range patterns in `via schema(...)` (slice 4b, #990)
+  with patterns slice 5. Still open: replay/backfill with the actors **Q8**, split to a future track.
 - **Sagas / compensation** — the `Sagas` capability and LIFO compensation unwind
   in design notes §13.
 - **Query algebra** — ✅ shipped in v0.88–v0.94: `Query[T]`, the builder/terminal
