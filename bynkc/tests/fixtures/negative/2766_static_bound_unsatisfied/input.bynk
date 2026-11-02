@@ -1,7 +1,5 @@
 commons bad
 
-
-
 type P = { x: Int }
 
 type Sorted[T: Ord] = { items: List[T] }

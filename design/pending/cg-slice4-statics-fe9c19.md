@@ -41,9 +41,11 @@ approved #2766 as written: decisions A to I as recommended.
    generic calls, generic statics and generic instance methods, and not to capability
    operations, which keep their own explicit-or-inferred rule. It runs after the first
    (non-lambda) argument pass and before the lambda pass, so a lambda whose parameter
-   type needs `T` can use a `T` the binding grounds. It runs only where the checker
-   reported `uninferable_type_arg` before, so it can only accept programs that were
-   rejected; the call is still checked against the expected type afterwards. One rule
+   type needs `T` can use a `T` the binding grounds. It fills only what the non-lambda
+   arguments left open, so a program that compiled keeps its types and the goldens are
+   byte-identical; one whose parameter only a lambda's return type would have fixed now
+   grounds from the binding first, so its error can move into the lambda body. The call
+   is still checked against the expected type afterwards. One rule
    answers the question for all three call paths: if `Box.empty()` grounded from its
    binding but `fn none[T]() -> Option[T]` did not, there would be two. Fixture
    `159_uninferable_type_arg` is rewritten to `let y = first_of(5)`, which has no

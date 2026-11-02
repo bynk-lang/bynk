@@ -1,2 +1,2 @@
 # #2766: a bounded generic type's statics across units.
-passed=2 failed=0
+passed=3 failed=0

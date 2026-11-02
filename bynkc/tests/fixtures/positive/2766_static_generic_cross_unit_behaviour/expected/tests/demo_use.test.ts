@@ -44,7 +44,7 @@ function __makeTestDeps() {
 async function test_a_concrete_site_and_an_imported_element_type() {
   try {
     const deps = {};
-    const { blank, forward, names, ranks } = __ns_demo_use;
+    const { blank, blankRanks, forward, names, ranks } = __ns_demo_use;
     const { Sorted } = __ns_demo_sorted;
     type Sorted<T> = __ns_demo_sorted.Sorted<T>;
     const { Rank } = __ns_demo_cards;
@@ -66,7 +66,7 @@ async function test_a_concrete_site_and_an_imported_element_type() {
 async function test_a_rigid_caller_forwards_its_witness() {
   try {
     const deps = {};
-    const { blank, forward, names, ranks } = __ns_demo_use;
+    const { blank, blankRanks, forward, names, ranks } = __ns_demo_use;
     const { Sorted } = __ns_demo_sorted;
     type Sorted<T> = __ns_demo_sorted.Sorted<T>;
     const { Rank } = __ns_demo_cards;
@@ -75,6 +75,25 @@ async function test_a_rigid_caller_forwards_its_witness() {
     if (!(__bynkEq(forward(xs, __bynkCmpInt).items, [1, 2, 3]))) { throw __bynkExpectFailure("tests/demo/use.bynk:12:10", 284, 314, "expect forward(xs).items == [1, 2, 3]\n  expected: forward(xs).items == [1, 2, 3]\n  actual:   " + __bynkShow((forward(xs, __bynkCmpInt).items)) + " == " + __bynkShow(([1, 2, 3]))); }
     const e: Sorted<number> = blank(__bynkCmpInt);
     if (!(__bynkEq(e.items, []))) { throw __bynkExpectFailure("tests/demo/use.bynk:14:10", 355, 368, "expect e.items == []\n  expected: e.items == []\n  actual:   " + __bynkShow((e.items)) + " == " + __bynkShow(([]))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_explicit_type_arguments_on_an_imported_generic_type() {
+  try {
+    const deps = {};
+    const { blank, blankRanks, forward, names, ranks } = __ns_demo_use;
+    const { Sorted } = __ns_demo_sorted;
+    type Sorted<T> = __ns_demo_sorted.Sorted<T>;
+    const { Rank } = __ns_demo_cards;
+    type Rank = __ns_demo_cards.Rank;
+    if (!(__bynkEq(blankRanks().items, []))) { throw __bynkExpectFailure("tests/demo/use.bynk:18:10", 442, 466, "expect blankRanks().items == []\n  expected: blankRanks().items == []\n  actual:   " + __bynkShow((blankRanks().items)) + " == " + __bynkShow(([]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -98,7 +117,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a concrete site and an imported element type", "a rigid caller forwards its witness"];
+export const __bynkCases: readonly string[] = ["a concrete site and an imported element type", "a rigid caller forwards its witness", "explicit type arguments on an imported generic type"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -112,6 +131,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a rigid caller forwards its witness")) {
     const started = __bynkCaseNow();
     const r = { name: "a rigid caller forwards its witness", ...(await test_a_rigid_caller_forwards_its_witness()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("explicit type arguments on an imported generic type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "explicit type arguments on an imported generic type", ...(await test_explicit_type_arguments_on_an_imported_generic_type()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

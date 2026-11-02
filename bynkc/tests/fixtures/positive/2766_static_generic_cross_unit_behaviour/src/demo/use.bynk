@@ -14,3 +14,5 @@ fn forward[A: Ord](xs: List[A]) -> Sorted[A] { Sorted.fromList(xs) }
 fn blank[A: Ord]() -> Sorted[A] { Sorted.empty() }
 
 fn names(xs: List[String]) -> Sorted[String] { Sorted.fromList(xs) }
+
+fn blankRanks() -> Sorted[Rank] { Sorted.empty[Rank]() }

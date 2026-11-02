@@ -13,3 +13,7 @@ case "a rigid caller forwards its witness" {
   let e: Sorted[Int] = blank()
   expect e.items == []
 }
+
+case "explicit type arguments on an imported generic type" {
+  expect blankRanks().items == []
+}

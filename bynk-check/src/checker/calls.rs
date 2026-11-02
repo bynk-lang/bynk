@@ -960,8 +960,9 @@ fn check_value_application(
 /// Constrained generics slice 4 (DECISION C): the expected type as the last
 /// resort for a generic call's type parameters. Runs after the non-lambda
 /// argument pass and before the lambda pass, and only fills `names` that the
-/// arguments left undetermined — so it can only accept programs that were
-/// `uninferable_type_arg` before. The declared return type is matched
+/// non-lambda arguments left undetermined. A program that compiled keeps its
+/// types (both orders pick a compatible `T`); one whose `T` only a lambda's
+/// return type would have fixed now grounds from the binding first. The declared return type is matched
 /// structurally against `expected`; an `expected` that is still being inferred
 /// (it mentions a flexible variable of an enclosing call) carries nothing and
 /// is ignored. The call's result is still checked against `expected` by its
@@ -3518,7 +3519,13 @@ fn check_generic_method_call(
             return None;
         }
         for (name, ta) in all_params.iter().zip(type_args) {
-            let ty = resolve_expr_type_ref(ta, ctx)?;
+            let Some(ty) = resolve_expr_type_ref(ta, ctx) else {
+                // Type the arguments so their own errors are still reported.
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+                return None;
+            };
             subst.insert(name.clone(), ty);
         }
     }

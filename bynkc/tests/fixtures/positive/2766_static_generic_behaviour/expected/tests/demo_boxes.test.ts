@@ -153,7 +153,9 @@ async function test_an_Ord_bounded_static_takes_a_comparator() {
     const q = Sorted.rebuilt(ms, __bynkCmpInt);
     if (!(__bynkEq(q.items, [8, 9]))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:36:10", 804, 821, "expect q.items == [8, 9]\n  expected: q.items == [8, 9]\n  actual:   " + __bynkShow((q.items)) + " == " + __bynkShow(([8, 9]))); }
     const z: Sorted<number> = Sorted.empty(__bynkCmpInt);
-    if (!(__bynkEq(z.items, []))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:38:10", 869, 882, "expect z.items == []\n  expected: z.items == []\n  actual:   " + __bynkShow((z.items)) + " == " + __bynkShow(([]))); }
+    const y = Sorted.empty<number>(__bynkCmpInt);
+    if (!(__bynkEq(y.items, []))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:39:10", 899, 912, "expect y.items == []\n  expected: y.items == []\n  actual:   " + __bynkShow((y.items)) + " == " + __bynkShow(([]))); }
+    if (!(__bynkEq(z.items, []))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:40:10", 922, 935, "expect z.items == []\n  expected: z.items == []\n  actual:   " + __bynkShow((z.items)) + " == " + __bynkShow(([]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -175,7 +177,7 @@ async function test_a_Key_bounded_static() {
     type Sorted<T> = __ns_demo_boxes.Sorted<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const k = Keyed.single("a", 1);
-    if (!(__bynkEq(((__m: ReadonlyMap<string, number>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(k.entries, "a"), Some(1)))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:43:10", 956, 985, "expect k.entries.get(\"a\") == Some(1)\n  expected: k.entries.get(\"a\") == Some(1)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<string, number>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(k.entries, "a"))) + " == " + __bynkShow((Some(1)))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<string, number>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(k.entries, "a"), Some(1)))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:45:10", 1009, 1038, "expect k.entries.get(\"a\") == Some(1)\n  expected: k.entries.get(\"a\") == Some(1)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<string, number>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(k.entries, "a"))) + " == " + __bynkShow((Some(1)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -198,8 +200,8 @@ async function test_a_Codable_bounded_static() {
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const p = { x: 7 };
     const w = Packed.pack(p, { encode: __serialise_P, decode: __deserialise_P });
-    if (!(w.json === globalThis.JSON.stringify(__serialise_P(p)))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:49:10", 1078, 1102, "expect w.json == Json.encode(p)\n  expected: w.json == Json.encode(p)\n  actual:   " + __bynkShow((w.json)) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_P(p))))); }
-    if (!(__bynkEq(Packed.unpack(w, { encode: __serialise_P, decode: __deserialise_P }), Ok(p)))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:50:10", 1112, 1137, "expect Packed.unpack(w) == Ok(p)\n  expected: Packed.unpack(w) == Ok(p)\n  actual:   " + __bynkShow((Packed.unpack(w, { encode: __serialise_P, decode: __deserialise_P }))) + " == " + __bynkShow((Ok(p)))); }
+    if (!(w.json === globalThis.JSON.stringify(__serialise_P(p)))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:51:10", 1131, 1155, "expect w.json == Json.encode(p)\n  expected: w.json == Json.encode(p)\n  actual:   " + __bynkShow((w.json)) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_P(p))))); }
+    if (!(__bynkEq(Packed.unpack(w, { encode: __serialise_P, decode: __deserialise_P }), Ok(p)))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:52:10", 1165, 1190, "expect Packed.unpack(w) == Ok(p)\n  expected: Packed.unpack(w) == Ok(p)\n  actual:   " + __bynkShow((Packed.unpack(w, { encode: __serialise_P, decode: __deserialise_P }))) + " == " + __bynkShow((Ok(p)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -221,7 +223,7 @@ async function test_a_free_generic_function_grounded_by_the_expected_type() {
     type Sorted<T> = __ns_demo_boxes.Sorted<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const x: Option<number> = none();
-    if (!(__bynkEq(x, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:55:10", 1243, 1252, "expect x == None\n  expected: x == None\n  actual:   " + __bynkShow((x)) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(x, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:57:10", 1296, 1305, "expect x == None\n  expected: x == None\n  actual:   " + __bynkShow((x)) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -244,7 +246,7 @@ async function test_a_generic_instance_method_grounded_by_the_expected_type() {
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = Box.of(1);
     const c: Option<string> = Box.cast(b);
-    if (!(__bynkEq(c, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:61:10", 1385, 1394, "expect c == None\n  expected: c == None\n  actual:   " + __bynkShow((c)) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(c, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:63:10", 1438, 1447, "expect c == None\n  expected: c == None\n  actual:   " + __bynkShow((c)) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -266,7 +268,7 @@ async function test_the_expected_type_grounds_T_before_a_lambda_argument_needs_i
     type Sorted<T> = __ns_demo_boxes.Sorted<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b: Option<number> = pick((n) => n > 1);
-    if (!(__bynkEq(b, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:66:10", 1520, 1529, "expect b == None\n  expected: b == None\n  actual:   " + __bynkShow((b)) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(b, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:68:10", 1573, 1582, "expect b == None\n  expected: b == None\n  actual:   " + __bynkShow((b)) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -288,7 +290,7 @@ async function test_a_static_s_lambda_argument_uses_a_T_the_expected_type_ground
     type Sorted<T> = __ns_demo_boxes.Sorted<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b: Box<Option<number>> = Box.probe((n) => n > 1);
-    if (!(__bynkEq(b.value, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:71:10", 1665, 1680, "expect b.value == None\n  expected: b.value == None\n  actual:   " + __bynkShow((b.value)) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(b.value, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:73:10", 1718, 1733, "expect b.value == None\n  expected: b.value == None\n  actual:   " + __bynkShow((b.value)) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

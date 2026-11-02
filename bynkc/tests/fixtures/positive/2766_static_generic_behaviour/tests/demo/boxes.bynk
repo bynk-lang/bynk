@@ -35,6 +35,8 @@ case "an Ord-bounded static takes a comparator" {
   let q = Sorted.rebuilt(ms)
   expect q.items == [8, 9]
   let z: Sorted[Int] = Sorted.empty()
+  let y = Sorted.empty[Int]()
+  expect y.items == []
   expect z.items == []
 }
 

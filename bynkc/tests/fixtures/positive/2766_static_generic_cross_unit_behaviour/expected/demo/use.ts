@@ -28,3 +28,7 @@ export function blank<A>(__cmp_A: (a: A, b: A) => number): Sorted<A> {
 export function names(xs: readonly string[]): Sorted<string> {
   return Sorted.fromList(xs, __bynkCmpString);
 }
+
+export function blankRanks(): Sorted<Rank> {
+  return Sorted.empty<Rank>(__bynkCmpSum(["Two", "Three", "Ace"], {}));
+}
