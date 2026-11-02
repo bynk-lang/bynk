@@ -1,0 +1,1 @@
+bynk.adapter.consumes_requires_selection

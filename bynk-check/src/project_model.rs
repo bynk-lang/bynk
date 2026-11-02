@@ -2028,6 +2028,20 @@ pub fn phase_resolve_consumes(
     // v0.17: `consumes U { Cap, … }` flattens selected caps into the consumer's
     // local namespace. unit → bare-cap → consumed unit providing it.
     let mut unit_flattened: HashMap<String, HashMap<String, String>> = HashMap::new();
+    // #2765: does `target` export the type `name` (`exports transparent|opaque`)?
+    let exports_type = |target: &str, name: &str| {
+        groups.get(target).is_some_and(|files| {
+            files.iter().any(|&j| {
+                parsed[j].exports().iter().any(|clause| {
+                    matches!(clause.kind, ExportKind::Type(_))
+                        && clause.names.iter().any(|e| e.name.name == name)
+                })
+            })
+        })
+    };
+    // #2765: type names already selected, per (file, target), so a repeat in
+    // one file is refused as a repeated capability is.
+    let mut type_selected: HashSet<(usize, String, String)> = HashSet::new();
     for (name, indices) in groups {
         let kind = *kinds.get(name).unwrap();
         let mut consumes_targets: Vec<String> = Vec::new();
@@ -2046,7 +2060,17 @@ pub fn phase_resolve_consumes(
                 // v0.18: an adapter's `consumes` is the braced capability-selection
                 // form only — an adapter has no services to RPC-call, so the
                 // whole-unit and `as Alias` forms are meaningless inside one.
-                if kind == UnitKind::Adapter && c.selected.is_none() {
+                // #2765: braces that select only types name no capability, so
+                // they trip the same guard.
+                let selects_only_types = c.selected.as_ref().is_some_and(|names| {
+                    let caps = unit_tables.get(&target).map(|t| &t.exported_capabilities);
+                    !names.is_empty()
+                        && names.iter().all(|n| {
+                            !caps.is_some_and(|c| c.contains(&n.name))
+                                && exports_type(&target, &n.name)
+                        })
+                });
+                if kind == UnitKind::Adapter && (c.selected.is_none() || selects_only_types) {
                     errors.push_for(Some(&parsed[i].identity_path()),
                         CompileError::new(
                             "bynk.adapter.consumes_requires_selection",
@@ -2153,16 +2177,21 @@ pub fn phase_resolve_consumes(
                         // already in scope for any `consumes U`, so a type
                         // selection has nothing to flatten; it only states the
                         // dependency.
-                        if !exported.contains(&cap.name)
-                            && groups.get(&target).is_some_and(|files| {
-                                files.iter().any(|&j| {
-                                    parsed[j].exports().iter().any(|clause| {
-                                        matches!(clause.kind, ExportKind::Type(_))
-                                            && clause.names.iter().any(|e| e.name.name == cap.name)
-                                    })
-                                })
-                            })
-                        {
+                        if !exported.contains(&cap.name) && exports_type(&target, &cap.name) {
+                            if !type_selected.insert((i, target.clone(), cap.name.clone())) {
+                                errors.push_for(
+                                    Some(&parsed[i].identity_path()),
+                                    CompileError::new(
+                                        "bynk.consumes.capability_name_clash",
+                                        cap.span,
+                                        format!(
+                                            "`{}` is selected from `{target}` more than once in this file",
+                                            cap.name
+                                        ),
+                                    ),
+                                );
+                                continue;
+                            }
                             refs.record_in_unit(cap.span, SymbolKind::Type, &cap.name, &target);
                             continue;
                         }
@@ -6321,6 +6350,17 @@ mod shadowed_import_tests {
                 r.error_categories()
             );
         }
+    }
+
+    /// A type repeated in one file is refused, as a repeated capability is.
+    #[test]
+    fn a_repeated_type_selection_is_refused() {
+        let src = format!("context app\n\nconsumes bynk {{ TimedOut, TimedOut }}\n{WITHIN_SVC}");
+        let r = analyse(&[("app.bynk", &src)]);
+        assert_eq!(
+            r.error_categories(),
+            vec!["bynk.consumes.capability_name_clash"]
+        );
     }
 
     /// A braced name that is neither an exported capability nor an exported
