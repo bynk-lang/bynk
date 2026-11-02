@@ -396,6 +396,10 @@ pub struct ProjectOutput {
     /// here, so a caller that reconciles the same shape twice in a row still
     /// gets `Some` both times.
     pub schema_lock: Option<String>,
+    /// #2695: the `on call(...)` handler of each of the project's own
+    /// `service`s, described from the checker's resolved types, in unit then
+    /// service order. Empty for a project with none.
+    pub entry_handlers: Vec<bynk_check::entry_signature::EntryHandler>,
 }
 
 /// v0.67: a discovered test suite — one `test <target>` group (unit) or
@@ -3415,6 +3419,24 @@ fn build_output(
         compiled.retain(|f| !f.output_path.starts_with("tests"));
     }
     compiled.extend(integration_outputs);
+    // #2695: the entry handlers of the project's own contexts (first-party
+    // injected units are the toolchain's, not the user's), described from the
+    // checked symbol tables before they are moved into emission.
+    let entry_handlers: Vec<bynk_check::entry_signature::EntryHandler> = groups
+        .iter()
+        .filter(|(unit, idxs)| {
+            kinds.get(*unit) == Some(&UnitKind::Context)
+                && idxs.iter().any(|i| !parsed[*i].is_synthetic())
+        })
+        .filter_map(|(unit, _)| {
+            let table = unit_tables.get(unit)?;
+            let types = bynk_check::symbols::combined_types_for(unit, &unit_tables, &unit_uses);
+            Some(bynk_check::entry_signature::entry_handlers(
+                unit, table, &types,
+            ))
+        })
+        .flatten()
+        .collect();
     // The integration runnables follow the unit ones.
     let unit_count = runnable_tests.len();
     runnable_tests.extend(integration_runnables);
@@ -4088,6 +4110,7 @@ fn build_output(
         display_root: PathBuf::new(),
         // Likewise (#1078) — `Some` only when the registry was on.
         schema_lock: None,
+        entry_handlers,
     }
 }
 

@@ -24,6 +24,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use bynk_check::checker::{TyId, Types};
+use bynk_check::entry_signature::{EntryHandler, EntryShape};
 use bynk_check::expr_types::type_at_offset;
 use bynk_check::firstparty::Platform;
 use bynk_check::locals::{LocalBinding, locals_at};
@@ -94,6 +95,106 @@ pub struct CompileResult {
     pub files: Vec<EmittedFile>,
     /// Errors on failure, or non-failing warnings on success.
     pub diagnostics: Vec<Diagnostic>,
+    /// #2695: the `on call(...)` handler of each `service` in the program,
+    /// described from the checker's resolved types so a host can build a run's
+    /// arguments without parsing the source. Empty on failure.
+    pub entries: Vec<Entry>,
+}
+
+/// One service's `on call(...)` handler, for the host's Arguments row.
+#[derive(serde::Serialize)]
+pub struct Entry {
+    /// The context the service is declared in (`app.demo`).
+    pub unit: String,
+    pub service: String,
+    pub params: Vec<EntryParam>,
+    /// The declared return type, as the checker displays it.
+    pub returns: String,
+}
+
+/// One handler parameter.
+#[derive(serde::Serialize)]
+pub struct EntryParam {
+    pub name: String,
+    /// The declared type, as the checker displays it (`Slug`, `List[Int]`).
+    #[serde(rename = "type")]
+    pub ty: String,
+    /// The base type the declared type is, refines or wraps (`String` for
+    /// `Slug`); `null` for a record, sum or collection.
+    pub base: Option<&'static str>,
+    /// Whether the type is a named refined type (`type Slug = String where
+    /// ...`): a value is a `base` value its `T.of` accepts.
+    pub refined: bool,
+    /// The structural description, see the README.
+    pub shape: serde_json::Value,
+}
+
+fn shape_json(s: &EntryShape) -> serde_json::Value {
+    use serde_json::{Value, json};
+    let fields = |fs: &[(String, EntryShape)]| -> Vec<Value> {
+        fs.iter()
+            .map(|(n, s)| json!({ "name": n, "shape": shape_json(s) }))
+            .collect()
+    };
+    match s {
+        EntryShape::Base(b) => json!({ "kind": "base", "base": b }),
+        EntryShape::Refined { name, base } => {
+            json!({ "kind": "refined", "name": name, "base": base })
+        }
+        EntryShape::Opaque { name, base } => {
+            json!({ "kind": "opaque", "name": name, "base": base })
+        }
+        EntryShape::Record { name, fields: fs } => {
+            json!({ "kind": "record", "name": name, "fields": fields(fs) })
+        }
+        EntryShape::Sum { name, variants } => {
+            let vs: Vec<Value> = variants
+                .iter()
+                .map(|(n, fs)| json!({ "name": n, "fields": fields(fs) }))
+                .collect();
+            json!({ "kind": "sum", "name": name, "variants": vs })
+        }
+        EntryShape::List(t) => json!({ "kind": "list", "element": shape_json(t) }),
+        EntryShape::Set(t) => json!({ "kind": "set", "element": shape_json(t) }),
+        EntryShape::Option(t) => json!({ "kind": "option", "element": shape_json(t) }),
+        EntryShape::Map(k, v) => {
+            json!({ "kind": "map", "key": shape_json(k), "value": shape_json(v) })
+        }
+        EntryShape::Result(t, e) => {
+            json!({ "kind": "result", "ok": shape_json(t), "err": shape_json(e) })
+        }
+        EntryShape::Unit => json!({ "kind": "unit" }),
+        EntryShape::Recursive(name) => json!({ "kind": "recursive", "name": name }),
+        EntryShape::Other(display) => json!({ "kind": "other", "display": display }),
+    }
+}
+
+fn to_entries(handlers: Vec<EntryHandler>) -> Vec<Entry> {
+    handlers
+        .into_iter()
+        .map(|h| Entry {
+            unit: h.unit,
+            service: h.service,
+            returns: h.returns,
+            params: h
+                .params
+                .into_iter()
+                .map(|p| EntryParam {
+                    name: p.name,
+                    ty: p.ty,
+                    base: match &p.shape {
+                        EntryShape::Base(b) => Some(*b),
+                        EntryShape::Refined { base, .. } | EntryShape::Opaque { base, .. } => {
+                            Some(*base)
+                        }
+                        _ => None,
+                    },
+                    refined: matches!(p.shape, EntryShape::Refined { .. }),
+                    shape: shape_json(&p.shape),
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 fn severity_str(err: &CompileError) -> &'static str {
@@ -199,6 +300,7 @@ pub fn compile(source: &str, platform: Platform) -> CompileResult {
         ok: false,
         files: Vec::new(),
         diagnostics: vec![d],
+        entries: Vec::new(),
     })
 }
 
@@ -209,6 +311,7 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                 // The user program is the single in-memory source, so warnings
                 // resolve their line/col against it (the fallback).
                 let diagnostics = to_diagnostics(js.warnings, &HashMap::new(), source);
+                let entries = to_entries(js.entry_handlers);
                 // #2148: the graph is the modules the browser links, so the
                 // output's `package.json` (the ES-module marker for Node and
                 // `tsc`) is left out.
@@ -238,6 +341,7 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                     ok: true,
                     files,
                     diagnostics,
+                    entries,
                 }
             }
             // The emitter is strip-only (ADR 0136), so this is unreachable for a
@@ -257,6 +361,7 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                     notes: Vec::new(),
                     labels: Vec::new(),
                 }],
+                entries: Vec::new(),
             },
         },
         Err(failure) => {
@@ -265,6 +370,7 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                 ok: false,
                 files: Vec::new(),
                 diagnostics: to_diagnostics(failure.errors, &sources, source),
+                entries: Vec::new(),
             }
         }
     }
@@ -274,7 +380,7 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
 pub fn compile_to_json(source: &str, platform: Platform) -> String {
     serde_json::to_string(&compile(source, platform)).unwrap_or_else(|e| {
         format!(
-            "{{\"ok\":false,\"files\":[],\"diagnostics\":[{{\"path\":null,\"line\":0,\"col\":0,\"from\":0,\"to\":0,\
+            "{{\"ok\":false,\"files\":[],\"entries\":[],\"diagnostics\":[{{\"path\":null,\"line\":0,\"col\":0,\"from\":0,\"to\":0,\
              \"severity\":\"error\",\"category\":\"bynk.wasm.serialize_failed\",\"message\":{:?}}}]}}",
             e.to_string()
         )
@@ -1466,5 +1572,102 @@ mod tests {
             Some("y")
         );
         assert!(project_files("not json").is_empty());
+    }
+
+    // ---- #2695: entry handler signatures ----
+
+    const ENTRY_PROG: &str = "context app.sig\n\
+        \n\
+        type Slug = String where NonEmpty && MaxLength(20)\n\
+        type Point = { x: Int, y: Int }\n\
+        type Shape = | Dot | Circle(r: Int)\n\
+        type Node = { label: String, next: Option[Node] }\n\
+        \n\
+        service greet {\n\
+        \x20 on call(tag: Slug, n: Int, pts: List[Point], s: Shape, node: Node) -> Effect[String] {\n\
+        \x20   \"hi\"\n\
+        \x20 }\n\
+        }\n";
+
+    fn compile_json(src: &str) -> serde_json::Value {
+        serde_json::from_str(&compile_to_json(src, Platform::Browser)).unwrap()
+    }
+
+    #[test]
+    fn compile_reports_the_entry_handler_signature() {
+        let v = compile_json(ENTRY_PROG);
+        assert_eq!(v["ok"], true, "{v}");
+        let entries = v["entries"].as_array().unwrap();
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        let e = &entries[0];
+        assert_eq!(e["unit"], "app.sig");
+        assert_eq!(e["service"], "greet");
+        assert_eq!(e["returns"], "Effect[String]");
+        let params = e["params"].as_array().unwrap();
+        let names: Vec<&str> = params.iter().map(|p| p["name"].as_str().unwrap()).collect();
+        assert_eq!(names, ["tag", "n", "pts", "s", "node"]);
+
+        // The issue's example: a refined type reports what it refines.
+        let tag = &params[0];
+        assert_eq!(tag["type"], "Slug");
+        assert_eq!(tag["base"], "String");
+        assert_eq!(tag["refined"], true);
+        assert_eq!(tag["shape"]["kind"], "refined");
+
+        // A plain base type is not refined.
+        let n = &params[1];
+        assert_eq!(n["type"], "Int");
+        assert_eq!(n["base"], "Int");
+        assert_eq!(n["refined"], false);
+        assert_eq!(
+            n["shape"],
+            serde_json::json!({"kind": "base", "base": "Int"})
+        );
+
+        // Lists and records are described structurally.
+        let pts = &params[2];
+        assert_eq!(pts["type"], "List[Point]");
+        assert!(pts["base"].is_null());
+        assert_eq!(pts["refined"], false);
+        assert_eq!(pts["shape"]["kind"], "list");
+        let point = &pts["shape"]["element"];
+        assert_eq!(point["kind"], "record");
+        assert_eq!(point["name"], "Point");
+        assert_eq!(point["fields"][1]["name"], "y");
+        assert_eq!(point["fields"][1]["shape"]["base"], "Int");
+
+        // Sums list their variants and payloads.
+        let shape = &params[3]["shape"];
+        assert_eq!(shape["kind"], "sum");
+        assert_eq!(shape["variants"][0]["name"], "Dot");
+        assert_eq!(shape["variants"][1]["fields"][0]["name"], "r");
+
+        // A self-referential record is named, not expanded forever.
+        let next = &params[4]["shape"]["fields"][1]["shape"];
+        assert_eq!(next["kind"], "option");
+        assert_eq!(
+            next["element"],
+            serde_json::json!({"kind": "recursive", "name": "Node"})
+        );
+    }
+
+    #[test]
+    fn compile_reports_no_params_for_a_nullary_entry() {
+        let v = compile_json(PROG);
+        assert_eq!(v["ok"], true);
+        let entries = v["entries"].as_array().unwrap();
+        assert_eq!(entries.len(), 1, "first-party units are not reported");
+        assert_eq!(entries[0]["service"], "demo");
+        assert!(entries[0]["params"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn compile_failure_reports_no_entries_and_keeps_the_existing_shape() {
+        let v =
+            compile_json("context app.bad\nservice s { on call(x: Nope) -> Effect[Int] { 1 } }\n");
+        assert_eq!(v["ok"], false);
+        assert!(v["entries"].as_array().unwrap().is_empty());
+        assert!(v["files"].as_array().unwrap().is_empty());
+        assert!(!v["diagnostics"].as_array().unwrap().is_empty());
     }
 }

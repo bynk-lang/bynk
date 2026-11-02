@@ -38,6 +38,48 @@ for live on-type checking; `bynk_hover` returns the inferred type at an offset;
 returns the source in house style (`{ok, formatted}` / `{ok:false, error}`). Every entry
 compiles for the `browser` platform.
 
+### Entry handler signatures
+
+`bynk_compile` also reports each `service`'s `on call(…)` handler as `entries`
+(empty on failure), so a host can build a run's arguments without parsing the
+source. It is derived from the checker's resolved types, and only the program's
+own contexts are listed (never injected first-party units). The field is
+additive: the rest of the result is unchanged.
+
+```ts
+interface CompileResult {
+  ok: boolean;
+  files: EmittedFile[];
+  diagnostics: Diagnostic[];
+  entries: Entry[]; // new
+}
+interface Entry {
+  unit: string;       // the context, e.g. "app.demo"
+  service: string;
+  params: EntryParam[];
+  returns: string;    // the declared return type, e.g. "Effect[String]"
+}
+interface EntryParam {
+  name: string;
+  type: string;           // as declared, e.g. "Slug", "List[Point]"
+  base: string | null;    // what it is, refines or wraps ("String" for Slug); null for records, sums, collections
+  refined: boolean;       // a named refined type: a `base` value its `T.of` accepts
+  shape: Shape;
+}
+type Shape =
+  | { kind: "base"; base: string }                     // Int, String, Bool, Float, Duration, Instant, Bytes, Decimal
+  | { kind: "refined"; name: string; base: string }
+  | { kind: "opaque"; name: string; base: string }
+  | { kind: "record"; name: string; fields: { name: string; shape: Shape }[] }
+  | { kind: "sum"; name: string; variants: { name: string; fields: { name: string; shape: Shape }[] }[] }
+  | { kind: "list" | "set" | "option"; element: Shape }
+  | { kind: "map"; key: Shape; value: Shape }
+  | { kind: "result"; ok: Shape; err: Shape }
+  | { kind: "unit" }
+  | { kind: "recursive"; name: string }                // a type already being described above it
+  | { kind: "other"; display: string };               // a generic record instance, a function, ...: no value to build
+```
+
 The pipeline reuses the on-disk compile path wholesale (first-party injection,
 the per-platform binding, the strip-only emitter), so the in-browser result
 matches the CLI's.
