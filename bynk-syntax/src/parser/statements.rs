@@ -110,7 +110,12 @@ impl<'a> Parser<'a> {
         let word = if is_requires { "requires" } else { "ensures" };
         let name = self.expect_ident(&format!("as the clause name after `{word}`"))?;
         self.expect(TokenKind::Colon, "after the contract clause name")?;
-        let predicate = self.parse_expr()?;
+        // #2703: a contract clause is always followed by the function body's
+        // `{` (or another clause), so a bare name before it ends the predicate;
+        // it is never the head of a record construction (`Limit { n }`). Parse
+        // the predicate under the same no-record-literal rule as an `if`/`match`
+        // condition; a record literal still works parenthesised.
+        let predicate = self.parse_cond_expr()?;
         let span = kw.span.merge(predicate.span);
         Ok(Contract {
             name,

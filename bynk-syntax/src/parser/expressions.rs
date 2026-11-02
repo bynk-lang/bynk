@@ -73,7 +73,7 @@ impl<'a> Parser<'a> {
     /// (`if (ready { x }) { … }` constructs a record). Mirrors Rust's
     /// `NO_STRUCT_LITERAL` restriction; parenthesise to construct a record in
     /// condition head position, e.g. `match (A { x: 1 }) { … }`.
-    fn parse_cond_expr(&mut self) -> Result<Expr, CompileError> {
+    pub(crate) fn parse_cond_expr(&mut self) -> Result<Expr, CompileError> {
         let prev = self.no_record_literal;
         self.no_record_literal = true;
         let result = self.parse_expr_inner();

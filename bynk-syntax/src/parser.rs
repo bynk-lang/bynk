@@ -1697,6 +1697,23 @@ mod tests {
         parse_unit_with_recovery(&toks, src)
     }
 
+    /// #2703: a bare name ending a contract clause is the end of the predicate,
+    /// not the head of a record construction, even with the body's `{` on the
+    /// next line (and a lone-name body `{ n }`, which looks like `Limit { n }`).
+    #[test]
+    fn contract_clause_name_before_next_line_brace_is_not_a_record() {
+        for src in [
+            "commons m\n\nconst Limit: Int = 10\n\nfn small(n: Int) -> Int\n  requires small: n <= Limit\n{\n  n\n}\n",
+            "commons m\n\nfn f(n: Int) -> Int\n  ensures same: result == n\n{\n  n\n}\n",
+            "commons m\n\nfn f(n: Int) -> Int\n  requires r: n <= Limit {\n  n\n}\n",
+        ] {
+            assert!(parse_str(src).is_ok(), "{src}\n{:?}", parse_str(src).err());
+        }
+        // A record literal in a clause still works once parenthesised.
+        let src = "commons m\n\ntype P = { x: Int }\n\nfn f(p: P) -> Int\n  requires r: (p == P { x: 1 })\n{\n  1\n}\n";
+        assert!(parse_str(src).is_ok(), "{:?}", parse_str(src).err());
+    }
+
     /// Finding #29/#30: `parse_units_with_recovery` keeps every top-level unit
     /// an atomic `commons`+`suite` file declares (v0.113, DECISION S), where
     /// `parse_unit_with_recovery` keeps only the first — the defect the IDE's
