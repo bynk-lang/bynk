@@ -1087,14 +1087,22 @@ jobs:
       # `npm ci`'s node-gyp-build install script) with a runtime from the
       # declared range. `tree-sitter` is the package's own optional peer, so
       # `npm i` in this directory never installs it: put it in a separate
-      # prefix and resolve it via NODE_PATH.
+      # prefix and resolve it via NODE_PATH. NODE_PATH is only a fallback, so
+      # fail if a local node_modules copy would shadow it. npm picks the newest
+      # match, so this checks the top of the range, not its lower bound.
       - name: Node binding loads with the declared tree-sitter runtime
         run: |
           range=$(node -p 'require("./package.json").peerDependencies["tree-sitter"]')
           prefix="$RUNNER_TEMP/tree-sitter-runtime"
           npm i --prefix "$prefix" --no-save --no-package-lock "tree-sitter@$range"
           echo "peer range $range -> tree-sitter $(node -p "require('$prefix/node_modules/tree-sitter/package.json').version")"
-          NODE_PATH="$prefix/node_modules" node --test bindings/node/binding_test.js
+          export NODE_PATH="$prefix/node_modules"
+          resolved=$(node -p 'require.resolve("tree-sitter", { paths: [require("path").resolve("bindings/node")] })')
+          case "$resolved" in
+            "$prefix"/*) ;;
+            *) echo "::error::tree-sitter resolved to $resolved, not the declared-range runtime in $prefix"; exit 1 ;;
+          esac
+          node --test bindings/node/binding_test.js
 
   runtime:
     # The @bynk/runtime package: focused TypeScript modules that are bundled
