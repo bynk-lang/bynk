@@ -1,0 +1,5 @@
+commons cyc.shapes
+
+type Stmt =
+  | Skip
+  | Eval(expr: Expr)
