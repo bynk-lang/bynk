@@ -1,0 +1,11 @@
+context pay
+
+exports opaque { Token }
+
+type Token = opaque String where Matches("T-[0-9]+")
+
+service issue {
+  on call() -> Effect[Token] {
+    Effect.pure(Token.unsafe("T-1"))
+  }
+}

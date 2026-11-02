@@ -204,12 +204,15 @@ fn external_opaque_reaching(
             continue;
         };
         if let Some(ct) = consumed.get(&n)
-            && (ct.visibility == Visibility::Opaque
-                || matches!(decl.body, TypeBody::Opaque { .. }))
+            && (ct.visibility == Visibility::Opaque || matches!(decl.body, TypeBody::Opaque { .. }))
         {
             return Some((n, ct.owning_context.clone()));
         }
-        let vars: HashSet<&str> = decl.type_params.iter().map(|p| p.name.name.as_str()).collect();
+        let vars: HashSet<&str> = decl
+            .type_params
+            .iter()
+            .map(|p| p.name.name.as_str())
+            .collect();
         let mut found = Vec::new();
         match &decl.body {
             TypeBody::Record(r) => r
@@ -217,9 +220,9 @@ fn external_opaque_reaching(
                 .iter()
                 .for_each(|f| crate::project_model::type_ref_names(&f.type_ref, &vars, &mut found)),
             TypeBody::Sum(sum) => sum.variants.iter().for_each(|v| {
-                v.payload
-                    .iter()
-                    .for_each(|p| crate::project_model::type_ref_names(&p.type_ref, &vars, &mut found))
+                v.payload.iter().for_each(|p| {
+                    crate::project_model::type_ref_names(&p.type_ref, &vars, &mut found)
+                })
             }),
             TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {}
         }
