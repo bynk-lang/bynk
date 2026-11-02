@@ -12,8 +12,8 @@ export interface LocalLedger {
 }
 
 export const LocalLedger = {
-  authorise(self: LocalLedger, amount: number): globalThis.Promise<Result<number, string>> {
-    return globalThis.Promise.resolve(Ok(amount));
+  async authorise(self: LocalLedger, amount: number): globalThis.Promise<Result<number, string>> {
+    return Ok(amount);
   },
 };
 

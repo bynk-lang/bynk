@@ -1,0 +1,18 @@
+suite box {
+	case "an awaiting method" {
+		let b = Box { n: 4 }
+		let r <- b.bump(3)
+		expect r == 7
+	}
+
+	case "a non-awaiting effectful method" {
+		let b = Box { n: 4 }
+		let r <- b.same()
+		expect r == 4
+	}
+
+	case "through the service" {
+		let r <- run.call(10)
+		expect r == 11
+	}
+}

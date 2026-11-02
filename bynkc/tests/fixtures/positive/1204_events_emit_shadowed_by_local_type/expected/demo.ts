@@ -8,8 +8,8 @@ export interface Events {
 }
 
 export const Events = {
-  emit(e: number): globalThis.Promise<void> {
-    return globalThis.Promise.resolve(undefined);
+  async emit(e: number): globalThis.Promise<void> {
+    return undefined;
   },
 };
 
