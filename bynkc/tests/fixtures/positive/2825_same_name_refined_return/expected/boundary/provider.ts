@@ -29,6 +29,20 @@ export interface Fault {
 export const Fault = {
 };
 
+export type Handle = string & { readonly __brand: "boundary.provider.Handle" };
+
+export const Handle = {
+  of(value: string): Result<Handle, ValidationError> {
+    if (!(value.length <= 8)) {
+      return Err({ field: "Handle", message: "length must be at most 8", value });
+    }
+    return Ok(value as Handle);
+  },
+  unsafe(value: string): Handle {
+    return value as Handle;
+  },
+};
+
 export const reply = {
   async call(n: number, deps: {}): globalThis.Promise<Result<Reply, number>> {
     return Err(n);
@@ -47,6 +61,12 @@ export const mixed = {
   },
 };
 
+export const handle = {
+  async call(n: number, deps: {}): globalThis.Promise<Result<Handle, number>> {
+    return Err(n);
+  },
+};
+
 export interface __BoundaryProviderDeps {
 }
 
@@ -60,6 +80,9 @@ export function __makeSurface(deps: __BoundaryProviderDeps) {
     },
     async mixed(n: number): globalThis.Promise<Result<Reply, Fault>> {
       return mixed.call(n, deps);
+    },
+    async handle(n: number): globalThis.Promise<Result<Handle, number>> {
+      return handle.call(n, deps);
     },
   };
 }

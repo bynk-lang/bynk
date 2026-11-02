@@ -17,6 +17,20 @@ export const Reply = {
   },
 };
 
+export type Handle = string & { readonly __brand: "boundary.consumer.Handle" };
+
+export const Handle = {
+  of(value: string): Result<Handle, ValidationError> {
+    if (!(value.length <= 8)) {
+      return Err({ field: "Handle", message: "length must be at most 8", value });
+    }
+    return Ok(value as Handle);
+  },
+  unsafe(value: string): Handle {
+    return value as Handle;
+  },
+};
+
 export const ask = {
   async call(n: number, deps: { surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> } }): globalThis.Promise<Result<Reply, number>> {
     const r = await (deps.surface.Provider.reply(n) as unknown as globalThis.Promise<Result<Reply, number>>);
@@ -46,6 +60,13 @@ export const askMixed = {
   },
 };
 
+export const askHandle = {
+  async call(n: number, deps: { surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> } }): globalThis.Promise<Result<Handle, number>> {
+    const h = await (deps.surface.Provider.handle(n) as unknown as globalThis.Promise<Result<Handle, number>>);
+    return h;
+  },
+};
+
 export interface __BoundaryConsumerDeps {
   readonly surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> };
 }
@@ -60,6 +81,9 @@ export function __makeSurface(deps: __BoundaryConsumerDeps) {
     },
     async askMixed(n: number): globalThis.Promise<number> {
       return askMixed.call(n, deps);
+    },
+    async askHandle(n: number): globalThis.Promise<Result<Handle, number>> {
+      return askHandle.call(n, deps);
     },
   };
 }
