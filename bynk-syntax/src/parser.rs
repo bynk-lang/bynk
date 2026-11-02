@@ -623,10 +623,15 @@ struct Parser<'a> {
     /// delimited sub-expression (parentheses, call arguments, list, record
     /// field). Mirrors Rust's `NO_STRUCT_LITERAL` restriction.
     no_record_literal: bool,
+    /// #2721: set while parsing a match-arm guard's spine, where a `(` is never a
+    /// lambda head: the `=>` after `)` is the arm's own arrow. Cleared by
+    /// `parse_expr` on entry to any delimited sub-expression.
+    in_guard: bool,
     /// True while parsing the tail of an `is` pattern that sits outside every
     /// delimiter — `x is P`, `x is A | B`. A record pattern there would be
     /// ambiguous with the block that follows an `if` condition, so it must be
-    /// parenthesised (`x is (T { .. })`, patterns track Q2, #2641). Cleared by
+    /// parenthesised (`x is (T { .. })`, #2641; the patterns track's Q2 in
+    /// `design/archive/retired-tracks.md`). Cleared by
     /// [`Parser::parse_pattern`], the entry every delimited (nested) pattern
     /// goes through.
     is_pattern_tail: bool,
@@ -684,6 +689,7 @@ impl<'a> Parser<'a> {
             trivia,
             depth: 0,
             no_record_literal: false,
+            in_guard: false,
             is_pattern_tail: false,
             brace_depth: 0,
             item_loop_baseline: Vec::new(),
@@ -1695,6 +1701,31 @@ mod tests {
             Err(e) => return (None, vec![e]),
         };
         parse_unit_with_recovery(&toks, src)
+    }
+
+    /// #2703: a bare name ending a contract clause is the end of the predicate,
+    /// not the head of a record construction, even with the body's `{` on the
+    /// next line (and a lone-name body `{ n }`, which looks like `Limit { n }`).
+    #[test]
+    fn contract_clause_name_before_next_line_brace_is_not_a_record() {
+        for src in [
+            "commons m\n\nconst Limit: Int = 10\n\nfn small(n: Int) -> Int\n  requires small: n <= Limit\n{\n  n\n}\n",
+            "commons m\n\nfn f(n: Int) -> Int\n  ensures same: result == n\n{\n  n\n}\n",
+            "commons m\n\nfn f(n: Int) -> Int\n  requires r: n <= Limit {\n  n\n}\n",
+        ] {
+            assert!(parse_str(src).is_ok(), "{src}\n{:?}", parse_str(src).err());
+        }
+        // A record literal in a clause still works once parenthesised.
+        let src = "commons m\n\ntype P = { x: Int }\n\nfn f(p: P) -> Int\n  requires r: (p == P { x: 1 })\n{\n  1\n}\n";
+        assert!(parse_str(src).is_ok(), "{:?}", parse_str(src).err());
+    }
+
+    /// #2703: the flip side — an unparenthesised record literal on a clause's
+    /// spine is rejected (the `{` opens the body), as in an `if` condition.
+    #[test]
+    fn contract_clause_unparenthesised_record_literal_is_rejected() {
+        let src = "commons m\n\ntype P = { x: Int }\n\nfn f(p: P) -> Int\n  requires r: p == P { x: 1 }\n{\n  1\n}\n";
+        assert!(parse_str(src).is_err());
     }
 
     /// Finding #29/#30: `parse_units_with_recovery` keeps every top-level unit
@@ -4235,5 +4266,36 @@ mod tests {
             &r.trailing_comments[..],
             [Comment::OrphanDoc(d)] if d.as_str() == "Dangling."
         ));
+    }
+}
+
+#[cfg(test)]
+mod paren_guard_2721 {
+    use super::*;
+    use crate::lexer::tokenize;
+
+    fn ok(src: &str) {
+        let toks = tokenize(src).unwrap();
+        parse(&toks, src).unwrap_or_else(|e| panic!("{src}\n{e:?}"));
+    }
+
+    fn wrap(guard: &str) -> String {
+        format!(
+            "commons t {{\n  fn f(n: Int, flag: Bool) -> Int {{\n    match n {{\n      n if {guard} => n,\n      _ => 0,\n    }}\n  }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn parenthesised_guards_parse() {
+        ok(&wrap("(flag)"));
+        ok(&wrap("(n > 0 && flag)"));
+        ok(&wrap("(n > 0) && flag"));
+        ok(&wrap("!(flag)"));
+        ok(&wrap("()"));
+    }
+
+    #[test]
+    fn lambda_still_parses_when_parenthesised_in_guard() {
+        ok(&wrap("pred(((x: Int) => x > 0))"));
     }
 }

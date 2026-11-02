@@ -2,6 +2,7 @@
 // test target: demo.wire
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
+import { __bynkDecimalParseWire, __bynkDecimalToString } from "../__bynk_runtime/decimal.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __BynkKeyMap, __BynkKeySet } from "../__bynk_runtime/keys.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
@@ -184,6 +185,106 @@ async function test_a_distinct_set_decodes() {
   }
 }
 
+// case tier: unit
+async function test_a_repeated_map_key_is_rejected__not_last_entry_wins___2707_() {
+  try {
+    const deps = {};
+    const { Ledger, OrderId, Status, sample } = __ns_demo_wire;
+    type Ledger = __ns_demo_wire.Ledger;
+    type OrderId = __ns_demo_wire.OrderId;
+    type Status = __ns_demo_wire.Status;
+    const __r0 = ((__s: string): Result<ReadonlyMap<string, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_String_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[\"a\",1],[\"a\",2]]");
+    if (!(__r0.tag === "Err")) { throw __bynkExpectFailure("tests/demo/wire.bynk:44:10", 1152, 1216, "expect Json.decode[Map[String, Int]](\"[[\\\"a\\\",1],[\\\"a\\\",2]]\") is Err(_)"); }
+    const __r1 = ((__s: string): Result<ReadonlyMap<number, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_Int_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<number, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[1,1],[1,2]]");
+    if (!(__r1.tag === "Err")) { throw __bynkExpectFailure("tests/demo/wire.bynk:45:10", 1226, 1279, "expect Json.decode[Map[Int, Int]](\"[[1,1],[1,2]]\") is Err(_)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_repeated_composite_map_key_is_rejected_by_value___2707_() {
+  try {
+    const deps = {};
+    const { Ledger, OrderId, Status, sample } = __ns_demo_wire;
+    type Ledger = __ns_demo_wire.Ledger;
+    type OrderId = __ns_demo_wire.OrderId;
+    type Status = __ns_demo_wire.Status;
+    const __r0 = ((__s: string): Result<ReadonlyMap<__ns_demo_wire.OrderId, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_OrderId_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<__ns_demo_wire.OrderId, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[{\"region\":\"eu\",\"n\":7},1],[{\"n\":7,\"region\":\"eu\"},2]]");
+    if (!(__r0.tag === "Err")) { throw __bynkExpectFailure("tests/demo/wire.bynk:49:10", 1359, 1468, "expect Json.decode[Map[OrderId, Int]](\"[[{\\\"region\\\":\\\"eu\\\",\\\"n\\\":7},1],[{\\\"n\\\":7,\\\"region\\\":\\\"eu\\\"},2]]\") is Err(_)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_repeated_Decimal_map_key_is_rejected_on_its_canonical_value___2707_() {
+  try {
+    const deps = {};
+    const { Ledger, OrderId, Status, sample } = __ns_demo_wire;
+    type Ledger = __ns_demo_wire.Ledger;
+    type OrderId = __ns_demo_wire.OrderId;
+    type Status = __ns_demo_wire.Status;
+    const __r0 = ((__s: string): Result<ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_Decimal_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[\"1.20\",1],[\"1.2\",2]]");
+    if (!(__r0.tag === "Err")) { throw __bynkExpectFailure("tests/demo/wire.bynk:53:10", 1560, 1630, "expect Json.decode[Map[Decimal, Int]](\"[[\\\"1.20\\\",1],[\\\"1.2\\\",2]]\") is Err(_)"); }
+    void (((__d) => {
+        switch (__d.tag) {
+          case "Ok": {
+            const m = __d.value;
+            return __bynkExpect(((m).size === 2), "tests/demo/wire.bynk:55:21", 1722, 1737, "expect m.length() == 2");
+          }
+          case "Err": {
+            return __bynkExpect((false), "tests/demo/wire.bynk:56:22", 1759, 1764, "expect false");
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(((__s: string): Result<ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_Decimal_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[\"1.20\",1],[\"1.3\",2]]")));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_distinct_map_keys_still_decode___2707_() {
+  try {
+    const deps = {};
+    const { Ledger, OrderId, Status, sample } = __ns_demo_wire;
+    type Ledger = __ns_demo_wire.Ledger;
+    type OrderId = __ns_demo_wire.OrderId;
+    type Status = __ns_demo_wire.Status;
+    void (((__d) => {
+        switch (__d.tag) {
+          case "Ok": {
+            const m = __d.value;
+            return __bynkExpect(((m).size === 2), "tests/demo/wire.bynk:62:21", 1905, 1920, "expect m.length() == 2");
+          }
+          case "Err": {
+            return __bynkExpect((false), "tests/demo/wire.bynk:63:22", 1942, 1947, "expect false");
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(((__s: string): Result<ReadonlyMap<string, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Map_String_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[[\"a\",1],[\"b\",2]]")));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 export function __serialise_Ledger(value: __ns_demo_wire.Ledger): __JsonValue {
   return {
     totals: __serialise_Map_OrderId_Int(value.totals),
@@ -298,6 +399,87 @@ export function __deserialise_List_Status(json: __JsonValue, path: string = "$")
   return Ok(out);
 }
 
+export function __serialise_Map_String_Int(value: ReadonlyMap<string, number>): __JsonValue {
+  const entries: __JsonValue[] = [];
+  for (const [k, v] of value) {
+    entries.push([k as __JsonValue, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(v)]);
+  }
+  return entries;
+}
+
+export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, number>, __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out = new globalThis.Map<string, number>();
+  for (let i = 0; i < json.length; i++) {
+  const entry = json[i];
+  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+  }
+  const entryK = entry[0];
+  const entryV = entry[1];
+  if (typeof entryK !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+  }
+  const __k = entryK;
+  if (out.has(__k as string)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+  }
+  if (typeof entryV !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+  }
+  if (!globalThis.Number.isSafeInteger(entryV)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+  }
+  const __v = entryV;
+  out.set(__k as string, __v as number);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Map_Int_Int(value: ReadonlyMap<number, number>): __JsonValue {
+  const entries: __JsonValue[] = [];
+  for (const [k, v] of value) {
+    entries.push([((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(k), ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(v)]);
+  }
+  return entries;
+}
+
+export function __deserialise_Map_Int_Int(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<number, number>, __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out = new globalThis.Map<number, number>();
+  for (let i = 0; i < json.length; i++) {
+  const entry = json[i];
+  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+  }
+  const entryK = entry[0];
+  const entryV = entry[1];
+  if (typeof entryK !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "number", actual: typeof entryK });
+  }
+  if (!globalThis.Number.isSafeInteger(entryK)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "safe integer", actual: String(entryK) });
+  }
+  const __k = entryK;
+  if (out.has(__k as number)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+  }
+  if (typeof entryV !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+  }
+  if (!globalThis.Number.isSafeInteger(entryV)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+  }
+  const __v = entryV;
+  out.set(__k as number, __v as number);
+  }
+  return Ok(out);
+}
+
 export function __serialise_Map_OrderId_Int(value: ReadonlyMap<__ns_demo_wire.OrderId, number>): __JsonValue {
   const entries: __JsonValue[] = [];
   for (const [k, v] of value) {
@@ -321,6 +503,9 @@ export function __deserialise_Map_OrderId_Int(json: __JsonValue, path: string = 
   const __r_k = __deserialise_OrderId(entryK, `${path}[${i}][0]`);
   if (__r_k.tag === "Err") return __r_k;
   const __k = __r_k.value;
+  if (out.has(__k as __ns_demo_wire.OrderId)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+  }
   if (typeof entryV !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
   }
@@ -329,6 +514,49 @@ export function __deserialise_Map_OrderId_Int(json: __JsonValue, path: string = 
   }
   const __v = entryV;
   out.set(__k as __ns_demo_wire.OrderId, __v as number);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Map_Decimal_Int(value: ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>): __JsonValue {
+  const entries: __JsonValue[] = [];
+  for (const [k, v] of value) {
+    entries.push([__bynkDecimalToString(k) as __JsonValue, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(v)]);
+  }
+  return entries;
+}
+
+export function __deserialise_Map_Decimal_Int(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<{ readonly coefficient: bigint; readonly scale: number }, number>, __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out = new __BynkKeyMap<{ readonly coefficient: bigint; readonly scale: number }, number>();
+  for (let i = 0; i < json.length; i++) {
+  const entry = json[i];
+  if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+  }
+  const entryK = entry[0];
+  const entryV = entry[1];
+  if (typeof entryK !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "decimal string", actual: typeof entryK });
+  }
+  const __b_k = __bynkDecimalParseWire(entryK);
+  if (__b_k.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "decimal string", actual: "invalid decimal" });
+  }
+  const __k = __b_k.value;
+  if (out.has(__k as { readonly coefficient: bigint; readonly scale: number })) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+  }
+  if (typeof entryV !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+  }
+  if (!globalThis.Number.isSafeInteger(entryV)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+  }
+  const __v = entryV;
+  out.set(__k as { readonly coefficient: bigint; readonly scale: number }, __v as number);
   }
   return Ok(out);
 }
@@ -347,7 +575,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a record-keyed map round-trips", "a decoded map looks up by value", "a decoded set is keyed by value", "a repeated set member is rejected", "a distinct set decodes"];
+export const __bynkCases: readonly string[] = ["a record-keyed map round-trips", "a decoded map looks up by value", "a decoded set is keyed by value", "a repeated set member is rejected", "a distinct set decodes", "a repeated map key is rejected, not last-entry-wins (#2707)", "a repeated composite map key is rejected by value (#2707)", "a repeated Decimal map key is rejected on its canonical value (#2707)", "distinct map keys still decode (#2707)"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -379,6 +607,30 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a distinct set decodes")) {
     const started = __bynkCaseNow();
     const r = { name: "a distinct set decodes", ...(await test_a_distinct_set_decodes()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a repeated map key is rejected, not last-entry-wins (#2707)")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a repeated map key is rejected, not last-entry-wins (#2707)", ...(await test_a_repeated_map_key_is_rejected__not_last_entry_wins___2707_()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a repeated composite map key is rejected by value (#2707)")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a repeated composite map key is rejected by value (#2707)", ...(await test_a_repeated_composite_map_key_is_rejected_by_value___2707_()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a repeated Decimal map key is rejected on its canonical value (#2707)")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a repeated Decimal map key is rejected on its canonical value (#2707)", ...(await test_a_repeated_Decimal_map_key_is_rejected_on_its_canonical_value___2707_()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("distinct map keys still decode (#2707)")) {
+    const started = __bynkCaseNow();
+    const r = { name: "distinct map keys still decode (#2707)", ...(await test_distinct_map_keys_still_decode___2707_()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

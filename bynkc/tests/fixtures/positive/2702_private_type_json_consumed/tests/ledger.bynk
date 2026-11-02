@@ -1,0 +1,14 @@
+// #2702: the target consumes a context with a private `Tag` and uses a
+// commons with a public one: the codec is the public `Tag`'s.
+suite shop.ledger {
+  case "decodes the visible Tag" {
+    match Json.decode[Tag]("{\"name\": \"tea\"}") {
+      Ok(t) => expect t.name == "tea"
+      Err(_) => expect false
+    }
+  }
+
+  case "encodes the visible Tag" {
+    expect Json.encode(Tag { name: "tea" }) == "{\"name\":\"tea\"}"
+  }
+}

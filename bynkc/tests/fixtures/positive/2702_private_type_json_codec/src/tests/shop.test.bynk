@@ -1,0 +1,13 @@
+suite shop {
+  // #2702: the codec for `Tag` is `labels`'s, not `pricing`'s private `Tag`.
+  case "decodes the visible Tag" {
+    match Json.decode[Tag]("{\"name\": \"tea\"}") {
+      Ok(t) => expect tag_name(t) == "tea"
+      Err(_) => expect false
+    }
+  }
+
+  case "encodes the visible Tag" {
+    expect Json.encode(Tag { name: "tea" }) == "{\"name\":\"tea\"}"
+  }
+}

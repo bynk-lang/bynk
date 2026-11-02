@@ -919,21 +919,17 @@ fn emit_method(
     if commons.exec_plan.fn_needs(f) {
         params.push(exec_param("__exec"));
     }
-    // Methods are emitted as plain (non-async) members on an object literal;
-    // any `Effect.pure(...)` in tail position must still wrap as
-    // `Promise.resolve(...)` because there's no surrounding `async` to absorb
-    // it. (Methods aren't expected to return `Effect[T]` in v0–v0.7.1.)
+    // A pure method is a plain member; an effectful one is `async` (below).
     let mut body_text = String::new();
     // #1653: parameters are bindings of the body's own scope, so a `let` that
     // re-binds one gets a fresh name instead of redeclaring it.
     for p in &f.params {
         cx.declare_binder(&p.name.name);
     }
-    // #2719: a method that takes the execution context is `async`, and its tail
-    // wraps as a free function's does, since it awaits the construct it hands
-    // the context to. Every other method stays a plain member, byte for byte
-    // (an effectful method that awaits without it is a separate, existing gap).
-    let is_async = commons.exec_plan.fn_needs(f);
+    // #2725: a method is `async` exactly as a free fn is (`-> Effect[T]`), so
+    // an effectful method that awaits is valid TS; #2719's exec-context need
+    // also forces it (a defensive union: such a method is effectful anyway).
+    let is_async = is_effectful_return(&f.return_type) || commons.exec_plan.fn_needs(f);
     emit_block_as_function_body_with_return(
         &mut body_text,
         &f.body,

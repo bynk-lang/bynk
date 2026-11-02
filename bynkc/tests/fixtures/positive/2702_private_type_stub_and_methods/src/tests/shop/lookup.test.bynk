@@ -1,0 +1,13 @@
+suite shop.lookup {
+  stub Directory.find(_) returns Tag { name: "tea" }
+
+  // #2702: `label` is the String method of `labels`, not the private Int one.
+  case "the stubbed Tag and its method are the visible ones" {
+    let s <- lookup.call("x")
+    expect s == "tea"
+  }
+
+  case "a method of the visible Tag" {
+    expect Tag { name: "a" }.label() == "a"
+  }
+}

@@ -21,7 +21,7 @@ diagnostics, with **no filesystem and no `tsc`**:
 ```text
 source ─▶ bynk_emit::compile_in_memory  ─▶ ProjectOutput (TypeScript)
        ─▶ bynk_strip::strip_project_to_js ─▶ ProjectOutput (JavaScript)
-       ─▶ { files: [{ path, kind, contents }], diagnostics }
+       ─▶ { files: [{ path, kind, contents, map? }], diagnostics }
 ```
 
 The returned graph is the complete set the browser links: the user module,
@@ -31,7 +31,13 @@ and `compose.js`. Each file carries a `kind`: `"user"` (modules authored from th
 source, e.g. `hello/world.js`), `"wiring"` (`compose.js`) or `"support"`
 (`__bynk_runtime/*.js`, `bynk-browser.js`, injected first-party units such as `bynk.js`),
 so a consumer can show only the user's code while still linking the whole graph
-(TS: `kind: "user" | "wiring" | "support"` on `EmittedFile`). Three companion
+(TS: `kind: "user" | "wiring" | "support"` on `EmittedFile`). A `"user"` file also
+carries `map` (`map?: string` on `EmittedFile`, omitted for the other kinds): a source-map
+v3 JSON document from that module's JavaScript lines back to the Bynk source, composed from
+the emitter's own declaration and handler anchors (ADR 0569), so a host can highlight the JS
+a Bynk line compiled to, and back, from the result alone. `sources` names the module by its
+logical path (`app/demo.bynk`) and there is no `sourcesContent`; a few hundred bytes per module.
+Three companion
 entries back the playground's editor: `bynk_analyze` returns diagnostics only,
 for live on-type checking; `bynk_hover` returns the inferred type at an offset;
 `bynk_complete` returns completion candidates at an offset; and `bynk_format`

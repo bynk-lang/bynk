@@ -12,8 +12,8 @@ export interface Box {
 }
 
 export const Box = {
-  put(self: Box, x: number): globalThis.Promise<void> {
-    return globalThis.Promise.resolve(undefined);
+  async put(self: Box, x: number): globalThis.Promise<void> {
+    return undefined;
   },
 };
 

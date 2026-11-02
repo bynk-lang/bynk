@@ -3109,20 +3109,25 @@ fn json_codec_qual_for_target(
     unit_consumes: &HashMap<String, Vec<String>>,
 ) -> HashMap<String, String> {
     let mut qual = HashMap::new();
-    let mut qualify = |units: Option<&Vec<String>>| {
+    // #2702: only the target's own types are all visible (a unit-tier suite sees
+    // its target's private declarations, ADR 0683 decision I); another unit's
+    // `private` type is not in scope, so it must not claim a name.
+    let mut qualify = |units: Option<&Vec<String>>, own: bool| {
         for u in units.into_iter().flatten() {
             let ns = test_ns(u);
             if let Some(table) = unit_tables.get(u) {
                 for n in table.types.keys() {
-                    qual.entry(n.clone()).or_insert_with(|| format!("{ns}."));
+                    if own || is_public_type(table, n) {
+                        qual.entry(n.clone()).or_insert_with(|| format!("{ns}."));
+                    }
                 }
             }
         }
     };
     // Highest precedence first; `or_insert` keeps the first claim.
-    qualify(Some(&vec![target_name.to_string()]));
-    qualify(unit_consumes.get(target_name));
-    qualify(unit_uses.get(target_name));
+    qualify(Some(&vec![target_name.to_string()]), true);
+    qualify(unit_consumes.get(target_name), false);
+    qualify(unit_uses.get(target_name), false);
     qual
 }
 
@@ -4697,7 +4702,8 @@ fn emit_stub_class(
         for u in used {
             if let Some(table) = unit_tables.get(u) {
                 let uns = test_ns(u);
-                for n in table.types.keys() {
+                // #2702: a used commons' `private` type is not in scope.
+                for n in public_types(table) {
                     type_ns.entry(n.clone()).or_insert_with(|| uns.clone());
                 }
             }
@@ -5156,10 +5162,13 @@ fn synthetic_typed_commons_for_target(
     // them (`emit_test_scope_setup`), and the lowering qualifies a bare
     // nullary variant (`Domestic` → `Region.Domestic`) only when its sum is
     // here, as a handler body's lowering does from the context's own view.
+    // #2702: only the public ones, the filter the codec qualifier uses.
     for unit in unit_consumes.get(target_name).into_iter().flatten() {
         if let Some(t) = unit_tables.get(unit) {
             for (n, d) in &t.types {
-                types.entry(n.clone()).or_insert_with(|| d.clone());
+                if d.private.is_none() {
+                    types.entry(n.clone()).or_insert_with(|| d.clone());
+                }
             }
         }
     }
@@ -5174,13 +5183,23 @@ fn synthetic_typed_commons_for_target(
     if let Some(used) = unit_uses.get(target_name) {
         for u in used {
             if let Some(t) = unit_tables.get(u) {
+                // #2702: a used commons' `private` declarations are not in the
+                // case's scope, so they must not claim a name (and with it the
+                // codec, the methods or the call a visible one resolves to).
                 for (n, d) in &t.types {
-                    types.entry(n.clone()).or_insert_with(|| d.clone());
+                    if d.private.is_none() {
+                        types.entry(n.clone()).or_insert_with(|| d.clone());
+                    }
                 }
                 for (n, f) in &t.fns {
-                    fns.entry(n.clone()).or_insert_with(|| f.clone());
+                    if f.private.is_none() {
+                        fns.entry(n.clone()).or_insert_with(|| f.clone());
+                    }
                 }
                 for (n, mt) in &t.methods {
+                    if t.types.get(n).is_some_and(|d| d.private.is_some()) {
+                        continue;
+                    }
                     let entry = methods.entry(n.clone()).or_default();
                     for (m, decl) in &mt.instance {
                         entry
@@ -6270,8 +6289,6 @@ fn emit_ns_destructure(
     stmts
 }
 
-/// #1703: the types of `table` that `keep` admits, each with its type
-/// parameters, sorted by name: the `type_names` [`emit_ns_destructure`] aliases.
 /// #2618: the names of `table`'s types not marked `private`.
 fn public_types(table: &UnitTable) -> impl Iterator<Item = &String> {
     table
@@ -6295,6 +6312,8 @@ fn is_public_type(table: &UnitTable, name: &str) -> bool {
     table.types.get(name).is_some_and(|d| d.private.is_none())
 }
 
+/// #1703: the types of `table` that `keep` admits, each with its type
+/// parameters, sorted by name: the `type_names` [`emit_ns_destructure`] aliases.
 fn aliased_types(table: &UnitTable, keep: impl Fn(&String) -> bool) -> Vec<(String, Vec<String>)> {
     let mut types: Vec<(String, Vec<String>)> = table
         .types
@@ -6661,7 +6680,8 @@ fn emit_test_scope_setup(
                 Some(UnitKind::Adapter)
             );
             if let Some(table) = unit_tables.get(q) {
-                let types = aliased_types(table, |_| true);
+                // #2702: not a consumed context's `private` types.
+                let types = aliased_types(table, |n| is_public_type(table, n));
                 let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
                 bound.extend(names.iter().cloned());
                 crate::emitter::extend_printed_at(out, emit_ns_destructure(&ns, &names, &types), 2);

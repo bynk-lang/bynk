@@ -342,8 +342,17 @@ mod tests {
     /// return what survived. The `sleep`s stand in for wrangler's `workerd`s:
     /// grandchildren the child never signals itself.
     fn survivors(tag: &str, script: &str, grace: Duration) -> Vec<u32> {
-        let dir =
-            std::env::temp_dir().join(format!("bynk-wrangler-guard-{tag}-{}", std::process::id()));
+        // Unique per test copy, not per process: this module is compiled into
+        // every `*_workerd` test module, so one process runs a copy of each
+        // test per module at once. A `tag`+pid name made them share a
+        // directory, and `processes_under` then counted the other copies'
+        // live `sleep`s as survivors (#2717). `module_path!()` differs per
+        // copy (a `static` counter would not: each copy has its own).
+        let dir = std::env::temp_dir().join(format!(
+            "bynk-wrangler-guard-{tag}-{}-{}",
+            module_path!().replace("::", "-"),
+            std::process::id(),
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // Null stdio: a stranded `sleep` holding the harness's output pipe
