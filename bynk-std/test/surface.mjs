@@ -483,28 +483,47 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
 
     // K5c (#2627): streamed bodies, against a real server where it matters.
     t("FetchProvider.receiveStream: streams the body as it arrives; the timeout bounds the head only", async () => {
+      // No margin between two clocks: the server holds the rest of the body
+      // until the test says so, and the test says so only after the timeout
+      // has demonstrably elapsed. The head must arrive inside `timeout`, so
+      // that is generous; the wait after it is one-sided (longer is safe).
+      const timeout = 1000;
+      const bytes = allBytes();
+      let releaseRest;
+      const restReleased = new Promise((resolve) => (releaseRest = resolve));
       await withServer(
         async (_req, res) => {
           res.writeHead(200, { "content-type": "application/octet-stream" });
-          const bytes = allBytes();
-          for (let i = 0; i < 4; i++) {
-            res.write(bytes.subarray(i * 64, (i + 1) * 64));
-            await sleep(60);
-          }
-          res.end();
+          res.write(bytes.subarray(0, 64));
+          await restReleased;
+          res.end(bytes.subarray(64));
         },
         async (url) => {
-          // The body takes ~240 ms; a timeout of 100 ms bounds the head alone.
+          const started = Date.now();
           const res = await new b.FetchProvider().receiveStream(
             request({ url }),
-            { timeout: Some(100), redirect: bynk.Redirect.Follow },
+            { timeout: Some(timeout), redirect: bynk.Redirect.Follow },
           );
           assert.equal(res.tag, "Ok");
           assert.equal(res.value.status, 200);
           assert.equal(res.value.headers.get("content-type"), "application/octet-stream");
           // Handed out unclaimed: the first read claims it, not the binding.
           assert.equal(claimed(res.value.body), false);
-          assert.deepEqual(await drain(res.value.body), [...allBytes()]);
+          const it = res.value.body[Symbol.asyncIterator]();
+          // Streamed: the first chunk is readable while the server still holds
+          // the rest of the body open.
+          const first = await within(it.next(), 5000, "first chunk");
+          assert.deepEqual([...first.value], [...bytes.subarray(0, 64)]);
+          // Wait out the timeout (measured from before the request began),
+          // with the body still open. A timeout that covered the body would
+          // abort it here.
+          await sleep(Math.max(0, started + timeout + 200 - Date.now()));
+          releaseRest();
+          const rest = [];
+          for (let r = await it.next(); !r.done; r = await it.next()) {
+            rest.push(...r.value);
+          }
+          assert.deepEqual([...first.value, ...rest], [...bytes]);
         },
       );
     });
