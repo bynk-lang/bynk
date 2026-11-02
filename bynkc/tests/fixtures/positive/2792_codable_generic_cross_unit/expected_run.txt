@@ -1,0 +1,2 @@
+# 2792 codec factory across units
+passed=2 failed=0

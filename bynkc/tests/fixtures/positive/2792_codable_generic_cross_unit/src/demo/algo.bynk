@@ -1,0 +1,13 @@
+---
+#2792: the factory is built in the unit that names the generic type at a type
+parameter, from the declaration it imports.
+---
+commons demo.algo
+
+uses demo.shapes
+
+fn encode[T: Codable](e: Envelope[T]) -> String { Json.encode(e) }
+
+fn decode[T: Codable](s: String) -> Result[Envelope[T], JsonError] { Json.decode[Envelope[T]](s) }
+
+fn forward[T: Codable](e: Envelope[T]) -> String { encode(e) }

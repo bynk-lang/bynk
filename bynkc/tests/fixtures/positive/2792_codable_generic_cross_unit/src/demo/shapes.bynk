@@ -1,0 +1,11 @@
+---
+#2792: a generic type with a refined field, declared apart from the generic
+function that codes it and from the unit that uses both.
+---
+commons demo.shapes
+
+type Code = String where MinLength(3)
+
+type Envelope[T] = { payload: T, code: Code }
+
+type Card = { name: String, rank: Int }
