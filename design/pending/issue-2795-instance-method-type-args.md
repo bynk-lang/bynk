@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: ts_writes
 changelog: A generic instance method takes explicit type arguments, `b.cast[String]()`, naming the method's own parameters
 ---
 
