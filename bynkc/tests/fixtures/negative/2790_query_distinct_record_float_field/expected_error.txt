@@ -1,0 +1,4 @@
+# #2790: ADR 0690 decision 9 — `Query.distinct` keeps the `String`/`Int` rule, so a
+# record element is refused. `Reading` has a `Float` field, so it is not a `Key`
+# even once `Query` keys widen to `Key` (#2789).
+bynk.types.not_keyable `Query.distinct` needs a value-keyable element/key, but got `Reading`
