@@ -892,7 +892,7 @@ fn tally(ids: List[OrderId]) -> Int {
 
 A `store` `Map`, `Set` or `Cache`, and an `@indexed` field, still take only
 `String`, `Int` or a refined or opaque type over them. A `Query`'s `distinct`,
-`groupBy` and join keys do too.
+`distinctBy`, `groupBy` and join keys take any `Key` type, as a `List`'s do.
 
 ## Ordering your own types
 

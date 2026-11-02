@@ -1,0 +1,13 @@
+context probe
+
+// #2789: a `Query` key is `Key`, and a `Float` is never `Key` at any depth.
+type Reading = { sensor: String, value: Float }
+
+agent Probe {
+  key id: String
+  store readings: Map[String, Reading]
+
+  on call f() -> Effect[Int] {
+    readings.groupBy((r) => r, (k, rows) => 1).count()
+  }
+}

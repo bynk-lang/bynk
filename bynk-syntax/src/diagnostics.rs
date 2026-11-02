@@ -3194,7 +3194,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.not_keyable",
-        "A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2). A `Query` keeps the narrower `String`/`Int` rule.",
+        "A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2).",
         &["generic_type_ref"],
     ),
     d(
