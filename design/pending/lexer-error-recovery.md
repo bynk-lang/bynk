@@ -14,7 +14,7 @@ character, or a half-typed one in the editor, hid every other diagnostic in its 
 
 **Decision.** The lexer has a recovering entry point, `tokenize_recovering`, that
 returns the tokens it could read and every lexical error. It skips a bad character, a
-malformed or out-of-range literal, an unclosed doc-block opener and a `///`, and a
+malformed or out-of-range literal, an unclosed doc block (the rest of the file) and a `///`, and a
 string literal: an unterminated one to the end of its line, a malformed one that closes through its closing delimiter. No error token is added to `TokenKind`: a
 skipped span yields no token, so no parser or IDE match grows an arm. The strict
 `tokenize` family is unchanged (the first error, no tokens). The parse cache, the

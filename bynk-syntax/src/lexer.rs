@@ -698,6 +698,22 @@ fn hole_end(bytes: &[u8], from: usize) -> Option<usize> {
     None
 }
 
+/// Record `err`, folding a run of adjacent stray characters into one error (a
+/// pasted block of them would otherwise be one diagnostic per character).
+fn push_lex_error(errors: &mut Vec<CompileError>, err: CompileError) {
+    const UNEXPECTED: &str = "bynk.lex.unexpected_character";
+    if err.category == UNEXPECTED
+        && let Some(prev) = errors.last_mut()
+        && prev.category == UNEXPECTED
+        && prev.span.end == err.span.start
+    {
+        prev.span.end = err.span.end;
+        prev.message = "unexpected characters".to_string();
+        return;
+    }
+    errors.push(err);
+}
+
 fn tokenize_mode_recovering(
     source: &str,
     file: FileId,
@@ -736,7 +752,9 @@ fn tokenize_mode_recovering(
                          a line of three or more dashes is a doc-block marker, not a divider, so \
                          for a divider use a line comment, such as `// ---------`"
                     )));
-                    pos = open_end;
+                    // The block is the rest of the file, as the error says: its
+                    // prose lexed as code would only add errors.
+                    pos = bytes.len();
                     continue;
                 }
             }
@@ -837,11 +855,14 @@ fn tokenize_mode_recovering(
             // the user sees something useful.
             let ch = source[pos..].chars().next().unwrap_or('\0');
             let span = Span::new_in(file, pos, pos + ch.len_utf8());
-            errors.push(CompileError::new(
-                "bynk.lex.unexpected_character",
-                span,
-                format!("unexpected character `{ch}`"),
-            ));
+            push_lex_error(
+                &mut errors,
+                CompileError::new(
+                    "bynk.lex.unexpected_character",
+                    span,
+                    format!("unexpected character `{ch}`"),
+                ),
+            );
             pos += ch.len_utf8();
             continue;
         };
@@ -943,7 +964,7 @@ fn tokenize_mode_recovering(
                         format!("unexpected character `{ch}`"),
                     )
                 };
-                errors.push(err);
+                push_lex_error(&mut errors, err);
                 pos = if ch == '"' {
                     skip_line(bytes, span.end.max(pos + 1))
                 } else {
@@ -971,9 +992,9 @@ pub fn without_lex_echoes(
     let echo_ranges: Vec<(usize, usize)> = lex_errors
         .iter()
         .map(|le| {
+            // `tokens` are in source order.
             let next_end = tokens
-                .iter()
-                .find(|t| t.span.start >= le.span.end)
+                .get(tokens.partition_point(|t| t.span.start < le.span.end))
                 .map_or(le.span.end, |t| t.span.end);
             (le.span.start, next_end)
         })
@@ -2920,6 +2941,22 @@ mod tests {
         );
         // `, 1) }` after the literal still lexes: nothing of the hole leaked.
         assert!(!tokens.iter().any(|t| t.kind == TokenKind::StrLit));
+    }
+
+    #[test]
+    fn adjacent_stray_characters_are_one_error() {
+        let (_, errors) = tokenize_recovering("fn $$$ f é$");
+        assert_eq!(errors.len(), 2, "{errors:?}");
+        assert_eq!(errors[0].span.end - errors[0].span.start, 3);
+    }
+
+    #[test]
+    fn an_unclosed_doc_block_swallows_the_rest_without_more_errors() {
+        let (tokens, errors) =
+            tokenize_recovering("fn a() = 1\n---\nit's prose; don't lex #this\nfn b() = 2\n");
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].category, "bynk.lex.unclosed_doc_block");
+        assert_eq!(tokens.iter().filter(|t| t.kind == TokenKind::Fn).count(), 1);
     }
 
     #[test]
