@@ -1,0 +1,10 @@
+suite demo.use
+
+case "a type named only in an explicit instance-method list" {
+  let b = Box { value: 1 }
+  expect probeIt(b)
+}
+
+case "a type named only in an explicit static list" {
+  expect emptyItems().value == None
+}

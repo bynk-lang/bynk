@@ -1,0 +1,13 @@
+commons demo.use
+
+uses demo.boxes
+uses demo.items
+
+// `Item` appears only in an explicit list, so the emitted call needs its import.
+fn probeIt(b: Box[Int]) -> Bool {
+  b.probe[Item]()
+}
+
+fn emptyItems() -> Box[Option[Item]] {
+  Box.empty[Item]()
+}

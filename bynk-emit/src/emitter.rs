@@ -3075,9 +3075,14 @@ fn collect_refs_in_expr(
         ExprKind::MethodCall {
             receiver,
             method: _,
+            type_args,
             args,
-            ..
         } => {
+            // #2795: a type named only in an explicit list (`b.probe[Item]()`,
+            // `Box.empty[Item]()`) is kept in the emitted call, so it is imported.
+            for t in type_args {
+                collect_refs_in_typeref(t, local_to_file, ctx, out);
+            }
             if let ExprKind::Ident(id) = &receiver.kind {
                 record_name_ref(&id.name, local_to_file, ctx, out);
             } else {

@@ -22,8 +22,14 @@ The maintainer accepted #2795 with decisions A to F as recommended.
    none. This differs from a static, whose type parameters come first.
 4. **Emission keeps the list (D).** `Box.cast<number, string>(b)`: the receiver's
    arguments first, then the method's, the order of the emitted namespace member.
-   A call without a list is emitted as before. A receiver argument with no
-   TypeScript spelling drops the list and leaves `tsc` to infer.
+   The method's own arguments are what the author wrote. A receiver argument is
+   spelled only when it is a base type, `Unit` or a built-in container of those,
+   which is in scope in every emitted module; any other (a user type, a type
+   variable, a function type) is `any`, since the module may never import it. The
+   list is kept either way, so the call still types as written, and `Box<any>`
+   accepts every `Box<X>` the checker has already accepted. A type named only in
+   the list is imported like any other referenced type. A call without a list is
+   emitted as before.
 5. **Other receivers are unchanged (E).** A list on a non-generic method, on a
    method with no type parameters of its own, or on a built-in receiver stays
    `bynk.generics.type_arg_mismatch`. The verdict for a value receiver waits for

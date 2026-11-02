@@ -1,0 +1,2 @@
+# #2795: a type named only in an explicit list is imported.
+passed=2 failed=0
