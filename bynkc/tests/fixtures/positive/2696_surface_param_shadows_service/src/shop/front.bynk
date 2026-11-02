@@ -13,3 +13,9 @@ service count {
 		Greeter.tally(n)
 	}
 }
+
+service note {
+	on call(s: String) -> Effect[String] {
+		Greeter.audit(s)
+	}
+}

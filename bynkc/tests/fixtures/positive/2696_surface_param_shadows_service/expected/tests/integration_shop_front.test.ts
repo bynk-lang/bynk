@@ -98,6 +98,22 @@ async function test_a_parameter_named_deps_survives_the_surface() {
   }
 }
 
+async function test_a_caller_binding_handler_s_parameter_named_like_its_service_survives() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const s = await __callService(deps.env.SHOP_FRONT, "note", "yo" as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "integration", "7a20d8f31d1d8e22", deps.env, "shop.front");
+    if (!(s === "yo")) { throw __bynkExpectFailure("tests/shop/front.bynk:14:10", 378, 387, "expect s == \"yo\"\n  expected: s == \"yo\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("yo"))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -112,7 +128,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a parameter named like its service survives the surface", "a parameter named deps survives the surface"];
+export const __bynkCases: readonly string[] = ["a parameter named like its service survives the surface", "a parameter named deps survives the surface", "a caller-binding handler's parameter named like its service survives"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -126,6 +142,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a parameter named deps survives the surface")) {
     const started = __bynkCaseNow();
     const r = { name: "a parameter named deps survives the surface", ...(await test_a_parameter_named_deps_survives_the_surface()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a caller-binding handler's parameter named like its service survives")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a caller-binding handler's parameter named like its service survives", ...(await test_a_caller_binding_handler_s_parameter_named_like_its_service_survives()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

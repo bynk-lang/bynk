@@ -15,3 +15,10 @@ service tally {
 		deps + 1
 	}
 }
+
+// The `{ ...deps, identity: __caller }` branch: a Caller-binding handler.
+service audit {
+	on call(audit: String) -> Effect[String] by c: Caller {
+		audit
+	}
+}

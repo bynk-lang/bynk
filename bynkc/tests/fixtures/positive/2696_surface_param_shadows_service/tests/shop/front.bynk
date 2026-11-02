@@ -8,4 +8,9 @@ suite shop.front as system {
 		let n <- shop.front.count(4)
 		expect n == 5
 	}
+
+	case "a caller-binding handler's parameter named like its service survives" {
+		let s <- shop.front.note("yo")
+		expect s == "yo"
+	}
 }

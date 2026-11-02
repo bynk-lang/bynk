@@ -16,16 +16,25 @@ export const tally = {
   },
 };
 
+export const audit = {
+  async call(audit: string, deps: { identity: string }): globalThis.Promise<string> {
+    return audit;
+  },
+};
+
 export interface __ShopGreeterDeps {
 }
 
-export function __makeSurface(deps: __ShopGreeterDeps) {
+export function __makeSurface(deps: __ShopGreeterDeps, __caller: string) {
   return {
     async greet(__id_greet: string): globalThis.Promise<string> {
       return greet.call(__id_greet, deps);
     },
     async tally(__id_deps: number): globalThis.Promise<number> {
       return tally.call(__id_deps, deps);
+    },
+    async audit(__id_audit: string): globalThis.Promise<string> {
+      return audit.call(__id_audit, { ...deps, identity: __caller });
     },
   };
 }

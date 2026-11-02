@@ -10,6 +10,9 @@ export interface Env {
 export function compose(env: Env) {
   const deps = {  };
   return {
+    async audit(__caller: string, audit: string) {
+      return handlers.audit.call(audit, { ...deps, identity: __caller });
+    },
     async greet(greet: string) {
       return handlers.greet.call(greet, deps);
     },

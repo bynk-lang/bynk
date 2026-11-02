@@ -16,3 +16,9 @@ export const tally = {
     return __id_deps + 1;
   },
 };
+
+export const audit = {
+  async call(audit: string, deps: { identity: string }): globalThis.Promise<string> {
+    return audit;
+  },
+};

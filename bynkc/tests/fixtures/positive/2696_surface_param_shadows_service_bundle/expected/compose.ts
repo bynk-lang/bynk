@@ -6,8 +6,8 @@ import * as shop_greeter from "./shop/greeter.js";
 
 export function composeApp() {
   const shop_greeterDeps = {  };
-  const shop_greeterSurface = shop_greeter.__makeSurface(shop_greeterDeps);
-  const shop_frontDeps = { surface: { Greeter: shop_greeterSurface } };
+  const shop_greeterSurface = shop_greeter.__makeSurface(shop_greeterDeps, "shop.greeter");
+  const shop_frontDeps = { surface: { Greeter: shop_greeter.__makeSurface(shop_greeterDeps, "shop.front") } };
   const shop_frontSurface = shop_front.__makeSurface(shop_frontDeps);
 
   return {

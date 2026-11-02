@@ -18,6 +18,12 @@ export const count = {
   },
 };
 
+export const note = {
+  async call(s: string, deps: { surface: { Greeter: globalThis.ReturnType<typeof shop_greeter.__makeSurface> } }): globalThis.Promise<string> {
+    return deps.surface.Greeter.audit(s);
+  },
+};
+
 export interface __ShopFrontDeps {
   readonly surface: { Greeter: globalThis.ReturnType<typeof shop_greeter.__makeSurface> };
 }
@@ -29,6 +35,9 @@ export function __makeSurface(deps: __ShopFrontDeps) {
     },
     async count(n: number): globalThis.Promise<number> {
       return count.call(n, deps);
+    },
+    async note(s: string): globalThis.Promise<string> {
+      return note.call(s, deps);
     },
   };
 }

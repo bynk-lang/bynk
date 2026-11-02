@@ -29,6 +29,27 @@ export default {
         if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
         const servicePath = path.slice("/_bynk/call/".length);
         switch (servicePath) {
+          case "audit": {
+            __route = "call audit";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "3ac226280cb37073") {
+              globalThis.console.error("ContractMismatch shop.greeter call audit", { service: "audit", expected: "3ac226280cb37073", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "audit", expected: "3ac226280cb37073", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            const __caller = request.headers.get("X-Bynk-Caller") as string;
+            const __r_audit = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
+            if (__r_audit.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_audit.error), { status: 400, headers: { "content-type": "application/json" } });
+            const audit = __r_audit.value;
+            const result = await surface.audit(__caller, audit);
+            const body = result as __JsonValue;
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
           case "greet": {
             __route = "call greet";
             const __contract = request.headers.get("X-Bynk-Contract");

@@ -4085,13 +4085,15 @@ pub(crate) fn emit_make_surface(
             .find(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Call));
         let Some(h) = handler else { continue };
         let is_async = is_effectful_return(&h.return_type);
-        // #2696: the method body reads `<service>`, `deps` and `__caller` after the
-        // parameters bind, so a user parameter spelled like one of them would
-        // shadow it. Rename the user's binder (hygienically), never the generated
-        // name, so every other surface stays byte-identical.
+        // #2696: the method body reads `<service>` after the parameters bind, so a
+        // user parameter spelled like the service would shadow it. Rename the
+        // user's binder (hygienically), never the generated name, so every other
+        // surface stays byte-identical. `deps` needs no check here: `ts_ident`
+        // already maps it to `__id_deps`. `__caller` needs none either: a
+        // `__`-prefixed name can't be a user identifier.
         let surface_param = |name: &str| -> String {
             let id = ts_ident(name);
-            if id == s.name.name || id == "deps" || id == "__caller" {
+            if id == s.name.name {
                 format!("__id_{id}")
             } else {
                 id

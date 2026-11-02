@@ -18,3 +18,9 @@ export const count = {
     return __callService(deps.env.SHOP_GREETER, "tally", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(n), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "shop.front", "77c1ac7009cd779b", deps.env, "shop.greeter");
   },
 };
+
+export const note = {
+  async call(s: string, deps: { env: { SHOP_GREETER: __ServiceBinding } }): globalThis.Promise<string> {
+    return __callService(deps.env.SHOP_GREETER, "audit", s as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "shop.front", "3ac226280cb37073", deps.env, "shop.greeter");
+  },
+};

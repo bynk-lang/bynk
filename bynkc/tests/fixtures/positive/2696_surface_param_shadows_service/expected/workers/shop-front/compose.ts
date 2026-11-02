@@ -17,5 +17,8 @@ export function compose(env: Env) {
     async front(name: string) {
       return handlers.front.call(name, deps);
     },
+    async note(s: string) {
+      return handlers.note.call(s, deps);
+    },
   };
 }
