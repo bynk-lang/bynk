@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.22** | "`bynk-contracts.json` `provides`, `provides_shapes` and the foreign-client hash for a service naming a consumed context's exported type now come from the table the Worker's `index.ts` enforces (a lock entry pinned from the old, unresolved `provides_shapes` is re-evaluated); the generated client declares such a type under its plain name" |
 | **v0.480.21** | A module whose `via schema(...)` subscribers are all bare handlers imports `EventEnvelope`, so its emitted TypeScript type-checks |
 | **v0.480.20** | An effectful method that awaits is emitted async, so its TypeScript compiles |
 | **v0.480.19** | a parenthesised match-arm guard such as `n if (flag) => n` now parses as a guard rather than a lambda |
