@@ -23,4 +23,13 @@ export const Box = {
   sortedWith<T, U>(self: Box<T>, xs: readonly U[], __cmp_U: (a: U, b: U) => number): readonly U[] {
     return sort(xs, __cmp_U);
   },
+  castInside<T, V>(self: Box<T>): Option<string> {
+    const c = Box.cast<T, string>(self);
+    return c;
+  },
 };
+
+export function castFn(b: Box<(a0: number) => number>): Option<string> {
+  const c = Box.cast<(a0: number) => number, string>(b);
+  return c;
+}

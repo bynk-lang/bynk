@@ -999,6 +999,18 @@ fn file_mentions_connection(commons: &TypedCommons) -> bool {
 /// `collect_codec_closure` — the one remaining consumer still genuinely
 /// `TypeRef`-driven.
 pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
+    ty_to_type_ref_in(t, tys, false)
+}
+
+/// #2795: [`ty_to_type_ref`] for a type that is only *spelled* in TypeScript, an
+/// explicit type-argument list on a call, not given a codec. With `open`, a type
+/// variable is its own name (it is in scope in the enclosing emitted function)
+/// and a function type is a `TypeRef::Fn`; a codec root still refuses both.
+pub(crate) fn ty_to_type_ref_spelled(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
+    ty_to_type_ref_in(t, tys, true)
+}
+
+fn ty_to_type_ref_in(t: TyId, tys: &Arc<Types>, open: bool) -> Option<TypeRef> {
     let sp = bynk_syntax::span::Span::new(0, 0);
     Some(match &*tys.get(t) {
         Ty::Base(b) => TypeRef::Base(*b, sp),
@@ -1013,7 +1025,7 @@ pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
             },
             args: args
                 .iter()
-                .map(|a| ty_to_type_ref(*a, tys))
+                .map(|a| ty_to_type_ref_in(*a, tys, open))
                 .collect::<Option<Vec<_>>>()?,
             span: sp,
         },
@@ -1022,16 +1034,28 @@ pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
             span: sp,
         }),
         Ty::Result(a, b) => TypeRef::Result(
-            Box::new(ty_to_type_ref(*a, tys)?),
-            Box::new(ty_to_type_ref(*b, tys)?),
+            Box::new(ty_to_type_ref_in(*a, tys, open)?),
+            Box::new(ty_to_type_ref_in(*b, tys, open)?),
             sp,
         ),
-        Ty::Option(a) => TypeRef::Option(Box::new(ty_to_type_ref(*a, tys)?), sp),
-        Ty::List(a) => TypeRef::List(Box::new(ty_to_type_ref(*a, tys)?), sp),
-        Ty::Set(a) => TypeRef::Set(Box::new(ty_to_type_ref(*a, tys)?), sp),
+        Ty::Option(a) => TypeRef::Option(Box::new(ty_to_type_ref_in(*a, tys, open)?), sp),
+        Ty::List(a) => TypeRef::List(Box::new(ty_to_type_ref_in(*a, tys, open)?), sp),
+        Ty::Set(a) => TypeRef::Set(Box::new(ty_to_type_ref_in(*a, tys, open)?), sp),
         Ty::Map(k, v) => TypeRef::Map(
-            Box::new(ty_to_type_ref(*k, tys)?),
-            Box::new(ty_to_type_ref(*v, tys)?),
+            Box::new(ty_to_type_ref_in(*k, tys, open)?),
+            Box::new(ty_to_type_ref_in(*v, tys, open)?),
+            sp,
+        ),
+        Ty::Var(name) if open => TypeRef::Named(Ident {
+            name: name.clone(),
+            span: sp,
+        }),
+        Ty::Fn { params, ret } if open => TypeRef::Fn(
+            params
+                .iter()
+                .map(|p| ty_to_type_ref_in(*p, tys, open))
+                .collect::<Option<Vec<_>>>()?,
+            Box::new(ty_to_type_ref_in(*ret, tys, open)?),
             sp,
         ),
         Ty::Unit => TypeRef::Unit(sp),

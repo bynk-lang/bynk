@@ -22,3 +22,13 @@ case "the explicit form agrees with inference" {
   let b = Box { value: 2 }
   expect b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value
 }
+
+case "an explicit list from inside a generic method, receiver args a type variable" {
+  let b = Box { value: 1 }
+  expect b.castInside[Int]() == None
+}
+
+case "an explicit list on a receiver whose argument is a function type" {
+  let f = Box { value: (n: Int) => n + 1 }
+  expect castFn(f) == None
+}

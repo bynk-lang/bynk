@@ -1,2 +1,2 @@
 # #2795: explicit type arguments on a generic instance method.
-passed=4 failed=0
+passed=6 failed=0

@@ -3731,7 +3731,11 @@ fn lower_method_call(
                 Ty::Named { args, .. } => Some(args.clone()),
                 _ => None,
             })
-            .and_then(|args| args.iter().map(|a| ty_to_type_ref(*a, tys)).collect());
+            .and_then(|args| {
+                args.iter()
+                    .map(|a| ty_to_type_ref_spelled(*a, tys))
+                    .collect()
+            });
         match recv_args {
             Some(mut all_refs) => {
                 all_refs.extend(type_args.iter().cloned());

@@ -43,7 +43,7 @@ function __makeTestDeps() {
 async function test_a_method_type_parameter_with_nothing_to_infer_it_from() {
   try {
     const deps = {};
-    const { Box } = __ns_demo_boxes;
+    const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 1 };
@@ -62,7 +62,7 @@ async function test_a_method_type_parameter_with_nothing_to_infer_it_from() {
 async function test_an_explicit_argument_pins_a_method_type_parameter() {
   try {
     const deps = {};
-    const { Box } = __ns_demo_boxes;
+    const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 3 };
@@ -82,7 +82,7 @@ async function test_an_explicit_argument_pins_a_method_type_parameter() {
 async function test_an_explicit_argument_on_a_bounded_method_parameter() {
   try {
     const deps = {};
-    const { Box } = __ns_demo_boxes;
+    const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 0 };
@@ -100,11 +100,47 @@ async function test_an_explicit_argument_on_a_bounded_method_parameter() {
 async function test_the_explicit_form_agrees_with_inference() {
   try {
     const deps = {};
-    const { Box } = __ns_demo_boxes;
+    const { Box, castFn } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 2 };
     if (!(Box.mapped<number, number>(b, (n) => n + 1).value === Box.mapped(b, (n) => n + 1).value)) { throw __bynkExpectFailure("tests/demo/boxes.bynk:23:10", 559, 624, "expect b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value\n  expected: b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value\n  actual:   " + __bynkShow((Box.mapped<number, number>(b, (n) => n + 1).value)) + " == " + __bynkShow((Box.mapped(b, (n) => n + 1).value))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_an_explicit_list_from_inside_a_generic_method__receiver_args_a_type_variable() {
+  try {
+    const deps = {};
+    const { Box, castFn } = __ns_demo_boxes;
+    type Box<T> = __ns_demo_boxes.Box<T>;
+    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
+    const b = { value: 1 };
+    if (!(__bynkEq(Box.castInside<number, number>(b), None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:28:10", 750, 777, "expect b.castInside[Int]() == None\n  expected: b.castInside[Int]() == None\n  actual:   " + __bynkShow((Box.castInside<number, number>(b))) + " == " + __bynkShow((None))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_an_explicit_list_on_a_receiver_whose_argument_is_a_function_type() {
+  try {
+    const deps = {};
+    const { Box, castFn } = __ns_demo_boxes;
+    type Box<T> = __ns_demo_boxes.Box<T>;
+    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
+    const f = { value: (n: number) => n + 1 };
+    if (!(__bynkEq(castFn(f), None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:33:10", 907, 924, "expect castFn(f) == None\n  expected: castFn(f) == None\n  actual:   " + __bynkShow((castFn(f))) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -128,7 +164,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a method type parameter with nothing to infer it from", "an explicit argument pins a method type parameter", "an explicit argument on a bounded method parameter", "the explicit form agrees with inference"];
+export const __bynkCases: readonly string[] = ["a method type parameter with nothing to infer it from", "an explicit argument pins a method type parameter", "an explicit argument on a bounded method parameter", "the explicit form agrees with inference", "an explicit list from inside a generic method, receiver args a type variable", "an explicit list on a receiver whose argument is a function type"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -154,6 +190,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("the explicit form agrees with inference")) {
     const started = __bynkCaseNow();
     const r = { name: "the explicit form agrees with inference", ...(await test_the_explicit_form_agrees_with_inference()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an explicit list from inside a generic method, receiver args a type variable")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an explicit list from inside a generic method, receiver args a type variable", ...(await test_an_explicit_list_from_inside_a_generic_method__receiver_args_a_type_variable()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an explicit list on a receiver whose argument is a function type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an explicit list on a receiver whose argument is a function type", ...(await test_an_explicit_list_on_a_receiver_whose_argument_is_a_function_type()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
