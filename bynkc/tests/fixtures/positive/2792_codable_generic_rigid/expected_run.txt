@@ -1,2 +1,2 @@
 # 2792 codec factory for a generic type at a rigid parameter
-passed=6 failed=0
+passed=7 failed=0

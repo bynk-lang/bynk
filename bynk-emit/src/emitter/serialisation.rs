@@ -3658,6 +3658,9 @@ fn option_value_decoder(
 const FACTORY_PARAM_PREFIX: &str = "__P_";
 
 /// The TypeScript name of the codec factory for generic declaration `name`.
+/// Keyed on the bare declaration name, as every other codec name is: a module's
+/// type table (`TypedCommons::types`) holds one declaration per name, so two
+/// same-named generic declarations from different units cannot both be in scope.
 pub(crate) fn codec_factory_ident(name: &str) -> String {
     format!("__codecOf_{name}")
 }

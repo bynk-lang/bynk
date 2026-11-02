@@ -42,9 +42,10 @@ function __makeTestDeps() {
 async function test_a_record_round_trips_and_encodes_as_the_concrete_codec_does() {
   try {
     const deps = {};
-    const { Box, Maybe, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
+    const { Box, Maybe, Outer, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decOuter, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encOuter, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
     type Box<T> = __ns_demo_gen.Box<T>;
     type Maybe<T> = __ns_demo_gen.Maybe<T>;
+    type Outer<T> = __ns_demo_gen.Outer<T>;
     type P = __ns_demo_gen.P;
     type Pair<A, B> = __ns_demo_gen.Pair<A, B>;
     type Wrapped<T> = __ns_demo_gen.Wrapped<T>;
@@ -67,9 +68,10 @@ async function test_a_record_round_trips_and_encodes_as_the_concrete_codec_does(
 async function test_decoding_agrees_at_the_same_error_paths() {
   try {
     const deps = {};
-    const { Box, Maybe, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
+    const { Box, Maybe, Outer, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decOuter, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encOuter, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
     type Box<T> = __ns_demo_gen.Box<T>;
     type Maybe<T> = __ns_demo_gen.Maybe<T>;
+    type Outer<T> = __ns_demo_gen.Outer<T>;
     type P = __ns_demo_gen.P;
     type Pair<A, B> = __ns_demo_gen.Pair<A, B>;
     type Wrapped<T> = __ns_demo_gen.Wrapped<T>;
@@ -91,9 +93,10 @@ async function test_decoding_agrees_at_the_same_error_paths() {
 async function test_two_parameters() {
   try {
     const deps = {};
-    const { Box, Maybe, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
+    const { Box, Maybe, Outer, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decOuter, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encOuter, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
     type Box<T> = __ns_demo_gen.Box<T>;
     type Maybe<T> = __ns_demo_gen.Maybe<T>;
+    type Outer<T> = __ns_demo_gen.Outer<T>;
     type P = __ns_demo_gen.P;
     type Pair<A, B> = __ns_demo_gen.Pair<A, B>;
     type Wrapped<T> = __ns_demo_gen.Wrapped<T>;
@@ -114,9 +117,10 @@ async function test_two_parameters() {
 async function test_a_generic_sum() {
   try {
     const deps = {};
-    const { Box, Maybe, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
+    const { Box, Maybe, Outer, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decOuter, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encOuter, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
     type Box<T> = __ns_demo_gen.Box<T>;
     type Maybe<T> = __ns_demo_gen.Maybe<T>;
+    type Outer<T> = __ns_demo_gen.Outer<T>;
     type P = __ns_demo_gen.P;
     type Pair<A, B> = __ns_demo_gen.Pair<A, B>;
     type Wrapped<T> = __ns_demo_gen.Wrapped<T>;
@@ -139,9 +143,10 @@ async function test_a_generic_sum() {
 async function test_containers_of_the_parameter_inside_the_generic_type() {
   try {
     const deps = {};
-    const { Box, Maybe, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
+    const { Box, Maybe, Outer, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decOuter, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encOuter, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
     type Box<T> = __ns_demo_gen.Box<T>;
     type Maybe<T> = __ns_demo_gen.Maybe<T>;
+    type Outer<T> = __ns_demo_gen.Outer<T>;
     type P = __ns_demo_gen.P;
     type Pair<A, B> = __ns_demo_gen.Pair<A, B>;
     type Wrapped<T> = __ns_demo_gen.Wrapped<T>;
@@ -162,9 +167,10 @@ async function test_containers_of_the_parameter_inside_the_generic_type() {
 async function test_nested_generic_types_and_a_generic_type_inside_a_container() {
   try {
     const deps = {};
-    const { Box, Maybe, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
+    const { Box, Maybe, Outer, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decOuter, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encOuter, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
     type Box<T> = __ns_demo_gen.Box<T>;
     type Maybe<T> = __ns_demo_gen.Maybe<T>;
+    type Outer<T> = __ns_demo_gen.Outer<T>;
     type P = __ns_demo_gen.P;
     type Pair<A, B> = __ns_demo_gen.Pair<A, B>;
     type Wrapped<T> = __ns_demo_gen.Wrapped<T>;
@@ -175,6 +181,32 @@ async function test_nested_generic_types_and_a_generic_type_inside_a_container()
     if (!(encListOfBox(xs, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }) === globalThis.JSON.stringify(__serialise_List_Box_Int(xs)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:52:10", 2270, 2305, "expect encListOfBox(xs) == Json.encode(xs)\n  expected: encListOfBox(xs) == Json.encode(xs)\n  actual:   " + __bynkShow((encListOfBox(xs, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_List_Box_Int(xs))))); }
     if (!(__bynkEq(decListOfBox(globalThis.JSON.stringify(__serialise_List_Box_Int(xs)), { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), Ok(xs)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:53:10", 2315, 2359, "expect decListOfBox[Int](Json.encode(xs)) == Ok(xs)\n  expected: decListOfBox[Int](Json.encode(xs)) == Ok(xs)\n  actual:   " + __bynkShow((decListOfBox(globalThis.JSON.stringify(__serialise_List_Box_Int(xs)), { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((Ok(xs)))); }
     if (!(__bynkEq(decListOfBox("[{\"value\":1,\"label\":2}]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<readonly __ns_demo_gen.Box<number>[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Box_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly __ns_demo_gen.Box<number>[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[{\"value\":1,\"label\":2}]")))) { throw __bynkExpectFailure("tests/demo/gen.bynk:54:10", 2369, 2479, "expect decListOfBox[Int](\"[{\\\"value\\\":1,\\\"label\\\":2}]\") == Json.decode[List[Box[Int]]](\"[{\\\"value\\\":1,\\\"label\\\":2}]\")\n  expected: decListOfBox[Int](\"[{\\\"value\\\":1,\\\"label\\\":2}]\") == Json.decode[List[Box[Int]]](\"[{\\\"value\\\":1,\\\"label\\\":2}]\")\n  actual:   " + __bynkShow((decListOfBox("[{\"value\":1,\"label\":2}]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<readonly __ns_demo_gen.Box<number>[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Box_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly __ns_demo_gen.Box<number>[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("[{\"value\":1,\"label\":2}]")))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_generic_field_at_the_parameter_beside_a_concrete_instantiation() {
+  try {
+    const deps = {};
+    const { Box, Maybe, Outer, P, Pair, Wrapped, dec, decListOfBox, decMaybe, decNested, decOuter, decPair, decWrapped, enc, encListOfBox, encMaybe, encNested, encOuter, encPair, encWrapped, roundTrip, viaTwo } = __ns_demo_gen;
+    type Box<T> = __ns_demo_gen.Box<T>;
+    type Maybe<T> = __ns_demo_gen.Maybe<T>;
+    type Outer<T> = __ns_demo_gen.Outer<T>;
+    type P = __ns_demo_gen.P;
+    type Pair<A, B> = __ns_demo_gen.Pair<A, B>;
+    type Wrapped<T> = __ns_demo_gen.Wrapped<T>;
+    const o: Outer<P> = { inner: { value: { x: 1, y: 2 }, label: "i" }, tag: { value: 5, label: "t" } };
+    if (!(encOuter(o, { encode: __serialise_P, decode: __deserialise_P }) === globalThis.JSON.stringify(__serialise_Outer_P(o)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:59:10", 2682, 2711, "expect encOuter(o) == Json.encode(o)\n  expected: encOuter(o) == Json.encode(o)\n  actual:   " + __bynkShow((encOuter(o, { encode: __serialise_P, decode: __deserialise_P }))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_Outer_P(o))))); }
+    if (!(__bynkEq(decOuter(globalThis.JSON.stringify(__serialise_Outer_P(o)), { encode: __serialise_P, decode: __deserialise_P }), Ok(o)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:60:10", 2721, 2757, "expect decOuter[P](Json.encode(o)) == Ok(o)\n  expected: decOuter[P](Json.encode(o)) == Ok(o)\n  actual:   " + __bynkShow((decOuter(globalThis.JSON.stringify(__serialise_Outer_P(o)), { encode: __serialise_P, decode: __deserialise_P }))) + " == " + __bynkShow((Ok(o)))); }
+    const bad = "{\"inner\":{\"value\":{\"x\":1,\"y\":2},\"label\":\"i\"},\"tag\":{\"value\":\"no\",\"label\":\"t\"}}";
+    if (!(__bynkEq(decOuter(bad, { encode: __serialise_P, decode: __deserialise_P }), ((__s: string): Result<__ns_demo_gen.Outer<__ns_demo_gen.P>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Outer_P(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_gen.Outer<__ns_demo_gen.P>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(bad)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:62:10", 2882, 2928, "expect decOuter[P](bad) == Json.decode[Outer[P]](bad)\n  expected: decOuter[P](bad) == Json.decode[Outer[P]](bad)\n  actual:   " + __bynkShow((decOuter(bad, { encode: __serialise_P, decode: __deserialise_P }))) + " == " + __bynkShow((((__s: string): Result<__ns_demo_gen.Outer<__ns_demo_gen.P>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Outer_P(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_gen.Outer<__ns_demo_gen.P>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(bad)))); }
+    if (!(!(decOuter(bad, { encode: __serialise_P, decode: __deserialise_P }).tag === "Ok"))) { throw __bynkExpectFailure("tests/demo/gen.bynk:63:10", 2938, 2962, "expect !decOuter[P](bad).isOk()"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -480,6 +512,27 @@ export function __deserialise_List_Box_Int(json: __JsonValue, path: string = "$"
   return Ok(out);
 }
 
+export function __serialise_Outer_P(value: __ns_demo_gen.Outer<__ns_demo_gen.P>): __JsonValue {
+  return {
+    inner: __serialise_Box_P(value.inner),
+    tag: __serialise_Box_Int(value.tag),
+  };
+}
+
+export function __deserialise_Outer_P(json: __JsonValue, path: string = "$"): Result<__ns_demo_gen.Outer<__ns_demo_gen.P>, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_inner = __deserialise_Box_P(obj["inner"], `${path}.inner`);
+  if (__r_inner.tag === "Err") return __r_inner;
+  const __inner = __r_inner.value;
+  const __r_tag = __deserialise_Box_Int(obj["tag"], `${path}.tag`);
+  if (__r_tag.tag === "Err") return __r_tag;
+  const __tag = __r_tag.value;
+  return Ok({ inner: __inner, tag: __tag } as __ns_demo_gen.Outer<__ns_demo_gen.P>);
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -494,7 +547,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a record round-trips and encodes as the concrete codec does", "decoding agrees at the same error paths", "two parameters", "a generic sum", "containers of the parameter inside the generic type", "nested generic types and a generic type inside a container"];
+export const __bynkCases: readonly string[] = ["a record round-trips and encodes as the concrete codec does", "decoding agrees at the same error paths", "two parameters", "a generic sum", "containers of the parameter inside the generic type", "nested generic types and a generic type inside a container", "a generic field at the parameter beside a concrete instantiation"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -532,6 +585,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("nested generic types and a generic type inside a container")) {
     const started = __bynkCaseNow();
     const r = { name: "nested generic types and a generic type inside a container", ...(await test_nested_generic_types_and_a_generic_type_inside_a_container()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a generic field at the parameter beside a concrete instantiation")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic field at the parameter beside a concrete instantiation", ...(await test_a_generic_field_at_the_parameter_beside_a_concrete_instantiation()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

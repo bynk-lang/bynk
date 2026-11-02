@@ -53,6 +53,14 @@ export interface Wrapped<T> {
 export const Wrapped = {
 };
 
+export interface Outer<T> {
+  readonly inner: Box<T>;
+  readonly tag: Box<number>;
+}
+
+export const Outer = {
+};
+
 export function enc<T>(b: Box<T>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): string {
   return globalThis.JSON.stringify(__codecOf_Box(__codec_T).encode(b));
 }
@@ -105,8 +113,42 @@ export function decListOfBox<T>(s: string, __codec_T: { encode: (v: T) => __Json
   return ((__s: string): Result<readonly Box<T>[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __bynkCodecList(__codecOf_Box(__codec_T)).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Box<T>[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
 }
 
+export function encOuter<T>(o: Outer<T>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): string {
+  return globalThis.JSON.stringify(__codecOf_Outer(__codec_T).encode(o));
+}
+
+export function decOuter<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<Outer<T>, JsonError> {
+  return ((__s: string): Result<Outer<T>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __codecOf_Outer(__codec_T).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Outer<T>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+}
+
 export function viaTwo<T>(b: Box<T>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<Box<T>, JsonError> {
   return roundTrip(b, __codec_T);
+}
+
+export function __serialise_Box_Int(value: Box<number>): __JsonValue {
+  return {
+    value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value),
+    label: value.label as __JsonValue,
+  };
+}
+
+export function __deserialise_Box_Int(json: __JsonValue, path: string = "$"): Result<Box<number>, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+  if (typeof obj["label"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.label`, expected: "string", actual: typeof obj["label"] });
+  }
+  const __label = obj["label"];
+  return Ok({ value: __value, label: __label } as Box<number>);
 }
 
 function __codecOf_Box<__P_T>(__codec___P_T: { encode: (v: __P_T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<__P_T, __BoundaryError> }): { encode: (v: Box<__P_T>) => __JsonValue; decode: (j: __JsonValue, path?: string) => Result<Box<__P_T>, __BoundaryError> } {
@@ -273,4 +315,49 @@ function __codecOf_Wrapped<__P_T>(__codec___P_T: { encode: (v: __P_T) => __JsonV
     return __b;
   }
   return { encode: __serialise_Wrapped___P_T, decode: __deserialise_Wrapped___P_T };
+}
+
+function __codecOf_Outer<__P_T>(__codec___P_T: { encode: (v: __P_T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<__P_T, __BoundaryError> }): { encode: (v: Outer<__P_T>) => __JsonValue; decode: (j: __JsonValue, path?: string) => Result<Outer<__P_T>, __BoundaryError> } {
+  const __serialise___P_T = (v: __P_T) => __codec___P_T.encode(v);
+  const __deserialise___P_T = (j: __JsonValue, path: string = "$") => __codec___P_T.decode(j, path);
+  function __serialise_Outer___P_T(value: Outer<__P_T>): __JsonValue {
+    return {
+      inner: __serialise_Box___P_T(value.inner),
+      tag: __serialise_Box_Int(value.tag),
+    };
+  }
+  function __deserialise_Outer___P_T(json: __JsonValue, path: string = "$"): Result<Outer<__P_T>, __BoundaryError> {
+    if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+      return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+    }
+    const obj = json as { [k: string]: __JsonValue };
+    const __r_inner = __deserialise_Box___P_T(obj["inner"], `${path}.inner`);
+    if (__r_inner.tag === "Err") return __r_inner;
+    const __inner = __r_inner.value;
+    const __r_tag = __deserialise_Box_Int(obj["tag"], `${path}.tag`);
+    if (__r_tag.tag === "Err") return __r_tag;
+    const __tag = __r_tag.value;
+    return Ok({ inner: __inner, tag: __tag } as Outer<__P_T>);
+  }
+  function __serialise_Box___P_T(value: Box<__P_T>): __JsonValue {
+    return {
+      value: __serialise___P_T(value.value),
+      label: value.label as __JsonValue,
+    };
+  }
+  function __deserialise_Box___P_T(json: __JsonValue, path: string = "$"): Result<Box<__P_T>, __BoundaryError> {
+    if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+      return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+    }
+    const obj = json as { [k: string]: __JsonValue };
+    const __r_value = __deserialise___P_T(obj["value"], `${path}.value`);
+    if (__r_value.tag === "Err") return __r_value;
+    const __value = __r_value.value;
+    if (typeof obj["label"] !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}.label`, expected: "string", actual: typeof obj["label"] });
+    }
+    const __label = obj["label"];
+    return Ok({ value: __value, label: __label } as Box<__P_T>);
+  }
+  return { encode: __serialise_Outer___P_T, decode: __deserialise_Outer___P_T };
 }

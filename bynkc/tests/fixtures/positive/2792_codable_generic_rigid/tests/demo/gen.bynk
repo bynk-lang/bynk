@@ -53,3 +53,12 @@ case "nested generic types and a generic type inside a container" {
   expect decListOfBox[Int](Json.encode(xs)) == Ok(xs)
   expect decListOfBox[Int]("[{\"value\":1,\"label\":2}]") == Json.decode[List[Box[Int]]]("[{\"value\":1,\"label\":2}]")
 }
+
+case "a generic field at the parameter beside a concrete instantiation" {
+  let o: Outer[P] = Outer { inner: Box { value: P { x: 1, y: 2 }, label: "i" }, tag: Box { value: 5, label: "t" } }
+  expect encOuter(o) == Json.encode(o)
+  expect decOuter[P](Json.encode(o)) == Ok(o)
+  let bad = "{\"inner\":{\"value\":{\"x\":1,\"y\":2},\"label\":\"i\"},\"tag\":{\"value\":\"no\",\"label\":\"t\"}}"
+  expect decOuter[P](bad) == Json.decode[Outer[P]](bad)
+  expect !decOuter[P](bad).isOk()
+}

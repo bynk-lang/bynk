@@ -47,4 +47,10 @@ fn decListOfBox[T: Codable](s: String) -> Result[List[Box[T]], JsonError] {
   Json.decode[List[Box[T]]](s)
 }
 
+type Outer[T] = { inner: Box[T], tag: Box[Int] }
+
+fn encOuter[T: Codable](o: Outer[T]) -> String { Json.encode(o) }
+
+fn decOuter[T: Codable](s: String) -> Result[Outer[T], JsonError] { Json.decode[Outer[T]](s) }
+
 fn viaTwo[T: Codable](b: Box[T]) -> Result[Box[T], JsonError] { roundTrip(b) }

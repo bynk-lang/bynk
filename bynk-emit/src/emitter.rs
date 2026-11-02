@@ -1104,9 +1104,15 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
             let mut factories = Vec::new();
             codec::generic_factories(t, commons, &mut factories);
             for f in factories {
-                if let Some(root) = serialisation::codec_factory_root(&f, &commons.types) {
-                    roots.push(root);
-                }
+                let root = serialisation::codec_factory_root(&f, &commons.types);
+                // `CodecGen::for_ty` names `__codecOf_<f>` for exactly these, so a
+                // declaration that is not a generic record or sum here would leave
+                // a reference to a function nothing emits.
+                debug_assert!(
+                    root.is_some(),
+                    "bynk internal error: no codec factory for generic type `{f}`"
+                );
+                roots.extend(root);
             }
         };
         let mut visit = |e: &Expr| {
