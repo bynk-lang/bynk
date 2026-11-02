@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: A generic instance method takes explicit type arguments, `b.cast[String]()`, naming the method's own parameters
----
+# 0707 — A generic instance method takes explicit type arguments naming its own parameters
 
-## ADR: instance-method-explicit-type-args
-title: A generic instance method takes explicit type arguments naming its own parameters
-summary: x.m[T](…) on a user instance method; the receiver's parameters are not listed; ADR 0234 B and 0702 F lifted
+- **Status:** Accepted (v0.485)
 
 **Context.** ADR 0234 B deferred `value.map[U](…)` and ADR 0702 B kept it refused
 on an instance method while allowing it on a static (`Box.empty[Int]()`).
