@@ -761,8 +761,19 @@ pub fn phase_integration_bodies(
         }
         let mut harness_consumes = unit_consumes.clone();
         harness_consumes.insert(harness_name.clone(), participants.clone());
+        // #2832: the harness is named for its target, so its entry here is the
+        // target's own. The target's `uses` stay (they are what its consumed
+        // view, `contract_types_for`, resolves a commons type through) and the
+        // suite's own `uses` join them, where an overwrite lost the commons
+        // types of the context under test and typed a call to a service
+        // returning one as `()`.
         let mut harness_uses = unit_uses.clone();
-        harness_uses.insert(harness_name.clone(), uses_targets.clone());
+        let entry = harness_uses.entry(harness_name.clone()).or_default();
+        for u in &uses_targets {
+            if !entry.contains(u) {
+                entry.push(u.clone());
+            }
+        }
         let cross_context = build_cross_context_info(
             &harness_name,
             &harness_consumes,

@@ -1,0 +1,12 @@
+---
+#2832: a `system` case calls a service whose result is a refined type of a
+commons the context under test `uses`. The harness is named for its target, so
+its `uses` entry used to replace the target's, the target's consumed view lost
+the commons type, and the call typed as `()` (`bynk.effect.bind_on_non_effect`).
+---
+suite boundary.consumer as system {
+  case "price crosses back" {
+    let r <- boundary.consumer.askPrice(1)
+    expect r is Err(_)
+  }
+}

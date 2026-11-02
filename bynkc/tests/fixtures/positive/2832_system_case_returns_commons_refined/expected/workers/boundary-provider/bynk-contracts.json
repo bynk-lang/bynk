@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "price": "37c348bfa2453aa8"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "price": "Svc(\"price\",P(\"n\",B(\"Int\")),Ret(R(Rf(\"Cents\",\"Int\",\"NonNegative\"),B(\"Int\"))))"
+  }
+}

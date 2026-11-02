@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "provides": {
+    "askPrice": "e673a306edd722c3"
+  },
+  "expects": {
+    "boundary.provider": {
+      "price": "37c348bfa2453aa8"
+    }
+  },
+  "provides_shapes": {
+    "askPrice": "Svc(\"askPrice\",P(\"n\",B(\"Int\")),Ret(R(Rf(\"Cents\",\"Int\",\"NonNegative\"),B(\"Int\"))))"
+  },
+  "expects_shapes": {
+    "boundary.provider": {
+      "price": "Svc(\"price\",P(\"n\",B(\"Int\")),Ret(R(Rf(\"Cents\",\"Int\",\"NonNegative\"),B(\"Int\"))))"
+    }
+  }
+}
