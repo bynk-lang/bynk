@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "provides": {
+    "count": "7e87c4bc913fdc06",
+    "front": "2d478202a004583f"
+  },
+  "expects": {
+    "shop.greeter": {
+      "greet": "a55e77482ed232ef",
+      "tally": "77c1ac7009cd779b"
+    }
+  },
+  "provides_shapes": {
+    "count": "Svc(\"count\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))",
+    "front": "Svc(\"front\",P(\"name\",B(\"String\")),Ret(B(\"String\")))"
+  },
+  "expects_shapes": {
+    "shop.greeter": {
+      "greet": "Svc(\"greet\",P(\"greet\",B(\"String\")),Ret(B(\"String\")))",
+      "tally": "Svc(\"tally\",P(\"deps\",B(\"Int\")),Ret(B(\"Int\")))"
+    }
+  }
+}

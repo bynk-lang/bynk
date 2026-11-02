@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "greet": "a55e77482ed232ef",
+    "tally": "77c1ac7009cd779b"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "greet": "Svc(\"greet\",P(\"greet\",B(\"String\")),Ret(B(\"String\")))",
+    "tally": "Svc(\"tally\",P(\"deps\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
+}
