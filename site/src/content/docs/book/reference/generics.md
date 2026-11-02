@@ -219,8 +219,10 @@ inside the function; a `Set[T]` needs `T: Key + Codable`. A generic type of your
 over a type parameter (`Box[T]` inside `fn f[T: Codable]`) is not supported yet:
 `bynk.generics.codec_generic_at_rigid`. A concrete `Box[Order]` is unaffected.
 
-An opaque type decoded outside the unit that owns it is checked no more than it is at
-any boundary there; `Codable` does not change that.
+A type another context owns and exports opaque cannot be decoded, by `Json.decode`,
+`Json.decodeSql` or a `Codable` witness: decoding creates a value, and only the owning
+context may create one (`bynk.context.external_decode`). Take the value from a service of
+the owner instead.
 
 ## A method's receiver parameters
 
