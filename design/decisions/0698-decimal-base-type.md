@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: A built-in exact `Decimal` base type for money and fractional arithmetic: `1.20d` literals, exact `+`/`-`/`*`, `div` and `round` with a stated scale and rounding mode, ordering by value, and a canonical JSON string on the wire
----
+# 0698 — A built-in exact Decimal base type
 
-## ADR: decimal-base-type
-title: A built-in exact Decimal base type
-summary: Decimal is an arbitrary-precision base-10 base type with a kept scale, no `/`, a `d` literal, value equality and a JSON-string wire form
+- **Status:** Accepted (v0.480)
 
 **Context.** The only exact numeric type was `Int`, a 53-bit safe integer. `Float`
 is IEEE 754, and the specification itself warned `0.1 + 0.2 != 0.3` and advised
