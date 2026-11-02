@@ -1,10 +1,11 @@
 # Constrained generics — declared bounds on type parameters
 
-- **Status:** Settled (#2630, merged 2026-11-01). Every question in §5 is
-  closed; the maintainer confirmed the adopted answers on 2026-11-01. Q3 adopted
-  declared bounds with a codemod, so slice 0 must land before the 1.0 freeze
-  (Q8). Slicing next: no slice is authorised until its proposal is accepted.
-  Spine [#2614](https://github.com/bynk-lang/bynk/issues/2614).
+- **Status:** Complete. Slices 0 to 4 shipped; slice 5 (`Show`) was decided
+  no-go and is not adopted (#2785). The work the slices left open is listed in
+  §9 under "Deferred from this track", each with an issue. Settled in #2630
+  (merged 2026-11-01); Q3 adopted declared bounds with a codemod, so slice 0
+  landed before the 1.0 freeze (Q8). Spine
+  [#2614](https://github.com/bynk-lang/bynk/issues/2614).
 - **Realises:** the extension point [ADR 0028](../decisions/0028-open-narrow-generics.md)
   left open ("the `TypeParam` representation is a struct, so a bound is a later
   field addition, not a rework"), and the alternative
@@ -137,7 +138,8 @@ for the slice that depends on it must do so before that slice is accepted.
 ### Q1 — Closed or open?
 
 - **(a) Closed.** A fixed, compiler-known set: `Eq`, `Ord`, `Key`, `Codable`,
-  perhaps `Show`. Users cannot declare new constraints. A type's satisfaction is
+  (`Show` was considered and not adopted: see §6 slice 5 and §9, #2785).
+  Users cannot declare new constraints. A type's satisfaction is
   derived (Q2). Prior art: Go's `comparable`/`cmp.Ordered`; Swift's synthesised
   `Equatable`/`Hashable`/`Codable`.
 - **(b) Open.** User-declared interfaces or traits with user implementations,
@@ -209,7 +211,7 @@ the comparator for the *concrete* `T` at run time.
   runtime representation. That changes the in-memory shape of every sum and
   record, and the stored-state encoding Gate 3 freezes (ADR 0538). Rejected.
 - **(b) Witness passing for bounded parameters only.** A parameter bound by a
-  constraint that needs run-time behaviour (`Ord`, `Codable`, `Show`) gets one
+  constraint that needs run-time behaviour (`Ord`, `Codable`; a renderer for `Show` was the third, not adopted, §9) gets one
   hidden argument per parameter: a compiler-generated witness (comparator,
   codec pair, renderer) for the concrete type at each call site, threaded
   through nested generic calls. Unbounded parameters, and `Eq`/`Key` (served by
@@ -316,8 +318,9 @@ a sub-issue of #2614.
 - **Slice 4 — Static methods on generic types.** Resolve the type's parameters
   from explicit type arguments or the expected type (`Box.empty[Int]()`).
 - **Slice 5 — `Show`**, conditional (Q1 left it optional; decided when the
-  slice is proposed): a user-defined
-  string form usable in interpolation.
+  slice is proposed): a user-defined string form usable in interpolation.
+  **Not adopted** (#2785, 2026-11-02): see §9 for the decision and when to
+  revisit it. Q1's set is final at `Eq`, `Ord`, `Key`, `Codable`.
 
 ## 7. Front-loaded ADR candidates
 
@@ -401,7 +404,60 @@ obligations follow from Q6 and Q7:
   - `method_on_generic_type` is narrowed to a static that never mentions one of the
     type's parameters. `from` is a reserved word, so the issue's `Sorted.from` is
     spelled `Sorted.fromList`.
-- [ ] Slice 5 — `Show` (conditional)
+- [x] Slice 5 — `Show`: **not adopted** (#2785, decided no-go 2026-11-02)
+  - Reasons (DECISION A):
+    1. It overturns ADR 0075's scalar-only interpolation line for little gain.
+       Interpolating a record is an error that makes you say which string you
+       mean (`label()`, `toIso()`, `Json.encode`); `Show` would make one of those
+       implicit, a second spelling of the same thing, and hide user code inside
+       a string literal.
+    2. No consumer. Slices 1 to 3 do not need it, no stdlib API takes a renderer
+       (`Logger` takes text), and no issue asks for it. A generic function that
+       needs a rendering takes a function argument, which keeps the cost visible
+       at the call site (§4).
+    3. It widens a leak surface the language has no answer for. Derived display
+       of records would put every field, including a secret `String`, into log
+       lines with no redaction story (ADR 0107 defers one), and the opaque
+       exclusion that keeps keys out of interpolation would have to be re-argued.
+    4. Witness passing (Q4) stays possible, so saying no now forecloses nothing.
+  - Revisit when a stdlib API needs a renderer witness, or when a redaction
+    convention exists. Either starts with a new proposal; the shape sketched in
+    #2785 DECISION B (declared `derives Show`, a `__show_T` witness, opaque types
+    and secrets excluded unless they derive it) is a starting point, not a plan.
+  - The set of constraints is therefore final at `Eq`, `Ord`, `Key`, `Codable`.
+    ADR 0702's "and `Show` remain open" is an immutable record; this is the
+    answer.
+
+### Deferred from this track
+
+Everything the slices left open, each with an issue, so closing the track buries
+nothing.
+
+- **Slice 1 (`Ord`, ADR 0681)**
+  - `Query` `sortBy`/`min`/`max` widened to `Ord`: #2787.
+  - Hoisting the per-use comparator out of hot loops: #2796.
+  - A lint for reordering a `derives Ord` type's fields or variants: #2797.
+- **Slice 2 (`Key`, ADR 0690)**
+  - Composite keys for store `Map`/`Set`/`Cache` and `@indexed`, which need a new
+    frozen stored-key format: #2788.
+  - `Query` `distinct`/`distinctBy`/`groupBy`/join keys widened to `Key`: #2789.
+  - A negative fixture for `Query.distinct` over a record: #2790.
+  - A `Map`/`Set` as a key: #2798.
+  - The boundary `Map` decoder's last-entry-wins on a repeated key: #2707 (done:
+    it now rejects).
+- **Slice 3 (`Codable`, ADR 0696)**
+  - `Codable` in capability operation return types (`Kv.get[T]`, `query[T]`, and
+    standard-library D4's read side): #2791.
+  - A user generic type at a rigid parameter (`codec_generic_at_rigid`): #2792.
+  - `Queue` batch and delayed `sendValue`, and `Analytics.write[T]`: #2793.
+  - The opaque `StructuralOnly` decode gap: #2794.
+  - Crypto keys satisfying `Codable` and `Json.*`: #2784.
+- **Slice 4 (static methods, ADR 0702)**
+  - Explicit type arguments on instance methods (ADR 0234 B): #2795.
+  - `from` as a reserved word: the text fix shipped as #2774; whether a reserved
+    word may be a member name after `.` is open as #2778.
+- **Found while closing the track:** string interpolation accepts `Bytes`,
+  `Duration` and `Instant`, beyond ADR 0075 and the spec: #2799.
 
 ## 10. Non-goals
 
