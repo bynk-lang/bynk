@@ -1,0 +1,5 @@
+commons bad
+
+type Pair[A, B] = { first: A }
+
+fn Pair.of(a: A) -> Pair[A, A] { Pair { first: a } }

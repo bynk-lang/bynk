@@ -26,6 +26,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Handle money correctly](/book/guides/type-system/handle-money-correctly/)
 - [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/)
 - [Generic code that crosses the boundary](/book/guides/type-system/generic-code-that-crosses-the-boundary/)
+- [Constructors for generic types](/book/guides/type-system/constructors-for-generic-types/)
 
 **See also:** [Reference — Type system](/book/reference/types/),
 [Refined-type API](/book/reference/refined-types/),

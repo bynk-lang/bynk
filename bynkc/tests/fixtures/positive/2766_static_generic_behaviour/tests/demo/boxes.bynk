@@ -1,0 +1,72 @@
+suite demo.boxes
+
+case "T comes from the argument" {
+  let a = Box.of(5)
+  expect a.value == 5
+  let s = Box.of("x")
+  expect s.value == "x"
+}
+
+case "T comes from the expected type" {
+  let b: Box[Option[String]] = Box.empty()
+  expect b.value == None
+}
+
+case "T is given explicitly" {
+  let c = Box.empty[String]()
+  expect c.value == None
+}
+
+case "a static with its own type parameter" {
+  let m = Box.mapped(3, (n) => n + 1)
+  expect m.value == 4
+  let e = Box.mapped[Int, String](3, (n) => "n")
+  expect e.value == "n"
+}
+
+case "an Ord-bounded static takes a comparator" {
+  let names = ["b", "c", "a"]
+  let s = Sorted.fromList(names)
+  expect s.items == ["a", "b", "c"]
+  let ns = [3, 1, 2]
+  let r = rebuild(ns)
+  expect r.items == [1, 2, 3]
+  let ms = [9, 8]
+  let q = Sorted.rebuilt(ms)
+  expect q.items == [8, 9]
+  let z: Sorted[Int] = Sorted.empty()
+  expect z.items == []
+}
+
+case "a Key-bounded static" {
+  let k = Keyed.single("a", 1)
+  expect k.entries.get("a") == Some(1)
+}
+
+case "a Codable-bounded static" {
+  let p = P { x: 7 }
+  let w = Packed.pack(p)
+  expect w.json == Json.encode(p)
+  expect Packed.unpack(w) == Ok(p)
+}
+
+case "a free generic function grounded by the expected type" {
+  let x: Option[Int] = none()
+  expect x == None
+}
+
+case "a generic instance method grounded by the expected type" {
+  let b = Box.of(1)
+  let c: Option[String] = b.cast()
+  expect c == None
+}
+
+case "the expected type grounds T before a lambda argument needs it" {
+  let b: Option[Int] = pick((n) => n > 1)
+  expect b == None
+}
+
+case "a static's lambda argument uses a T the expected type grounds" {
+  let b: Box[Option[Int]] = Box.probe((n) => n > 1)
+  expect b.value == None
+}

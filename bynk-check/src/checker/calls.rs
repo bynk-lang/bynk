@@ -643,7 +643,7 @@ pub(crate) fn check_call(
             .insert(expr_id, Callee::Fn(Arc::clone(&fn_decl), Vec::new()));
         warn_bynk_list_deprecation(name, args, span, ctx);
         refuse_experimental_import(name, ctx);
-        let ret = check_call_against_fn(name, &fn_decl, type_args, args, ctx);
+        let ret = check_call_against_fn(name, &fn_decl, type_args, args, expected, ctx);
         // Slice 1: the comparator witnesses the generic-call path resolved.
         if let Some(witnesses) = ctx.last_witness.take() {
             ctx.callees
@@ -957,6 +957,45 @@ fn check_value_application(
     Some(ret)
 }
 
+/// Constrained generics slice 4 (DECISION C): the expected type as the last
+/// resort for a generic call's type parameters. Runs after the non-lambda
+/// argument pass and before the lambda pass, and only fills `names` that the
+/// arguments left undetermined — so it can only accept programs that were
+/// `uninferable_type_arg` before. The declared return type is matched
+/// structurally against `expected`; an `expected` that is still being inferred
+/// (it mentions a flexible variable of an enclosing call) carries nothing and
+/// is ignored. The call's result is still checked against `expected` by its
+/// caller, so a mismatch is reported where it always was.
+fn ground_from_expected(
+    ret_pattern: TyId,
+    expected: Option<TyId>,
+    names: &[String],
+    subst: &mut HashMap<String, TyId>,
+    ctx: &Ctx,
+) {
+    let tys = ctx.tys;
+    let Some(expected) = expected else {
+        return;
+    };
+    if names.iter().all(|n| subst.contains_key(n))
+        || matches!(&*tys.get(expected), Ty::Error | Ty::Never)
+        || contains_flexible_var(expected, &ctx.type_vars, tys)
+    {
+        return;
+    }
+    let mut scratch: HashMap<String, TyId> = HashMap::new();
+    if !unify(ret_pattern, expected, &mut scratch, tys) {
+        return;
+    }
+    for n in names {
+        if !subst.contains_key(n)
+            && let Some(t) = scratch.get(n)
+        {
+            subst.insert(n.clone(), *t);
+        }
+    }
+}
+
 /// v0.20a: instantiate and check a call to a generic function. Two-pass
 /// argument-directed inference: pass 1 types every **non-lambda** argument
 /// left-to-right against the (possibly still Var-bearing) expected — safe
@@ -972,6 +1011,7 @@ fn check_generic_call(
     fn_decl: &FnDecl,
     type_args: &[TypeRef],
     args: &[Expr],
+    expected: Option<TyId>,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
@@ -1059,6 +1099,14 @@ fn check_generic_call(
         }
         arg_tys[i] = ty;
     }
+    // Slice 4 (DECISION C): the expected type grounds what the arguments left
+    // open, so a lambda argument can use it.
+    let own: Vec<String> = fn_decl
+        .type_params
+        .iter()
+        .map(|tp| tp.name.name.clone())
+        .collect();
+    ground_from_expected(ret_pattern, expected, &own, &mut subst, ctx);
     // Pass 2 — lambda arguments, against substituted expecteds.
     for (i, arg) in args.iter().enumerate() {
         if !matches!(arg.kind, ExprKind::Lambda(_)) {
@@ -1223,6 +1271,7 @@ fn check_call_against_fn(
     fn_decl: &FnDecl,
     type_args: &[TypeRef],
     args: &[Expr],
+    expected: Option<TyId>,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
@@ -1230,7 +1279,7 @@ fn check_call_against_fn(
     // non-generic path below runs byte-identically to v0.19 (the additive
     // guard). Explicit type args on a non-generic fn are rejected.
     if !fn_decl.type_params.is_empty() {
-        return check_generic_call(name, fn_decl, type_args, args, ctx);
+        return check_generic_call(name, fn_decl, type_args, args, expected, ctx);
     }
     if !type_args.is_empty() {
         ctx.errors.push(CompileError::new(
@@ -1779,7 +1828,32 @@ pub(crate) fn check_static_call(
         .and_then(|table| table.statics.get(&method.name))
     {
         ctx.callees
-            .insert(expr_id, Callee::Static(Arc::clone(method_decl)));
+            .insert(expr_id, Callee::Static(Arc::clone(method_decl), Vec::new()));
+        // Constrained generics slice 4: a static on a generic type is generic
+        // over the type's parameters; infer them like an instance method's.
+        if !decl.type_params.is_empty() {
+            let type_params: Vec<String> = decl
+                .type_params
+                .iter()
+                .map(|p| p.name.name.clone())
+                .collect();
+            let ret = check_generic_method_call(
+                &type_name.name,
+                &type_params,
+                None,
+                method_decl,
+                method,
+                type_args,
+                args,
+                expected,
+                ctx,
+            );
+            if let Some(witnesses) = ctx.last_witness.take() {
+                ctx.callees
+                    .insert(expr_id, Callee::Static(Arc::clone(method_decl), witnesses));
+            }
+            return ret;
+        }
         return check_method_args(method_decl, args, ctx, type_name, method);
     }
 
@@ -2509,6 +2583,27 @@ pub(crate) fn check_store_cell_op(
     Some(tys.intern(effect))
 }
 
+/// Constrained generics slice 4 (DECISION B, I): the explicit type-argument list
+/// is admitted only for a user static on a generic type (`Box.empty[Int]()`) —
+/// never for a qualified variant (`Opt.None[Int]`), whose parameters ground from
+/// the expected type.
+fn receiver_is_generic_static(receiver: &Expr, method: &Ident, ctx: &Ctx) -> bool {
+    let ExprKind::Ident(id) = &receiver.kind else {
+        return false;
+    };
+    ctx.lookup(id.name.as_str()).is_none()
+        && ctx
+            .input
+            .types
+            .get(&id.name)
+            .is_some_and(|d| !d.type_params.is_empty())
+        && ctx
+            .input
+            .methods
+            .get(&id.name)
+            .is_some_and(|t| t.statics.contains_key(&method.name))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_method_call(
     receiver: &Expr,
@@ -2549,6 +2644,7 @@ pub(crate) fn check_method_call(
         && !matches!(&receiver.kind, ExprKind::Ident(id) if id.name == JSON
             && !ctx.input.types.contains_key(JSON))
         && !receiver_is_capability
+        && !receiver_is_generic_static(receiver, method, ctx)
     {
         ctx.errors.push(CompileError::new(
             "bynk.generics.type_arg_mismatch",
@@ -3250,10 +3346,12 @@ pub(crate) fn check_method_call(
         let ret = check_generic_method_call(
             &type_name,
             &recv_type_params,
-            recv_ty,
+            Some(recv_ty),
             &method_decl,
             method,
+            &[],
             args,
+            expected,
             ctx,
         );
         // Slice 1: the comparator witnesses the generic-call path resolved.
@@ -3325,16 +3423,27 @@ pub(crate) fn check_method_call(
 /// arguments, then drive argument-directed inference over the method's own
 /// parameters. The receiver's parameters are already ground (from the receiver
 /// type), so only the method's own parameters need inferring.
+///
+/// Constrained generics slice 4: the same function checks a generic *static*
+/// (`recv_ty` is `None`). A static has no receiver to seed from, so the type's
+/// parameters are inferred like the method's own — from the arguments, then the
+/// expected type, or from the explicit `type_args` (the type's parameters, then
+/// the method's own, all or none; DECISION B).
+#[allow(clippy::too_many_arguments)]
 fn check_generic_method_call(
     type_name: &str,
     recv_type_params: &[String],
-    recv_ty: TyId,
+    recv_ty: Option<TyId>,
     method_decl: &FnDecl,
     method: &Ident,
+    type_args: &[TypeRef],
     args: &[Expr],
+    call_expected: Option<TyId>,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    let is_static = recv_ty.is_none();
+    let what = if is_static { "static method" } else { "method" };
     // Rigid vars: the receiver type's parameters plus the method's own.
     let mut vars: HashSet<String> = recv_type_params.iter().cloned().collect();
     for tp in &method_decl.type_params {
@@ -3347,7 +3456,7 @@ fn check_generic_method_call(
                 "bynk.types.method_arity",
                 method.span,
                 format!(
-                    "method `{}.{}` expects {} argument(s), but {} were given",
+                    "{what} `{}.{}` expects {} argument(s), but {} were given",
                     type_name,
                     method.name,
                     method_decl.params.len(),
@@ -3368,13 +3477,49 @@ fn check_generic_method_call(
     // receiver was under-applied — reported where the receiver was typed — so we
     // leave those parameters unseeded and fail below as uninferable.
     let mut subst: HashMap<String, TyId> = HashMap::new();
-    if let Ty::Named {
-        args: recv_args, ..
-    } = &*tys.get(recv_ty)
+    if let Some(recv_ty) = recv_ty
+        && let Ty::Named {
+            args: recv_args, ..
+        } = &*tys.get(recv_ty)
         && recv_args.len() == recv_type_params.len()
     {
         for (name, arg) in recv_type_params.iter().zip(recv_args.iter()) {
             subst.insert(name.clone(), *arg);
+        }
+    }
+    // The parameters still to determine, in declaration order: for a static the
+    // type's own, then the method's (the witness and emitted order; DECISION B).
+    let mut all_params: Vec<String> = Vec::new();
+    if is_static {
+        all_params.extend(recv_type_params.iter().cloned());
+    }
+    all_params.extend(
+        method_decl
+            .type_params
+            .iter()
+            .map(|tp| tp.name.name.clone()),
+    );
+    if !type_args.is_empty() {
+        if type_args.len() != all_params.len() {
+            ctx.errors.push(CompileError::new(
+                "bynk.generics.type_arg_mismatch",
+                method.span,
+                format!(
+                    "`{}.{}` takes {} type argument(s), but {} were given",
+                    type_name,
+                    method.name,
+                    all_params.len(),
+                    type_args.len()
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+        for (name, ta) in all_params.iter().zip(type_args) {
+            let ty = resolve_expr_type_ref(ta, ctx)?;
+            subst.insert(name.clone(), ty);
         }
     }
     // Resolve the method's parameter and return patterns with every rigid var in
@@ -3411,6 +3556,9 @@ fn check_generic_method_call(
         }
         arg_tys[i] = ty;
     }
+    // Slice 4 (DECISION C): the call's expected type grounds what the
+    // receiver and the arguments left open, before the lambdas need it.
+    ground_from_expected(ret_pattern, call_expected, &all_params, &mut subst, ctx);
     // Pass 2 — lambda arguments, against the now-substituted expecteds.
     for (i, arg) in args.iter().enumerate() {
         if !matches!(arg.kind, ExprKind::Lambda(_)) {
@@ -3460,20 +3608,38 @@ fn check_generic_method_call(
         arg_tys[i] = ty;
     }
     // Every one of the method's own type parameters must now be determined (the
-    // receiver's parameters were seeded above).
-    for tp in &method_decl.type_params {
-        if !subst.contains_key(&tp.name.name) {
-            ctx.errors.push(
-                CompileError::new(
-                    "bynk.generics.uninferable_type_arg",
-                    method.span,
+    // receiver's parameters were seeded above). A static must determine the
+    // type's parameters too.
+    for name in &all_params {
+        if !subst.contains_key(name) {
+            let mut err = CompileError::new(
+                "bynk.generics.uninferable_type_arg",
+                method.span,
+                if is_static {
                     format!(
-                        "type parameter `{}` of `{}.{}` is not inferable from the receiver or the arguments",
-                        tp.name.name, type_name, method.name
-                    ),
-                )
-                .with_label(tp.span, "declared here"),
+                        "type parameter `{name}` of `{}.{}` is neither inferable from the arguments nor given explicitly",
+                        type_name, method.name
+                    )
+                } else {
+                    format!(
+                        "type parameter `{name}` of `{}.{}` is not inferable from the receiver or the arguments",
+                        type_name, method.name
+                    )
+                },
             );
+            if let Some(tp) = method_decl
+                .type_params
+                .iter()
+                .find(|tp| &tp.name.name == name)
+            {
+                err = err.with_label(tp.span, "declared here");
+            }
+            if is_static {
+                err = err.with_note(
+                    "annotate the binding, or give explicit type arguments: `Type.method[T](…)`",
+                );
+            }
+            ctx.errors.push(err);
             return None;
         }
     }
@@ -3569,11 +3735,10 @@ fn check_generic_method_call(
     // v0.39 (ADR 0072)-style hint: show the inferred method type arguments after
     // the method name (`box.map` [Int] `(f)`). Only the method's own
     // parameters — the receiver's are visible in the receiver's type.
-    if !method_decl.type_params.is_empty() {
-        let rendered: Option<Vec<String>> = method_decl
-            .type_params
+    if !all_params.is_empty() && type_args.is_empty() {
+        let rendered: Option<Vec<String>> = all_params
             .iter()
-            .map(|tp| subst.get(&tp.name.name).map(|t| t.display(tys)))
+            .map(|n| subst.get(n).map(|t| t.display(tys)))
             .collect();
         if let Some(parts) = rendered {
             ctx.hints
@@ -5753,7 +5918,7 @@ mod tests {
         let a = commons(
             "fn first_of[A](x: Int) -> A { identity_helper(x) }\n\n\
              fn identity_helper[A](x: A) -> A { x }\n\n\
-             fn misuse() -> Int { first_of(5) }\n",
+             fn misuse() -> Int { let y = first_of(5)\n 0 }\n",
         );
         a.assert_reports("bynk.generics.uninferable_type_arg");
     }

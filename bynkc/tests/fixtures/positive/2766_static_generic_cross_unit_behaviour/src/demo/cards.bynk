@@ -1,0 +1,6 @@
+---
+#2766: the element type lives in a third unit.
+---
+commons demo.cards
+
+type Rank = enum { Two, Three, Ace } derives Ord

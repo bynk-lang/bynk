@@ -1,0 +1,14 @@
+commons bad
+
+
+
+type P = { x: Int }
+
+type Sorted[T: Ord] = { items: List[T] }
+
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: xs } }
+
+fn misuse(ps: List[P]) -> Int {
+  let s = Sorted.fromList(ps)
+  0
+}

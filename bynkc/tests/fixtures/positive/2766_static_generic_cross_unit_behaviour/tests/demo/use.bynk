@@ -1,0 +1,15 @@
+suite demo.use
+
+case "a concrete site and an imported element type" {
+  let rs = [Ace, Two, Three]
+  expect ranks(rs).items == [Two, Three, Ace]
+  let ns = ["b", "a"]
+  expect names(ns).items == ["a", "b"]
+}
+
+case "a rigid caller forwards its witness" {
+  let xs = [3, 1, 2]
+  expect forward(xs).items == [1, 2, 3]
+  let e: Sorted[Int] = blank()
+  expect e.items == []
+}
