@@ -1,0 +1,27 @@
+commons labels
+
+// #2751: methods attached to a record type and to a sum type, called from a
+// context that `uses` this commons.
+
+type Shade = enum { Light, Dark }
+
+type Tag = { name: String, shade: Shade }
+
+fn Tag.label(self) -> String {
+  self.name
+}
+
+fn Tag.suffixed(self, s: String) -> String {
+  "\(self.name)\(s)"
+}
+
+fn Shade.code(self) -> Int {
+  match self {
+    Light => 1,
+    Dark => 2,
+  }
+}
+
+fn dark() -> Shade {
+  Dark
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "lookup": "807ea699f3b8fa96"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "lookup": "Svc(\"lookup\",P(\"key\",B(\"String\")),Ret(B(\"String\")))"
+  }
+}

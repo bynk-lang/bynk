@@ -1,0 +1,24 @@
+context shop.lookup
+
+uses labels
+
+capability Directory {
+  fn find(key: String) -> Effect[Tag]
+}
+
+provides Directory = RealDirectory {
+  fn find(key: String) -> Effect[Tag] {
+    Tag { name: key, shade: dark() }
+  }
+}
+
+fn shout(t: Tag) -> String {
+  t.suffixed("!")
+}
+
+service lookup {
+  on call(key: String) -> Effect[String] given Directory {
+    let t <- Directory.find(key)
+    "\(t.label())\(shout(t))\(t.shade.code())"
+  }
+}
