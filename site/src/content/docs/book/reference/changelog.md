@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.482**.
+written against **v0.483**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.483.0** | "A user generic record or sum over a `Codable` type parameter (`Box[T]` in `fn f[T: Codable]`) now encodes and decodes, with the JSON and error paths of the codec for a concrete `Box[Order]`; `bynk.generics.codec_generic_at_rigid` is retired (#2792)" |
 | **v0.482.2** | String interpolation holes accept only `String`, `Int`, `Float`, `Bool`, `Decimal` and refinements of them, as ADR 0075 and 0698 specify — `Bytes`, `Duration` and `Instant` holes are now `bynk.types.interpolation_non_scalar` errors (use `toHex()`/`toBase64()`, `toString()`, `toIso()`) (#2799) |
 | **v0.482.1** | A negative fixture pins `Query.distinct` over a record with a `Float` field as `bynk.types.not_keyable` |
 | **v0.482.0** | "**Breaking:** a `bynk.crypto` `SigningKey` or `VerifyKey` is no longer `Codable`, at any depth: `Json.encode`, `Json.decode`, a `T: Codable` bound and `Queue.sendValue` refuse one (`bynk.types.json_uncodable` / `bynk.types.not_codable`, with a note naming the key), so a key can no longer be encoded and sent. A program that encoded or decoded a key must keep the key bytes in `Secrets` and import the key again where it is used. The declaration-position check (`bynk.types.key_at_boundary`) and in-process uses such as `Crypto.sign(key, …)` are unchanged (#2784)" |

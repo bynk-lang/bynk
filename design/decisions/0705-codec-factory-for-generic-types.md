@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "A user generic record or sum over a `Codable` type parameter (`Box[T]` in `fn f[T: Codable]`) now encodes and decodes, with the JSON and error paths of the codec for a concrete `Box[Order]`; `bynk.generics.codec_generic_at_rigid` is retired (#2792)"
----
+# 0705 — A generic type over a Codable type parameter gets its codec from a per-declaration factory
 
-## ADR: codec-factory-for-generic-types
-title: A generic type over a Codable type parameter gets its codec from a per-declaration factory
-summary: The unit that names a generic record or sum at a rigid parameter builds a factory from the declaration and applies it to the argument witnesses
+- **Status:** Accepted (v0.483)
 
 **Context.** ADR 0696 decision 3 gave `List`, `Option`, `Set`, `Map` and `Result`
 over a type parameter their codec from runtime combinators, and refused a user
