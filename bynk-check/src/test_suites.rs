@@ -759,6 +759,9 @@ pub fn phase_integration_bodies(
                 }
             }
         }
+        // The same key is the target's own, but nothing is lost: `participants` is
+        // the target's `consumes` closure (contexts only, and the view reads only
+        // contexts), so it is a superset of the entry it replaces (#2832).
         let mut harness_consumes = unit_consumes.clone();
         harness_consumes.insert(harness_name.clone(), participants.clone());
         // #2832: the harness is named for its target, so its entry here is the
