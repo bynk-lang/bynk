@@ -19,10 +19,10 @@
 //! so stripping is a syntactic erase, not a semantics-aware rewrite.
 
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use oxc::allocator::Allocator;
-use oxc::codegen::Codegen;
+use oxc::codegen::{Codegen, CodegenOptions};
 use oxc::parser::Parser;
 use oxc::semantic::SemanticBuilder;
 use oxc::span::SourceType;
@@ -58,6 +58,16 @@ impl std::error::Error for StripError {}
 /// diagnostics; it does not have to exist on disk. Value imports are preserved
 /// verbatim (see the module docs); only type syntax is erased.
 pub fn strip_types(source: &str, filename: &str) -> Result<String, StripError> {
+    strip_types_with_map(source, filename, false).map(|(js, _)| js)
+}
+
+/// [`strip_types`], optionally also returning the JS-to-input source map the
+/// codegen records (generated JS position -> position in `source`).
+fn strip_types_with_map(
+    source: &str,
+    filename: &str,
+    want_map: bool,
+) -> Result<(String, Option<oxc_sourcemap::SourceMap<'static>>), StripError> {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::ts());
 
@@ -100,7 +110,63 @@ pub fn strip_types(source: &str, filename: &str) -> Result<String, StripError> {
         });
     }
 
-    Ok(Codegen::new().build(&program).code)
+    if !want_map {
+        return Ok((Codegen::new().build(&program).code, None));
+    }
+    let options = CodegenOptions {
+        source_map_path: Some(PathBuf::from(filename)),
+        ..CodegenOptions::default()
+    };
+    let ret = Codegen::new().with_options(options).build(&program);
+    Ok((ret.code, ret.map.map(|m| m.into_owned())))
+}
+
+/// Compose a Bynk-to-TypeScript source map (the emitter's own, line-anchored
+/// per ADR 0103) with the TypeScript-to-JavaScript map the strip codegen
+/// records, giving a Bynk-to-JavaScript v3 map. No second mapping is
+/// generated: each JS token takes the Bynk position the emitter already
+/// assigned to its TypeScript line. `sourcesContent` is dropped (the consumer
+/// holds the source). `None` when either map does not parse or nothing maps.
+fn compose_maps(bynk_to_ts: &str, ts_to_js: &oxc_sourcemap::SourceMap<'_>) -> Option<String> {
+    let first = oxc_sourcemap::SourceMap::from_json_string(bynk_to_ts).ok()?;
+    // The emitter's map has one segment per TS line; the last wins per line.
+    let mut by_line: std::collections::HashMap<u32, (u32, u32, u32)> = Default::default();
+    for t in first.get_tokens() {
+        by_line.insert(
+            t.get_dst_line(),
+            (
+                t.get_source_id().unwrap_or(0),
+                t.get_src_line(),
+                t.get_src_col(),
+            ),
+        );
+    }
+    let mut builder = oxc_sourcemap::SourceMapBuilder::default();
+    for name in first.get_sources() {
+        builder.add_source_and_content(name, "");
+    }
+    let mut last: Option<(u32, u32, u32, u32)> = None;
+    let mut any = false;
+    for t in ts_to_js.get_tokens() {
+        let Some(&(src, sl, sc)) = by_line.get(&t.get_src_line()) else {
+            continue;
+        };
+        // Line-level maps: one token per JS line per Bynk position is enough.
+        let key = (t.get_dst_line(), src, sl, sc);
+        if last == Some(key) {
+            continue;
+        }
+        last = Some(key);
+        builder.add_token(t.get_dst_line(), t.get_dst_col(), sl, sc, Some(src), None);
+        any = true;
+    }
+    if !any {
+        return None;
+    }
+    let mut map = builder.into_sourcemap();
+    // Without `sourcesContent`, as promised above.
+    map.set_source_contents(Vec::new());
+    Some(map.to_json_string())
 }
 
 /// Rewrite a compiled [`ProjectOutput`](bynk_emit::project::ProjectOutput) from
@@ -124,17 +190,59 @@ pub fn strip_types(source: &str, filename: &str) -> Result<String, StripError> {
 pub fn strip_project_to_js(
     out: bynk_emit::project::ProjectOutput,
 ) -> Result<bynk_emit::project::ProjectOutput, StripError> {
-    use bynk_emit::project::{Artefacts, Document};
-    use std::collections::BTreeMap;
-    use std::path::PathBuf;
+    strip_project(out, false).map(|(out, _)| out)
+}
 
+/// The per-`.js`-path Bynk-to-JavaScript source maps of a stripped project.
+pub type JsMaps = std::collections::BTreeMap<PathBuf, String>;
+
+/// [`strip_project_to_js`] that also returns, per emitted `.js` path, a
+/// Bynk-to-JavaScript v3 source map composed from the emitter's own
+/// Bynk-to-TypeScript map and the strip's TypeScript-to-JavaScript map (#2705).
+/// Only modules the emitter maps (the user's own) appear; support files have no
+/// entry. The returned `ProjectOutput` is identical to
+/// [`strip_project_to_js`]'s: the maps are not added as documents.
+pub fn strip_project_to_js_mapped(
+    out: bynk_emit::project::ProjectOutput,
+) -> Result<(bynk_emit::project::ProjectOutput, JsMaps), StripError> {
+    strip_project(out, true)
+}
+
+fn strip_project(
+    out: bynk_emit::project::ProjectOutput,
+    want_maps: bool,
+) -> Result<(bynk_emit::project::ProjectOutput, JsMaps), StripError> {
+    use bynk_emit::project::{Artefacts, Document, sibling_path};
+    use std::collections::BTreeMap;
+
+    let bynk_maps: BTreeMap<PathBuf, String> = if want_maps {
+        out.artefacts
+            .docs
+            .iter()
+            .filter_map(|(p, d)| match d {
+                Document::SourceMap(s) => Some((p.clone(), s.clone())),
+                _ => None,
+            })
+            .collect()
+    } else {
+        BTreeMap::new()
+    };
+    let mut js_maps: JsMaps = BTreeMap::new();
     let mut docs: BTreeMap<PathBuf, Document> = BTreeMap::new();
     for (path, doc) in out.artefacts.docs {
         match doc {
             Document::Ts(program) => {
                 let printed = bynk_ts::print(&program, "", "", &path.to_string_lossy());
-                let js = strip_types(&printed.text, &path.to_string_lossy())?;
-                docs.insert(path.with_extension("js"), Document::Js(js));
+                let (js, ts_to_js) =
+                    strip_types_with_map(&printed.text, &path.to_string_lossy(), want_maps)?;
+                let js_path = path.with_extension("js");
+                if let (Some(ts_to_js), Some(bynk)) =
+                    (ts_to_js, bynk_maps.get(&sibling_path(&path, "map")))
+                    && let Some(map) = compose_maps(bynk, &ts_to_js)
+                {
+                    js_maps.insert(js_path.clone(), map);
+                }
+                docs.insert(js_path, Document::Js(js));
             }
             Document::Toml(mut toml) => {
                 if path.file_name().and_then(|n| n.to_str()) == Some("wrangler.toml")
@@ -173,14 +281,17 @@ pub fn strip_project_to_js(
     }
     // #1883, slice 0: static assets are served as-is by the platform; type
     // stripping has nothing to do to them.
-    Ok(bynk_emit::project::ProjectOutput {
-        artefacts: Artefacts {
-            docs,
-            assets: out.artefacts.assets,
-            modules: out.artefacts.modules,
+    Ok((
+        bynk_emit::project::ProjectOutput {
+            artefacts: Artefacts {
+                docs,
+                assets: out.artefacts.assets,
+                modules: out.artefacts.modules,
+            },
+            ..out
         },
-        ..out
-    })
+        js_maps,
+    ))
 }
 
 fn join_diagnostics(diags: &[oxc::diagnostics::OxcDiagnostic]) -> String {

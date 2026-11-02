@@ -392,6 +392,7 @@ dependencies = [
  "bynk-emit",
  "bynk-ts",
  "oxc",
+ "oxc_sourcemap",
 ]
 
 [[package]]
@@ -429,6 +430,7 @@ dependencies = [
  "bynk-strip",
  "bynk-syntax",
  "console_error_panic_hook",
+ "oxc_sourcemap",
  "serde",
  "serde_json",
  "wasm-bindgen",

@@ -8,7 +8,7 @@
 //! ```text
 //! source ─▶ bynk_emit::compile_in_memory (Bundle / Browser)  ─▶ ProjectOutput (TS)
 //!        ─▶ bynk_strip::strip_project_to_js                   ─▶ ProjectOutput (JS)
-//!        ─▶ { files: [{ path, kind, contents }], diagnostics }
+//!        ─▶ { files: [{ path, kind, contents, map? }], diagnostics }
 //! ```
 //!
 //! The pipeline reuses the on-disk path wholesale (first-party injection, the
@@ -60,6 +60,24 @@ pub struct EmittedFile {
     pub path: String,
     /// The JavaScript source.
     pub contents: String,
+    /// #2705: a source-map v3 JSON document mapping this module's JavaScript
+    /// lines back to the Bynk source (declaration and handler anchors, ADR
+    /// 0569). Present only on `user` modules; omitted for wiring and support
+    /// files. `sources` names the Bynk file as the emitter does; there is no
+    /// `sourcesContent` (the host holds the source).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub map: Option<String>,
+}
+
+/// Rename a source map's single source to the module's logical path (the name
+/// the emitter was handed is the host's absolute path, which a browser has no
+/// use for and should not see). `None` if the map is not the expected JSON.
+fn with_source_name(map: &str, name: &str) -> Option<String> {
+    let mut v: serde_json::Value = serde_json::from_str(map).ok()?;
+    for s in v.get_mut("sources")?.as_array_mut()? {
+        *s = name.into();
+    }
+    serde_json::to_string(&v).ok()
 }
 
 /// A diagnostic flattened for the JS side, with a 1-indexed line/column.
@@ -362,8 +380,8 @@ pub fn compile(source: &str, platform: Platform) -> CompileResult {
 
 fn compile_inner(source: &str, platform: Platform) -> CompileResult {
     match compile_in_memory(source, BuildTarget::Bundle, platform) {
-        Ok(out) => match bynk_strip::strip_project_to_js(out) {
-            Ok(js) => {
+        Ok(out) => match bynk_strip::strip_project_to_js_mapped(out) {
+            Ok((js, mut maps)) => {
                 // The user program is the single in-memory source, so warnings
                 // resolve their line/col against it (the fallback).
                 let diagnostics = to_diagnostics(js.warnings, &HashMap::new(), source);
@@ -371,26 +389,41 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                 // #2148: the graph is the modules the browser links, so the
                 // output's `package.json` (the ES-module marker for Node and
                 // `tsc`) is left out.
-                let user_paths: std::collections::HashSet<std::path::PathBuf> = js
+                let user_paths: HashMap<PathBuf, String> = js
                     .snapshots
                     .iter()
-                    .map(|(p, _)| p.with_extension("js"))
+                    .map(|(p, _)| {
+                        (
+                            p.with_extension("js"),
+                            slash_key(p).to_string_lossy().into_owned(),
+                        )
+                    })
                     .collect();
                 let files = js
                     .artefacts
                     .docs
                     .into_iter()
                     .filter(|(_, doc)| !matches!(doc, bynk_emit::project::Document::Json(_)))
-                    .map(|(path, doc)| EmittedFile {
-                        kind: if user_paths.contains(&path) {
+                    .map(|(path, doc)| {
+                        let kind = if user_paths.contains_key(&path) {
                             FileKind::User
                         } else if path == std::path::Path::new("compose.js") {
                             FileKind::Wiring
                         } else {
                             FileKind::Support
-                        },
-                        path: path.to_string_lossy().into_owned(),
-                        contents: doc.text(),
+                        };
+                        // Injected first-party units are mapped too, but only
+                        // the user's own module is worth the bytes (#2705).
+                        let map = maps
+                            .remove(&path)
+                            .zip(user_paths.get(&path))
+                            .and_then(|(m, name)| with_source_name(&m, name));
+                        EmittedFile {
+                            kind,
+                            map,
+                            path: path.to_string_lossy().into_owned(),
+                            contents: doc.text(),
+                        }
                     })
                     .collect();
                 CompileResult {
@@ -948,7 +981,7 @@ pub fn bynk_format(source: &str) -> String {
 
 /// The wasm entry point: compile an in-memory Bynk source for the browser
 /// playground, returning a JSON document
-/// `{ ok, files: [{ path, contents }], diagnostics: [{ path, line, col, severity,
+/// `{ ok, files: [{ path, contents, kind, map? }], diagnostics: [{ path, line, col, severity,
 /// category, message }] }`.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -1936,5 +1969,62 @@ mod tests {
         assert_eq!(f[2]["shape"], named);
         // The next parameter starts afresh.
         assert_eq!(params[1]["shape"]["kind"], "record");
+    }
+
+    /// #2705: a `user` module carries a v3 source map; wiring and support
+    /// files carry none (the field is omitted, not null).
+    #[test]
+    fn only_user_modules_carry_a_source_map() {
+        let v = compile_json(PROG);
+        let files = v["files"].as_array().unwrap();
+        for f in files {
+            match f["kind"].as_str().unwrap() {
+                "user" => {
+                    let m: serde_json::Value =
+                        serde_json::from_str(f["map"].as_str().expect("user map")).unwrap();
+                    assert_eq!(m["version"], 3);
+                    assert_eq!(m["sources"], serde_json::json!(["app/demo.bynk"]));
+                    assert!(
+                        m.get("sourcesContent").is_none_or(
+                            |c| c.is_null() || c.as_array().is_some_and(|a| a.is_empty())
+                        )
+                    );
+                }
+                _ => assert!(f.get("map").is_none(), "{}", f["path"]),
+            }
+        }
+        assert!(files.iter().any(|f| f["kind"] == "user"));
+    }
+
+    /// #2705: the map points a JS line back at the Bynk line it came from, so
+    /// a host can highlight in both directions from the result alone.
+    #[test]
+    fn the_map_sends_a_js_line_back_to_its_bynk_line() {
+        let v = compile_json(PROG);
+        let user = v["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["kind"] == "user")
+            .unwrap();
+        let js = user["contents"].as_str().unwrap();
+        let map = oxc_sourcemap::SourceMap::from_json_string(user["map"].as_str().unwrap())
+            .expect("a parseable v3 map");
+        let bynk_line_of = |needle: &str| -> Vec<u32> {
+            let js_line = js
+                .lines()
+                .position(|l| l.contains(needle))
+                .unwrap_or_else(|| panic!("`{needle}` in the JS:\n{js}"))
+                as u32;
+            map.get_tokens()
+                .filter(|t| t.get_dst_line() == js_line)
+                .map(|t| t.get_src_line())
+                .collect()
+        };
+        // PROG: line 7 (1-based) is the Logger.info statement, line 8 Clock.now.
+        let logger = bynk_line_of("Logger.info");
+        assert!(logger.contains(&6), "Logger.info -> {logger:?}");
+        let clock = bynk_line_of("Clock.now");
+        assert!(clock.contains(&7), "Clock.now -> {clock:?}");
     }
 }
