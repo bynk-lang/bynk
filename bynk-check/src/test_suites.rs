@@ -1915,8 +1915,8 @@ fn check_event_address_tier(
 /// #2649: report a `system`-tier case that addresses an `on call` service with
 /// `svc.call(…)`. An `on call` service has no public route to drive: it is
 /// internal to the deployment and its calls are signed per caller (#2004), so
-/// the system driver has nothing to send, and lowering would emit no call at
-/// all. The case drives an `http` route that reaches the handler, or runs the
+/// the system driver has nothing to send, and lowering would emit an unresolved
+/// receiver (`/* unknown */.call(…)`) rather than a real call. The case drives an `http` route that reaches the handler, or runs the
 /// call at `unit` or `integration`.
 fn check_call_address_tier(
     case: &Case,
