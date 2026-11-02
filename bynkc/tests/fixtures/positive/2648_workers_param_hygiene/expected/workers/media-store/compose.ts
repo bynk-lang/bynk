@@ -8,22 +8,29 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const Clock = new handlers.FixedClock();
+  const deps = { Clock };
   return {
     async http_GET_by_Param_request_Param_result_Param_surface(__id_request: string, __id_result: string, __id_surface: string) {
       return handlers.api.http_GET_by_Param_request_Param_result_Param_surface(__id_request, __id_result, __id_surface, deps);
     },
+    async http_GET_at_Param_url_Param_path(__id_url: string, __id_path: string) {
+      return handlers.api.http_GET_at_Param_url_Param_path(__id_url, __id_path, deps);
+    },
     async http_POST_echo(body: string) {
       return handlers.api.http_POST_echo(body, deps);
     },
-    async many(key: string, body: string, __id_result: string, __id_args: string, __id_argsObj: string, __id_surface: string, __id_request: string, __id_env: string, __id_ctx: string, __id_handlers: string) {
-      return handlers.many.call(key, body, __id_result, __id_args, __id_argsObj, __id_surface, __id_request, __id_env, __id_ctx, __id_handlers, deps);
+    async many(key: string, body: string, __id_result: string, __id_args: string, __id_argsObj: string, __id_surface: string, __id_request: string, __id_env: string, __id_ctx: string, __id_handlers: string, __id_deps: string) {
+      return handlers.many.call(key, body, __id_result, __id_args, __id_argsObj, __id_surface, __id_request, __id_env, __id_ctx, __id_handlers, __id_deps, deps);
     },
     async one(body: string) {
       return handlers.one.call(body, deps);
     },
-    async cron_ticker_0(__id_result: number) {
-      return handlers.ticker.cron_ticker_0(__id_result, deps);
+    async cron_ticker_0(__id_deps: number) {
+      return handlers.ticker.cron_ticker_0(__id_deps, deps);
+    },
+    async cron_ticker2_0(__id_result: number) {
+      return handlers.ticker2.cron_ticker2_0(__id_result, deps);
     },
   };
 }

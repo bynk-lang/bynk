@@ -6,17 +6,29 @@ context media.store
 // binding of its own name and then encodes the result into `body`; the http and
 // scheduled dispatches bind `request`, `surface` and `result`.
 
+// A non-empty deps shape, so a parameter that shadowed `deps` would fail `tsc`.
+capability Clock {
+	fn now() -> Effect[Int]
+}
+
+provides Clock = FixedClock {
+	fn now() -> Effect[Int] {
+		42
+	}
+}
+
 // One parameter: the single-argument dispatch path.
 service one {
-	on call(body: String) -> Effect[Int] {
-		body.length()
+	on call(body: String) -> Effect[Int] given Clock {
+		let t <- Clock.now()
+		t + body.length()
 	}
 }
 
 // Several parameters: the keyed-object dispatch path.
 service many {
-	on call(key: String, body: String, result: String, args: String, argsObj: String, surface: String, request: String, env: String, ctx: String, handlers: String) -> Effect[Int] {
-		body.length() + result.length() + args.length() + argsObj.length() + surface.length() + request.length() + env.length() + ctx.length() + handlers.length() + key.length()
+	on call(key: String, body: String, result: String, args: String, argsObj: String, surface: String, request: String, env: String, ctx: String, handlers: String, deps: String) -> Effect[Int] {
+		body.length() + result.length() + args.length() + argsObj.length() + surface.length() + request.length() + env.length() + ctx.length() + handlers.length() + deps.length() + key.length()
 	}
 }
 
@@ -25,13 +37,23 @@ service api from http {
 		Ok(request.length() + result.length() + surface.length())
 	}
 
+	on GET("/at/:url/:path") (url: String, path: String) -> Effect[HttpResult[Int]] by Visitor {
+		Ok(url.length() + path.length())
+	}
+
 	on POST("/echo") (body: String) -> Effect[HttpResult[Int]] by Visitor {
 		Ok(body.length())
 	}
 }
 
 service ticker from cron {
-	on schedule("*/5 * * * *") (result: Int) -> Effect[Result[(), String]] {
+	on schedule("*/5 * * * *") (deps: Int) -> Effect[Result[(), String]] {
+		Ok(())
+	}
+}
+
+service ticker2 from cron {
+	on schedule("0 * * * *") (result: Int) -> Effect[Result[(), String]] {
 		Ok(())
 	}
 }

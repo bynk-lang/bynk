@@ -6,15 +6,30 @@ import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
+export interface Clock {
+  now(): globalThis.Promise<number>;
+}
+
+export const __ClockToken: symbol = globalThis.Symbol("Clock");
+
+export class FixedClock implements Clock {
+  async now(): globalThis.Promise<number> {
+    return 42;
+  }
+}
+
+export const __FixedClockProvider = { token: __ClockToken, factory: () => new FixedClock() };
+
 export const one = {
-  async call(body: string, deps: {}): globalThis.Promise<number> {
-    return (body).length;
+  async call(body: string, deps: { Clock: Clock }): globalThis.Promise<number> {
+    const t = await deps.Clock.now();
+    return t + (body).length;
   },
 };
 
 export const many = {
-  async call(key: string, body: string, result: string, args: string, argsObj: string, surface: string, request: string, env: string, ctx: string, handlers: string, deps: {}): globalThis.Promise<number> {
-    return (body).length + (result).length + (args).length + (argsObj).length + (surface).length + (request).length + (env).length + (ctx).length + (handlers).length + (key).length;
+  async call(key: string, body: string, result: string, args: string, argsObj: string, surface: string, request: string, env: string, ctx: string, handlers: string, __id_deps: string, deps: {}): globalThis.Promise<number> {
+    return (body).length + (result).length + (args).length + (argsObj).length + (surface).length + (request).length + (env).length + (ctx).length + (handlers).length + (__id_deps).length + (key).length;
   },
 };
 
@@ -22,13 +37,22 @@ export const api = {
   async http_GET_by_Param_request_Param_result_Param_surface(request: string, result: string, surface: string, deps: {}): globalThis.Promise<HttpResult<number>> {
     return HttpResult.Ok((request).length + (result).length + (surface).length);
   },
+  async http_GET_at_Param_url_Param_path(url: string, path: string, deps: {}): globalThis.Promise<HttpResult<number>> {
+    return HttpResult.Ok((url).length + (path).length);
+  },
   async http_POST_echo(body: string, deps: {}): globalThis.Promise<HttpResult<number>> {
     return HttpResult.Ok((body).length);
   },
 };
 
 export const ticker = {
-  async cron_ticker_0(result: number, deps: {}): globalThis.Promise<Result<void, string>> {
+  async cron_ticker_0(__id_deps: number, deps: {}): globalThis.Promise<Result<void, string>> {
+    return Ok(undefined);
+  },
+};
+
+export const ticker2 = {
+  async cron_ticker2_0(result: number, deps: {}): globalThis.Promise<Result<void, string>> {
     return Ok(undefined);
   },
 };

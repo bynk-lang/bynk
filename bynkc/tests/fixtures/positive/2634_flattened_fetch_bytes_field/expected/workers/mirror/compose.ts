@@ -12,8 +12,8 @@ export function compose(env: Env) {
   const Fetch = new bynk__binding.FetchProvider();
   const deps = { Fetch };
   return {
-    async note(url: string) {
-      return handlers.note.call(url, deps);
+    async note(__id_url: string) {
+      return handlers.note.call(__id_url, deps);
     },
   };
 }

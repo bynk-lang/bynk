@@ -34,9 +34,9 @@ export default {
           case "many": {
             __route = "call many";
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "f48180be137426cf") {
-              globalThis.console.error("ContractMismatch media.store call many", { service: "many", expected: "f48180be137426cf", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "many", expected: "f48180be137426cf", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "25d9a60d356a7316") {
+              globalThis.console.error("ContractMismatch media.store call many", { service: "many", expected: "25d9a60d356a7316", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "many", expected: "25d9a60d356a7316", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {
@@ -76,7 +76,10 @@ export default {
             const __r_handlers = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.handlers", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["handlers"]);
             if (__r_handlers.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_handlers.error), { status: 400, headers: { "content-type": "application/json" } });
             const __id_handlers = __r_handlers.value;
-            const result = await surface.many(key, __id_body, __id_result, __id_args, __id_argsObj, __id_surface, __id_request, __id_env, __id_ctx, __id_handlers);
+            const __r_deps = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.deps", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["deps"]);
+            if (__r_deps.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_deps.error), { status: 400, headers: { "content-type": "application/json" } });
+            const __id_deps = __r_deps.value;
+            const result = await surface.many(key, __id_body, __id_result, __id_args, __id_argsObj, __id_surface, __id_request, __id_env, __id_ctx, __id_handlers, __id_deps);
             const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
@@ -122,6 +125,19 @@ export default {
         }
       }
       {
+        const __m = __matchPath("/at/:url/:path", path);
+        if ((method === "GET" || method === "HEAD") && __m) {
+          __route = "GET /at/:url/:path";
+          const __raw_url = __m.params["url"];
+          const __id_url = __raw_url;
+          const __raw_path = __m.params["path"];
+          const __id_path = __raw_path;
+          const result = await surface.http_GET_at_Param_url_Param_path(__id_url, __id_path);
+          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
         const __m = __matchPath("/by/:request/:result/:surface", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /by/:request/:result/:surface";
@@ -135,6 +151,11 @@ export default {
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
+      }
+      if (__matchPath("/at/:url/:path", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
       }
       if (__matchPath("/by/:request/:result/:surface", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
@@ -159,6 +180,11 @@ export default {
       case "*/5 * * * *": {
         const result = await surface.cron_ticker_0(event.scheduledTime);
         if (result.tag === "Err") globalThis.console.error("cron */5 * * * * failed", result.error);
+        return;
+      }
+      case "0 * * * *": {
+        const result = await surface.cron_ticker2_0(event.scheduledTime);
+        if (result.tag === "Err") globalThis.console.error("cron 0 * * * * failed", result.error);
         return;
       }
       default:
