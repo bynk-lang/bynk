@@ -1697,7 +1697,10 @@ fn build_emit_unit_ctx(
             continue;
         };
         let used_types = bynk_check::symbols::combined_types_for_unit_info(t, unit_info);
-        for (type_name, mt) in &used.table.methods {
+        // #2751: only what an importer can reach — a `private` type's methods
+        // (and a private method) would otherwise merge into a same-named
+        // public type's forwarded const.
+        for (type_name, mt) in &used.table.importable().methods {
             let entry = imported_methods.entry(type_name.clone()).or_default();
             entry.extend(lower_attached_fn_sig_ir_from_types(mt, &used_types, tys));
         }

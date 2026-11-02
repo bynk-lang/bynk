@@ -8,7 +8,6 @@ import { Tag as __CommonsTag } from "../labels.js";
 
 export type Tag = __CommonsTag & { readonly __ctxBrand?: "shop.lookup" };
 export const Tag = {
-  label(self: Tag): number { return __CommonsTag.label(self); },
   label(self: Tag): string { return __CommonsTag.label(self); },
 };
 
