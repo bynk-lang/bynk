@@ -1182,7 +1182,7 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                         } else {
                             ("right", rhs.span, &rt)
                         };
-                    ctx.errors.push(CompileError::new(
+                    let mut err = CompileError::new(
                         "bynk.types.type_mismatch",
                         side_span,
                         format!(
@@ -1190,7 +1190,13 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                             op.name(),
                             ty.display(tys)
                         ),
-                    ));
+                    );
+                    if op == BinOp::Add
+                        && (lt_base == Some(BaseType::String) || rt_base == Some(BaseType::String))
+                    {
+                        err = with_interpolation_hint(err, span, (lhs, lt), (rhs, rt), tys);
+                    }
+                    ctx.errors.push(err);
                     None
                 }
             }
@@ -5556,6 +5562,61 @@ fn gather_pattern_bindings(
             bind_error(b.pattern(), out);
         }
     }
+}
+
+/// #2808: `+` does not join strings; string interpolation is the spelling. The
+/// note is always given. The rewrite is offered as machine-applicable only when
+/// both operands drop into an interpolated string unchanged: a plain string
+/// literal (no `\(`, quote, escape or control character, so its text reads the
+/// same inside the new literal) or a name or field path of a scalar the hole
+/// rule displays (ADR 0075). Anything else (a call, an arithmetic operand, an
+/// opaque value) is left for the author.
+fn with_interpolation_hint(
+    err: CompileError,
+    span: Span,
+    lhs: (&Expr, TyId),
+    rhs: (&Expr, TyId),
+    tys: &Types,
+) -> CompileError {
+    let err = err.with_note(
+        "`+` does not join strings; use string interpolation instead, \
+         e.g. `\"hi \\(name)\"` rather than `\"hi \" + name`",
+    );
+    let (Some(l), Some(r)) = (interpolation_part(lhs, tys), interpolation_part(rhs, tys)) else {
+        return err;
+    };
+    err.with_suggestion(
+        "use string interpolation",
+        vec![(span, format!("\"{l}{r}\""))],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// The text `operand` contributes inside an interpolated string, or `None` when
+/// it cannot be placed there safely.
+fn interpolation_part((e, ty): (&Expr, TyId), tys: &Types) -> Option<String> {
+    fn path(e: &Expr) -> Option<String> {
+        match &e.kind {
+            ExprKind::Ident(id) => Some(id.name.clone()),
+            ExprKind::FieldAccess { receiver, field } => {
+                Some(format!("{}.{}", path(receiver)?, field.name))
+            }
+            _ => None,
+        }
+    }
+    if let ExprKind::StrLit(text) = &e.kind {
+        return text
+            .chars()
+            .all(|c| c != '\\' && c != '"' && !c.is_control())
+            .then(|| text.clone());
+    }
+    let scalar = matches!(
+        ty.base(tys),
+        Some(BaseType::String | BaseType::Int | BaseType::Float | BaseType::Bool)
+    );
+    scalar
+        .then(|| path(e).map(|p| format!("\\({p})")))
+        .flatten()
 }
 
 #[cfg(test)]
