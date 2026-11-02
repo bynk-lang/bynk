@@ -397,10 +397,8 @@ fn withTotal(ns: List[Int]) -> List[Int] {
 **Terminals**: `count`, `any`, `all`, `first`, `firstOrElse`, `sum`, `min`, `max`,
 `average`.
 
-Ordering keys (`sortBy`/`min`/`max`) on a `List` are any [`Ord` type](#ordering-your-own-types)
-(`bynk.types.key_not_orderable` otherwise). On a lazy storage `Query` the key is
-still one of `Int`/`Float`/`String`/`Duration`/`Instant`, refined types widening,
-opaque keys rejected. Numeric keys (`sum`/`average`) are
+Ordering keys (`sortBy`/`min`/`max`), on a `List` and on a lazy storage `Query`, are any
+[`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). Numeric keys (`sum`/`average`) are
 `Int`/`Float`/`Duration` (`bynk.query.sum_needs_numeric`), with `average -> Float`.
 **Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
 `sum` the zero. The first-party `bynk.list` free functions are the deprecated

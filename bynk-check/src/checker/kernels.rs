@@ -183,26 +183,6 @@ pub(crate) fn check_set_kernel_method(
     Some(tys.intern(ret))
 }
 
-/// v0.88 (ADR 0116 D2): the closed orderable base set for a storage `Query`'s
-/// `sortBy`/`min`/`max` (constrained-generics slice 1 widened `List`'s rule to
-/// `Ord`; this predicate stays the `Query` rule — its ordering runs on the
-/// storage path, where a user-type comparator has no lowering).
-/// A key widens through `Ty::base()` (Refined → base; Opaque does not widen,
-/// so an opaque key — whose base is hidden — is not orderable). `Instant`
-/// joins this set with slice 1b.
-fn is_orderable(t: TyId, tys: &Types) -> bool {
-    matches!(
-        t.base(tys),
-        Some(
-            BaseType::Int
-                | BaseType::Float
-                | BaseType::String
-                | BaseType::Duration
-                | BaseType::Instant
-        )
-    )
-}
-
 /// v0.88 (ADR 0116 D3): the numeric keys `sum`/`average` accept.
 fn is_numeric(t: TyId, tys: &Types) -> bool {
     matches!(
@@ -211,29 +191,10 @@ fn is_numeric(t: TyId, tys: &Types) -> bool {
     )
 }
 
-/// A `List` ordering kernel's key is any `Ord` type (constrained-generics slice
-/// 1, DECISION H); a `Query` key stays on [`require_orderable`]'s five base types.
-fn require_list_key_ord(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
+/// A `sortBy`/`min`/`max` key, on a `List` or a `Query`, is any `Ord` type
+/// (constrained-generics slice 1, DECISION H; `Query` since #2787).
+fn require_key_ord(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
     super::ordering::check_ord(ctx, key, span, &super::ordering::OrdSite::Key(method));
-}
-
-fn require_orderable(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
-    let tys = ctx.tys;
-    if !is_orderable(key, tys) {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.key_not_orderable",
-                span,
-                format!(
-                    "`{method}` needs an orderable key, but the key function returns `{}`",
-                    key.display(tys)
-                ),
-            )
-            .with_note(
-                "a `Query` key is `Int`, `Float`, `String`, `Duration`, `Instant` (or a refined type over them)",
-            ),
-        );
-    }
 }
 
 fn require_numeric(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
@@ -796,7 +757,7 @@ pub(crate) fn check_list_kernel_method(
                 return None;
             }
             let key = check_kernel_fn_arg(&args[0], vec![elem], "the `List.sortBy` key", ctx)?;
-            require_list_key_ord(key, "List.sortBy", args[0].span, ctx);
+            require_key_ord(key, "List.sortBy", args[0].span, ctx);
             Some(tys.intern(Ty::List(elem)))
         }
         "distinct" => {
@@ -836,7 +797,7 @@ pub(crate) fn check_list_kernel_method(
                 &format!("the `List.{}` key", method.name),
                 ctx,
             )?;
-            require_list_key_ord(key, &format!("List.{}", method.name), args[0].span, ctx);
+            require_key_ord(key, &format!("List.{}", method.name), args[0].span, ctx);
             Some(tys.intern(Ty::Option(key)))
         }
         "average" => {
@@ -1025,7 +986,7 @@ pub(crate) fn check_query_kernel_method(
                 return None;
             }
             let key = check_kernel_fn_arg(&args[0], vec![elem], "the `Query.sortBy` key", ctx)?;
-            require_orderable(key, "Query.sortBy", args[0].span, ctx);
+            require_key_ord(key, "Query.sortBy", args[0].span, ctx);
             Some(query(elem))
         }
         "take" | "skip" => {
@@ -1132,7 +1093,7 @@ pub(crate) fn check_query_kernel_method(
                 &format!("the `Query.{}` key", method.name),
                 ctx,
             )?;
-            require_orderable(key, &format!("Query.{}", method.name), args[0].span, ctx);
+            require_key_ord(key, &format!("Query.{}", method.name), args[0].span, ctx);
             Some(eff(tys.intern(Ty::Option(key))))
         }
         "average" => {

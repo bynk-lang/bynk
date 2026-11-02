@@ -1,0 +1,46 @@
+---
+#2787: ordering on a store query follows the declared order, not insertion or name order.
+---
+suite demo.ord
+
+case "sortBy a derives Ord enum" {
+  do Board("a").add("x", High, 1, 0.0, 1.0)
+  do Board("a").add("y", Low, 2, 0.0, 1.0)
+  do Board("a").add("z", Medium, 3, 0.0, 1.0)
+  let names <- Board("a").byPriority()
+  expect names == ["y", "z", "x"]
+}
+
+case "sortBy a derives Ord record, ties by the next field" {
+  do Board("r").add("x", High, 5, 0.0, 1.0)
+  do Board("r").add("y", High, 2, 0.0, 1.0)
+  do Board("r").add("z", Low, 9, 0.0, 1.0)
+  let names <- Board("r").byRank()
+  expect names == ["z", "y", "x"]
+}
+
+case "max and min by an Ord key" {
+  do Board("m").add("x", Medium, 5, 0.0, 1.0)
+  do Board("m").add("y", High, 2, 0.0, 1.0)
+  do Board("m").add("z", Low, 9, 0.0, 1.0)
+  let top <- Board("m").topPriority()
+  expect top == Some(High)
+  let low <- Board("m").lowestRank()
+  expect low == Some(Rank { priority: Low, due: 9 })
+}
+
+case "Float keys order NaN last" {
+  do Board("f").add("x", Low, 1, 2.5, 1.0)
+  do Board("f").add("y", Low, 1, 0.0, 0.0)
+  do Board("f").add("z", Low, 1, 1.5, 1.0)
+  let names <- Board("f").byScore()
+  expect names == ["z", "x", "y"]
+}
+
+case "sortBy stays lazy for skip and take" {
+  do Board("t").add("a", High, 1, 0.0, 1.0)
+  do Board("t").add("b", Low, 1, 0.0, 1.0)
+  do Board("t").add("c", Medium, 1, 0.0, 1.0)
+  let names <- Board("t").topTwo()
+  expect names == ["c", "a"]
+}

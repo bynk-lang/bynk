@@ -2249,6 +2249,7 @@ fn lower_method_call(
                         elem_ts: &f_ts,
                         other_elem_ts: &other_elem_ts,
                         keyed: query_keyed(e, method, args, cx),
+                        key_cmp: query_key_cmp(method, args, cx),
                     },
                     tys,
                 )
@@ -2369,6 +2370,7 @@ fn lower_method_call(
                         elem_ts: &elem_ts,
                         other_elem_ts: &other_elem_ts,
                         keyed: query_keyed(e, method, args, cx),
+                        key_cmp: query_key_cmp(method, args, cx),
                     },
                     tys,
                 )
@@ -2526,6 +2528,7 @@ fn lower_method_call(
                         elem_ts: &elem_ts,
                         other_elem_ts: &other_elem_ts,
                         keyed: query_keyed(e, method, args, cx),
+                        key_cmp: query_key_cmp(method, args, cx),
                     },
                     tys,
                 )
@@ -3490,6 +3493,7 @@ fn lower_method_call(
                         elem_ts: &elem_ts,
                         other_elem_ts: &other_elem_ts,
                         keyed: query_keyed(e, method, args, cx),
+                        key_cmp: query_key_cmp(method, args, cx),
                     },
                     tys,
                 ) {
@@ -4896,6 +4900,18 @@ struct QueryShape<'a> {
     elem_ts: &'a str,
     other_elem_ts: &'a str,
     keyed: bool,
+    /// The comparator expression for `sortBy`/`min`/`max` (#2787); `None` keeps
+    /// the bare `<`/`>` operators, for `Int`/`String`/`Duration`/`Instant` keys.
+    key_cmp: Option<String>,
+}
+
+/// The comparator for a `Query` `sortBy`/`min`/`max` key, as `lower_list_kernel`
+/// picks it: `None` for a plain base key, otherwise the key type's comparator.
+fn query_key_cmp(method: &Ident, args: &[Expr], cx: &LowerCtx) -> Option<String> {
+    match (method.name.as_str(), args) {
+        ("sortBy" | "min" | "max", [key]) => kernel_key_comparator(key, cx),
+        _ => None,
+    }
 }
 
 /// Whether this `Query` method's key is a non-primitive `Key` type, noting the
@@ -4906,8 +4922,8 @@ fn query_keyed(e: &Expr, method: &Ident, args: &[Expr], cx: &LowerCtx) -> bool {
     let (helper, plain) = match (method.name.as_str(), args) {
         ("distinct", []) => (
             "__bynkDistinct",
-            cx.commons().expr_types.get(&e.id).is_none_or(
-                |te| !matches!(&*tys.get(te.ty), Ty::Query(el) if !key_is_plain(*el, tys)),
+            cx.commons().expr_types.get(&e.id).is_some_and(
+                |te| matches!(&*tys.get(te.ty), Ty::Query(el) if key_is_plain(*el, tys)),
             ),
         ),
         ("distinctBy", [key]) => ("__bynkDistinctBy", key_fn_is_plain(key, cx)),
@@ -4969,7 +4985,9 @@ fn lower_query_method(
         elem_ts,
         other_elem_ts,
         keyed,
-    } = *shape;
+        key_cmp,
+    } = shape;
+    let keyed = *keyed;
     let elem_el = ts_array_elem(elem_ts);
     let other_elem_el = ts_array_elem(other_elem_ts);
     let thunk = |body: String| format!("(() => {body})");
@@ -4979,6 +4997,9 @@ fn lower_query_method(
         ("map", [f]) => thunk(format!("{source}.map((__x) => ({f})(__x))")),
         // storage flatMap: the fn returns a `Query` (a thunk) — invoke each.
         ("flatMap", [f]) => thunk(format!("{source}.flatMap((__x) => ({f})(__x)())")),
+        ("sortBy", [key]) if let Some(cmp) = key_cmp => thunk(with_comparator(cmp, |c| {
+            format!("[...{source}].sort((__a, __b) => {c}(({key})(__a), ({key})(__b)))")
+        })),
         ("sortBy", [key]) => thunk(format!(
             "[...{source}].sort((__a, __b) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
         )),
@@ -5052,6 +5073,14 @@ fn lower_query_method(
         ("any", [p]) => format!("{source}.some((__x) => ({p})(__x))"),
         ("all", [p]) => format!("{source}.every((__x) => ({p})(__x))"),
         ("sum", [key]) => format!("{source}.reduce((__s: number, __x) => __s + ({key})(__x), 0)"),
+        ("min" | "max", [key]) if let Some(key_cmp) = key_cmp => {
+            let op = if method.name == "min" { "<" } else { ">" };
+            with_comparator(key_cmp, |c| {
+                format!(
+                    "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __m = ({key})(__a[0]); for (const __x of __a) {{ const __k = ({key})(__x); if ({c}(__k, __m) {op} 0) __m = __k; }} return Some(__m); }})()"
+                )
+            })
+        }
         ("min" | "max", [key]) => {
             let cmp = if method.name == "min" { "<" } else { ">" };
             format!(

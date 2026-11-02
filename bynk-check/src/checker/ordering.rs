@@ -19,9 +19,8 @@
 //! in declaration order, a sum by variant declaration order and then by payload.
 //! That is why `Ord` is opt-in (Q2) while `Eq` is automatic.
 //!
-//! `Query`'s `sortBy`/`min`/`max` keep the five-base-type rule on their own
-//! predicate (`kernels::is_orderable`): their ordering runs on the storage path,
-//! where a user-type comparator has no SQL lowering (DECISION H).
+//! `Query`'s `sortBy`/`min`/`max` take any `Ord` key too (#2787); a `Query` is
+//! evaluated in memory, so there is no storage path that needs a base-type key.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -90,7 +89,7 @@ pub(crate) fn not_orderable(ty: TyId, ctx: &Ctx) -> Option<NotOrd> {
 pub(crate) enum OrdSite<'a> {
     /// A comparison operator (`<`, `<=`, `>`, `>=`).
     Operator(&'a str),
-    /// A `List` ordering kernel's key (`List.sortBy`, `List.min`, `List.max`).
+    /// A `List` or `Query` ordering kernel's key (`sortBy`, `min`, `max`).
     Key(&'a str),
     /// A call to an `Ord`-bounded callee: `callee` requires `param: Ord`.
     Call { callee: &'a str, param: &'a str },
