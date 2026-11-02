@@ -1,12 +1,12 @@
 {
   "version": 1,
   "provides": {
-    "echo": "afd64a7da8d0ad67",
-    "orderId": "1d4af87f575402de"
+    "echo": "4ed9e6c524c58307",
+    "orderId": "663f30fee451cde6"
   },
   "expects": {},
   "provides_shapes": {
-    "echo": "Svc(\"echo\",P(\"o\",N(\"Order\")),Ret(N(\"Order\")))",
-    "orderId": "Svc(\"orderId\",P(\"o\",N(\"Order\")),Ret(B(\"String\")))"
+    "echo": "Svc(\"echo\",P(\"o\",Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))),Ret(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))))",
+    "orderId": "Svc(\"orderId\",P(\"o\",Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))),Ret(B(\"String\")))"
   }
 }

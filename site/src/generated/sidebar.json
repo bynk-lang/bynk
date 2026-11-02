@@ -138,6 +138,10 @@
           {
             "label": "Generic code that crosses the boundary",
             "link": "/book/guides/type-system/generic-code-that-crosses-the-boundary/"
+          },
+          {
+            "label": "Constructors for generic types",
+            "link": "/book/guides/type-system/constructors-for-generic-types/"
           }
         ]
       },

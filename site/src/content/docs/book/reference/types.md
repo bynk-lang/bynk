@@ -745,9 +745,12 @@ itself, so `fn Box.map[U](self, f: A -> U) -> Box[U]` reads `A` from the receive
 namespace-object method — `map<A, U>(self: Box<A>, f: (a: A) => U): Box<U>` — the
 type's parameters threaded onto each method (the namespace object itself cannot
 carry them). The type arguments are inferred from the receiver and the argument
-types; the explicit `x.map[U](…)` form is a later increment. **Static** methods
-on a generic type stay deferred (`bynk.generics.method_on_generic_type`) — they
-have no receiver to supply the type's parameters. A refined or opaque body cannot
+types; the explicit `x.map[U](…)` form is a later increment. A **static**
+method on a generic type (`fn Box.of(value: A) -> Box[A]`) is generic over the
+type's parameters too, followed by its own; see
+[Generics](/book/reference/generics/#static-methods-on-generic-types). A static
+whose signature never mentions one of the type's parameters is rejected
+(`bynk.generics.method_on_generic_type`) — no call could determine it. A refined or opaque body cannot
 be generic (its base is a fixed primitive); only a record or **sum** body may be
 (`bynk.generics.generic_non_record`), and generic sums are described under
 [Sum types](#sum-types).

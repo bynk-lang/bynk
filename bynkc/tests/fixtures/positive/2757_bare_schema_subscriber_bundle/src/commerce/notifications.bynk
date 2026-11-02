@@ -1,0 +1,20 @@
+context commerce.notifications
+
+consumes commerce.order
+consumes bynk { Logger }
+
+// #2720: every `via schema(...)` subscriber here is bare (`on event(e: E)`,
+// no declared `env: EventEnvelope`), so the synthetic envelope parameter the
+// emitter inserts is the module's only mention of `EventEnvelope`. It must
+// bring its own import.
+service OnV1 from Events(PaymentConfirmed) via schema(1) {
+  on event(e: PaymentConfirmed) -> Effect[()] given Logger {
+    Logger.info(e.orderId)
+  }
+}
+
+service OnV2 from Events(PaymentConfirmed) via schema(2) {
+  on event(e: PaymentConfirmed) -> Effect[()] given Logger {
+    Logger.info(e.orderId)
+  }
+}

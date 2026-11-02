@@ -1,0 +1,6 @@
+[project]
+name = "2735-call-address-integration"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

@@ -44,7 +44,7 @@ use bynk_lower::{
 use bynk_syntax::ast::{
     AgentDecl, BaseType, BinOp, Block, CommonsItem, Expr, ExprKind, FnDecl, FnName, Ident,
     InterpPart, MatchBody, MessagesDecl, ObservationMatcher, Param, Pattern, PredKind, ServiceDecl,
-    Statement, TypeBody, TypeDecl, TypeRef,
+    ServiceProtocol, Statement, TypeBody, TypeDecl, TypeRef,
 };
 
 pub mod client;
@@ -1109,7 +1109,8 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                 Some(
                     bynk_check::checker::Callee::Fn(decl, ws)
                     | bynk_check::checker::Callee::FnValue(decl, ws)
-                    | bynk_check::checker::Callee::Method(decl, ws),
+                    | bynk_check::checker::Callee::Method(decl, ws)
+                    | bynk_check::checker::Callee::Static(decl, ws),
                 ) => {
                     for (w, ty) in bynk_check::checker::codable::witness_list(decl, &commons.types)
                         .iter()
@@ -2435,6 +2436,27 @@ fn emit_context_rebrands(
                 None,
             );
             stmts.push(const_decl);
+        } else if ctx
+            .imported_methods
+            .get(name)
+            .is_some_and(|m| !m.is_empty())
+        {
+            // #2751: a record/sum commons type has no `.of`, but its
+            // attached methods are still called as `Type.method(recv)`, which
+            // needs a value `Type` in the context (the rebrand above is only
+            // a type). The value is the commons' own, re-exported unbranded:
+            // its methods already speak types the context's optionally-branded
+            // ones fit, and — unlike a re-declared forwarder — it carries a
+            // generic type's parameters, a bounded method's hidden comparator
+            // and codec witnesses, and a sum's variants unchanged.
+            stmts.push(bynk_ts::TsStmt::decl(
+                bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
+                    name: name.clone(),
+                    ty: None,
+                    init: bynk_ts::TsExpr::Ident(format!("__Commons{name}")),
+                })),
+                None,
+            ));
         }
     }
     // #1486: no explicit trailing blank stmt here — the printer's automatic
@@ -2639,9 +2661,28 @@ fn collect_external_references(commons: &TypedCommons, ctx: &EmitProjectCtx) -> 
                 }
             }
             CommonsItem::Service(s) => {
+                // #2720: a `via schema(...)` subscriber whose handler declares
+                // no `env` gets a synthetic `EventEnvelope` parameter at emit
+                // time (`emit_service`); that parameter's type must be imported
+                // exactly as a declared `env: EventEnvelope` would be.
+                let synthesises_envelope = matches!(
+                    &s.protocol,
+                    ServiceProtocol::Events {
+                        schema_dispatch: Some(_),
+                        ..
+                    }
+                );
                 for h in &s.handlers {
                     for p in &h.params {
                         collect_refs_in_typeref(&p.type_ref, &local_to_file, ctx, &mut refs);
+                    }
+                    // Kept in step with `emit_service`'s `schema_dispatch_env_binder`
+                    // on purpose: event handler, `schema_dispatch`, no `env` param.
+                    if synthesises_envelope
+                        && matches!(h.kind, bynk_syntax::ast::HandlerKind::Event)
+                        && h.params.len() < 2
+                    {
+                        record_name_ref("EventEnvelope", &local_to_file, ctx, &mut refs);
                     }
                     collect_refs_in_typeref(&h.return_type, &local_to_file, ctx, &mut refs);
                     collect_refs_in_block(&h.body, &local_to_file, commons, ctx, &mut refs);

@@ -1,20 +1,20 @@
 {
   "version": 1,
   "provides": {
-    "echo": "fc383d49727e0872",
-    "first": "be279a2fb1d69294",
+    "echo": "5ec0507cbf4df93c",
+    "first": "f3c615f6c053d6dc",
     "here": "8636e891054e2b67",
-    "orderId": "1d4af87f575402de",
-    "parcelRef": "b746cfae2a013a6d",
-    "present": "2b93d2b79eaa3765"
+    "orderId": "63ccab8c0151718d",
+    "parcelRef": "5cf635bacfa951d6",
+    "present": "ee692a633f10b09c"
   },
   "expects": {},
   "provides_shapes": {
-    "echo": "Svc(\"echo\",P(\"os\",L(N(\"Order\"))),Ret(L(N(\"Order\"))))",
-    "first": "Svc(\"first\",P(\"os\",L(N(\"Order\"))),Ret(O(N(\"Order\"))))",
+    "echo": "Svc(\"echo\",P(\"os\",L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"shop_order__Region\",V(\"Domestic\"),V(\"International\")))))),Ret(L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"shop_order__Region\",V(\"Domestic\"),V(\"International\")))))))",
+    "first": "Svc(\"first\",P(\"os\",L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"shop_order__Region\",V(\"Domestic\"),V(\"International\")))))),Ret(O(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"shop_order__Region\",V(\"Domestic\"),V(\"International\")))))))",
     "here": "Svc(\"here\",Ret(Sum(\"Region\",V(\"Here\"),V(\"There\"))))",
-    "orderId": "Svc(\"orderId\",P(\"o\",N(\"Order\")),Ret(B(\"String\")))",
-    "parcelRef": "Svc(\"parcelRef\",P(\"p\",N(\"Parcel\")),Ret(B(\"String\")))",
-    "present": "Svc(\"present\",P(\"o\",O(N(\"Parcel\"))),Ret(B(\"Bool\")))"
+    "orderId": "Svc(\"orderId\",P(\"o\",Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"shop_order__Region\",V(\"Domestic\"),V(\"International\"))))),Ret(B(\"String\")))",
+    "parcelRef": "Svc(\"parcelRef\",P(\"p\",Rec(\"Parcel\",F(\"ref\",B(\"String\")),F(\"region\",Sum(\"shop_post__Region\",V(\"North\"),V(\"South\"))))),Ret(B(\"String\")))",
+    "present": "Svc(\"present\",P(\"o\",O(Rec(\"Parcel\",F(\"ref\",B(\"String\")),F(\"region\",Sum(\"shop_post__Region\",V(\"North\"),V(\"South\")))))),Ret(B(\"Bool\")))"
   }
 }

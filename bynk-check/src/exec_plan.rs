@@ -388,7 +388,10 @@ fn scan_with<'a>(
                 }
             }
             Some(
-                Callee::Fn(d, _) | Callee::Method(d, _) | Callee::Static(d) | Callee::FnValue(d, _),
+                Callee::Fn(d, _)
+                | Callee::Method(d, _)
+                | Callee::Static(d, _)
+                | Callee::FnValue(d, _),
             ) => facts.edges.push(Edge {
                 name: d.name.display(),
                 key: d.span,

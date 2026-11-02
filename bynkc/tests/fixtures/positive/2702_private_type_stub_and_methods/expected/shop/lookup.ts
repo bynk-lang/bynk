@@ -7,6 +7,7 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 import { Tag as __CommonsTag } from "../labels.js";
 
 export type Tag = __CommonsTag & { readonly __ctxBrand?: "shop.lookup" };
+export const Tag = __CommonsTag;
 
 export interface Directory {
   find(key: string): globalThis.Promise<Tag>;
@@ -25,7 +26,7 @@ export const __RealDirectoryProvider = { token: __DirectoryToken, factory: () =>
 export const lookup = {
   async call(key: string, deps: { Directory: Directory }): globalThis.Promise<string> {
     const t = await deps.Directory.find(key);
-    return t.name;
+    return Tag.label(t);
   },
 };
 

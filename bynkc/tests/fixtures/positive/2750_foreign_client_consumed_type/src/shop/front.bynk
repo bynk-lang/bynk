@@ -1,0 +1,12 @@
+// #2087: a production caller passing `shop.order`'s `Order` to `shop.ledger`.
+context shop.front
+
+consumes shop.order
+consumes shop.ledger
+
+service check {
+  on call(id: String) -> Effect[String] {
+    let o <- shop.order.place(id)
+    shop.ledger.orderId(o)
+  }
+}

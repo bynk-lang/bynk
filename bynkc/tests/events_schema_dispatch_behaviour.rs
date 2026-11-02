@@ -169,10 +169,10 @@ service OnV5Up from Events(PaymentConfirmed) via schema(5..) {
   }
 }
 
-// Declares `env`, which also pulls `EventEnvelope` into this file's imports for
-// the bare subscribers (the precedent `SOURCE_NOTIFICATIONS` sets).
+// Every subscriber in this file is bare: the synthetic envelope parameter
+// brings its own `EventEnvelope` import (#2720).
 service OnAny from Events(PaymentConfirmed) via schema(_) {
-  on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Logger {
+  on event(e: PaymentConfirmed) -> Effect[()] given Logger {
     Logger.info("any-fired")
   }
 }

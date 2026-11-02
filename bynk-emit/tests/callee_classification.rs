@@ -216,7 +216,7 @@ commons demo {
     assert!(
         callees
             .iter()
-            .any(|c| matches!(c, Callee::Static(f) if f.name.display().ends_with("origin"))),
+            .any(|c| matches!(c, Callee::Static(f, _) if f.name.display().ends_with("origin"))),
         "expected a Callee::Static(\"Point.origin\"), got {callees:?}"
     );
     let ts = emit(src);

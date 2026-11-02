@@ -244,6 +244,65 @@ type, and `size` accepts it; `b.has(f)` on one is rejected at the call. A
 `+`-joined bounds like any other. Naming anything else is
 `bynk.generics.unknown_where_param`.
 
+## Static methods on generic types
+
+A method with no `self` is a **static**. On a generic type it is generic over the
+type's parameters, then its own, so a bounded type can offer the only way in:
+
+```bynk,fragment
+commons demo.constructors
+
+uses bynk.list
+
+type Box[T] = { value: T }
+
+fn Box.of(value: T) -> Box[T] { Box { value } }
+
+fn Box.empty() -> Box[Option[T]] { Box { value: None } }
+
+type Sorted[T: Ord] = { items: List[T] }
+
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: sort(xs) } }
+
+fn demo() -> Int {
+  let a = Box.of(5)
+  let b: Box[Option[String]] = Box.empty()
+  let c = Box.empty[String]()
+  let s = Sorted.fromList(["b", "a"])
+  a.value
+}
+```
+
+The type's parameters come from, in order:
+
+1. **the arguments**, as for any generic call (`Box.of(5)` is a `Box[Int]`);
+2. **the expected type**, for any parameter the arguments leave open: the declared
+   return type is matched against the binding's type (`Box.empty()` above);
+3. **explicit type arguments**: `Box.empty[String]()` lists the type's parameters,
+   then the method's own, in declaration order, all or none. A qualified variant
+   takes none (`Opt.None[Int]` stays rejected), and an instance method does not take
+   them yet.
+
+A parameter that none of these determines is `bynk.generics.uninferable_type_arg`.
+A bound the type declares holds inside the static and adds the usual hidden
+witness, which the call site supplies (`Sorted.fromList(names)` passes the string
+comparator).
+
+A static must mention every parameter of its type in its parameter or return types.
+`fn Box.empty() -> Box[Int]` names no `T` to infer, so it is
+`bynk.generics.method_on_generic_type`: make it a free function, or mention the
+parameter. A static is not a value: `Box.of` without a call is still an unknown
+member.
+
+### The expected type, for every generic call
+
+The expected type is the last source for any generic call except a capability
+operation, not only statics. After the arguments (other than lambdas) have been
+typed, a parameter that is still open takes its type from the call's expected type,
+before the lambdas are checked, so `let o: Option[Int] = none()` works for
+`fn none[T]() -> Option[T]`. It only fills what was `uninferable_type_arg` before;
+`let o = none()` is still rejected.
+
 ## Bounds on type declarations
 
 A `type` may bound its parameters as well, `type Pair[T: Eq] = { left: T, right:

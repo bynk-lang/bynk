@@ -18,6 +18,6 @@ provides Directory = RealDirectory {
 service lookup {
   on call(key: String) -> Effect[String] given Directory {
     let t <- Directory.find(key)
-    t.name
+    t.label()
   }
 }
