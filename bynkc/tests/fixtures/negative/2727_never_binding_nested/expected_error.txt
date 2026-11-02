@@ -1,0 +1,1 @@
+bynk.types.never_inferred `xs` would have the type `List[never returns]`

@@ -1,0 +1,14 @@
+commons demo.discard
+
+---
+A discarded binding names nothing that could stand in for another type.
+---
+fn pure_discard(n: Int) -> Int {
+  let _ = if n < 0 { unreachable("negative") }
+  n
+}
+
+fn effect_discard(n: Int) -> Effect[Int] {
+  let _ <- if n < 0 { unreachable("negative") } else { Effect.pure(n) }
+  Effect.pure(n)
+}

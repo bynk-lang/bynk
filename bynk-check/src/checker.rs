@@ -3819,26 +3819,49 @@ pub(super) fn check_do(d: &DoStmt, check_context: bool, ctx: &mut Ctx) {
     }
 }
 
-/// Check one `let x <- e` binding: the effect-context requirement (when
-/// `check_context`), the annotation, the `Effect[T]` payload and the call-site
-/// principal. Returns the bound type, or `None` when the value failed to type
-/// (already reported). Binding the name is the caller's job, so a `par` block can
-/// bind its names only after every binding is checked.
 /// How [`Ty::Never`] reads in a message or hover. It is not source syntax, so
 /// no inlay hint or inserted annotation may carry it (#2727).
 pub const NEVER_DISPLAY: &str = "never returns";
 
 /// #2727: the diagnostic for an unannotated binding or lambda result whose
 /// inferred type is the bottom type, which would otherwise stand in for any type.
-pub(super) fn never_inferred(span: Span, what: &str, hint: &str) -> CompileError {
+pub(super) fn never_inferred(span: Span, what: &str, ty: &str, hint: &str) -> CompileError {
     CompileError::new(
         "bynk.types.never_inferred",
         span,
-        format!("{what} would have the type `never returns`, which cannot be named in source"),
+        format!("{what} would have the type `{ty}`, which cannot be named in source"),
     )
     .with_note(hint)
 }
 
+/// #2727: whether `t` is, or is built from, the bottom type, so a binding of it
+/// would stand in for any type.
+pub(crate) fn contains_never(t: TyId, tys: &Types) -> bool {
+    match &*tys.get(t) {
+        Ty::Never => true,
+        Ty::Result(a, b) | Ty::Map(a, b) => contains_never(*a, tys) || contains_never(*b, tys),
+        Ty::Option(a)
+        | Ty::Effect(a)
+        | Ty::HttpResult(a)
+        | Ty::HttpOutcome(a)
+        | Ty::List(a)
+        | Ty::Set(a)
+        | Ty::Query(a)
+        | Ty::Stream(a)
+        | Ty::Connection(a) => contains_never(*a, tys),
+        Ty::Fn { params, ret } => {
+            params.iter().any(|p| contains_never(*p, tys)) || contains_never(*ret, tys)
+        }
+        Ty::Named { args, .. } => args.iter().any(|a| contains_never(*a, tys)),
+        _ => false,
+    }
+}
+
+/// Check one `let x <- e` binding: the effect-context requirement (when
+/// `check_context`), the annotation, the `Effect[T]` payload and the call-site
+/// principal. Returns the bound type, or `None` when the value failed to type
+/// (already reported). Binding the name is the caller's job, so a `par` block can
+/// bind its names only after every binding is checked.
 pub(super) fn check_effect_let(l: &LetStmt, check_context: bool, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     if check_context && !ctx.effectful {
@@ -3934,10 +3957,11 @@ pub(super) fn check_effect_let(l: &LetStmt, check_context: bool, ctx: &mut Ctx) 
             annot
         }
         (Some(annot), None) => annot,
-        (None, Some(rhs)) if matches!(&*tys.get(rhs), Ty::Never) && l.name.name != "_" => {
+        (None, Some(rhs)) if contains_never(rhs, tys) && l.name.name != "_" => {
             ctx.errors.push(never_inferred(
                 l.value.span,
                 &format!("`{}`", l.name.name),
+                &rhs.display(tys),
                 "annotate the binding (`let x: T <- …`) so the value has a type to stand in for",
             ));
             return None;
@@ -4042,12 +4066,11 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                     (Some(annot), None) => annot,
                     // #2727: with no annotation the binding would be `Never`,
                     // assignable anywhere. Bind it to the error type instead.
-                    (None, Some(rhs))
-                        if matches!(&*tys.get(rhs), Ty::Never) && l.name.name != "_" =>
-                    {
+                    (None, Some(rhs)) if contains_never(rhs, tys) && l.name.name != "_" => {
                         ctx.errors.push(never_inferred(
                             l.value.span,
                             &format!("`{}`", l.name.name),
+                            &rhs.display(tys),
                             "annotate the binding (`let x: T = …`) so the value has a type to stand in for",
                         ));
                         ctx.bind(l.name.name.clone(), tys.intern(Ty::Error));

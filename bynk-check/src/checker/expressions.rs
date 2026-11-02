@@ -1674,13 +1674,14 @@ pub(crate) fn check_lambda(
 /// body is the bottom type would give its caller a `Never` return. Refuse it,
 /// as an unannotated parameter is refused.
 fn never_result(body_ty: TyId, lambda: &LambdaExpr, ctx: &mut Ctx) -> bool {
-    if !matches!(&*ctx.tys.get(body_ty), Ty::Never) {
+    if !crate::checker::contains_never(body_ty, ctx.tys) {
         return false;
     }
     ctx.errors.push(crate::checker::never_inferred(
         lambda.body.span,
         "this lambda's result",
-        "pass the lambda where a function type is expected, or have the body return a value of a named type",
+        &body_ty.display(ctx.tys),
+        "annotate the lambda's result, or give the call explicit type arguments",
     ));
     true
 }

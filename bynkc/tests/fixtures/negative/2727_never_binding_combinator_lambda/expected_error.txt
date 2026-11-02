@@ -1,0 +1,1 @@
+bynk.types.never_inferred this lambda's result would have the type
