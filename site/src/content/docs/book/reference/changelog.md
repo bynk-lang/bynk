@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.481.4** | "A test module that calls a `Codable`-bounded generic (or generic static) with a base type such as `Int` now imports the `JsonValue`/`BoundaryError`/`Result` names the inline witness codec uses, instead of failing `tsc` with `Cannot find name '__JsonValue'`" |
 | **v0.481.3** | A bare `Val` of a refined `Int` with a wholly negative `InRange` lands inside the range instead of at `0` |
 | **v0.481.2** | The `tree-sitter-bynk` npm package declares the `tree-sitter` runtime it can load. Its parser is generated at ABI 15, but the peer dependency still said `^0.21`, and that runtime only loads ABI 14 and below, so `parser.setLanguage` threw. The peer range is now `^0.25` (#15). |
 | **v0.481.1** | Regression tests pin the recursive-type nesting bound on `/_bynk/call/` arguments, on a subscriber's event payload decoder, and on cycles that cross files, a commons and a context boundary, and check that a codec and its callers agree on the `depth` parameter (#2704) |
