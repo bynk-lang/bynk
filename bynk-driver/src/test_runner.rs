@@ -970,6 +970,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                     violation: None,
                     refusals: None,
                     origin: c.doc.then(|| "doc".to_string()),
+                    warnings: None,
                     duration_ms: None,
                 })
                 .collect(),
@@ -1038,6 +1039,9 @@ fn finish_runner(
         });
         let status =
             crate::test_stream::forward(cmd, &mut events, &mut std::io::stdout().lock(), aliases)?;
+        for warning in events.warnings() {
+            eprintln!("{}", warning.line(program));
+        }
         events.unmatched().report(program);
         return Ok(exit_from(status.success()));
     }
@@ -1060,6 +1064,9 @@ fn finish_runner(
             None => doc.with_skips(&skipped),
         };
         print!("{}", doc.render());
+        for warning in doc.warnings() {
+            eprintln!("{}", warning.line(program));
+        }
         unmatched.report(program);
         Ok(exit_from(out.status.success()))
     } else if aliases.is_empty() {
@@ -1200,6 +1207,9 @@ fn run_with_coverage(
             .with_tiers(discovered)
             .with_coverage(&report);
         print!("{}", doc.render());
+        for warning in doc.warnings() {
+            eprintln!("{}", warning.line(program));
+        }
         unmatched.report(program);
         exit_from(out.status.success())
     } else {

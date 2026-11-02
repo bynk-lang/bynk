@@ -80,6 +80,7 @@ fn golden_document_normal() {
                     violation: None,
                     refusals: None,
                     origin: None,
+                    warnings: None,
                     duration_ms: None,
                 },
                 Case {
@@ -101,6 +102,7 @@ fn golden_document_normal() {
                     violation: None,
                     refusals: None,
                     origin: None,
+                    warnings: None,
                     duration_ms: None,
                 },
             ],
@@ -135,6 +137,7 @@ fn golden_document_discovered() {
         violation: None,
         refusals: None,
         origin: None,
+        warnings: None,
         duration_ms: None,
     };
     let run = TestRun::discovered(vec![
@@ -163,6 +166,7 @@ fn golden_document_discovered() {
                 violation: None,
                 refusals: None,
                 origin: None,
+                warnings: None,
                 duration_ms: None,
             }],
         },
@@ -443,6 +447,7 @@ fn golden_document_with_tiers() {
                 violation: None,
                 refusals: None,
                 origin: None,
+                warnings: None,
                 duration_ms: None,
             },
             Case {
@@ -458,6 +463,7 @@ fn golden_document_with_tiers() {
                 violation: None,
                 refusals: None,
                 origin: None,
+                warnings: None,
                 duration_ms: None,
             },
             Case {
@@ -473,6 +479,7 @@ fn golden_document_with_tiers() {
                 violation: None,
                 refusals: None,
                 origin: None,
+                warnings: None,
                 duration_ms: None,
             },
         ],
@@ -499,6 +506,7 @@ fn golden_document_failed_property() {
         violation: None,
         refusals: None,
         origin: None,
+        warnings: None,
         duration_ms: None,
     };
     let run = TestRun {
@@ -538,6 +546,7 @@ fn golden_document_refusals() {
         violation: None,
         refusals,
         origin: None,
+        warnings: None,
         duration_ms: None,
     };
     let run = TestRun {
