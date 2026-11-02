@@ -7,3 +7,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 [triggers]
 crons = ["*/5 * * * *", "0 * * * *"]
 
+[[queues.consumers]]
+queue = "jobs"
+max_batch_size = 10
+

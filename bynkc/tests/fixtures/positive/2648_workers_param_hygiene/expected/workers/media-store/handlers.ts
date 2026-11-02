@@ -5,6 +5,18 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { QueueResult } from "../../__bynk_runtime/queue.js";
+
+export type UserId = string & { readonly __brand: "media.store.UserId" };
+
+export const UserId = {
+  of(value: string): Result<UserId, ValidationError> {
+    if (!(value.length > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", value });
+    }
+    return Ok(value as UserId);
+  },
+};
 
 export interface Clock {
   now(): globalThis.Promise<number>;
@@ -40,6 +52,12 @@ export const api = {
   async http_GET_at_Param_url_Param_path(url: string, path: string, deps: {}): globalThis.Promise<HttpResult<number>> {
     return HttpResult.Ok((url).length + (path).length);
   },
+  async http_GET_bearer_Param_request_Param_result(request: string, result: string, deps: { identity: UserId }): globalThis.Promise<HttpResult<number>> {
+    return HttpResult.Ok((request).length + (result).length);
+  },
+  async http_GET_sum_Param_request_Param_result(request: string, result: string, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<number>> {
+    return HttpResult.Ok((request).length + (result).length);
+  },
   async http_POST_echo(body: string, deps: {}): globalThis.Promise<HttpResult<number>> {
     return HttpResult.Ok((body).length);
   },
@@ -54,6 +72,12 @@ export const ticker = {
 export const ticker2 = {
   async cron_ticker2_0(result: number, deps: {}): globalThis.Promise<Result<void, string>> {
     return Ok(undefined);
+  },
+};
+
+export const jobs = {
+  async queue_jobs_0(result: string, deps: {}): globalThis.Promise<QueueResult> {
+    return QueueResult.Ack;
   },
 };
 

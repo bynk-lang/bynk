@@ -138,6 +138,32 @@ export default {
         }
       }
       {
+        const __m = __matchPath("/bearer/:request/:result", path);
+        if ((method === "GET" || method === "HEAD") && __m) {
+          __route = "GET /bearer/:request/:result";
+          const __raw_request = __m.params["request"];
+          const __id_request = __raw_request;
+          const __raw_result = __m.params["result"];
+          const __id_result = __raw_result;
+          const result = await surface.http_GET_bearer_Param_request_Param_result(request, __id_request, __id_result);
+          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
+        const __m = __matchPath("/sum/:request/:result", path);
+        if ((method === "GET" || method === "HEAD") && __m) {
+          __route = "GET /sum/:request/:result";
+          const __raw_request = __m.params["request"];
+          const __id_request = __raw_request;
+          const __raw_result = __m.params["result"];
+          const __id_result = __raw_result;
+          const result = await surface.http_GET_sum_Param_request_Param_result(request, __id_request, __id_result);
+          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
         const __m = __matchPath("/by/:request/:result/:surface", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /by/:request/:result/:surface";
@@ -157,6 +183,11 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
+      if (__matchPath("/bearer/:request/:result", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
       if (__matchPath("/by/:request/:result/:surface", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
@@ -165,6 +196,11 @@ export default {
       if (path === "/echo") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (__matchPath("/sum/:request/:result", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
       return new globalThis.Response("Not Found", { status: 404 });
@@ -185,6 +221,27 @@ export default {
       case "0 * * * *": {
         const result = await surface.cron_ticker2_0(event.scheduledTime);
         if (result.tag === "Err") globalThis.console.error("cron 0 * * * * failed", result.error);
+        return;
+      }
+      default:
+        return;
+    }
+  },
+  async queue(batch: { readonly queue: string; readonly messages: ReadonlyArray<{ readonly body: unknown; ack(): void; retry(): void }> }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
+    const surface = compose(env);
+    switch (batch.queue) {
+      case "jobs": {
+        for (const msg of batch.messages) {
+          try {
+            const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))((msg.body as __JsonValue));
+            if (__r.tag === "Err") { globalThis.console.error("queue jobs deserialise failed", __r.error); msg.retry(); continue; }
+            const result = await surface.queue_jobs_0(__r.value);
+            if (result.tag === "Ack") msg.ack();
+            else { globalThis.console.error("queue jobs retry", result.reason); msg.retry(); }
+          } catch (e) {
+            globalThis.console.error("queue jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+          }
+        }
         return;
       }
       default:

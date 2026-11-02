@@ -17,6 +17,10 @@ provides Clock = FixedClock {
 	}
 }
 
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
 // One parameter: the single-argument dispatch path.
 service one {
 	on call(body: String) -> Effect[Int] given Clock {
@@ -41,6 +45,16 @@ service api from http {
 		Ok(url.length() + path.length())
 	}
 
+	// A Bearer route and a multi-actor sum route: their wrappers declare
+	// `request` and read `deps`/`handlers` after the path params are bound.
+	on GET("/bearer/:request/:result") (request: String, result: String) -> Effect[HttpResult[Int]] by u: User {
+		Ok(request.length() + result.length())
+	}
+
+	on GET("/sum/:request/:result") (request: String, result: String) -> Effect[HttpResult[Int]] by who: User | Visitor {
+		Ok(request.length() + result.length())
+	}
+
 	on POST("/echo") (body: String) -> Effect[HttpResult[Int]] by Visitor {
 		Ok(body.length())
 	}
@@ -55,5 +69,11 @@ service ticker from cron {
 service ticker2 from cron {
 	on schedule("0 * * * *") (result: Int) -> Effect[Result[(), String]] {
 		Ok(())
+	}
+}
+
+service jobs from queue("jobs") {
+	on message(result: String) -> Effect[QueueResult] {
+		Ack
 	}
 }

@@ -2,6 +2,8 @@
 // composition root for `media.store` Worker.
 
 import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
+import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -17,8 +19,43 @@ export function compose(env: Env) {
     async http_GET_at_Param_url_Param_path(__id_url: string, __id_path: string) {
       return handlers.api.http_GET_at_Param_url_Param_path(__id_url, __id_path, deps);
     },
+    async http_GET_bearer_Param_request_Param_result(request: globalThis.Request, __id_request: string, __id_result: string) {
+      const __authz = request.headers.get("Authorization");
+      if (__authz === null || !__authz.startsWith("Bearer ")) return HttpResult.Unauthorized;
+      const __secret = (env as unknown as globalThis.Record<string, unknown>)["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["AUTH_JWT_SECRET"];
+      if (typeof __secret !== "string") return HttpResult.Unauthorized;
+      const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret);
+      if (__claims.tag === "Err") return HttpResult.Unauthorized;
+      const __id = handlers.UserId.of(__claims.value.sub);
+      if (__id.tag === "Err") return HttpResult.Unauthorized;
+      return handlers.api.http_GET_bearer_Param_request_Param_result(__id_request, __id_result, { ...deps, identity: __id.value });
+    },
+    async http_GET_sum_Param_request_Param_result(request: globalThis.Request, __id_request: string, __id_result: string) {
+      let __who: any = undefined;
+      if (__who === undefined) {
+        const __authz = request.headers.get("Authorization");
+        if (__authz !== null && __authz.startsWith("Bearer ")) {
+          const __secret = (env as unknown as globalThis.Record<string, unknown>)["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["AUTH_JWT_SECRET"];
+          if (typeof __secret === "string") {
+            const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret);
+            if (__claims.tag === "Ok") {
+              const __id = handlers.UserId.of(__claims.value.sub);
+              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value };
+            }
+          }
+        }
+      }
+      if (__who === undefined) {
+        __who = { tag: "Visitor" };
+      }
+      if (__who === undefined) return HttpResult.Unauthorized;
+      return handlers.api.http_GET_sum_Param_request_Param_result(__id_request, __id_result, { ...deps, who: __who });
+    },
     async http_POST_echo(body: string) {
       return handlers.api.http_POST_echo(body, deps);
+    },
+    async queue_jobs_0(__id_result: string) {
+      return handlers.jobs.queue_jobs_0(__id_result, deps);
     },
     async many(key: string, body: string, __id_result: string, __id_args: string, __id_argsObj: string, __id_surface: string, __id_request: string, __id_env: string, __id_ctx: string, __id_handlers: string, __id_deps: string) {
       return handlers.many.call(key, body, __id_result, __id_args, __id_argsObj, __id_surface, __id_request, __id_env, __id_ctx, __id_handlers, __id_deps, deps);

@@ -13,5 +13,8 @@ passed `bynkc check` and then failed `tsc` on the emitted `index.ts` (#2648): a
 The workers emitter now binds a user parameter through `wire_ident`, which sends
 any such name into the generated-name namespace (`__id_<name>`) that the parser
 keeps free of user identifiers. A `call` handler's `body` is renamed the same
-way; on an `http` route `body` is the request body and keeps its name. Programs
-whose parameters do not collide emit byte-identical TypeScript.
+way; on an `http` route `body` is the request body and keeps its name.
+
+A parameter named like one of the wrapper's own locals (including the
+preventively reserved `url`/`path`) is now bound as `__id_<name>`; other
+programs emit identical TypeScript.
