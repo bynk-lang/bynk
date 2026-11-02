@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.13** | tree-sitter grammar - a match arm ending in a field access no longer needs a comma before a `[`-led arm |
 | **v0.480.12** | Names bound by an `is` pattern are recorded as locals, so hover, go-to-definition, references and rename resolve them in the branch the test guards |
 | **v0.480.11** | bynk-wasm exports bynk_reference(), the standard library catalogue (built-in methods and statics, first-party capabilities and modules, with signatures, docs, experimental and deprecated marks); Duration and Instant statics now complete |
 | **v0.480.10** | Regression fixtures pin that a flattened `Locale.current()` types as `LocaleTag` without `uses bynk.locale.types` (#2697, resolved by #2634) |
