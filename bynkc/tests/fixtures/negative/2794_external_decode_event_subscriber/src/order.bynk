@@ -1,0 +1,14 @@
+context order
+
+consumes bynk { Events }
+consumes pay
+exports transparent { Placed }
+
+event Placed = { id: String, token: Token }
+
+service place {
+  on call(id: String, t: Token) -> Effect[()] given Events {
+    let _ <- Events.emit[Placed](Placed { id: id, token: t })
+    Effect.pure(())
+  }
+}

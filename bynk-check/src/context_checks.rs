@@ -271,7 +271,10 @@ fn check_decode_of_external_opaque(
 /// context did not produce, so a parameter that reaches a type another context
 /// owns and exports opaque would create one of its values from the base type
 /// alone. A `call` handler's arguments come from a Bynk caller that holds such
-/// a value, so it is not an input in this sense.
+/// a value, so it is not an input in this sense. A `from Events(E)` subscriber is
+/// one: its event arrives as the publisher's payload, decoded here, so a
+/// payload field of such a type is refused (the event's declaration is walked
+/// like any record's).
 fn check_handler_inputs_not_external_opaque(
     s: &ServiceDecl,
     typed: &checker::TypedCommons,
@@ -280,6 +283,27 @@ fn check_handler_inputs_not_external_opaque(
 ) {
     if consumed.is_empty() || matches!(s.protocol, ServiceProtocol::Call | ServiceProtocol::Cron) {
         return;
+    }
+    // A held WebSocket decodes every inbound frame as `in_type`, whichever
+    // handler the frame reaches.
+    if let ServiceProtocol::WebSocket { in_type, .. } = &s.protocol {
+        let mut names = Vec::new();
+        crate::project_model::type_ref_names(in_type, &HashSet::new(), &mut names);
+        if let Some((name, owner)) = external_opaque_reaching(names, typed, consumed) {
+            errors.push(
+                CompileError::new(
+                    "bynk.context.external_decode",
+                    in_type.span(),
+                    format!(
+                        "cannot take inbound frames of this type here — `{name}` is owned by context `{owner}`"
+                    ),
+                )
+                .with_note(
+                    "a frame is decoded from bytes this context did not produce, which creates a value; values of an externally-owned opaque type can only be created inside the owning context",
+                ),
+            );
+            return;
+        }
     }
     for h in &s.handlers {
         for p in &h.params {

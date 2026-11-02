@@ -39,8 +39,13 @@ the witness and monomorphic paths together and deferred it. Proposed in #2794.
 4. **Encode (D).** Unchanged: encoding a held value carries only what the owner
    produced.
 
-**Consequences.** Breaking narrowing, with a migration note in the changelog. A
-`call` handler's parameters and a `cron` handler are not inputs in this sense (the
-caller is a Bynk context holding the value). A consumed type that the owner exports
+**Consequences.** Breaking narrowing, with a migration note in the changelog. The
+inputs checked are the parameters of an HTTP, queue, WebSocket or `from Events(E)`
+handler, and a WebSocket's inbound frame type. An event subscriber is an input
+because the event arrives as the publisher's payload, decoded in the subscriber's
+unit; the event declaration is walked like a record, so a payload field of such a
+type is refused (an event published by the same unit names no consumed type, so is
+unaffected). A `call` handler's parameters and a `cron` handler are not inputs in
+this sense (the caller is a Bynk context holding the value). A consumed type that the owner exports
 `transparent` and declares as a record or sum is unaffected, as is a transparent
 refined scalar (re-checked inline, ADR 0236 [D]).

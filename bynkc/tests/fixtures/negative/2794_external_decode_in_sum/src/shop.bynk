@@ -1,0 +1,13 @@
+context shop
+
+consumes pay
+
+type Message =
+  | Text(body: String)
+  | Credit(token: Token)
+
+service check {
+  on call(raw: String) -> Effect[Bool] {
+    Effect.pure(Json.decode[Message](raw).isOk())
+  }
+}
