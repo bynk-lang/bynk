@@ -200,14 +200,16 @@ fn external_opaque_reaching(
         if !seen.insert(n.clone()) {
             continue;
         }
-        let Some(decl) = typed.types.get(&n) else {
-            continue;
-        };
+        let decl = typed.types.get(&n);
         if let Some(ct) = consumed.get(&n)
-            && (ct.visibility == Visibility::Opaque || matches!(decl.body, TypeBody::Opaque { .. }))
+            && (ct.visibility == Visibility::Opaque
+                || decl.is_some_and(|d| matches!(d.body, TypeBody::Opaque { .. })))
         {
             return Some((n, ct.owning_context.clone()));
         }
+        let Some(decl) = decl else {
+            continue;
+        };
         let vars: HashSet<&str> = decl
             .type_params
             .iter()

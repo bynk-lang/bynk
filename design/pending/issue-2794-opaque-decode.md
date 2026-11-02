@@ -49,3 +49,8 @@ unaffected). A `call` handler's parameters and a `cron` handler are not inputs i
 this sense (the caller is a Bynk context holding the value). A consumed type that the owner exports
 `transparent` and declares as a record or sum is unaffected, as is a transparent
 refined scalar (re-checked inline, ADR 0236 [D]).
+The rule covers what a context writes (`Json.decode`, `Json.decodeSql`, `Codable`
+instantiations) and the inputs above. A bodiless external provider operation whose
+declared return type is a foreign opaque type is outside it: that value comes from
+a provider the project binds, not from bytes of an outside caller, and no codec of
+the type is generated for it.
