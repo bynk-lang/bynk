@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.17** | "`bynk test --smoke` gives a bare `String`, `Int` or `Bool` parameter a literal instead of `Val`, and skips a case whose parameter `Val` cannot fabricate (#2706)" |
 | **v0.480.16** | The `Map[K, V]` boundary decoder rejects a repeated key as `StructuralMismatch` ("a distinct map key") instead of keeping the last entry; `Decimal` keys compare by value, so `1.20` and `1.2` collide |
 | **v0.480.15** | "A name ending a `requires`/`ensures` clause no longer parses as a record construction when the function body's `{` follows it, e.g. on the next line" |
 | **v0.480.14** | Test scaffolds no longer resolve a name to a used commons' or consumed context's `private` declarations, so `Json.decode[T]` and stub signatures bind the visible `T` (#2702) |
