@@ -1,12 +1,6 @@
----
-level: patch
-changelog: A `system`-tier case that calls an `on call` service is refused with `bynk.test.call_needs_in_process`, not lowered to invalid TypeScript (#2649)
-probes: diagnostic_coverage, emit_diagnostics
----
+# 0699 — A system-tier case can't call an `on call` service
 
-## ADR: system-tier-call-address-refused
-title: A system-tier case can't call an `on call` service
-summary: bynk.test.call_needs_in_process closes the `/* unknown */` hole for `svc.call(…)` at `system`
+- **Status:** Accepted (v0.480.2)
 
 **Context.** A `system` case drives the target through its real Worker. `http` addresses go through `worker.fetch`, and `cron` and `queue` addresses through `worker.scheduled` / `worker.queue` (#2136). An `on call` service has no such entry: it is internal to a deployment and each call is signed per caller (#2004), so there is no public route for a driver to send to. A case `save.call("abc")` at `system` passed `bynkc check` whenever the target also had an `http` service (so `system_needs_wire` did not fire), and lowering then emitted `/* unknown */.call(save, "abc")`, which `tsc` rejected.
 
