@@ -220,7 +220,8 @@ pub struct Stream<'a> {
     ended: bool,
     unmatched: Unmatched,
     /// #2685: the warnings seen since the last `case` event, which that event
-    /// carries.
+    /// carries. They attach by stream order, which relies on cases running
+    /// one at a time.
     pending: Vec<Warning>,
     /// Every warning the run raised, for the driver to write to stderr.
     warnings: Vec<Warning>,

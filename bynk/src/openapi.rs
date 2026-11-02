@@ -193,8 +193,9 @@ pub fn declared_statuses(root: &Path) -> BTreeMap<String, Vec<u16>> {
                 let mut statuses: Vec<u16> = model.responses.iter().map(|r| r.status).collect();
                 statuses.sort_unstable();
                 statuses.dedup();
-                // Two contexts' services of one name, method and path share a
-                // key: the union is the conservative set.
+                // The key names the context, so a union happens only within one
+                // context (two services of one name, method and path), where it is
+                // the conservative set.
                 let key = format!("{unit} {} {} {path}", svc.name.name, method.as_str());
                 let entry: &mut Vec<u16> = out.entry(key).or_default();
                 entry.extend(statuses);

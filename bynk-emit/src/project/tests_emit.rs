@@ -777,7 +777,9 @@ fn emit_integration_module(
     // #2685: a smoke suite (the synthesised `<stem>.smoke.bynk`) names each typed
     // route to the decoder, so a run can compare an answer with what the route
     // declares. No other build is changed by it.
-    let smoke = cases.iter().any(|c| c.map_source.ends_with(".smoke.bynk"));
+    let smoke = cases
+        .iter()
+        .any(|c| c.map_source.ends_with(crate::project::SMOKE_SUITE_SUFFIX));
     let http_support = emit_system_http_support(
         suite,
         unit_tables,

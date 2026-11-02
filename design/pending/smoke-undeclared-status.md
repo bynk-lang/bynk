@@ -27,10 +27,10 @@ deliberately does not carry.
   to a failure would reintroduce the false positives. A 5xx is the case's own
   failure and is never also a warning. The malformed-body and no-credential cases
   expect `400` and `401` by design and are not compared.
-- **The set is `bynk`'s, handed to `bynkc` in an environment variable.** `bynk
+- **The set is `bynk`'s, handed to `bynkc` in a temporary file.** `bynk
   test --smoke` computes `route -> statuses` with the same `wire_contract` walk
   `bynk openapi` documents (boundary-implicit `400`, `401`, `413`, `415` included)
-  and sets `BYNK_SMOKE_DECLARED`, a JSON object keyed `<context> <service>
+  writes a JSON object keyed `<context> <service>
   <METHOD> <path>`. `bynk-ide` stays out of `bynkc`, `bynk-driver` and
   `bynk-emit`.
 - **The runtime compares.** A smoke build (a suite whose source is the

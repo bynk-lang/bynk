@@ -37,7 +37,7 @@ use bynk_syntax::parser::parse_unit_with_recovery;
 
 /// The tail of a synthesised suite's file name: `<stem>.smoke.bynk` beside the
 /// context's `<stem>.bynk`.
-pub const SYNTHETIC_SUFFIX: &str = ".smoke.bynk";
+pub const SYNTHETIC_SUFFIX: &str = bynk_emit::project::SMOKE_SUITE_SUFFIX;
 
 /// Every case a smoke suite holds is named with this prefix, so it cannot
 /// collide with a case the author wrote.
@@ -358,14 +358,14 @@ impl Smoke {
 /// declared type, where an author's own case gets the raw value to judge.
 pub const STRICT_WIRE_ENV: &str = "BYNK_TEST_STRICT_WIRE";
 
-/// #2685: the environment variable `bynk test --smoke` sets for `bynkc`, a JSON
-/// object from each route's key (`<context> <service> <METHOD> <path>`) to the
+/// #2685: the environment variable `bynk test --smoke` sets for `bynkc`, the path of a
+/// file holding a JSON object from each route's key (`<context> <service> <METHOD> <path>`) to the
 /// statuses its handler can answer. `bynk` computes it, since the response set
 /// is walked by `bynk-ide`, which the `bynkc` binary does not carry; the test
 /// runtime warns (`bynk.test.smoke_undeclared_status`) when a smoke case gets a
 /// non-5xx answer outside its route's set. Without it, as in a direct `bynkc
 /// test --smoke`, a smoke run compares nothing.
-pub const DECLARED_ENV: &str = "BYNK_SMOKE_DECLARED";
+pub const DECLARED_ENV: &str = "BYNK_SMOKE_DECLARED_FILE";
 
 /// #2685: the code of the warning a smoke case carries for an answer its route
 /// does not declare.

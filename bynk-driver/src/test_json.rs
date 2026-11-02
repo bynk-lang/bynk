@@ -513,7 +513,9 @@ impl ParsedRun {
 /// stray line should never abort the whole report).
 pub fn parse_ndjson(stdout: &str) -> ParsedRun {
     let mut run = ParsedRun::default();
-    // #2685: a `warning` event belongs to the `case` event that follows it.
+    // #2685: a `warning` event belongs to the `case` event that follows it. Warnings
+    // attach by stream order, which relies on the runner running cases one at a
+    // time: a warning raised while a case runs precedes that case's own event.
     let mut pending: Vec<Warning> = Vec::new();
     for line in stdout.lines() {
         let line = line.trim();

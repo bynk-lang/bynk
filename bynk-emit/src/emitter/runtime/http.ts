@@ -336,7 +336,7 @@ function strictWire(): boolean {
 }
 
 // #2685: `bynk test --smoke` hands the runner the statuses each route's handler
-// can answer (`BYNK_SMOKE_DECLARED`: a JSON object from a route's key, which the
+// can answer (`BYNK_SMOKE_DECLARED_FILE`: the path of a JSON file holding an object from a route's key, which the
 // driver names `<context> <service> <METHOD> <path>`, to its statuses). A smoke
 // case's typed call passes its key to `responseToHttpResult`, and a non-5xx
 // answer outside that set is a warning, never a failure: the set is walked from
@@ -350,16 +350,21 @@ let smokeParsed: { raw: string; table: Record<string, number[] | undefined> } | 
 
 function smokeNote(route: string, status: number): void {
   const host = globalThis as {
-    process?: { env?: Record<string, string | undefined> };
+    process?: {
+      env?: Record<string, string | undefined>;
+      getBuiltinModule?(id: string): { readFileSync(path: string, encoding: string): string } | undefined;
+    };
     console?: { log(line: string): void; error(line: string): void };
   };
-  const raw = host.process?.env?.BYNK_SMOKE_DECLARED ?? "{}";
+  const file = host.process?.env?.BYNK_SMOKE_DECLARED_FILE;
+  if (file === undefined) return;
   let parsed = smokeParsed;
-  if (parsed === undefined || parsed.raw !== raw) {
+  if (parsed === undefined || parsed.raw !== file) {
     try {
-      parsed = { raw, table: JSON.parse(raw) };
+      const text = host.process?.getBuiltinModule?.("node:fs")?.readFileSync(file, "utf8") ?? "{}";
+      parsed = { raw: file, table: JSON.parse(text) };
     } catch {
-      parsed = { raw, table: {} };
+      parsed = { raw: file, table: {} };
     }
     smokeParsed = parsed;
   }

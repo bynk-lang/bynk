@@ -1,4 +1,7 @@
 import { test } from "node:test";
+import { rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import {
   matchPath,
@@ -693,7 +696,8 @@ test("responseToHttpResult: strict, a status no HttpResult carries fails", async
 });
 
 // #2685: a smoke run warns when a route answers a non-5xx status outside the
-// set its handler declares (`BYNK_SMOKE_DECLARED`), and never fails the call.
+// set its handler declares (`BYNK_SMOKE_DECLARED_FILE`, a file of JSON), and never fails the call.
+let smokeFiles = 0;
 async function smokeLines(
   declared: string | undefined,
   format: string | undefined,
@@ -701,11 +705,16 @@ async function smokeLines(
 ): Promise<{ logged: string[]; errored: string[] }> {
   const env = (globalThis as any).process.env;
   const console_ = (globalThis as any).console;
-  const was = { declared: env.BYNK_SMOKE_DECLARED, format: env.BYNK_TEST_FORMAT, log: console_.log, error: console_.error };
+  const was = { declared: env.BYNK_SMOKE_DECLARED_FILE, format: env.BYNK_TEST_FORMAT, log: console_.log, error: console_.error };
   const logged: string[] = [];
   const errored: string[] = [];
-  if (declared === undefined) delete env.BYNK_SMOKE_DECLARED;
-  else env.BYNK_SMOKE_DECLARED = declared;
+  let file: string | undefined;
+  if (declared === undefined) delete env.BYNK_SMOKE_DECLARED_FILE;
+  else {
+    file = join(tmpdir(), `bynk-smoke-test-${process.pid}-${smokeFiles++}.json`);
+    writeFileSync(file, declared);
+    env.BYNK_SMOKE_DECLARED_FILE = file;
+  }
   if (format === undefined) delete env.BYNK_TEST_FORMAT;
   else env.BYNK_TEST_FORMAT = format;
   console_.log = (l: string) => logged.push(l);
@@ -719,7 +728,8 @@ async function smokeLines(
   } finally {
     console_.log = was.log;
     console_.error = was.error;
-    for (const [k, v] of [["BYNK_SMOKE_DECLARED", was.declared], ["BYNK_TEST_FORMAT", was.format]] as const) {
+    if (file !== undefined) rmSync(file, { force: true });
+    for (const [k, v] of [["BYNK_SMOKE_DECLARED_FILE", was.declared], ["BYNK_TEST_FORMAT", was.format]] as const) {
       if (v === undefined) delete env[k];
       else env[k] = v;
     }
