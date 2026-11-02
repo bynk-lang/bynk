@@ -1,0 +1,13 @@
+suite demo.boxes
+
+case "a call result as the receiver, nothing to infer the parameter from" {
+  expect boxed("a").cast[String]() == None
+}
+
+case "a call result as the receiver, the argument pins the parameter" {
+  expect boxed("a").mapped[Int]((s) => 7).value == 7
+}
+
+case "a chained call result as the receiver" {
+  expect boxed("a").mapped[Int]((s) => 1).mapped[String]((n) => "n").value == "n"
+}

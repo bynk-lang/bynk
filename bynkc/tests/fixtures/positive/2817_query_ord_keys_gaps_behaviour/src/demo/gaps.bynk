@@ -1,0 +1,42 @@
+---
+#2817 (the #2818 review's test gaps): `Query` `sortBy`, `min` and `max` over an `Option` key,
+a `Float` key holding a `NaN`, a `T: Ord` generic key, an opaque `Ord` key, and the
+held-connection source's comparator path.
+---
+context demo.gaps
+
+type Item = { name: String, rank: Option[Int], score: Float, div: Float, tag: Tag }
+
+type Tag = opaque Int derives Ord
+
+type Frame = { text: String }
+
+fn keyed[K: Ord](xs: List[Item], key: (Item) -> K) -> List[String] {
+  xs.sortBy(key).map((i) => i.name)
+}
+
+agent Shelf {
+  key id: String
+  store items: Map[String, Item]
+  store conns: Map[String, Connection[Frame]]
+
+  on call add(name: String, rank: Option[Int], score: Float, div: Float, tag: Int) -> Effect[()] {
+    let _ <- items.put(name, Item { name: name, rank: rank, score: score, div: div, tag: Tag.unsafe(tag) })
+    ()
+  }
+  on call byRank() -> Effect[List[String]] {
+    items.sortBy((i) => i.rank).map((i) => i.name).collect()
+  }
+  on call minScore() -> Effect[Option[Float]] {
+    items.min((i) => i.score / i.div)
+  }
+  on call maxScore() -> Effect[Option[Float]] {
+    items.max((i) => i.score / i.div)
+  }
+  on call byTag() -> Effect[List[String]] {
+    items.sortBy((i) => i.tag).map((i) => i.name).collect()
+  }
+  on call openCount() -> Effect[Int] {
+    conns.sortBy((c) => Some(0)).count()
+  }
+}

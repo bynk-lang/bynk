@@ -1,0 +1,6 @@
+[project]
+name = "instance-method-call-receiver"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
