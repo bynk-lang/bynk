@@ -1,0 +1,1 @@
+bynk.types.rounding_mode_position `RoundingMode.HalfUp` names a mode only

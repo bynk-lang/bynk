@@ -1,0 +1,45 @@
+==========================
+Decimal base type, decimal literals, refinement bounds (#2622)
+==========================
+
+commons pricing {
+	type Price = Decimal where Positive
+	type Rate = Decimal where InRange(0.00d, 1.00d)
+
+	fn net(p: Decimal) -> Decimal {
+		p + 1.20d
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier))
+    (type_decl
+      name: (identifier)
+      body: (refined_type
+        base: (base_type)
+        refinement: (refinement
+          (pred_atom
+            (predicate_name)))))
+    (type_decl
+      name: (identifier)
+      body: (refined_type
+        base: (base_type)
+        refinement: (refinement
+          (pred_call
+            name: (predicate_name)
+            (decimal_literal)
+            (decimal_literal)))))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (base_type))
+      return_type: (base_type)
+      body: (block
+        tail: (binary_expr
+          (identifier)
+          (decimal_literal))))))

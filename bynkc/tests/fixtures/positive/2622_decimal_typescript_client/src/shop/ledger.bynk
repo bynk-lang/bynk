@@ -1,0 +1,15 @@
+context shop.ledger
+
+// #2622: a foreign caller's typed client sends and receives a `Decimal` as its
+// canonical JSON string, parsed into the same `{ coefficient, scale }` value.
+actor Billing { auth = Foreign(secret = "BILLING_CALL_KEY", worker = "billing-svc") }
+
+type Price = Decimal where Positive
+
+type Charge = { sku: String, amount: Price, fee: Option[Decimal] }
+
+service charge {
+  on call(c: Charge, tip: Decimal) -> Effect[Decimal] by Billing {
+    c.amount + tip
+  }
+}

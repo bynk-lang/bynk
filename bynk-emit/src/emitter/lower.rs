@@ -1064,8 +1064,21 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             {
                 let lv = pre.lower(l, cx);
                 let rv = pre.lower(r, cx);
+                // #2622: an operand that holds a `Decimal` prints through the
+                // decimal-aware show, since `JSON.stringify` throws on a `bigint`.
+                let decimal = cx
+                    .commons()
+                    .expr_types
+                    .get(&l.id)
+                    .is_some_and(|te| mentions_decimal(te.ty, cx));
+                let show = if decimal {
+                    cx.note_decimal("__bynkDecimalShow");
+                    "__bynkDecimalShow"
+                } else {
+                    "__bynkShow"
+                };
                 format!(
-                    "\"expect {src}\\n  expected: {src}\\n  actual:   \" + __bynkShow(({lv})) + \" {sym} \" + __bynkShow(({rv}))"
+                    "\"expect {src}\\n  expected: {src}\\n  actual:   \" + {show}(({lv})) + \" {sym} \" + {show}(({rv}))"
                 )
             } else if matches!(a.value.kind, ExprKind::Faults(_)) {
                 // #1706: the claim's only failure is a call that returned.
@@ -1210,6 +1223,9 @@ fn lower_const_literal_raw(e: &Expr) -> Option<String> {
         ExprKind::IntLit { value: n, .. } => Some(n.to_string()),
         // v0.21: the stored lexeme verbatim.
         ExprKind::FloatLit { lexeme, .. } => Some(lexeme.clone()),
+        ExprKind::DecimalLit { coef, scale, .. } => {
+            Some(crate::emitter::decimal_ts_literal(coef, *scale))
+        }
         ExprKind::StrLit(s) => Some(format!("\"{}\"", escape_ts_string(s))),
         // A negated numeric literal — admissible at compile time (the
         // checker folds the sign in `const_literal`), so the lowering must
@@ -1217,6 +1233,10 @@ fn lower_const_literal_raw(e: &Expr) -> Option<String> {
         ExprKind::UnaryOp(UnaryOp::Neg, inner) => match &inner.kind {
             ExprKind::IntLit { value: n, .. } => Some(format!("-{n}")),
             ExprKind::FloatLit { lexeme, .. } => Some(format!("-{lexeme}")),
+            ExprKind::DecimalLit { coef, scale, .. } => Some(crate::emitter::decimal_ts_literal(
+                &format!("-{coef}"),
+                *scale,
+            )),
             _ => None,
         },
         _ => None,
@@ -1236,7 +1256,20 @@ fn lower_interp_str(parts: &[InterpPart], cx: &mut LowerCtx) -> Lowered {
             InterpPart::Chunk(text) => out.push_str(&escape_ts_template(text)),
             InterpPart::Hole(hole) => {
                 let lowered = pre.lower(hole, cx);
-                out.push_str(&format!("${{String({lowered})}}"));
+                // #2622: a `Decimal` prints as its canonical text, not as the
+                // host's `[object Object]`.
+                let decimal = cx
+                    .commons()
+                    .expr_types
+                    .get(&hole.id)
+                    .and_then(|te| te.ty.base(cx.commons().tys()))
+                    == Some(BaseType::Decimal);
+                if decimal {
+                    cx.note_decimal("__bynkDecimalToString");
+                    out.push_str(&format!("${{__bynkDecimalToString({lowered})}}"));
+                } else {
+                    out.push_str(&format!("${{String({lowered})}}"));
+                }
             }
         }
     }
@@ -1403,6 +1436,10 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::Wire(inner) => pre.lower(inner, cx),
         // v0.21: the stored lexeme verbatim — `1e10` must not normalise.
         ExprKind::FloatLit { lexeme, .. } => lexeme.clone(),
+        // #2622: a `Decimal` literal is an object literal (no runtime import).
+        ExprKind::DecimalLit { coef, scale, .. } => {
+            crate::emitter::decimal_ts_literal(coef, *scale)
+        }
         // v0.86 (ADR 0112): a `Duration` literal lowers to its constant
         // milliseconds (the value `Duration` erases to).
         ExprKind::DurationLit { millis, .. } => millis.to_string(),
@@ -1419,6 +1456,19 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         }
         ExprKind::Ident(id) => lower_ident(e, id, cx),
         ExprKind::Call { name, args, .. } => pre.absorb(lower_call(e, name, args, cx)),
+        ExprKind::UnaryOp(UnaryOp::Neg, inner)
+            if cx
+                .commons()
+                .expr_types
+                .get(&inner.id)
+                .and_then(|te| te.ty.base(cx.commons().tys()))
+                == Some(BaseType::Decimal) =>
+        {
+            // #2622: negating a `Decimal` is exact, not a JS unary minus.
+            let inner = pre.lower(inner, cx);
+            cx.note_decimal("__bynkDecimalNeg");
+            format!("__bynkDecimalNeg({inner})")
+        }
         ExprKind::UnaryOp(op, inner) => {
             let inner = pre.lower(inner, cx);
             let sym = match op {
@@ -1853,7 +1903,56 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
         // v0.110: `Bytes` carries no refinement; the empty octet sequence is
         // its default.
         BaseType::Bytes => Some("new globalThis.Uint8Array()".to_string()),
+        // #2622: the smallest value the refinement admits, at scale 2.
+        BaseType::Decimal => {
+            let mut lo: i128 = 0;
+            let mut hi: Option<i128> = None;
+            let mut scale = 2u32;
+            if let Some(r) = refinement {
+                for p in &r.predicates {
+                    if let PredKind::InRangeD(a, b) = &p.kind {
+                        scale = scale.max(a.scale).max(b.scale);
+                    }
+                }
+                for p in &r.predicates {
+                    match &p.kind {
+                        PredKind::Positive => lo = lo.max(1),
+                        PredKind::InRangeD(a, b) => {
+                            match scaled_coef(&a.coef, a.scale, scale) {
+                                Some(v) => lo = lo.max(v),
+                                // The bound does not fit once lifted to the
+                                // common scale: the bound itself, at its own
+                                // scale, is the smallest value in range.
+                                None => {
+                                    return Some(crate::emitter::decimal_ts_literal(
+                                        &a.coef, a.scale,
+                                    ));
+                                }
+                            }
+                            if let Some(v) = scaled_coef(&b.coef, b.scale, scale) {
+                                hi = Some(hi.map_or(v, |h| h.min(v)));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            // As for `Float`: a floor above the ceiling falls back to the ceiling.
+            if let Some(h) = hi
+                && lo > h
+            {
+                lo = h;
+            }
+            Some(crate::emitter::decimal_ts_literal(&lo.to_string(), scale))
+        }
     }
+}
+
+/// `coef` (a signed digit string at `from` scale) raised to scale `to`, as an
+/// `i128`, or `None` when it does not fit.
+fn scaled_coef(coef: &str, from: u32, to: u32) -> Option<i128> {
+    let v: i128 = coef.parse().ok()?;
+    v.checked_mul(10i128.checked_pow(to.checked_sub(from)?)?)
 }
 
 /// v0.9.4 Part B (slice 1): lower a refined-type `Val[T]` / `Val[T](lit)` to
@@ -1874,6 +1973,7 @@ fn base_default_ts(base: BaseType) -> String {
         BaseType::Float => "0".to_string(),
         BaseType::Duration | BaseType::Instant => "0".to_string(),
         BaseType::Bytes => "new globalThis.Uint8Array()".to_string(),
+        BaseType::Decimal => crate::emitter::decimal_ts_literal("0", 0),
     }
 }
 
@@ -1890,6 +1990,7 @@ fn mock_value(ty: TyId, cx: &LowerCtx, depth: u32) -> String {
         Ty::Base(BaseType::String) => "\"\"".to_string(),
         Ty::Base(BaseType::Bool) => "true".to_string(),
         Ty::Base(BaseType::Float) => "0".to_string(),
+        Ty::Base(BaseType::Decimal) => crate::emitter::decimal_ts_literal("0", 0),
         Ty::Named { name, .. } => {
             let Some(decl) = cx.commons().types.get(name.as_str()) else {
                 return "undefined".to_string();
@@ -2651,6 +2752,24 @@ fn lower_method_call(
             }
             ("empty", 0) => {
                 return pre.finish("new globalThis.Uint8Array()".to_string());
+            }
+            _ => {}
+        }
+    }
+    // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == DECIMAL)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("parse", 1) => {
+                let s = pre.lower(&args[0], cx);
+                cx.note_decimal("__bynkDecimalParse");
+                return pre.finish(format!("__bynkDecimalParse({s})"));
+            }
+            ("fromInt", 1) => {
+                let n = pre.lower(&args[0], cx);
+                cx.note_decimal("__bynkDecimalFromInt");
+                return pre.finish(format!("__bynkDecimalFromInt({n})"));
             }
             _ => {}
         }
@@ -3419,6 +3538,12 @@ fn lower_method_call(
                     return pre.finish(s);
                 }
             }
+            // #2622: the `Decimal` kernel.
+            Ty::Base(BaseType::Decimal) => {
+                if let Some(s) = pre.absorb_opt(lower_decimal_kernel(receiver, method, args, cx)) {
+                    return pre.finish(s);
+                }
+            }
             // v0.22a: the string kernel (ADR 0046).
             Ty::Base(BaseType::String) => {
                 if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, method, args, cx)) {
@@ -3531,6 +3656,9 @@ fn lower_method_call(
                     }
                     BaseType::Bytes => {
                         pre.absorb_opt(lower_bytes_kernel(receiver, method, args, cx))
+                    }
+                    BaseType::Decimal => {
+                        pre.absorb_opt(lower_decimal_kernel(receiver, method, args, cx))
                     }
                     BaseType::Bool => None,
                 };
@@ -4558,6 +4686,19 @@ fn lower_list_kernel(
             let key = pre.lower(key, cx);
             Some(format!(
                 "((__xs: readonly {elem_el}[]) => {{ const __seen = new globalThis.Set(); const __out: {elem_el}[] = []; for (const __x of __xs) {{ const __k = ({key})(__x); if (!__seen.has(__k)) {{ __seen.add(__k); __out.push(__x); }} }} return __out; }})({recv})"
+            ))
+        }
+        ("sum", [key])
+            if key_fn_ret(key, cx).and_then(|t| t.base(tys)) == Some(BaseType::Decimal) =>
+        {
+            // #2622: an exact sum, from the zero decimal.
+            let recv = pre.lower(receiver, cx);
+            let key = pre.lower(key, cx);
+            cx.note_decimal("__bynkDecimalAdd");
+            Some(format!(
+                "({recv}).reduce((__s: {}, __x: {elem_ts}) => __bynkDecimalAdd(__s, ({key})(__x)), {})",
+                crate::emitter::DECIMAL_TS_TYPE,
+                crate::emitter::decimal_ts_literal("0", 0)
             ))
         }
         ("sum", [key]) => {
@@ -6627,7 +6768,26 @@ fn lower_bin_op(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut LowerCtx) -> Lowered
         });
     }
     let r = pre.lower(rhs, cx);
-    let text = if op == BinOp::Div {
+    // #2622: `Decimal` arithmetic is exact and goes through the runtime; the
+    // checker rejects `/` and any mixed operand, so the left operand decides.
+    let decimal_helper = matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul)
+        .then(|| {
+            cx.commons()
+                .expr_types
+                .get(&lhs.id)
+                .and_then(|te| te.ty.base(tys))
+        })
+        .flatten()
+        .filter(|b| *b == BaseType::Decimal)
+        .map(|_| match op {
+            BinOp::Add => "__bynkDecimalAdd",
+            BinOp::Sub => "__bynkDecimalSub",
+            _ => "__bynkDecimalMul",
+        });
+    let text = if let Some(helper) = decimal_helper {
+        cx.note_decimal(helper);
+        format!("{helper}({l}, {r})")
+    } else if op == BinOp::Div {
         // v0.21: division is operand-typed (ADR 0042) — `Float`
         // true-divides; `Int` keeps truncating. The checker rejects
         // mixed operands, so the left operand decides; a missing
@@ -6705,11 +6865,11 @@ fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<String> {
 /// `keys.ts`; a plain-keyed site emits exactly what it did before.
 fn key_is_plain(ty: TyId, tys: &Types) -> bool {
     match &*tys.get(ty) {
-        Ty::Base(b) => !matches!(b, BaseType::Bytes),
+        Ty::Base(b) => !matches!(b, BaseType::Bytes | BaseType::Decimal),
         Ty::Named {
             kind: NamedKind::Refined(b) | NamedKind::Opaque(b),
             ..
-        } => !matches!(b, BaseType::Bytes),
+        } => !matches!(b, BaseType::Bytes | BaseType::Decimal),
         _ => false,
     }
 }
@@ -6769,6 +6929,9 @@ enum EqualityLowering {
     /// `__bynkBytesEqual`: `Bytes`, including an opaque type over it, erases to
     /// a `Uint8Array`, which `===` compares by reference (ADR 0142 D4).
     Bytes,
+    /// `__bynkDecimalEqual` (#2622): a `Decimal` is a `{ coefficient, scale }`
+    /// object that compares by numeric value (`1.20 == 1.2`).
+    Decimal,
     /// `__bynkEq`, the runtime's structural walker: records, sums, `Option`,
     /// `Result`, `List`, value-level `Map`, the built-in error records, and type
     /// variables (a generic `T` is not monomorphised, so its runtime shape is
@@ -6786,6 +6949,10 @@ fn equality_helper(operand: Option<TyId>, tys: &Types, cx: &LowerCtx) -> Option<
             cx.note_bytes();
             Some("__bynkBytesEqual")
         }
+        Some(EqualityLowering::Decimal) => {
+            cx.note_decimal("__bynkDecimalEqual");
+            Some("__bynkDecimalEqual")
+        }
         Some(EqualityLowering::Structural) | None => {
             cx.note_eq();
             Some("__bynkEq")
@@ -6800,6 +6967,11 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
             kind: NamedKind::Refined(BaseType::Bytes) | NamedKind::Opaque(BaseType::Bytes),
             ..
         } => EqualityLowering::Bytes,
+        Ty::Base(BaseType::Decimal)
+        | Ty::Named {
+            kind: NamedKind::Refined(BaseType::Decimal) | NamedKind::Opaque(BaseType::Decimal),
+            ..
+        } => EqualityLowering::Decimal,
         Ty::Base(_)
         | Ty::Unit
         | Ty::Named {
@@ -8407,6 +8579,13 @@ fn refined_check_as_bool(recv: &str, base: BaseType, refinement: Option<&Refinem
     if let Some(r) = refinement {
         for p in bynk_syntax::ast::in_check_order(&r.predicates, |p| &p.kind) {
             terms.push(match &p.kind {
+                PredKind::NonNegative if base == BaseType::Decimal => {
+                    format!("({recv}).coefficient >= 0n")
+                }
+                PredKind::Positive if base == BaseType::Decimal => {
+                    format!("({recv}).coefficient > 0n")
+                }
+                PredKind::InRangeD(a, b) => crate::emitter::decimal_range_condition(recv, a, b),
                 PredKind::NonNegative => format!("{recv} >= 0"),
                 PredKind::Positive => format!("{recv} > 0"),
                 PredKind::InRange(a, b) => {
@@ -8771,4 +8950,125 @@ mod settle_tests {
         let text = rewrite(&pieces, &[Unsafe, Expect], "");
         assert_eq!(text, pieces.concat());
     }
+}
+
+/// #2622: lower a `Decimal` kernel method to its runtime helper. `round` and
+/// `div` carry a rounding mode, read from the `RoundingMode.<mode>` argument
+/// and lowered to its name as a string literal.
+fn lower_decimal_kernel(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+) -> Option<Lowered> {
+    let mut pre = Pre::new();
+    let mode = |a: &Expr| bynk_syntax::ast::rounding_mode(a).map(|m| format!("\"{}\"", m.name()));
+    let text: Option<String> = match (method.name.as_str(), args) {
+        ("scale", []) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!("({recv}).scale"))
+        }
+        ("toString", []) => {
+            let recv = pre.lower(receiver, cx);
+            cx.note_decimal("__bynkDecimalToString");
+            Some(format!("__bynkDecimalToString({recv})"))
+        }
+        ("abs", []) => {
+            let recv = pre.lower(receiver, cx);
+            cx.note_decimal("__bynkDecimalAbs");
+            Some(format!("__bynkDecimalAbs({recv})"))
+        }
+        ("toInt", []) => {
+            let recv = pre.lower(receiver, cx);
+            cx.note_decimal("__bynkDecimalToInt");
+            Some(format!("__bynkDecimalToInt({recv})"))
+        }
+        ("toFloat", []) => {
+            let recv = pre.lower(receiver, cx);
+            cx.note_decimal("__bynkDecimalToFloat");
+            Some(format!("__bynkDecimalToFloat({recv})"))
+        }
+        ("min" | "max", [other]) => {
+            let recv = pre.lower(receiver, cx);
+            let other = pre.lower(other, cx);
+            let (helper, name) = if method.name == "min" {
+                ("__bynkDecimalMin", "__bynkDecimalMin")
+            } else {
+                ("__bynkDecimalMax", "__bynkDecimalMax")
+            };
+            cx.note_decimal(name);
+            Some(format!("{helper}({recv}, {other})"))
+        }
+        ("round", [scale, m]) => {
+            let mode = mode(m)?;
+            let recv = pre.lower(receiver, cx);
+            let scale = pre.lower(scale, cx);
+            cx.note_decimal("__bynkDecimalRound");
+            Some(format!("__bynkDecimalRound({recv}, {scale}, {mode})"))
+        }
+        ("div", [other, scale, m]) => {
+            let mode = mode(m)?;
+            let recv = pre.lower(receiver, cx);
+            let other = pre.lower(other, cx);
+            let scale = pre.lower(scale, cx);
+            cx.note_decimal("__bynkDecimalDiv");
+            Some(format!(
+                "__bynkDecimalDiv({recv}, {other}, {scale}, {mode})"
+            ))
+        }
+        _ => None,
+    };
+    text.map(|expr| pre.finish(expr))
+}
+
+/// #2622: whether a value of type `ty` can hold a `Decimal` anywhere: it is one
+/// (or a refined or opaque type over one), or a container, record or sum that
+/// mentions one. A name that does not resolve counts as no.
+fn mentions_decimal(ty: TyId, cx: &LowerCtx) -> bool {
+    use std::collections::HashSet;
+    fn by_name(name: &str, cx: &LowerCtx, seen: &mut HashSet<String>) -> bool {
+        if !seen.insert(name.to_string()) {
+            return false;
+        }
+        let Some(decl) = cx.commons().types.get(name) else {
+            return false;
+        };
+        match &decl.body {
+            TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => {
+                *base == BaseType::Decimal
+            }
+            TypeBody::Record(r) => r.fields.iter().any(|f| by_ref(&f.type_ref, cx, seen)),
+            TypeBody::Sum(s) => s
+                .variants
+                .iter()
+                .any(|v| v.payload.iter().any(|f| by_ref(&f.type_ref, cx, seen))),
+        }
+    }
+    fn by_ref(t: &TypeRef, cx: &LowerCtx, seen: &mut HashSet<String>) -> bool {
+        match t {
+            TypeRef::Base(b, _) => *b == BaseType::Decimal,
+            TypeRef::Named(id) => by_name(&id.name, cx, seen),
+            TypeRef::Option(a, _) | TypeRef::List(a, _) | TypeRef::Set(a, _) => by_ref(a, cx, seen),
+            TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+                by_ref(a, cx, seen) || by_ref(b, cx, seen)
+            }
+            TypeRef::App { name, args, .. } => {
+                by_name(&name.name, cx, seen) || args.iter().any(|a| by_ref(a, cx, seen))
+            }
+            _ => false,
+        }
+    }
+    fn by_ty(ty: TyId, cx: &LowerCtx, seen: &mut HashSet<String>) -> bool {
+        let tys = cx.commons().tys();
+        match &*tys.get(ty) {
+            Ty::Base(b) => *b == BaseType::Decimal,
+            Ty::Option(t) | Ty::List(t) | Ty::Set(t) => by_ty(*t, cx, seen),
+            Ty::Map(k, v) | Ty::Result(k, v) => by_ty(*k, cx, seen) || by_ty(*v, cx, seen),
+            Ty::Named { name, args, .. } => {
+                by_name(name, cx, seen) || args.iter().any(|a| by_ty(*a, cx, seen))
+            }
+            _ => false,
+        }
+    }
+    by_ty(ty, cx, &mut HashSet::new())
 }

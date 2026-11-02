@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "provides": {
+    "charge": "c92d9edcd68ae375"
+  },
+  "expects": {},
+  "foreign": {
+    "Billing": {
+      "charge": "c92d9edcd68ae375"
+    }
+  },
+  "provides_shapes": {
+    "charge": "Svc(\"charge\",P(\"c\",Rec(\"Charge\",F(\"amount\",Rf(\"Price\",\"Decimal\",\"Positive\")),F(\"fee\",O(B(\"Decimal\"))),F(\"sku\",B(\"String\")))),P(\"tip\",B(\"Decimal\")),Ret(B(\"Decimal\")))"
+  }
+}

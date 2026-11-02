@@ -285,6 +285,7 @@ impl Lin<'_> {
             // position — the old `_ => {}` silently skipped them all.
             ExprKind::IntLit { .. }
             | ExprKind::FloatLit { .. }
+            | ExprKind::DecimalLit { .. }
             | ExprKind::DurationLit { .. }
             | ExprKind::StrLit(_)
             | ExprKind::InterpStr(_)

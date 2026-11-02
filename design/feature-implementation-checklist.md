@@ -119,7 +119,7 @@ surface, not oversights.
 | `Instant` primitive (absolute time) | ✅ | ADR 0114 (the type-system spec's name since the spec adopted the built names) |
 | `Stream[T]` value-over-time primitive | ✅ | ADR 0128 — non-serialisable/non-storable like `Query`/`Effect`/`Fn`; `Stream.of`/`map`/`take`/`collect` |
 | `Bytes` primitive | ✅ | ADR 0142 |
-| Exact-decimal primitive | — (not planned) | the spec's `Decimal` was renamed to the built `Float`; money is integer minor units (type-system spec §2.5.0) |
+| Exact-decimal primitive | ✅ | `Decimal` (#2622): arbitrary precision, kept scale, no `/` (`div` states a scale and rounding mode), a JSON string on the wire; the spec's earlier `Decimal` was renamed to the built `Float` |
 
 ## Validation & invariants (§14)
 

@@ -1,0 +1,5 @@
+commons demo
+
+fn bump(price: Decimal, n: Int) -> Decimal {
+  price + n
+}

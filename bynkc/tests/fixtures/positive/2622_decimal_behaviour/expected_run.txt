@@ -1,0 +1,2 @@
+# #2622: exact decimal arithmetic, rounding and the JSON-string wire form, run.
+passed=17 failed=0

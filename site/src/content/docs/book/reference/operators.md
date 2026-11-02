@@ -5,8 +5,8 @@ title: Operators & built-ins
 
 | Operator | Arity | Operands | Result | Notes |
 |---|---|---|---|---|
-| `+` `-` `*` `/` | binary | `Int` | `Int` | arithmetic; no `%` |
-| `-` | unary | `Int` | `Int` | negation |
+| `+` `-` `*` `/` | binary | `Int` (or `Float`; or `Decimal` for `+` `-` `*`) | `Int` | arithmetic; no `%`; `/` on `Int` truncates and on `Float` divides, but is not defined on `Decimal` ([below](#decimal-arithmetic)) |
+| `-` | unary | `Int` (or `Decimal`) | `Int` | negation |
 | `==` `!=` | binary | same equality-supporting type (compared structurally) | `Bool` | non-associative |
 | `<` `<=` `>` `>=` | binary | two operands of the same [`Ord`](/book/reference/types/#ordering-your-own-types) type | `Bool` | comparison; IEEE on `Float` (`NaN < x` is `false`) |
 | `&&` `\|\|` | binary | `Bool` | `Bool` | logical |
@@ -17,7 +17,7 @@ title: Operators & built-ins
 | `<-` | bind | `Effect[T]` | `T` | sequences an effect in a `let` |
 | `~>` | prefix | `Effect[()]` | statement | asynchronous (fire-and-forget) send; the reply is discarded, so it is restricted to `Effect[()]`, and not allowed in an agent handler ([guide](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/)) |
 
-There is no string concatenation operator: `+` requires `Int` operands.
+There is no string concatenation operator: `+` requires numeric operands.
 
 ## Precedence
 
@@ -35,6 +35,22 @@ Lowest to highest:
 10. postfix: `?`, `.field`, `.method(…)`, calls
 
 So `expect x == 1` parses as `expect (x == 1)`, and `a + b * c` as `a + (b * c)`.
+
+## Decimal arithmetic
+
+`Decimal` is exact base-10 arithmetic. Its operand and result rules:
+
+| Expression | Result | Notes |
+|---|---|---|
+| `Decimal + Decimal`, `Decimal - Decimal` | `Decimal` | exact; the result has the larger of the two scales |
+| `Decimal * Decimal` | `Decimal` | exact; the result's scale is the sum of the two |
+| `-Decimal` | `Decimal` | exact |
+| `Decimal / Decimal` | rejected | `bynk.types.decimal_division_unscaled`: a quotient has no exact answer, so write `a.div(b, scale, RoundingMode.<mode>)` |
+| `Decimal == Decimal`, `<`, `<=`, `>`, `>=` | `Bool` | by numeric value, so `1.20d == 1.2d` |
+| `Decimal` with `Int` or `Float`, in any operator | rejected | `bynk.types.no_numeric_coercion`; use `Decimal.fromInt(n)` or a decimal literal |
+
+See [Decimal](/book/reference/types/#decimal) for rounding, parsing and the wire
+form.
 
 ## Duration & Instant arithmetic
 

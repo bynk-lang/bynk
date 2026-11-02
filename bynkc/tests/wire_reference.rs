@@ -93,8 +93,8 @@ fn the_pages_example_hashes_are_the_emitted_constants() {
     let contracts = example_contracts();
     assert_eq!(
         contracts.len(),
-        4,
-        "the example has four `on call` services"
+        5,
+        "the example has five `on call` services"
     );
     for (name, form, hash) in &contracts {
         let needle =
@@ -317,6 +317,11 @@ function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error("FAIL: " + msg);
 }
 
+// A decoded `Decimal` holds a `bigint`, which `JSON.stringify` refuses.
+function show(v: unknown): string {
+  return JSON.stringify(v, (_k, x) => (typeof x === "bigint" ? x.toString() + "n" : x));
+}
+
 const EXAMPLES: any[] = __EXAMPLES__;
 const c: any = codecs;
 for (const ex of EXAMPLES) {
@@ -326,13 +331,13 @@ for (const ex of EXAMPLES) {
   const r = decode(JSON.parse(ex.json));
   const what = ex.codec + " " + ex.json;
   if ("accepted" in ex.outcome) {
-    assert(r.tag === "Ok", what + " → accepted, got " + JSON.stringify(r));
+    assert(r.tag === "Ok", what + " → accepted, got " + show(r));
     const back = JSON.stringify(encode(r.value));
     assert(back === JSON.stringify(JSON.parse(ex.outcome.accepted)), what + " encodes back as " + back);
   } else {
-    assert(r.tag === "Err", what + " → rejected, got " + JSON.stringify(r));
-    assert(r.error.kind === ex.outcome.kind, what + " → " + ex.outcome.kind + ", got " + JSON.stringify(r.error));
-    assert(r.error.path === ex.outcome.path, what + " → at " + ex.outcome.path + ", got " + JSON.stringify(r.error));
+    assert(r.tag === "Err", what + " → rejected, got " + show(r));
+    assert(r.error.kind === ex.outcome.kind, what + " → " + ex.outcome.kind + ", got " + show(r.error));
+    assert(r.error.path === ex.outcome.path, what + " → at " + ex.outcome.path + ", got " + show(r.error));
   }
 }
 

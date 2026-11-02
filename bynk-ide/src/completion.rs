@@ -1667,6 +1667,34 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
     ("Int", &[("parse", "parse(s: String) -> Option[Int]")]),
     ("Float", &[("parse", "parse(s: String) -> Option[Float]")]),
     (
+        "Decimal",
+        &[
+            ("parse", "parse(s: String) -> Option[Decimal]"),
+            ("fromInt", "fromInt(n: Int) -> Decimal"),
+        ],
+    ),
+    (
+        "RoundingMode",
+        &[
+            ("Down", "RoundingMode.Down - toward zero"),
+            ("Up", "RoundingMode.Up - away from zero"),
+            ("Floor", "RoundingMode.Floor - toward negative infinity"),
+            ("Ceiling", "RoundingMode.Ceiling - toward positive infinity"),
+            (
+                "HalfUp",
+                "RoundingMode.HalfUp - nearest, a tie away from zero",
+            ),
+            (
+                "HalfDown",
+                "RoundingMode.HalfDown - nearest, a tie toward zero",
+            ),
+            (
+                "HalfEven",
+                "RoundingMode.HalfEven - nearest, a tie to the even neighbour",
+            ),
+        ],
+    ),
+    (
         "Json",
         &[
             ("encode", "encode(value) -> String"),
@@ -3440,6 +3468,22 @@ mod tests {
         let j = complete("  Json.", "context a.b\n", None);
         assert!(find(&j, "encode", CompletionKind::Member).is_some());
         assert!(find(&j, "decode", CompletionKind::Member).is_some());
+    }
+
+    #[test]
+    fn decimal_statics_and_rounding_modes_are_offered() {
+        // #2622: `Decimal.` offers its two statics, and `RoundingMode.` every mode.
+        let d = complete("  Decimal.", "context a.b\n", None);
+        assert!(find(&d, "parse", CompletionKind::Member).is_some());
+        assert!(find(&d, "fromInt", CompletionKind::Member).is_some());
+        let r = complete("  RoundingMode.", "context a.b\n", None);
+        for mode in bynk_syntax::ast::RoundingMode::ALL {
+            assert!(
+                find(&r, mode.name(), CompletionKind::Member).is_some(),
+                "RoundingMode.{} missing",
+                mode.name()
+            );
+        }
     }
 
     #[test]

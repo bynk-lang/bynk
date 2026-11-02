@@ -1,0 +1,25 @@
+context invoice
+
+// #2622: a `Decimal` crosses the cross-context boundary as a JSON string,
+// both bare and inside a refined type.
+
+type Price = Decimal where Positive
+
+type Line = {
+  sku: String,
+  unit: Price,
+  discount: Decimal where NonNegative,
+  qty: Int,
+}
+
+service lines {
+  on call(sku: String, unit: Price, qty: Int) -> Effect[Result[Line, ()]] {
+    Ok(Line { sku: sku, unit: unit, discount: 0.00d, qty: qty })
+  }
+}
+
+service totals {
+  on call(unit: Price, qty: Int) -> Effect[Result[Decimal, ()]] {
+    Ok(unit * Decimal.fromInt(qty))
+  }
+}

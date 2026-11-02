@@ -3,6 +3,7 @@
 // modules below (in this dependency order) into one flat file.
 export * from "./result.ts";
 export * from "./bytes.ts";
+export * from "./decimal.ts";
 export * from "./time.ts";
 export * from "./settle.ts";
 export * from "./url.ts";

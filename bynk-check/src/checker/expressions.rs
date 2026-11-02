@@ -855,12 +855,29 @@ pub(crate) fn check_unary(op: UnaryOp, inner: &Expr, op_span: Span, ctx: &mut Ct
         UnaryOp::Neg => {
             if t.base(tys) == Some(BaseType::Int) {
                 Some(tys.intern(Ty::Base(BaseType::Int)))
+            } else if t.base(tys) == Some(BaseType::Decimal) {
+                // #2622: negation is exact. A folded `-<literal>` is a value
+                // too, so it obeys the 1000-character limit with its sign.
+                if let ExprKind::DecimalLit { coef, scale, .. } = &inner.kind
+                    && bynk_syntax::decimal::render(coef, *scale).len() + 1 > 1000
+                {
+                    ctx.errors.push(
+                        CompileError::new(
+                            "bynk.types.decimal_negation_too_large",
+                            inner.span,
+                            "decimal literal is too large once negated",
+                        )
+                        .with_note("a `Decimal` has at most 100 fraction digits and 1000 characters, sign included"),
+                    );
+                    return None;
+                }
+                Some(tys.intern(Ty::Base(BaseType::Decimal)))
             } else {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.type_mismatch",
                     op_span,
                     format!(
-                        "unary `-` requires `Int`, but the operand has type `{}`",
+                        "unary `-` requires `Int` or `Decimal`, but the operand has type `{}`",
                         t.display(tys)
                     ),
                 ));
@@ -888,9 +905,13 @@ pub(crate) fn check_unary(op: UnaryOp, inner: &Expr, op_span: Span, ctx: &mut Ct
 /// v0.21: whether one operand is `Int` and the other `Float` — the mix the
 /// no-coercion rule (ADR 0041) rejects with its own diagnostic.
 pub(crate) fn numeric_mix(a: Option<BaseType>, b: Option<BaseType>) -> bool {
+    use BaseType::{Decimal, Float, Int};
     matches!(
         (a, b),
-        (Some(BaseType::Int), Some(BaseType::Float)) | (Some(BaseType::Float), Some(BaseType::Int))
+        (Some(Int), Some(Float))
+            | (Some(Float), Some(Int))
+            | (Some(Int | Float), Some(Decimal))
+            | (Some(Decimal), Some(Int | Float))
     )
 }
 
@@ -943,6 +964,27 @@ fn push_instant_op_error(op: BinOp, span: Span, lt: TyId, rt: TyId, ctx: &mut Ct
 
 fn push_no_numeric_coercion(op: BinOp, span: Span, lt: TyId, rt: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
+    // #2622: a `Decimal` never mixes with `Int` or `Float` implicitly.
+    if lt.base(tys) == Some(BaseType::Decimal) || rt.base(tys) == Some(BaseType::Decimal) {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.types.no_numeric_coercion",
+                span,
+                format!(
+                    "operator `{}` is not defined for operands `{}` and `{}`",
+                    op.name(),
+                    lt.display(tys),
+                    rt.display(tys)
+                ),
+            )
+            .with_note(
+                "`Decimal` arithmetic and comparison need two `Decimal` operands; there is no \
+                 implicit coercion — convert an `Int` with `Decimal.fromInt(n)`, or write a \
+                 decimal literal (`2d`, `1.20d`)",
+            ),
+        );
+        return;
+    }
     ctx.errors.push(
         CompileError::new(
             "bynk.types.no_numeric_coercion",
@@ -1083,6 +1125,37 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                     // `Duration + Int`, `Int + Duration`, `Duration * Duration`).
                     _ => {
                         push_duration_op_error(op, span, lt, rt, ctx);
+                        None
+                    }
+                };
+            }
+            // #2622: `Decimal` arithmetic. `+`, `-` and `*` are exact; `/` has
+            // no exact answer, so it is rejected in favour of `div`, which
+            // states the scale and the rounding mode. Any mix with `Int` or
+            // `Float` is a coercion error.
+            if lt_base == Some(BaseType::Decimal) || rt_base == Some(BaseType::Decimal) {
+                return match (op, lt_base, rt_base) {
+                    (
+                        BinOp::Add | BinOp::Sub | BinOp::Mul,
+                        Some(BaseType::Decimal),
+                        Some(BaseType::Decimal),
+                    ) => Some(tys.intern(Ty::Base(BaseType::Decimal))),
+                    (BinOp::Div, Some(BaseType::Decimal), Some(BaseType::Decimal)) => {
+                        ctx.errors.push(
+                            CompileError::new(
+                                "bynk.types.decimal_division_unscaled",
+                                span,
+                                "`/` is not defined on `Decimal` — a quotient has no exact decimal answer",
+                            )
+                            .with_note(
+                                "state the scale and the rounding mode: \
+                                 `a.div(b, 2, RoundingMode.HalfEven)`",
+                            ),
+                        );
+                        None
+                    }
+                    _ => {
+                        push_no_numeric_coercion(op, span, lt, rt, ctx);
                         None
                     }
                 };
@@ -1742,6 +1815,7 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
         ExprKind::Ident(_)
         | ExprKind::IntLit { .. }
         | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
         | ExprKind::DurationLit { .. }
         | ExprKind::StrLit(_)
         | ExprKind::BoolLit(_)
