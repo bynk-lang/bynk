@@ -2654,7 +2654,12 @@ fn collect_external_references(commons: &TypedCommons, ctx: &EmitProjectCtx) -> 
                     for p in &h.params {
                         collect_refs_in_typeref(&p.type_ref, &local_to_file, ctx, &mut refs);
                     }
-                    if synthesises_envelope && h.params.len() < 2 {
+                    // Kept in step with `emit_service`'s `schema_dispatch_env_binder`
+                    // on purpose: event handler, `schema_dispatch`, no `env` param.
+                    if synthesises_envelope
+                        && matches!(h.kind, bynk_syntax::ast::HandlerKind::Event)
+                        && h.params.len() < 2
+                    {
                         record_name_ref("EventEnvelope", &local_to_file, ctx, &mut refs);
                     }
                     collect_refs_in_typeref(&h.return_type, &local_to_file, ctx, &mut refs);
