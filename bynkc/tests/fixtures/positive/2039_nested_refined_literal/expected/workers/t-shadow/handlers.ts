@@ -195,6 +195,9 @@ export function __deserialise_Map_String_t_pay__Cents(json: __JsonValue, path: s
     return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
   }
   const __k = entryK;
+  if (out.has(__k as string)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+  }
   const __r_v = __deserialise_t_pay__Cents(entryV, `${path}[${i}][1]`);
   if (__r_v.tag === "Err") return __r_v;
   const __v = __r_v.value;

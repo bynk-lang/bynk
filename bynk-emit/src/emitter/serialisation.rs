@@ -4268,6 +4268,21 @@ pub(crate) fn emit_generic_helpers_qualified(
                     depth,
                     ru,
                 ));
+                // #2707: a repeated key is refused, never last-entry-wins. `has`
+                // is value equality: a plain `Map` for a primitive key, the
+                // keyed class (canonical encoding, so `1.20` and `1.2` are one
+                // `Decimal` key) for a composite or `Decimal`/`Bytes` key.
+                loop_body.push(if_(
+                    call(
+                        member(ident("out"), "has"),
+                        vec![as_expr(ident("__k"), key_ty.clone())],
+                    ),
+                    block(vec![return_(err_structural_mismatch(
+                        "`${path}[${i}][0]`",
+                        "a distinct map key",
+                        str_lit("a duplicate"),
+                    ))]),
+                ));
                 loop_body.extend(emit_field_deserialise(
                     "v",
                     val,

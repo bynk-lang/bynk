@@ -104,6 +104,9 @@ export function __deserialise_Map_OrderId_Int(json: __JsonValue, path: string = 
   const __r_k = __deserialise_OrderId(entryK, `${path}[${i}][0]`);
   if (__r_k.tag === "Err") return __r_k;
   const __k = __r_k.value;
+  if (out.has(__k as OrderId)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+  }
   if (typeof entryV !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
   }
