@@ -1,0 +1,6 @@
+commons demo.d
+
+type Order = {
+  code: String where Matches("[A-Z]+"),
+  qty: Int,
+}
