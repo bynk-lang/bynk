@@ -1,0 +1,8 @@
+commons bad
+
+fn none[T]() -> Option[T] { None }
+
+fn misuse() -> Int {
+  let x = none()
+  0
+}

@@ -1,0 +1,10 @@
+commons bad
+
+type Counter = { n: Int }
+
+fn Counter.zero() -> Counter { Counter { n: 0 } }
+
+fn misuse() -> Int {
+  let c = Counter.zero[Int]()
+  0
+}

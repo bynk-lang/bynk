@@ -1,0 +1,18 @@
+---
+#2766: a caller in another unit: a concrete site, an imported element type, and a
+rigid caller that forwards its own witness.
+---
+commons demo.use
+
+uses demo.sorted
+uses demo.cards
+
+fn ranks(xs: List[Rank]) -> Sorted[Rank] { Sorted.fromList(xs) }
+
+fn forward[A: Ord](xs: List[A]) -> Sorted[A] { Sorted.fromList(xs) }
+
+fn blank[A: Ord]() -> Sorted[A] { Sorted.empty() }
+
+fn names(xs: List[String]) -> Sorted[String] { Sorted.fromList(xs) }
+
+fn blankRanks() -> Sorted[Rank] { Sorted.empty[Rank]() }

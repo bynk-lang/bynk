@@ -388,7 +388,19 @@ obligations follow from Q6 and Q7:
     are amended (J1). `Queue.sendValue[T: Codable]` ships.
   - Additions to the proposal: an operation with `Codable` parameters infers its
     type arguments from its arguments when they determine all of them.
-- [ ] Slice 4 — static methods on generic types
+- [x] Slice 4 — static methods on generic types (#2766)
+  - A static on a generic type is generic over the type's parameters, then its
+    own; it takes the type's bounds' witnesses at the call site. Explicit type
+    arguments are `Box.empty[Int]()` (type parameters, then the method's own, all
+    or none); a qualified variant still takes none.
+  - The expected type becomes the last-resort source of a generic call's type
+    arguments for free generic calls, statics and instance methods (not capability
+    operations): after the first argument pass, before lambdas, and only for
+    parameters still undetermined. `159_uninferable_type_arg` is rewritten to keep
+    pinning `uninferable_type_arg` without an expected type.
+  - `method_on_generic_type` is narrowed to a static that never mentions one of the
+    type's parameters. `from` is a reserved word, so the issue's `Sorted.from` is
+    spelled `Sorted.fromList`.
 - [ ] Slice 5 — `Show` (conditional)
 
 ## 10. Non-goals

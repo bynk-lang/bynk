@@ -1,0 +1,8 @@
+commons bad
+
+type Opt[T] = | Has(value: T) | Nil
+
+fn misuse() -> Int {
+  let o = Opt.Has[Int](1)
+  0
+}

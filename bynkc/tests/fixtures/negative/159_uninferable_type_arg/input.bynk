@@ -9,5 +9,6 @@ fn identity_helper[A](x: A) -> A {
 }
 
 fn misuse() -> Int {
-  first_of(5)
+  let y = first_of(5)
+  0
 }

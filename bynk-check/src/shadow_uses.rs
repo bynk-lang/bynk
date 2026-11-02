@@ -372,7 +372,7 @@ where
                 (decl.span == f.span)
                     .then(|| (decl.as_ref(), unit.as_str(), decl.type_params.clone()))
             }
-            Callee::Method(f, _) | Callee::Static(f) => {
+            Callee::Method(f, _) | Callee::Static(f, _) => {
                 let FnName::Method {
                     type_name,
                     method_name,
