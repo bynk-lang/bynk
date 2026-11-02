@@ -31,6 +31,21 @@ export const askAll = {
   },
 };
 
+export const askMixed = {
+  async call(n: number, deps: { surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> } }): globalThis.Promise<number> {
+    const r = await (deps.surface.Provider.mixed(n) as unknown as globalThis.Promise<Result<Reply, boundary_provider.Fault>>);
+    switch (r.tag) {
+      case "Ok": {
+        return 0;
+      }
+      case "Err": {
+        return 1;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};
+
 export interface __BoundaryConsumerDeps {
   readonly surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> };
 }
@@ -42,6 +57,9 @@ export function __makeSurface(deps: __BoundaryConsumerDeps) {
     },
     async askAll(n: number): globalThis.Promise<readonly Reply[]> {
       return askAll.call(n, deps);
+    },
+    async askMixed(n: number): globalThis.Promise<number> {
+      return askMixed.call(n, deps);
     },
   };
 }

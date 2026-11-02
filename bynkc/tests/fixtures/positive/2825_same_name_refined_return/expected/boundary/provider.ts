@@ -7,7 +7,8 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 /**
  * #2825: a service returns refined values and the consumer declares a type of the
  * same name. The brands are per context, so the consumer's lowering of the call
- * casts the result to its own declaration, bare and nested in a `List`.
+ * casts the result to its own declaration, bare, nested in a `List`, and beside a
+ * provider type the consumer does not declare (which stays provider-qualified).
  */
 
 export type Reply = string & { readonly __brand: "boundary.provider.Reply" };
@@ -19,6 +20,13 @@ export const Reply = {
     }
     return Ok(value as Reply);
   },
+};
+
+export interface Fault {
+  readonly code: number;
+}
+
+export const Fault = {
 };
 
 export const reply = {
@@ -33,6 +41,12 @@ export const replies = {
   },
 };
 
+export const mixed = {
+  async call(n: number, deps: {}): globalThis.Promise<Result<Reply, Fault>> {
+    return Err({ code: n });
+  },
+};
+
 export interface __BoundaryProviderDeps {
 }
 
@@ -43,6 +57,9 @@ export function __makeSurface(deps: __BoundaryProviderDeps) {
     },
     async replies(n: number): globalThis.Promise<readonly Reply[]> {
       return replies.call(n, deps);
+    },
+    async mixed(n: number): globalThis.Promise<Result<Reply, Fault>> {
+      return mixed.call(n, deps);
     },
   };
 }

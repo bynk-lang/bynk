@@ -17,3 +17,13 @@ service askAll {
     Effect.pure(rs)
   }
 }
+
+service askMixed {
+  on call(n: Int) -> Effect[Int] {
+    let r <- Provider.mixed(n)
+    match r {
+      Ok(_) => Effect.pure(0)
+      Err(_) => Effect.pure(1)
+    }
+  }
+}
