@@ -1164,11 +1164,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["capability_op"],
     ),
     dg(
-        "bynk.generics.codec_generic_at_rigid",
-        "A user generic type is applied to a type parameter inside a `Codable` context (`Paginated[T]` in a body with `T: Codable`). Its codec would need a factory per generic declaration, which is deferred; the built-in containers over a type parameter are supported, as is a concrete instantiation (constrained-generics slice 3).",
-        &["fn_decl"],
-    ),
-    dg(
         "bynk.generics.duplicate_type_param",
         "A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183).",
         &[],
@@ -3199,7 +3194,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.not_keyable",
-        "A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2). A `Query` keeps the narrower `String`/`Int` rule.",
+        "A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2).",
         &["generic_type_ref"],
     ),
     d(

@@ -13,8 +13,9 @@
 //!   runtime combinators (`__bynkCodecList`, …) over the witnesses of their
 //!   parts.
 //!
-//! A user generic type over a type variable has no codec here: the checker
-//! rejects it (`bynk.generics.codec_generic_at_rigid`).
+//! - a user generic type over a type variable is its declaration's codec
+//!   factory (`serialisation::emit_codec_factory`) applied to the witnesses of
+//!   its arguments (#2792).
 
 use std::collections::HashMap;
 
@@ -55,6 +56,31 @@ pub(crate) fn ground_parts(ty: TyId, commons: &TypedCommons, out: &mut Vec<TyId>
         Ty::Result(a, b) | Ty::Map(a, b) => {
             ground_parts(*a, commons, out);
             ground_parts(*b, commons, out);
+        }
+        // #2792: a user generic type over a type variable: its arguments' ground
+        // parts, beside the factory `generic_factories` names.
+        Ty::Named { args, .. } => args.iter().for_each(|a| ground_parts(*a, commons, out)),
+        _ => {}
+    }
+}
+
+/// #2792: the user generic types applied to a type variable in `ty`, whose
+/// codec is built by a factory (`serialisation::emit_codec_factory`).
+pub(crate) fn generic_factories(ty: TyId, commons: &TypedCommons, out: &mut Vec<String>) {
+    if !has_var(ty, commons) {
+        return;
+    }
+    let tys = commons.tys();
+    match &*tys.get(ty) {
+        Ty::Option(a) | Ty::List(a) | Ty::Set(a) => generic_factories(*a, commons, out),
+        Ty::Result(a, b) | Ty::Map(a, b) => {
+            generic_factories(*a, commons, out);
+            generic_factories(*b, commons, out);
+        }
+        Ty::Named { name, args, .. } => {
+            out.push(name.clone());
+            args.iter()
+                .for_each(|a| generic_factories(*a, commons, out));
         }
         _ => {}
     }
@@ -105,6 +131,16 @@ impl<'a> CodecGen<'a> {
             Ty::Result(a, b) => {
                 self.wrap("__bynkCodecResult", vec![self.for_ty(*a), self.for_ty(*b)])
             }
+            // #2792: a user generic type over a type variable is its declaration's
+            // factory applied to the witnesses of its arguments.
+            Ty::Named { name, args, .. } => format!(
+                "{}({})",
+                serialisation::codec_factory_ident(name),
+                args.iter()
+                    .map(|a| self.for_ty(*a))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             other => {
                 unreachable!("bynk internal error: no codec over a type variable in {other:?}")
             }

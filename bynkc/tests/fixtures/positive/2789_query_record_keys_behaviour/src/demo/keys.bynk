@@ -1,0 +1,74 @@
+---
+#2789: a store `Query`'s `distinct`, `distinctBy`, `groupBy`, `joinOn` and `leftJoin`
+take any `Key` type, so a record or enum key groups and joins by value.
+---
+context demo.keys
+
+type Region = enum { North, South }
+
+type Site = { region: Region, code: Int }
+
+type Visit = { site: Site, n: Int }
+
+type Label = { site: Site, name: String }
+
+type Tally = { site: Site, total: Int }
+
+capability Clock {
+  fn now() -> Effect[Instant]
+}
+
+provides Clock = FixedClock {
+  fn now() -> Effect[Instant] {
+    Instant.fromEpochMillis(0)
+  }
+}
+
+agent Log {
+  key id: String
+  store visits: Map[String, Visit]
+  store labels: Map[String, Label]
+  store regions: Map[String, Region]
+  store trail: Log[Site] @retain(30.days)
+
+  on call visit(k: String, region: Region, code: Int, n: Int) -> Effect[()] {
+    let _ <- visits.put(k, Visit { site: Site { region: region, code: code }, n: n })
+    ()
+  }
+  on call label(k: String, region: Region, code: Int, name: String) -> Effect[()] {
+    let _ <- labels.put(k, Label { site: Site { region: region, code: code }, name: name })
+    ()
+  }
+  on call region(k: String, r: Region) -> Effect[()] {
+    let _ <- regions.put(k, r)
+    ()
+  }
+  on call distinctSites() -> Effect[Int] {
+    visits.map((v) => v.site).distinct().count()
+  }
+  on call distinctRegions() -> Effect[Int] {
+    regions.values.distinct().count()
+  }
+  on call firstSeen() -> Effect[List[Visit]] {
+    visits.distinctBy((v) => v.site).collect()
+  }
+  on call totals() -> Effect[List[Tally]] {
+    visits.groupBy((v) => v.site, (s, rows) => Tally { site: s, total: rows.sum((r) => r.n) }).collect()
+  }
+  on call joined() -> Effect[Int] {
+    visits.joinOn(labels, (v) => v.site, (l) => l.site, (v, l) => v.n).sum((x) => x)
+  }
+  on call matchedTotal() -> Effect[Int] {
+    visits.leftJoin(labels, (v) => v.site, (l) => l.site, (v, l) => match l {
+      Some(_) => v.n
+      None => 0
+    }).sum((x) => x)
+  }
+  on call logSite(region: Region, code: Int) -> Effect[()] given Clock {
+    let _ <- trail.append(Site { region: region, code: code })
+    ()
+  }
+  on call distinctLogged() -> Effect[Int] {
+    trail.recent(10).distinctBy((s) => s).count()
+  }
+}

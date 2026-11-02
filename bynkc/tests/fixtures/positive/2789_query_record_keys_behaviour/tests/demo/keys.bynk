@@ -1,0 +1,62 @@
+---
+#2789: record and enum keys on a store query compare by value, not by reference.
+---
+suite demo.keys
+
+case "distinct by a record element" {
+  do Log("k").visit("a", North, 1, 10)
+  do Log("k").visit("b", North, 1, 20)
+  do Log("k").visit("c", South, 1, 5)
+  let n <- Log("k").distinctSites()
+  expect n == 2
+}
+
+case "distinct over an enum element" {
+  do Log("e").region("a", North)
+  do Log("e").region("b", North)
+  do Log("e").region("c", South)
+  let n <- Log("e").distinctRegions()
+  expect n == 2
+}
+
+case "distinctBy a record key keeps first seen" {
+  do Log("f").visit("a", North, 1, 10)
+  do Log("f").visit("b", North, 1, 20)
+  do Log("f").visit("c", South, 1, 5)
+  let vs <- Log("f").firstSeen()
+  expect vs.length() == 2
+}
+
+case "groupBy a record key merges equal keys" {
+  do Log("g").visit("a", North, 1, 10)
+  do Log("g").visit("b", North, 1, 20)
+  do Log("g").visit("c", South, 1, 5)
+  let ts <- Log("g").totals()
+  expect ts.length() == 2
+  expect ts.sum((t) => t.total) == 35
+  expect ts.any((t) => t.total == 30)
+}
+
+case "joinOn a record key matches by value" {
+  do Log("j").visit("a", North, 1, 10)
+  do Log("j").visit("b", South, 2, 7)
+  do Log("j").label("x", North, 1, "n1")
+  let n <- Log("j").joined()
+  expect n == 10
+}
+
+case "leftJoin matches a record key by value" {
+  do Log("l").visit("a", North, 1, 10)
+  do Log("l").visit("b", South, 2, 7)
+  do Log("l").label("x", North, 1, "n1")
+  let n <- Log("l").matchedTotal()
+  expect n == 10
+}
+
+case "distinctBy over a Log" {
+  do Log("t").logSite(North, 1)
+  do Log("t").logSite(North, 1)
+  do Log("t").logSite(South, 1)
+  let n <- Log("t").distinctLogged()
+  expect n == 2
+}

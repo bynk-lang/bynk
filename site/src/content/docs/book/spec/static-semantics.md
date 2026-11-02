@@ -638,7 +638,10 @@ over them; functions, effects, `HttpResult`, the error builtins, a `bynk.crypto`
 type variables are `bynk.types.json_uncodable`, except a type parameter declared
 `T: Codable`, which `Json.encode` and `Json.decode[T]` accept inside the generic
 function (the call site passes the codec; an unbounded one is
-`bynk.generics.missing_codable_bound`). `decode`'s target is given
+`bynk.generics.missing_codable_bound`). A generic record or sum applied to such a
+type parameter (`Box[T]` with `T: Codable`) is in the domain too; its codec is built
+from the declaration and the codecs of its arguments, and agrees with the codec for
+a concrete instantiation. `decode`'s target is given
 explicitly (`Json.decode[Order](s)`, any boundary-legal type-ref including
 `Json.decode[List[Order]]`) or inferred from an expected
 `Result[T, JsonError]`; with neither, `bynk.generics.uninferable_type_arg`.
@@ -2609,7 +2612,7 @@ the common key.
 *(v0.94, [ADR 0120](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0120-join-group-combiner-form.md))*
 **Joins & grouping take a combiner** — bynk has no pair type, so the join row
 exists only inside `into`, which names the result. `joinOn`/`leftJoin` are
-equi-joins hashing on a **`Key`** key (a `Query` keeps the `String`/`Int` rule); the left and
+equi-joins hashing on a **`Key`** key; the left and
 right key functions MUST return the **same** key type, else
 `bynk.query.join_key_mismatch`. `join` is a general-predicate (nested-loop) join.
 `groupBy` partitions by a `Key` key in **first-seen** key order, projecting

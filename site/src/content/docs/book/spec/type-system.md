@@ -222,7 +222,7 @@ or `Set` MUST agree with `==`, so an implementation holds a composite key under 
 canonical encoding that is injective per type (§7.4.4). A store `Map`/`Set`/`Cache`
 key and an `@indexed` key keep the narrower `String`/`Int` rule
 (`bynk.store.unkeyable_key`, `bynk.index.unkeyable_key`): they persist as JSON
-object keys. So do a `Query`'s `distinct`, `groupBy` and join keys.
+object keys. A `Query`'s `distinct`, `groupBy` and join keys take any `Key` type.
 
 ## §6.3 Refinement predicates
 

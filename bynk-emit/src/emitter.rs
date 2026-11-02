@@ -1100,6 +1100,20 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
             let mut parts = Vec::new();
             codec::ground_parts(t, commons, &mut parts);
             roots.extend(parts.into_iter().filter_map(|p| ty_to_type_ref(p, tys)));
+            // #2792: a user generic type over a type variable needs its factory.
+            let mut factories = Vec::new();
+            codec::generic_factories(t, commons, &mut factories);
+            for f in factories {
+                let root = serialisation::codec_factory_root(&f, &commons.types);
+                // `CodecGen::for_ty` names `__codecOf_<f>` for exactly these, so a
+                // declaration that is not a generic record or sum here would leave
+                // a reference to a function nothing emits.
+                debug_assert!(
+                    root.is_some(),
+                    "bynk internal error: no codec factory for generic type `{f}`"
+                );
+                roots.extend(root);
+            }
         };
         let mut visit = |e: &Expr| {
             // Constrained generics slice 3: every concrete type that fills a
@@ -1199,10 +1213,31 @@ fn emit_json_codec_helpers(
     skip_insts: &HashSet<String>,
 ) -> (Vec<bynk_ts::TsStmt>, Vec<String>) {
     use serialisation::{collect_codec_closure, emit_generic_helpers, emit_helpers_for_owner};
-    let roots = collect_json_codec_roots(commons);
+    let mut roots = collect_json_codec_roots(commons);
     if roots.is_empty() {
         return (Vec::new(), Vec::new());
     }
+    // #2792: a codec factory root is not a codec target: emit its factory, and
+    // root the module's ordinary closure at the parts of its declaration that
+    // name no type parameter.
+    let mut factories: Vec<TypeRef> = Vec::new();
+    let mut factory_seen: HashSet<String> = HashSet::new();
+    let mut plain: Vec<TypeRef> = Vec::new();
+    for r in roots.drain(..) {
+        match serialisation::codec_factory_name(&r) {
+            Some(n) => {
+                if factory_seen.insert(n.to_string()) {
+                    plain.extend(serialisation::codec_factory_ground_roots(
+                        &r,
+                        &commons.types,
+                    ));
+                    factories.push(r);
+                }
+            }
+            None => plain.push(r),
+        }
+    }
+    let roots = plain;
     let (names, insts) = collect_codec_closure(&roots, &commons.types);
     let names: Vec<String> = names
         .into_iter()
@@ -1224,6 +1259,14 @@ fn emit_json_codec_helpers(
             &commons.types,
             &ctx.runtime_use,
         )));
+    }
+    if !factories.is_empty() {
+        stmts.extend(serialisation::decls_as_stmts(
+            factories
+                .iter()
+                .map(|r| serialisation::emit_codec_factory(r, &commons.types, &ctx.runtime_use))
+                .collect(),
+        ));
     }
     (stmts, names)
 }

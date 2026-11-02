@@ -26,9 +26,10 @@ fn check(p: Point) -> Result[Point, JsonError] { roundTrip(p) }
 
 The caller supplies the codec the compiler already generates for the concrete type, so
 a refined type is validated on the way in exactly as at any other boundary. `List`,
-`Option`, `Set`, `Map` and `Result` over a `Codable` parameter work. A generic type of
-your own over a parameter (`Box[T]` inside `fn f[T: Codable]`) does not yet; it is
-`bynk.generics.codec_generic_at_rigid`.
+`Option`, `Set`, `Map` and `Result` over a `Codable` parameter work, and so does a
+generic type of your own over a parameter (`Box[T]` inside `fn f[T: Codable]`): its codec
+is built from the type's declaration and the codec of `T`, and it encodes and decodes
+exactly as the codec for a concrete `Box[Order]` does.
 
 ## Send a typed value to a queue
 

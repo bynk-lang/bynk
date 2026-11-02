@@ -448,7 +448,8 @@ nothing.
 - **Slice 3 (`Codable`, ADR 0696)**
   - `Codable` in capability operation return types (`Kv.get[T]`, `query[T]`, and
     standard-library D4's read side): #2791.
-  - A user generic type at a rigid parameter (`codec_generic_at_rigid`): #2792.
+  - A user generic type at a rigid parameter (`codec_generic_at_rigid`): #2792
+    (done: a codec factory per generic declaration; the code is retired).
   - `Queue` batch and delayed `sendValue`, and `Analytics.write[T]`: #2793
     (done: `sendValueWith` and `sendValueBatch`; `Analytics.write[T]` was not
     adopted, as `Codable` gives a record no column mapping and `DataPoint` is
