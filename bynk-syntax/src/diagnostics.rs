@@ -2834,6 +2834,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A test body addresses an http route / cron schedule / queue message the service does not declare.",
         &["case"],
     ),
+    warn(dg(
+        "bynk.test.smoke_undeclared_status",
+        "A smoke case (`bynk test --smoke`) gets a non-5xx answer whose status is not among those its route's handler declares; the case still passes (warning).",
+        &["case"],
+    )),
     dg(
         "bynk.test.stale_needs_timestamp",
         "A case drives `by Stale` at a `Signature` route whose actor declares no `timestamp` header and `tolerance`, so there is no replay window for the seam to refuse a stale signature by.",

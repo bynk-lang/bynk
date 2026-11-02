@@ -150,6 +150,7 @@ fn discover_all(bynkc: &Path, members: &[PathBuf]) -> Option<Vec<(String, String
 
 /// Shell `bynkc test` for one project.
 fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
+    let input = args.input.clone();
     let mut argv: Vec<OsString> = vec!["test".into(), args.input.into_os_string()];
     if let Some(output) = args.output {
         argv.push("--output".into());
@@ -207,20 +208,50 @@ fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
     if args.smoke_unsafe {
         argv.push("--smoke-unsafe".into());
     }
+    // #2685: the statuses each route can answer, which a smoke case's answer is
+    // compared against. The walk is `bynk-ide`'s, so `bynk` makes it and hands
+    // `bynkc` the result; the table is only for a run that calls routes.
+    // It goes in a file, since a large project's table could exceed what an
+    // environment variable can hold (`E2BIG`).
+    let mut me = None;
+    let mut env: Vec<(&str, &std::ffi::OsStr)> = Vec::new();
     if starts_dev {
         let me = match std::env::current_exe() {
-            Ok(me) => me,
+            Ok(path) => me.insert(path),
             Err(e) => {
                 eprintln!("bynk test: could not find this `bynk` binary to start `bynk dev`: {e}");
                 return ExitCode::FAILURE;
             }
         };
-        return crate::shell::delegate_with_env(
-            bynkc,
-            argv,
-            &[(bynk_driver::remote::DEV_COMMAND_ENV, me.as_os_str())],
-        );
+        env.push((bynk_driver::remote::DEV_COMMAND_ENV, me.as_os_str()));
     }
-
-    crate::shell::delegate(bynkc, argv)
+    let declared_file = (args.smoke && !args.print).then(|| {
+        let table = crate::openapi::declared_statuses(&input);
+        let path = std::env::temp_dir().join(format!(
+            "bynk-smoke-declared-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        std::fs::write(&path, serde_json::to_string(&table).unwrap_or_default()).map(|()| path)
+    });
+    let declared_file = match declared_file {
+        Some(Ok(path)) => Some(path),
+        Some(Err(e)) => {
+            eprintln!(
+                "bynk test: could not write the smoke table, so undeclared statuses are not checked: {e}"
+            );
+            None
+        }
+        None => None,
+    };
+    if let Some(path) = &declared_file {
+        env.push((bynk_driver::smoke::DECLARED_ENV, path.as_os_str()));
+    }
+    let code = crate::shell::delegate_with_env(bynkc, argv, &env);
+    if let Some(path) = &declared_file {
+        let _ = std::fs::remove_file(path);
+    }
+    code
 }

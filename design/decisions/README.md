@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0700](0700-smoke-undeclared-status-warning.md) | **A smoke case warns when a route answers a status it does not declare** (v0.480.7) — The smoke's `answers` case passes but carries a `warnings` entry, from a response set `bynk` computes and the test runtime compares, reported as an optional last-but-one `Case` field | Accepted (v0.480.7) |
 | [0699](0699-system-tier-call-address-refused.md) | **A system-tier case can't call an `on call` service** (v0.480.2) — bynk.test.call_needs_in_process closes the `/* unknown */` hole for `svc.call(…)` at `system` | Accepted (v0.480.2) |
 | [0698](0698-decimal-base-type.md) | **A built-in exact Decimal base type** (v0.480) — Decimal is an arbitrary-precision base-10 base type with a kept scale, no `/`, a `d` literal, value equality and a JSON-string wire form | Accepted (v0.480) |
 | [0697](0697-explicit-fault-unreachable-todo.md) | **A program can fault deliberately — `unreachable` and `todo`, with a bottom type** (v0.479) — Two ambient built-ins of an internal bottom type raise a runtime fault; `todo` warns | Accepted (v0.479) |
