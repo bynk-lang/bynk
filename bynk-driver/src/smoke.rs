@@ -50,6 +50,9 @@ const SKIPPABLE: &[&str] = &[
     // A `String where Matches(…)` has no generator.
     "bynk.val.needs_pin",
     "bynk.val.agent_not_generable",
+    // `Val` fabricates only a named type, so a bare base type with no literal
+    // in `bare_literal` (#2706) is skipped, not a failure of the whole run.
+    "bynk.val.unsupported_kind",
     // A principal the synthesiser could not construct.
     "bynk.test.actor_identity_required",
     "bynk.test.actor_no_identity",
@@ -489,6 +492,18 @@ impl Smoke {
     }
 }
 
+/// #2706: `Val` refuses a bare base type (`Val[String]` is `bynk.val.unsupported_kind`), so a
+/// plain `String`, `Int` or `Bool` parameter, such as a route's path parameter, is given a
+/// literal instead. A refined or declared type still goes through `Val`.
+fn bare_literal(ty: &str) -> Option<String> {
+    match ty.trim() {
+        "String" => Some(r#""a""#.to_string()),
+        "Int" => Some("1".to_string()),
+        "Bool" => Some("true".to_string()),
+        _ => None,
+    }
+}
+
 fn skippable(code: &str) -> bool {
     SKIPPABLE.iter().any(|s| match s.strip_suffix('*') {
         Some(prefix) => code.starts_with(prefix),
@@ -605,7 +620,7 @@ impl Route<'_> {
                 }
                 let span = p.type_ref.span();
                 let ty = self.source.get(span.start..span.end).unwrap_or("()");
-                format!("Val[{ty}]")
+                bare_literal(ty).unwrap_or_else(|| format!("Val[{ty}]"))
             })
             .collect()
     }
@@ -665,6 +680,15 @@ impl Route<'_> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn bare_literal_covers_string_int_and_bool_only() {
+        assert_eq!(bare_literal("String").as_deref(), Some(r#""a""#));
+        assert_eq!(bare_literal("Int").as_deref(), Some("1"));
+        assert_eq!(bare_literal("Bool").as_deref(), Some("true"));
+        assert_eq!(bare_literal("List[String]"), None);
+        assert_eq!(bare_literal("Sku"), None);
+    }
+
     fn sources(files: &[(&str, &str)]) -> HashMap<PathBuf, String> {
         files
             .iter()
@@ -700,17 +724,15 @@ service api from http {
             "{text}"
         );
         assert!(
-            text.contains(r#"api.PUT("/cart/:sku", Val[String], Val[Item]) by User(Val[UserId])"#),
+            text.contains(r#"api.PUT("/cart/:sku", "a", Val[Item]) by User(Val[UserId])"#),
             "{text}"
         );
         assert!(
-            text.contains(
-                r#"api.PUT("/cart/:sku", Val[String], Wire("{not json")) by User(Val[UserId])"#
-            ),
+            text.contains(r#"api.PUT("/cart/:sku", "a", Wire("{not json")) by User(Val[UserId])"#),
             "{text}"
         );
         assert!(
-            text.contains(r#"api.PUT("/cart/:sku", Val[String], Val[Item]) by Nobody"#),
+            text.contains(r#"api.PUT("/cart/:sku", "a", Val[Item]) by Nobody"#),
             "{text}"
         );
         // A public route has no credential to refuse, and a GET no body.
