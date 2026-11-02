@@ -199,7 +199,12 @@ pub fn explain(code: &str) -> Explanation {
 
 /// [`explain`] as a JSON string: `{ code, summary, blurb?, example?, href }`.
 pub fn explain_to_json(code: &str) -> String {
-    serde_json::to_string(&explain(code)).unwrap_or_else(|_| "{}".to_string())
+    serde_json::to_string(&explain(code)).unwrap_or_else(|_| {
+        format!(
+            "{{\"code\":{code:?},\"summary\":null,\"href\":\"{}\"}}",
+            bynk_syntax::diagnostics::href("")
+        )
+    })
 }
 
 /// Flatten attributed errors to [`Diagnostic`]s, resolving line/col against the
@@ -1046,6 +1051,26 @@ mod tests {
             h.starts_with("https://bynk-lang.org/book/reference/diagnostics/#"),
             "{h}"
         );
+    }
+
+    /// #2679: hard-coded anchors, independent of the slug code under test.
+    #[test]
+    fn index_anchors_are_the_expected_slugs() {
+        let anchor = |prefix: &str| {
+            let d = bynk_syntax::diagnostics::REGISTRY
+                .iter()
+                .find(|d| {
+                    d.code.starts_with(prefix)
+                        && bynk_syntax::diagnostics::explain(d.code).is_none()
+                })
+                .unwrap();
+            explain(d.code).href
+        };
+        // No `bynk.mock.*` code is registered today; `property` and `transition`
+        // exercise the parenthesised-title slug the same way.
+        assert!(anchor("bynk.property.").ends_with("#properties-generative-tests"));
+        assert!(anchor("bynk.transition.").ends_with("#transitions-step-invariants"));
+        assert!(anchor("bynk.types.").ends_with("#type-checking"));
     }
 
     /// #2679: every index deep-link lands on a real section of the generated page.
