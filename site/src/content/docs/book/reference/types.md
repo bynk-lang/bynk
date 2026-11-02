@@ -745,7 +745,10 @@ itself, so `fn Box.map[U](self, f: A -> U) -> Box[U]` reads `A` from the receive
 namespace-object method — `map<A, U>(self: Box<A>, f: (a: A) => U): Box<U>` — the
 type's parameters threaded onto each method (the namespace object itself cannot
 carry them). The type arguments are inferred from the receiver and the argument
-types; the explicit `x.map[U](…)` form is a later increment. A **static**
+types; an explicit list, `x.map[String](f)`, names the method's own parameters only (the
+receiver's are already known) and pins them where inference has nothing to go on
+(`fn Box.cast[U](self) -> Option[U]` is called `b.cast[String]()`); the arity is
+checked as for any generic call (`bynk.generics.type_arg_mismatch`). A **static**
 method on a generic type (`fn Box.of(value: A) -> Box[A]`) is generic over the
 type's parameters too, followed by its own; see
 [Generics](/book/reference/generics/#static-methods-on-generic-types). A static

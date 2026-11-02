@@ -1,0 +1,24 @@
+suite demo.boxes
+
+case "a method type parameter with nothing to infer it from" {
+  let b = Box { value: 1 }
+  let c = b.cast[String]()
+  expect c == None
+}
+
+case "an explicit argument pins a method type parameter" {
+  let b = Box { value: 3 }
+  let m = b.mapped[String]((n) => "n")
+  expect m.value == "n"
+  expect m.get() == "n"
+}
+
+case "an explicit argument on a bounded method parameter" {
+  let b = Box { value: 0 }
+  expect b.sortedWith[Int]([3, 1, 2]) == [1, 2, 3]
+}
+
+case "the explicit form agrees with inference" {
+  let b = Box { value: 2 }
+  expect b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value
+}

@@ -3716,7 +3716,31 @@ fn lower_method_call(
             needs_exec = true;
         }
     }
-    let call = format!("{ns}.{}({})", method.name, all.join(", "));
+    // #2795: explicit type arguments on a generic instance method are kept, the
+    // receiver's own parameters first (the emitted `<A, U>` order), so a call
+    // with no argument of type `U` still types as written. A receiver argument
+    // with no TypeScript spelling drops the list, leaving `tsc` to infer.
+    let explicit = if type_args.is_empty() {
+        String::new()
+    } else {
+        let recv_args: Option<Vec<TypeRef>> = cx
+            .commons()
+            .expr_types
+            .get(&receiver.id)
+            .and_then(|te| match &*tys.get(te.ty) {
+                Ty::Named { args, .. } => Some(args.clone()),
+                _ => None,
+            })
+            .and_then(|args| args.iter().map(|a| ty_to_type_ref(*a, tys)).collect());
+        match recv_args {
+            Some(mut all_refs) => {
+                all_refs.extend(type_args.iter().cloned());
+                capability_call_type_args_ts(&all_refs, None)
+            }
+            None => String::new(),
+        }
+    };
+    let call = format!("{ns}.{}{explicit}({})", method.name, all.join(", "));
     pre.finish(if needs_exec {
         settle_exec_call(call, cx)
     } else {

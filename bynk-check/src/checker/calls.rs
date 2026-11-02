@@ -2605,6 +2605,35 @@ fn receiver_is_generic_static(receiver: &Expr, method: &Ident, ctx: &Ctx) -> boo
             .is_some_and(|t| t.statics.contains_key(&method.name))
 }
 
+/// #2795: whether `recv_ty` is a user type whose instance method `method` has
+/// type parameters of its own, the only receiver that takes explicit type
+/// arguments on an instance call. They name the method's own parameters; the
+/// receiver's are already ground.
+fn receiver_has_generic_instance_method(recv_ty: TyId, method: &Ident, ctx: &Ctx) -> bool {
+    let Ty::Named { name, .. } = &*ctx.tys.get(recv_ty) else {
+        return false;
+    };
+    ctx.input
+        .methods
+        .get(name)
+        .and_then(|t| t.instance.get(&method.name))
+        .is_some_and(|m| !m.type_params.is_empty())
+}
+
+fn reject_method_type_args(method: &Ident, args: &[Expr], span: Span, ctx: &mut Ctx) {
+    ctx.errors.push(CompileError::new(
+        "bynk.generics.type_arg_mismatch",
+        span,
+        format!(
+            "`{}` does not take explicit type arguments — only a generic method with type parameters of its own does",
+            method.name
+        ),
+    ));
+    for a in args {
+        let _ = type_of(a, None, ctx);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_method_call(
     receiver: &Expr,
@@ -2622,8 +2651,9 @@ pub(crate) fn check_method_call(
     // static — every other method/static takes none (the 0039/0045 rule). A
     // user-declared type named `Json` shadows the codec module and takes no type
     // arguments. #594: a generic *user* instance method infers its type
-    // arguments from the receiver and the argument types — the explicit
-    // `x.map[U](…)` form is deferred, so explicit type args are rejected here.
+    // arguments from the receiver and the argument types; #2795: an explicit
+    // `x.map[U](…)` names the method's own parameters only (the receiver's are
+    // already ground), and is admitted once the receiver's type is known.
     // #926: a capability operation may declare its own type parameter(s),
     // resolved only from an explicit call-site type argument (never
     // inferred) — the same explicit-only discipline as `Json.decode[T]`, so
@@ -2641,23 +2671,19 @@ pub(crate) fn check_method_call(
                 .resolve_cross_capability(&chain)
                 .is_some()
         });
-    if !type_args.is_empty()
+    // #2795: a receiver that is a value may be a generic user instance method's
+    // receiver, so the verdict waits for its type (below); any other shape is
+    // refused here as before.
+    let value_receiver = ctx.lookup_root_ident(receiver).is_some()
+        || ctx.root_ident_is_store_field(receiver)
+        || flatten_ident_chain(receiver).is_none();
+    let type_args_pending = !type_args.is_empty()
         && !matches!(&receiver.kind, ExprKind::Ident(id) if id.name == JSON
             && !ctx.input.types.contains_key(JSON))
         && !receiver_is_capability
-        && !receiver_is_generic_static(receiver, method, ctx)
-    {
-        ctx.errors.push(CompileError::new(
-            "bynk.generics.type_arg_mismatch",
-            span,
-            format!(
-                "`{}` does not take explicit type arguments — a generic method infers them from the receiver and arguments",
-                method.name
-            ),
-        ));
-        for a in args {
-            let _ = type_of(a, None, ctx);
-        }
+        && !receiver_is_generic_static(receiver, method, ctx);
+    if type_args_pending && !value_receiver {
+        reject_method_type_args(method, args, span, ctx);
         return None;
     }
     // v0.25 / v0.178: a test body invokes the target's service as
@@ -2945,6 +2971,10 @@ pub(crate) fn check_method_call(
         _ => None,
     };
     let recv_ty = type_of(receiver, recv_expected, ctx)?;
+    if type_args_pending && !receiver_has_generic_instance_method(recv_ty, method, ctx) {
+        reject_method_type_args(method, args, span, ctx);
+        return None;
+    }
     // v0.20b: built-in kernel methods on the collection types. These are
     // compiler-known special forms typed directly here — generic in their
     // accumulator without the (deferred) declared-generic-methods feature;
@@ -3350,7 +3380,7 @@ pub(crate) fn check_method_call(
             Some(recv_ty),
             &method_decl,
             method,
-            &[],
+            type_args,
             args,
             expected,
             ctx,

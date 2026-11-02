@@ -6,9 +6,9 @@ fn Box.of(value: T) -> Box[T] { Box { value } }
 
 fn Box.empty() -> Box[Option[T]] { Box { value: None } }
 
-fn Box.cast[U](self) -> Option[U] { None }
+fn Box.get(self) -> T { self.value }
 
 fn misuse(b: Box[Int]) -> Int {
-  let c = b.cast[String]()
+  let c = b.get[Int]()
   0
 }

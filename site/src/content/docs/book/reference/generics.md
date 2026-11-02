@@ -280,8 +280,7 @@ The type's parameters come from, in order:
    return type is matched against the binding's type (`Box.empty()` above);
 3. **explicit type arguments**: `Box.empty[String]()` lists the type's parameters,
    then the method's own, in declaration order, all or none. A qualified variant
-   takes none (`Opt.None[Int]` stays rejected), and an instance method does not take
-   them yet.
+   takes none (`Opt.None[Int]` stays rejected).
 
 A parameter that none of these determines is `bynk.generics.uninferable_type_arg`.
 A bound the type declares holds inside the static and adds the usual hidden

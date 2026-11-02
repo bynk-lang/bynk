@@ -453,7 +453,7 @@ nothing.
   - The opaque `StructuralOnly` decode gap: #2794.
   - Crypto keys satisfying `Codable` and `Json.*`: #2784.
 - **Slice 4 (static methods, ADR 0702)**
-  - Explicit type arguments on instance methods (ADR 0234 B): #2795.
+  - Explicit type arguments on instance methods (ADR 0234 B): #2795, shipped.
   - `from` as a reserved word: the text fix shipped as #2774; whether a reserved
     word may be a member name after `.` is open as #2778.
 - **Found while closing the track:** string interpolation accepts `Bytes`,
