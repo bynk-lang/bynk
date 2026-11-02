@@ -1,0 +1,13 @@
+context media.store
+
+service api from http {
+	on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("pong")
+	}
+}
+
+service save {
+	on call(key: String) -> Effect[Int] {
+		key.length()
+	}
+}

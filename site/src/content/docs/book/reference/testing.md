@@ -38,6 +38,11 @@ At `unit` and `integration` the `schedule` and `message` addresses run the
 handler in process. At `system` they run it through the deployable Worker's own
 entry points; see [Cron and queue at `system`](#cron-queue-system).
 
+The `call` address works at `unit` and `integration` only. An `on call` service is
+internal to a deployment and signed per caller, so a `system` case that calls it
+is `bynk.test.call_needs_in_process`; drive an `http` route that reaches the
+handler instead.
+
 The outcome is typed by what the addressed handler returns. `let r <-
 api.GET("/x")` on a handler that returns `Effect[HttpResult[User]]` binds `r`
 as an `HttpResult[User]`, so `Ok(u)` binds `u` as a `User`. The same holds for
