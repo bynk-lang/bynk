@@ -1,0 +1,5 @@
+commons demo {
+  fn show(v: Bytes) -> String {
+    "value: \(v)"
+  }
+}
