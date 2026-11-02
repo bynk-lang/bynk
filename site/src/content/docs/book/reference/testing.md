@@ -1070,6 +1070,9 @@ fn discount(p: Int, pct: Int) -> Int
   an `invariant`: a pure `Bool` with `implies`, `is`, operators, and pure methods
   — no effects, capabilities, `expect`, or `Val`
   (`bynk.contract.impure_predicate`, `bynk.contract.not_bool`).
+- A record literal in a clause must be **parenthesised**: `requires r: (p == P { x: 1 })`.
+  The `{` after a clause opens the function body, so a bare `P { … }` is not read
+  as a record construction there (as in an `if`/`match` condition).
 
 **Checked at two points, for free.** A contract needs no test to run:
 
