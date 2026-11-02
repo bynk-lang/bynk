@@ -55,6 +55,8 @@ pub struct LocalsSink {
     file: Option<PathBuf>,
     /// Set for synthetic (toolchain-injected) files only.
     muted: bool,
+    /// (file, name, def site) → indices into that file's entries.
+    index: HashMap<(PathBuf, String, Span), Vec<usize>>,
 }
 
 impl LocalsSink {
@@ -85,20 +87,39 @@ impl LocalsSink {
         let Some(file) = &self.file else {
             return;
         };
-        self.files
-            .entry(file.clone())
-            .or_default()
-            .push(LocalBinding {
-                name,
-                def_span,
-                kind,
-                ty,
-                scope,
-            });
+        let entries = self.files.entry(file.clone()).or_default();
+        // #2701: an `is` binding is recorded once per region it is in scope in
+        // (a left-nested `&&` chain records it per operand). The same binding
+        // (same file, name and def site) with an overlapping scope is one
+        // entry; a disjoint scope is its own entry, never the hull of the two,
+        // so the gap between them (where an outer same-named binding may be
+        // the one in scope) stays out of scope.
+        let slot = self
+            .index
+            .entry((file.clone(), name.clone(), def_span))
+            .or_default();
+        for &i in slot.iter() {
+            let prev: &mut LocalBinding = &mut entries[i];
+            if prev.scope.start <= scope.end && scope.start <= prev.scope.end {
+                prev.scope = prev.scope.merge(scope);
+                prev.ty = ty;
+                prev.kind = kind;
+                return;
+            }
+        }
+        slot.push(entries.len());
+        entries.push(LocalBinding {
+            name,
+            def_span,
+            kind,
+            ty,
+            scope,
+        });
     }
 
     /// Drain the recorded bindings, each file's entries ordered by def span.
     pub fn take_files(&mut self) -> FileLocals {
+        self.index.clear();
         let mut files = std::mem::take(&mut self.files);
         for locals in files.values_mut() {
             locals.sort_by_key(|b| (b.def_span.start, b.def_span.end));
@@ -150,6 +171,32 @@ mod tests {
             ty: "Int".to_string(),
             scope: Span::new(scope.0, scope.1),
         }
+    }
+
+    #[test]
+    fn record_merges_overlapping_scopes_keeps_disjoint_ones_apart_and_last_wins() {
+        let mut sink = LocalsSink::new();
+        sink.enter_file(Path::new("a.bynk"), false);
+        let def = Span::new(10, 11);
+        let rec = |sink: &mut LocalsSink, ty: &str, lo: usize, hi: usize| {
+            sink.record(
+                "v".to_string(),
+                def,
+                LocalKind::Let,
+                ty.to_string(),
+                Span::new(lo, hi),
+            );
+        };
+        rec(&mut sink, "Int", 20, 30);
+        rec(&mut sink, "String", 25, 40); // overlaps: merges, last type wins
+        rec(&mut sink, "Bool", 60, 70); // disjoint: its own entry
+        let files = sink.take_files();
+        let got = &files[Path::new("a.bynk")];
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert_eq!((got[0].scope.start, got[0].scope.end), (20, 40));
+        assert_eq!(got[0].ty, "String");
+        assert_eq!((got[1].scope.start, got[1].scope.end), (60, 70));
+        assert_eq!(got[1].ty, "Bool");
     }
 
     #[test]
