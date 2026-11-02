@@ -596,6 +596,10 @@ pub struct CompileOptions {
     pub remote_tests: Option<RemoteTests>,
 }
 
+/// #2685: the tail of the synthesised smoke suite's file name (`<stem>.smoke.bynk`), which a
+/// test build reads to name its typed routes to the decoder.
+pub const SMOKE_SUITE_SUFFIX: &str = ".smoke.bynk";
+
 /// #2138: how a remote test build treats a `system` case it can't run
 /// against a real runtime ([`CompileOptions::remote_tests`]).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

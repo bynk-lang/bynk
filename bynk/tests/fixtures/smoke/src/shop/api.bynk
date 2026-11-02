@@ -10,7 +10,17 @@ type Item = { sku: Sku, qty: Int where Positive }
 // An inline `Matches` on a field has no generator either.
 type Tag = { code: String where Matches("[a-z]+") }
 
+// A helper's result is one the walk of a handler's body can't see into, so the
+// `409` below is not among `/clash`'s declared statuses (#2685).
+fn taken() -> HttpResult[String] {
+  Conflict("taken")
+}
+
 service api from http {
+  // Answers a status it does not declare: a warning, not a failure.
+  on GET("/clash") () -> Effect[HttpResult[String]] by v: Visitor {
+    Effect.pure(taken())
+  }
   on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("pong")
   }

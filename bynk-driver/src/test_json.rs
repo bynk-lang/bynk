@@ -159,11 +159,56 @@ pub struct Case {
     /// `origin` as an ordinary `case`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// #2685: the warnings a smoke case raised, which do not fail it. Appended
+    /// after `origin` (and so before the stream's `durationMs`) and absent when
+    /// the case raised none, so every other document keeps its layout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warnings: Option<Vec<Warning>>,
     /// How long the case ran, in milliseconds, as its module measured it (#2267
     /// stage 2). Never part of the JSON document, which stays deterministic; the
     /// `ndjson` stream's `case` event carries it, last.
     #[serde(skip)]
     pub duration_ms: Option<f64>,
+}
+
+/// #2685: a warning a case raised without failing: a smoke case's answer
+/// (`bynk.test.smoke_undeclared_status`) outside the statuses its route's handler
+/// can return.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Warning {
+    pub code: String,
+    /// The route, as `METHOD /path`.
+    pub route: String,
+    /// The status the route answered.
+    pub status: u16,
+    /// The statuses its handler declares, ascending.
+    pub declared: Vec<u16>,
+    /// The warning as a sentence, as it is written to stderr.
+    pub message: String,
+}
+
+impl Warning {
+    /// The warning a runner `warning` event describes; `None` for one missing a
+    /// field.
+    pub(crate) fn from_event(value: &serde_json::Value) -> Option<Warning> {
+        Some(Warning {
+            code: value.get("code")?.as_str()?.to_string(),
+            route: value.get("route")?.as_str()?.to_string(),
+            status: u16::try_from(value.get("status")?.as_u64()?).ok()?,
+            declared: value
+                .get("declared")?
+                .as_array()?
+                .iter()
+                .filter_map(|n| u16::try_from(n.as_u64()?).ok())
+                .collect(),
+            message: value.get("message")?.as_str()?.to_string(),
+        })
+    }
+
+    /// The line a run writes to stderr for this warning.
+    pub fn line(&self, program: &str) -> String {
+        format!("{program} test: warning[{}]: {}", self.code, self.message)
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -322,6 +367,15 @@ impl TestRun {
         self.with_skips(skipped)
     }
 
+    /// Every warning the run's cases raised (#2685), in the order they ran.
+    pub fn warnings(&self) -> impl Iterator<Item = &Warning> {
+        self.suites
+            .iter()
+            .flatten()
+            .flat_map(|s| &s.cases)
+            .flat_map(|c| c.warnings.iter().flatten())
+    }
+
     /// Each skipped case as an `outcome: "skipped"` case whose `message` is
     /// why, in its suite: a remote run's (#2138) or a smoke run's (#2658).
     pub fn with_skips(mut self, skipped: &[(String, String, String)]) -> Self {
@@ -345,6 +399,7 @@ impl TestRun {
                 violation: None,
                 refusals: None,
                 origin: None,
+                warnings: None,
                 duration_ms: None,
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
@@ -458,6 +513,10 @@ impl ParsedRun {
 /// stray line should never abort the whole report).
 pub fn parse_ndjson(stdout: &str) -> ParsedRun {
     let mut run = ParsedRun::default();
+    // #2685: a `warning` event belongs to the `case` event that follows it. Warnings
+    // attach by stream order, which relies on the runner running cases one at a
+    // time: a warning raised while a case runs precedes that case's own event.
+    let mut pending: Vec<Warning> = Vec::new();
     for line in stdout.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -474,8 +533,10 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
                     cases: Vec::new(),
                 });
             }
+            Some("warning") => pending.extend(Warning::from_event(&value)),
             Some("case") => {
-                let case = case_from_event(&value);
+                let mut case = case_from_event(&value);
+                case.warnings = (!pending.is_empty()).then(|| std::mem::take(&mut pending));
                 if case.outcome == "pass" {
                     run.passed += 1;
                 } else {
@@ -526,6 +587,7 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         violation,
         refusals,
         origin: None,
+        warnings: None,
         duration_ms: value.get("durationMs").and_then(serde_json::Value::as_f64),
     }
 }
@@ -558,6 +620,17 @@ pub(crate) fn violation_from_json(value: &serde_json::Value) -> Violation {
         name: str_field(value, "name"),
         location: location_from_json(value),
     }
+}
+
+/// #2685: a case's `warnings` array, as the document carries it. A malformed
+/// entry is dropped, and an array left empty is absent.
+pub(crate) fn warnings_from_json(value: Option<&serde_json::Value>) -> Option<Vec<Warning>> {
+    let warnings: Vec<Warning> = value?
+        .as_array()?
+        .iter()
+        .filter_map(Warning::from_event)
+        .collect();
+    (!warnings.is_empty()).then_some(warnings)
 }
 
 /// #2272: a runner `refusals` array, as the case event and the document carry it. A
@@ -637,6 +710,37 @@ fn parse_location(s: &str) -> Option<Location> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_warning_event_belongs_to_the_case_that_follows_it() {
+        let stream = concat!(
+            r#"{"type":"suite-begin","name":"s","kind":"integration","tests":2}"#,
+            "\n",
+            r#"{"type":"warning","code":"bynk.test.smoke_undeclared_status","route":"GET /a","status":409,"declared":[200,404],"message":"m"}"#,
+            "\n",
+            r#"{"type":"case","suite":"s","name":"one","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"case","suite":"s","name":"two","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"run-end","passed":2,"failed":0}"#,
+            "\n",
+        );
+        let run = parse_ndjson(stream);
+        // A warning does not fail the case it is on.
+        assert_eq!((run.passed, run.failed), (2, 0));
+        let cases = &run.suites[0].cases;
+        let warning = &cases[0].warnings.as_ref().expect("the first case warns")[0];
+        assert_eq!(warning.code, "bynk.test.smoke_undeclared_status");
+        assert_eq!(warning.route, "GET /a");
+        assert_eq!(warning.status, 409);
+        assert_eq!(warning.declared, vec![200, 404]);
+        assert_eq!(cases[1].warnings, None);
+        let doc = run.into_document("").render();
+        assert!(
+            doc.contains(r#""warnings": ["#) && doc.matches("warnings").count() == 1,
+            "{doc}"
+        );
+    }
 
     fn known(
         suite: &str,

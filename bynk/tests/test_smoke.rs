@@ -118,6 +118,7 @@ fn assert_smoke_outcomes(doc: &serde_json::Value) {
         outcomes(doc),
         pairs(&[
             ("smoke: GET /boom answers", "fail"),
+            ("smoke: GET /clash answers", "pass"),
             ("smoke: GET /code/:c answers", "skipped"),
             ("smoke: GET /ping answers", "pass"),
             ("smoke: POST /tag answers", "skipped"),
@@ -128,9 +129,109 @@ fn assert_smoke_outcomes(doc: &serde_json::Value) {
         ]),
         "{doc:#}"
     );
-    assert_eq!(doc["passed"], 5, "{doc:#}");
+    assert_eq!(doc["passed"], 6, "{doc:#}");
     assert_eq!(doc["failed"], 1, "{doc:#}");
     assert_eq!(doc["skipped"], 2, "{doc:#}");
+    assert_clash_warning(doc);
+}
+
+/// #2685: `/clash` answers a `409` that its handler's body does not declare. The
+/// case still passes, and carries the warning; no other case does.
+fn assert_clash_warning(doc: &serde_json::Value) {
+    let cases: Vec<&serde_json::Value> = doc["suites"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|s| s["cases"].as_array().into_iter().flatten())
+        .filter(|c| c.get("warnings").is_some())
+        .collect();
+    assert_eq!(cases.len(), 1, "{doc:#}");
+    let case = cases[0];
+    assert_eq!(case["name"], "smoke: GET /clash answers", "{doc:#}");
+    assert_eq!(case["outcome"], "pass", "{doc:#}");
+    let warnings = case["warnings"].as_array().expect("an array");
+    assert_eq!(warnings.len(), 1, "{doc:#}");
+    let w = &warnings[0];
+    assert_eq!(w["code"], "bynk.test.smoke_undeclared_status", "{doc:#}");
+    assert_eq!(w["route"], "GET /clash", "{doc:#}");
+    assert_eq!(w["status"], 409, "{doc:#}");
+    assert_eq!(w["declared"], serde_json::json!([200]), "{doc:#}");
+    assert!(
+        w["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("answered 409 Conflict") && m.contains("declares 200")),
+        "{doc:#}"
+    );
+}
+
+/// The stderr line a run writes for the `/clash` warning.
+const CLASH_LINE: &str = "warning[bynk.test.smoke_undeclared_status]: `GET /clash` (shop.api, service `api`) answered 409 Conflict, which it does not declare; it declares 200";
+
+#[test]
+fn an_undeclared_status_is_a_warning_on_stderr_in_the_human_format() {
+    if !have("node") {
+        eprintln!("skipping: `node` is not available");
+        return;
+    }
+    let Some(p) = Project::new("warn-human") else {
+        return;
+    };
+    let o = p.test(&["--smoke"]);
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    let stdout = String::from_utf8_lossy(&o.stdout);
+    assert!(stderr.contains(CLASH_LINE), "{stderr}\n{stdout}");
+    // A warning is not a failure: the case passes, and only the 500 fails.
+    assert!(stdout.contains("✓ smoke: GET /clash answers"), "{stdout}");
+    assert!(stdout.contains("6 passed, 1 failed"), "{stdout}");
+}
+
+#[test]
+fn an_undeclared_status_is_a_warning_in_json_and_on_stderr() {
+    if !have("node") {
+        eprintln!("skipping: `node` is not available");
+        return;
+    }
+    let Some(p) = Project::new("warn-json") else {
+        return;
+    };
+    let o = p.test(&["--smoke", "--format", "json"]);
+    assert_clash_warning(&document(&o));
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(stderr.contains(CLASH_LINE), "{stderr}");
+}
+
+#[test]
+fn an_undeclared_status_is_a_warning_on_the_case_event_in_ndjson() {
+    if !have("node") {
+        eprintln!("skipping: `node` is not available");
+        return;
+    }
+    let Some(p) = Project::new("warn-ndjson") else {
+        return;
+    };
+    let o = p.test(&["--smoke", "--format", "ndjson"]);
+    let stdout = String::from_utf8_lossy(&o.stdout);
+    let events: Vec<serde_json::Value> = stdout
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+    // The runner's `warning` line is not an event of the stream: the case it
+    // belongs to carries it, between `origin` and `durationMs`.
+    assert!(events.iter().all(|e| e["type"] != "warning"), "{stdout}");
+    let line = stdout
+        .lines()
+        .find(|l| l.contains("smoke: GET /clash answers"))
+        .expect("the case event");
+    let warnings = line.find("\"warnings\":").expect("warnings on the event");
+    assert!(line.find("\"tier\":").unwrap() < warnings, "{line}");
+    assert!(warnings < line.find("\"durationMs\":").unwrap(), "{line}");
+    let event: serde_json::Value = serde_json::from_str(line).unwrap();
+    assert_eq!(event["warnings"][0]["status"], 409, "{line}");
+    assert_eq!(event["warnings"][0]["declared"], serde_json::json!([200]));
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(stderr.contains(CLASH_LINE), "{stderr}");
+    // No other case carries one.
+    assert_eq!(stdout.matches("\"warnings\":").count(), 1, "{stdout}");
 }
 
 #[test]
@@ -179,7 +280,7 @@ fn a_smoke_run_in_process_calls_every_route_and_leaves_the_projects_suites_out()
     assert_smoke_outcomes(&doc);
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
-        stderr.contains("smoke: 6 cases from 5 routes, 2 skipped"),
+        stderr.contains("smoke: 7 cases from 6 routes, 2 skipped"),
         "{stderr}"
     );
 }

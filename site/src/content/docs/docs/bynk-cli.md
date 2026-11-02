@@ -698,7 +698,7 @@ and the right choice for CI that wants one result.
 |---|---|
 | `run-begin` | `type`, `suites` |
 | `suite-begin` | `type`, `name`, `kind`, `tests` |
-| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, `violation`, `refusals`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
+| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, `violation`, `refusals`, `origin`, `warnings`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
 | `suite-end` | `type`, `name` |
 | `run-end` | `type`, `passed`, `failed`, `skipped` and `transport` (a remote run only) |
 | `error` | `type`, then the document's `error` object: `kind` (`compile` or `runtime`), `message`, `diagnostics`, `stderr` |
@@ -872,6 +872,24 @@ more than one `from http` service puts the service's name before the method.
   carries, or a JSON body that doesn't decode as the route's declared type,
   where an author's own case receives the raw value to judge. That catches a
   deployment built from different source than the run.
+- **An answer a route does not declare is a warning.** A `answers` case that gets a
+  non-5xx status outside the ones the route'"'"'s handler can return (the set
+  `bynk openapi` documents, which includes the boundary'"'"'s own `400`, `401`,
+  `413` and `415`) passes, and warns with `bynk.test.smoke_undeclared_status`,
+  naming the route, the status and the declared statuses:
+
+  ```text
+  bynk test: warning[bynk.test.smoke_undeclared_status]: `GET /clash` (shop.api, service `api`) answered 409 Conflict, which it does not declare; it declares 200
+  ```
+
+  The warning is on stderr in every format. Under `--format json` it is on the
+  case, as `"warnings": [{ "code", "route", "status", "declared", "message" }]`,
+  after `"origin"`; under `--format ndjson` the `case` event carries the same
+  array, before `"durationMs"`. It never fails the run: the set is walked from the
+  handler'"'"'s body, so a status that comes from a helper'"'"'s result is outside it, and
+  treating the set as exhaustive would fail on the false positives the warning
+  exists to surface. The set is computed by `bynk test`; a direct `bynkc test
+  --smoke` compares nothing and does not warn.
 - **`--print`.** Prints the synthesised suites, each headed by the path it would
   have beside its context file, and the skipped cases as comments. Copy one
   into `tests/` to extend it. A smoke run writes nothing into the project: a

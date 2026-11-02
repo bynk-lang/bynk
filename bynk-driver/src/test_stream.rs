@@ -31,7 +31,7 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use serde::Serialize;
 
 use crate::test_json::{
-    Case, TestError, TestRun, Unmatched, case_from_event, unmatched_from_event,
+    Case, TestError, TestRun, Unmatched, Warning, case_from_event, unmatched_from_event,
 };
 
 #[derive(Serialize)]
@@ -219,6 +219,12 @@ pub struct Stream<'a> {
     context: StreamContext<'a>,
     ended: bool,
     unmatched: Unmatched,
+    /// #2685: the warnings seen since the last `case` event, which that event
+    /// carries. They attach by stream order, which relies on cases running
+    /// one at a time.
+    pending: Vec<Warning>,
+    /// Every warning the run raised, for the driver to write to stderr.
+    warnings: Vec<Warning>,
 }
 
 impl<'a> Stream<'a> {
@@ -227,6 +233,8 @@ impl<'a> Stream<'a> {
             context,
             ended: false,
             unmatched: Unmatched::default(),
+            pending: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -234,6 +242,11 @@ impl<'a> Stream<'a> {
     /// not part of the stream, but the driver turns them into an error (#2273).
     pub fn unmatched(&self) -> &Unmatched {
         &self.unmatched
+    }
+
+    /// The warnings the run raised (#2685), in order.
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
     }
 
     /// `"doc"` for a doc-comment example's case (#2461), from the case table.
@@ -275,8 +288,17 @@ impl<'a> Stream<'a> {
         match text("type") {
             "run-begin" => run_begin(count("suites")),
             "suite-begin" => suite_begin(text("name"), text("kind"), count("tests")),
+            "warning" => {
+                if let Some(warning) = Warning::from_event(&value) {
+                    self.warnings.push(warning.clone());
+                    self.pending.push(warning);
+                }
+                String::new()
+            }
             "case" => {
                 let mut case = case_from_event(&value);
+                case.warnings =
+                    (!self.pending.is_empty()).then(|| std::mem::take(&mut self.pending));
                 case.tier = self.tier_of(text("suite"), &case.name).map(str::to_string);
                 case.origin = self.origin_of(text("suite"), &case.name);
                 case_event(text("suite"), &case)
@@ -302,6 +324,7 @@ impl<'a> Stream<'a> {
                             violation: None,
                             refusals: None,
                             origin: self.origin_of(suite, name),
+                            warnings: None,
                             duration_ms: None,
                         },
                     ));
@@ -428,6 +451,7 @@ mod tests {
             violation: None,
             refusals: None,
             origin: None,
+            warnings: None,
             duration_ms: None,
         }
     }
