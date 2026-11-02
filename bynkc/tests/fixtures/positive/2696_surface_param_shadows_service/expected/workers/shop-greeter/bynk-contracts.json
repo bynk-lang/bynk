@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "audit": "3ac226280cb37073",
+    "greet": "a55e77482ed232ef",
+    "tally": "77c1ac7009cd779b"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "audit": "Svc(\"audit\",P(\"audit\",B(\"String\")),Ret(B(\"String\")))",
+    "greet": "Svc(\"greet\",P(\"greet\",B(\"String\")),Ret(B(\"String\")))",
+    "tally": "Svc(\"tally\",P(\"deps\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
+}

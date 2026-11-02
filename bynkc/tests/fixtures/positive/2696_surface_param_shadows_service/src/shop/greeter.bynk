@@ -1,0 +1,24 @@
+context shop.greeter
+
+// #2696: a handler parameter named like its own service, or like `deps`, must
+// not shadow what the generated surface method reads after binding its
+// parameters.
+
+service greet {
+	on call(greet: String) -> Effect[String] {
+		greet
+	}
+}
+
+service tally {
+	on call(deps: Int) -> Effect[Int] {
+		deps + 1
+	}
+}
+
+// The `{ ...deps, identity: __caller }` branch: a Caller-binding handler.
+service audit {
+	on call(audit: String) -> Effect[String] by c: Caller {
+		audit
+	}
+}

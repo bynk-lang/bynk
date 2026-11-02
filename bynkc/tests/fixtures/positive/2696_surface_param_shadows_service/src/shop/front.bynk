@@ -1,0 +1,21 @@
+context shop.front
+
+consumes shop.greeter as Greeter
+
+service front {
+	on call(name: String) -> Effect[String] {
+		Greeter.greet(name)
+	}
+}
+
+service count {
+	on call(n: Int) -> Effect[Int] {
+		Greeter.tally(n)
+	}
+}
+
+service note {
+	on call(s: String) -> Effect[String] {
+		Greeter.audit(s)
+	}
+}
