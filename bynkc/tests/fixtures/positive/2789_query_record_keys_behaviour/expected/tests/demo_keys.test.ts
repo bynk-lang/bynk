@@ -34,7 +34,7 @@ function __bynkShow(v: unknown): string {
 }
 
 function __makeTestDeps() {
-  return {  };
+  return { Clock: new __ns_demo_keys.FixedClock() };
 }
 
 // case tier: unit
@@ -165,7 +165,7 @@ async function test_joinOn_a_record_key_matches_by_value() {
 }
 
 // case tier: unit
-async function test_leftJoin_keeps_an_unmatched_left_row() {
+async function test_leftJoin_matches_a_record_key_by_value() {
   try {
     __ns_demo_keys.__resetAgents();
     const deps = __makeTestDeps();
@@ -178,8 +178,33 @@ async function test_leftJoin_keeps_an_unmatched_left_row() {
     await __makeLog("l").visit("a", Region.North, 1, 10, deps);
     await __makeLog("l").visit("b", Region.South, 2, 7, deps);
     await __makeLog("l").label("x", Region.North, 1, "n1", deps);
-    const n = await __makeLog("l").unlabelled(deps);
-    if (!(n === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:53:10", 1456, 1462, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
+    const n = await __makeLog("l").matchedTotal(deps);
+    if (!(n === 10)) { throw __bynkExpectFailure("tests/demo/keys.bynk:53:10", 1460, 1467, "expect n == 10\n  expected: n == 10\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((10))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_distinctBy_over_a_Log() {
+  try {
+    __ns_demo_keys.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Label, Log, Region, Site, Tally, Visit, __makeLog } = __ns_demo_keys;
+    type Label = __ns_demo_keys.Label;
+    type Region = __ns_demo_keys.Region;
+    type Site = __ns_demo_keys.Site;
+    type Tally = __ns_demo_keys.Tally;
+    type Visit = __ns_demo_keys.Visit;
+    await __makeLog("t").logSite(Region.North, 1, deps);
+    await __makeLog("t").logSite(Region.North, 1, deps);
+    await __makeLog("t").logSite(Region.South, 1, deps);
+    const n = await __makeLog("t").distinctLogged(deps);
+    if (!(n === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:61:10", 1644, 1650, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -203,7 +228,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["distinct by a record element", "distinct over an enum element", "distinctBy a record key keeps first seen", "groupBy a record key merges equal keys", "joinOn a record key matches by value", "leftJoin keeps an unmatched left row"];
+export const __bynkCases: readonly string[] = ["distinct by a record element", "distinct over an enum element", "distinctBy a record key keeps first seen", "groupBy a record key merges equal keys", "joinOn a record key matches by value", "leftJoin matches a record key by value", "distinctBy over a Log"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -238,9 +263,15 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("leftJoin keeps an unmatched left row")) {
+  if (want("leftJoin matches a record key by value")) {
     const started = __bynkCaseNow();
-    const r = { name: "leftJoin keeps an unmatched left row", ...(await test_leftJoin_keeps_an_unmatched_left_row()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "leftJoin matches a record key by value", ...(await test_leftJoin_matches_a_record_key_by_value()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("distinctBy over a Log")) {
+    const started = __bynkCaseNow();
+    const r = { name: "distinctBy over a Log", ...(await test_distinctBy_over_a_Log()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

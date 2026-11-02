@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: ts_writes
 changelog: A `Query`'s `distinct`, `distinctBy`, `groupBy` and join keys take any `Key` type, as a `List`'s do
 ---
 

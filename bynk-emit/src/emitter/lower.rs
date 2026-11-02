@@ -4888,40 +4888,6 @@ fn lower_stream_method(source: String, method: &Ident, a: &[String]) -> Option<S
 /// uses streams still needs no runtime import (ADR 0128 D6).
 const STREAM_CLAIM: &str = "const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for(\"bynk.stream.read\"); if (__m[__k]) { throw new globalThis.Error(\"bynk: a stream can be read only once\"); } __m[__k] = true;";
 
-/// v0.91 (ADR 0119, query-algebra slice 2): lower a lazy storage-query op over a
-/// `source` array expression. **Builders** wrap the source in a deferred thunk
-/// `() => …[]` (so the terminal reads *staged* state when it runs —
-/// read-your-writes, ADR 0109/0119 D7). **Terminals** read the source array and
-/// produce the result; they are `Effect`-typed (awaited with `<-`), but the
-/// staged map is in memory, so a synchronous expression suffices (`await` on a
-/// non-promise is identity) — except `forEach`, which awaits its effectful fn.
-/// The element type is inferred from the typed source (`Record`'s values), so no
-/// `__x` annotations are needed. Callbacks are wrapped in a single-arg arrow so
-/// the array index never reaches a one-param Bynk fn.
-///
-/// `elem_ts` is the receiver's own element type, already rendered — resolved
-/// by review of #1460 (the `List[T]` sibling, `lower_list_kernel`, already
-/// threads the equivalent `elem: TyId` through for its own `distinctBy`/
-/// `joinOn`/`leftJoin`/`groupBy` arms; this function's own four collection-
-/// kernel sites just never reused it). A pre-rendered string, not a `TyId`,
-/// because this function has four real callers with four different sources
-/// for it: a genuine `store Query[T]` field/expression (`Ty::Query`'s own
-/// element `TyId`, via `ts_ty`), a held `store Map[K, Connection]`'s
-/// connection frame type (already a `String`, `agent_held_map_frame`), a
-/// plain `store Map[K, V]`'s value type (`agent_store_map_value_ts`, added by
-/// this review), and a `store Log[T]`'s element type
-/// (`agent_store_log_value_ts`, ditto) — the latter two mirror
-/// `held_maps`/`held_maps_ts`'s own established construction exactly, just
-/// for the non-held case.
-///
-/// `other_elem_ts` is `joinOn`/`leftJoin`'s own `other`-side bucket type,
-/// computed by every caller via the same `join_other_elem_ts` helper
-/// `lower_list_kernel`'s own `joinOn`/`leftJoin`/`join` arms already call —
-/// pushed to the call site (rather than this function taking `args`/`cx`
-/// itself, `join_other_elem_ts`'s own `args[0]` indexing) to stay under
-/// clippy's argument-count lint; every caller already has `args`/`cx` in
-/// scope and guards the empty-args case (`distinct`/`collect`/etc. have no
-/// `other` to derive one from — `other_elem_ts` is simply unused there).
 /// What `lower_query_method` needs to know about the receiver beyond its
 /// already-lowered arguments: the rendered element types, and whether a key-based
 /// method (`distinct`, `distinctBy`, `groupBy`, `joinOn`, `leftJoin`) has a key
@@ -4956,6 +4922,41 @@ fn query_keyed(e: &Expr, method: &Ident, args: &[Expr], cx: &LowerCtx) -> bool {
     !plain
 }
 
+/// v0.91 (ADR 0119, query-algebra slice 2): lower a lazy storage-query op over a
+/// `source` array expression. **Builders** wrap the source in a deferred thunk
+/// `() => …[]` (so the terminal reads *staged* state when it runs —
+/// read-your-writes, ADR 0109/0119 D7). **Terminals** read the source array and
+/// produce the result; they are `Effect`-typed (awaited with `<-`), but the
+/// staged map is in memory, so a synchronous expression suffices (`await` on a
+/// non-promise is identity) — except `forEach`, which awaits its effectful fn.
+/// The element type is inferred from the typed source (`Record`'s values), so no
+/// `__x` annotations are needed. Callbacks are wrapped in a single-arg arrow so
+/// the array index never reaches a one-param Bynk fn.
+///
+/// `shape.elem_ts` is the receiver's own element type, already rendered — resolved
+/// by review of #1460 (the `List[T]` sibling, `lower_list_kernel`, already
+/// threads the equivalent `elem: TyId` through for its own `distinctBy`/
+/// `joinOn`/`leftJoin`/`groupBy` arms; this function's own four collection-
+/// kernel sites just never reused it). A pre-rendered string, not a `TyId`,
+/// because this function has four real callers with four different sources
+/// for it: a genuine `store Query[T]` field/expression (`Ty::Query`'s own
+/// element `TyId`, via `ts_ty`), a held `store Map[K, Connection]`'s
+/// connection frame type (already a `String`, `agent_held_map_frame`), a
+/// plain `store Map[K, V]`'s value type (`agent_store_map_value_ts`, added by
+/// this review), and a `store Log[T]`'s element type
+/// (`agent_store_log_value_ts`, ditto) — the latter two mirror
+/// `held_maps`/`held_maps_ts`'s own established construction exactly, just
+/// for the non-held case.
+///
+/// `shape.other_elem_ts` is `joinOn`/`leftJoin`'s own `other`-side bucket type,
+/// computed by every caller via the same `join_other_elem_ts` helper
+/// `lower_list_kernel`'s own `joinOn`/`leftJoin`/`join` arms already call —
+/// pushed to the call site (rather than this function taking `args`/`cx`
+/// itself, `join_other_elem_ts`'s own `args[0]` indexing); every caller
+/// already has `args`/`cx` in scope and guards the empty-args case
+/// (`distinct`/`collect`/etc. have no `other` to derive one from —
+/// `other_elem_ts` is simply unused there). Both ride in [`QueryShape`], with
+/// `keyed`, to stay under clippy's argument-count lint.
 fn lower_query_method(
     source: String,
     method: &Ident,

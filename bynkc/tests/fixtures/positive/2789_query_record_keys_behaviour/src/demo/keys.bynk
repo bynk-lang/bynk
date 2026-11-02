@@ -14,11 +14,22 @@ type Label = { site: Site, name: String }
 
 type Tally = { site: Site, total: Int }
 
+capability Clock {
+  fn now() -> Effect[Instant]
+}
+
+provides Clock = FixedClock {
+  fn now() -> Effect[Instant] {
+    Instant.fromEpochMillis(0)
+  }
+}
+
 agent Log {
   key id: String
   store visits: Map[String, Visit]
   store labels: Map[String, Label]
   store regions: Map[String, Region]
+  store trail: Log[Site] @retain(30.days)
 
   on call visit(k: String, region: Region, code: Int, n: Int) -> Effect[()] {
     let _ <- visits.put(k, Visit { site: Site { region: region, code: code }, n: n })
@@ -47,7 +58,17 @@ agent Log {
   on call joined() -> Effect[Int] {
     visits.joinOn(labels, (v) => v.site, (l) => l.site, (v, l) => v.n).sum((x) => x)
   }
-  on call unlabelled() -> Effect[Int] {
-    visits.leftJoin(labels, (v) => v.site, (l) => l.site, (v, l) => v.n).count()
+  on call matchedTotal() -> Effect[Int] {
+    visits.leftJoin(labels, (v) => v.site, (l) => l.site, (v, l) => match l {
+      Some(_) => v.n
+      None => 0
+    }).sum((x) => x)
+  }
+  on call logSite(region: Region, code: Int) -> Effect[()] given Clock {
+    let _ <- trail.append(Site { region: region, code: code })
+    ()
+  }
+  on call distinctLogged() -> Effect[Int] {
+    trail.recent(10).distinctBy((s) => s).count()
   }
 }

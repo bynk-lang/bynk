@@ -54,14 +54,29 @@ export interface Tally {
 export const Tally = {
 };
 
+export interface Clock {
+  now(): globalThis.Promise<number>;
+}
+
+export const __ClockToken: symbol = globalThis.Symbol("Clock");
+
+export class FixedClock implements Clock {
+  async now(): globalThis.Promise<number> {
+    return 0;
+  }
+}
+
+export const __FixedClockProvider = { token: __ClockToken, factory: () => new FixedClock() };
+
 export interface LogState {
   readonly visits: globalThis.Record<string, Visit>;
   readonly labels: globalThis.Record<string, Label>;
   readonly regions: globalThis.Record<string, Region>;
+  readonly trail: globalThis.Array<{ t: number; v: Site }>;
 }
 
 const __LogRegistry = new __StateRegistry();
-function __zeroOfLogState(): LogState { return { visits: {}, labels: {}, regions: {} }; }
+function __zeroOfLogState(): LogState { return { visits: {}, labels: {}, regions: {}, trail: [] }; }
 
 function __rehydrateLogState(s: LogState, stored: LogState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "visits")) for (const __k of globalThis.Object.keys(s.visits)) { const __r = __deserialise_Visit((s.visits[__k] as unknown as __JsonValue), "visits"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); s.visits[__k] = __r.value as unknown as (typeof s.visits)[string]; }
@@ -70,10 +85,11 @@ function __rehydrateLogState(s: LogState, stored: LogState): void {
   for (const __k of globalThis.Object.keys(s.labels)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "labels", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "regions")) for (const __k of globalThis.Object.keys(s.regions)) { const __r = __deserialise_Region((s.regions[__k] as unknown as __JsonValue), "regions"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); s.regions[__k] = __r.value as unknown as (typeof s.regions)[string]; }
   for (const __k of globalThis.Object.keys(s.regions)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "regions", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "trail")) for (const __e of s.trail) { const __r = __deserialise_Site((__e.v as unknown as __JsonValue), "trail"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); __e.v = __r.value as unknown as typeof __e.v; }
 }
 
 function __encodeLogState(s: LogState): globalThis.Record<string, unknown> {
-  return { ...s, visits: globalThis.Object.fromEntries(globalThis.Object.entries(s.visits).map(([__k, __v]) => [__k, __serialise_Visit(__v)])), labels: globalThis.Object.fromEntries(globalThis.Object.entries(s.labels).map(([__k, __v]) => [__k, __serialise_Label(__v)])), regions: globalThis.Object.fromEntries(globalThis.Object.entries(s.regions).map(([__k, __v]) => [__k, __serialise_Region(__v)])) };
+  return { ...s, visits: globalThis.Object.fromEntries(globalThis.Object.entries(s.visits).map(([__k, __v]) => [__k, __serialise_Visit(__v)])), labels: globalThis.Object.fromEntries(globalThis.Object.entries(s.labels).map(([__k, __v]) => [__k, __serialise_Label(__v)])), regions: globalThis.Object.fromEntries(globalThis.Object.entries(s.regions).map(([__k, __v]) => [__k, __serialise_Region(__v)])), trail: s.trail.map((__e) => ({ ...__e, v: __serialise_Site(__e.v) })) };
 }
 
 export class Log {
@@ -151,9 +167,34 @@ export class Log {
     return ((() => __bynkJoinOn(globalThis.Object.values(__state.visits), ((() => globalThis.Object.values(__state.labels)))(), (v) => v.site, (l) => l.site, (v, l) => v.n)))().reduce((__s: number, __x) => __s + ((x) => x)(__x), 0);
   }
 
-  async unlabelled(deps: {}): globalThis.Promise<number> {
+  async matchedTotal(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkLeftJoin(globalThis.Object.values(__state.visits), ((() => globalThis.Object.values(__state.labels)))(), (v) => v.site, (l) => l.site, (v, l) => v.n)))().length;
+    return ((() => __bynkLeftJoin(globalThis.Object.values(__state.visits), ((() => globalThis.Object.values(__state.labels)))(), (v) => v.site, (l) => l.site, (v, l) => ((__d) => {
+    switch (__d.tag) {
+      case "Some": {
+        return v.n;
+      }
+      case "None": {
+        return 0;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  })(l))))().reduce((__s: number, __x) => __s + ((x) => x)(__x), 0);
+  }
+
+  async logSite(region: Region, code: number, deps: { Clock: Clock }): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); __state.trail.push({ t: __now, v: { region: region, code: code } }); for (let __i = __state.trail.length - 1; __i >= 0; __i--) { if (__state.trail[__i].t < __now - 2592000000) __state.trail.splice(__i, 1); } return undefined; })();
+      return undefined;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+
+  async distinctLogged(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return ((() => __bynkDistinctBy(((() => __state.trail.slice(globalThis.Math.max(0, __state.trail.length - globalThis.Math.max(0, 10))).reverse().map((__e) => __e.v)))(), (s) => s)))().length;
   }
 
 }

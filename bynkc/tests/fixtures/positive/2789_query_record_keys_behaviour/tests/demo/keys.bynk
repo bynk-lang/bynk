@@ -45,10 +45,18 @@ case "joinOn a record key matches by value" {
   expect n == 10
 }
 
-case "leftJoin keeps an unmatched left row" {
+case "leftJoin matches a record key by value" {
   do Log("l").visit("a", North, 1, 10)
   do Log("l").visit("b", South, 2, 7)
   do Log("l").label("x", North, 1, "n1")
-  let n <- Log("l").unlabelled()
+  let n <- Log("l").matchedTotal()
+  expect n == 10
+}
+
+case "distinctBy over a Log" {
+  do Log("t").logSite(North, 1)
+  do Log("t").logSite(North, 1)
+  do Log("t").logSite(South, 1)
+  let n <- Log("t").distinctLogged()
   expect n == 2
 }
