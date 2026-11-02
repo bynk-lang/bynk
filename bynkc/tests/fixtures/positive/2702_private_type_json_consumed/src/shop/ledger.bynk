@@ -1,0 +1,10 @@
+context shop.ledger
+
+uses labels
+consumes shop.order
+
+service name {
+  on call(t: Tag) -> Effect[String] {
+    t.name
+  }
+}

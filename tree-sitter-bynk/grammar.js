@@ -39,7 +39,7 @@ const PREC = {
 module.exports = grammar({
   name: "bynk",
 
-  externals: ($) => [$.doc_block, $.doc_line, $.raw_string],
+  externals: ($) => [$.doc_block, $.doc_line, $.raw_string, $._type_app_open, $._error_sentinel],
 
   extras: ($) => [/\s+/, $.doc_line, $.line_comment, $.doc_block],
 
@@ -52,7 +52,6 @@ module.exports = grammar({
     // end of the statement (an `else` or none) says whether the record
     // pattern stood alone.
     [$._pattern, $._let_paren_record_pattern],
-    [$._primary, $.call],
     // `match e { … }` / `if e { … }`: after a bare identifier `e`,
     // the `{` is ambiguous between opening the match/if body and opening a
     // record construction/spread `e { … }`. Keep all parses alive; the body
@@ -2009,7 +2008,7 @@ module.exports = grammar({
           field("method", $.identifier),
           // v0.22b: optional explicit type arguments on a qualified static —
           // `Json.decode[T](…)` (same-line rule as `call` type application).
-          optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
+          optional(seq(alias($._type_app_open, "["), sep1(field("type_arg", $._type_ref), ","), "]")),
           "(",
           optional(sep1(field("arg", $._expression), ",")),
           optional(","),
@@ -2035,13 +2034,12 @@ module.exports = grammar({
             ")",
           ),
         ),
-        // v0.20a: explicit type arguments — `name[T, U](…)`. Not given the
-        // postfix precedence, so that the `[` stays ambiguous with a list-pattern
-        // arm that follows a bare-identifier arm body on the next line (#2680);
-        // the conflict below keeps both parses and only one completes.
+        // v0.20a: explicit type arguments — `name[T, U](…)`. The `[` is the
+        // same-line external token (#2700), so a list-pattern arm on the next
+        // line is never read as a type application.
         seq(
           field("name", choice($.identifier, $._contextual_identifier)),
-          "[",
+          alias($._type_app_open, "["),
           sep1(field("type_arg", $._type_ref), ","),
           "]",
           "(",

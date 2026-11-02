@@ -32,6 +32,8 @@ enum TokenType {
     DOC_BLOCK,
     DOC_LINE,
     RAW_STRING,
+    TYPE_APP_OPEN,
+    ERROR_SENTINEL,
 };
 
 void *tree_sitter_bynk_external_scanner_create(void) { return NULL; }
@@ -139,12 +141,35 @@ static bool scan_raw_string(TSLexer *l) {
 bool tree_sitter_bynk_external_scanner_scan(void *payload, TSLexer *lexer,
                                             const bool *valid_symbols) {
     (void)payload;
+    // #2700: the `[` that opens explicit type arguments (`f[T](…)`,
+    // `Json.decode[T](…)`) must sit on the same line as what it follows, like
+    // the compiler's parser. tree-sitter's lexer cannot see newlines, so this
+    // token is produced only when no newline precedes the `[`; across a line
+    // break the internal lexer reads an ordinary `[` instead, which starts the
+    // next match arm's list pattern (or a list literal).
+    bool first_on_line = lexer->get_column(lexer) == 0;
+    // `ERROR_SENTINEL` is never used by a rule, so it is valid only while
+    // tree-sitter is in error recovery (when every external symbol is marked
+    // valid). Leave recovery to the internal lexer. Doc and raw-string tokens
+    // legitimately share states with `[` (a string pattern can start the next
+    // arm), so those cannot be used to detect it.
+    bool recovering = valid_symbols[ERROR_SENTINEL];
+    if (valid_symbols[TYPE_APP_OPEN] && !recovering) {
+        while (lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
+               lexer->lookahead == '\r') {
+            skip(lexer);
+        }
+        if (lexer->lookahead == '[') {
+            advance(lexer);
+            lexer->result_symbol = TYPE_APP_OPEN;
+            return true;
+        }
+    }
     if (!valid_symbols[DOC_BLOCK] && !valid_symbols[DOC_LINE] && !valid_symbols[RAW_STRING]) {
         return false;
     }
     // A one-line doc must be first on its line: the scanner starts at column
     // 0, or skips a newline on its way to the marker.
-    bool first_on_line = lexer->get_column(lexer) == 0;
     // The lexer's position when external scanners run can include leading
     // whitespace — and, crucially, the scanner is frequently invoked at the
     // newline *before* the marker line (after the preceding item). We must

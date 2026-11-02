@@ -28,6 +28,11 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.17** | "`bynk test --smoke` gives a bare `String`, `Int` or `Bool` parameter a literal instead of `Val`, and skips a case whose parameter `Val` cannot fabricate (#2706)" |
+| **v0.480.16** | The `Map[K, V]` boundary decoder rejects a repeated key as `StructuralMismatch` ("a distinct map key") instead of keeping the last entry; `Decimal` keys compare by value, so `1.20` and `1.2` collide |
+| **v0.480.15** | "A name ending a `requires`/`ensures` clause no longer parses as a record construction when the function body's `{` follows it, e.g. on the next line" |
+| **v0.480.14** | Test scaffolds no longer resolve a name to a used commons' or consumed context's `private` declarations, so `Json.decode[T]` and stub signatures bind the visible `T` (#2702) |
+| **v0.480.13** | tree-sitter grammar - a match arm ending in a field access no longer needs a comma before a `[`-led arm |
 | **v0.480.12** | Names bound by an `is` pattern are recorded as locals, so hover, go-to-definition, references and rename resolve them in the branch the test guards |
 | **v0.480.11** | bynk-wasm exports bynk_reference(), the standard library catalogue (built-in methods and statics, first-party capabilities and modules, with signatures, docs, experimental and deprecated marks); Duration and Instant statics now complete |
 | **v0.480.10** | Regression fixtures pin that a flattened `Locale.current()` types as `LocaleTag` without `uses bynk.locale.types` (#2697, resolved by #2634) |

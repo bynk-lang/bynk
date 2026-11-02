@@ -1,0 +1,19 @@
+commons commerce.limits
+
+// #2703: a contract clause that ends in a bare name, with the function body's
+// `{` on the next line. The name is the end of the predicate, not the head of a
+// record construction (`Limit { n }`).
+const Limit: Int = 10
+
+fn small(n: Int) -> Int
+  requires small: n <= Limit
+{
+  n
+}
+
+fn echo(n: Int) -> Int
+  requires bounded: n <= Limit
+  ensures same: result == n
+{
+  n
+}

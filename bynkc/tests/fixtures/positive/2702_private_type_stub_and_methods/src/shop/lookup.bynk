@@ -1,0 +1,23 @@
+context shop.lookup
+
+uses pricing
+uses labels
+
+// #2702: the stub signature names `Tag`, which is the one from `labels`
+// although `pricing` is used first.
+capability Directory {
+  fn find(key: String) -> Effect[Tag]
+}
+
+provides Directory = RealDirectory {
+  fn find(key: String) -> Effect[Tag] {
+    Tag { name: key }
+  }
+}
+
+service lookup {
+  on call(key: String) -> Effect[String] given Directory {
+    let t <- Directory.find(key)
+    t.name
+  }
+}
