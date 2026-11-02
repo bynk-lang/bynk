@@ -1,0 +1,6 @@
+[project]
+name = "2784-queue-send-value-key"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.crypto", "bynk.cloudflare.Queue"]

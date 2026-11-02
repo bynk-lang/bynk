@@ -1,0 +1,14 @@
+adapter logging {
+  binding "./logging.binding.ts"
+
+  exports capability { Log }
+  exports transparent { Level }
+
+  type Level = { rank: Int }
+
+  capability Log {
+    fn info(msg: String) -> Effect[()]
+  }
+
+  provides Log = ConsoleLog
+}

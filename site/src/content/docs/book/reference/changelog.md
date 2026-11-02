@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.481**.
+written against **v0.482**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,13 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.482.0** | "**Breaking:** a `bynk.crypto` `SigningKey` or `VerifyKey` is no longer `Codable`, at any depth: `Json.encode`, `Json.decode`, a `T: Codable` bound and `Queue.sendValue` refuse one (`bynk.types.json_uncodable` / `bynk.types.not_codable`, with a note naming the key), so a key can no longer be encoded and sent. A program that encoded or decoded a key must keep the key bytes in `Secrets` and import the key again where it is used. The declaration-position check (`bynk.types.key_at_boundary`) and in-process uses such as `Crypto.sign(key, …)` are unchanged (#2784)" |
+| **v0.481.6** | An unannotated `let`, `<-` binding whose type is or contains the bottom type (a value that only faults, including a faulting lambda bound that way) (`unreachable`, `todo`) is refused with `bynk.types.never_inferred`, and no inlay hint offers `never returns` |
+| **v0.481.5** | "`consumes bynk { TimedOut }` is accepted — a `consumes U { … }` list may name a type U exports, as the `timed_out_not_in_scope` note recommends" |
+| **v0.481.4** | "A test module that calls a `Codable`-bounded generic (or generic static) with a base type such as `Int` now imports the `JsonValue`/`BoundaryError`/`Result` names the inline witness codec uses, instead of failing `tsc` with `Cannot find name '__JsonValue'`" |
+| **v0.481.3** | A bare `Val` of a refined `Int` with a wholly negative `InRange` lands inside the range instead of at `0` |
+| **v0.481.2** | The `tree-sitter-bynk` npm package declares the `tree-sitter` runtime it can load. Its parser is generated at ABI 15, but the peer dependency still said `^0.21`, and that runtime only loads ABI 14 and below, so `parser.setLanguage` threw. The peer range is now `^0.25` (#15). |
+| **v0.481.1** | Regression tests pin the recursive-type nesting bound on `/_bynk/call/` arguments, on a subscriber's event payload decoder, and on cycles that cross files, a commons and a context boundary, and check that a codec and its callers agree on the `depth` parameter (#2704) |
 | **v0.481.0** | "**Static methods on generic types, and the expected type as the last source of type arguments** (constrained-generics slice 4): `fn Box.of(value: T) -> Box[T]`, `fn Box.empty() -> Box[Option[T]]`, `fn Sorted.fromList(xs: List[T]) -> Sorted[T]`. A static on a generic type is generic over the type's parameters, then its own. They come from the arguments (`Box.of(5)`), from the expected type (`let b: Box[Option[String]] = Box.empty()`), or from explicit type arguments (`Box.empty[String]()`: the type's parameters, then the method's own, all or none). A bound the type declares adds the usual hidden witness at the call site (`Sorted.fromList(names)` passes the `String` comparator). The expected type now also grounds a parameter the arguments leave open for every generic call except a capability operation, so `let o: Option[Int] = none()` works for `fn none[T]() -> Option[T]`; `let o = none()` is still `bynk.generics.uninferable_type_arg`. `bynk.generics.method_on_generic_type` is narrowed to a static that never mentions one of its type's parameters. `Opt.None[Int]` and explicit type arguments on an instance method stay rejected. Code that uses no static on a generic type is emitted unchanged" |
 | **v0.480.23** | A context calling a used commons' method on a record or sum type no longer emits `Tag.label(t)` against a type-only binding that fails `tsc`; the commons' value is re-exported alongside the rebranded type (#2751) |
 | **v0.480.22** | "`bynk-contracts.json` `provides`, `provides_shapes` and the foreign-client hash for a service naming a consumed context's exported type now come from the table the Worker's `index.ts` enforces (a lock entry pinned from the old, unresolved `provides_shapes` is re-evaluated); the generated client declares such a type under its plain name" |

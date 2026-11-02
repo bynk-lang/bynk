@@ -1,0 +1,6 @@
+commons demo
+
+fn later() -> Int {
+  let xs = [unreachable("never")]
+  1
+}

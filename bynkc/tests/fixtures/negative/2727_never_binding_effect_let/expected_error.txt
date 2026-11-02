@@ -1,0 +1,1 @@
+bynk.types.never_inferred `n` would have the type `never returns`

@@ -1,0 +1,13 @@
+context r
+
+// #2683: `within` yields `Result[_, TimedOut]`, and `TimedOut` is `bynk`'s.
+capability Pricing {
+	fn quote(id: Int) -> Effect[Int]
+}
+
+service s {
+	on call(id: Int) -> Effect[String] given Pricing {
+		let r <- Pricing.quote(id).within(2.seconds)
+		Effect.pure("x")
+	}
+}

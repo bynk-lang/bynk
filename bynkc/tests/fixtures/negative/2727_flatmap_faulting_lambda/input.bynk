@@ -1,0 +1,5 @@
+commons demo
+
+fn later(xs: List[Int]) -> List[Int] {
+  xs.flatMap((x) => unreachable("later"))
+}

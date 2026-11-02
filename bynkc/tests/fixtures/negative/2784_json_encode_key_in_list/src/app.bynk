@@ -1,0 +1,8 @@
+context app
+
+consumes bynk.crypto { Crypto }
+
+// #2784: the refusal holds at any depth.
+fn encode(keys: List[VerifyKey]) -> String {
+	Json.encode(keys)
+}

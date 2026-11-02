@@ -3107,7 +3107,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.json_uncodable",
-        "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, error builtins).",
+        "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, `bynk.crypto` keys, error builtins).",
         &["method_call"],
     ),
     d(
@@ -3173,6 +3173,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.negative_length",
         "A length predicate was given a negative value.",
         &["refinement"],
+    ),
+    dg(
+        "bynk.types.never_inferred",
+        "An unannotated `let` or `<-` binding has a type that is, or contains, the bottom type (`never returns`) because its value only faults (a faulting lambda bound this way included); the type cannot be written in source, so an annotation is needed.",
+        &["let_stmt"],
     ),
     dg(
         "bynk.types.no_numeric_coercion",

@@ -1,0 +1,18 @@
+context app
+
+consumes bynk.crypto { Crypto }
+
+fn enc[T: Codable](v: T) -> String {
+	Json.encode(v)
+}
+
+// #2784: a key is not `Codable`.
+service probe {
+	on call(pkcs8: Bytes) -> Effect[String] given Crypto {
+		let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
+		match imported {
+			Err(_) => Effect.pure("error")
+			Ok(key) => Effect.pure(enc(key))
+		}
+	}
+}

@@ -1,0 +1,7 @@
+commons demo
+
+fn pick(n: Int) -> Int {
+  let bad = unreachable("never")
+  let ok = if n > 0 { n } else { unreachable("callers pass a positive count") }
+  ok
+}

@@ -1,0 +1,11 @@
+context app
+
+consumes bynk.crypto { Crypto }
+
+// #2784: a key cannot be built from JSON either.
+fn parse(s: String) -> Bool {
+	match Json.decode[SigningKey](s) {
+		Ok(_) => true
+		Err(_) => false
+	}
+}

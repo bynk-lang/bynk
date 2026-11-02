@@ -64,7 +64,8 @@ approved #2766 as written: decisions A to I as recommended.
    parameter, with the note "make it a free function, or mention `T` in the signature". A
    `where` clause alone does not count as mentioning it.
 7. **A spelling.** `from` is a reserved word, so the constructor the issue calls
-   `Sorted.from` is written `Sorted.fromList`.
+   `Sorted.from` is written `Sorted.fromList`. Whether a reserved word
+   should be legal as a member name after `.` is open: #2778.
 
 **Consequences.** ADR 0234 C and ADR 0183 D are lifted. A generic type can offer the
 only way in to a bounded value. Every existing positive golden is byte-identical;

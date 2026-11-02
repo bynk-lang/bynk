@@ -63,7 +63,8 @@ export const CryptoError = {
  * a `Stream`, it lives for the call that imported it. It cannot be stored,
  * persisted, logged or sent, so it is refused in a `store`, a record or event
  * field, a handler parameter or result, and a wire type
- * (`bynk.types.key_at_boundary`). Import it again where it is needed.
+ * (`bynk.types.key_at_boundary`), and it is not `Codable`, so `Json` and a
+ * `Queue` refuse it. Import it again where it is needed.
  */
 export type SigningKey = globalThis.Uint8Array & { readonly __brand: "SigningKey" };
 

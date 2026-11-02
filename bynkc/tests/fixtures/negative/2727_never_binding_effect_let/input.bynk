@@ -1,0 +1,6 @@
+commons demo
+
+fn later() -> Effect[Int] {
+  let n <- unreachable("never")
+  Effect.pure(1)
+}

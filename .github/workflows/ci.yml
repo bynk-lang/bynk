@@ -561,7 +561,7 @@ jobs:
       # Pinned to the 0.9 line (like typescript@5): this now
       # gates every test run, so a future 0.10 with changed behaviour must not
       # turn CI red with no repo change.
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
         with:
           tool: nextest@0.9
       # #1671: Node 22 (the floor, NODE_MAJOR_FLOOR) so tsc_verify's strip-types
@@ -833,7 +833,7 @@ jobs:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Prebuilt binary — avoids recompiling cargo-llvm-cov from source on every
       # run (minutes of pure build cost on a report-only, continue-on-error job).
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
         with:
           tool: cargo-llvm-cov
       - name: Coverage summary
@@ -943,7 +943,7 @@ jobs:
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Same version as the wasm-bindgen crate in Cargo.lock, like release.yml.
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
         with:
           tool: wasm-bindgen-cli@0.2.127
       - name: Install binaryen (wasm-opt)
@@ -1080,6 +1080,29 @@ jobs:
         run: git diff --exit-code -- src/
       - name: Test corpus
         run: npx tree-sitter test
+      # The generated parser carries an ABI version, and each Node `tree-sitter`
+      # runtime loads only a range of them. Nothing else ties the two together,
+      # so the declared `peerDependencies` range once drifted to a runtime that
+      # could not load the grammar (#15). Load the native binding (built by
+      # `npm ci`'s node-gyp-build install script) with a runtime from the
+      # declared range. `tree-sitter` is the package's own optional peer, so
+      # `npm i` in this directory never installs it: put it in a separate
+      # prefix and resolve it via NODE_PATH. NODE_PATH is only a fallback, so
+      # fail if a local node_modules copy would shadow it. npm picks the newest
+      # match, so this checks the top of the range, not its lower bound.
+      - name: Node binding loads with the declared tree-sitter runtime
+        run: |
+          range=$(node -p 'require("./package.json").peerDependencies["tree-sitter"]')
+          prefix="$RUNNER_TEMP/tree-sitter-runtime"
+          npm i --prefix "$prefix" --no-save --no-package-lock "tree-sitter@$range"
+          echo "peer range $range -> tree-sitter $(node -p "require('$prefix/node_modules/tree-sitter/package.json').version")"
+          export NODE_PATH="$prefix/node_modules"
+          resolved=$(node -p 'require.resolve("tree-sitter", { paths: [require("path").resolve("bindings/node")] })')
+          case "$resolved" in
+            "$prefix"/*) ;;
+            *) echo "::error::tree-sitter resolved to $resolved, not the declared-range runtime in $prefix"; exit 1 ;;
+          esac
+          node --test bindings/node/binding_test.js
 
   runtime:
     # The @bynk/runtime package: focused TypeScript modules that are bundled
@@ -1186,7 +1209,7 @@ jobs:
       # trigger an implicit download when `cargo audit` dispatches in-repo).
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       # Prebuilt binary — avoids compiling cargo-audit from source on every run.
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
         with:
           tool: cargo-audit
       - name: Audit dependencies

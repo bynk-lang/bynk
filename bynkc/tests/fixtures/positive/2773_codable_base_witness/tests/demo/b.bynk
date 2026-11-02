@@ -1,0 +1,6 @@
+suite demo.b
+
+case "a base-type witness from a src module" {
+  expect seven() == "7"
+  expect packed() == "true"
+}

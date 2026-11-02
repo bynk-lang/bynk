@@ -1,0 +1,17 @@
+context app
+
+consumes bynk.cloudflare { Queue }
+consumes bynk.crypto { Crypto }
+
+capability Orders = Queue @name("orders")
+
+// #2784: a key cannot be handed to a queue.
+service probe {
+	on call(pkcs8: Bytes) -> Effect[()] given Crypto, Orders {
+		let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
+		match imported {
+			Err(_) => Effect.pure(())
+			Ok(key) => Orders.sendValue(key)
+		}
+	}
+}
