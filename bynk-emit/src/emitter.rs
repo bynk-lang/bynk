@@ -2440,7 +2440,7 @@ fn emit_context_rebrands(
             .get(name)
             .is_some_and(|m| !m.is_empty())
         {
-            // #2751: a record/sum/alias commons type has no `.of`, but its
+            // #2751: a record/sum commons type has no `.of`, but its
             // attached methods are still called as `Type.method(recv)`, which
             // needs a value `Type` in the context (the rebrand above is only
             // a type). The value is the commons' own, re-exported unbranded:
