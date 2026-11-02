@@ -1,4 +1,4 @@
 ---
 level: patch
-changelog: A test scaffold no longer resolves a type name to a used commons' `private` type, so `Json.decode[T]` and stub signatures bind the visible `T` (#2702)
+changelog: Test scaffolds no longer resolve a name to a used commons' or consumed context's `private` declarations, so `Json.decode[T]` and stub signatures bind the visible `T` (#2702)
 ---
