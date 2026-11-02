@@ -44,6 +44,9 @@ parameters, so it would need free-function-style inference of the type's own
 parameters — a separable follow-on. It keeps
 `bynk.generics.method_on_generic_type` (now narrowed to the static case). Instance
 methods are the surface #594 asked for and the narrowest coherent lift.
+_(Lifted by the constrained-generics slice 4 ADR: a static is generic over the
+type's parameters, inferred from its arguments, the expected type or explicit type
+arguments.)_
 
 **Consequences.**
 

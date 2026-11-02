@@ -1,0 +1,20 @@
+context rec.provider
+
+uses rec.shapes
+consumes bynk { Events }
+exports transparent { Planted }
+
+event Planted = { tree: Tree }
+
+// A call argument and result of a recursive type: the `/_bynk/call/` decoders.
+service trees {
+  on call(t: Tree) -> Effect[Tree] {
+    Effect.pure(t)
+  }
+}
+
+service gardener {
+  on call(t: Tree) -> Effect[()] given Events {
+    let _ <- Events.emit[Planted](Planted { tree: t })
+  }
+}

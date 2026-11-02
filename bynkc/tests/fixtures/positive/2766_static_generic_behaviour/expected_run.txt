@@ -1,0 +1,2 @@
+# #2766: static methods on generic types.
+passed=11 failed=0

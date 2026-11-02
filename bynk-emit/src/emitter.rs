@@ -1109,7 +1109,8 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                 Some(
                     bynk_check::checker::Callee::Fn(decl, ws)
                     | bynk_check::checker::Callee::FnValue(decl, ws)
-                    | bynk_check::checker::Callee::Method(decl, ws),
+                    | bynk_check::checker::Callee::Method(decl, ws)
+                    | bynk_check::checker::Callee::Static(decl, ws),
                 ) => {
                     for (w, ty) in bynk_check::checker::codable::witness_list(decl, &commons.types)
                         .iter()

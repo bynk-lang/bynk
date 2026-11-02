@@ -1,0 +1,21 @@
+context cyc.client
+
+uses cyc.shapes
+consumes cyc.graph
+
+// #2704: a caller generates its own codecs for the callee's recursive types
+// (`client.rs`), from its own view of the type table; each must carry the
+// same `depth` parameter as the callee's.
+service relayDir {
+  on call(d: Dir) -> Effect[Dir] {
+    let r <- cyc.graph.dirs(d)
+    Effect.pure(r)
+  }
+}
+
+service relayExpr {
+  on call(e: Expr) -> Effect[Expr] {
+    let r <- cyc.graph.exprs(e)
+    Effect.pure(r)
+  }
+}
