@@ -816,6 +816,7 @@ impl Renderer<'_> {
         match r {
             WireRef::Base { base, .. } => Value::Object(base_schema(*base)),
             WireRef::Bytes => Value::Object(base_schema(BaseType::Bytes)),
+            WireRef::Decimal => Value::Object(base_schema(BaseType::Decimal)),
             WireRef::Named { name } => {
                 if let Some(t) = self.model.types.iter().find(|t| &t.name == name) {
                     let n = self.names.of(self.unit, name);
@@ -1028,6 +1029,13 @@ fn base_schema(b: BaseType) -> Map<String, Value> {
         BaseType::String => json!({ "type": "string" }),
         BaseType::Bytes => json!({ "type": "string", "contentEncoding": "base64" }),
         BaseType::Instant => json!({ "type": "integer", "x-bynk-base": "Instant" }),
+        // #2622: a `Decimal` is a plain decimal string (`"1.20"`) - no
+        // exponent, no leading `+`.
+        BaseType::Decimal => json!({
+            "type": "string",
+            "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
+            "x-bynk-base": "Decimal",
+        }),
         BaseType::Duration => json!({ "type": "number", "x-bynk-base": "Duration" }),
     };
     match v {
@@ -1043,8 +1051,13 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
         return;
     }
     let mut patterns: Vec<String> = Vec::new();
+    // #2622: a `Decimal` schema is a string, so its numeric predicates have no
+    // `minimum`/`maximum` form; they stay in `x-bynk-refinements` and the prose.
+    let decimal = s.get("x-bynk-base").and_then(Value::as_str) == Some("Decimal");
     for p in preds {
         match p {
+            PredKind::Positive | PredKind::NonNegative | PredKind::InRange(..) if decimal => {}
+            PredKind::InRangeD(..) => {}
             PredKind::NonEmpty => tighten_min(s, "minLength", 1.0),
             PredKind::MinLength(n) => tighten_min(s, "minLength", *n as f64),
             PredKind::MaxLength(n) => tighten_max(s, "maxLength", *n as f64),
@@ -1114,6 +1127,7 @@ fn render_pred(p: &PredKind) -> String {
         PredKind::Matches(re) => format!("Matches({re:?})"),
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::InRangeD(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::MinLength(n) => format!("MinLength({n})"),
         PredKind::MaxLength(n) => format!("MaxLength({n})"),
         PredKind::Length(n) => format!("Length({n})"),
@@ -1131,6 +1145,7 @@ fn pred_prose(p: &PredKind) -> String {
         PredKind::Matches(re) => format!("must match `{re}`"),
         PredKind::InRange(a, b) => format!("must be in range [{}, {}]", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
+        PredKind::InRangeD(a, b) => format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
         PredKind::MinLength(n) => format!("length must be at least {n}"),
         PredKind::MaxLength(n) => format!("length must be at most {n}"),
         PredKind::Length(n) => format!("length must be exactly {n}"),

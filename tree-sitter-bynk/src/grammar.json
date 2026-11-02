@@ -2207,6 +2207,27 @@
           ]
         },
         {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "-"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "decimal_literal"
+            }
+          ]
+        },
+        {
           "type": "SYMBOL",
           "name": "string_literal"
         }
@@ -2246,6 +2267,10 @@
         {
           "type": "STRING",
           "value": "Bytes"
+        },
+        {
+          "type": "STRING",
+          "value": "Decimal"
         }
       ]
     },
@@ -9001,6 +9026,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "decimal_literal"
+        },
+        {
+          "type": "SYMBOL",
           "name": "string_literal"
         },
         {
@@ -10312,6 +10341,10 @@
     "float_literal": {
       "type": "PATTERN",
       "value": "[0-9]+(_[0-9]+)*\\.[0-9]+(_[0-9]+)*([eE][+-]?[0-9]+(_[0-9]+)*)?|[0-9]+(_[0-9]+)*[eE][+-]?[0-9]+(_[0-9]+)*"
+    },
+    "decimal_literal": {
+      "type": "PATTERN",
+      "value": "[0-9]+(_[0-9]+)*(\\.[0-9]+(_[0-9]+)*)?d"
     },
     "string_literal": {
       "type": "CHOICE",

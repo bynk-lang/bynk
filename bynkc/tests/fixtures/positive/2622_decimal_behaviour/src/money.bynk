@@ -1,0 +1,135 @@
+commons money
+
+// #2622: the exact `Decimal` type - money without `Float` or scaled `Int`s.
+
+type Price = Decimal where Positive
+type Rate = Decimal where InRange(0.00d, 1.00d)
+type Debt = Decimal where InRange(-5.00d, -1.00d)
+type Wide = Decimal where InRange(1d, 2.0000000000000000000000000000000000000000d)
+
+type Line = { sku: String, unit: Price, qty: Int }
+
+type Receipt =
+  | Paid(amount: Price)
+  | Pending
+  | Waived(note: String)
+
+type Order = { id: String, total: Decimal }
+
+fn encodeReceipt(r: Receipt) -> String {
+  Json.encode(r)
+}
+
+fn decodeReceipt(s: String) -> Option[Receipt] {
+  match Json.decode[Receipt](s) {
+    Ok(r) => Some(r)
+    Err(_) => None
+  }
+}
+
+fn amountText(r: Receipt) -> String {
+  match r {
+    Paid(a) => a.toString()
+    Pending => "pending"
+    Waived(n) => n
+  }
+}
+
+const VAT: Decimal = 0.20d
+const REFUND: Decimal = -1.50d
+
+type Charge = { sku: String, fee: Decimal = 0.00d, tip: Decimal where NonNegative = 0.50d }
+
+fn gross(net: Decimal) -> Decimal {
+  net + net * VAT
+}
+
+fn refund() -> Decimal {
+  REFUND
+}
+
+fn decodeCharge(json: String) -> Option[Charge] {
+  match Json.decode[Charge](json) {
+    Ok(c) => Some(c)
+    Err(_) => None
+  }
+}
+
+fn feeOf(json: String) -> String {
+  match decodeCharge(json) {
+    Some(c) => "\(c.fee) \(c.tip)"
+    None => "bad"
+  }
+}
+
+fn lineTotal(unit: Price, qty: Int) -> Decimal {
+  unit * Decimal.fromInt(qty)
+}
+
+fn withTax(net: Decimal, rate: Rate) -> Decimal {
+  (net + net * rate).round(2, RoundingMode.HalfEven)
+}
+
+fn split(total: Decimal, ways: Int) -> Decimal {
+  total.div(Decimal.fromInt(ways), 2, RoundingMode.Down)
+}
+
+fn parsed(s: String) -> Decimal {
+  match Decimal.parse(s) {
+    Some(d) => d
+    None => 0d
+  }
+}
+
+fn decodeLine(json: String) -> Option[Line] {
+  match Json.decode[Line](json) {
+    Ok(l) => Some(l)
+    Err(_) => None
+  }
+}
+
+fn total(prices: List[Decimal]) -> Decimal {
+  prices.sum((p) => p)
+}
+
+fn cheapest(prices: List[Decimal]) -> Option[Decimal] {
+  prices.min((p) => p)
+}
+
+fn sorted(prices: List[Decimal]) -> List[Decimal] {
+  prices.sortBy((p) => p)
+}
+
+fn distinctCount(prices: List[Decimal]) -> Int {
+  prices.distinct().count()
+}
+
+fn seen(known: Map[Decimal, Int], price: Decimal) -> Bool {
+  match known.get(price) {
+    Some(_) => true
+    None => false
+  }
+}
+
+fn label(price: Decimal) -> String {
+  "total: \(price)"
+}
+
+fn lineError(json: String) -> String {
+  match Json.decode[Line](json) {
+    Ok(_) => "ok"
+    Err(e) => "\(e.kind) \(e.path)"
+  }
+}
+
+fn roundTo(d: Decimal, mode: String) -> Decimal {
+  match mode {
+    "down" => d.round(0, RoundingMode.Down)
+    "up" => d.round(0, RoundingMode.Up)
+    "floor" => d.round(0, RoundingMode.Floor)
+    "ceiling" => d.round(0, RoundingMode.Ceiling)
+    "halfUp" => d.round(0, RoundingMode.HalfUp)
+    "halfDown" => d.round(0, RoundingMode.HalfDown)
+    _ => d.round(0, RoundingMode.HalfEven)
+  }
+}

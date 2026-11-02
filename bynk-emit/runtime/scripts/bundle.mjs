@@ -28,6 +28,7 @@ const SRC = join(pkgRoot, "src");
 const MODULES = [
   "result",
   "bytes",
+  "decimal",
   "time",
   "settle",
   "url",
@@ -61,7 +62,7 @@ const MODULES = [
 const CLIENT_ROOT = join(pkgRoot, "..", "wire-client");
 const CLIENT_TARGET = join(CLIENT_ROOT, "index.ts");
 const CLIENT_SOURCES = [
-  ...["result", "bytes", "errors", "keys", "boundary"].map((name) => join(SRC, `${name}.ts`)),
+  ...["result", "bytes", "decimal", "errors", "keys", "boundary"].map((name) => join(SRC, `${name}.ts`)),
   join(CLIENT_ROOT, "src", "surface.ts"),
 ];
 const CLIENT_HEADER = [

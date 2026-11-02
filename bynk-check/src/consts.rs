@@ -218,13 +218,14 @@ fn is_literal(e: &Expr) -> bool {
     match &e.kind {
         ExprKind::IntLit { .. }
         | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
         | ExprKind::StrLit(_)
         | ExprKind::BoolLit(_)
         | ExprKind::UnitLit => true,
         ExprKind::UnaryOp(UnaryOp::Neg, inner) => {
             matches!(
                 inner.kind,
-                ExprKind::IntLit { .. } | ExprKind::FloatLit { .. }
+                ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. }
             )
         }
         ExprKind::Paren(inner) => is_literal(inner),
@@ -247,6 +248,7 @@ fn first_non_static(
     match &e.kind {
         ExprKind::IntLit { .. }
         | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
         | ExprKind::DurationLit { .. }
         | ExprKind::StrLit(_)
         | ExprKind::BoolLit(_)
@@ -255,7 +257,7 @@ fn first_non_static(
         ExprKind::UnaryOp(UnaryOp::Neg, inner)
             if matches!(
                 inner.kind,
-                ExprKind::IntLit { .. } | ExprKind::FloatLit { .. }
+                ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. }
             ) =>
         {
             None

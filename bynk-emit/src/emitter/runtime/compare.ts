@@ -15,12 +15,14 @@
 //   compare equal, and `NaN` compares equal to itself and greater than every
 //   other value. The comparison operators keep their IEEE meaning (`NaN < x` is
 //   `false`); only the ordering kernels and `Ord` witnesses use this.
+// - `Decimal` is numeric order, ignoring scale (#2622).
 // - `Bytes` is unsigned lexicographic (`__bynkBytesCompare`).
 // - `Option` puts `None` first; `List` is lexicographic.
 // - A record compares its fields in declaration order; a sum compares the
 //   variant's declaration position first, then its payload fields in order.
 
 import { __bynkBytesCompare } from "./bytes.ts";
+import { __bynkDecimalCmp, type __BynkDecimalValue } from "./decimal.ts";
 
 /** A comparator: negative, zero or positive, as `a` sorts before, with or after `b`. */
 export type __BynkCmp<T> = (a: T, b: T) => number;
@@ -46,6 +48,11 @@ export function __bynkCmpFloat(a: number, b: number): number {
 /** `Bytes`. */
 export function __bynkCmpBytes(a: Uint8Array, b: Uint8Array): number {
   return __bynkBytesCompare(a, b);
+}
+
+/** `Decimal`: numeric order, ignoring scale. */
+export function __bynkCmpDecimal(a: __BynkDecimalValue, b: __BynkDecimalValue): number {
+  return __bynkDecimalCmp(a, b);
 }
 
 type OptionLike<T> = { readonly tag: "Some"; readonly value: T } | { readonly tag: "None" };

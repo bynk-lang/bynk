@@ -178,6 +178,7 @@ fn default_of(ty: &TypeRef) -> Option<&'static str> {
     Some(match ty {
         TypeRef::Base(BaseType::Int, _) => "0",
         TypeRef::Base(BaseType::Float, _) => "0.0",
+        TypeRef::Base(BaseType::Decimal, _) => "0d",
         TypeRef::Base(BaseType::String, _) => "\"\"",
         TypeRef::Base(BaseType::Bool, _) => "false",
         TypeRef::Unit(_) => "()",

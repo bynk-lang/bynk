@@ -2414,6 +2414,7 @@ impl Backend {
                         | bynk_syntax::lexer::TokenKind::String
                         | bynk_syntax::lexer::TokenKind::Bool
                         | bynk_syntax::lexer::TokenKind::Float
+                        | bynk_syntax::lexer::TokenKind::Decimal
                         | bynk_syntax::lexer::TokenKind::Result
                         | bynk_syntax::lexer::TokenKind::Option
                         | bynk_syntax::lexer::TokenKind::Effect

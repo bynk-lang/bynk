@@ -275,6 +275,7 @@ fn pred_text(p: &PredKind) -> String {
         PredKind::Matches(re) => format!("Matches(\"{}\")", bynk_fmt::escape_string(re)),
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::InRangeD(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::MinLength(n) => format!("MinLength({n})"),
         PredKind::MaxLength(n) => format!("MaxLength({n})"),
         PredKind::Length(n) => format!("Length({n})"),
@@ -288,6 +289,7 @@ fn ref_text(r: &WireRef) -> String {
     match r {
         WireRef::Base { base, .. } => base.name().to_string(),
         WireRef::Bytes => "Bytes".to_string(),
+        WireRef::Decimal => "Decimal".to_string(),
         WireRef::Named { name } => bynk_check::symbols::display_type_name(name).to_string(),
         WireRef::Inst { key } => key.clone(),
         WireRef::Unit => "()".to_string(),

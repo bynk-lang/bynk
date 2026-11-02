@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **701** codes in total.
+There are **706** codes in total.
 
 ## Agents
 
@@ -234,6 +234,7 @@ There are **701** codes in total.
 |---|---|---|---|
 | `bynk.lex.bad_escape` | An invalid escape sequence in a string literal. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.bad_unicode_escape` | A `\u{…}` escape names a surrogate or a value above U+10FFFF. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
+| `bynk.lex.decimal_literal_too_large` | A decimal literal has more than 100 fraction digits or more than 1000 characters, the most any `Decimal` may have (#2622). | [`decimal_literal`](/book/reference/grammar/#rule-decimal_literal) | — |
 | `bynk.lex.float_literal_overflow` | A float literal does not fit a finite 64-bit float. | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
 | `bynk.lex.integer_overflow` | An integer literal is outside the `Int` range, the JS safe integers ±(2^53 − 1). | [`number_literal`](/book/reference/grammar/#rule-number_literal) | — |
 | `bynk.lex.interpolation_too_deep` | A string interpolation `\(…)` nests deeper than the lexer's fixed limit. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
@@ -772,6 +773,8 @@ There are **701** codes in total.
 | `bynk.types.combinator_return_mismatch` | A callback passed to a combinator (`map`/`andThen`/`flatMap`/`traverseAll`/…) returns the wrong type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.types.constructor_arity` | A variant constructor got the wrong number of arguments. |  | — |
 | `bynk.types.constructor_base_mismatch` | A `.of` constructor was given an argument of the wrong base type. |  | — |
+| `bynk.types.decimal_division_unscaled` | `/` was used on `Decimal` operands. A quotient has no exact decimal answer, so division states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)` (#2622). |  | — |
+| `bynk.types.decimal_negation_too_large` | A negated decimal literal would have more than 1000 characters of canonical text once its sign is counted, the most any `Decimal` may have (#2622). |  | — |
 | `bynk.types.derives_automatic` | A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.types.derives_field_not_orderable` | A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.types.duplicate_literal_arm` | A `match` has two arms for the same literal value. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
@@ -819,7 +822,7 @@ There are **701** codes in total.
 | `bynk.types.method_on_non_named_type` | A method was called on a built-in type that has no methods. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.mixed_pattern_bindings` | A pattern mixes named and positional bindings. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | `bynk.types.negative_length` | A length predicate was given a negative value. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.types.no_numeric_coercion` | `Int` and `Float` were mixed without an explicit conversion — in an operation or in refinement bounds. | [`binary_expr`](/book/reference/grammar/#rule-binary_expr), [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| `bynk.types.no_numeric_coercion` | `Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds. | [`binary_expr`](/book/reference/grammar/#rule-binary_expr), [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.non_exhaustive_match` | A `match` does not cover every value. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
 | `bynk.types.not_codable` | A type is instantiated at a `Codable`-bounded parameter (of a generic function, or of a capability operation) but is outside the domain `Json.decode` accepts: top-level `()`, a function, `Effect`, `Query`, a `Stream` or a type that carries one, a connection, the HTTP and queue result types, `Asset`, request headers, token claims, or an actor (constrained-generics slice 3). |  | — |
 | `bynk.types.not_comparable` | A value compared with `==`/`!=` contains a function, `Effect`, or `Query` somewhere inside it — those have no value equality, so the type is not equality-supporting (type-system §2.3.5, #1652). |  | — |
@@ -845,6 +848,7 @@ There are **701** codes in total.
 | `bynk.types.regex_not_literal` | A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.rejection_at_boundary` | `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | `bynk.types.return_mismatch` | A returned value does not match the declared return type. |  | — |
+| `bynk.types.rounding_mode_position` | `RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622). |  | — |
 | `bynk.types.some_value_mismatch` | A `Some` payload has the wrong type. | [`some_expr`](/book/reference/grammar/#rule-some_expr) | — |
 | `bynk.types.sql_not_literal` | A `D1` statement's SQL (the first argument of `all`, `first` or `run`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c). | [`method_call`](/book/reference/grammar/#rule-method_call), [`record_construction`](/book/reference/grammar/#rule-record_construction), [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 | `bynk.types.sql_row_shape` | `Json.decodeSql[T]`'s `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
@@ -855,6 +859,7 @@ There are **701** codes in total.
 | `bynk.types.uninferable_element_type` | An empty `[]` (or `List.empty()` / `Map.empty()`) has no expected type to infer its element type from. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |
 | `bynk.types.unknown_field` | Referenced a field the record type does not declare. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
 | `bynk.types.unknown_pattern_field` | A pattern names a field the variant does not have. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
+| `bynk.types.unknown_rounding_mode` | A `Decimal` `round` or `div` was not given a rounding mode written `RoundingMode.<mode>`; the modes are `Down`, `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown` and `HalfEven` (#2622). |  | — |
 | `bynk.types.unknown_static_member` | Referenced an unknown static member on a type. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
 | `bynk.types.unknown_variant_in_pattern` | A pattern names a variant the sum type does not have. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | `bynk.types.unreachable_arm` | A `match` arm is unreachable. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |

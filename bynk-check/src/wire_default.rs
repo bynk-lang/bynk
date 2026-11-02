@@ -220,6 +220,19 @@ fn lower_base_literal(base: BaseType, e: &Expr) -> Result<String, DefaultReason>
         } else {
             lexeme.clone()
         }),
+        // #2622: a `Decimal` is a JSON string on the wire, so its default is the
+        // canonical text, which the decoder then parses.
+        (BaseType::Decimal, ExprKind::DecimalLit { coef, scale, .. }) => {
+            let signed = if negate && bynk_syntax::decimal::sign(coef) != 0 {
+                format!("-{coef}")
+            } else {
+                coef.clone()
+            };
+            Ok(format!(
+                "\"{}\"",
+                bynk_syntax::decimal::render(&signed, *scale)
+            ))
+        }
         (BaseType::String, ExprKind::StrLit(s)) if !negate => {
             Ok(format!("\"{}\"", escape_ts_literal(s)))
         }

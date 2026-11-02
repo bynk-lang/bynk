@@ -7,6 +7,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 **Understand**
 - [The type-system philosophy](/book/guides/type-system/philosophy/)
 - [The refined-literal admission model](/book/guides/type-system/refined-literal-admission/)
+- [Choosing `Int`, `Float` or `Decimal`](/book/guides/type-system/handle-money-correctly/#choosing-int-float-or-decimal)
 
 **Do**
 - [Define and validate untrusted input](/book/guides/type-system/define-and-validate/)
@@ -22,6 +23,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/)
 - [Fault on the impossible or the unfinished](/book/guides/type-system/fault-on-the-impossible/)
 - [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/)
+- [Handle money correctly](/book/guides/type-system/handle-money-correctly/)
 - [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/)
 - [Generic code that crosses the boundary](/book/guides/type-system/generic-code-that-crosses-the-boundary/)
 

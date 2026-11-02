@@ -576,6 +576,7 @@ fn parse_units_drain(
 enum SignedNumLit {
     Int(IntBound),
     Float(FloatBound),
+    Decimal(DecimalBound),
 }
 
 struct Parser<'a> {
@@ -1634,6 +1635,7 @@ fn is_reserved_keyword(kind: TokenKind) -> bool {
             | Duration
             | Instant
             | Bytes
+            | Decimal
             | JsonError
             | Property
             | Adapter

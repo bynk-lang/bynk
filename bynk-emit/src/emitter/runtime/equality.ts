@@ -16,6 +16,7 @@
 // - primitives compare with `===`, keeping IEEE semantics: `NaN != NaN` and
 //   `-0 == 0`, at any depth;
 // - a `Uint8Array` (`Bytes`) compares by content;
+// - a `Decimal` compares by numeric value (`1.20 == 1.2`, #2622);
 // - an array (`List`) compares element-wise;
 // - a `Map` (value-level `Map`) compares by size, then by key and value;
 // - a `Set` (K6a, #2596) compares by size, then membership, so order is
@@ -29,6 +30,7 @@
 // The checker guarantees both operands have the same type, so shapes can only
 // differ by variant or by value, never by kind.
 import { __bynkBytesEqual } from "./bytes.ts";
+import { __bynkDecimalEqual, __bynkIsDecimal } from "./decimal.ts";
 
 export function __bynkEq(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -37,6 +39,10 @@ export function __bynkEq(a: unknown, b: unknown): boolean {
   }
   if (a instanceof Uint8Array || b instanceof Uint8Array) {
     return a instanceof Uint8Array && b instanceof Uint8Array && __bynkBytesEqual(a, b);
+  }
+  // #2622: a `Decimal` compares by numeric value (`1.20 == 1.2`), not by shape.
+  if (__bynkIsDecimal(a) || __bynkIsDecimal(b)) {
+    return __bynkIsDecimal(a) && __bynkIsDecimal(b) && __bynkDecimalEqual(a, b);
   }
   if (Array.isArray(a) || Array.isArray(b)) {
     if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
