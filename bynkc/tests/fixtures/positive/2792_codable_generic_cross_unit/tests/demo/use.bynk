@@ -1,0 +1,25 @@
+---
+#2792: a generic type coded across units agrees with the concrete codec, the
+refined field included.
+---
+suite demo.use
+
+case "encoding agrees across units" {
+  let c = Card { name: "a", rank: 1 }
+  match Code.of("abc") {
+    Ok(code) => {
+      let e: Envelope[Card] = Envelope { payload: c, code: code }
+      expect shown(c, code) == Json.encode(e)
+    }
+    Err(_) => expect false
+  }
+}
+
+case "decoding agrees across units, a refinement violation included" {
+  let good = "{\"payload\":{\"name\":\"a\",\"rank\":1},\"code\":\"abc\"}"
+  let bad = "{\"payload\":{\"name\":\"a\",\"rank\":1},\"code\":\"ab\"}"
+  expect read(good) == Json.decode[Envelope[Card]](good)
+  expect read(good).isOk()
+  expect read(bad) == Json.decode[Envelope[Card]](bad)
+  expect !read(bad).isOk()
+}

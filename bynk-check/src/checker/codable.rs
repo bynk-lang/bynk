@@ -118,48 +118,11 @@ pub(crate) fn key_note(
     })
 }
 
-/// The first user generic type applied to a type variable in `t`, as written.
-/// Its codec would need a factory per generic declaration, which is deferred
-/// (`bynk.generics.codec_generic_at_rigid`).
-fn generic_at_rigid(t: TyId, vars: &HashSet<String>, tys: &Types) -> Option<String> {
-    match &*tys.get(t) {
-        Ty::Named { args, .. } if !args.is_empty() => {
-            let mut inner = HashSet::new();
-            for a in args {
-                super::equality::collect_vars(*a, tys, &mut inner);
-            }
-            if inner.iter().any(|v| vars.contains(v)) {
-                return Some(tys.display(t));
-            }
-            args.iter().find_map(|a| generic_at_rigid(*a, vars, tys))
-        }
-        Ty::Result(a, b) | Ty::Map(a, b) => {
-            generic_at_rigid(*a, vars, tys).or_else(|| generic_at_rigid(*b, vars, tys))
-        }
-        Ty::Option(a) | Ty::List(a) | Ty::Set(a) => generic_at_rigid(*a, vars, tys),
-        _ => None,
-    }
-}
-
-/// The variable-dependent half of a `Codable` requirement on `ty`: no user
-/// generic type applied to a type parameter, and every type parameter in it
-/// declared `Codable`. Reports and returns `false` otherwise.
+/// The variable-dependent half of a `Codable` requirement on `ty`: every type
+/// parameter in it is declared `Codable`. Reports and returns `false` otherwise.
+/// A user generic type over a type parameter is allowed: its codec is built
+/// from the declaration and the witnesses of its arguments (#2792).
 pub(crate) fn require_codable_rigid(ctx: &mut Ctx, ty: TyId, span: Span, clause: &str) -> bool {
-    if let Some(shown) = generic_at_rigid(ty, &ctx.type_vars, ctx.tys) {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.generics.codec_generic_at_rigid",
-                span,
-                format!("{clause}, but `{shown}` is a generic type applied to a type parameter"),
-            )
-            .with_note(
-                "a codec for a user generic type over a type parameter is not supported yet; \
-                 use a built-in container (`List`, `Option`, `Set`, `Map`, `Result`) of the \
-                 parameter, or a concrete instantiation",
-            ),
-        );
-        return false;
-    }
     require_codable_vars(ctx, ty, span, clause)
 }
 

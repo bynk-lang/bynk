@@ -636,7 +636,10 @@ over them; functions, effects, `HttpResult`, the error builtins, a `bynk.crypto`
 type variables are `bynk.types.json_uncodable`, except a type parameter declared
 `T: Codable`, which `Json.encode` and `Json.decode[T]` accept inside the generic
 function (the call site passes the codec; an unbounded one is
-`bynk.generics.missing_codable_bound`). `decode`'s target is given
+`bynk.generics.missing_codable_bound`). A generic record or sum applied to such a
+type parameter (`Box[T]` with `T: Codable`) is in the domain too; its codec is built
+from the declaration and the codecs of its arguments, and agrees with the codec for
+a concrete instantiation. `decode`'s target is given
 explicitly (`Json.decode[Order](s)`, any boundary-legal type-ref including
 `Json.decode[List[Order]]`) or inferred from an expected
 `Result[T, JsonError]`; with neither, `bynk.generics.uninferable_type_arg`.

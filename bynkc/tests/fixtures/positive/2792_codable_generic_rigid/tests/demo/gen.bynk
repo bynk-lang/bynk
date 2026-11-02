@@ -1,0 +1,55 @@
+---
+#2792: each generic codec path is compared with the monomorphised one on the same
+value, for the encoding and for the decode result, errors included.
+---
+suite demo.gen
+
+case "a record round-trips and encodes as the concrete codec does" {
+  let b = Box { value: P { x: 1, y: 2 }, label: "p" }
+  expect roundTrip(b) == Ok(b)
+  expect viaTwo(b) == Ok(b)
+  expect enc(b) == Json.encode(b)
+  let n = Box { value: 7, label: "n" }
+  expect enc(n) == Json.encode(n)
+}
+
+case "decoding agrees at the same error paths" {
+  expect dec[Int]("{\"value\":\"x\",\"label\":\"l\"}") == Json.decode[Box[Int]]("{\"value\":\"x\",\"label\":\"l\"}")
+  expect dec[P]("{\"value\":{\"x\":1},\"label\":\"l\"}") == Json.decode[Box[P]]("{\"value\":{\"x\":1},\"label\":\"l\"}")
+  expect dec[Int]("{\"label\":\"l\"}") == Json.decode[Box[Int]]("{\"label\":\"l\"}")
+  expect dec[Int]("[]") == Json.decode[Box[Int]]("[]")
+  expect !dec[Int]("[]").isOk()
+}
+
+case "two parameters" {
+  let p = Pair { first: 1, second: "a" }
+  expect encPair(p) == Json.encode(p)
+  expect decPair[Int, String](Json.encode(p)) == Ok(p)
+  expect decPair[Int, String]("{\"first\":\"no\",\"second\":\"a\"}") == Json.decode[Pair[Int, String]]("{\"first\":\"no\",\"second\":\"a\"}")
+}
+
+case "a generic sum" {
+  let j: Maybe[Int] = Just(3)
+  expect encMaybe(j) == Json.encode(j)
+  let none: Maybe[Int] = Nothing
+  expect encMaybe(none) == Json.encode(none)
+  expect decMaybe[Int](Json.encode(j)) == Json.decode[Maybe[Int]](Json.encode(j))
+  expect decMaybe[Int]("{\"kind\":\"Just\",\"value\":\"x\"}") == Json.decode[Maybe[Int]]("{\"kind\":\"Just\",\"value\":\"x\"}")
+}
+
+case "containers of the parameter inside the generic type" {
+  let w: Wrapped[Int] = Wrapped { items: [1, 2], best: Some(2) }
+  expect encWrapped(w) == Json.encode(w)
+  expect decWrapped[Int](Json.encode(w)) == Ok(w)
+  expect decWrapped[Int]("{\"items\":[1,\"x\"],\"best\":null}") == Json.decode[Wrapped[Int]]("{\"items\":[1,\"x\"],\"best\":null}")
+}
+
+case "nested generic types and a generic type inside a container" {
+  let b = Box { value: Pair { first: 1, second: 2 }, label: "n" }
+  expect encNested(b) == Json.encode(b)
+  expect decNested[Int](Json.encode(b)) == Ok(b)
+  let xs = [Box { value: 1, label: "a" }, Box { value: 2, label: "b" }]
+  expect encListOfBox(xs) == Json.encode(xs)
+  expect decListOfBox[Int](Json.encode(xs)) == Ok(xs)
+  expect decListOfBox[Int]("[{\"value\":1,\"label\":2}]") == Json.decode[List[Box[Int]]]("[{\"value\":1,\"label\":2}]")
+}
