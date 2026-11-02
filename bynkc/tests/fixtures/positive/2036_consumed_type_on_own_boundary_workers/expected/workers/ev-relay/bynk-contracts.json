@@ -1,16 +1,16 @@
 {
   "version": 1,
   "provides": {
-    "echo": "e4ac65945b1cb740",
-    "many": "354c78a41f3bf9d6",
-    "relay": "b7abab77f593fb65",
-    "shelve": "f68b2c374a38dd44"
+    "echo": "f190d4b380d48324",
+    "many": "655bd96d7d8015a0",
+    "relay": "d6345e386194d3d5",
+    "shelve": "f2c20475ffd3a188"
   },
   "expects": {},
   "provides_shapes": {
-    "echo": "Svc(\"echo\",P(\"id\",B(\"String\")),Ret(N(\"Batch\")))",
-    "many": "Svc(\"many\",P(\"xs\",L(N(\"Batch\"))),P(\"o\",O(N(\"Batch\"))),Ret(O(N(\"Batch\"))))",
-    "relay": "Svc(\"relay\",P(\"b\",N(\"Batch\")),Ret(B(\"Int\")))",
-    "shelve": "Svc(\"shelve\",P(\"b\",N(\"Batch\")),Ret(N(\"Batch\")))"
+    "echo": "Svc(\"echo\",P(\"id\",B(\"String\")),Ret(Rec(\"Batch\",F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")))))",
+    "many": "Svc(\"many\",P(\"xs\",L(Rec(\"Batch\",F(\"id\",B(\"String\")),F(\"size\",B(\"Int\"))))),P(\"o\",O(Rec(\"Batch\",F(\"id\",B(\"String\")),F(\"size\",B(\"Int\"))))),Ret(O(Rec(\"Batch\",F(\"id\",B(\"String\")),F(\"size\",B(\"Int\"))))))",
+    "relay": "Svc(\"relay\",P(\"b\",Rec(\"Batch\",F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")))),Ret(B(\"Int\")))",
+    "shelve": "Svc(\"shelve\",P(\"b\",Rec(\"Batch\",F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")))),Ret(Rec(\"Batch\",F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")))))"
   }
 }

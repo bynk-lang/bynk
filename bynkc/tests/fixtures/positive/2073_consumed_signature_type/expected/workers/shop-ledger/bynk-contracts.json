@@ -1,14 +1,14 @@
 {
   "version": 1,
   "provides": {
-    "domestic": "4028885f5bafc4bb",
-    "isDomestic": "92144809984a34bc",
-    "isHome": "b823fe0cc9198040"
+    "domestic": "0fd1db5f7e7421c3",
+    "isDomestic": "18d7709789670052",
+    "isHome": "d12ea5dbd46c7174"
   },
   "expects": {},
   "provides_shapes": {
-    "domestic": "Svc(\"domestic\",P(\"id\",B(\"String\")),Ret(N(\"Order\")))",
-    "isDomestic": "Svc(\"isDomestic\",P(\"o\",N(\"Order\")),Ret(B(\"Bool\")))",
-    "isHome": "Svc(\"isHome\",P(\"r\",N(\"Region\")),Ret(B(\"Bool\")))"
+    "domestic": "Svc(\"domestic\",P(\"id\",B(\"String\")),Ret(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))))",
+    "isDomestic": "Svc(\"isDomestic\",P(\"o\",Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))),Ret(B(\"Bool\")))",
+    "isHome": "Svc(\"isHome\",P(\"r\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))),Ret(B(\"Bool\")))"
   }
 }

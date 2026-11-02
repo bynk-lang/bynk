@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "big": "313b663c6461865b"
+    "big": "f276b0ce9a96daad"
   },
   "expects": {},
   "provides_shapes": {
-    "big": "Svc(\"big\",P(\"b\",N(\"Batch\")),Ret(B(\"Bool\")))"
+    "big": "Svc(\"big\",P(\"b\",Rec(\"Batch\",F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")))),Ret(B(\"Bool\")))"
   }
 }

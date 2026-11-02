@@ -192,3 +192,52 @@ fn caller_sources(fixture: &Path) -> Vec<std::path::PathBuf> {
     }
     out
 }
+
+/// #2750: a Worker's `bynk-contracts.json` `provides` hash is the hash its own
+/// `index.ts` enforces. Both are computed from one type table
+/// (`contract_types_for`); a second, narrower table once left a consumed
+/// context's exported type unresolved in the manifest, so a driver reading the
+/// manifest got a `409 ContractMismatch`. Swept over every blessed workers
+/// fixture, so any new divergence between the two sites fails here.
+#[test]
+fn manifest_provides_equals_the_hash_the_entry_enforces() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive");
+    let expect = regex::Regex::new(
+        r#"kind: "ContractMismatch", service: "([^"]+)", expected: "([0-9a-f]{16})""#,
+    )
+    .unwrap();
+    let mut checked = 0usize;
+    let mut problems: Vec<String> = Vec::new();
+    for e in std::fs::read_dir(&root).unwrap().flatten() {
+        let fx = e.file_name().to_string_lossy().to_string();
+        let Ok(dirs) = std::fs::read_dir(e.path().join("expected/workers")) else {
+            continue;
+        };
+        for d in dirs.flatten() {
+            let Ok(manifest) = std::fs::read_to_string(d.path().join("bynk-contracts.json")) else {
+                continue;
+            };
+            let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+            let Some(provides) = manifest["provides"].as_object() else {
+                continue;
+            };
+            let entry = std::fs::read_to_string(d.path().join("index.ts")).unwrap_or_default();
+            let enforced: HashMap<String, String> = expect
+                .captures_iter(&entry)
+                .map(|c| (c[1].to_string(), c[2].to_string()))
+                .collect();
+            let worker = d.file_name().to_string_lossy().to_string();
+            for (svc, h) in provides {
+                checked += 1;
+                if enforced.get(svc).map(String::as_str) != h.as_str() {
+                    problems.push(format!(
+                        "{fx}/{worker}: manifest provides {svc}={h}, index.ts enforces {:?}",
+                        enforced.get(svc)
+                    ));
+                }
+            }
+        }
+    }
+    assert!(checked > 0, "no provides entries found — vacuous");
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
