@@ -15,11 +15,11 @@ export function compose(env: Env) {
     async http_GET_mirror_Param_key(key: string) {
       return handlers.api.http_GET_mirror_Param_key(key, deps);
     },
-    async both(url: string) {
-      return handlers.both.call(url, deps);
+    async both(__id_url: string) {
+      return handlers.both.call(__id_url, deps);
     },
-    async twice(url: string) {
-      return handlers.twice.call(url, deps);
+    async twice(__id_url: string) {
+      return handlers.twice.call(__id_url, deps);
     },
     async upload(target: string) {
       return handlers.upload.call(target, deps);

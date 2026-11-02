@@ -12,11 +12,11 @@ export function compose(env: Env) {
   const Fetch = new bynk__binding.FetchProvider();
   const deps = { Fetch };
   return {
-    async bounded(url: string) {
-      return handlers.bounded.call(url, deps);
+    async bounded(__id_url: string) {
+      return handlers.bounded.call(__id_url, deps);
     },
-    async plain(url: string) {
-      return handlers.plain.call(url, deps);
+    async plain(__id_url: string) {
+      return handlers.plain.call(__id_url, deps);
     },
   };
 }
