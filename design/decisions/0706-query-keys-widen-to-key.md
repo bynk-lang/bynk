@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: A `Query`'s `distinct`, `distinctBy`, `groupBy` and join keys take any `Key` type, as a `List`'s do
----
+# 0706 — A Query's distinct, groupBy and join keys are Key
 
-## ADR: query-keys-widen-to-key
-title: A Query's distinct, groupBy and join keys are Key
-summary: Query shares List's Key rule and keyed helpers; stores keep String/Int
+- **Status:** Accepted (v0.484)
 
 **Context.** ADR 0690 decision 9 kept a `Query`'s `distinct`, `distinctBy`, `groupBy`, `joinOn` and `leftJoin` keys on the `String`/`Int` rule, because the `Query` emission hashed keys through `String(key)`. That is an emitter detail: `List` already routes a non-primitive key through the keyed helpers in `keys.ts`. Proposal #2789.
 

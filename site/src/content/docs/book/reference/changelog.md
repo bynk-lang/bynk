@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.483**.
+written against **v0.484**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.484.0** | A `Query`'s `distinct`, `distinctBy`, `groupBy` and join keys take any `Key` type, as a `List`'s do |
 | **v0.483.0** | "A user generic record or sum over a `Codable` type parameter (`Box[T]` in `fn f[T: Codable]`) now encodes and decodes, with the JSON and error paths of the codec for a concrete `Box[Order]`; `bynk.generics.codec_generic_at_rigid` is retired (#2792)" |
 | **v0.482.2** | String interpolation holes accept only `String`, `Int`, `Float`, `Bool`, `Decimal` and refinements of them, as ADR 0075 and 0698 specify — `Bytes`, `Duration` and `Instant` holes are now `bynk.types.interpolation_non_scalar` errors (use `toHex()`/`toBase64()`, `toString()`, `toIso()`) (#2799) |
 | **v0.482.1** | A negative fixture pins `Query.distinct` over a record with a `Float` field as `bynk.types.not_keyable` |
