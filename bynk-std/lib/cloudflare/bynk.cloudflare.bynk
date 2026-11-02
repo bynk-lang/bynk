@@ -393,7 +393,10 @@ adapter bynk.cloudflare {
 	`sendValue(message)` is `send(Json.encode(message))` for any `Codable`
 	value: it puts exactly the same message on the queue, encoding at the call
 	site (`Queue.sendValue(order)`). `sendBatch` sends its bodies in one call,
-	all or none. The platform caps a
+	all or none. `sendValueWith(message, options)` and `sendValueBatch(messages)`
+	are `sendWith` and `sendBatch` for any `Codable` value, encoding at the call
+	site: the same messages, the same delay and the same all-or-none rule (a
+	message that cannot be encoded faults before anything is sent). The platform caps a
 	message at 128 KB and a batch at 100 messages and 256 KB; over a cap, the
 	send faults. Delivery is at least once and messages are stored by the
 	platform, so make consumers idempotent and keep secrets out of bodies.
@@ -403,6 +406,8 @@ adapter bynk.cloudflare {
 		fn sendWith(body: String, options: QueueSend) -> Effect[()]
 		fn sendBatch(bodies: List[String]) -> Effect[()]
 		fn sendValue[T: Codable](message: T) -> Effect[()]
+		fn sendValueWith[T: Codable](message: T, options: QueueSend) -> Effect[()]
+		fn sendValueBatch[T: Codable](messages: List[T]) -> Effect[()]
 	}
 
 	---

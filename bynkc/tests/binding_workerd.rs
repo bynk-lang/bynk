@@ -789,6 +789,16 @@ service api from http {
 \t\tOk(\"sent\")
 \t}
 
+\ton GET(\"/valuelater/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet _ <- Orders.sendValueWith(Placed { id: id, total: 10 }, QueueSend { delay: Some(1.seconds) })
+\t\tOk(\"sent\")
+\t}
+
+\ton GET(\"/valuebatch/:a/:b\") (a: String, b: String) -> Effect[HttpResult[String]] by Visitor given Orders {
+\t\tlet _ <- Orders.sendValueBatch([Placed { id: a, total: 11 }, Placed { id: b, total: 12 }])
+\t\tOk(\"sent\")
+\t}
+
 \ton GET(\"/raw/:text\") (text: String) -> Effect[HttpResult[String]] by Visitor given Orders {
 \t\tlet _ <- Orders.send(text)
 \t\tOk(\"sent\")
@@ -828,6 +838,8 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
                 // `sendValue` encodes at the call site and must reach the same
                 // consumer, decoded the same way, as `send(Json.encode(…))`.
                 ("/value/o-5", 200, r#""sent""#),
+                ("/valuelater/o-6", 200, r#""sent""#),
+                ("/valuebatch/o-7/o-8", 200, r#""sent""#),
                 ("/raw/not-json", 500, ""),
             ],
         );
@@ -838,6 +850,9 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
             ("o-3", "1"),
             ("o-4", "2"),
             ("o-5", "9"),
+            ("o-6", "10"),
+            ("o-7", "11"),
+            ("o-8", "12"),
         ];
         let deadline = Instant::now() + Duration::from_secs(60);
         loop {

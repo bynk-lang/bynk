@@ -456,7 +456,10 @@ export const __RateLimitToken: symbol = globalThis.Symbol("RateLimit");
  * `sendValue(message)` is `send(Json.encode(message))` for any `Codable`
  * value: it puts exactly the same message on the queue, encoding at the call
  * site (`Queue.sendValue(order)`). `sendBatch` sends its bodies in one call,
- * all or none. The platform caps a
+ * all or none. `sendValueWith(message, options)` and `sendValueBatch(messages)`
+ * are `sendWith` and `sendBatch` for any `Codable` value, encoding at the call
+ * site: the same messages, the same delay and the same all-or-none rule (a
+ * message that cannot be encoded faults before anything is sent). The platform caps a
  * message at 128 KB and a batch at 100 messages and 256 KB; over a cap, the
  * send faults. Delivery is at least once and messages are stored by the
  * platform, so make consumers idempotent and keep secrets out of bodies.
@@ -466,6 +469,8 @@ export interface Queue {
   sendWith(body: string, options: QueueSend): globalThis.Promise<void>;
   sendBatch(bodies: readonly string[]): globalThis.Promise<void>;
   sendValue(message: unknown): globalThis.Promise<void>;
+  sendValueWith(message: unknown, options: QueueSend): globalThis.Promise<void>;
+  sendValueBatch(messages: unknown): globalThis.Promise<void>;
 }
 
 export const __QueueToken: symbol = globalThis.Symbol("Queue");

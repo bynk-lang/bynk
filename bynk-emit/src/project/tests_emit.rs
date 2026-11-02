@@ -5676,6 +5676,15 @@ const QUEUE_DOUBLE_BODY: &str = r#"  const json = (body: string) => {
     async sendValue(message) {
       json(globalThis.JSON.stringify(message));
     },
+    async sendValueWith(message, options) {
+      json(globalThis.JSON.stringify(message));
+      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.ceil(options.delay.value / 1000) > 43200)) {
+        throw new globalThis.Error(`bynk.cloudflare.Queue: a delay is between 0 seconds and 12 hours, not ${options.delay.value} ms`);
+      }
+    },
+    async sendValueBatch(messages) {
+      for (const m of messages as readonly unknown[]) json(globalThis.JSON.stringify(m));
+    },
   };
 "#;
 
