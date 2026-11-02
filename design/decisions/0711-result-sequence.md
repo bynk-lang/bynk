@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: `List[Result[T, E]]` gains `sequenceAll()` (every error) and `sequenceTry()` (first error) (#2806)
----
+# 0711 — List sequenceAll and sequenceTry, pure Result accumulation
 
-## ADR: result-sequence
-title: List sequenceAll and sequenceTry, pure Result accumulation
-summary: Pure kernel methods collecting a List of Results, all errors or the first
+- **Status:** Accepted (v0.489)
 
 **Context.** `.of` short-circuits and `ValidationError` is singular, so validating a whole form and reporting every failing field had no idiomatic spelling. Only the effectful collectors existed: `traverseAll` (gather every outcome, ADR 0172) and `traverseTry` (stop at the first `Err`, ADR 0174), both over `f: T -> Effect[Result[U, E]]`. There was no pure `List[Result[T, E]] -> Result[List[T], List[E]]`.
 
