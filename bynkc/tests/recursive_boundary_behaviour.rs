@@ -432,7 +432,9 @@ async function post(worker: any, env: any, callee: string, envKey: string, servi
 const toGraph = (service: string, body: string) => post(graph, graphEnv, "cyc.graph", "CYC__GRAPH", service, body);
 const toClient = (service: string, body: string) => post(client, clientEnv, "cyc.client", "CYC__CLIENT", service, body);
 
-const DIR_PATH = ".entries[0].dir".repeat(BOUND / 2);
+// Each repetition is two levels, so the paths below need an even bound.
+assert(BOUND % 2 === 0, "the bound is even");
+const DIR_PATH =".entries[0].dir".repeat(BOUND / 2);
 const ENTRY_PATH = ".dir.entries[0]".repeat(BOUND / 2);
 const EXPR_PATH = ".stmts[0].expr".repeat(BOUND / 2);
 
@@ -496,22 +498,35 @@ async function main(): Promise<void> {
       stubEnv,
     );
   };
+  // The fault is logged by the entry's catch; capture it rather than let it
+  // print, and require it to be a `StructuralMismatch` (the reply decoder's
+  // refusal; the runtime logs the kind but not the message, which can carry
+  // the value), so that a 500 from some other cause (a stub, contract or
+  // header mistake: `ContractMismatch`, `Transport`) does not pass.
   const quiet = globalThis.console.error;
-  globalThis.console.error = () => {};
+  let logged: string[] = [];
+  globalThis.console.error = (...args: unknown[]) => {
+    logged.push(args.map((a) => (a instanceof Error ? `${a.message} ${a.stack ?? ""} ${JSON.stringify(a)}` : typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+  };
+  const refusedAsMismatch = (): boolean => logged.some((l) => l.includes("BoundaryError: StructuralMismatch"));
   try {
     reply = dirChain(BOUND, true);
     r = await viaStub("relayDir", dirChain(1, true));
     assert(r.status === 200, `a reply at the bound is accepted by the caller, got ${r.status}`);
     reply = dirChain(BOUND + 1, true);
+    logged = [];
     r = await viaStub("relayDir", dirChain(1, true));
     assert(r.status === 500, `a Dir reply one past the bound is refused by the caller, got ${r.status}`);
+    assert(refusedAsMismatch(), `the Dir refusal is a StructuralMismatch, logged: ${JSON.stringify(logged).slice(0, 400)}`);
 
     reply = exprChain(BOUND);
     r = await viaStub("relayExpr", exprChain(1));
     assert(r.status === 200, `an Expr reply at the bound is accepted by the caller, got ${r.status}`);
     reply = exprChain(BOUND + 1);
+    logged = [];
     r = await viaStub("relayExpr", exprChain(1));
     assert(r.status === 500, `an Expr reply one past the bound is refused by the caller, got ${r.status}`);
+    assert(refusedAsMismatch(), `the Expr refusal is a StructuralMismatch, logged: ${JSON.stringify(logged).slice(0, 400)}`);
   } finally {
     globalThis.console.error = quiet;
   }

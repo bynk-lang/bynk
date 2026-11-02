@@ -15,11 +15,19 @@
 //!
 //! This reads the blessed output of every positive fixture and checks that,
 //! inside a codec that takes `depth`, every call to a codec that also takes it
-//! passes it on (`depth` from a container's codec, `depth + 1` from a record's
-//! or sum's). Calls are resolved across modules through the emitted `import`
-//! and re-export lines, so a call into another module's codec is checked
-//! against that module's definition. A negative control proves the check is
-//! not vacuous.
+//! passes it on, as `depth` from a container's codec and as `depth + 1` from a
+//! record's or sum's (so the count both survives and rises). Calls are
+//! resolved across modules through the emitted `import` and re-export lines,
+//! so a call into another module's codec is checked against that module's
+//! definition. Negative controls prove the check is not vacuous.
+//!
+//! Not checked here: a caller that does *not* take `depth` calling a callee
+//! that does is skipped (a non-recursive record holding a recursive field does
+//! exactly that legitimately, so the text alone cannot tell it from the
+//! bug above). The opposite shape, a `depth` caller passing an extra
+//! argument to a callee without the parameter, is an arity error that `tsc`
+//! reports on the emitted tree; the behaviour tests in
+//! `recursive_boundary_behaviour.rs` catch the lost bound at runtime.
 
 use std::collections::HashMap;
 use std::fs;
@@ -178,6 +186,26 @@ fn call_args(s: &str, open: usize) -> Option<&str> {
     None
 }
 
+/// A relative path spelt with `/` on every OS, for reports and comparisons.
+fn slashed(p: &Path) -> String {
+    p.components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// The codecs of a container (`__deserialise_List_Dir`, `Map_String_Index`,
+/// `Option_Tree`, …), as opposed to a named type's.
+fn is_container_codec(name: &str) -> bool {
+    let suffix = name
+        .strip_prefix("__serialise_")
+        .or_else(|| name.strip_prefix("__deserialise_"))
+        .unwrap_or(name);
+    ["List_", "Map_", "Set_", "Option_", "Result_"]
+        .iter()
+        .any(|p| suffix.starts_with(p))
+}
+
 /// Every place a codec taking `depth` calls a codec taking `depth` without
 /// passing it on, as `file: caller -> callee`.
 fn disagreements(tree: &Tree) -> Vec<String> {
@@ -200,10 +228,21 @@ fn disagreements(tree: &Tree) -> Vec<String> {
                     continue;
                 }
                 let args = call_args(body, at).unwrap_or("").trim_end();
-                if !(args.ends_with(", depth") || args.ends_with(", depth + 1")) {
+                // A container's codec (`List_Dir`) is not a level of nesting and
+                // passes `depth` on unchanged; a record's or sum's counts one
+                // and passes `depth + 1`. A codec that never increments loses
+                // the bound as surely as one that drops the argument.
+                let (want, how) = if is_container_codec(caller) {
+                    (", depth", "`depth`")
+                } else {
+                    (", depth + 1", "`depth + 1`")
+                };
+                let passes = args.ends_with(want)
+                    && (want == ", depth + 1" || !args.ends_with(", depth + 1"));
+                if !passes {
                     found.push(format!(
-                        "{}: {caller} calls {name} without passing `depth`",
-                        file.display()
+                        "{}: {caller} calls {name} without passing {how}",
+                        slashed(file)
                     ));
                 }
             }
@@ -292,7 +331,20 @@ fn a_call_that_drops_depth_across_modules_is_reported() {
     assert_eq!(
         disagreements(&tree),
         vec![
-            "cyc/shapes/stmt.ts: __deserialise_Stmt calls __deserialise_Expr without passing `depth`"
+            "cyc/shapes/stmt.ts: __deserialise_Stmt calls __deserialise_Expr without passing `depth + 1`"
+        ],
+    );
+
+    // A named type's codec that passes `depth` unchanged never raises the
+    // count, so the bound is lost although the argument is passed.
+    let mut tree = load(&expected);
+    let stmt = tree.get_mut(Path::new("cyc/shapes/stmt.ts")).unwrap();
+    let def = stmt.defs.get_mut("__deserialise_Stmt").unwrap();
+    def.body = def.body.replace(", depth + 1)", ", depth)");
+    assert_eq!(
+        disagreements(&tree),
+        vec![
+            "cyc/shapes/stmt.ts: __deserialise_Stmt calls __deserialise_Expr without passing `depth + 1`"
         ],
     );
 
@@ -305,5 +357,15 @@ fn a_call_that_drops_depth_across_modules_is_reported() {
         .expect("a context emits the List[Stmt] decoder");
     let def = handlers.defs.get_mut("__deserialise_List_Stmt").unwrap();
     def.body = def.body.replace(", depth)", ")");
+    assert_eq!(disagreements(&tree).len(), 1, "{:?}", disagreements(&tree));
+
+    // A container's codec that increments counts a level that is not one.
+    let mut tree = load(&expected);
+    let handlers = tree
+        .values_mut()
+        .find(|m| m.defs.contains_key("__deserialise_List_Stmt"))
+        .unwrap();
+    let def = handlers.defs.get_mut("__deserialise_List_Stmt").unwrap();
+    def.body = def.body.replace(", depth)", ", depth + 1)");
     assert_eq!(disagreements(&tree).len(), 1, "{:?}", disagreements(&tree));
 }
