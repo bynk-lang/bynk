@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.18** | bynk-wasm's bynk_compile returns a source map with each user module, so the playground can match compiled JS lines to Bynk lines |
 | **v0.480.17** | "`bynk test --smoke` gives a bare `String`, `Int` or `Bool` parameter a literal instead of `Val`, and skips a case whose parameter `Val` cannot fabricate (#2706)" |
 | **v0.480.16** | The `Map[K, V]` boundary decoder rejects a repeated key as `StructuralMismatch` ("a distinct map key") instead of keeping the last entry; `Decimal` keys compare by value, so `1.20` and `1.2` collide |
 | **v0.480.15** | "A name ending a `requires`/`ensures` clause no longer parses as a record construction when the function body's `{` follows it, e.g. on the next line" |
