@@ -396,6 +396,29 @@ pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = &[
     m("has", "has(name: String) -> Bool"),
 ];
 
+/// Every method table above, by the type a user writes. The one enumerable
+/// registry (read by the wasm `bynk_reference`); a test pins it against the
+/// `pub const *_METHODS` declarations, so a new table cannot be left out.
+pub const ALL_METHODS: &[(&str, &[KernelMethod])] = &[
+    ("Int", INT_METHODS),
+    ("Float", FLOAT_METHODS),
+    ("Decimal", DECIMAL_METHODS),
+    ("String", STRING_METHODS),
+    ("Bytes", BYTES_METHODS),
+    ("Duration", DURATION_METHODS),
+    ("Instant", INSTANT_METHODS),
+    ("List", LIST_METHODS),
+    ("Map", MAP_METHODS),
+    ("Set", SET_METHODS),
+    ("Query", QUERY_METHODS),
+    ("Option", OPTION_METHODS),
+    ("Result", RESULT_METHODS),
+    ("Effect", EFFECT_METHODS),
+    ("Effect[Result[T, E]]", EFFECT_RESULT_METHODS),
+    ("RequestHeaders", REQUEST_HEADERS_METHODS),
+    ("TokenClaims", TOKEN_CLAIMS_METHODS),
+];
+
 /// The value methods of a receiver type, or `&[]` for a type with no kernel
 /// methods (record/sum named types, `Bool`, `Effect`, …). Record *fields* are
 /// resolved separately by the LSP (they need the type declaration).
@@ -444,6 +467,19 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn all_methods_lists_every_method_table() {
+        let declared = include_str!("kernel_methods.rs")
+            .lines()
+            .filter(|l| l.starts_with("pub const ") && l.contains("_METHODS: &[KernelMethod]"))
+            .count();
+        assert_eq!(
+            ALL_METHODS.len(),
+            declared,
+            "a *_METHODS table is missing from ALL_METHODS"
+        );
+    }
 
     fn refined(tys: &Types, base: BaseType) -> TyId {
         tys.intern(Ty::Named {
