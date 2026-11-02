@@ -1714,6 +1714,14 @@ mod tests {
         assert!(parse_str(src).is_ok(), "{:?}", parse_str(src).err());
     }
 
+    /// #2703: the flip side — an unparenthesised record literal on a clause's
+    /// spine is rejected (the `{` opens the body), as in an `if` condition.
+    #[test]
+    fn contract_clause_unparenthesised_record_literal_is_rejected() {
+        let src = "commons m\n\ntype P = { x: Int }\n\nfn f(p: P) -> Int\n  requires r: p == P { x: 1 }\n{\n  1\n}\n";
+        assert!(parse_str(src).is_err());
+    }
+
     /// Finding #29/#30: `parse_units_with_recovery` keeps every top-level unit
     /// an atomic `commons`+`suite` file declares (v0.113, DECISION S), where
     /// `parse_unit_with_recovery` keeps only the first — the defect the IDE's

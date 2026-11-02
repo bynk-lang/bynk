@@ -5,15 +5,13 @@ commons commerce.limits
 // record construction (`Limit { n }`).
 const Limit: Int = 10
 
-type Cap = Int
-
 fn small(n: Int) -> Int
   requires small: n <= Limit
 {
   n
 }
 
-fn echo(n: Int, flag: Bool) -> Int
+fn echo(n: Int) -> Int
   requires bounded: n <= Limit
   ensures same: result == n
 {

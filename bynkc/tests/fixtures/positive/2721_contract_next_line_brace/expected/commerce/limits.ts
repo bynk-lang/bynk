@@ -4,17 +4,6 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
-export type Cap = number & { readonly __brand: "Cap" };
-
-export const Cap = {
-  of(value: number): Result<Cap, ValidationError> {
-    if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Cap", message: "must be a safe integer", value });
-    }
-    return Ok(value as Cap);
-  },
-};
-
 var __const_Limit: { v: number } | undefined;
 export function Limit(): number { return (__const_Limit ??= { v: 10 }).v; }
 
@@ -22,6 +11,6 @@ export function small(n: number): number {
   return n;
 }
 
-export function echo(n: number, flag: boolean): number {
+export function echo(n: number): number {
   return n;
 }
