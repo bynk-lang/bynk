@@ -16,7 +16,7 @@
 use std::sync::OnceLock;
 
 use bynk_check::firstparty::{self, FIRSTPARTY_SOURCES, Stability, UNITS, UnitKind};
-use bynk_check::kernel_methods::{self as km, KernelMethod};
+use bynk_check::kernel_methods as km;
 use bynk_ide::completion::{BUILTIN_STATICS, capability_op_signature, free_fn_signature};
 use bynk_syntax::ast::{CommonsItem, Doc, FnName, SourceUnit};
 use bynk_syntax::{lexer, parser};
@@ -87,33 +87,10 @@ fn plain(name: &str, signature: &str) -> Member {
     }
 }
 
-/// The value-receiver method tables, by the type a user writes.
-fn method_tables() -> Vec<(&'static str, &'static [KernelMethod])> {
-    vec![
-        ("Int", km::INT_METHODS),
-        ("Float", km::FLOAT_METHODS),
-        ("Decimal", km::DECIMAL_METHODS),
-        ("String", km::STRING_METHODS),
-        ("Bytes", km::BYTES_METHODS),
-        ("Duration", km::DURATION_METHODS),
-        ("Instant", km::INSTANT_METHODS),
-        ("List", km::LIST_METHODS),
-        ("Map", km::MAP_METHODS),
-        ("Set", km::SET_METHODS),
-        ("Query", km::QUERY_METHODS),
-        ("Option", km::OPTION_METHODS),
-        ("Result", km::RESULT_METHODS),
-        ("Effect", km::EFFECT_METHODS),
-        ("Effect[Result[T, E]]", km::EFFECT_RESULT_METHODS),
-        ("RequestHeaders", km::REQUEST_HEADERS_METHODS),
-        ("TokenClaims", km::TOKEN_CLAIMS_METHODS),
-    ]
-}
-
 fn types() -> Vec<TypeEntry> {
-    let mut out: Vec<TypeEntry> = method_tables()
-        .into_iter()
-        .map(|(name, table)| TypeEntry {
+    let mut out: Vec<TypeEntry> = km::ALL_METHODS
+        .iter()
+        .map(|&(name, table)| TypeEntry {
             name: name.to_string(),
             statics: Vec::new(),
             methods: table.iter().map(|m| plain(m.name, m.signature)).collect(),
@@ -140,7 +117,10 @@ fn doc_text(d: &Option<Doc>) -> Option<String> {
 
 fn parse(src: &str) -> Option<SourceUnit> {
     let tokens = lexer::tokenize(src).ok()?;
-    parser::parse_unit_with_recovery(&tokens, src).0
+    let (unit, errors) = parser::parse_unit_with_recovery(&tokens, src);
+    // Recovery would hide a broken first-party source; surface it in debug.
+    debug_assert!(errors.is_empty(), "first-party source has parse errors");
+    unit
 }
 
 fn is_experimental(path: &str) -> bool {
@@ -152,16 +132,21 @@ fn units() -> (Vec<CapabilityEntry>, Vec<ModuleEntry>) {
     let mut mods = Vec::new();
     for (unit_name, src) in FIRSTPARTY_SOURCES {
         let Some(kind) = UNITS.iter().find(|u| u.name == *unit_name).map(|u| u.kind) else {
+            debug_assert!(false, "{unit_name} is in FIRSTPARTY_SOURCES but not UNITS");
             continue;
         };
-        let Some(unit) = parse(src) else { continue };
+        let Some(unit) = parse(src) else {
+            debug_assert!(false, "first-party unit {unit_name} failed to parse");
+            continue;
+        };
         match (kind, &unit) {
             (UnitKind::Adapter, SourceUnit::Adapter(a)) => {
                 for item in &a.items {
                     let CommonsItem::Capability(c) = item else {
                         continue;
                     };
-                    // A derived capability has its base's operations.
+                    // A derived capability has its base's operations; none ships
+                    // today (`no_first_party_derived_capability`), so skipping is safe.
                     if c.derived.is_some() {
                         continue;
                     }
@@ -229,7 +214,7 @@ fn units() -> (Vec<CapabilityEntry>, Vec<ModuleEntry>) {
                     });
                 }
             }
-            _ => {}
+            _ => debug_assert!(false, "{unit_name}: unit kind does not match its source"),
         }
     }
     (caps, mods)
@@ -280,7 +265,7 @@ mod tests {
     #[test]
     fn value_methods_are_listed_with_signatures() {
         let v = json();
-        for (name, table) in method_tables() {
+        for &(name, table) in km::ALL_METHODS {
             let t = find(&v, "types", name);
             assert_eq!(
                 t["methods"].as_array().unwrap().len(),
@@ -369,6 +354,52 @@ mod tests {
                     .is_empty(),
                 "{name}"
             );
+        }
+    }
+
+    /// Units that list nothing: types only, no functions or capabilities.
+    const NOTHING_TO_LIST: &[&str] = &["bynk.locale.types"];
+
+    #[test]
+    fn every_first_party_unit_is_listed_or_allowlisted() {
+        let v = json();
+        for (name, src) in FIRSTPARTY_SOURCES {
+            let tokens = lexer::tokenize(src).expect("lexes");
+            let (unit, errors) = parser::parse_unit_with_recovery(&tokens, src);
+            assert!(errors.is_empty(), "{name}: {errors:?}");
+            let unit = unit.expect("parses");
+            let listed = match &unit {
+                SourceUnit::Adapter(_) => v["capabilities"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|c| c["unit"] == *name),
+                SourceUnit::Commons(_) => v["modules"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|m| m["name"] == *name),
+                _ => false,
+            };
+            assert!(
+                listed || NOTHING_TO_LIST.contains(name),
+                "{name} is neither in the reference nor allowlisted"
+            );
+        }
+    }
+
+    #[test]
+    fn no_first_party_derived_capability() {
+        // `build` skips derived capabilities (their operations are their base's).
+        // Shipping one must be a decision, so this fails until it is made.
+        for (name, src) in FIRSTPARTY_SOURCES {
+            if let Some(SourceUnit::Adapter(a)) = parse(src) {
+                for item in &a.items {
+                    if let CommonsItem::Capability(c) = item {
+                        assert!(c.derived.is_none(), "{name}.{} is derived", c.name.name);
+                    }
+                }
+            }
         }
     }
 

@@ -545,11 +545,6 @@ pub(crate) fn refuse_experimental_import(name: &Ident, ctx: &mut Ctx) {
     }
 }
 
-/// v0.91 (ADR 0116 D6): the `bynk.list` free functions whose method forms
-/// shipped with slice 1 are **deprecated** in favour of the method-chain
-/// vocabulary. `reverse`/`traverse` stay (no method form yet). Emits a
-/// non-failing warning (ADR 0117) with a machine-applicable rewrite to the
-/// method form — `map(xs, f)` → `xs.map(f)`, `find(xs, p)` → `xs.filter(p).first()`.
 /// The deprecated `bynk.list` free functions and the `List` method form each
 /// rewrites to. One table, read by the warning below and by the wasm
 /// `bynk_reference` catalogue so the two cannot drift. `reverse`/`traverse`
@@ -562,6 +557,11 @@ pub const BYNK_LIST_DEPRECATED: &[(&str, &str)] = &[
     ("find", "xs.filter(p).first()"),
 ];
 
+/// v0.91 (ADR 0116 D6): the `bynk.list` free functions whose method forms
+/// shipped with slice 1 are **deprecated** in favour of the method-chain
+/// vocabulary. `reverse`/`traverse` stay (no method form yet). Emits a
+/// non-failing warning (ADR 0117) with a machine-applicable rewrite to the
+/// method form — `map(xs, f)` → `xs.map(f)`, `find(xs, p)` → `xs.filter(p).first()`.
 fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx: &mut Ctx) {
     if ctx.input.imported_from.get(&name.name).map(String::as_str) != Some("bynk.list") {
         return;
