@@ -1,0 +1,7 @@
+commons c {
+  // #2806: `sequenceAll` collects a `List[Result[T, E]]`; plain `Int` elements are not.
+  fn bad(xs: List[Int]) -> Int {
+    let r = xs.sequenceAll()
+    0
+  }
+}

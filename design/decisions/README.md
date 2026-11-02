@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0711](0711-result-sequence.md) | **List sequenceAll and sequenceTry, pure Result accumulation** (v0.489) — Pure kernel methods collecting a List of Results, all errors or the first | Accepted (v0.489) |
 | [0710](0710-no-decode-of-external-opaque.md) | **A context cannot decode a type another context owns and exports opaque** (v0.488) — Json.decode, Codable witnesses and HTTP or queue inputs refuse an externally-owned opaque type; owner service replies keep the structural cast | Accepted (v0.488) |
 | [0709](0709-query-ord-keys.md) | **A Query's sortBy, min and max keys are Ord** (v0.487) — Query shares List's Ord rule and comparators; Float keys take the total order | Accepted (v0.487) |
 | [0708](0708-queue-typed-send-variants.md) | **Queue gains typed delayed and batch sends; Analytics.write is not made generic** (v0.486) — sendValueWith and sendValueBatch mirror the untyped set; a generic Analytics.write has no Codable meaning | Accepted (v0.486) |
