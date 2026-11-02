@@ -6139,6 +6139,39 @@ mod tests {
         a.assert_reports("bynk.boundary.structural_mismatch");
     }
 
+    /// #2802: the `Opaque` arm of `structural_compare_named` shares
+    /// `refinements_match`, so a same-named opaque peer widens like a refined
+    /// one. The predicate of an opaque type is not part of the contract (the
+    /// consumer cannot observe it), so a stronger sender is as safe as for a
+    /// refined type.
+    fn opaque_provider(max: u32) -> String {
+        format!(
+            "context shop\n\ntype Tag = opaque String where MaxLength({max})\n\n\
+             service check {{\n  on call(t: Tag) -> Effect[Int] {{\n    Effect.pure(0)\n  }}\n}}\n"
+        )
+    }
+
+    fn opaque_till(max: u32) -> String {
+        format!(
+            "context till\n\nconsumes shop\n\ntype Tag = opaque String where MaxLength({max})\n\n\
+             service total {{\n  on call(t: Tag) -> Effect[Int] {{\n    shop.check(t)\n  }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn a_stronger_opaque_sender_is_admitted_and_a_weaker_one_rejected() {
+        analyse(&[
+            ("shop.bynk", &opaque_provider(8)),
+            ("till.bynk", &opaque_till(4)),
+        ])
+        .assert_clean();
+        analyse(&[
+            ("shop.bynk", &opaque_provider(4)),
+            ("till.bynk", &opaque_till(8)),
+        ])
+        .assert_reports("bynk.boundary.structural_mismatch");
+    }
+
     #[test]
     fn an_unexported_value_passes_back_to_its_service() {
         let a = analyse(&[

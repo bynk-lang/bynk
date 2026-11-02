@@ -1557,6 +1557,27 @@ mod tests {
     }
 
     #[test]
+    fn decimal_ranges_compare_by_value() {
+        // #2802: `Decimal` bounds are decided by the shared engine, by value.
+        compatible(
+            &format!("{REQ}type Req = {{ p: Decimal where InRange(1.00d, 5.00d) }}\n"),
+            &format!("{REQ}type Req = {{ p: Decimal where InRange(0.0d, 10.0d) }}\n"),
+        );
+        breaking(
+            &format!("{REQ}type Req = {{ p: Decimal where InRange(0.0d, 10.0d) }}\n"),
+            &format!("{REQ}type Req = {{ p: Decimal where InRange(1.00d, 5.00d) }}\n"),
+        );
+        compatible(
+            &format!("{RESP}type Resp = {{ p: Decimal where NonNegative }}\n"),
+            &format!("{RESP}type Resp = {{ p: Decimal where Positive }}\n"),
+        );
+        breaking(
+            &format!("{REQ}type Req = {{ p: Decimal where NonNegative }}\n"),
+            &format!("{REQ}type Req = {{ p: Decimal where Positive }}\n"),
+        );
+    }
+
+    #[test]
     fn a_changed_pattern_is_breaking_both_ways() {
         breaking(
             &format!("{REQ}type Req = {{ s: String where Matches(\"[a-z]+\") }}\n"),

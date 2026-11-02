@@ -383,8 +383,11 @@ Entailment is decided over the closed predicate vocabulary of
 `Int` is modelled as unbounded, so a conclusion that holds only because of the
 safe-integer limit is not drawn. This applies **across a context boundary
 only**: within a context, named types remain nominal and a stronger refined type
-is not assignable to a weaker one. It does not apply to unification, so a generic
-call's type arguments still agree exactly. The same canonical form backs the
+is not assignable to a weaker one. It does not apply to the unification of a generic call's
+type arguments, which still agree exactly. A type applied to arguments
+(`Page[ShortLabel]` into `Page[Label]`) crosses a boundary covariantly, as its
+fields do. A same-named `opaque` type widens the same way as a refined one: its
+predicate is not part of the contract, so a stronger sender is as safe. The same canonical form backs the
 cross-context contract hash ([emission §7.3.4c](/book/spec/emission/#734c-the-contract-seam-v0177)),
 which covers the callee's own contract and so is unchanged by admitting a
 stronger caller.
