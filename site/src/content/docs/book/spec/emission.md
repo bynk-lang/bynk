@@ -262,7 +262,9 @@ argument) through `compose(env, ctx)` into the handler's `deps.__exec` — but
 **only for contexts that contain a send**, so a context that never uses `~>`
 emits byte-for-byte as before. This is the *immediate* delivery tier; a
 buffered/at-commit tier is reserved for the events channel and is not yet
-emitted.
+emitted. `waitUntil` only keeps the effect alive past the response: nothing awaits,
+retries or reports it, so the send is best-effort and a failure is never observed by the
+handler (§5.5, *Delivery guarantee*; ADR 0106).
 
 A function, which has no `deps`, receives the execution context as a **hidden trailing
 parameter** (#2719). A function in the needs-context set (§4.8.5, *The execution context
