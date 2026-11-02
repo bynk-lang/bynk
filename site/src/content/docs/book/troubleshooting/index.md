@@ -16,6 +16,8 @@ code you saw.
   satisfy a refined type's predicate.
 - [`bynk.agents.non_zeroable_state_field`](/book/troubleshooting/agents-non-zeroable-state-field/) —
   an agent state field can't be zero-initialised.
+- [`bynk.agent.non_additive_state_change`](/book/troubleshooting/agent-non-additive-state-change/) —
+  an agent's stored state changed in a way deployed data can't be read through.
 - [`bynk.val.*` errors](/book/troubleshooting/val-errors/) — `outside_test`, `needs_pin`, and
   related `Val[T]` fabrication and `property` errors.
 - [`bynk.contract.*` errors](/book/troubleshooting/contract-errors/) — `requires`/`ensures`

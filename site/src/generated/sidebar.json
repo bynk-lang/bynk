@@ -689,6 +689,10 @@
         "link": "/book/troubleshooting/agents-bad-state-initialiser/"
       },
       {
+        "label": "bynk.agent.non_additive_state_change",
+        "link": "/book/troubleshooting/agent-non-additive-state-change/"
+      },
+      {
         "label": "bynk.provider.dependency_cycle",
         "link": "/book/troubleshooting/provider-dependency-cycle/"
       },
