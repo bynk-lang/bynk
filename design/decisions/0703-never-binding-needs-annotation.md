@@ -1,12 +1,6 @@
----
-level: patch
-changelog: An unannotated `let`, `<-` binding whose type is or contains the bottom type (a value that only faults, including a faulting lambda bound that way) (`unreachable`, `todo`) is refused with `bynk.types.never_inferred`, and no inlay hint offers `never returns`
-probes: diagnostic_coverage, emit_diagnostics
----
+# 0703 — A binding that would infer the bottom type needs an annotation
 
-## ADR: never-binding-needs-annotation
-title: A binding that would infer the bottom type needs an annotation
-summary: Where `Ty::Never` may be inferred, and the diagnostic that refuses it elsewhere
+- **Status:** Accepted (v0.481.6)
 
 **Context.** `unreachable` and `todo` (#2620) have the internal bottom type `Never`, assignable to every type. `let x = todo("…")` with no annotation bound `x` to `Never`, so `x` silently stood in for any type, and an inlay hint would offer `never returns`, which is not source.
 
