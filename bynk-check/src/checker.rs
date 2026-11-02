@@ -5608,7 +5608,7 @@ fn structural_compare_named(
             if ab != bb {
                 return false;
             }
-            refinements_match(ar.as_ref(), br.as_ref())
+            refinements_match(*ab, ar.as_ref(), br.as_ref())
         }
         (
             TypeBody::Opaque {
@@ -5630,7 +5630,7 @@ fn structural_compare_named(
             if ab != bb {
                 return false;
             }
-            refinements_match(ar.as_ref(), br.as_ref())
+            refinements_match(*ab, ar.as_ref(), br.as_ref())
         }
         (TypeBody::Record(a), TypeBody::Record(b)) => {
             if a.fields.len() != b.fields.len() {
@@ -5690,37 +5690,33 @@ fn structural_compare_named(
     }
 }
 
-/// v0.177 (#643): two refinements match when their **canonical forms** are
-/// equal — a *set* comparison, not a positional one.
+/// #2802 (supersedes the v0.177 set-equality of #643): a refinement on the
+/// sending side is admitted where the receiving side expects another when it
+/// **entails** it — every predicate of the receiver follows from the
+/// conjunction of the sender's ([`crate::entailment`]). Equal predicate sets are
+/// the degenerate case, so `String where NonEmpty && MaxLength(10)` and
+/// `String where MaxLength(10) && NonEmpty` still match, and so do `NonEmpty`
+/// and `MinLength(1)`; `MaxLength(4)` now also satisfies `MaxLength(8)`.
 ///
-/// This retires the v0.6 §4.3 foot-gun the status doc named: predicates were
-/// compared by `zip`, so `String where NonEmpty, MaxLen(10)` and
-/// `String where MaxLen(10), NonEmpty` — the same type — spuriously failed to
-/// match. Predicates are conjunctive and side-effect-free, so their order
-/// carries no meaning and comparing it was always accidental.
+/// The asymmetry is unchanged and now follows from the rule: an unrefined
+/// receiver is the empty conjunction, which anything entails; an unrefined
+/// sender entails no predicate, so a refined receiver rejects it.
 ///
-/// The comparison routes through `contract::canon_refinement`, the same function
-/// that feeds the cross-context contract hash, and deliberately so: if the
-/// matcher and the hash disagreed about what "the same refinement" is, a
-/// contract could type-check at compile time and 409 at runtime — the worst
-/// failure available to this increment. One normal form, two consumers.
-///
-/// The asymmetry is unchanged: a *more* restrictive sending side is admitted
-/// into a more permissive receiving one, but not the reverse.
-///
-/// One behavioural consequence of sharing the form: it de-duplicates, so
-/// `where NonEmpty, NonEmpty` now matches `where NonEmpty`. That is correct — a
-/// conjunction is idempotent, so they are the same type — and it must hold on
-/// the hash side regardless, or two contexts spelling the same type differently
-/// would fail closed against each other.
-fn refinements_match(a: Option<&Refinement>, b: Option<&Refinement>) -> bool {
+/// Both sides still go through `contract::canon_pred_set`, the form that feeds
+/// the cross-context contract hash, so the matcher, the hash and the deploy
+/// gate's classifier read one normal form. The hash covers the *callee's* own
+/// contract, not the caller's argument type, so admitting a stronger sender
+/// does not change it. `Matches` is entailed only by an identical `Matches`.
+fn refinements_match(base: BaseType, a: Option<&Refinement>, b: Option<&Refinement>) -> bool {
     match (a, b) {
-        (None, None) => true,
-        (Some(_), None) => true, // sending side is more restrictive — receiving is more permissive
+        (_, None) => true,
         (None, Some(_)) => false,
-        (Some(a), Some(b)) => {
-            crate::contract::canon_refinement(Some(a)) == crate::contract::canon_refinement(Some(b))
-        }
+        (Some(a), Some(b)) => crate::entailment::unmet(
+            base.name(),
+            &crate::contract::canon_pred_set(a),
+            &crate::contract::canon_pred_set(b),
+        )
+        .is_empty(),
     }
 }
 
@@ -6735,22 +6731,38 @@ mod pure_helper_pins {
     }
 
     /// R12.2/T1.8: `NonEmpty` folds to `MinLength(1)` in `contract::canon_predicate`,
-    /// so `refinements_match` — which routes through that same canonical form —
-    /// must now treat the two spellings as the same refinement. Before the fold
-    /// this was `false`.
+    /// so the two spellings are the same refinement. A strictly *tighter* receiver
+    /// still fails (T1.8's `1021_refined_boundary_mismatch`); since #2802 a
+    /// strictly tighter *sender* is admitted.
     #[test]
     fn refinements_match_treats_non_empty_and_min_length_one_as_equal() {
+        let s = BaseType::String;
         let a = refinement(vec![PredKind::NonEmpty]);
         let b = refinement(vec![PredKind::MinLength(1)]);
-        assert!(refinements_match(Some(&a), Some(&b)));
-        // …and the fold is exactly `MinLength(1)`, not a subsumption rule: a
-        // strictly tighter refinement must still fail to match. Without this,
-        // widening the fold into "`MinLength(2)` implies `MinLength(1)`, so
-        // admit it" would leave every assertion in T1.8 passing while a
-        // genuinely tighter callee refinement is accepted across a boundary.
+        assert!(refinements_match(s, Some(&a), Some(&b)));
         let c = refinement(vec![PredKind::MinLength(2)]);
-        assert!(!refinements_match(Some(&a), Some(&c)));
-        assert!(!refinements_match(Some(&c), Some(&a)));
+        assert!(!refinements_match(s, Some(&a), Some(&c)));
+        assert!(refinements_match(s, Some(&c), Some(&a)));
+    }
+
+    /// #2802: one row of the entailment table per assertion.
+    #[test]
+    fn refinements_match_admits_a_stronger_sender() {
+        let s = BaseType::String;
+        let max = |n| refinement(vec![PredKind::MaxLength(n)]);
+        assert!(refinements_match(s, Some(&max(4)), Some(&max(8))));
+        assert!(!refinements_match(s, Some(&max(8)), Some(&max(4))));
+        let len3 = refinement(vec![PredKind::Length(3)]);
+        let both = refinement(vec![PredKind::MinLength(1), PredKind::MaxLength(8)]);
+        assert!(refinements_match(s, Some(&len3), Some(&both)));
+        // Unrefined: anything entails the empty conjunction, nothing entails a refinement.
+        assert!(refinements_match(s, Some(&max(4)), None));
+        assert!(!refinements_match(s, None, Some(&max(4))));
+        let i = BaseType::Int;
+        let pos = refinement(vec![PredKind::Positive]);
+        let nn = refinement(vec![PredKind::NonNegative]);
+        assert!(refinements_match(i, Some(&pos), Some(&nn)));
+        assert!(!refinements_match(i, Some(&nn), Some(&pos)));
     }
 
     // -- numeric_mix -------------------------------------------------------

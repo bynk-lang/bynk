@@ -94,6 +94,22 @@ expressions or identifiers.
 See [The refined-literal admission model](/book/guides/type-system/refined-literal-admission/)
 for the rationale.
 
+## Across a context boundary
+
+A value crossing a context boundary (a `consumes` call argument, or a service's
+return value) is compared structurally, and a refinement on the sending side is
+admitted where the receiving side expects a weaker one: `String where
+MaxLength(4)` is accepted where `MaxLength(8)` is expected, `Positive` where
+`NonNegative` is, and an `InRange(1, 5)` where `InRange(0, 10)` is. The reverse
+is `bynk.boundary.structural_mismatch`. Order and spelling do not matter
+(`NonEmpty` is `MinLength(1)`), and the numeric and length predicates are decided
+by interval containment; `Decimal` bounds compare by value. `Matches` is only
+equal to an identical pattern.
+
+This is a boundary rule. Inside a context, `type Short = String where
+MaxLength(4)` is still not assignable to `type Long = String where MaxLength(8)`:
+named types stay distinct.
+
 ## Narrowing with `is`
 
 A runtime value can be narrowed to a refined type with `is`. `value is Refined`

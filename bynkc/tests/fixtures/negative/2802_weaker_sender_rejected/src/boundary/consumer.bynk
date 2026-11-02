@@ -1,0 +1,12 @@
+context boundary.consumer
+
+consumes boundary.provider as Provider
+
+type LocalToken = String where MaxLength(8)
+
+service submit {
+  on call(value: LocalToken) -> Effect[Result[Int, Int]] {
+    let _ <- Provider.verify(value)
+    Effect.pure(Ok(0))
+  }
+}
