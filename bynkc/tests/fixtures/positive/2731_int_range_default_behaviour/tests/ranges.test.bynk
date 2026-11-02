@@ -1,0 +1,21 @@
+// #2731: the default of a refined `Int` honours the upper bound too.
+suite ranges {
+  case "a negative range lands inside it" {
+    let d = Val[Debt]
+    expect d == -1
+    expect Debt.of(-3) is Ok(_)
+    expect Debt.of(0) is Err(_)
+  }
+
+  case "a single-value range is that value" {
+    expect Val[Pinned] == -3
+    expect Val[Single] == 7
+  }
+
+  case "lower bounds still win when they are above zero" {
+    expect Val[Window] == 2
+    expect Val[Low] == 0
+    expect Val[Tight] == 1
+    expect Val[Neg] == 0
+  }
+}
