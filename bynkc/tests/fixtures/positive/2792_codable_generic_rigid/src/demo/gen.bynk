@@ -1,0 +1,56 @@
+---
+#2792: generic code that crosses the JSON boundary with a user generic type
+over a type parameter. The codec is built from the generic declaration and the
+witnesses of its arguments.
+---
+commons demo.gen
+
+type P = { x: Int, y: Int }
+
+type Box[T] = { value: T, label: String }
+
+type Pair[A, B] = { first: A, second: B }
+
+type Maybe[T] = | Nothing | Just(value: T)
+
+type Wrapped[T] = { items: List[T], best: Option[T] }
+
+fn enc[T: Codable](b: Box[T]) -> String { Json.encode(b) }
+
+fn dec[T: Codable](s: String) -> Result[Box[T], JsonError] { Json.decode[Box[T]](s) }
+
+fn roundTrip[T: Codable](b: Box[T]) -> Result[Box[T], JsonError] { Json.decode[Box[T]](Json.encode(b)) }
+
+fn encPair[A: Codable, B: Codable](p: Pair[A, B]) -> String { Json.encode(p) }
+
+fn decPair[A: Codable, B: Codable](s: String) -> Result[Pair[A, B], JsonError] {
+  Json.decode[Pair[A, B]](s)
+}
+
+fn encMaybe[T: Codable](m: Maybe[T]) -> String { Json.encode(m) }
+
+fn decMaybe[T: Codable](s: String) -> Result[Maybe[T], JsonError] { Json.decode[Maybe[T]](s) }
+
+fn encWrapped[T: Codable](w: Wrapped[T]) -> String { Json.encode(w) }
+
+fn decWrapped[T: Codable](s: String) -> Result[Wrapped[T], JsonError] { Json.decode[Wrapped[T]](s) }
+
+fn encNested[T: Codable](b: Box[Pair[T, Int]]) -> String { Json.encode(b) }
+
+fn decNested[T: Codable](s: String) -> Result[Box[Pair[T, Int]], JsonError] {
+  Json.decode[Box[Pair[T, Int]]](s)
+}
+
+fn encListOfBox[T: Codable](xs: List[Box[T]]) -> String { Json.encode(xs) }
+
+fn decListOfBox[T: Codable](s: String) -> Result[List[Box[T]], JsonError] {
+  Json.decode[List[Box[T]]](s)
+}
+
+type Outer[T] = { inner: Box[T], tag: Box[Int] }
+
+fn encOuter[T: Codable](o: Outer[T]) -> String { Json.encode(o) }
+
+fn decOuter[T: Codable](s: String) -> Result[Outer[T], JsonError] { Json.decode[Outer[T]](s) }
+
+fn viaTwo[T: Codable](b: Box[T]) -> Result[Box[T], JsonError] { roundTrip(b) }

@@ -211,22 +211,6 @@ fn is_numeric(t: TyId, tys: &Types) -> bool {
     )
 }
 
-/// v0.88: value-keyable for a `Query`'s `distinct`/`distinctBy`/join/`groupBy` —
-/// `Int`/`String`, including Refined *and* Opaque over them (dedup is by value
-/// *equality*, which an opaque id supports even though it does not widen for
-/// ordering). A `Query` keeps this rule (slice 2 DECISION I): its keys hash
-/// through `String(key)`. A `List` is held to [`super::keying`]'s `Key`.
-fn is_query_keyable(t: TyId, tys: &Types) -> bool {
-    match &*tys.get(t) {
-        Ty::Base(BaseType::Int | BaseType::String) => true,
-        Ty::Named {
-            kind: NamedKind::Refined(b) | NamedKind::Opaque(b),
-            ..
-        } => matches!(b, BaseType::Int | BaseType::String),
-        _ => false,
-    }
-}
-
 /// A `List` ordering kernel's key is any `Ord` type (constrained-generics slice
 /// 1, DECISION H); a `Query` key stays on [`require_orderable`]'s five base types.
 fn require_list_key_ord(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
@@ -269,27 +253,10 @@ fn require_numeric(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
     }
 }
 
-/// The element or key of `distinct`, `distinctBy`, `groupBy` or a join: a `List`
-/// takes any `Key` type, a `Query` the `String`/`Int` rule.
+/// The element or key of `distinct`, `distinctBy`, `groupBy` or a join: any `Key`
+/// type, on a `List` and on a `Query` alike (constrained-generics #2789).
 fn require_keyable(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
-    if !method.starts_with("Query.") {
-        check_key(ctx, key, span, &KeySite::Kernel(method));
-        return;
-    }
-    let tys = ctx.tys;
-    if !is_query_keyable(key, tys) {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.not_keyable",
-                span,
-                format!(
-                    "`{method}` needs a value-keyable element/key, but got `{}`",
-                    key.display(tys)
-                ),
-            )
-            .with_note("a `Query` key is `Int`, `String`, or a refined/opaque type over them"),
-        );
-    }
+    check_key(ctx, key, span, &KeySite::Kernel(method));
 }
 
 /// v0.94 (ADR 0120): the element type `U` of a join's `other` collection — it

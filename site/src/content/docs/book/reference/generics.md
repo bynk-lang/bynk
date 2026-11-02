@@ -215,9 +215,12 @@ comparator comes first: `[T: Ord + Codable]` takes `__cmp_T` then `__codec_T`. L
 `Ord` witness, a codec is internal and not part of the published ABI.
 
 `List`, `Option`, `Set`, `Map` and `Result` over a type parameter encode and decode
-inside the function; a `Set[T]` needs `T: Key + Codable`. A generic type of your own
-over a type parameter (`Box[T]` inside `fn f[T: Codable]`) is not supported yet:
-`bynk.generics.codec_generic_at_rigid`. A concrete `Box[Order]` is unaffected.
+inside the function; a `Set[T]` needs `T: Key + Codable`. A generic record or sum of your
+own over a type parameter (`Box[T]` inside `fn f[T: Codable]`) does too: the unit that
+names it builds a codec factory from the declaration and applies it to the codecs of the
+arguments, so the JSON, the error paths and the revalidation of a field are those of the
+codec for a concrete `Box[Order]`. A recursive generic type is still refused at a
+boundary (`bynk.generics.recursive_generic_at_boundary`).
 
 A type another context owns and exports opaque cannot be decoded, by `Json.decode`,
 `Json.decodeSql` or a `Codable` witness: decoding creates a value, and only the owning

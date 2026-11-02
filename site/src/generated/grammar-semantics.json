@@ -670,10 +670,6 @@
       "summary": "A generic function with an `Ord` bound is used as a value, and its type arguments cannot be determined from the type expected at that reference; annotate the expected type (constrained-generics slice 1)."
     },
     {
-      "code": "bynk.generics.codec_generic_at_rigid",
-      "summary": "A user generic type is applied to a type parameter inside a `Codable` context (`Paginated[T]` in a body with `T: Codable`). Its codec would need a factory per generic declaration, which is deferred; the built-in containers over a type parameter are supported, as is a concrete instantiation (constrained-generics slice 3)."
-    },
-    {
       "code": "bynk.generics.method_on_generic_type",
       "summary": "A *static* method on a generic type never mentions one of the type's parameters in its parameter or return types, so no call could determine it from the arguments or the expected type. Mention the parameter in the signature, or make the method a free function (constrained-generics slice 4; instance methods are supported, #594)."
     },
@@ -737,7 +733,7 @@
     },
     {
       "code": "bynk.types.not_keyable",
-      "summary": "A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2). A `Query` keeps the narrower `String`/`Int` rule."
+      "summary": "A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2)."
     }
   ],
   "given_clause": [

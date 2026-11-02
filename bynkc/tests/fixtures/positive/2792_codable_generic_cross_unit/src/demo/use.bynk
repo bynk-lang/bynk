@@ -1,0 +1,14 @@
+---
+#2792: a unit that supplies the concrete type to the generic function.
+---
+commons demo.use
+
+uses demo.shapes
+uses demo.algo
+
+fn shown(c: Card, code: Code) -> String {
+  let e: Envelope[Card] = Envelope { payload: c, code: code }
+  forward(e)
+}
+
+fn read(s: String) -> Result[Envelope[Card], JsonError] { decode[Card](s) }
