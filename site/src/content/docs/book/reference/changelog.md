@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.2** | A `system`-tier case that calls an `on call` service is refused with `bynk.test.call_needs_in_process`, not lowered to invalid TypeScript (#2649) |
+| **v0.480.1** | "`for all` over a record whose field carries an inline `where Matches(…)` is refused with `bynk.val.needs_pin`, as a declared `Matches` type already was" |
 | **v0.480.0** | A built-in exact `Decimal` base type for money and fractional arithmetic: `1.20d` literals, exact `+`/`-`/`*`, `div` and `round` with a stated scale and rounding mode, ordering by value, and a canonical JSON string on the wire |
 | **v0.479.2** | A flattened capability (`consumes U { Cap }`) whose operation names a type `U` declares but does not export now resolves that type, as the qualified form does, instead of silently typing the call as `()`; calling an operation whose signature names a type the consumer declares with a different shape is refused with `bynk.boundary.structural_mismatch` |
 | **v0.479.1** | A `workers` handler (call, http, queue) whose parameters name a consumed adapter type such as `R2Upload` now type-checks |
