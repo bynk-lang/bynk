@@ -1,0 +1,8 @@
+suite demo.shapes {
+  case "the allowed shapes run when the fault is not reached" {
+    expect annotated(1) == 2
+    expect tail(3) == 3
+    expect joined(3) == 4
+    expect annotated(2) == 4
+  }
+}

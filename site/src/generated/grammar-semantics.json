@@ -940,6 +940,10 @@
     {
       "code": "bynk.types.let_annotation_mismatch",
       "summary": "A `let` value does not match its type annotation."
+    },
+    {
+      "code": "bynk.types.never_inferred",
+      "summary": "An unannotated `let` or `<-` binding has a type that is, or contains, the bottom type (`never returns`) because its value only faults (a faulting lambda bound this way included); the type cannot be written in source, so an annotation is needed."
     }
   ],
   "list_literal": [

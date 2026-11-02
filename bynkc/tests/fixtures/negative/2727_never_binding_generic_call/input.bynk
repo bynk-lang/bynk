@@ -1,0 +1,10 @@
+commons demo
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn later() -> Int {
+  let y = id(unreachable("never"))
+  1
+}

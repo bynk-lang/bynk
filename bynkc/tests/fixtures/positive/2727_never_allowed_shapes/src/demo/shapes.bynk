@@ -1,0 +1,58 @@
+commons demo.shapes
+
+---
+An annotation gives the fault an expected type to stand in for.
+---
+fn annotated(n: Int) -> Int {
+  let x: Int = unreachable("callers pass a positive count")
+  x + n
+}
+
+---
+A fault as the tail of the block is the function's result.
+---
+fn tail(n: Int) -> Int {
+  if n > 0 { n } else { unreachable("callers pass a positive count") }
+}
+
+---
+A binding whose value joins a fault with another type takes the other type.
+---
+fn joined(n: Int) -> Int {
+  let x = if n > 0 { n } else { unreachable("callers pass a positive count") }
+  x + 1
+}
+
+---
+A lambda passed where a function type is expected has its result type from there.
+---
+fn apply(f: (Int) -> Int, n: Int) -> Int {
+  f(n)
+}
+
+fn viaLambda(n: Int) -> Int {
+  apply((x) => unreachable("never called"), n)
+}
+
+---
+An annotated result gives an explicit lambda its expected type, too.
+---
+fn pick() -> (Int) -> String {
+  (n: Int) => unreachable("never called")
+}
+
+---
+A combinator whose lambda only faults takes its type from the result position.
+---
+fn prices(xs: List[Int]) -> List[Int] {
+  xs.map((o) => unreachable("prices are filled in later"))
+}
+
+fn annotated_map(xs: List[Int]) -> Int {
+  let ys: List[Int] = xs.map((o) => unreachable("never called"))
+  ys.length()
+}
+
+fn mapped_err(r: Result[Int, String]) -> Result[Int, String] {
+  r.mapErr((e) => unreachable("errors are impossible here"))
+}

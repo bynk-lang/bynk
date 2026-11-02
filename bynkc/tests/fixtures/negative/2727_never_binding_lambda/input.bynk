@@ -1,0 +1,6 @@
+commons demo
+
+fn build() -> Int {
+  let f = (n: Int) => unreachable("never")
+  1
+}
