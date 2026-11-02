@@ -2129,6 +2129,13 @@ mod tests {
         };
         let fix = err("n % 2");
         assert_eq!(fix.suggestions.len(), 1);
+        assert_eq!(
+            fix.notes,
+            [
+                "use `a.rem(b)` for the C-family remainder, which takes the dividend's sign, \
+              or `a.mod(b)` for the modulo, which takes the divisor's sign"
+            ]
+        );
         assert_eq!(fix.suggestions[0].edits[0].1, "n.rem(2)");
         assert_eq!(
             fix.suggestions[0].applicability,

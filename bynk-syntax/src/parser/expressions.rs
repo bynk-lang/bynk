@@ -517,7 +517,8 @@ impl<'a> Parser<'a> {
             "Bynk has no `%` operator",
         )
         .with_note(
-            "use `a.rem(b)` for the C-family remainder, which takes the dividend's sign,              or `a.mod(b)` for the modulo, which takes the divisor's sign",
+            "use `a.rem(b)` for the C-family remainder, which takes the dividend's sign, \
+             or `a.mod(b)` for the modulo, which takes the divisor's sign",
         );
         // The right operand is parsed only to measure the fix; a failure to
         // parse it leaves the error without one.
