@@ -292,6 +292,41 @@ pub fn explain(code: &str) -> Option<&'static Explain> {
     EXPLANATIONS.iter().find(|e| e.code == code)
 }
 
+/// The hosted diagnostic index page (the generated `reference/diagnostics`
+/// page), the link target for a code with no curated [`Explain`] page.
+pub const INDEX_PATH: &str = "/book/reference/diagnostics/";
+
+/// The anchor slug of a category's `## <title>` heading on the generated
+/// diagnostic index (Starlight/github-slugger shape: lowercase, spaces to
+/// hyphens, punctuation dropped), e.g. `"type-checking"`.
+fn category_anchor(cat: &str) -> String {
+    category_title(cat)
+        .chars()
+        .filter_map(|c| match c {
+            ' ' => Some('-'),
+            c if c.is_alphanumeric() || c == '-' => Some(c.to_ascii_lowercase()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The hosted-Book link for any diagnostic `code`: the curated
+/// [`Explain::href`] when one exists (what the LSP's `codeDescription` uses),
+/// otherwise the diagnostic index, deep-linked to the code's category section
+/// when the code is a registry code (a non-registry code, e.g. a host-synthetic
+/// one, links the index top).
+pub fn href(code: &str) -> String {
+    if let Some(e) = explain(code) {
+        return e.href();
+    }
+    let mut url = format!("{BOOK_BASE_URL}{INDEX_PATH}");
+    if lookup(code).is_some() {
+        url.push('#');
+        url.push_str(&category_anchor(category(code)));
+    }
+    url
+}
+
 /// Look up a code's registry entry by exact match — the one place
 /// [`crate::error::Severity::for_error`] reads a code's severity, instead of
 /// hardcoding its own copy of the (small) warning set.

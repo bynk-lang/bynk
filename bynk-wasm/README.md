@@ -38,6 +38,16 @@ for live on-type checking; `bynk_hover` returns the inferred type at an offset;
 returns the source in house style (`{ok, formatted}` / `{ok:false, error}`). Every entry
 compiles for the `browser` platform.
 
+Each diagnostic (in `bynk_compile`, `bynk_analyze` and `bynk_analyze_project`)
+carries, besides `category` and `message`, the registry's one-line `summary`
+(`null` only for an unregistered code) and an `href`: the curated Book
+page when the code has one (what the LSP offers as `codeDescription`), otherwise
+the diagnostic index section for its category. `bynk_explain(code)` returns
+`{ code, summary, blurb?, example?, href }` for any code — the same curated table
+`bynk explain` prints — so a consumer keeps no copy of either table. TS:
+`summary: string | null; href: string` on `Diagnostic`;
+`bynk_explain(code: string): string` (JSON).
+
 The pipeline reuses the on-disk compile path wholesale (first-party injection,
 the per-platform binding, the strip-only emitter), so the in-browser result
 matches the CLI's.

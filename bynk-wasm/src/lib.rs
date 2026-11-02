@@ -76,6 +76,14 @@ pub struct Diagnostic {
     /// The stable diagnostic category (e.g. `bynk.parse.expected_token`).
     pub category: String,
     pub message: String,
+    /// The registry's one-line summary of this code, so a consumer needs no copy
+    /// of the table. `null` only for a code that is not in the registry. (#2679)
+    pub summary: Option<String>,
+    /// A link to learn more: the curated Book page when the code has one (what
+    /// the LSP offers as `codeDescription`), otherwise the diagnostic index
+    /// section for the code's category. For the curated blurb and example, call
+    /// `bynk_explain(category)`. (#2679)
+    pub href: String,
     /// Finding #47: previously dropped entirely for the playground. Plain
     /// text, not positioned — the CLI/LSP renderers already carry the
     /// harder problem of a label's span belonging to a different module
@@ -127,6 +135,8 @@ fn panic_diagnostic(payload: Box<dyn std::any::Any + Send>) -> Diagnostic {
         severity: "error".to_string(),
         category: "bynk.wasm.panic".to_string(),
         message: format!("internal compiler panic: {}", panic_message(&*payload)),
+        summary: summary_of("bynk.wasm.panic"),
+        href: bynk_syntax::diagnostics::href("bynk.wasm.panic"),
         notes: Vec::new(),
         labels: Vec::new(),
     }
@@ -152,6 +162,49 @@ fn panic_diagnostic(payload: Box<dyn std::any::Any + Send>) -> Diagnostic {
 #[allow(clippy::result_large_err)]
 fn catch_panic<T>(f: impl FnOnce() -> T) -> Result<T, Diagnostic> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(panic_diagnostic)
+}
+
+/// The registry's one-line summary for a diagnostic `code`, if it is a registry code.
+fn summary_of(code: &str) -> Option<String> {
+    bynk_syntax::diagnostics::lookup(code).map(|d| d.summary.to_string())
+}
+
+/// What the compiler knows about a diagnostic code, for the playground's
+/// "learn more" affordance (#2679). `summary` is `null` only for a code not in
+/// the registry; `blurb`/`example` are present only for a curated code (the same
+/// table `bynk explain` prints); `href` is always set (see [`Diagnostic::href`]).
+#[derive(serde::Serialize)]
+pub struct Explanation {
+    pub code: String,
+    pub summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blurb: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub example: Option<String>,
+    pub href: String,
+}
+
+/// Look up the explanation for `code`. Never fails: an unknown code yields
+/// `summary: null` and the diagnostic-index link.
+pub fn explain(code: &str) -> Explanation {
+    let curated = bynk_syntax::diagnostics::explain(code);
+    Explanation {
+        code: code.to_string(),
+        summary: summary_of(code),
+        blurb: curated.map(|e| e.blurb.to_string()),
+        example: curated.map(|e| e.example.to_string()),
+        href: bynk_syntax::diagnostics::href(code),
+    }
+}
+
+/// [`explain`] as a JSON string: `{ code, summary, blurb?, example?, href }`.
+pub fn explain_to_json(code: &str) -> String {
+    serde_json::to_string(&explain(code)).unwrap_or_else(|_| {
+        format!(
+            "{{\"code\":{code:?},\"summary\":null,\"href\":\"{}\"}}",
+            bynk_syntax::diagnostics::href("")
+        )
+    })
 }
 
 /// Flatten attributed errors to [`Diagnostic`]s, resolving line/col against the
@@ -182,6 +235,8 @@ fn to_diagnostics(
                 severity: severity_str(&a.error).to_string(),
                 category: a.error.category.to_string(),
                 message: a.error.message.clone(),
+                summary: summary_of(a.error.category),
+                href: bynk_syntax::diagnostics::href(a.error.category),
                 notes: a.error.notes.clone(),
                 labels: a.error.labels.iter().map(|(_, msg)| msg.clone()).collect(),
             }
@@ -254,6 +309,8 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                     severity: "error".to_string(),
                     category: "bynk.wasm.strip_failed".to_string(),
                     message: e.to_string(),
+                    summary: summary_of("bynk.wasm.strip_failed"),
+                    href: bynk_syntax::diagnostics::href("bynk.wasm.strip_failed"),
                     notes: Vec::new(),
                     labels: Vec::new(),
                 }],
@@ -685,6 +742,17 @@ pub fn bynk_analyze(source: &str, platform: Option<String>) -> String {
     analyze_to_json(source, platform_named(platform.as_deref()))
 }
 
+/// The wasm entry point for a diagnostic's "learn more": the compiler's summary,
+/// curated blurb/example (when one exists) and docs link for a diagnostic `code`
+/// (a `category` from any diagnostic), as `{ code, summary, blurb?, example?, href }`
+/// (#2679).
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn bynk_explain(code: &str) -> String {
+    install_panic_hook();
+    explain_to_json(code)
+}
+
 /// The wasm entry point for the editor's hover tooltip: the inferred type at a
 /// byte `offset` into an in-memory Bynk source, as `{ "ty": string | null }`
 /// (#397). `platform` is optional (see [`platform_named`]).
@@ -930,6 +998,134 @@ mod tests {
         assert!(r.diagnostics.iter().all(|d| d.severity == "error"));
         // Line/col point into the user source.
         assert!(r.diagnostics.iter().any(|d| d.line >= 1));
+    }
+
+    /// #2679: every diagnostic carries the registry summary and a docs link.
+    #[test]
+    fn diagnostics_carry_a_summary_and_href() {
+        let r = analyze("context app.demo\n\nthis is not bynk\n", Platform::Browser);
+        assert!(!r.diagnostics.is_empty());
+        for d in &r.diagnostics {
+            assert!(d.summary.is_some(), "no summary for {}", d.category);
+            assert!(
+                d.href.starts_with("https://bynk-lang.org/book/"),
+                "{}",
+                d.href
+            );
+        }
+        // Also present on the serialised wire shape (additive fields).
+        let json: serde_json::Value = serde_json::from_str(&analyze_to_json(
+            "context app.demo\n\nthis is not bynk\n",
+            Platform::Browser,
+        ))
+        .unwrap();
+        let d = &json["diagnostics"][0];
+        assert!(d["category"].is_string() && d["message"].is_string());
+        assert!(d["summary"].is_string() && d["href"].is_string());
+    }
+
+    /// #2679: the host-synthetic codes are registered too, so they resolve.
+    #[test]
+    fn a_synthetic_code_resolves_from_the_registry() {
+        let d = panic_diagnostic(Box::new("boom"));
+        assert!(d.summary.is_some());
+        assert!(
+            d.href
+                .starts_with("https://bynk-lang.org/book/reference/diagnostics/")
+        );
+    }
+
+    /// #2679: the href is the curated page when one exists, else the category section.
+    #[test]
+    fn href_is_curated_else_the_index_category_section() {
+        let curated = bynk_syntax::diagnostics::EXPLANATIONS
+            .first()
+            .expect("at least one curated code");
+        assert_eq!(explain(curated.code).href, curated.href());
+        let plain = bynk_syntax::diagnostics::REGISTRY
+            .iter()
+            .find(|d| bynk_syntax::diagnostics::explain(d.code).is_none())
+            .expect("an uncurated code");
+        let h = explain(plain.code).href;
+        assert!(
+            h.starts_with("https://bynk-lang.org/book/reference/diagnostics/#"),
+            "{h}"
+        );
+    }
+
+    /// #2679: hard-coded anchors, independent of the slug code under test.
+    #[test]
+    fn index_anchors_are_the_expected_slugs() {
+        let anchor = |prefix: &str| {
+            let d = bynk_syntax::diagnostics::REGISTRY
+                .iter()
+                .find(|d| {
+                    d.code.starts_with(prefix)
+                        && bynk_syntax::diagnostics::explain(d.code).is_none()
+                })
+                .unwrap();
+            explain(d.code).href
+        };
+        // No `bynk.mock.*` code is registered today; `property` and `transition`
+        // exercise the parenthesised-title slug the same way.
+        assert!(anchor("bynk.property.").ends_with("#properties-generative-tests"));
+        assert!(anchor("bynk.transition.").ends_with("#transitions-step-invariants"));
+        assert!(anchor("bynk.types.").ends_with("#type-checking"));
+    }
+
+    /// #2679: every index deep-link lands on a real section of the generated page.
+    #[test]
+    fn index_anchors_match_the_generated_headings() {
+        let md = bynk_syntax::diagnostics::render_markdown();
+        let slug = |t: &str| -> String {
+            t.chars()
+                .filter_map(|c| match c {
+                    ' ' => Some('-'),
+                    c if c.is_alphanumeric() || c == '-' => Some(c.to_ascii_lowercase()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let anchors: Vec<String> = md
+            .lines()
+            .filter_map(|l| l.strip_prefix("## "))
+            .map(slug)
+            .collect();
+        for d in bynk_syntax::diagnostics::REGISTRY {
+            let h = bynk_syntax::diagnostics::href(d.code);
+            if let Some((_, frag)) = h.split_once("/reference/diagnostics/#") {
+                assert!(anchors.iter().any(|a| a == frag), "{}: #{frag}", d.code);
+            }
+        }
+    }
+
+    #[test]
+    fn explain_returns_summary_blurb_example_and_href() {
+        let e = bynk_syntax::diagnostics::EXPLANATIONS.first().unwrap();
+        let v: serde_json::Value = serde_json::from_str(&explain_to_json(e.code)).unwrap();
+        assert_eq!(v["code"], e.code);
+        assert!(v["summary"].is_string());
+        assert_eq!(v["blurb"], e.blurb);
+        assert_eq!(v["example"], e.example);
+        assert_eq!(v["href"], e.href());
+    }
+
+    #[test]
+    fn explain_omits_blurb_for_an_uncurated_code_and_survives_an_unknown_one() {
+        let plain = bynk_syntax::diagnostics::REGISTRY
+            .iter()
+            .find(|d| bynk_syntax::diagnostics::explain(d.code).is_none())
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&explain_to_json(plain.code)).unwrap();
+        assert_eq!(v["summary"], plain.summary);
+        assert!(v.get("blurb").is_none() && v.get("example").is_none());
+        let u: serde_json::Value = serde_json::from_str(&explain_to_json("nope")).unwrap();
+        assert_eq!(u["code"], "nope");
+        assert!(u["summary"].is_null());
+        assert_eq!(
+            u["href"],
+            "https://bynk-lang.org/book/reference/diagnostics/"
+        );
     }
 
     #[test]
