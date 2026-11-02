@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "dirs": "7ffc122beb9e2523",
+    "entries": "aff5330d58b6b8d4",
+    "exprs": "42a2a21570dffb48"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "dirs": "Svc(\"dirs\",P(\"d\",Rec(\"Dir\",F(\"entries\",L(Sum(\"Entry\",V(\"File\",F(\"name\",B(\"String\"))),V(\"Sub\",F(\"dir\",Ref(\"Dir\")))))),F(\"name\",B(\"String\")))),Ret(Rec(\"Dir\",F(\"entries\",L(Sum(\"Entry\",V(\"File\",F(\"name\",B(\"String\"))),V(\"Sub\",F(\"dir\",Ref(\"Dir\")))))),F(\"name\",B(\"String\")))))",
+    "entries": "Svc(\"entries\",P(\"e\",Sum(\"Entry\",V(\"File\",F(\"name\",B(\"String\"))),V(\"Sub\",F(\"dir\",Rec(\"Dir\",F(\"entries\",L(Ref(\"Entry\"))),F(\"name\",B(\"String\"))))))),Ret(Sum(\"Entry\",V(\"File\",F(\"name\",B(\"String\"))),V(\"Sub\",F(\"dir\",Rec(\"Dir\",F(\"entries\",L(Ref(\"Entry\"))),F(\"name\",B(\"String\"))))))))",
+    "exprs": "Svc(\"exprs\",P(\"e\",Sum(\"Expr\",V(\"Block\",F(\"stmts\",L(Sum(\"Stmt\",V(\"Eval\",F(\"expr\",Ref(\"Expr\"))),V(\"Skip\"))))),V(\"Lit\",F(\"value\",B(\"Int\"))))),Ret(Sum(\"Expr\",V(\"Block\",F(\"stmts\",L(Sum(\"Stmt\",V(\"Eval\",F(\"expr\",Ref(\"Expr\"))),V(\"Skip\"))))),V(\"Lit\",F(\"value\",B(\"Int\"))))))"
+  }
+}

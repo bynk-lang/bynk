@@ -1,0 +1,11 @@
+context rec.listener
+
+uses rec.shapes
+consumes rec.provider
+
+// #2704: the subscriber-side payload decoder of a recursive event payload.
+service OnPlanted from Events(Planted) {
+  on event(e: Planted) -> Effect[()] {
+    Effect.pure(())
+  }
+}
