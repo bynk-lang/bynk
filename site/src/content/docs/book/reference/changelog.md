@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.20** | An effectful method that awaits is emitted async, so its TypeScript compiles |
+| **v0.480.19** | a parenthesised match-arm guard such as `n if (flag) => n` now parses as a guard rather than a lambda |
 | **v0.480.18** | bynk-wasm's bynk_compile returns a source map with each user module, so the playground can match compiled JS lines to Bynk lines |
 | **v0.480.17** | "`bynk test --smoke` gives a bare `String`, `Int` or `Bool` parameter a literal instead of `Val`, and skips a case whose parameter `Val` cannot fabricate (#2706)" |
 | **v0.480.16** | The `Map[K, V]` boundary decoder rejects a repeated key as `StructuralMismatch` ("a distinct map key") instead of keeping the last entry; `Decimal` keys compare by value, so `1.20` and `1.2` collide |
