@@ -1,0 +1,8 @@
+suite demo.d {
+  // An inline `Matches` on a record field has no generator either; pin instead.
+  property "orders cannot be generated" {
+    for all o: Order {
+      expect o == o
+    }
+  }
+}
