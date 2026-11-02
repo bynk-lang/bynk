@@ -122,6 +122,10 @@ fn assert_smoke_outcomes(doc: &serde_json::Value) {
             ("smoke: GET /code/:c answers", "skipped"),
             ("smoke: GET /hello/:name answers", "pass"),
             ("smoke: GET /ping answers", "pass"),
+            ("smoke: POST /bulk answers", "skipped"),
+            ("smoke: POST /bulk rejects a malformed body", "pass"),
+            ("smoke: POST /note answers", "pass"),
+            ("smoke: POST /note rejects a malformed body", "pass"),
             ("smoke: POST /tag answers", "skipped"),
             ("smoke: POST /tag rejects a malformed body", "pass"),
             ("smoke: PUT /cart/:sku answers", "pass"),
@@ -130,9 +134,9 @@ fn assert_smoke_outcomes(doc: &serde_json::Value) {
         ]),
         "{doc:#}"
     );
-    assert_eq!(doc["passed"], 7, "{doc:#}");
+    assert_eq!(doc["passed"], 10, "{doc:#}");
     assert_eq!(doc["failed"], 1, "{doc:#}");
-    assert_eq!(doc["skipped"], 2, "{doc:#}");
+    assert_eq!(doc["skipped"], 3, "{doc:#}");
     assert_clash_warning(doc);
 }
 
@@ -183,7 +187,7 @@ fn an_undeclared_status_is_a_warning_on_stderr_in_the_human_format() {
     assert!(stderr.contains(CLASH_LINE), "{stderr}\n{stdout}");
     // A warning is not a failure: the case passes, and only the 500 fails.
     assert!(stdout.contains("✓ smoke: GET /clash answers"), "{stdout}");
-    assert!(stdout.contains("7 passed, 1 failed"), "{stdout}");
+    assert!(stdout.contains("10 passed, 1 failed"), "{stdout}");
 }
 
 #[test]
@@ -260,6 +264,16 @@ fn print_writes_the_synthesised_suite_and_names_the_skip() {
         "{stdout}"
     );
     assert!(
+        stdout.contains(r#"api.POST("/note", "a") by Visitor"#),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(
+            r#"// skipped `shop.api` case "smoke: POST /bulk answers" [bynk.val.unsupported_kind]"#
+        ),
+        "{stdout}"
+    );
+    assert!(
         stdout.contains(
             r#"// skipped `shop.api` case "smoke: GET /code/:c answers" [bynk.val.needs_pin]"#
         ),
@@ -285,7 +299,7 @@ fn a_smoke_run_in_process_calls_every_route_and_leaves_the_projects_suites_out()
     assert_smoke_outcomes(&doc);
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
-        stderr.contains("smoke: 8 cases from 7 routes, 2 skipped"),
+        stderr.contains("smoke: 11 cases from 9 routes, 3 skipped"),
         "{stderr}"
     );
 }

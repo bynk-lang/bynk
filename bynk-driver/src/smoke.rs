@@ -680,6 +680,15 @@ impl Route<'_> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn bare_literal_covers_string_int_and_bool_only() {
+        assert_eq!(bare_literal("String").as_deref(), Some(r#""a""#));
+        assert_eq!(bare_literal("Int").as_deref(), Some("1"));
+        assert_eq!(bare_literal("Bool").as_deref(), Some("true"));
+        assert_eq!(bare_literal("List[String]"), None);
+        assert_eq!(bare_literal("Sku"), None);
+    }
+
     fn sources(files: &[(&str, &str)]) -> HashMap<PathBuf, String> {
         files
             .iter()

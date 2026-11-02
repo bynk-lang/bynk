@@ -31,6 +31,15 @@ service api from http {
   on GET("/hello/:name") (name: String) -> Effect[HttpResult[String]] by v: Visitor {
     Ok("Hello, \(name)!")
   }
+  // A bare `String` body (#2706): a literal, not `Val`.
+  on POST("/note") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Created(body)
+  }
+  // A body type with no literal that `Val` refuses (`bynk.val.unsupported_kind`):
+  // the `answers` case is skipped with the reason, not a failure of the run.
+  on POST("/bulk") (body: List[String]) -> Effect[HttpResult[String]] by v: Visitor {
+    Created("ok")
+  }
   // No generator for a `Matches` type: skipped, and named.
   on GET("/code/:c") (c: Code) -> Effect[HttpResult[String]] by v: Visitor {
     Ok(c)
