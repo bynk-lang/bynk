@@ -6172,6 +6172,28 @@ mod tests {
         .assert_reports("bynk.boundary.structural_mismatch");
     }
 
+    /// #2802: two consumed contexts that declare one unexported type name agree
+    /// when each entails the other, so `Positive` and `Positive && NonNegative`
+    /// (equivalent, but different canonical sets) no longer make the name
+    /// ambiguous, and a value of it passes back to the context it came from.
+    #[test]
+    fn equivalent_refinements_of_one_name_do_not_make_it_ambiguous() {
+        let owner = "context shop\n\ntype Label = Int where Positive\n\n\
+                     service make {\n  on call() -> Effect[Result[Label, Int]] {\n    Effect.pure(Ok(1))\n  }\n}\n\n\
+                     service take {\n  on call(l: Label) -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+        let other = "context other\n\ntype Label = Int where Positive && NonNegative\n\n\
+                     service peek {\n  on call() -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+        let till = "context till\n\nconsumes shop\n\nconsumes other\n\n\
+                    service total {\n  on call() -> Effect[Int] {\n    \
+                    let r <- shop.make()\n    match r {\n      Ok(l) => shop.take(l)\n      Err(_) => Effect.pure(0)\n    }\n  }\n}\n";
+        analyse(&[
+            ("shop.bynk", owner),
+            ("other.bynk", other),
+            ("till.bynk", till),
+        ])
+        .assert_clean();
+    }
+
     #[test]
     fn an_unexported_value_passes_back_to_its_service() {
         let a = analyse(&[

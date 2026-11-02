@@ -124,10 +124,11 @@ impl PartialOrd for Dec<'_> {
     }
 }
 
-/// A canonical decimal bound is digits, an optional leading `-` and an optional point.
+/// A canonical decimal bound is digits, an optional leading `-` and an optional
+/// point, with at least one digit.
 fn dec(text: &str) -> Option<Dec<'_>> {
     let digits = text.strip_prefix('-').unwrap_or(text);
-    let ok = !digits.is_empty()
+    let ok = digits.bytes().any(|b| b.is_ascii_digit())
         && digits.bytes().all(|b| b.is_ascii_digit() || b == b'.')
         && digits.bytes().filter(|&b| b == b'.').count() <= 1;
     ok.then_some(Dec(text))
