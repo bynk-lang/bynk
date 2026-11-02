@@ -992,10 +992,14 @@ pub fn without_lex_echoes(
     let echo_ranges: Vec<(usize, usize)> = lex_errors
         .iter()
         .map(|le| {
-            // `tokens` are in source order.
-            let next_end = tokens
-                .get(tokens.partition_point(|t| t.span.start < le.span.end))
-                .map_or(le.span.end, |t| t.span.end);
+            // `tokens` are in source order. Trivia is not a token the parser
+            // sees, and with no token after the error the gap runs to the end
+            // of the file (an EOF error is its echo).
+            let first = tokens.partition_point(|t| t.span.start < le.span.end);
+            let next_end = tokens[first..]
+                .iter()
+                .find(|t| !matches!(t.kind, TokenKind::Comment | TokenKind::DocLine))
+                .map_or(usize::MAX, |t| t.span.end);
             (le.span.start, next_end)
         })
         .collect();
@@ -2929,7 +2933,8 @@ mod tests {
         }
     }
 
-    /// #2807: the parse errors a skipped character causes are dropped; others stay.
+    /// #2807: recovery from a bad escape resumes after the literal's closer,
+    /// even when a hole holds a string.
     #[test]
     fn string_recovery_skips_a_hole_holding_a_string() {
         let src = "fn f() { show(\"a\\q \\(g(\"x\")) b\", 1) }\nfn k() $";
@@ -2941,6 +2946,16 @@ mod tests {
         );
         // `, 1) }` after the literal still lexes: nothing of the hole leaked.
         assert!(!tokens.iter().any(|t| t.kind == TokenKind::StrLit));
+        let kinds: Vec<_> = tokens.iter().map(|t| t.kind).collect();
+        assert_eq!(
+            &kinds[kinds.len() - 8..kinds.len() - 4],
+            [
+                TokenKind::Comma,
+                TokenKind::IntLit,
+                TokenKind::RParen,
+                TokenKind::RBrace
+            ]
+        );
     }
 
     #[test]
@@ -2959,6 +2974,8 @@ mod tests {
         assert_eq!(tokens.iter().filter(|t| t.kind == TokenKind::Fn).count(), 1);
     }
 
+    /// #2807: the parse errors a skipped character causes are dropped (also past
+    /// a comment, and at the end of the file); a real error elsewhere stays.
     #[test]
     fn lex_echoes_are_dropped() {
         let src = "commons d\n\nfn f(a: Int, b: Int) -> Int { a $ b }\n";
@@ -2966,5 +2983,29 @@ mod tests {
         let parse_errors = crate::parser::parse_units_recovering(&tokens, src).errors;
         assert!(!parse_errors.is_empty(), "`a b` is a syntax error");
         assert!(without_lex_echoes(&lex_errors, &tokens, parse_errors).is_empty());
+    }
+
+    fn surviving(src: &str) -> usize {
+        let (tokens, lex_errors) = tokenize_recovering(src);
+        let parse_errors = crate::parser::parse_units_recovering(&tokens, src).errors;
+        without_lex_echoes(&lex_errors, &tokens, parse_errors).len()
+    }
+
+    #[test]
+    fn lex_echo_window_skips_comments_and_runs_to_eof() {
+        assert_eq!(
+            surviving("commons d\n\nfn f(a: Int, b: Int) -> Int { a $ // why\n b }\n"),
+            0
+        );
+        // An unclosed doc block inside a body: the missing `}` is its echo.
+        assert_eq!(
+            surviving("commons d\n\nfn f() -> Int {\n  1\n---\nprose\n"),
+            0
+        );
+        // A genuine syntax error well away from the lex error stays.
+        assert_eq!(
+            surviving("commons d\n\nfn f() -> Int { 1 $ }\n\nfn g( -> Int { 1 }\n"),
+            1
+        );
     }
 }
