@@ -85,7 +85,6 @@ each track's spine issue; this table is deliberately just the map.
 | [`first-party-registry.md`](first-party-registry.md) | [#2308](https://github.com/bynk-lang/bynk/issues/2308) | Settled (#2309); slicing next — R0, L1, L2 and R5b can start at once | The first-party registry (packaging slice 4b): a hosted Bynk service written in Bynk, in this repo until go-live; its `bynk-std` prerequisites, accounts and organisations, key custody, conformance, and setting `FIRST_PARTY` |
 | [`idempotency-capability.md`](idempotency-capability.md) | [#921](https://github.com/accuser/bynk/issues/921) | Slicing (slice 0 shipped, #929; call-site key scoping follow-up shipped, #934) | The `Idempotency` capability: mechanical dedup for at-least-once delivery, per design notes §4, §12 |
 | [`packaging.md`](packaging.md) | [#843](https://github.com/bynk-lang/bynk/issues/843) | Settled (#2199); slice 1 (manifest & workspace surface, #2207) shipped, slice 2 (resolution) next | Packaging & distribution: the package unit, `org/package` identity without renaming units, single-version resolution and `bynk.lock`, and a registry *protocol* run first-party and privately, with only the `bynk` driver touching the network |
-| [`patterns.md`](patterns.md) | [#2616](https://github.com/bynk-lang/bynk/issues/2616) | Settled (#2637); slice 1 (record patterns, #2641) shipped, slice 2 (`let` destructuring, #2654) and slice 3 (precise exhaustiveness, #2665) and slice 4 (list patterns, #2680) and slice 5 (range patterns, #2699, with events slice 4b #990) and slice 6 (lambda-parameter destructuring, #2712) shipped; retirement review next | Destructuring and richer patterns: open record patterns with a required `..`, `let` destructuring, precise exhaustiveness for multi-field patterns, list patterns, and integer range patterns sharing syntax with events (#990) |
 | [`post-trajectory-crate-hygiene.md`](post-trajectory-crate-hygiene.md) | [#1533](https://github.com/accuser/bynk/issues/1533) | Settling | READMEs, crate-local unit tests, comment rewrite, and module decomposition left open after the compiler-trajectory's eight phases closed — internal-architecture theme, not language surface, continuing the posture `compiler-architecture.md`/`crate-decomposition.md`/`content-ownership.md` took |
 | [`standard-library.md`](standard-library.md) | [#1936](https://github.com/accuser/bynk/issues/1936) | Slicing (S0 shipped, #1940) | The standard library: its four layers (kernel, commons, the `bynk` surface, `bynk.cloudflare`), its placement in a `bynk-std` crate and its 1.0 promise, derived capabilities for context-owned platform resources (`capability Sessions = Kv`), and the order in which the Workers surface is admitted |
 
@@ -230,6 +229,13 @@ A retired track's closing summary — what shipped, which ADRs carry its
 decisions, the named follow-ons — is kept for the record in
 [`../archive/retired-tracks.md`](../archive/retired-tracks.md):
 
+- **`patterns.md`** — spine [#2616](https://github.com/bynk-lang/bynk/issues/2616):
+  destructuring and richer patterns. Records are matched and destructured by field, always open
+  with a required `..` (ADRs 0669, 0670), in `match`, `is`, `let` (ADR 0675) and lambda parameters
+  (ADR 0692); lists by shape with a rest binding (ADR 0685); and integers by inclusive range, in one
+  production shared with events' `via schema(...)` (ADR 0689). One usefulness algorithm decides
+  exhaustiveness and reachability for all of them (ADR 0680, superseding ADR 0169 D). Six slices
+  shipped (v0.455.0 onward); tuple patterns were dropped. Retired 1 November 2026.
 - **`test-explorer-depth.md`** — spine [#2257](https://github.com/bynk-lang/bynk/issues/2257):
   the VS Code Test Explorer using the language's own testing vocabulary. The Testing view tags
   tests by tier and runs the `system` suites against a named target (ADR 0567), reproduces and
