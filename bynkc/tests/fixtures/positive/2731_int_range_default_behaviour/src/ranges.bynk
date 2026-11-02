@@ -1,0 +1,11 @@
+commons ranges
+
+// #2731: a bare `Val` of a refined `Int` lands inside the declared range.
+
+type Debt = Int where InRange(-5, -1)
+type Pinned = Int where InRange(-3, -3)
+type Single = Int where InRange(7, 7)
+type Window = Int where InRange(2, 9)
+type Low = Int where InRange(-9, 4)
+type Tight = Int where Positive && InRange(-4, 3)
+type Neg = Int where NonNegative && InRange(-8, 0)
