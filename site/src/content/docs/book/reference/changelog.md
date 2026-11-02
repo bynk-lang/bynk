@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.487**.
+written against **v0.488**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.488.0** | "**Breaking:** a context can no longer decode a type another context owns and exports `opaque`: `Json.decode`, `Json.decodeSql`, a `T: Codable` instantiation and an HTTP or queue handler input that reaches one are `bynk.context.external_decode`. Decoding created a value from the base type alone (the owner's predicate is not re-checked in the consumer), which the language otherwise forbids (`bynk.context.external_construction`). **Migration:** take the value from a service of the owning context, which returns it already validated, instead of decoding it; to accept raw input, take the base type and pass it to a service of the owner that builds the value. A reply from the owner's own service decodes as before (#2794)" |
 | **v0.487.0** | A `Query`'s `sortBy`, `min` and `max` keys take any `Ord` type, as a `List`'s do |
 | **v0.486.0** | "`bynk.cloudflare` `Queue` gains `sendValueWith(message, options)` and `sendValueBatch(messages)`, the `Codable` counterparts of `sendWith` and `sendBatch`: the same messages, delay and all-or-none rule as the untyped calls with `Json.encode`, encoded at the call site. `Analytics.write[T]` is not added (#2793)" |
 | **v0.485.0** | A generic instance method takes explicit type arguments, `b.cast[String]()`, naming the method's own parameters |

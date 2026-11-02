@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "**Breaking:** a context can no longer decode a type another context owns and exports `opaque`: `Json.decode`, `Json.decodeSql`, a `T: Codable` instantiation and an HTTP or queue handler input that reaches one are `bynk.context.external_decode`. Decoding created a value from the base type alone (the owner's predicate is not re-checked in the consumer), which the language otherwise forbids (`bynk.context.external_construction`). **Migration:** take the value from a service of the owning context, which returns it already validated, instead of decoding it; to accept raw input, take the base type and pass it to a service of the owner that builds the value. A reply from the owner's own service decodes as before (#2794)"
----
+# 0710 — A context cannot decode a type another context owns and exports opaque
 
-## ADR: no-decode-of-external-opaque
-title: A context cannot decode a type another context owns and exports opaque
-summary: Json.decode, Codable witnesses and HTTP or queue inputs refuse an externally-owned opaque type; owner service replies keep the structural cast
+- **Status:** Accepted (v0.488)
 
 **Context.** A consumer's codec for a type another context exports `opaque`
 validates the base type and casts (`Revalidation::StructuralOnly`, ADR 0236
