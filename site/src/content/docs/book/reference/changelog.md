@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.11** | bynk-wasm exports bynk_reference(), the standard library catalogue (built-in methods and statics, first-party capabilities and modules, with signatures, docs, experimental and deprecated marks); Duration and Instant statics now complete |
 | **v0.480.10** | Regression fixtures pin that a flattened `Locale.current()` types as `LocaleTag` without `uses bynk.locale.types` (#2697, resolved by #2634) |
 | **v0.480.9** | "A handler parameter named like its service no longer shadows the service in the generated `__makeSurface` method; the surface renames the parameter to `__id_<name>`" |
 | **v0.480.8** | "`bynk_compile` reports each service's `on call` handler signature (`entries`) from the checker's resolved types, so the playground can build a run's arguments without its own source scanner" |

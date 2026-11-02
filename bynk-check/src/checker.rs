@@ -60,7 +60,9 @@ use expressions::*;
 use kernels::*;
 use refinements::*;
 
-pub use calls::{check_const_decl, check_event_field_default, check_state_initialiser};
+pub use calls::{
+    BYNK_LIST_DEPRECATED, check_const_decl, check_event_field_default, check_state_initialiser,
+};
 pub use d1::row_bool_fields;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
 pub use refinements::{locale_tag_accepts, locale_tag_pattern, zero_value_ts};
