@@ -170,6 +170,7 @@
   - [`bynk.refine.literal_violates`](troubleshooting/refine-literal-violates.md)
   - [`bynk.agents.non_zeroable_state_field`](troubleshooting/agents-non-zeroable-state-field.md)
   - [`bynk.agents.bad_state_initialiser`](troubleshooting/agents-bad-state-initialiser.md)
+  - [`bynk.agent.non_additive_state_change`](troubleshooting/agent-non-additive-state-change.md)
   - [`bynk.provider.dependency_cycle`](troubleshooting/provider-dependency-cycle.md)
   - [`bynk.exports.*` cross-context capability errors](troubleshooting/exports-capability-errors.md)
   - [`bynk.adapter.*` / binding errors](troubleshooting/adapter-errors.md)
