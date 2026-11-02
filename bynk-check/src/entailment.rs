@@ -8,7 +8,7 @@
 //! (set-equality here, entailment there), so the compiler rejected a program
 //! the gate called compatible.
 //!
-//! Predicates arrive in their canonical text ([`crate::contract::canon_pred_set`]),
+//! Predicates arrive in their canonical text (`contract::canon_pred_set`),
 //! so `NonEmpty` is already `MinLength(1)` and `InRange` bounds are values, not
 //! lexemes. The engine is **sound but incomplete**: it models an `Int` as
 //! unbounded, so it never concludes something only the safe-integer limit would
