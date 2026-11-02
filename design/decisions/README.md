@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0701](0701-map-decoder-rejects-duplicate-keys.md) | **The Map boundary decoder rejects a repeated key** (v0.480.16) — A wire Map entries array that repeats a key is a StructuralMismatch, not last-entry-wins | Accepted (v0.480.16) |
 | [0700](0700-smoke-undeclared-status-warning.md) | **A smoke case warns when a route answers a status it does not declare** (v0.480.7) — The smoke's `answers` case passes but carries a `warnings` entry, from a response set `bynk` computes and the test runtime compares, reported as an optional last-but-one `Case` field | Accepted (v0.480.7) |
 | [0699](0699-system-tier-call-address-refused.md) | **A system-tier case can't call an `on call` service** (v0.480.2) — bynk.test.call_needs_in_process closes the `/* unknown */` hole for `svc.call(…)` at `system` | Accepted (v0.480.2) |
 | [0698](0698-decimal-base-type.md) | **A built-in exact Decimal base type** (v0.480) — Decimal is an arbitrary-precision base-10 base type with a kept scale, no `/`, a `d` literal, value equality and a JSON-string wire form | Accepted (v0.480) |
