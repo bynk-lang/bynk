@@ -1,0 +1,2 @@
+bynk.types.let_annotation_mismatch let binding's value has type `LocaleTag`, but the annotation declares `Int`
+# exact
