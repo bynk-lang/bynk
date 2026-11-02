@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes, diagnostic_coverage
-changelog: "`bynk test --smoke` warns (`bynk.test.smoke_undeclared_status`) when a route answers a non-5xx status its handler does not declare, on stderr and as a `warnings` array on the case in `json` and `ndjson`"
----
+# 0700 — A smoke case warns when a route answers a status it does not declare
 
-## ADR: smoke-undeclared-status-warning
-title: A smoke case warns when a route answers a status it does not declare
-summary: The smoke's `answers` case passes but carries a `warnings` entry, from a response set `bynk` computes and the test runtime compares, reported as an optional last-but-one `Case` field
+- **Status:** Accepted (v0.480.7)
 
 **Context.** `bynk test --smoke` (#2658) asserts only that a route's answer is not
 a 5xx, so a route that answers a `409` where nothing in its handler returns one

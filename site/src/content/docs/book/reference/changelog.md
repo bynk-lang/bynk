@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.7** | "`bynk test --smoke` warns (`bynk.test.smoke_undeclared_status`) when a route answers a non-5xx status its handler does not declare, on stderr and as a `warnings` array on the case in `json` and `ndjson`" |
 | **v0.480.6** | A troubleshooting page for `bynk.agent.non_additive_state_change` |
 | **v0.480.5** | "Agent schema lock: tests pin the gained-default version bump and the unexplained-difference refusal, and the path backfill is guarded on a snapshot with no recorded paths" |
 | **v0.480.4** | A parameter named `body`, `result`, `request`, `surface` or the like no longer collides with the Workers wrapper's own locals |
