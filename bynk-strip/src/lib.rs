@@ -190,7 +190,7 @@ fn compose_maps(bynk_to_ts: &str, ts_to_js: &oxc_sourcemap::SourceMap<'_>) -> Op
 pub fn strip_project_to_js(
     out: bynk_emit::project::ProjectOutput,
 ) -> Result<bynk_emit::project::ProjectOutput, StripError> {
-    strip_project(out, false).map(|(out, _)| out)
+    strip_project(out, None).map(|(out, _)| out)
 }
 
 /// The per-`.js`-path Bynk-to-JavaScript source maps of a stripped project.
@@ -199,23 +199,24 @@ pub type JsMaps = std::collections::BTreeMap<PathBuf, String>;
 /// [`strip_project_to_js`] that also returns, per emitted `.js` path, a
 /// Bynk-to-JavaScript v3 source map composed from the emitter's own
 /// Bynk-to-TypeScript map and the strip's TypeScript-to-JavaScript map (#2705).
-/// Only modules the emitter maps (the user's own) appear; support files have no
-/// entry. The returned `ProjectOutput` is identical to
+/// Only the modules in `only` (JS output paths; the host passes the user's own)
+/// are mapped, so the rest skip the work. The returned `ProjectOutput` is identical to
 /// [`strip_project_to_js`]'s: the maps are not added as documents.
 pub fn strip_project_to_js_mapped(
     out: bynk_emit::project::ProjectOutput,
+    only: &std::collections::HashSet<PathBuf>,
 ) -> Result<(bynk_emit::project::ProjectOutput, JsMaps), StripError> {
-    strip_project(out, true)
+    strip_project(out, Some(only))
 }
 
 fn strip_project(
     out: bynk_emit::project::ProjectOutput,
-    want_maps: bool,
+    only: Option<&std::collections::HashSet<PathBuf>>,
 ) -> Result<(bynk_emit::project::ProjectOutput, JsMaps), StripError> {
     use bynk_emit::project::{Artefacts, Document, sibling_path};
     use std::collections::BTreeMap;
 
-    let bynk_maps: BTreeMap<PathBuf, String> = if want_maps {
+    let bynk_maps: BTreeMap<PathBuf, String> = if only.is_some() {
         out.artefacts
             .docs
             .iter()
@@ -233,9 +234,10 @@ fn strip_project(
         match doc {
             Document::Ts(program) => {
                 let printed = bynk_ts::print(&program, "", "", &path.to_string_lossy());
-                let (js, ts_to_js) =
-                    strip_types_with_map(&printed.text, &path.to_string_lossy(), want_maps)?;
                 let js_path = path.with_extension("js");
+                let want_map = only.is_some_and(|o| o.contains(&js_path));
+                let (js, ts_to_js) =
+                    strip_types_with_map(&printed.text, &path.to_string_lossy(), want_map)?;
                 if let (Some(ts_to_js), Some(bynk)) =
                     (ts_to_js, bynk_maps.get(&sibling_path(&path, "map")))
                     && let Some(map) = compose_maps(bynk, &ts_to_js)
@@ -305,6 +307,53 @@ fn join_diagnostics(diags: &[oxc::diagnostics::OxcDiagnostic]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A v3 map whose one source is `a.bynk`, with the given
+    /// `(generated line, source line)` segments (all at column 0).
+    fn bynk_map(segs: &[(u32, u32)]) -> String {
+        let mut b = oxc_sourcemap::SourceMapBuilder::default();
+        b.add_source_and_content("a.bynk", "");
+        for &(gl, sl) in segs {
+            b.add_token(gl, 0, sl, 0, Some(0), None);
+        }
+        b.into_sourcemap().to_json_string()
+    }
+
+    /// A TS-to-JS map with one token per `(js line, ts line)`.
+    fn ts_to_js(toks: &[(u32, u32)]) -> oxc_sourcemap::SourceMap<'static> {
+        let mut b = oxc_sourcemap::SourceMapBuilder::default();
+        b.add_source_and_content("a.ts", "");
+        for &(jl, tl) in toks {
+            b.add_token(jl, 0, tl, 0, Some(0), None);
+        }
+        b.into_sourcemap().into_owned()
+    }
+
+    fn composed_lines(json: &str) -> Vec<(u32, u32)> {
+        let m = oxc_sourcemap::SourceMap::from_json_string(json).unwrap();
+        m.get_tokens()
+            .map(|t| (t.get_dst_line(), t.get_src_line()))
+            .collect()
+    }
+
+    #[test]
+    fn compose_drops_a_ts_line_with_no_emitter_segment() {
+        // The emitter maps TS line 1 only; the JS token for TS line 0 is dropped.
+        let out = compose_maps(&bynk_map(&[(1, 4)]), &ts_to_js(&[(0, 0), (1, 1)])).unwrap();
+        assert_eq!(composed_lines(&out), vec![(1, 4)]);
+    }
+
+    #[test]
+    fn compose_takes_the_last_segment_on_a_ts_line() {
+        let out = compose_maps(&bynk_map(&[(0, 2), (0, 7)]), &ts_to_js(&[(0, 0)])).unwrap();
+        assert_eq!(composed_lines(&out), vec![(0, 7)]);
+    }
+
+    #[test]
+    fn compose_is_none_when_nothing_maps() {
+        assert!(compose_maps(&bynk_map(&[(5, 1)]), &ts_to_js(&[(0, 0)])).is_none());
+        assert!(compose_maps("not json", &ts_to_js(&[(0, 0)])).is_none());
+    }
 
     /// Assert the stripped JS contains `needle` and none of the `absent` strings.
     fn strip(src: &str) -> String {

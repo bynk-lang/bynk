@@ -76,6 +76,8 @@ pub struct EmittedFile {
 /// use for and should not see). `None` if the map is not the expected JSON.
 fn with_source_name(map: &str, name: &str) -> Option<String> {
     let mut v: serde_json::Value = serde_json::from_str(map).ok()?;
+    // A playground compile is one in-memory module, so its map has one source.
+    debug_assert_eq!(v.get("sources")?.as_array()?.len(), 1);
     for s in v.get_mut("sources")?.as_array_mut()? {
         *s = name.into();
     }
@@ -382,81 +384,85 @@ pub fn compile(source: &str, platform: Platform) -> CompileResult {
 
 fn compile_inner(source: &str, platform: Platform) -> CompileResult {
     match compile_in_memory(source, BuildTarget::Bundle, platform) {
-        Ok(out) => match bynk_strip::strip_project_to_js_mapped(out) {
-            Ok((js, mut maps)) => {
-                // The user program is the single in-memory source, so warnings
-                // resolve their line/col against it (the fallback).
-                let diagnostics = to_diagnostics(js.warnings, &HashMap::new(), source);
-                let entries = to_entries(js.entry_handlers);
-                // #2148: the graph is the modules the browser links, so the
-                // output's `package.json` (the ES-module marker for Node and
-                // `tsc`) is left out.
-                let user_paths: HashMap<PathBuf, String> = js
-                    .snapshots
-                    .iter()
-                    .map(|(p, _)| {
-                        (
-                            p.with_extension("js"),
-                            slash_key(p).to_string_lossy().into_owned(),
-                        )
-                    })
-                    .collect();
-                let files = js
-                    .artefacts
-                    .docs
-                    .into_iter()
-                    .filter(|(_, doc)| !matches!(doc, bynk_emit::project::Document::Json(_)))
-                    .map(|(path, doc)| {
-                        let kind = if user_paths.contains_key(&path) {
-                            FileKind::User
-                        } else if path == std::path::Path::new("compose.js") {
-                            FileKind::Wiring
-                        } else {
-                            FileKind::Support
-                        };
-                        // Injected first-party units are mapped too, but only
-                        // the user's own module is worth the bytes (#2705).
-                        let map = maps
-                            .remove(&path)
-                            .zip(user_paths.get(&path))
-                            .and_then(|(m, name)| with_source_name(&m, name));
-                        EmittedFile {
-                            kind,
-                            map,
-                            path: path.to_string_lossy().into_owned(),
-                            contents: doc.text(),
-                        }
-                    })
-                    .collect();
-                CompileResult {
-                    ok: true,
-                    files,
-                    diagnostics,
-                    entries,
+        Ok(out) => {
+            // The user's own modules: the only ones that get a source map.
+            let user_paths: HashMap<PathBuf, String> = out
+                .snapshots
+                .iter()
+                .map(|(p, _)| {
+                    (
+                        p.with_extension("js"),
+                        slash_key(p).to_string_lossy().into_owned(),
+                    )
+                })
+                .collect();
+            let only: std::collections::HashSet<PathBuf> = user_paths.keys().cloned().collect();
+            match bynk_strip::strip_project_to_js_mapped(out, &only) {
+                Ok((js, mut maps)) => {
+                    // The user program is the single in-memory source, so warnings
+                    // resolve their line/col against it (the fallback).
+                    let diagnostics = to_diagnostics(js.warnings, &HashMap::new(), source);
+                    let entries = to_entries(js.entry_handlers);
+                    // #2148: the graph is the modules the browser links, so the
+                    // output's `package.json` (the ES-module marker for Node and
+                    // `tsc`) is left out.
+                    let files = js
+                        .artefacts
+                        .docs
+                        .into_iter()
+                        .filter(|(_, doc)| !matches!(doc, bynk_emit::project::Document::Json(_)))
+                        .map(|(path, doc)| {
+                            let kind = if user_paths.contains_key(&path) {
+                                FileKind::User
+                            } else if path == std::path::Path::new("compose.js") {
+                                FileKind::Wiring
+                            } else {
+                                FileKind::Support
+                            };
+                            // Injected first-party units are mapped too, but only
+                            // the user's own module is worth the bytes (#2705).
+                            let map = maps
+                                .remove(&path)
+                                .zip(user_paths.get(&path))
+                                .and_then(|(m, name)| with_source_name(&m, name));
+                            EmittedFile {
+                                kind,
+                                map,
+                                path: path.to_string_lossy().into_owned(),
+                                contents: doc.text(),
+                            }
+                        })
+                        .collect();
+                    CompileResult {
+                        ok: true,
+                        files,
+                        diagnostics,
+                        entries,
+                    }
                 }
+                // The emitter is strip-only (ADR 0136), so this is unreachable for a
+                // successful compile — surfaced as a diagnostic rather than a panic.
+                Err(e) => CompileResult {
+                    ok: false,
+                    files: Vec::new(),
+                    diagnostics: vec![Diagnostic {
+                        path: None,
+                        line: 0,
+                        col: 0,
+                        from: 0,
+                        to: 0,
+                        severity: "error".to_string(),
+                        category: "bynk.wasm.strip_failed".to_string(),
+                        message: e.to_string(),
+                        summary: summary_of("bynk.wasm.strip_failed"),
+                        href: bynk_syntax::diagnostics::href("bynk.wasm.strip_failed"),
+                        notes: Vec::new(),
+                        labels: Vec::new(),
+                    }],
+                    entries: Vec::new(),
+                },
             }
-            // The emitter is strip-only (ADR 0136), so this is unreachable for a
-            // successful compile — surfaced as a diagnostic rather than a panic.
-            Err(e) => CompileResult {
-                ok: false,
-                files: Vec::new(),
-                diagnostics: vec![Diagnostic {
-                    path: None,
-                    line: 0,
-                    col: 0,
-                    from: 0,
-                    to: 0,
-                    severity: "error".to_string(),
-                    category: "bynk.wasm.strip_failed".to_string(),
-                    message: e.to_string(),
-                    summary: summary_of("bynk.wasm.strip_failed"),
-                    href: bynk_syntax::diagnostics::href("bynk.wasm.strip_failed"),
-                    notes: Vec::new(),
-                    labels: Vec::new(),
-                }],
-                entries: Vec::new(),
-            },
-        },
+        }
         Err(failure) => {
             let sources: HashMap<PathBuf, String> = failure.snapshots.iter().cloned().collect();
             CompileResult {
