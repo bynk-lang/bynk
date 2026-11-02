@@ -1,0 +1,15 @@
+context probe
+
+// #2790: `Query.distinct` keeps the `String`/`Int` rule (ADR 0690 decision 9), so a
+// record element is refused. The record carries a `Float`, which is never a `Key`
+// at any depth, so this stays negative after `Query` keys widen to `Key`.
+type Reading = { sensor: String, value: Float }
+
+agent Probe {
+  key id: String
+  store readings: Map[String, Reading]
+
+  on call f() -> Effect[Int] {
+    readings.values.distinct().count()
+  }
+}
