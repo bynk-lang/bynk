@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.491.2** | A cross-context call's result now type-checks in the emitted TypeScript when its type is a `uses`d commons type both contexts rebrand, or a record or sum whose field is such a type; the cast of [#2825](https://github.com/bynk-lang/bynk/issues/2825) covers both ([#2828](https://github.com/bynk-lang/bynk/issues/2828)) |
 | **v0.491.1** | The boundary refinement entailment fixture also covers a returned value, a provider's stronger `Reply` into the consumer's weaker one ([#2802](https://github.com/bynk-lang/bynk/issues/2802)) |
 | **v0.491.0** | A context boundary admits a strictly stronger refinement where a weaker one is expected (`MaxLength(4)` into `MaxLength(8)`, `Positive` into `NonNegative`), decided by one entailment engine shared with the deploy gate, with `Decimal` ranges now decided by value ([#2802](https://github.com/bynk-lang/bynk/issues/2802)) |
 | **v0.490.1** | A service's refined or opaque return value now type-checks in the emitted TypeScript when the calling context declares a type of the same name; the call result is cast to the caller's declaration ([#2825](https://github.com/bynk-lang/bynk/issues/2825)) |
