@@ -6099,6 +6099,46 @@ mod tests {
         )
     }
 
+    /// #2802: a provider returning `Label` and a `till` declaring a `Label` of
+    /// its own take the same name, so the value is projected onto the caller's
+    /// declaration (`rebrand_conflict`) with the *provider* as the sender.
+    fn label_provider(max: u32) -> String {
+        format!(
+            "context shop\n\ntype Label = String where MaxLength({max})\n\n\
+             service label {{\n  on call() -> Effect[Result[Label, Int]] {{\n    Effect.pure(Ok(\"a\"))\n  }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn a_stronger_returned_refinement_is_admitted_by_the_callers_same_named_type() {
+        let a = analyse(&[
+            ("shop.bynk", &label_provider(4)),
+            (
+                "till.bynk",
+                &till(
+                    "type Label = String where MaxLength(8)\n\n",
+                    "    let l <- shop.label()\n    Effect.pure(0)",
+                ),
+            ),
+        ]);
+        a.assert_clean();
+    }
+
+    #[test]
+    fn a_weaker_returned_refinement_is_rejected_by_the_callers_same_named_type() {
+        let a = analyse(&[
+            ("shop.bynk", &label_provider(8)),
+            (
+                "till.bynk",
+                &till(
+                    "type Label = String where MaxLength(4)\n\n",
+                    "    let l <- shop.label()\n    Effect.pure(0)",
+                ),
+            ),
+        ]);
+        a.assert_reports("bynk.boundary.structural_mismatch");
+    }
+
     #[test]
     fn an_unexported_value_passes_back_to_its_service() {
         let a = analyse(&[

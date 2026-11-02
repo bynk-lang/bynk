@@ -87,8 +87,8 @@ fn closed<T>(lo: T, hi: T) -> Interval<T> {
     }
 }
 
-/// A predicate as a bound on the numeric domain (`Int` or `Float`) or the
-/// length domain.
+/// A predicate as a bound on the numeric domain (`Int`, `Float` or `Decimal`) or
+/// the length domain.
 enum Domain<'a> {
     Int(Interval<i128>),
     Float(Interval<f64>),
