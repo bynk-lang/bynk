@@ -4420,9 +4420,10 @@ pub(crate) struct HandlerShared {
     /// `Idempotency.dedup`/`remember` lowering, which prefixes the
     /// developer-supplied key with it so two unrelated handlers using the same
     /// literal key never collide (ADR 0283; the retired idempotency track's
-    /// §3.4 in `design/archive/retired-tracks.md`). `None` anywhere a capability call cannot occur (a plain method, a
-    /// free fn, an invariant/transition predicate, a static field initialiser) —
-    /// those kinds carry no `HandlerShared`, and the accessor reports `None`.
+    /// §3.4 in `design/archive/retired-tracks.md`). `None` anywhere a
+    /// capability call cannot occur (a plain method, a free fn, an
+    /// invariant/transition predicate, a static field initialiser) — those
+    /// kinds carry no `HandlerShared`, and the accessor reports `None`.
     handler_scope: Option<String>,
     /// Events track, slice 2 (spine #936): the qualified name of the unit
     /// this body is emitted into (`ctx.commons_name`), read by the
