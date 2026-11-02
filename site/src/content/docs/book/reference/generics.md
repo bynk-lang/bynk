@@ -196,7 +196,7 @@ base types (including `Float` and `Bytes`), refined and opaque types, `Option`,
 generic type instantiated at `Codable` arguments. It does not hold for top-level `()`
 (it encodes but does not decode), functions, `Effect`, `Query`, a `Stream` or a type
 that carries one, a held `Connection`, the HTTP and queue result types, `Asset`,
-request headers, token claims or an actor. A call that instantiates a `Codable`
+request headers, token claims, an actor, or a `bynk.crypto` key (`SigningKey`, `VerifyKey`) at any depth: a key is held non-extractable and never sent. A call that instantiates a `Codable`
 parameter with one of these is `bynk.types.not_codable`.
 
 Without the bound, `Json.encode` or `Json.decode[T]` on a type parameter is

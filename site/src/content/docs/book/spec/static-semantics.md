@@ -631,7 +631,8 @@ the built-in `Json` module: `encode` dispatches to the generated
 `__serialise_<T>` for the value's checked type; `decode` to `JSON.parse` +
 `__deserialise_<T>`. The **domain of `T`** (and of `encode`'s argument) is any
 boundary-legal shape — base types, named types, and the built-in containers
-over them; functions, effects, `HttpResult`, the error builtins, and
+over them; functions, effects, `HttpResult`, the error builtins, a `bynk.crypto` key
+(`SigningKey`, `VerifyKey`) at any depth, and
 type variables are `bynk.types.json_uncodable`, except a type parameter declared
 `T: Codable`, which `Json.encode` and `Json.decode[T]` accept inside the generic
 function (the call site passes the codec; an unbounded one is

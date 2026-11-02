@@ -49,6 +49,8 @@ pub(crate) fn json_codable(
         // `bynk.types.json_uncodable` diagnostic — the resolution failure was
         // reported once, at its own site.
         Ty::Error | Ty::Never => true,
+        // #2784: a `bynk.crypto` key is non-extractable and never sent, so it has no codec.
+        Ty::Named { name, .. } if crate::context_checks::is_crypto_key_type(name, types) => false,
         // K-streams (#2623): a record or sum carrying a `Stream` has no codec.
         Ty::Named { name, .. } if bynk_syntax::ast::type_carries_stream(name, types) => false,
         // v0.174 (#592): a generic record instantiation is boundary-serialisable
@@ -80,6 +82,40 @@ pub(crate) fn json_codable(
         | Ty::Actor(_)
         | Ty::ActorSum(_) => false,
     }
+}
+
+/// The `bynk.crypto` key type (`SigningKey`/`VerifyKey`) `t` is or contains, if any.
+pub(crate) fn crypto_key_in(
+    t: TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Types,
+) -> Option<String> {
+    match &*tys.get(t) {
+        Ty::Named { name, .. } if crate::context_checks::is_crypto_key_type(name, types) => {
+            Some(name.clone())
+        }
+        Ty::Named { args, .. } => args.iter().find_map(|a| crypto_key_in(*a, types, tys)),
+        Ty::Result(a, b) | Ty::Map(a, b) => {
+            crypto_key_in(*a, types, tys).or_else(|| crypto_key_in(*b, types, tys))
+        }
+        Ty::Option(a) | Ty::List(a) | Ty::Set(a) => crypto_key_in(*a, types, tys),
+        _ => None,
+    }
+}
+
+/// The note a `Codable`/`Json` rejection of `t` adds when a crypto key is the cause.
+pub(crate) fn key_note(
+    t: TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Types,
+) -> Option<String> {
+    crypto_key_in(t, types, tys).map(|k| {
+        format!(
+            "a `{k}` is held non-extractable by the platform and never sent or persisted \
+             (`bynk.types.key_at_boundary`); keep the key bytes in `Secrets` and import the \
+             key again where it is used"
+        )
+    })
 }
 
 /// The first user generic type applied to a type variable in `t`, as written.
@@ -157,20 +193,21 @@ pub(crate) fn check_codable(ctx: &mut Ctx, ty: TyId, span: Span, site: &CodableS
     }
     if !json_codable(ty, &ctx.input.types, tys, &ctx.type_vars) || ty == tys.intern(Ty::Unit) {
         let shown = tys.display(ty);
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.not_codable",
-                span,
-                format!(
-                    "{clause}, but this call makes `{param}` `{shown}`, which is not `Codable`"
-                ),
-            )
-            .with_note(
-                "`Codable` types are the ones `Json.decode` accepts: base types, named types, \
+        let key_note = key_note(ty, &ctx.input.types, tys);
+        let mut err = CompileError::new(
+            "bynk.types.not_codable",
+            span,
+            format!("{clause}, but this call makes `{param}` `{shown}`, which is not `Codable`"),
+        )
+        .with_note(
+            "`Codable` types are the ones `Json.decode` accepts: base types, named types, \
                  and the built-in containers over them — not `()`, functions, effects, streams \
-                 (or a type that carries one), or error builtins",
-            ),
+                 (or a type that carries one), `bynk.crypto` keys, or error builtins",
         );
+        if let Some(n) = key_note {
+            err = err.with_note(n);
+        }
+        ctx.errors.push(err);
         return false;
     }
     require_codable_rigid(ctx, ty, span, &clause)

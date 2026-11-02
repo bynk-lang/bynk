@@ -1,0 +1,1 @@
+bynk.types.json_uncodable `SigningKey` cannot be encoded as JSON
