@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.6** | A troubleshooting page for `bynk.agent.non_additive_state_change` |
+| **v0.480.5** | "Agent schema lock: tests pin the gained-default version bump and the unexplained-difference refusal, and the path backfill is guarded on a snapshot with no recorded paths" |
 | **v0.480.4** | A parameter named `body`, `result`, `request`, `surface` or the like no longer collides with the Workers wrapper's own locals |
 | **v0.480.3** | "`bynk-wasm` diagnostics carry the registry `summary` and a docs `href`, and a new `bynk_explain(code)` export returns the curated blurb, example and link" |
 | **v0.480.2** | A `system`-tier case that calls an `on call` service is refused with `bynk.test.call_needs_in_process`, not lowered to invalid TypeScript (#2649) |

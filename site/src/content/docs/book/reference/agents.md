@@ -266,7 +266,9 @@ Anything else changes what is on disk, and the build refuses it with
 `one (one.dark added without a default)`, `prefs.theme removed`,
 `prefs.size lost its default`. A lock written before the build recorded positions
 judges a change inside a value as a retype until one build with the unchanged
-definition fills them in. A refused change needs a migration step.
+definition fills them in. A refused change needs a migration step. For how to read
+the message and the fixes in order, see
+[`bynk.agent.non_additive_state_change`](/book/troubleshooting/agent-non-additive-state-change/).
 
 ## Migrations
 
