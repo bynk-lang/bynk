@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, ast_importers
-changelog: "**Static methods on generic types, and the expected type as the last source of type arguments** (constrained-generics slice 4): `fn Box.of(value: T) -> Box[T]`, `fn Box.empty() -> Box[Option[T]]`, `fn Sorted.fromList(xs: List[T]) -> Sorted[T]`. A static on a generic type is generic over the type's parameters, then its own. They come from the arguments (`Box.of(5)`), from the expected type (`let b: Box[Option[String]] = Box.empty()`), or from explicit type arguments (`Box.empty[String]()`: the type's parameters, then the method's own, all or none). A bound the type declares adds the usual hidden witness at the call site (`Sorted.fromList(names)` passes the `String` comparator). The expected type now also grounds a parameter the arguments leave open for every generic call except a capability operation, so `let o: Option[Int] = none()` works for `fn none[T]() -> Option[T]`; `let o = none()` is still `bynk.generics.uninferable_type_arg`. `bynk.generics.method_on_generic_type` is narrowed to a static that never mentions one of its type's parameters. `Opt.None[Int]` and explicit type arguments on an instance method stay rejected. Code that uses no static on a generic type is emitted unchanged"
----
+# 0702 — A static method on a generic type is generic over the type's parameters, and the expected type is the last source of a generic call's type arguments
 
-## ADR: static-methods-on-generic-types
-title: A static method on a generic type is generic over the type's parameters, and the expected type is the last source of a generic call's type arguments
-summary: statics on generic types, explicit type arguments `Box.empty[Int]()`, call-site witnesses for statics, the narrowed `method_on_generic_type`, and the expected-type rule for every generic call except capability operations (constrained-generics slice 4)
+- **Status:** Accepted (v0.481)
 
 **Context.** A generic type with no way to build it except a literal cannot hide its
 representation: `Sorted[T]` is sorted only if `Sorted.fromList` is the way in. ADR 0234
