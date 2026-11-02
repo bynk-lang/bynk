@@ -1,0 +1,14 @@
+context shop.order
+
+// #2702: `Tag` is private here; `labels` declares a public `Tag` of another shape.
+private type Tag = { code: Int }
+
+private fn code_of(t: Tag) -> Int {
+  t.code
+}
+
+service place {
+  on call(n: Int) -> Effect[Int] {
+    code_of(Tag { code: n })
+  }
+}
