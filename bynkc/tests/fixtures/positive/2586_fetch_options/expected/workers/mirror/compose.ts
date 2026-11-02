@@ -13,11 +13,11 @@ export function compose(env: Env) {
   const Logger = new bynk__binding.LoggerProvider();
   const deps = { Fetch, Logger };
   return {
-    async headProbe(url: string) {
-      return handlers.headProbe.call(url, deps);
+    async headProbe(__id_url: string) {
+      return handlers.headProbe.call(__id_url, deps);
     },
-    async probe(url: string) {
-      return handlers.probe.call(url, deps);
+    async probe(__id_url: string) {
+      return handlers.probe.call(__id_url, deps);
     },
   };
 }

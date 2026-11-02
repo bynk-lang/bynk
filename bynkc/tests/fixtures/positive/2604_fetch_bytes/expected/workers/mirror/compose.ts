@@ -15,8 +15,8 @@ export function compose(env: Env) {
     async copy(source: string, target: string) {
       return handlers.copy.call(source, target, deps);
     },
-    async note(url: string) {
-      return handlers.note.call(url, deps);
+    async note(__id_url: string) {
+      return handlers.note.call(__id_url, deps);
     },
   };
 }

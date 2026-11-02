@@ -46,8 +46,8 @@ export default {
             }
             const __r_url = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
             if (__r_url.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_url.error), { status: 400, headers: { "content-type": "application/json" } });
-            const url = __r_url.value;
-            const result = await surface.both(url);
+            const __id_url = __r_url.value;
+            const result = await surface.both(__id_url);
             const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
@@ -66,8 +66,8 @@ export default {
             }
             const __r_url = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
             if (__r_url.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_url.error), { status: 400, headers: { "content-type": "application/json" } });
-            const url = __r_url.value;
-            const result = await surface.twice(url);
+            const __id_url = __r_url.value;
+            const result = await surface.twice(__id_url);
             const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }

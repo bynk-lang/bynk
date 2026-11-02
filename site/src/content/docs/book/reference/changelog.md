@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.4** | A parameter named `body`, `result`, `request`, `surface` or the like no longer collides with the Workers wrapper's own locals |
 | **v0.480.3** | "`bynk-wasm` diagnostics carry the registry `summary` and a docs `href`, and a new `bynk_explain(code)` export returns the curated blurb, example and link" |
 | **v0.480.2** | A `system`-tier case that calls an `on call` service is refused with `bynk.test.call_needs_in_process`, not lowered to invalid TypeScript (#2649) |
 | **v0.480.1** | "`for all` over a record whose field carries an inline `where Matches(…)` is refused with `bynk.val.needs_pin`, as a declared `Matches` type already was" |
