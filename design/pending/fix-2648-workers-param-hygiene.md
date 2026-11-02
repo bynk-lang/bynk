@@ -1,5 +1,6 @@
 ---
 level: patch
+probes: ts_writes
 changelog: A parameter named `body`, `result`, `request`, `surface` or the like no longer collides with the Workers wrapper's own locals
 ---
 
