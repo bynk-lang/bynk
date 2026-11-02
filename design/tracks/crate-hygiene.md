@@ -83,7 +83,7 @@ The graph has four kinds of residue:
 
 - **Multi-increment.** Five workstreams across 15 crates and both release workflows. Several
   slices move a gated probe (§3) and must each re-stamp it alone.
-- **Surface not yet settled.**
+- **Surface not yet settled** (at proposal; §11 records how settling closed it).
   - Retiring `bynkc` changes the distribution: `cargo install bynkc`, CI scripts that call it,
     and `vscode-bynk`'s binary lookup (ADR 0101's three contracts).
   - Where the system model sits (§6 Q1) and whether it becomes a public interface (§6 Q4) are
@@ -138,14 +138,24 @@ is invisible to `test_mod_ranges`. That still applies to every module this track
 Small, independent, probe-invariant. Each is a separate PR.
 
 - **A1.** Remove `bynk`'s unused `bynk-render` dependency.
-- **A2.** Take `bynk-lsp` off `bynk-emit`. `pred_condition_and_message` returns a `bynk_ts::TsExpr`
-  built from a `PredKind`, so it moves to `bynk-ts` or beside the checker's predicate types (Q-A1).
-  Then check the one-call `bynk-ts` uses in `bynk-lsp` and `bynk-driver` and keep or cut each.
-- **A3.** Take `bynk-check` off `bynk-fmt`. `expr_to_string` is used for three checker messages. It
-  either moves to `bynk-syntax` as a plain expression printer, or the checker renders those
-  messages itself (Q-A2).
-- **A4.** A check that every declared workspace dependency is used (H-3), as an xtask probe or with
-  `cargo-machete`/`cargo-udeps` in CI (Q-A3).
+- **A2.** Take `bynk-lsp` off `bynk-emit` by moving `pred_condition_and_message` (and
+  `pred_condition_and_message_for`) into `bynk-ts` (Q-A1).
+  - It turns a `PredKind` into a `bynk_ts::TsExpr`, and `bynk-lsp` already depends on `bynk-ts`,
+    so the move adds no edge.
+  - Its helpers move with it: `escape_ts_string`, `escape_ts_literal` and the two
+    `decimal_*_condition` functions. Escaping TypeScript literals belongs in the TypeScript crate
+    anyway.
+  - `bynk-emit` calls the moved functions from their new home. The one-call `bynk-ts` uses in
+    `bynk-lsp` (`print_expr`) and `bynk-driver` (`print`) stay, because those are real uses of the
+    printer.
+- **A3.** Take `bynk-check` off `bynk-fmt` by moving the expression printer behind
+  `expr_to_string` (the `to_string` family in `bynk-fmt/src/fmt.rs`) into `bynk-syntax` (Q-A2).
+  `bynk-fmt` and the checker's three messages both call it there. A printer of the AST is
+  something the syntax crate can own, and the checker keeps the exact text it renders today (H-1).
+- **A4.** An xtask probe, `unused_deps`, that fails when a declared workspace dependency has no
+  non-comment use (H-3) (Q-A3). Being a probe means it sits beside the other `greenfield-status`
+  rows and needs no new tool under `deny.toml` or the MSRV policy. It reads 0 once A1–A3 land and
+  is gated at 0.
 
 ## 6. Workstream B — the system model (`bynk-ir` becomes `bynk-model`)
 
@@ -221,18 +231,23 @@ playground and the smoke runner. `bynk-lower` stays the builder from a checked p
 
 ### 6.3 Questions
 
-**Q1 — Where does the model sit?**
+**Q1 — Where does the model sit? SETTLED: above `bynk-check` for B1–B3. B4 decides whether it moves below.**
 - **(a) Above `bynk-check`, as now.** Every consumer already depends on the checker, so H-2 holds.
   But `WireModel` can't move in, because the checker's own boundary checks read it.
 - **(b) Below `bynk-check`.** Every model gets one home, but `TyId` and the `actors` types would
   have to move down, or the model would use names. #1533's S7 (moving `block_uses_emit` off its
   `bynk-check` dependency) is the first step either way.
 
-Lean (a) for B1–B3, and settle (b) at B4 on evidence.
+B1–B3 build under (a). B4 decides (b) on what B1–B3 showed: whether the remaining models
+(`WireModel`, entry signatures) would read better in the same crate than they do in `bynk-check`.
+If (b) is chosen, #1533's S7 is its first slice.
 
-**Q2 — Is `bynk-lower` a separate crate?** It is the model's only constructor. Under (a) it can
-merge into the model crate, which also takes one step out of the build chain. Two crates only earn
-their place if something wants the vocabulary without the builder, which is what (b) would need.
+**Q2 — Is `bynk-lower` a separate crate? SETTLED: no. It merges into `bynk-model` as part of the
+Q3 rename.** It is the model's only constructor. Under (a), merging it takes one step out of the
+build chain (H-2 is improved, not just held). `unconsumed_ir_items`' two-owner rule (`bynk-ir` and
+`bynk-lower` can't vouch for each other) becomes a module rule: items in `bynk-model`'s vocabulary
+module need a reader outside the crate. The probe is re-pointed in the same PR (§3). If B4 chooses
+(b), the builder splits back out, because something would then want the vocabulary without it.
 
 **Q3 — Name. SETTLED: `bynk-model`, applied when B1 passes.** R10.1 says "a crate is named for what
 it produces". `bynk-ir` reads as an intermediate representation for codegen, which is the reading
@@ -240,14 +255,14 @@ Part 15.1 narrowed away from. `bynk-model` sits beside the models §6.1 lists an
 `bynk-lower` merges in. The crate docs say in one line that it is distinct from
 `bynk_check::project_model`, which models units and manifests, not declarations.
 
-The rename lands as B1's closing step, in its own PR that changes no behaviour. If B1 fails, the
-crate folds into `bynk-emit` and is never renamed. It publishes `bynk-model` as a new crate and
-gives `bynk-ir` a final release (H-5).
+The rename lands as B1's closing step, in its own PR that changes no behaviour, and takes in
+`bynk-lower` (Q2). It publishes `bynk-model` as a new crate and gives `bynk-ir` and `bynk-lower` each
+a final release (H-5). If B1 fails, the crates fold into `bynk-emit` and are never renamed.
 
-**Q4 — Is the model a public interface?** A serialised form (`bynk model --json`, or an MCP
+**Q4 — Is the model a public interface? SETTLED: deferred until B3.** A serialised form (`bynk model --json`, or an MCP
 resource) would give tools outside this repository one description of a project, for contract
 diffs, architecture diffs in review and deploy planning. That would make the model's shape a
-versioned contract. **Out of scope until B3 lands.** Recorded so no slice closes the option: model
+versioned contract. Recorded so no slice closes the option: model
 items stay plain data, with no lifetimes and no references into the AST.
 
 ### 6.4 Slices and the exit criterion
@@ -281,10 +296,12 @@ beats today's: a separate crate whose separation buys nothing.
   `bynk-testkit` and `bynk-grammar`. CI's `-p bynkc --test it` filters become `-p bynk-tests`.
   This is independent of §9 and can land first. It only moves files.
 
-`bynk-wasm` stays in this repository, unpublished (Q-C1). It has two consumers (the playground and
-the `vscode-bynk` web extension, ADRs 0517 and 0518). Its wasm32 CI build is also the only check
-that `bynk-check`, `bynk-emit`, `bynk-strip`, `bynk-ide` and `bynk-fmt` still compile for the
-browser.
+`bynk-wasm` stays in this repository, unpublished (Q-C1). It has two consumers, the playground and
+the `vscode-bynk` web extension (ADRs 0517 and 0518). Both build from the release's
+`bynk-web-<tag>.tar.gz` at a pinned tag, not from source: `vscode-bynk/scripts/fetch-web-assets.mjs`
+says so, and so does the playground's `fetch-assets.sh`. The tarball is the contract, so moving
+the crate elsewhere would only move who builds it. Its wasm32 CI build is also the only check that
+`bynk-check`, `bynk-emit`, `bynk-strip`, `bynk-ide` and `bynk-fmt` still compile for the browser.
 
 ## 8. Workstream D — crate boundaries
 
@@ -318,11 +335,23 @@ browser.
   a `bynkc` process.
 - **E2.** Retire the compiler lookup (`BYNK_BYNKC` → `PATH` → sibling) and ADR 0434's skew gate,
   along with `bynk doctor`'s skew report. Nothing is left to skew against.
-- **E3.** `bynkc` becomes either a name the `bynk` executable answers to (dispatch on `argv[0]`),
-  which keeps `cargo install bynkc`, CI scripts and `vscode-bynk`'s lookup working, or is dropped
-  (Q-E1). Either way, the `bynkc` crate stops existing as a separate binary.
-- **E4.** Rename the `bynkc-lsp` binary to `bynk-lsp`, coordinated with `vscode-bynk`'s binary
-  lookup (Q-E2).
+- **E3.** `bynkc` becomes a name the `bynk` executable answers to, for one release, and is then
+  dropped before 1.0 (Q-E1).
+  - `bynk` dispatches on `argv[0]`: run as `bynkc`, it accepts `bynkc`'s four subcommands with
+    their current flags.
+  - The `bynkc` crate stops existing as a separate binary. For that one release, the release still
+    attaches a `bynkc-<target>` asset (a copy of `bynk`). The `bynkc` crate on crates.io gets a
+    final version whose `bynkc` binary calls `bynk`'s entry point, so `cargo install bynkc` still
+    works for that release (H-5). `vscode-bynk/scripts/fetch-toolchain.mjs` downloads
+    `bynkc-<target>` by name, so that keeps a pinned extension release working.
+  - The release after that drops the alias and the asset. That's the version `vscode-bynk` must
+    have moved past (E4).
+- **E4.** Rename the `bynkc-lsp` binary to `bynk-lsp`, in two steps (Q-E2).
+  - The first release attaches both `bynk-lsp-<target>` and `bynkc-lsp-<target>` (the same
+    binary). In the same window, `vscode-bynk` looks for `bynk-lsp` first and falls back to
+    `bynkc-lsp`, and stops downloading `bynkc`.
+  - The next release drops `bynkc-lsp-<target>`.
+  - E3's alias removal and this step land in the same release, so `vscode-bynk` makes one move.
 - **E5.** Change the emitted header `// Generated by bynkc` and re-bless the fixtures. Do this
   separately from everything else in the workstream so the diff is only that header.
 
@@ -342,21 +371,22 @@ Each item names what would bring it back.
 - **Unbundling `bynk.cloudflare` (L3) to the registry.** That belongs to the standard-library
   track (its D9) and the packaging track.
 
-## 11. Open questions
+## 11. Settled questions
 
-- **Q-A1** — Where `pred_condition_and_message` lands: `bynk-ts` (it returns a `TsExpr`) or beside
-  the checker's predicate types.
-- **Q-A2** — Whether the checker's three `expr_to_string` messages get a printer in `bynk-syntax`
-  or render their own text.
-- **Q-A3** — An xtask probe or an external tool for H-3, given `deny.toml` and the MSRV policy.
-- **Q-C1** — Confirm `bynk-wasm` stays, and how `vscode-bynk` gets the module since it moved to
-  its own repository (`bynk-web-<tag>.tar.gz` or a source build).
-- **Q-E1** — Keep `bynkc` as an `argv[0]` name, or drop it. That turns on who still runs
-  `cargo install bynkc` and which CI scripts call it.
-- **Q-E2** — How `vscode-bynk` moves to `bynk-lsp`: a release that accepts both names, then one
-  that drops the old one.
-- **§6 Q1, Q2, Q4** — The system model's placement, whether `bynk-lower` merges into it, and
-  whether it becomes public.
+All settled 2 November 2026, in the settling review of #2776.
+
+| Question | Answer | Where |
+|---|---|---|
+| **Q-A1** Where `pred_condition_and_message` lands | `bynk-ts`, with its escaping and decimal helpers | §5 A2 |
+| **Q-A2** How the checker stops depending on `bynk-fmt` | The expression printer moves into `bynk-syntax` | §5 A3 |
+| **Q-A3** How H-3 is enforced | An xtask probe, `unused_deps`, gated at 0 | §5 A4 |
+| **Q-C1** Whether `bynk-wasm` stays | Stays. Both consumers build from the `bynk-web-<tag>.tar.gz` release asset | §7 |
+| **Q-E1** What happens to `bynkc` | An `argv[0]` alias of `bynk` (plus a `bynkc-<target>` asset) for one release, then dropped before 1.0 | §9 E3 |
+| **Q-E2** How `vscode-bynk` moves to `bynk-lsp` | One release with both asset names, extension prefers `bynk-lsp`, then the old name drops | §9 E4 |
+| **§6 Q1** Where the model sits | Above `bynk-check` for B1–B3. B4 decides whether to move below | §6.3 |
+| **§6 Q2** Whether `bynk-lower` stays separate | No, it merges into `bynk-model` with the rename | §6.3 |
+| **§6 Q3** Name | `bynk-model`, applied when B1 passes | §6.3 |
+| **§6 Q4** Public interface | Deferred until B3 | §6.3 |
 
 ## 12. Candidate slice decomposition
 
@@ -366,15 +396,15 @@ Provisional. Each slice becomes an increment proposal, filed as a sub-issue of t
 |---|---|---|---|
 | 1 | A1, A2, A3 (separate PRs) | — | no |
 | 1 | C1, C2 | — | no |
-| 1 | B1 (+ Q3 rename if it passes) | §6 Q1 leaning (a) | `unconsumed_ir_items` (rename) |
-| 2 | A4 | A1–A3 | adds one |
+| 1 | B1 (+ Q2/Q3 rename and merge if it passes) | the system-model ADR (§13) | `unconsumed_ir_items` (re-pointed by the rename) |
+| 2 | A4 | A1–A3 | adds `unused_deps` |
 | 2 | C3 | — | no |
 | 2 | B2, B3 | B1 passed | no |
 | 3 | D1 (public `emitter` API, then the move) | — | `options_sources`, `fs_below_driver`, `emit_diagnostics` |
 | 4 | E1, E2 | D1 | no |
 | 5 | E3, E4, D2 | E1, E2 | no |
 | 6 | E5 | E3 | no |
-| — | B4 | B3 and §6 Q1 settled | depends on Q1 |
+| — | B4 | B3 | depends on whether B4 chooses (b) |
 
 The release workflows' hardcoded crate lists change in every slice that adds, removes or renames
 a crate: C1, the Q3 rename, D2, E3 and the §6 fold path.
