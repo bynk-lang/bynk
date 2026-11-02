@@ -27,6 +27,10 @@ service api from http {
   on PUT("/cart/:sku") (sku: Sku, body: Item) -> Effect[HttpResult[Item]] by u: User {
     Created(body)
   }
+  // A bare `String` path parameter (#2706): `Val` refuses it, so it gets a literal.
+  on GET("/hello/:name") (name: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("Hello, \(name)!")
+  }
   // No generator for a `Matches` type: skipped, and named.
   on GET("/code/:c") (c: Code) -> Effect[HttpResult[String]] by v: Visitor {
     Ok(c)
