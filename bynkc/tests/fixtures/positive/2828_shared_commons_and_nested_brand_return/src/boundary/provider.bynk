@@ -1,0 +1,24 @@
+---
+#2828: the return types the #2825 cast did not reach. `Cents` is a commons type
+both contexts `use`, which each rebrands as its own; `Envelope` is a record
+both declare whose field is a refined type of its own. Both brands differ per
+context, so the consumer casts each result to its own declarations.
+---
+context boundary.provider
+
+uses lib.money
+
+type Reply = String where MaxLength(8)
+type Envelope = { reply: Reply }
+
+service price {
+  on call(n: Int) -> Effect[Result[Cents, Int]] {
+    Effect.pure(Err(n))
+  }
+}
+
+service wrapped {
+  on call(n: Int) -> Effect[Result[Envelope, Int]] {
+    Effect.pure(Err(n))
+  }
+}

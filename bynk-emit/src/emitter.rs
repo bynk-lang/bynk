@@ -5622,6 +5622,12 @@ impl<'a> LowerCtx<'a> {
                 == Some("bynk")
     }
 
+    /// #2058: the type names a consumed context declares, each with the
+    /// namespace this module names that context's types under.
+    pub(crate) fn consumed_type_ns(&self) -> &HashMap<String, String> {
+        &self.module.consumed_type_ns
+    }
+
     /// #2058: `name` as this module spells it in a type position: qualified
     /// under its context's namespace when a consumed context declares it.
     pub(crate) fn consumed_type_name(&self, name: &str) -> String {

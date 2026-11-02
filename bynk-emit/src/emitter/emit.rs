@@ -4662,23 +4662,28 @@ pub(crate) fn param_cast(
 ///
 /// A returned value is projected by name (spec §6.5): where the caller declares
 /// a type of the same name, the value takes it. A refined or opaque type is
-/// branded per context (`"a.Reply"` against `"b.Reply"`), so the callee's value
-/// is not assignable to the caller's declaration of the same name under
+/// branded per context (`"a.Reply"` against `"b.Reply"`), and a `uses`d commons
+/// type is rebranded per context (`__ctxBrand`), so the callee's value is not
+/// assignable to the caller's declaration of the same name under
 /// `tsc --strict`, although the checker proved the two compatible. Route the
 /// call through `unknown` to the type as the caller names it, exactly as
-/// [`param_cast`] does for an argument. Names the caller does not declare keep
-/// the owning context's namespace, since the value keeps that type.
+/// [`param_cast`] does for an argument.
 ///
-/// Only a return type that mentions a caller-declared refined or opaque type
-/// that is not shared with the provider is cast; every other call lowers as
-/// before. Two cases are not covered and are tracked in #2828: a commons type
-/// both contexts `use` (rebranded per context, but its caller-side name exists
-/// only where the module references it), and a brand reached through a record
-/// or sum the return type names.
+/// Each name in the cast type is spelled as the caller's module spells it: a
+/// type of a consumed context under its namespace (`consumed_type_ns`, the
+/// provider's own types such as `Token`, which the caller never redeclares), a
+/// name the caller does not bind under the owning context's namespace, and
+/// every other name bare. A bare commons name is defined by the module's
+/// rebrand, which the emitter keeps because the cast spells it.
+///
+/// A call is cast when the return type reaches a refined or opaque type the
+/// caller binds, directly or through the fields of a record or sum it binds
+/// (#2828). Every other call lowers as before.
 pub(crate) fn return_cast(
     consumed: &str,
     info: &bynk_check::resolver::CrossContextInfo,
     caller_types: &HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    consumed_type_ns: &HashMap<String, String>,
     method: &Ident,
     call: String,
     in_test_scaffold: bool,
@@ -4692,24 +4697,7 @@ pub(crate) fn return_cast(
     };
     let mut names = HashSet::new();
     type_ref_names(&service.return_type, &mut names);
-    // A declaration both contexts share is skipped (#2828): only a same-named
-    // declaration of the caller's own, distinct from the provider's, is cast.
-    let provider_types = info.consumed_types.get(consumed);
-    let branded = names.iter().any(|n| {
-        let Some(decl) = caller_types.get(n) else {
-            return false;
-        };
-        let shared = provider_types
-            .and_then(|t| t.get(n))
-            .is_some_and(|p| std::sync::Arc::ptr_eq(p, decl));
-        !shared
-            && matches!(
-                decl.body,
-                bynk_syntax::ast::TypeBody::Refined { .. }
-                    | bynk_syntax::ast::TypeBody::Opaque { .. }
-            )
-    });
-    if !branded {
+    if !reaches_brand(&names, caller_types, consumed_type_ns) {
         return call;
     }
     let ns_of = |owner: &str| {
@@ -4721,8 +4709,11 @@ pub(crate) fn return_cast(
     };
     let type_ns: HashMap<String, String> = names
         .iter()
-        .filter(|n| !caller_types.contains_key(*n))
+        .filter(|n| consumed_type_ns.contains_key(*n) || !caller_types.contains_key(*n))
         .map(|n| {
+            if let Some(ns) = consumed_type_ns.get(n) {
+                return (n.clone(), ns.clone());
+            }
             let owner = info
                 .consumed_type_owners
                 .get(consumed)
@@ -4740,6 +4731,46 @@ pub(crate) fn return_cast(
         }),
         ty,
     })))
+}
+
+/// #2828: whether any of `names`, or a type their caller-bound declarations
+/// name in a field or payload, is a refined or opaque type the caller binds.
+/// A consumed context's own type (`consumed_type_ns`) is never the caller's
+/// declaration, so it neither counts nor is searched.
+fn reaches_brand(
+    names: &HashSet<String>,
+    caller_types: &HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    consumed_type_ns: &HashMap<String, String>,
+) -> bool {
+    use bynk_syntax::ast::TypeBody;
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut todo: Vec<String> = names.iter().cloned().collect();
+    while let Some(n) = todo.pop() {
+        if consumed_type_ns.contains_key(&n) || !seen.insert(n.clone()) {
+            continue;
+        }
+        let Some(decl) = caller_types.get(&n) else {
+            continue;
+        };
+        let mut inner = HashSet::new();
+        match &decl.body {
+            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => return true,
+            TypeBody::Record(r) => {
+                for f in &r.fields {
+                    type_ref_names(&f.type_ref, &mut inner);
+                }
+            }
+            TypeBody::Sum(sum) => {
+                for v in &sum.variants {
+                    for f in &v.payload {
+                        type_ref_names(&f.type_ref, &mut inner);
+                    }
+                }
+            }
+        }
+        todo.extend(inner);
+    }
+    false
 }
 
 /// #2039: the user type names `r` mentions, at any depth.
