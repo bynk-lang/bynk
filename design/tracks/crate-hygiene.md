@@ -45,7 +45,8 @@ The graph has four kinds of residue:
      driver, `bynk-wasm`, `bynk-strip`) reach code generation only through it.
    - `bynk-ir` (657 lines) and `bynk-lower` (2,582) have one producer and one consumer between
      them (§6).
-   - `bynk-render` (949 lines) has one real user once `bynkc` is gone.
+   - `bynk-render` (949 lines) has one production user once `bynkc` is gone: `bynk-driver`.
+     Its only other user is a `bynk-fmt` dev-dependency (§8 D2).
 3. **A published set wider than what's installed.**
    - `bynk-grammar` is published, and first in the release order, though only `bynkc`'s
      integration tests use it.
@@ -295,8 +296,18 @@ browser.
     tests and its no-orphan-context veto.
   - `bynk-strip` and `bynk-wasm` switch to the driver's output types.
   - This moves `options_sources`, `fs_below_driver` and `emit_diagnostics` (§3).
-- **D2.** Merge `bynk-render` into `bynk-driver` once §9 has removed `bynkc`, its other user.
-  This amends ADR 0100.
+- **D2.** Merge `bynk-render` into `bynk-driver` once §9 has removed `bynkc`. This amends ADR 0100.
+  Two other users move with it:
+  - **`bynk-render/tests/golden.rs`** and its `golden/` fixtures move into `bynk-driver`'s
+    tests unchanged.
+  - **`bynk-fmt`'s dev-dependency.** `roundtrip_error_renders_against_source_without_panicking`
+    (`bynk-fmt/src/fmt.rs`, #735) renders the round-trip guard's diagnostic to prove its span
+    stays inside the source. Keeping that test in place would need a `bynk-fmt` → `bynk-driver`
+    dev-dependency. Cargo allows that cycle, but it's the kind of edge workstream A removes.
+    Instead, the test moves to `bynk-driver`, which already depends on `bynk-fmt`. It drives
+    the guard through `bynk-fmt`'s public API, because `roundtrip_error` is private, and keeps
+    its assertion. `bynk-fmt`'s own test keeps the span-bounds check it already has
+    (`err.span.end <= src.len()`), so `bynk-fmt` doesn't lose coverage.
 - **D3.** `bynk-ir`/`bynk-lower`: decided by §6's exit criterion, not here.
 
 ## 9. Workstream E — installables
