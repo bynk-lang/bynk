@@ -1,0 +1,11 @@
+suite shop.front as system {
+	case "a parameter named like its service survives the surface" {
+		let s <- shop.front.front("hi")
+		expect s == "hi"
+	}
+
+	case "a parameter named deps survives the surface" {
+		let n <- shop.front.count(4)
+		expect n == 5
+	}
+}

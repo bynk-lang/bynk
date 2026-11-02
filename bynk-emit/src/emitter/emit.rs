@@ -4085,11 +4085,23 @@ pub(crate) fn emit_make_surface(
             .find(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Call));
         let Some(h) = handler else { continue };
         let is_async = is_effectful_return(&h.return_type);
+        // #2696: the method body reads `<service>`, `deps` and `__caller` after the
+        // parameters bind, so a user parameter spelled like one of them would
+        // shadow it. Rename the user's binder (hygienically), never the generated
+        // name, so every other surface stays byte-identical.
+        let surface_param = |name: &str| -> String {
+            let id = ts_ident(name);
+            if id == s.name.name || id == "deps" || id == "__caller" {
+                format!("__id_{id}")
+            } else {
+                id
+            }
+        };
         let method_params: Vec<bynk_ts::TsParam> = h
             .params
             .iter()
             .map(|p| bynk_ts::TsParam {
-                name: ts_ident(&p.name.name),
+                name: surface_param(&p.name.name),
                 ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
                 optional: false,
             })
@@ -4097,7 +4109,7 @@ pub(crate) fn emit_make_surface(
         let mut call_args: Vec<bynk_ts::TsExpr> = h
             .params
             .iter()
-            .map(|p| bynk_ts::TsExpr::Ident(ts_ident(&p.name.name)))
+            .map(|p| bynk_ts::TsExpr::Ident(surface_param(&p.name.name)))
             .collect();
         // A Caller-binding handler's `deps.identity` is the caller name the
         // compose root threaded in; every other handler forwards `deps` verbatim.
