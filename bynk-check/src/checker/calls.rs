@@ -1696,7 +1696,7 @@ pub(crate) fn check_static_call(
                 // ADR 0256's locale-types-split gap analysis used), so this
                 // is a check over existing data, not new provenance
                 // plumbing — the primary boundary guarantee the threat
-                // model (events.md §6) names.
+                // model (the retired events track's §6, `design/archive/retired-tracks.md`) names.
                 //
                 // First-party-gated like every other Events-special-cased
                 // site (mirrors #934's Idempotency precedent): a bare
