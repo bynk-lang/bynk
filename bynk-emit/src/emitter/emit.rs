@@ -4679,6 +4679,11 @@ pub(crate) fn param_cast(
 /// A call is cast when the return type reaches a refined or opaque type the
 /// caller binds, directly or through the fields of a record or sum it binds
 /// (#2828). Every other call lowers as before.
+///
+/// `in_test_scaffold` is carried for symmetry with [`param_cast`]: no test body
+/// reaches this lowering today. Below `system` a case that crosses a context is
+/// `bynk.tier.cross_context_needs_system`, and a `system` case lowers through
+/// the Workers codecs.
 pub(crate) fn return_cast(
     consumed: &str,
     info: &bynk_check::resolver::CrossContextInfo,

@@ -14,7 +14,9 @@ export const Cents = {
 /**
  * #2828: the return types the #2825 cast did not reach. `Cents` is a commons type
  * both contexts `use`, which each rebrands as its own; `Envelope` is a record
- * both declare whose field is a refined type of its own. Both brands differ per
+ * both declare whose field is a refined type of its own, and so is a sum `Outcome`
+ * whose payload is. `Tagged` names a type the provider owns and exports, which stays
+ * provider-qualified and needs no cast. Both brands differ per
  * context, so the consumer casts each result to its own declarations.
  */
 
@@ -36,6 +38,37 @@ export interface Envelope {
 export const Envelope = {
 };
 
+export type Outcome =
+    { readonly tag: "Done"; readonly reply: Reply }
+  | { readonly tag: "Failed"; readonly code: number };
+
+export const Outcome = {
+  Done: (reply: Reply): Outcome => ({ tag: "Done", reply }),
+  Failed: (code: number): Outcome => ({ tag: "Failed", code }),
+};
+
+export type Token = string & { readonly __brand: "boundary.provider.Token" };
+
+export const Token = {
+  of(value: string): Result<Token, ValidationError> {
+    if (!(value.length <= 8)) {
+      return Err({ field: "Token", message: "length must be at most 8", value });
+    }
+    return Ok(value as Token);
+  },
+  unsafe(value: string): Token {
+    return value as Token;
+  },
+};
+
+export interface Tagged {
+  readonly token: Token;
+  readonly n: number;
+}
+
+export const Tagged = {
+};
+
 export const price = {
   async call(n: number, deps: {}): globalThis.Promise<Result<Cents, number>> {
     return Err(n);
@@ -44,6 +77,18 @@ export const price = {
 
 export const wrapped = {
   async call(n: number, deps: {}): globalThis.Promise<Result<Envelope, number>> {
+    return Err(n);
+  },
+};
+
+export const outcome = {
+  async call(n: number, deps: {}): globalThis.Promise<Result<Outcome, number>> {
+    return Err(n);
+  },
+};
+
+export const tagged = {
+  async call(n: number, deps: {}): globalThis.Promise<Result<Tagged, number>> {
     return Err(n);
   },
 };
@@ -58,6 +103,12 @@ export function __makeSurface(deps: __BoundaryProviderDeps) {
     },
     async wrapped(n: number): globalThis.Promise<Result<Envelope, number>> {
       return wrapped.call(n, deps);
+    },
+    async outcome(n: number): globalThis.Promise<Result<Outcome, number>> {
+      return outcome.call(n, deps);
+    },
+    async tagged(n: number): globalThis.Promise<Result<Tagged, number>> {
+      return tagged.call(n, deps);
     },
   };
 }

@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
+import { Token } from "./provider.js";
 import { Cents as __CommonsCents } from "../lib/money.js";
 
 import * as boundary_provider from "./provider.js";
@@ -31,6 +32,23 @@ export interface Envelope {
 export const Envelope = {
 };
 
+export type Outcome =
+    { readonly tag: "Done"; readonly reply: Reply }
+  | { readonly tag: "Failed"; readonly code: number };
+
+export const Outcome = {
+  Done: (reply: Reply): Outcome => ({ tag: "Done", reply }),
+  Failed: (code: number): Outcome => ({ tag: "Failed", code }),
+};
+
+export interface Tagged {
+  readonly token: Token;
+  readonly n: number;
+}
+
+export const Tagged = {
+};
+
 export const askPrice = {
   async call(n: number, deps: { surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> } }): globalThis.Promise<Result<Cents, number>> {
     const r = await (deps.surface.Provider.price(n) as unknown as globalThis.Promise<Result<Cents, number>>);
@@ -41,6 +59,20 @@ export const askPrice = {
 export const askWrapped = {
   async call(n: number, deps: { surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> } }): globalThis.Promise<Result<Envelope, number>> {
     const r = await (deps.surface.Provider.wrapped(n) as unknown as globalThis.Promise<Result<Envelope, number>>);
+    return r;
+  },
+};
+
+export const askOutcome = {
+  async call(n: number, deps: { surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> } }): globalThis.Promise<Result<Outcome, number>> {
+    const r = await (deps.surface.Provider.outcome(n) as unknown as globalThis.Promise<Result<Outcome, number>>);
+    return r;
+  },
+};
+
+export const askTagged = {
+  async call(n: number, deps: { surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> } }): globalThis.Promise<Result<Tagged, number>> {
+    const r = await deps.surface.Provider.tagged(n);
     return r;
   },
 };
@@ -56,6 +88,12 @@ export function __makeSurface(deps: __BoundaryConsumerDeps) {
     },
     async askWrapped(n: number): globalThis.Promise<Result<Envelope, number>> {
       return askWrapped.call(n, deps);
+    },
+    async askOutcome(n: number): globalThis.Promise<Result<Outcome, number>> {
+      return askOutcome.call(n, deps);
+    },
+    async askTagged(n: number): globalThis.Promise<Result<Tagged, number>> {
+      return askTagged.call(n, deps);
     },
   };
 }
