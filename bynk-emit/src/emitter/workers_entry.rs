@@ -2699,7 +2699,7 @@ fn emit_http_route_dispatch(
         // It's a path parameter — extract from __m.params and construct. The
         // `__m.params` key is the wire segment name (verbatim); the constructed
         // binding must dodge JS reserved words for the surface call.
-        let jname = ts_ident(pname);
+        let jname = wire_ident(pname);
         guarded.push(const_(
             format!("__raw_{pname}"),
             index_expr(member(ident("__m"), "params"), str_lit(pname.clone())),
@@ -3071,6 +3071,58 @@ fn emit_http_route_dispatch(
     block(inner)
 }
 
+/// #2648: the TypeScript binder for a user parameter in a Worker wrapper or
+/// entry dispatch. On top of [`ts_ident`]'s reserved-word renames, a parameter
+/// whose name is one the wrapper itself declares or reads after binding the
+/// parameters (`request`, `surface`, `handlers`, `result`, `args`, ...) goes into
+/// the generated-name namespace (`__id_<name>`), which the parser keeps free of
+/// user identifiers. Otherwise such a parameter redeclares or shadows the
+/// wrapper's own local and the Worker fails `tsc`.
+///
+/// `body` is *not* in this set: on an `http` route a parameter named `body` is
+/// the request body the wrapper binds under that very name. The `call` dispatch,
+/// where it is an ordinary parameter, renames it through [`call_wire_ident`].
+pub(crate) fn wire_ident(name: &str) -> String {
+    const WRAPPER_NAMES: &[&str] = &[
+        // The fetch/scheduled/queue entry's own parameters and locals.
+        "request",
+        "env",
+        "ctx",
+        "method",
+        "surface",
+        // The dispatch's decoded-arguments and result locals.
+        "args",
+        "argsObj",
+        "result",
+        // The compose-surface namespace and runtime constructors the wrappers
+        // and the deserialising IIFEs reference by name.
+        "handlers",
+        "HttpResult",
+        "Result",
+        "Option",
+        "Ok",
+        "Err",
+        "Some",
+        "None",
+    ];
+    let t = ts_ident(name);
+    if WRAPPER_NAMES.contains(&t.as_str()) {
+        format!("__id_{t}")
+    } else {
+        t
+    }
+}
+
+/// [`wire_ident`] for the `call` dispatch, where `body` is an ordinary
+/// parameter and the dispatch's own encoded-result local is called `body`.
+fn call_wire_ident(name: &str) -> String {
+    if name == "body" {
+        "__id_body".to_string()
+    } else {
+        wire_ident(name)
+    }
+}
+
 /// Synthesise a deps object literal for invoking a handler from the
 /// fetch entry point. Mirrors `compose`'s deps construction so handlers
 /// see the same shape whether invoked through the surface or directly.
@@ -3111,7 +3163,7 @@ fn emit_call_handler_dispatch(
         let pname = &p.name.name;
         // The binding target must dodge JS reserved words (`class`, `const`, …)
         // that lex as valid Bynk identifiers; the `__r_` temp is already safe.
-        let jname = ts_ident(pname);
+        let jname = call_wire_ident(pname);
         let dser_call = deserialise_call(&p.type_ref, "args", "$", ru);
         stmts.push(const_(format!("__r_{pname}"), dser_call));
         stmts.push(if_(
@@ -3175,7 +3227,7 @@ fn emit_call_handler_dispatch(
             // and must stay verbatim; `jname` is the reserved-word-safe binding
             // the surface call references.
             let pname = &p.name.name;
-            let jname = ts_ident(pname);
+            let jname = call_wire_ident(pname);
             let dser = deserialise_call(
                 &p.type_ref,
                 &format!("argsObj[\"{pname}\"]"),
@@ -3250,7 +3302,7 @@ fn emit_path_param_construction(
     // `pname` names the wire segment (the `__raw_`/`__r_` temps and diagnostic
     // path stay verbatim); `jname` is the reserved-word-safe binding the surface
     // call references.
-    let jname = ts_ident(pname);
+    let jname = wire_ident(pname);
     let raw = format!("__raw_{pname}");
     match t {
         TypeRef::Base(BaseType::String, _) => {

@@ -1,0 +1,37 @@
+context media.store
+
+// #2648: a user parameter named like a local the Worker wrapper declares or
+// reads (`body`, `result`, `args`, `request`, `surface`, `handlers`, ...) must
+// not redeclare or shadow it. The `call` dispatch decodes each parameter into a
+// binding of its own name and then encodes the result into `body`; the http and
+// scheduled dispatches bind `request`, `surface` and `result`.
+
+// One parameter: the single-argument dispatch path.
+service one {
+	on call(body: String) -> Effect[Int] {
+		body.length()
+	}
+}
+
+// Several parameters: the keyed-object dispatch path.
+service many {
+	on call(key: String, body: String, result: String, args: String, argsObj: String, surface: String, request: String, env: String, ctx: String, handlers: String) -> Effect[Int] {
+		body.length() + result.length() + args.length() + argsObj.length() + surface.length() + request.length() + env.length() + ctx.length() + handlers.length() + key.length()
+	}
+}
+
+service api from http {
+	on GET("/by/:request/:result/:surface") (request: String, result: String, surface: String) -> Effect[HttpResult[Int]] by Visitor {
+		Ok(request.length() + result.length() + surface.length())
+	}
+
+	on POST("/echo") (body: String) -> Effect[HttpResult[Int]] by Visitor {
+		Ok(body.length())
+	}
+}
+
+service ticker from cron {
+	on schedule("*/5 * * * *") (result: Int) -> Effect[Result[(), String]] {
+		Ok(())
+	}
+}

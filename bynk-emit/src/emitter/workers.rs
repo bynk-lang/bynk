@@ -12,8 +12,8 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use super::workers_entry::wire_ident;
 use crate::emitter::http_handler_method_name_ir;
-use crate::emitter::ts_ident;
 use crate::emitter::wrangler::{
     BindingSource, WorkerBinding, agent_binding, binding_ts_type, events_fanout_binding,
 };
@@ -1127,7 +1127,7 @@ fn emit_call_wrapper(
         .params
         .iter()
         .map(|p| TsParam {
-            name: ts_ident(&p.name.name),
+            name: wire_ident(&p.name.name),
             ty: Some(crate::emitter::ts_type_ref_qualified_ts_type(
                 &p.type_ref,
                 &scope,
@@ -1139,7 +1139,7 @@ fn emit_call_wrapper(
     let param_args: Vec<TsExpr> = h
         .params
         .iter()
-        .map(|p| ident(ts_ident(&p.name.name)))
+        .map(|p| ident(wire_ident(&p.name.name)))
         .collect();
     // v0.54: a `by c: Caller` handler's wrapper takes the caller's context name
     // (read from the header in the entry dispatch) and threads it into `deps`
@@ -1291,7 +1291,7 @@ fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry
         .params
         .iter()
         .map(|p| TsParam {
-            name: ts_ident(&p.name.name),
+            name: wire_ident(&p.name.name),
             ty: Some(qualified_ts_type_ref(&p.type_ref)),
             optional: false,
         })
@@ -1299,7 +1299,7 @@ fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry
     let mut call_args: Vec<TsExpr> = h
         .params
         .iter()
-        .map(|p| ident(ts_ident(&p.name.name)))
+        .map(|p| ident(wire_ident(&p.name.name)))
         .collect();
     call_args.push(ident("deps"));
     TsObjectEntry::Method {
@@ -1328,7 +1328,7 @@ fn emit_queue_wrapper(sname: &str, queue_idx: usize, h: &Handler) -> TsObjectEnt
         .params
         .iter()
         .map(|p| TsParam {
-            name: ts_ident(&p.name.name),
+            name: wire_ident(&p.name.name),
             ty: Some(qualified_ts_type_ref(&p.type_ref)),
             optional: false,
         })
@@ -1336,7 +1336,7 @@ fn emit_queue_wrapper(sname: &str, queue_idx: usize, h: &Handler) -> TsObjectEnt
     let mut call_args: Vec<TsExpr> = h
         .params
         .iter()
-        .map(|p| ident(ts_ident(&p.name.name)))
+        .map(|p| ident(wire_ident(&p.name.name)))
         .collect();
     call_args.push(ident("deps"));
     TsObjectEntry::Method {
@@ -1390,7 +1390,7 @@ fn emit_websocket_upgrade(
         optional: false,
     }];
     params.extend(h.params.iter().map(|p| TsParam {
-        name: ts_ident(&p.name.name),
+        name: wire_ident(&p.name.name),
         ty: Some(TsType::named("string")),
         optional: false,
     }));
@@ -1572,7 +1572,7 @@ fn emit_websocket_upgrade(
     let mut validated: HashMap<String, TsExpr> = HashMap::new();
     for p in &h.params {
         let pn = &p.name.name;
-        let jn = ts_ident(pn);
+        let jn = wire_ident(pn);
         match &p.type_ref {
             TypeRef::Named(id) => {
                 let r_name = format!("__r_{pn}");
@@ -1635,7 +1635,7 @@ fn emit_websocket_upgrade(
             validated
                 .get(&p.name.name)
                 .cloned()
-                .unwrap_or_else(|| ident(ts_ident(&p.name.name)))
+                .unwrap_or_else(|| ident(wire_ident(&p.name.name)))
         })
         .collect();
     stmts.push(const_(
@@ -1740,7 +1740,7 @@ fn emit_http_wrapper(
     let param_args: Vec<TsExpr> = h
         .params
         .iter()
-        .map(|p| ident(ts_ident(&p.name.name)))
+        .map(|p| ident(wire_ident(&p.name.name)))
         .collect();
 
     // v0.47: a Bearer handler's wrapper takes the request, runs the fail-closed
@@ -1762,7 +1762,7 @@ fn emit_http_wrapper(
             optional: false,
         }];
         params.extend(h.params.iter().map(|p| TsParam {
-            name: ts_ident(&p.name.name),
+            name: wire_ident(&p.name.name),
             ty: Some(qualified_ts_type_ref(&p.type_ref)),
             optional: false,
         }));
@@ -1869,7 +1869,7 @@ fn emit_http_wrapper(
         .params
         .iter()
         .map(|p| TsParam {
-            name: ts_ident(&p.name.name),
+            name: wire_ident(&p.name.name),
             ty: Some(qualified_ts_type_ref(&p.type_ref)),
             optional: false,
         })
@@ -1910,7 +1910,7 @@ fn emit_http_oidc_wrapper(
     let param_args: Vec<TsExpr> = h
         .params
         .iter()
-        .map(|p| ident(ts_ident(&p.name.name)))
+        .map(|p| ident(wire_ident(&p.name.name)))
         .collect();
     let issuer = crate::emitter::escape_ts_string(&seam.issuer);
     let audience = crate::emitter::escape_ts_string(&seam.audience);
@@ -1923,7 +1923,7 @@ fn emit_http_oidc_wrapper(
         optional: false,
     }];
     params.extend(h.params.iter().map(|p| TsParam {
-        name: ts_ident(&p.name.name),
+        name: wire_ident(&p.name.name),
         ty: Some(qualified_ts_type_ref(&p.type_ref)),
         optional: false,
     }));
@@ -2084,7 +2084,7 @@ fn emit_http_sum_wrapper(
         .params
         .iter()
         .filter(|p| p.name.name != "body")
-        .map(|p| (ts_ident(&p.name.name), p.type_ref.clone()))
+        .map(|p| (wire_ident(&p.name.name), p.type_ref.clone()))
         .collect();
     let mut params: Vec<TsParam> = vec![TsParam {
         name: "request".to_string(),
@@ -2373,7 +2373,7 @@ fn emit_http_sum_wrapper(
             if p.name.name == "body" {
                 ident("body")
             } else {
-                ident(ts_ident(&p.name.name))
+                ident(wire_ident(&p.name.name))
             }
         })
         .collect();

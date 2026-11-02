@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "many": "f48180be137426cf",
+    "one": "90f937538b00037d"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "many": "Svc(\"many\",P(\"key\",B(\"String\")),P(\"body\",B(\"String\")),P(\"result\",B(\"String\")),P(\"args\",B(\"String\")),P(\"argsObj\",B(\"String\")),P(\"surface\",B(\"String\")),P(\"request\",B(\"String\")),P(\"env\",B(\"String\")),P(\"ctx\",B(\"String\")),P(\"handlers\",B(\"String\")),Ret(B(\"Int\")))",
+    "one": "Svc(\"one\",P(\"body\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}
