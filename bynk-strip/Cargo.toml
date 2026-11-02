@@ -21,3 +21,6 @@ bynk-ts.workspace = true
 # A pure-Rust TS parser + type-erasing transform + codegen — no Node/tsc in the
 # loop and wasm-safe (the wasm toolchain slice compiles this path to wasm32).
 oxc = { version = "0.146", features = ["semantic", "transformer", "codegen"] }
+# #2705: composes the emitter's Bynk-to-TS source map with the strip codegen's
+# TS-to-JS map. Already in the tree (oxc_codegen's `sourcemap`); wasm-safe.
+oxc_sourcemap = "8"
