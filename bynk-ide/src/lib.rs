@@ -95,22 +95,22 @@ impl Diagnostic {
 /// needs diagnostics; the CLI uses `compile` / `compile_project`.
 pub fn diagnose(source: &str) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    let tokens = match lexer::tokenize(source) {
-        Ok(t) => t,
-        Err(e) => {
-            diagnostics.push(Diagnostic {
-                severity: Severity::for_error(&e),
-                error: e,
-                label_files: Vec::new(),
-            });
-            return diagnostics;
-        }
-    };
+    // #2807: the lexer recovers past a bad character or literal, so one lexical
+    // error no longer blanks the file's other diagnostics.
+    let (tokens, lex_errors) = lexer::tokenize_recovering(source);
     let parser::Recovered {
         units,
         errors: parse_errors,
         broken_decl_names,
     } = parser::parse_units_recovering(&tokens, source);
+    let parse_errors = lexer::without_lex_echoes(&lex_errors, &tokens, parse_errors);
+    for e in lex_errors {
+        diagnostics.push(Diagnostic {
+            severity: Severity::for_error(&e),
+            error: e,
+            label_files: Vec::new(),
+        });
+    }
     let unit_opt = units.into_iter().next();
     for e in parse_errors {
         diagnostics.push(Diagnostic {

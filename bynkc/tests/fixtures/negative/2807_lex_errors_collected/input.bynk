@@ -1,0 +1,11 @@
+commons demo
+
+$
+
+fn one() -> Int { 1 }
+
+~
+
+fn label() -> String { 1 }
+
+fn flag() -> Bool { "x" }

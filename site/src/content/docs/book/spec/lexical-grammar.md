@@ -331,3 +331,19 @@ other construct is newline-sensitive — in particular, `match`-arm separation
 terminated by their own greedy parse and an optional trailing comma, with no
 newline check. The complete token-and-trivia summary is part of the grammar
 appendix ([§11](/book/spec/grammar-appendix/)).
+
+## §3.5 Lexical errors
+
+A lexical error does not end the analysis of its file. The lexer reports the
+error, skips the text it covers, and goes on, so a file is lexed in full and
+**every** lexical error in it is reported, in source order, beside the
+syntactic and semantic diagnostics for the rest of the file. What is skipped is
+the offending character; a malformed, out-of-range or unterminated literal; an
+unclosed doc block (the rest of the file); or a `///` doc habit. An unterminated string literal
+is skipped to the end of its line; a malformed one that does close is skipped
+through its closing delimiter.
+
+The skipped text yields no token. A syntax error that starts in it, or at the
+token right after it, is its echo and is not reported. A file with a lexical
+error is still rejected: the build fails, and `bynk fmt` refuses to format it,
+since formatting from a token list with a gap would delete the skipped text.

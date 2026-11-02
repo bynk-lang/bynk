@@ -553,7 +553,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompileError> {
 }
 
 /// Tokenise a source string, stamping every token's span with `file`.
-/// Returns the full token vector or the first lexical error.
+/// Returns the full token vector or the first lexical error
+/// ([`tokenize_recovering_in`] keeps going past it).
 ///
 /// Doc blocks (`---` ... `---`), one-line docs (`--- text`) and line comments
 /// (`// ...`) are recognised outside the logos-generated lexer: we scan the
@@ -576,7 +577,150 @@ pub fn tokenize_legacy(source: &str) -> Result<Vec<Token>, CompileError> {
 }
 
 fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>, CompileError> {
+    let (tokens, errors) = tokenize_mode_recovering(source, file, legacy);
+    match errors.into_iter().next() {
+        Some(first) => Err(first),
+        None => Ok(tokens),
+    }
+}
+
+/// #2807: tokenise `source`, recovering from lexical errors instead of
+/// stopping at the first. Every error is returned, in source order, beside the
+/// tokens of everything the lexer could read: a bad character, a malformed or
+/// out-of-range literal, an unterminated string, an unclosed doc block and a
+/// `///` doc habit each yield an error and are then skipped (a string to the end
+/// of its line), so the text after them still lexes. The skipped text produces
+/// no token, which the parser sees as a gap; [`without_lex_echoes`] drops the
+/// syntax errors that gap causes.
+///
+/// The strict entry points ([`tokenize`] and kin) are this function with the
+/// first error kept and the tokens dropped. Callers that must not act on a file
+/// holding any lex error (the formatter, which would delete the skipped text)
+/// use those.
+pub fn tokenize_recovering_in(source: &str, file: FileId) -> (Vec<Token>, Vec<CompileError>) {
+    tokenize_mode_recovering(source, file, false)
+}
+
+/// [`tokenize_recovering_in`] with no real file identity.
+pub fn tokenize_recovering(source: &str) -> (Vec<Token>, Vec<CompileError>) {
+    tokenize_recovering_in(source, FileId::UNKNOWN)
+}
+
+/// The offset just past the line holding `from` (its newline included), or the
+/// end of `bytes`. A newline is ASCII, so the result is a character boundary.
+fn skip_line(bytes: &[u8], from: usize) -> usize {
+    match bytes[from.min(bytes.len())..]
+        .iter()
+        .position(|&b| b == b'\n')
+    {
+        Some(i) => from + i + 1,
+        None => bytes.len(),
+    }
+}
+
+/// Where lexing resumes after `err`, a failed string literal opened at `pos`.
+/// An unterminated literal has no closer, so the rest of its line goes. Any
+/// other fault (a bad escape, an under-indented body line, a bad hole) leaves a
+/// literal that does close: resume after its real closer, found by rescanning
+/// with escapes skipped, so the body and the closing quote are not lexed as code.
+/// No closer on the line (or at all, for a multi-line literal) falls back to
+/// skipping the line.
+fn string_error_resume(bytes: &[u8], pos: usize, err: &CompileError) -> usize {
+    let fallback = skip_line(bytes, err.span.end.max(pos + 1));
+    if err.category == "bynk.lex.unterminated_string" {
+        return fallback;
+    }
+    let Some(open) = string_open(bytes, pos) else {
+        return fallback;
+    };
+    let mut p = open.body;
+    while p < bytes.len() {
+        match bytes[p] {
+            b'\\' if !open.raw && bytes.get(p + 1) == Some(&b'(') => {
+                // An interpolation hole: its own strings and parens are not
+                // the literal's closer.
+                match hole_end(bytes, p + 2) {
+                    Some(end) => p = end,
+                    None => return fallback,
+                }
+            }
+            b'\\' if !open.raw => p += 2,
+            b'\n' if !open.multi => return fallback,
+            b'"' if open.multi => {
+                if bytes[p..].starts_with(b"\"\"\"") {
+                    return p + 3;
+                }
+                p += 1;
+            }
+            b'"' => {
+                let hashes = &bytes[p + 1..];
+                if hashes.len() >= open.hashes && hashes[..open.hashes].iter().all(|&b| b == b'#') {
+                    return p + 1 + open.hashes;
+                }
+                p += 1;
+            }
+            _ => p += 1,
+        }
+    }
+    fallback
+}
+
+/// The offset just past the `)` closing an interpolation hole whose body starts
+/// at `from`, skipping nested parens and string literals. `None` if it does not
+/// close before a newline or the end.
+fn hole_end(bytes: &[u8], from: usize) -> Option<usize> {
+    let (mut p, mut depth) = (from, 1usize);
+    while p < bytes.len() {
+        match bytes[p] {
+            b'\n' => return None,
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(p + 1);
+                }
+            }
+            b'"' => {
+                p += 1;
+                while p < bytes.len() && bytes[p] != b'"' {
+                    match bytes[p] {
+                        b'\n' => return None,
+                        b'\\' => p += 1,
+                        _ => {}
+                    }
+                    p += 1;
+                }
+            }
+            _ => {}
+        }
+        p += 1;
+    }
+    None
+}
+
+/// Record `err`, folding a run of adjacent stray characters into one error (a
+/// pasted block of them would otherwise be one diagnostic per character).
+fn push_lex_error(errors: &mut Vec<CompileError>, err: CompileError) {
+    const UNEXPECTED: &str = "bynk.lex.unexpected_character";
+    if err.category == UNEXPECTED
+        && let Some(prev) = errors.last_mut()
+        && prev.category == UNEXPECTED
+        && prev.span.end == err.span.start
+    {
+        prev.span.end = err.span.end;
+        prev.message = "unexpected characters".to_string();
+        return;
+    }
+    errors.push(err);
+}
+
+fn tokenize_mode_recovering(
+    source: &str,
+    file: FileId,
+    legacy: bool,
+) -> (Vec<Token>, Vec<CompileError>) {
     let mut tokens = Vec::new();
+    let mut errors: Vec<CompileError> = Vec::new();
     let bytes = source.as_bytes();
     let mut pos = 0;
     while pos < bytes.len() {
@@ -598,7 +742,7 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
                     continue;
                 }
                 None => {
-                    return Err(CompileError::new(
+                    errors.push(CompileError::new(
                         "bynk.lex.unclosed_doc_block",
                         Span::new_in(file, pos, open_end),
                         "documentation block opened but never closed",
@@ -608,6 +752,10 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
                          a line of three or more dashes is a doc-block marker, not a divider, so \
                          for a divider use a line comment, such as `// ---------`"
                     )));
+                    // The block is the rest of the file, as the error says: its
+                    // prose lexed as code would only add errors.
+                    pos = bytes.len();
+                    continue;
                 }
             }
         }
@@ -628,7 +776,9 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
         // lexical error pointing at `---`. A longer run of slashes is a `//`
         // comment, as `////` is in Rust.
         if line_first && bytes[pos..].starts_with(b"///") && bytes.get(pos + 3) != Some(&b'/') {
-            return Err(slash_doc_error(bytes, pos, file));
+            errors.push(slash_doc_error(bytes, pos, file));
+            pos = skip_line(bytes, pos);
+            continue;
         }
         // #1888: the legacy `--|` doc line, first on its line. It still lexes
         // as a doc line; the parser reports its spelling.
@@ -676,7 +826,16 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
         // literal holding a `\(` hole lexes as `InterpStr`, any other as
         // `StrLit`.
         if string_open(bytes, pos).is_some() {
-            let (end, segments) = lex_string(source, pos, 0, file)?;
+            let (end, segments) = match lex_string(source, pos, 0, file) {
+                Ok(lexed) => lexed,
+                Err(e) => {
+                    // The literal's remains are not code; lexing them as such
+                    // would only echo the error.
+                    pos = string_error_resume(bytes, pos, &e);
+                    errors.push(e);
+                    continue;
+                }
+            };
             let kind = if segments.iter().any(|s| matches!(s, InterpSegment::Hole(_))) {
                 TokenKind::InterpStr
             } else {
@@ -696,11 +855,16 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
             // the user sees something useful.
             let ch = source[pos..].chars().next().unwrap_or('\0');
             let span = Span::new_in(file, pos, pos + ch.len_utf8());
-            return Err(CompileError::new(
-                "bynk.lex.unexpected_character",
-                span,
-                format!("unexpected character `{ch}`"),
-            ));
+            push_lex_error(
+                &mut errors,
+                CompileError::new(
+                    "bynk.lex.unexpected_character",
+                    span,
+                    format!("unexpected character `{ch}`"),
+                ),
+            );
+            pos += ch.len_utf8();
+            continue;
         };
         let local = lex.span();
         let span: Span = Span::new_in(file, pos + local.start, pos + local.end);
@@ -718,15 +882,19 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
                         .parse::<i64>()
                         .is_ok_and(|n| n <= MAX_SAFE_INT)
                     {
-                        return Err(CompileError::new(
-                            "bynk.lex.integer_overflow",
-                            span,
-                            format!("integer literal `{slice}` is out of range for an `Int`"),
-                        )
-                        .with_note(
-                            "an `Int` is a safe integer, -(2^53 - 1) to 2^53 - 1 \
+                        errors.push(
+                            CompileError::new(
+                                "bynk.lex.integer_overflow",
+                                span,
+                                format!("integer literal `{slice}` is out of range for an `Int`"),
+                            )
+                            .with_note(
+                                "an `Int` is a safe integer, -(2^53 - 1) to 2^53 - 1 \
                              (±9007199254740991); use a `Float` or a `String` for a larger value",
-                        ));
+                            ),
+                        );
+                        pos = span.end;
+                        continue;
                     }
                 }
                 if kind == TokenKind::DecimalLit {
@@ -736,14 +904,18 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
                     let body = strip_digit_separators(&slice[..slice.len() - 1]).into_owned();
                     let frac = body.split_once('.').map_or(0, |(_, f)| f.len());
                     if frac > 100 || body.len() > 1000 {
-                        return Err(CompileError::new(
-                            "bynk.lex.decimal_literal_too_large",
-                            span,
-                            "decimal literal is too large",
-                        )
-                        .with_note(
-                            "a `Decimal` has at most 100 fraction digits and 1000 characters",
-                        ));
+                        errors.push(
+                            CompileError::new(
+                                "bynk.lex.decimal_literal_too_large",
+                                span,
+                                "decimal literal is too large",
+                            )
+                            .with_note(
+                                "a `Decimal` has at most 100 fraction digits and 1000 characters",
+                            ),
+                        );
+                        pos = span.end;
+                        continue;
                     }
                 }
                 if kind == TokenKind::FloatLit {
@@ -751,17 +923,21 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
                     match strip_digit_separators(slice).parse::<f64>() {
                         Ok(v) if v.is_finite() => {}
                         _ => {
-                            return Err(CompileError::new(
-                                "bynk.lex.float_literal_overflow",
-                                span,
-                                format!(
-                                    "float literal `{slice}` is out of range for a 64-bit float"
-                                ),
-                            )
-                            .with_note(
-                                "the literal does not fit a finite IEEE 754 double; \
+                            errors.push(
+                                CompileError::new(
+                                    "bynk.lex.float_literal_overflow",
+                                    span,
+                                    format!(
+                                        "float literal `{slice}` is out of range for a 64-bit float"
+                                    ),
+                                )
+                                .with_note(
+                                    "the literal does not fit a finite IEEE 754 double; \
                                  the largest finite value is ~1.8e308",
-                            ));
+                                ),
+                            );
+                            pos = span.end;
+                            continue;
                         }
                     }
                 }
@@ -788,11 +964,53 @@ fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>,
                         format!("unexpected character `{ch}`"),
                     )
                 };
-                return Err(err);
+                push_lex_error(&mut errors, err);
+                pos = if ch == '"' {
+                    skip_line(bytes, span.end.max(pos + 1))
+                } else {
+                    span.end.max(pos + ch.len_utf8())
+                };
             }
         }
     }
-    Ok(tokens)
+    (tokens, errors)
+}
+
+/// #2807: `parse_errors` without the ones a lexical error caused. Recovery
+/// skips the text a lex error covers, so the parser meets a gap where the
+/// literal or character stood and complains about it at the same spot. An error
+/// that starts in a lex error's span, or at the token right after it, is that
+/// echo and is dropped; every other syntax error stays. `tokens` is the
+/// recovering lex's token list. A heuristic: a genuine syntax error at that next
+/// token (the `fn` after a stray character on its own line) is dropped with the
+/// echo, and surfaces once the lexical error is fixed.
+pub fn without_lex_echoes(
+    lex_errors: &[CompileError],
+    tokens: &[Token],
+    parse_errors: Vec<CompileError>,
+) -> Vec<CompileError> {
+    let echo_ranges: Vec<(usize, usize)> = lex_errors
+        .iter()
+        .map(|le| {
+            // `tokens` are in source order. Trivia is not a token the parser
+            // sees, and with no token after the error the gap runs to the end
+            // of the file (an EOF error is its echo).
+            let first = tokens.partition_point(|t| t.span.start < le.span.end);
+            let next_end = tokens[first..]
+                .iter()
+                .find(|t| !matches!(t.kind, TokenKind::Comment | TokenKind::DocLine))
+                .map_or(usize::MAX, |t| t.span.end);
+            (le.span.start, next_end)
+        })
+        .collect();
+    parse_errors
+        .into_iter()
+        .filter(|e| {
+            !echo_ranges
+                .iter()
+                .any(|&(lo, hi)| e.span.start >= lo && e.span.start <= hi)
+        })
+        .collect()
 }
 
 /// Like [`tokenize`], but with every interpolated-string token replaced by the
@@ -2669,5 +2887,125 @@ mod tests {
         // The other way round: a `---` block does not close on `----`.
         let err = tokenize("---\nText.\n----\n").unwrap_err();
         assert_eq!(err.category, "bynk.lex.unclosed_doc_block");
+    }
+
+    /// #2807: the recovering lexer reads past every lexical error, reports each
+    /// in source order and keeps the tokens around them.
+    #[test]
+    fn recovering_lex_collects_every_error_and_keeps_the_rest() {
+        let src = "fn a() $ 1\nlet n = 99999999999999999999\n\"oops\nfn b() ~ 2\n";
+        let (tokens, errors) = tokenize_recovering(src);
+        let cats: Vec<_> = errors.iter().map(|e| e.category).collect();
+        assert_eq!(
+            cats,
+            [
+                "bynk.lex.unexpected_character",
+                "bynk.lex.integer_overflow",
+                "bynk.lex.unterminated_string",
+                "bynk.lex.unexpected_character",
+            ]
+        );
+        assert!(errors.windows(2).all(|w| w[0].span.start < w[1].span.start));
+        // The text between the errors still lexes.
+        let fns = tokens.iter().filter(|t| t.kind == TokenKind::Fn).count();
+        assert_eq!(fns, 2, "{tokens:?}");
+        // The strict entry point still reports the first error alone.
+        assert_eq!(tokenize(src).unwrap_err().span.start, errors[0].span.start);
+    }
+
+    /// #2807: recovery always advances, whatever it meets, and never splits a
+    /// multi-byte character.
+    #[test]
+    fn recovering_lex_terminates_on_hostile_input() {
+        for src in [
+            "é",
+            "\"é",
+            "\"\"\"é",
+            "$é$",
+            "///é",
+            "----\né",
+            "r\"é",
+            "\"\\(é",
+            "9é99999999999999999999é",
+        ] {
+            let (_, errors) = tokenize_recovering(src);
+            assert!(!errors.is_empty(), "{src:?}");
+        }
+    }
+
+    /// #2807: recovery from a bad escape resumes after the literal's closer,
+    /// even when a hole holds a string.
+    #[test]
+    fn string_recovery_skips_a_hole_holding_a_string() {
+        let src = "fn f() { show(\"a\\q \\(g(\"x\")) b\", 1) }\nfn k() $";
+        let (tokens, errors) = tokenize_recovering(src);
+        let cats: Vec<_> = errors.iter().map(|e| e.category).collect();
+        assert_eq!(
+            cats,
+            ["bynk.lex.bad_escape", "bynk.lex.unexpected_character"]
+        );
+        // `, 1) }` after the literal still lexes: nothing of the hole leaked.
+        assert!(!tokens.iter().any(|t| t.kind == TokenKind::StrLit));
+        let kinds: Vec<_> = tokens.iter().map(|t| t.kind).collect();
+        assert_eq!(
+            &kinds[kinds.len() - 8..kinds.len() - 4],
+            [
+                TokenKind::Comma,
+                TokenKind::IntLit,
+                TokenKind::RParen,
+                TokenKind::RBrace
+            ]
+        );
+    }
+
+    #[test]
+    fn adjacent_stray_characters_are_one_error() {
+        let (_, errors) = tokenize_recovering("fn $$$ f é$");
+        assert_eq!(errors.len(), 2, "{errors:?}");
+        assert_eq!(errors[0].span.end - errors[0].span.start, 3);
+    }
+
+    #[test]
+    fn an_unclosed_doc_block_swallows_the_rest_without_more_errors() {
+        let (tokens, errors) =
+            tokenize_recovering("fn a() = 1\n---\nit's prose; don't lex #this\nfn b() = 2\n");
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].category, "bynk.lex.unclosed_doc_block");
+        assert_eq!(tokens.iter().filter(|t| t.kind == TokenKind::Fn).count(), 1);
+    }
+
+    /// #2807: the parse errors a skipped character causes are dropped (also past
+    /// a comment, and at the end of the file); a real error elsewhere stays.
+    #[test]
+    fn lex_echoes_are_dropped() {
+        let src = "commons d\n\nfn f(a: Int, b: Int) -> Int { a $ b }\n";
+        let (tokens, lex_errors) = tokenize_recovering(src);
+        let parse_errors = crate::parser::parse_units_recovering(&tokens, src).errors;
+        assert!(!parse_errors.is_empty(), "`a b` is a syntax error");
+        assert!(without_lex_echoes(&lex_errors, &tokens, parse_errors).is_empty());
+    }
+
+    fn surviving(src: &str) -> usize {
+        let (tokens, lex_errors) = tokenize_recovering(src);
+        let parse_errors = crate::parser::parse_units_recovering(&tokens, src).errors;
+        without_lex_echoes(&lex_errors, &tokens, parse_errors).len()
+    }
+
+    #[test]
+    fn lex_echo_window_skips_comments_and_runs_to_eof() {
+        assert_eq!(
+            surviving("commons d\n\nfn f(a: Int, b: Int) -> Int { a $ // why\n b }\n"),
+            0
+        );
+        // An unclosed doc block inside a body: the missing `}` is its echo.
+        assert_eq!(
+            surviving("commons d\n\nfn f() -> Int {\n  1\n---\nprose\n"),
+            0
+        );
+        // A genuine syntax error well away from the lex error stays.
+        assert_eq!(
+            surviving("commons d\n\nfn f() -> Int { 1 $ }\n\nfn g( -> Int { 1 }\n"),
+            1
+        );
     }
 }

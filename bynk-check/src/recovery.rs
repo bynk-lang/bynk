@@ -20,12 +20,28 @@ pub fn diagnose_unparsable(
     source: &str,
     strict: Vec<CompileError>,
 ) -> Vec<CompileError> {
+    diagnose_unlexable(tokens, source, Vec::new(), strict)
+}
+
+/// [`diagnose_unparsable`] for a file the lexer recovered from (#2807): `tokens`
+/// are the recovering lex's, `lex_errors` its errors. They come first in the
+/// result, and the syntax errors they caused are left out.
+pub fn diagnose_unlexable(
+    tokens: &[Token],
+    source: &str,
+    lex_errors: Vec<CompileError>,
+    strict: Vec<CompileError>,
+) -> Vec<CompileError> {
     let parser::Recovered {
         units,
         errors,
         broken_decl_names,
     } = parser::parse_units_recovering(tokens, source);
     let (recovered, _warnings) = bynk_syntax::partition_by_severity(errors);
+    // #2807: lexical errors left gaps the parser tripped over.
+    let recovered = bynk_syntax::lexer::without_lex_echoes(&lex_errors, tokens, recovered);
+    let mut strict = strict;
+    strict.splice(0..0, lex_errors);
     let mut out = parser::merge_syntax_errors(strict, recovered);
     if let Some(SourceUnit::Commons(commons)) = units.into_iter().next() {
         let item_spans: Vec<_> = commons.items.iter().map(|i| i.span()).collect();

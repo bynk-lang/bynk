@@ -305,3 +305,36 @@ fn partial_parse_checks_surviving_declarations_without_echoes() {
     want.sort();
     assert_eq!(got, want);
 }
+
+/// #2807: a lexical error no longer blanks its file. `a.bynk` holds a stray
+/// `$` and, beyond it, a type error; both are reported, with nothing echoed
+/// from the skipped character. The sibling file's own error is reported as
+/// ever.
+#[test]
+fn a_lex_error_is_reported_with_the_rest_of_its_files_diagnostics() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/diagnose/lex_error/src");
+    let result = bynk_ide::diagnose_project(
+        &root,
+        &bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone())),
+    );
+    let mut got: Vec<(String, String)> = result
+        .files
+        .iter()
+        .flat_map(|f| {
+            let path = f.source_path.to_string_lossy().replace('\\', "/");
+            f.diagnostics
+                .iter()
+                .map(move |d| (path.clone(), d.error.category.to_string()))
+        })
+        .collect();
+    got.sort();
+    let want: Vec<(String, String)> = [
+        ("demo/a.bynk", "bynk.lex.unexpected_character"),
+        ("demo/a.bynk", "bynk.types.return_mismatch"),
+        ("demo/b.bynk", "bynk.types.return_mismatch"),
+    ]
+    .iter()
+    .map(|(p, c)| (p.to_string(), c.to_string()))
+    .collect();
+    assert_eq!(got, want);
+}
