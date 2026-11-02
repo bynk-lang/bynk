@@ -71,10 +71,28 @@ export const Slug = {
   },
 };
 
+export type Reply = string & { readonly __brand: "boundary.consumer.Reply" };
+
+export const Reply = {
+  of(value: string): Result<Reply, ValidationError> {
+    if (!(value.length <= 8)) {
+      return Err({ field: "Reply", message: "length must be at most 8", value });
+    }
+    return Ok(value as Reply);
+  },
+};
+
 export const submit = {
   async call(label: ShortLabel, qty: Positive1, ratio: Unit, price: Cheap, slug: Slug, deps: { surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> } }): globalThis.Promise<Result<number, number>> {
     const __r0 = await deps.surface.Provider.describe((label as unknown as boundary_provider.Label), (qty as unknown as boundary_provider.Qty), (ratio as unknown as boundary_provider.Ratio), (price as unknown as boundary_provider.Price), (slug as unknown as boundary_provider.Slug));
     return Ok(0);
+  },
+};
+
+export const ask = {
+  async call(n: number, deps: { surface: { Provider: globalThis.ReturnType<typeof boundary_provider.__makeSurface> } }): globalThis.Promise<Result<Reply, number>> {
+    const r = await (deps.surface.Provider.reply(n) as unknown as globalThis.Promise<Result<Reply, number>>);
+    return r;
   },
 };
 
@@ -86,6 +104,9 @@ export function __makeSurface(deps: __BoundaryConsumerDeps) {
   return {
     async submit(label: ShortLabel, qty: Positive1, ratio: Unit, price: Cheap, slug: Slug): globalThis.Promise<Result<number, number>> {
       return submit.call(label, qty, ratio, price, slug, deps);
+    },
+    async ask(n: number): globalThis.Promise<Result<Reply, number>> {
+      return ask.call(n, deps);
     },
   };
 }
