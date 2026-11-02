@@ -652,6 +652,37 @@ pub(crate) fn check_list_kernel_method(
                 tys.intern(Ty::Result(tys.intern(Ty::List(ok_ty)), err_ty)),
             )))
         }
+        // #2806: pure `Result` accumulation. `sequenceAll` gathers every `Err`
+        // (`Result[List[T], List[E]]`); `sequenceTry` stops at the first
+        // (`Result[List[T], E]`, `traverseTry`'s shape). The receiver must be a
+        // `List[Result[T, E]]`; nothing runs a function value, so both are pure.
+        "sequenceAll" | "sequenceTry" => {
+            if !arity(0, ctx) {
+                return None;
+            }
+            let Ty::Result(ok, err) = &*tys.get(elem) else {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.types.sequence_needs_result",
+                        span,
+                        format!(
+                            "`List.{}` needs a `List[Result[T, E]]`, but the elements are `{}`",
+                            method.name,
+                            elem.display(tys)
+                        ),
+                    )
+                    .with_note("`xs.map(f).sequenceAll()` collects the results of a fallible `f`"),
+                );
+                return None;
+            };
+            let ok_list = tys.intern(Ty::List(*ok));
+            let err_ty = if method.name == "sequenceAll" {
+                tys.intern(Ty::List(*err))
+            } else {
+                *err
+            };
+            Some(tys.intern(Ty::Result(ok_list, err_ty)))
+        }
         // v0.88 (ADR 0116, query-algebra slice 1): the eager in-memory builder
         // and terminal vocabulary as kernel methods. Lazy storage queries reuse
         // these names over a `Query[T]` receiver (slice 2); here every chain is

@@ -4613,6 +4613,37 @@ fn lower_list_kernel(
                 "(async (__xs: readonly {elem_el}[]) => await __bynkSettleAll(__xs.map((__x: {elem_ts}) => () => ({f})(__x))))({recv})"
             ))
         }
+        // #2806: pure `Result` accumulation. The call's checked type is
+        // `Result[List[T], E']`; `T` and `E` (the element's own `Err` type) type
+        // the accumulators.
+        (name @ ("sequenceAll" | "sequenceTry"), []) => {
+            let (ok_ts, err_ts) = match cx.commons().expr_ty(e.id).as_deref() {
+                Some(Ty::Result(ok, err)) => {
+                    let ok_ts = match &*tys.get(*ok) {
+                        Ty::List(t) => ts_ty(*t, tys),
+                        _ => ts_ty(*ok, tys),
+                    };
+                    let err_ts = match &*tys.get(*err) {
+                        Ty::List(t) if name == "sequenceAll" => ts_ty(*t, tys),
+                        _ => ts_ty(*err, tys),
+                    };
+                    (ok_ts, err_ts)
+                }
+                _ => ("any".to_string(), "any".to_string()),
+            };
+            let ok_el = ts_array_elem(&ok_ts);
+            let err_el = ts_array_elem(&err_ts);
+            let recv = pre.lower(receiver, cx);
+            Some(if name == "sequenceAll" {
+                format!(
+                    "((__xs: readonly {elem_el}[]) => {{ const __ok: {ok_el}[] = []; const __errs: {err_el}[] = []; for (const __r of __xs) {{ if (__r.tag === \"Err\") {{ __errs.push(__r.error); }} else {{ __ok.push(__r.value); }} }} return __errs.length > 0 ? Err(__errs) : Ok(__ok); }})({recv})"
+                )
+            } else {
+                format!(
+                    "((__xs: readonly {elem_el}[]) => {{ const __ok: {ok_el}[] = []; for (const __r of __xs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __ok.push(__r.value); }} return Ok(__ok); }})({recv})"
+                )
+            })
+        }
         // v0.150 (ADR 0174): the short-circuit collect iterators — stop at the
         // first `Err` and return it (`Effect[Result[List[U], E]]`). `traverseTry`
         // awaits each in order, bailing on the first `Err`; `parTraverseTry`

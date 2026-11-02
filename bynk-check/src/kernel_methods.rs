@@ -67,6 +67,9 @@ pub const LIST_METHODS: &[KernelMethod] = &[
         "parTraverseTry",
         "parTraverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]",
     ),
+    // #2806: pure `Result` accumulation over a `List[Result[T, E]]` receiver.
+    m("sequenceAll", "sequenceAll() -> Result[List[T], List[E]]"),
+    m("sequenceTry", "sequenceTry() -> Result[List[T], E]"),
     // v0.88 (ADR 0116): eager in-memory builders + terminals.
     m("map", "map(f: T -> U) -> List[U]"),
     m("filter", "filter(p: T -> Bool) -> List[T]"),

@@ -1,0 +1,17 @@
+---
+#2806: `sequenceAll` collects every `Err` of a `List[Result[T, E]]` (`Result[List[T], List[E]]`);
+`sequenceTry` stops at the first (`Result[List[T], E]`). Both are pure.
+---
+commons demo.seq
+
+fn check(n: Int) -> Result[Int, String] {
+  if n < 0 { Err("negative") } else { if n > 9 { Err("too big") } else { Ok(n) } }
+}
+
+fn all(xs: List[Int]) -> Result[List[Int], List[String]] { xs.map(check).sequenceAll() }
+
+fn first(xs: List[Int]) -> Result[List[Int], String] { xs.map(check).sequenceTry() }
+
+fn allOf(rs: List[Result[Int, String]]) -> Result[List[Int], List[String]] { rs.sequenceAll() }
+
+fn firstOf(rs: List[Result[Int, String]]) -> Result[List[Int], String] { rs.sequenceTry() }

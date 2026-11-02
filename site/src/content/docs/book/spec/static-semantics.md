@@ -2520,6 +2520,8 @@ existing (ADR 0037). The whole kernel:
 | `List[T]` | `parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` |
 | `List[T]` | `traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` |
 | `List[T]` | `parTraverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` |
+| `List[Result[T, E]]` | `sequenceAll()` | `Result[List[T], List[E]]` |
+| `List[Result[T, E]]` | `sequenceTry()` | `Result[List[T], E]` |
 | `List[T]` | `map(f: T -> U)` | `List[U]` |
 | `List[T]` | `filter(p: T -> Bool)` | `List[T]` |
 | `List[T]` | `flatMap(f: T -> List[U])` | `List[U]` |
@@ -2601,6 +2603,14 @@ faulted, in which case the fault (first in input order) is raised instead, whate
 the `Err` positions. They are the fault-**propagating** counterpart to the fault-gathering
 `traverseAll`/`parTraverseAll`, and likewise apply over the `Query`/`Map`
 broadcast.
+
+The **pure** pair `sequenceAll` / `sequenceTry` collect a `List[Result[T, E]]` that
+already exists, with no function and no effect. `sequenceAll` returns `Ok` of every
+value, or `Err` of **every** error in input order (`Result[List[T], List[E]]`);
+`sequenceTry` returns `Ok` of every value, or the **first** `Err`
+(`Result[List[T], E]`). The empty list is `Ok([])`. Calling either on a list whose
+elements are not `Result`s is `bynk.types.sequence_needs_result`. They are defined on
+a `List` receiver only; a `Query` is `collect`ed first.
 
 *(v0.88, [ADR 0116](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0116-query-vocabulary-and-ordering.md))*
 The builder/terminal rows above are the **eager in-memory half** of the query
