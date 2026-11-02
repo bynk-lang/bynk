@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The `Map[K, V]` boundary decoder rejects a repeated key as `StructuralMismatch` ("a distinct map key") instead of keeping the last entry; `Decimal` keys compare by value, so `1.20` and `1.2` collide
----
+# 0701 — The Map boundary decoder rejects a repeated key
 
-## ADR: map-decoder-rejects-duplicate-keys
-title: The Map boundary decoder rejects a repeated key
-summary: A wire Map entries array that repeats a key is a StructuralMismatch, not last-entry-wins
+- **Status:** Accepted (v0.480.16)
 
 **Context.** ADR 0690 (H) kept the `Map` boundary decoder's last-entry-wins on a
 repeated key, because rejecting it changed how existing primitive-keyed maps
