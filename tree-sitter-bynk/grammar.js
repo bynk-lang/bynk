@@ -39,7 +39,7 @@ const PREC = {
 module.exports = grammar({
   name: "bynk",
 
-  externals: ($) => [$.doc_block, $.doc_line, $.raw_string, $._type_app_open],
+  externals: ($) => [$.doc_block, $.doc_line, $.raw_string, $._type_app_open, $._error_sentinel],
 
   extras: ($) => [/\s+/, $.doc_line, $.line_comment, $.doc_block],
 

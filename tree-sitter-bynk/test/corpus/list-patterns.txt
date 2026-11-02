@@ -161,3 +161,43 @@ commons d {
           (identifier)
           (base_type)
           (number_literal))))))
+
+==========================
+qualified-path arm body, no comma before a list-pattern arm (#2700)
+==========================
+
+commons d {
+	fn f(xs: List[Int]) -> Int {
+		match xs {
+			[] => Json.decode
+			[..] => 0
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (base_type)))
+      (base_type)
+      (block
+        (match_expr
+          (identifier)
+          (match_arm
+            (list_pattern)
+            (field_access
+              (identifier)
+              (identifier)))
+          (match_arm
+            (list_pattern
+              (list_rest))
+            (number_literal)))))))

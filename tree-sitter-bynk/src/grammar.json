@@ -10615,6 +10615,10 @@
     {
       "type": "SYMBOL",
       "name": "_type_app_open"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_error_sentinel"
     }
   ],
   "inline": [],

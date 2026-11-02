@@ -33,6 +33,7 @@ enum TokenType {
     DOC_LINE,
     RAW_STRING,
     TYPE_APP_OPEN,
+    ERROR_SENTINEL,
 };
 
 void *tree_sitter_bynk_external_scanner_create(void) { return NULL; }
@@ -147,7 +148,13 @@ bool tree_sitter_bynk_external_scanner_scan(void *payload, TSLexer *lexer,
     // break the internal lexer reads an ordinary `[` instead, which starts the
     // next match arm's list pattern (or a list literal).
     bool first_on_line = lexer->get_column(lexer) == 0;
-    if (valid_symbols[TYPE_APP_OPEN]) {
+    // `ERROR_SENTINEL` is never used by a rule, so it is valid only while
+    // tree-sitter is in error recovery (when every external symbol is marked
+    // valid). Leave recovery to the internal lexer. Doc and raw-string tokens
+    // legitimately share states with `[` (a string pattern can start the next
+    // arm), so those cannot be used to detect it.
+    bool recovering = valid_symbols[ERROR_SENTINEL];
+    if (valid_symbols[TYPE_APP_OPEN] && !recovering) {
         while (lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
                lexer->lookahead == '\r') {
             skip(lexer);

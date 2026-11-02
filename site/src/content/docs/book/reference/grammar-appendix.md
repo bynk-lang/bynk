@@ -203,4 +203,4 @@ line_comment ::= "//" /[^\n]*/
 
 - **Word token:** `identifier`
 - **Ignored between tokens:** `/\s+/`, `doc_line`, `line_comment`, `doc_block`
-- **External tokens:** `doc_block`, `doc_line`, `raw_string`, `_type_app_open`
+- **External tokens:** `doc_block`, `doc_line`, `raw_string`, `_type_app_open`, `_error_sentinel`
