@@ -1,0 +1,25 @@
+context shop.quote
+
+consumes bynk { TimedOut }
+
+// #2765: the braces of `consumes U { … }` may name a type `U` exports, so
+// `consumes bynk { TimedOut }` — the form the `timed_out_not_in_scope` note
+// recommends — brings `TimedOut` into scope for `within`.
+
+capability Pricing {
+	fn quote(id: Int) -> Effect[Int]
+}
+
+provides Pricing = FixedPricing {
+	fn quote(id: Int) -> Effect[Int] { id }
+}
+
+service quotes {
+	on call(id: Int) -> Effect[String] given Pricing {
+		let r <- Pricing.quote(id).within(2.seconds)
+		match r {
+			Ok(n) => Effect.pure("quoted")
+			Err(TimedOut { after, .. }) => Effect.pure("slow")
+		}
+	}
+}

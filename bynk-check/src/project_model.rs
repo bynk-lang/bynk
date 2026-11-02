@@ -2148,6 +2148,24 @@ pub fn phase_resolve_consumes(
                         {
                             errors.push_for(Some(&parsed[i].identity_path()), err);
                         }
+                        // #2765: the braces may also name a type `U` exports
+                        // (`consumes bynk { TimedOut }`). Exported types are
+                        // already in scope for any `consumes U`, so a type
+                        // selection has nothing to flatten; it only states the
+                        // dependency.
+                        if !exported.contains(&cap.name)
+                            && groups.get(&target).is_some_and(|files| {
+                                files.iter().any(|&j| {
+                                    parsed[j].exports().iter().any(|clause| {
+                                        matches!(clause.kind, ExportKind::Type(_))
+                                            && clause.names.iter().any(|e| e.name.name == cap.name)
+                                    })
+                                })
+                            })
+                        {
+                            refs.record_in_unit(cap.span, SymbolKind::Type, &cap.name, &target);
+                            continue;
+                        }
                         if !exported.contains(&cap.name) {
                             errors.push_for(
                                 Some(&parsed[i].identity_path()),
@@ -6282,6 +6300,58 @@ mod shadowed_import_tests {
         assert_eq!(
             e.error.message,
             "`thing` names this unit's type, which hides the function `thing` from `lib.util`"
+        );
+    }
+
+    const WITHIN_SVC: &str = "\nservice s {\n  on call() -> Effect[String] {\n    let r <- Effect.pure(1).within(2.seconds)\n    Effect.pure(\"x\")\n  }\n}\n";
+
+    /// #2765: the braces may name a type the target exports, so the form the
+    /// `timed_out_not_in_scope` note recommends is accepted.
+    #[test]
+    fn consumes_bynk_may_select_an_exported_type() {
+        for consumes in [
+            "consumes bynk { TimedOut }",
+            "consumes bynk { Clock, TimedOut }",
+        ] {
+            let src = format!("context app\n\n{consumes}\n{WITHIN_SVC}");
+            let r = analyse(&[("app.bynk", &src)]);
+            assert!(
+                r.error_categories().is_empty(),
+                "{consumes}: {:?}",
+                r.error_categories()
+            );
+        }
+    }
+
+    /// A braced name that is neither an exported capability nor an exported
+    /// type is still refused.
+    #[test]
+    fn consumes_bynk_still_refuses_an_unknown_name() {
+        let r = analyse(&[("app.bynk", "context app\n\nconsumes bynk { NoSuchThing }\n")]);
+        assert_eq!(
+            r.error_categories(),
+            vec!["bynk.given.cross_context_unknown_capability"]
+        );
+    }
+
+    /// The note recommends only forms that work.
+    #[test]
+    fn timed_out_not_in_scope_note_names_the_accepted_form() {
+        let src = format!("context app\n{WITHIN_SVC}");
+        let r = analyse(&[("app.bynk", &src)]);
+        let e = r
+            .analysis
+            .errors
+            .iter()
+            .find(|e| e.error.category == "bynk.within.timed_out_not_in_scope")
+            .expect("TimedOut is not in scope without `consumes bynk`");
+        assert!(
+            e.error
+                .notes
+                .iter()
+                .any(|n| n.contains("consumes bynk { TimedOut }")),
+            "{:?}",
+            e.error.notes
         );
     }
 }
