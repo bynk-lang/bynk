@@ -493,6 +493,20 @@ enum AgentChange {
     },
 }
 
+/// #2676 (Decision C), per field: a stored field written before the lock
+/// recorded paths (`paths.is_empty()`) takes them from the unchanged
+/// declaration, matched by name, so the next change can be judged path by
+/// path. The structure is the same and defaults were never recorded, so
+/// nothing is invented. A field whose paths are already recorded is never
+/// touched, so a later classifier change cannot silently rewrite history.
+fn backfill_paths(stored: &mut [StoreShape], current: &[StoreShape]) {
+    for f in stored.iter_mut().filter(|f| f.paths.is_empty()) {
+        if let Some(c) = current.iter().find(|c| c.name == f.name) {
+            f.paths = c.paths.clone();
+        }
+    }
+}
+
 fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> AgentChange {
     if current == stored {
         return AgentChange::Unchanged;
@@ -1150,20 +1164,13 @@ pub fn reconcile_agents(
                         .expect("a parsed agent entry has a snapshot at its version");
                     match classify_agent_change(&current, stored) {
                         AgentChange::Unchanged => {
-                            // #2676 (Decision C): a snapshot written before
-                            // the lock recorded paths takes them from the
-                            // unchanged declaration, so the next change can
-                            // be judged path by path. The structure is the
-                            // same, and defaults were never recorded, so
-                            // nothing is invented.
+                            // #2676 (Decision C): see `backfill_paths`.
                             let mut entry = stored_entry.clone();
                             let version = entry.version;
                             if let Some(snapshot) =
                                 entry.shapes.iter_mut().find(|s| s.version == version)
-                                && snapshot.fields.iter().any(|f| f.paths.is_empty())
-                                && snapshot.fields != current
                             {
-                                snapshot.fields = current.clone();
+                                backfill_paths(&mut snapshot.fields, &current);
                             }
                             entry
                         }
@@ -1710,6 +1717,41 @@ mod path_tests {
             refinement: String::new(),
             paths,
         }
+    }
+
+    #[test]
+    fn backfill_leaves_a_recorded_snapshot_with_reordered_paths_alone() {
+        // #2688: the paths come back in another order, which classifies as
+        // Unchanged; the stored bytes must not be rewritten.
+        let a = vec![at("p", "{}", false), at("p.size", "Int", false)];
+        let b = vec![at("p.size", "Int", false), at("p", "{}", false)];
+        let stored = vec![store("{size: Int}", a)];
+        let current = vec![store("{size: Int}", b)];
+        assert_eq!(
+            classify_agent_change(&current, &stored),
+            AgentChange::Unchanged
+        );
+        let mut after = stored.clone();
+        backfill_paths(&mut after, &current);
+        assert_eq!(after, stored);
+    }
+
+    #[test]
+    fn backfill_fills_only_the_field_with_no_recorded_paths() {
+        let recorded = vec![at("p", "{}", false), at("p.size", "Int", false)];
+        let reordered = vec![at("p.size", "Int", false), at("p", "{}", false)];
+        let mut old = store("{size: Int}", recorded.clone());
+        old.name = "p".to_string();
+        let mut legacy = store("Int", Vec::new());
+        legacy.name = "q".to_string();
+        let mut cur_p = store("{size: Int}", reordered);
+        cur_p.name = "p".to_string();
+        let mut cur_q = store("Int", vec![at("q", "Int", false)]);
+        cur_q.name = "q".to_string();
+        let mut stored = vec![old, legacy];
+        backfill_paths(&mut stored, &[cur_p, cur_q]);
+        assert_eq!(stored[0].paths, recorded, "recorded field untouched");
+        assert_eq!(stored[1].paths, [at("q", "Int", false)]);
     }
 
     #[test]
