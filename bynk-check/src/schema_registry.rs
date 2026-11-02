@@ -1160,6 +1160,7 @@ pub fn reconcile_agents(
                             let version = entry.version;
                             if let Some(snapshot) =
                                 entry.shapes.iter_mut().find(|s| s.version == version)
+                                && snapshot.fields.iter().any(|f| f.paths.is_empty())
                                 && snapshot.fields != current
                             {
                                 snapshot.fields = current.clone();
@@ -1699,6 +1700,29 @@ mod path_tests {
             at("e|B", "variant", false),
         ];
         assert_eq!(compare_paths(&sum, &more).problems, ["e|B variant added"]);
+    }
+
+    fn store(ty: &str, paths: Vec<PathShape>) -> StoreShape {
+        StoreShape {
+            name: "p".to_string(),
+            kind: "Cell".to_string(),
+            ty: ty.to_string(),
+            refinement: String::new(),
+            paths,
+        }
+    }
+
+    #[test]
+    fn a_type_string_difference_no_path_explains_is_refused() {
+        // #2688: the recorded paths agree, yet the structure strings differ.
+        // Never guess: the change is non-additive.
+        let paths = vec![at("p", "{}", false), at("p.size", "Int", false)];
+        let old = [store("{size: Int}", paths.clone())];
+        let new = [store("{size: Int, ghost: Int}", paths)];
+        match classify_agent_change(&new, &old) {
+            AgentChange::NonAdditive { retyped, .. } => assert_eq!(retyped, ["p"]),
+            other => panic!("expected NonAdditive, got {other:?}"),
+        }
     }
 }
 
