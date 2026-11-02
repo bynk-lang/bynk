@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: A `Query`'s `sortBy`, `min` and `max` keys take any `Ord` type, as a `List`'s do
----
+# 0709 — A Query's sortBy, min and max keys are Ord
 
-## ADR: query-ord-keys
-title: A Query's sortBy, min and max keys are Ord
-summary: Query shares List's Ord rule and comparators; Float keys take the total order
+- **Status:** Accepted (v0.487)
 
 **Context.** ADR 0681 decision 8 left a `Query`'s `sortBy`/`min`/`max` on the five-base-type rule, reasoning that storage ordering has no SQL lowering for a user-type comparator. Every `Query` operation is in-memory array code (`lower_query_method`), and nothing in the roadmap lowers one to a query language. Proposal #2787.
 

@@ -54,7 +54,7 @@ production edge.
 
 ```toml
 [dependencies]
-bynk-lower = "0.485"
+bynk-lower = "0.487"
 ```
 
 ```rust

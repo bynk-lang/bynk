@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`bynk.cloudflare` `Queue` gains `sendValueWith(message, options)` and `sendValueBatch(messages)`, the `Codable` counterparts of `sendWith` and `sendBatch`: the same messages, delay and all-or-none rule as the untyped calls with `Json.encode`, encoded at the call site. `Analytics.write[T]` is not added (#2793)"
----
+# 0708 — Queue gains typed delayed and batch sends; Analytics.write is not made generic
 
-## ADR: queue-typed-send-variants
-title: Queue gains typed delayed and batch sends; Analytics.write is not made generic
-summary: sendValueWith and sendValueBatch mirror the untyped set; a generic Analytics.write has no Codable meaning
+- **Status:** Accepted (v0.486)
 
 **Context.** ADR 0696 shipped only `Queue.sendValue[T: Codable]`. A program that
 needed a delay or a batch went back to `sendWith(Json.encode(v), …)` and

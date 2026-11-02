@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0709](0709-query-ord-keys.md) | **A Query's sortBy, min and max keys are Ord** (v0.487) — Query shares List's Ord rule and comparators; Float keys take the total order | Accepted (v0.487) |
+| [0708](0708-queue-typed-send-variants.md) | **Queue gains typed delayed and batch sends; Analytics.write is not made generic** (v0.486) — sendValueWith and sendValueBatch mirror the untyped set; a generic Analytics.write has no Codable meaning | Accepted (v0.486) |
 | [0707](0707-instance-method-explicit-type-args.md) | **A generic instance method takes explicit type arguments naming its own parameters** (v0.485) — x.m[T](…) on a user instance method; the receiver's parameters are not listed; ADR 0234 B and 0702 F lifted | Accepted (v0.485) |
 | [0706](0706-query-keys-widen-to-key.md) | **A Query's distinct, groupBy and join keys are Key** (v0.484) — Query shares List's Key rule and keyed helpers; stores keep String/Int | Accepted (v0.484) |
 | [0705](0705-codec-factory-for-generic-types.md) | **A generic type over a Codable type parameter gets its codec from a per-declaration factory** (v0.483) — The unit that names a generic record or sum at a rigid parameter builds a factory from the declaration and applies it to the argument witnesses | Accepted (v0.483) |

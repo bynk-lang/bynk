@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.485**.
+written against **v0.487**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.487.0** | A `Query`'s `sortBy`, `min` and `max` keys take any `Ord` type, as a `List`'s do |
+| **v0.486.0** | "`bynk.cloudflare` `Queue` gains `sendValueWith(message, options)` and `sendValueBatch(messages)`, the `Codable` counterparts of `sendWith` and `sendBatch`: the same messages, delay and all-or-none rule as the untyped calls with `Json.encode`, encoded at the call site. `Analytics.write[T]` is not added (#2793)" |
 | **v0.485.0** | A generic instance method takes explicit type arguments, `b.cast[String]()`, naming the method's own parameters |
 | **v0.484.0** | A `Query`'s `distinct`, `distinctBy`, `groupBy` and join keys take any `Key` type, as a `List`'s do |
 | **v0.483.0** | "A user generic record or sum over a `Codable` type parameter (`Box[T]` in `fn f[T: Codable]`) now encodes and decodes, with the JSON and error paths of the codec for a concrete `Box[Order]`; `bynk.generics.codec_generic_at_rigid` is retired (#2792)" |
