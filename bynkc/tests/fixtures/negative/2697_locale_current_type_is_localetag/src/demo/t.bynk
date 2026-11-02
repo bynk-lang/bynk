@@ -1,0 +1,13 @@
+context demo.t
+
+// #2697: the call is typed `LocaleTag` (not `()`), so this is a let mismatch.
+
+consumes bynk { Locale }
+
+service s {
+	on call() -> Effect[String] given Locale {
+		let l <- Locale.current()
+		let n: Int = l
+		"x"
+	}
+}

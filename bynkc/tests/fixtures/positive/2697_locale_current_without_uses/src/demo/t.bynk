@@ -1,0 +1,13 @@
+context demo.t
+
+// #2697: `Locale.current()` returns `Effect[LocaleTag]`; the call types as
+// the op declares it with no `uses bynk.locale.types` at the call site.
+
+consumes bynk { Locale }
+
+service s {
+	on call() -> Effect[String] given Locale {
+		let l <- Locale.current()
+		Effect.pure("x")
+	}
+}
