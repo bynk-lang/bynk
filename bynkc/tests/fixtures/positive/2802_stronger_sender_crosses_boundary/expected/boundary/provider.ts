@@ -9,7 +9,8 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
  * #2802: the receiving side of each pair below is weaker than what the caller
  * sends, so the call crosses. Each refinement family is one pair: string length, an integer range
  * into a sign predicate, a float range, a decimal range compared by value, and a
- * `Matches` pattern that is identical on both sides.
+ * `Matches` pattern that is identical on both sides. A returned value crosses the
+ * same way: the provider's `Reply` is stronger than the consumer's own `Reply`.
  */
 
 export type Label = string & { readonly __brand: "boundary.provider.Label" };
@@ -76,9 +77,26 @@ export const Slug = {
   },
 };
 
+export type Reply = string & { readonly __brand: "boundary.provider.Reply" };
+
+export const Reply = {
+  of(value: string): Result<Reply, ValidationError> {
+    if (!(value.length <= 4)) {
+      return Err({ field: "Reply", message: "length must be at most 4", value });
+    }
+    return Ok(value as Reply);
+  },
+};
+
 export const describe = {
   async call(label: Label, qty: Qty, ratio: Ratio, price: Price, slug: Slug, deps: {}): globalThis.Promise<Result<number, number>> {
     return Ok(0);
+  },
+};
+
+export const reply = {
+  async call(n: number, deps: {}): globalThis.Promise<Result<Reply, number>> {
+    return Err(n);
   },
 };
 
@@ -89,6 +107,9 @@ export function __makeSurface(deps: __BoundaryProviderDeps) {
   return {
     async describe(label: Label, qty: Qty, ratio: Ratio, price: Price, slug: Slug): globalThis.Promise<Result<number, number>> {
       return describe.call(label, qty, ratio, price, slug, deps);
+    },
+    async reply(n: number): globalThis.Promise<Result<Reply, number>> {
+      return reply.call(n, deps);
     },
   };
 }

@@ -2,7 +2,8 @@
 #2802: the receiving side of each pair below is weaker than what the caller
 sends, so the call crosses. Each refinement family is one pair: string length, an integer range
 into a sign predicate, a float range, a decimal range compared by value, and a
-`Matches` pattern that is identical on both sides.
+`Matches` pattern that is identical on both sides. A returned value crosses the
+same way: the provider's `Reply` is stronger than the consumer's own `Reply`.
 ---
 context boundary.provider
 
@@ -11,9 +12,16 @@ type Qty = Int where NonNegative
 type Ratio = Float where InRange(0.0, 2.0)
 type Price = Decimal where InRange(0.00d, 10.00d)
 type Slug = String where Matches("[a-z]+") && MaxLength(8)
+type Reply = String where MaxLength(4)
 
 service describe {
   on call(label: Label, qty: Qty, ratio: Ratio, price: Price, slug: Slug) -> Effect[Result[Int, Int]] {
     Effect.pure(Ok(0))
+  }
+}
+
+service reply {
+  on call(n: Int) -> Effect[Result[Reply, Int]] {
+    Effect.pure(Err(n))
   }
 }
