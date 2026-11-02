@@ -1,0 +1,9 @@
+context shop
+
+consumes pay
+
+service check {
+  on call(raw: String) -> Effect[Bool] {
+    Effect.pure(Json.decode[List[Token]](raw).isOk())
+  }
+}

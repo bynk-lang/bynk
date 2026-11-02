@@ -95,7 +95,10 @@ pub fn check_handler_constraints(
     let mut errors = Vec::new();
     for item in &typed.commons.items {
         let (bodies, predicates): (Vec<&Block>, Vec<&Expr>) = match item {
-            CommonsItem::Service(s) => (s.handlers.iter().map(|h| &h.body).collect(), Vec::new()),
+            CommonsItem::Service(s) => {
+                check_handler_inputs_not_external_opaque(s, typed, consumed_types, &mut errors);
+                (s.handlers.iter().map(|h| &h.body).collect(), Vec::new())
+            }
             // An agent's invariants and transitions are typed alongside its
             // handlers, and are expressions that can name a consumed type.
             CommonsItem::Agent(a) => (
@@ -124,6 +127,207 @@ pub fn check_handler_constraints(
         }
     }
     errors
+}
+
+/// The types an expression decodes from JSON: the target of `Json.decode` /
+/// `Json.decodeSql`, and each type that fills a `Codable` witness of a callee
+/// (its decode half runs inside the callee). Encoding is not a decode.
+fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
+    use checker::Callee;
+    use checker::codable::{WitnessKind, witness_list};
+    match typed.callees.get(&e.id) {
+        Some(Callee::Intrinsic { ns, op })
+            if *ns == crate::builtin_names::types::JSON
+                && matches!(op.as_str(), "decode" | "decodeSql") =>
+        {
+            match typed.expr_ty(e.id).as_deref() {
+                Some(Ty::Result(t, _)) => vec![*t],
+                _ => Vec::new(),
+            }
+        }
+        Some(
+            Callee::Fn(decl, ws)
+            | Callee::FnValue(decl, ws)
+            | Callee::Method(decl, ws)
+            | Callee::Static(decl, ws),
+        ) => witness_list(decl, &typed.types)
+            .iter()
+            .zip(ws)
+            .filter(|(w, _)| w.kind == WitnessKind::Codec)
+            .map(|(_, t)| *t)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The first externally-owned opaque type that decoding `t` would create: a
+/// consumed type its owner exports opaque, or one declared `opaque`, found
+/// through named types' fields and payloads as well as through the type
+/// itself. Such a value can only be made by the owning context (#2794).
+fn external_opaque_in(
+    t: TyId,
+    typed: &checker::TypedCommons,
+    consumed: &HashMap<String, ConsumedType>,
+    tys: &Arc<Types>,
+) -> Option<(String, String)> {
+    fn names(t: TyId, tys: &Arc<Types>, out: &mut Vec<String>) {
+        match &*tys.get(t) {
+            Ty::Named { name, args, .. } => {
+                out.push(name.clone());
+                args.iter().for_each(|a| names(*a, tys, out));
+            }
+            Ty::Option(a) | Ty::List(a) | Ty::Set(a) => names(*a, tys, out),
+            Ty::Result(a, b) | Ty::Map(a, b) => {
+                names(*a, tys, out);
+                names(*b, tys, out);
+            }
+            _ => {}
+        }
+    }
+    let mut stack = Vec::new();
+    names(t, tys, &mut stack);
+    external_opaque_reaching(stack, typed, consumed)
+}
+
+/// As [`external_opaque_in`], from the type names a position mentions.
+fn external_opaque_reaching(
+    mut stack: Vec<String>,
+    typed: &checker::TypedCommons,
+    consumed: &HashMap<String, ConsumedType>,
+) -> Option<(String, String)> {
+    let mut seen: HashSet<String> = HashSet::new();
+    while let Some(n) = stack.pop() {
+        if !seen.insert(n.clone()) {
+            continue;
+        }
+        let decl = typed.types.get(&n);
+        if let Some(ct) = consumed.get(&n)
+            && (ct.visibility == Visibility::Opaque
+                || decl.is_some_and(|d| matches!(d.body, TypeBody::Opaque { .. })))
+        {
+            return Some((n, ct.owning_context.clone()));
+        }
+        let Some(decl) = decl else {
+            continue;
+        };
+        let vars: HashSet<&str> = decl
+            .type_params
+            .iter()
+            .map(|p| p.name.name.as_str())
+            .collect();
+        let mut found = Vec::new();
+        match &decl.body {
+            TypeBody::Record(r) => r
+                .fields
+                .iter()
+                .for_each(|f| crate::project_model::type_ref_names(&f.type_ref, &vars, &mut found)),
+            TypeBody::Sum(sum) => sum.variants.iter().for_each(|v| {
+                v.payload.iter().for_each(|p| {
+                    crate::project_model::type_ref_names(&p.type_ref, &vars, &mut found)
+                })
+            }),
+            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {}
+        }
+        stack.extend(found);
+    }
+    None
+}
+
+/// #2794: decoding creates a value, so a context cannot decode a type another
+/// context owns and exports opaque, through `Json.decode`, `Json.decodeSql` or a
+/// `Codable` witness: its codec would check no more than the base type, because
+/// the owner's predicate is the owner's secret. A reply from the owner's own
+/// service is not this: that decode is generated, and a skewed owner is caught
+/// by the contract hash.
+fn check_decode_of_external_opaque(
+    e: &Expr,
+    typed: &checker::TypedCommons,
+    consumed: &HashMap<String, ConsumedType>,
+    errors: &mut Vec<CompileError>,
+    tys: &Arc<Types>,
+) {
+    if consumed.is_empty() {
+        return;
+    }
+    for t in decode_targets(e, typed) {
+        if let Some((name, owner)) = external_opaque_in(t, typed, consumed, tys) {
+            errors.push(
+                CompileError::new(
+                    "bynk.context.external_decode",
+                    e.span,
+                    format!(
+                        "cannot decode `{}` here — `{name}` is owned by context `{owner}`",
+                        tys.display(t),
+                    ),
+                )
+                .with_note(
+                    "decoding creates a value, and values of an externally-owned opaque type can only be created inside the owning context; take the value from a service of `{owner}` instead".replace("{owner}", &owner),
+                ),
+            );
+            return;
+        }
+    }
+}
+
+/// #2794: an HTTP or queue handler decodes its parameters from bytes the
+/// context did not produce, so a parameter that reaches a type another context
+/// owns and exports opaque would create one of its values from the base type
+/// alone. A `call` handler's arguments come from a Bynk caller that holds such
+/// a value, so it is not an input in this sense. A `from Events(E)` subscriber is
+/// one: its event arrives as the publisher's payload, decoded here, so a
+/// payload field of such a type is refused (the event's declaration is walked
+/// like any record's).
+fn check_handler_inputs_not_external_opaque(
+    s: &ServiceDecl,
+    typed: &checker::TypedCommons,
+    consumed: &HashMap<String, ConsumedType>,
+    errors: &mut Vec<CompileError>,
+) {
+    if consumed.is_empty() || matches!(s.protocol, ServiceProtocol::Call | ServiceProtocol::Cron) {
+        return;
+    }
+    // A held WebSocket decodes every inbound frame as `in_type`, whichever
+    // handler the frame reaches.
+    if let ServiceProtocol::WebSocket { in_type, .. } = &s.protocol {
+        let mut names = Vec::new();
+        crate::project_model::type_ref_names(in_type, &HashSet::new(), &mut names);
+        if let Some((name, owner)) = external_opaque_reaching(names, typed, consumed) {
+            errors.push(
+                CompileError::new(
+                    "bynk.context.external_decode",
+                    in_type.span(),
+                    format!(
+                        "cannot take inbound frames of this type here — `{name}` is owned by context `{owner}`"
+                    ),
+                )
+                .with_note(
+                    "a frame is decoded from bytes this context did not produce, which creates a value; values of an externally-owned opaque type can only be created inside the owning context",
+                ),
+            );
+            return;
+        }
+    }
+    for h in &s.handlers {
+        for p in &h.params {
+            let mut names = Vec::new();
+            crate::project_model::type_ref_names(&p.type_ref, &HashSet::new(), &mut names);
+            if let Some((name, owner)) = external_opaque_reaching(names, typed, consumed) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.context.external_decode",
+                        p.type_ref.span(),
+                        format!(
+                            "cannot take `{}` as an input here — `{name}` is owned by context `{owner}`",
+                            p.name.name,
+                        ),
+                    )
+                    .with_note(
+                        "an input is decoded from bytes this context did not produce, which creates a value; values of an externally-owned opaque type can only be created inside the owning context",
+                    ),
+                );
+            }
+        }
+    }
 }
 
 fn walk_block_for_constraints(
@@ -166,6 +370,7 @@ fn walk_expr_for_constraints(
     errors: &mut Vec<CompileError>,
     tys: &Arc<Types>,
 ) {
+    check_decode_of_external_opaque(e, typed, consumed, errors, tys);
     match &e.kind {
         // A transparent export shares its structure with consumers, including
         // field-level construction (type-system §6.5); only an opaque one's

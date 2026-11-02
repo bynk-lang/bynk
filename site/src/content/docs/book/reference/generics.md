@@ -222,8 +222,10 @@ arguments, so the JSON, the error paths and the revalidation of a field are thos
 codec for a concrete `Box[Order]`. A recursive generic type is still refused at a
 boundary (`bynk.generics.recursive_generic_at_boundary`).
 
-An opaque type decoded outside the unit that owns it is checked no more than it is at
-any boundary there; `Codable` does not change that.
+A type another context owns and exports opaque cannot be decoded, by `Json.decode`,
+`Json.decodeSql` or a `Codable` witness: decoding creates a value, and only the owning
+context may create one (`bynk.context.external_decode`). Take the value from a service of
+the owner instead.
 
 ## A method's receiver parameters
 

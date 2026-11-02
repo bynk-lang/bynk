@@ -1,0 +1,11 @@
+context shop
+
+consumes pay
+
+type Held = { token: Token, note: String }
+
+service check {
+  on call(raw: String) -> Effect[Bool] {
+    Effect.pure(Json.decode[Held](raw).isOk())
+  }
+}

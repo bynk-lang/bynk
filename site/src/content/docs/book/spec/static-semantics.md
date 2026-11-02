@@ -2069,7 +2069,8 @@ compatible with the receiving side ([§6.5](/book/spec/type-system/#65-type-comp
 `bynk.boundary.structural_mismatch`); outside its owning context, a context-owned
 type MUST NOT be built through its constructors (`.of`, `.unsafe`, a variant) and
 an opaque export MUST NOT be built with record syntax or inspected
-(`bynk.context.external_construction`, `bynk.context.opaque_inspection`); a
+(`bynk.context.external_construction`, `bynk.context.opaque_inspection`), nor
+decoded from JSON (`bynk.context.external_decode`); a
 field read on a value of an opaque export is an inspection, however the value
 was bound. A transparent record's fields are shared, so a consumer MAY build
 one with record syntax. A consumer MAY read the fields of a value whose type the

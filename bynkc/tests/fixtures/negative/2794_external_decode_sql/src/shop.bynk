@@ -1,0 +1,11 @@
+context shop
+
+consumes pay
+
+type Row = { token: Token }
+
+service check {
+  on call(raw: String) -> Effect[Bool] {
+    Effect.pure(Json.decodeSql[List[Row]](raw).isOk())
+  }
+}

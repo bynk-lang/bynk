@@ -1,0 +1,30 @@
+context shop
+
+consumes pay
+
+type Frame = { token: Token, text: String }
+type Room = { name: String }
+
+actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+type UserId = opaque String
+
+service Echo from websocket(in: Frame, out: Frame) {
+  on open (roomId: UserId) -> Effect[()] by Participant {
+    let _ <- Rooms(roomId).join(roomId, connection)
+    ()
+  }
+
+  on message (frame: Frame) -> Effect[()] by Participant {
+    ()
+  }
+}
+
+agent Rooms {
+  key id: UserId
+  store conns: Map[UserId, Connection[Frame]]
+
+  on call join(rid: UserId, conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(rid, conn)
+    ()
+  }
+}

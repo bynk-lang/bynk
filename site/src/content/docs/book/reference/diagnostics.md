@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **708** codes in total.
+There are **709** codes in total.
 
 ## Agents
 
@@ -94,6 +94,7 @@ There are **708** codes in total.
 | `bynk.context.consumes_cycle` | Contexts form a `consumes` dependency cycle. |  | — |
 | `bynk.context.duplicate_binding` | A Worker would declare two bindings with the same name, such as an agent `Kv` and the `bynk.cloudflare` KV namespace (both `KV`). |  | — |
 | `bynk.context.external_construction` | A context-owned type was constructed from outside that context. |  | — |
+| `bynk.context.external_decode` | A context decoded a type another context owns and exports opaque, through `Json.decode`, `Json.decodeSql` or a `Codable` witness. Decoding creates a value, which only the owning context may do; its codec would check no more than the base type. |  | — |
 | `bynk.context.external_provider` | A bodiless (external) provider was declared outside an `adapter`. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.context.opaque_inspection` | An opaquely-exported type was inspected from outside its context. |  | — |
 | `bynk.context.rebrand_construction` | A variant of a `uses`-sourced commons sum type was constructed directly inside a context, where the emitter's per-context rebrand leaves its constructors out of scope. |  | — |

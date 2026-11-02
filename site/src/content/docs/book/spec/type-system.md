@@ -375,7 +375,11 @@ field-level construction — whereas an `exports opaque` type exposes only an
 opaque handle — inspecting it from outside the owning context is rejected
 (`bynk.context.opaque_inspection`), as is building a context-owned type through
 its constructors (`.of`, `.unsafe`, a variant), or an opaque one with record
-syntax, from outside (`bynk.context.external_construction`).
+syntax, from outside (`bynk.context.external_construction`). Decoding creates a
+value too: a context MUST NOT decode such a type through `Json.decode`,
+`Json.decodeSql` or a `Codable` witness, nor take one in an HTTP or queue
+handler's input (`bynk.context.external_decode`); the value comes from a service
+of the owning context.
 
 **Reading a field of a value from a consumed context** (#1948) follows what the
 consumer may inspect. A field read on a value whose type is an `exports opaque`

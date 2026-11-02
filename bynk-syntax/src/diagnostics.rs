@@ -835,6 +835,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.context.external_construction",
         "A context-owned type was constructed from outside that context.",
     ),
+    d(
+        "bynk.context.external_decode",
+        "A context decoded a type another context owns and exports opaque, through `Json.decode`, `Json.decodeSql` or a `Codable` witness. Decoding creates a value, which only the owning context may do; its codec would check no more than the base type.",
+    ),
     dg(
         "bynk.context.external_provider",
         "A bodiless (external) provider was declared outside an `adapter`.",

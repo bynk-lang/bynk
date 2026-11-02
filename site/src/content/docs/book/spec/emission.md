@@ -505,8 +505,10 @@ A caller-side codec for a callee-owned type cannot route through the owner's `.o
 constructor (it lives in the owner's module), so validation follows the export
 visibility: an **opaque** type validates its base and casts — its refinement is
 the owner's secret and is not re-checked, which is sound because the value came
-from the owner's typed code and a *skewed* owner is caught by the §7.3.4c contract
-hash — while a **transparent** refined type inlines its predicate, since the
+from the owner's typed code (the only decode of one is the generated decode of the
+owner's own service reply: `Json.decode`, a `Codable` witness and a handler input
+cannot name one, `bynk.context.external_decode`) and a *skewed* owner is caught by
+the §7.3.4c contract hash — while a **transparent** refined type inlines its predicate, since the
 consumer knows the shape by declaration. This applies to consumed *contexts* under
 `workers` only: a consumed *adapter*'s binding namespace is a real value import
 used by the composition root, and on `bundle` the contexts compile together.

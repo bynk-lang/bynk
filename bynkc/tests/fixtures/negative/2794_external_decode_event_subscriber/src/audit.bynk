@@ -1,0 +1,10 @@
+context audit
+
+consumes order
+consumes pay
+
+service OnPlaced from Events(Placed) {
+  on event(e: Placed) -> Effect[()] {
+    Effect.pure(())
+  }
+}
