@@ -1,0 +1,12 @@
+---
+#2802: decimal bounds compare by value. The caller sends 0.00..10.00 and the callee takes 1.00..5.00, so the call must not cross.
+---
+context boundary.provider
+
+type Price = Decimal where InRange(1.00d, 5.00d)
+
+service quote {
+  on call(price: Price) -> Effect[Result[Int, Int]] {
+    Effect.pure(Ok(0))
+  }
+}

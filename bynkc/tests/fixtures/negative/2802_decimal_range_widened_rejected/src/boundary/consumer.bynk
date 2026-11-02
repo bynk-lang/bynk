@@ -1,0 +1,12 @@
+context boundary.consumer
+
+consumes boundary.provider as Provider
+
+type Amount = Decimal where InRange(0.0d, 10.0d)
+
+service submit {
+  on call(value: Amount) -> Effect[Result[Int, Int]] {
+    let _ <- Provider.quote(value)
+    Effect.pure(Ok(0))
+  }
+}

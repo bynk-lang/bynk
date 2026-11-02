@@ -1,0 +1,16 @@
+context boundary.consumer
+
+consumes boundary.provider as Provider
+
+type ShortLabel = String where MaxLength(4)
+type Positive1 = Int where Positive
+type Unit = Float where InRange(0.5, 1.5)
+type Cheap = Decimal where InRange(1.0d, 5.0d)
+type Slug = String where Matches("[a-z]+") && MaxLength(4)
+
+service submit {
+  on call(label: ShortLabel, qty: Positive1, ratio: Unit, price: Cheap, slug: Slug) -> Effect[Result[Int, Int]] {
+    let _ <- Provider.describe(label, qty, ratio, price, slug)
+    Effect.pure(Ok(0))
+  }
+}

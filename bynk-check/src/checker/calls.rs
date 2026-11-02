@@ -6099,6 +6099,101 @@ mod tests {
         )
     }
 
+    /// #2802: a provider returning `Label` and a `till` declaring a `Label` of
+    /// its own take the same name, so the value is projected onto the caller's
+    /// declaration (`rebrand_conflict`) with the *provider* as the sender.
+    fn label_provider(max: u32) -> String {
+        format!(
+            "context shop\n\ntype Label = String where MaxLength({max})\n\n\
+             service label {{\n  on call() -> Effect[Result[Label, Int]] {{\n    Effect.pure(Ok(\"a\"))\n  }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn a_stronger_returned_refinement_is_admitted_by_the_callers_same_named_type() {
+        let a = analyse(&[
+            ("shop.bynk", &label_provider(4)),
+            (
+                "till.bynk",
+                &till(
+                    "type Label = String where MaxLength(8)\n\n",
+                    "    let l <- shop.label()\n    Effect.pure(0)",
+                ),
+            ),
+        ]);
+        a.assert_clean();
+    }
+
+    #[test]
+    fn a_weaker_returned_refinement_is_rejected_by_the_callers_same_named_type() {
+        let a = analyse(&[
+            ("shop.bynk", &label_provider(8)),
+            (
+                "till.bynk",
+                &till(
+                    "type Label = String where MaxLength(4)\n\n",
+                    "    let l <- shop.label()\n    Effect.pure(0)",
+                ),
+            ),
+        ]);
+        a.assert_reports("bynk.boundary.structural_mismatch");
+    }
+
+    /// #2802: the `Opaque` arm of `structural_compare_named` shares
+    /// `refinements_match`, so a same-named opaque peer widens like a refined
+    /// one. The predicate of an opaque type is not part of the contract (the
+    /// consumer cannot observe it), so a stronger sender is as safe as for a
+    /// refined type.
+    fn opaque_provider(max: u32) -> String {
+        format!(
+            "context shop\n\ntype Tag = opaque String where MaxLength({max})\n\n\
+             service check {{\n  on call(t: Tag) -> Effect[Int] {{\n    Effect.pure(0)\n  }}\n}}\n"
+        )
+    }
+
+    fn opaque_till(max: u32) -> String {
+        format!(
+            "context till\n\nconsumes shop\n\ntype Tag = opaque String where MaxLength({max})\n\n\
+             service total {{\n  on call(t: Tag) -> Effect[Int] {{\n    shop.check(t)\n  }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn a_stronger_opaque_sender_is_admitted_and_a_weaker_one_rejected() {
+        analyse(&[
+            ("shop.bynk", &opaque_provider(8)),
+            ("till.bynk", &opaque_till(4)),
+        ])
+        .assert_clean();
+        analyse(&[
+            ("shop.bynk", &opaque_provider(4)),
+            ("till.bynk", &opaque_till(8)),
+        ])
+        .assert_reports("bynk.boundary.structural_mismatch");
+    }
+
+    /// #2802: two consumed contexts that declare one unexported type name agree
+    /// when each entails the other, so `Positive` and `Positive && NonNegative`
+    /// (equivalent, but different canonical sets) no longer make the name
+    /// ambiguous, and a value of it passes back to the context it came from.
+    #[test]
+    fn equivalent_refinements_of_one_name_do_not_make_it_ambiguous() {
+        let owner = "context shop\n\ntype Label = Int where Positive\n\n\
+                     service make {\n  on call() -> Effect[Result[Label, Int]] {\n    Effect.pure(Ok(1))\n  }\n}\n\n\
+                     service take {\n  on call(l: Label) -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+        let other = "context other\n\ntype Label = Int where Positive && NonNegative\n\n\
+                     service peek {\n  on call() -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+        let till = "context till\n\nconsumes shop\n\nconsumes other\n\n\
+                    service total {\n  on call() -> Effect[Int] {\n    \
+                    let r <- shop.make()\n    match r {\n      Ok(l) => shop.take(l)\n      Err(_) => Effect.pure(0)\n    }\n  }\n}\n";
+        analyse(&[
+            ("shop.bynk", owner),
+            ("other.bynk", other),
+            ("till.bynk", till),
+        ])
+        .assert_clean();
+    }
+
     #[test]
     fn an_unexported_value_passes_back_to_its_service() {
         let a = analyse(&[

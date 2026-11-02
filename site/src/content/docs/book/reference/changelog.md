@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.490**.
+written against **v0.491**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.491.0** | A context boundary admits a strictly stronger refinement where a weaker one is expected (`MaxLength(4)` into `MaxLength(8)`, `Positive` into `NonNegative`), decided by one entailment engine shared with the deploy gate, with `Decimal` ranges now decided by value ([#2802](https://github.com/bynk-lang/bynk/issues/2802)) |
 | **v0.490.1** | A service's refined or opaque return value now type-checks in the emitted TypeScript when the calling context declares a type of the same name; the call result is cast to the caller's declaration ([#2825](https://github.com/bynk-lang/bynk/issues/2825)) |
 | **v0.490.0** | `List` and `Query` gain `sortByDescending`: the exact reverse of `sortBy`'s order, stable on ties (#2805) |
 | **v0.489.1** | A lexical error no longer hides the rest of its file's diagnostics (#2807) |

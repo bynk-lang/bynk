@@ -1,0 +1,12 @@
+---
+#2802: `Matches` is entailed only by an identical pattern. A stricter-looking pattern on the caller is still a different regex, so the call must not cross.
+---
+context boundary.provider
+
+type Token = String where Matches("[a-z0-9]+")
+
+service verify {
+  on call(token: Token) -> Effect[Result[Int, Int]] {
+    Effect.pure(Ok(0))
+  }
+}
