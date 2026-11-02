@@ -1,0 +1,7 @@
+// #2808: `+` on a `String`. The interpolation note and its fix are pinned in
+// `bynkc/tests/diagnostic_hints.rs`.
+commons demo {
+  fn greet(name: String) -> String {
+    "hi " + name
+  }
+}
