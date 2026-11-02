@@ -1,0 +1,8 @@
+commons c {
+  type Item = {
+    id: Int,
+  }
+  fn bad(items: List[Item]) -> List[Item] {
+    items.sortByDescending((i) => i)
+  }
+}

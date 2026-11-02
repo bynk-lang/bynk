@@ -75,6 +75,10 @@ pub const LIST_METHODS: &[KernelMethod] = &[
     m("filter", "filter(p: T -> Bool) -> List[T]"),
     m("flatMap", "flatMap(f: T -> List[U]) -> List[U]"),
     m("sortBy", "sortBy(key: T -> K) -> List[T]"),
+    m(
+        "sortByDescending",
+        "sortByDescending(key: T -> K) -> List[T]",
+    ),
     m("take", "take(n: Int) -> List[T]"),
     m("skip", "skip(n: Int) -> List[T]"),
     m("distinct", "distinct() -> List[T]"),
@@ -140,6 +144,10 @@ pub const QUERY_METHODS: &[KernelMethod] = &[
     m("filter", "filter(p: T -> Bool) -> Query[T]"),
     m("flatMap", "flatMap(f: T -> Query[U]) -> Query[U]"),
     m("sortBy", "sortBy(key: T -> K) -> Query[T]"),
+    m(
+        "sortByDescending",
+        "sortByDescending(key: T -> K) -> Query[T]",
+    ),
     m("take", "take(n: Int) -> Query[T]"),
     m("skip", "skip(n: Int) -> Query[T]"),
     m("distinct", "distinct() -> Query[T]"),

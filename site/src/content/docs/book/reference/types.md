@@ -305,7 +305,7 @@ returnable from a pure helper, passable. A query is **agent-local** and reads
 **staged** state (read-your-writes).
 
 **Builders** are pure and return a further `Query` — `filter`, `map`, `flatMap`,
-`sortBy`, `take`, `skip`, `distinct`, plus the joins and `groupBy` below.
+`sortBy`, `sortByDescending`, `take`, `skip`, `distinct`, plus the joins and `groupBy` below.
 
 **Terminals** execute the query and are `Effect`-typed (awaited with `<-`), folding
 into the storage capability the `store` fields already carry (no new `given`):
@@ -371,8 +371,8 @@ combinator vocabulary as kernel methods, so a chain reads
 `xs.filter((x) => x > 2).map((x) => x * 2)` (the same names the lazy
 [`Query`](#query) carries over storage; the receiver decides eager vs lazy).
 
-**Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `take`,
-`skip`, `distinct`, `distinctBy`.
+**Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`,
+`take`, `skip`, `distinct`, `distinctBy`.
 
 **Collecting `Result`s** (pure; the receiver is a `List[Result[T, E]]`): `sequenceAll()`
 returns `Ok` of every value, or `Err` of the list of **every** error in input order;
@@ -408,8 +408,11 @@ fn withTotal(ns: List[Int]) -> List[Int] {
 **Terminals**: `count`, `any`, `all`, `first`, `firstOrElse`, `sum`, `min`, `max`,
 `average`.
 
-Ordering keys (`sortBy`/`min`/`max`), on a `List` and on a lazy storage `Query`, are any
-[`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). Numeric keys (`sum`/`average`) are
+Ordering keys (`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a lazy storage `Query`, are any
+[`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). `sortByDescending` is `sortBy` largest key first: the exact reverse of the ascending order, so a
+`Float` `NaN` comes **first** (`None` last, a longer list first). It is **stable**: equal keys keep
+their input order, which `reverse(xs.sortBy(k))` does not. It behaves the same for a concrete,
+`derives Ord` or type-parameter key. Numeric keys (`sum`/`average`) are
 `Int`/`Float`/`Duration` (`bynk.query.sum_needs_numeric`), with `average -> Float`.
 **Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
 `sum` the zero. The first-party `bynk.list` free functions are the deprecated

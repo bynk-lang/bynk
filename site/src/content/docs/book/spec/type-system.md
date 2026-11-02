@@ -147,7 +147,7 @@ surface.
 - **`List[T]`** (v0.20b) — an **immutable** ordered sequence, constructed by
   the list literal `[a, b, c]` or `List.empty()`; every operation returns a
   new list, none mutates. Kernel operations and the eager method vocabulary
-  (`map`/`filter`/`flatMap`/`sortBy`/… builders, `count`/`sum`/`first`/…
+  (`map`/`filter`/`flatMap`/`sortBy`/`sortByDescending`/… builders, `count`/`sum`/`first`/…
   terminals; v0.88, ADR 0116): [§5.10](/book/spec/static-semantics/#510-collections).
   The predecessor `bynk.list` free functions whose method forms now exist are
   **deprecated** (`bynk.list.deprecated_function`, v0.91) — they still work.

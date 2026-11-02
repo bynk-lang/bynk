@@ -4757,6 +4757,24 @@ fn lower_list_kernel(
                 ),
             })
         }
+        // #2805: `sortByDescending` is the exact reverse of `sortBy`'s order
+        // (the comparator's arguments swapped, so `NaN` is first), and stable.
+        ("sortByDescending", [key]) => {
+            let cmp = kernel_key_comparator(&args[0], cx);
+            let recv = pre.lower(receiver, cx);
+            let key = pre.lower(key, cx);
+            Some(match cmp {
+                None => format!(
+                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; }})"
+                ),
+                Some(cmp) if cmp.chars().all(|c| c.is_alphanumeric() || c == '_') => format!(
+                    "[...{recv}].sort((__a: {elem_ts}, __b: {elem_ts}) => {cmp}(({key})(__b), ({key})(__a)))"
+                ),
+                Some(cmp) => format!(
+                    "((__c, __r: readonly {elem_el}[]) => [...__r].sort((__a: {elem_ts}, __b: {elem_ts}) => __c(({key})(__b), ({key})(__a))))({cmp}, {recv})"
+                ),
+            })
+        }
         ("distinct", []) if !key_is_plain(elem, tys) => {
             cx.runtime_use().note_key("__bynkDistinct");
             let recv = pre.lower(receiver, cx);
@@ -4993,6 +5011,7 @@ struct QueryShape<'a> {
 fn query_key_cmp(method: &Ident, args: &[Expr], cx: &LowerCtx) -> Option<String> {
     match (method.name.as_str(), args) {
         ("sortBy" | "min" | "max", [key]) => kernel_key_comparator(key, cx),
+        ("sortByDescending", [key]) => kernel_key_comparator(key, cx),
         _ => None,
     }
 }
@@ -5085,6 +5104,14 @@ fn lower_query_method(
         })),
         ("sortBy", [key]) => thunk(format!(
             "[...{source}].sort((__a, __b) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
+        )),
+        ("sortByDescending", [key]) if let Some(cmp) = key_cmp => {
+            thunk(with_comparator(cmp, |c| {
+                format!("[...{source}].sort((__a, __b) => {c}(({key})(__b), ({key})(__a)))")
+            }))
+        }
+        ("sortByDescending", [key]) => thunk(format!(
+            "[...{source}].sort((__a, __b) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; }})"
         )),
         ("take", [n]) => thunk(format!("{source}.slice(0, globalThis.Math.max(0, {n}))")),
         ("skip", [n]) => thunk(format!("{source}.slice(globalThis.Math.max(0, {n}))")),

@@ -1,0 +1,48 @@
+---
+#2805: descending, stable, NaN first.
+---
+suite demo.desc
+
+case "largest key first" {
+  let xs: List[Item] = [item("a", 0.0, 1), item("b", 0.0, 3), item("c", 0.0, 2)]
+  expect names(byTier(xs)) == ["b", "c", "a"]
+}
+
+case "ties keep input order, unlike reverse of sortBy" {
+  let xs: List[Item] = [item("a", 0.0, 1), item("b", 0.0, 2), item("c", 0.0, 1), item("d", 0.0, 2)]
+  expect names(byTier(xs)) == ["b", "d", "a", "c"]
+  expect names(byTierReversed(xs)) == ["d", "b", "c", "a"]
+}
+
+case "a String key sorts descending" {
+  let xs: List[Item] = [item("b", 0.0, 1), item("c", 0.0, 1), item("a", 0.0, 1)]
+  expect names(byName(xs)) == ["c", "b", "a"]
+}
+
+case "NaN is first in a descending Float key" {
+  let xs: List[Item] = [item("a", 1.0, 1), item("n", nan(), 1), item("b", 3.0, 1), item("m", nan(), 1), item("c", 2.0, 1)]
+  expect names(byScore(xs)) == ["n", "m", "b", "c", "a"]
+}
+
+case "a derives Ord record key: fields in order, reversed, NaN first" {
+  let xs: List[Item] = [
+    item("a", 1.0, 1), item("b", 1.0, 2), item("n", nan(), 9),
+    item("c", 2.0, 1), item("d", 2.0, 1), item("m", nan(), 3)
+  ]
+  expect names(byRank(xs)) == ["n", "m", "c", "d", "b", "a"]
+}
+
+case "a type-parameter key reverses its witness" {
+  let ints: List[Int] = [2, 3, 1]
+  let strs: List[String] = ["b", "c", "a"]
+  expect largestFirst(ints) == [3, 2, 1]
+  expect largestFirst(strs) == ["c", "b", "a"]
+}
+
+case "a generic helper sorts exactly like the inlined call, NaN first" {
+  let fs: List[Float] = [1.0, nan(), 3.0]
+  let out = floatsLargestFirst(fs)
+  expect isNaN(out.firstOrElse(0.0))
+  expect out.skip(1) == [3.0, 1.0]
+  expect fs.sortByDescending((x) => x).skip(1) == [3.0, 1.0]
+}

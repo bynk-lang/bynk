@@ -1,0 +1,38 @@
+---
+#2805: `List.sortByDescending` is the exact reverse of `sortBy`'s order, and stable
+(equal keys keep input order, unlike `reverse(sortBy)`), so `NaN` comes first, in a bare
+`Float` key, inside a `derives Ord` record key and through a type parameter alike.
+---
+commons demo.desc
+
+uses bynk.list
+
+type Rank = { score: Float, tier: Int } derives Ord
+
+type Item = { name: String, score: Float, tier: Int }
+
+fn nan() -> Float { 0.0 / 0.0 }
+
+fn isNaN(x: Float) -> Bool { x != x }
+
+fn item(name: String, score: Float, tier: Int) -> Item {
+  Item { name: name, score: score, tier: tier }
+}
+
+fn names(xs: List[Item]) -> List[String] { xs.map((i) => i.name) }
+
+fn byTier(xs: List[Item]) -> List[Item] { xs.sortByDescending((i) => i.tier) }
+
+fn byTierReversed(xs: List[Item]) -> List[Item] { reverse(xs.sortBy((i) => i.tier)) }
+
+fn byScore(xs: List[Item]) -> List[Item] { xs.sortByDescending((i) => i.score) }
+
+fn byName(xs: List[Item]) -> List[Item] { xs.sortByDescending((i) => i.name) }
+
+fn byRank(xs: List[Item]) -> List[Item] {
+  xs.sortByDescending((i) => Rank { score: i.score, tier: i.tier })
+}
+
+fn floatsLargestFirst(xs: List[Float]) -> List[Float] { largestFirst(xs) }
+
+fn largestFirst[T: Ord](xs: List[T]) -> List[T] { xs.sortByDescending((x) => x) }

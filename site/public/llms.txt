@@ -197,7 +197,7 @@ agent Todos {
   `@ttl(30.minutes)`, and needs `given Clock`). `Map` fields can be
   `@indexed(by: field)` for indexed equality filters.
 - Reads are lazy `Query[T]` values over `items.values`, `items.keys` or
-  `items.entries`: `filter`, `map`, `sortBy`, `groupBy`, `joinOn`, `leftJoin`,
+  `items.entries`: `filter`, `map`, `sortBy`, `sortByDescending`, `groupBy`, `joinOn`, `leftJoin`,
   then a terminal `collect()` / `count()` / `sum(...)`.
 - `invariant` declares a predicate that must hold of every committed state
   (runtime-checked); `transition` constrains each step over `old`/`new` state;
