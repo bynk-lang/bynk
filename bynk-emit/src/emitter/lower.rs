@@ -1845,15 +1845,25 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
     match base {
         BaseType::Int => {
             let mut lo: i64 = 0;
+            let mut hi = i64::MAX;
             if let Some(r) = refinement {
                 for p in &r.predicates {
                     match &p.kind {
                         PredKind::Positive => lo = lo.max(1),
                         PredKind::NonNegative => lo = lo.max(0),
-                        PredKind::InRange(a, _) => lo = lo.max(a.value),
+                        PredKind::InRange(a, b) => {
+                            lo = lo.max(a.value);
+                            hi = hi.min(b.value);
+                        }
                         _ => {}
                     }
                 }
+            }
+            // The floor of 0 can overshoot a wholly negative range
+            // (`InRange(-5, -1)`); fall back to the upper bound. An empty
+            // range never reaches here: the checker rejects it.
+            if lo > hi {
+                lo = hi;
             }
             Some(lo.to_string())
         }

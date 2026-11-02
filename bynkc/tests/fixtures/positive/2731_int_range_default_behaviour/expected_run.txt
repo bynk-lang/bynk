@@ -1,0 +1,2 @@
+# #2731: the default of a refined Int honours the upper bound, run.
+passed=3 failed=0
