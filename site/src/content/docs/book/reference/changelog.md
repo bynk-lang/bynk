@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.480.21** | A module whose `via schema(...)` subscribers are all bare handlers imports `EventEnvelope`, so its emitted TypeScript type-checks |
 | **v0.480.20** | An effectful method that awaits is emitted async, so its TypeScript compiles |
 | **v0.480.19** | a parenthesised match-arm guard such as `n if (flag) => n` now parses as a guard rather than a lambda |
 | **v0.480.18** | bynk-wasm's bynk_compile returns a source map with each user module, so the playground can match compiled JS lines to Bynk lines |
