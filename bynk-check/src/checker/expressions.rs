@@ -1016,6 +1016,7 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
         // memoises by span) the lhs's `expr_types`, so type-checking has to
         // have populated them first — collecting earlier would cache empties.
         let bindings = collect_is_bindings(lhs, ctx);
+        record_is_locals(lhs, true, rhs.span, ctx);
         ctx.push_scope();
         for (name, ty) in bindings {
             ctx.bind(name, ty);
@@ -2063,6 +2064,7 @@ pub(crate) fn check_if(
     // after `type_of(cond)` above so the memoised collector sees populated
     // `expr_types`; collecting before type-checking would cache empties.
     let bindings = collect_is_bindings(cond, ctx);
+    record_is_locals(cond, true, then_block.span, ctx);
     ctx.push_scope();
     for (name, ty) in bindings {
         ctx.bind(name, ty);
@@ -2117,6 +2119,7 @@ pub(crate) fn check_if(
     // #1654: the bindings the condition's *falsity* proves are in scope in the
     // else-branch (`if !(o is Some(v)) { 0 } else { v }`, type-system §2.3.6).
     let else_bindings = collect_is_bindings_when(cond, false, ctx);
+    record_is_locals(cond, false, else_block.span, ctx);
     ctx.push_scope();
     for (name, ty) in else_bindings {
         ctx.bind(name, ty);
@@ -5350,6 +5353,45 @@ pub(crate) fn collect_is_bindings_when(
     ctx.is_binding_cache
         .insert((expr.id, when_true), out.clone());
     out
+}
+
+/// #2701: record the names the `is` tests in `cond` bind (when `cond` evaluates
+/// to `when_true`) as locals scoped to `scope` — the then-branch, the else-branch
+/// or the right operand of `&&`/`implies`, whichever the checker is about to bind
+/// them in. Hover, go-to-definition, references and rename read these. Types come
+/// from the same per-test bindings the checker binds; a name the checker does not
+/// bind (a nested sub-pattern's) has no type here and is skipped.
+fn record_is_locals(cond: &Expr, when_true: bool, scope: Span, ctx: &mut Ctx) {
+    let tys = ctx.tys;
+    for test in crate::narrowing::matched_is_tests(cond, when_true) {
+        let ExprKind::Is { pattern, .. } = &test.kind else {
+            continue;
+        };
+        let own = match ctx.is_binding_cache.get(&(test.id, true)) {
+            Some(cached) => cached.clone(),
+            None => {
+                let mut own = Vec::new();
+                bindings_of_is_test(test, ctx, &mut own);
+                ctx.is_binding_cache.insert((test.id, true), own.clone());
+                own
+            }
+        };
+        for id in pattern.bound_names() {
+            let Some((_, ty)) = own.iter().rev().find(|(n, _)| *n == id.name) else {
+                continue;
+            };
+            if matches!(&*tys.get(*ty), Ty::Error) {
+                continue;
+            }
+            ctx.locals.record(
+                id.name.clone(),
+                id.span,
+                crate::locals::LocalKind::Let,
+                ty.display(tys),
+                scope,
+            );
+        }
+    }
 }
 
 /// The bindings one `is` test introduces when it has matched.

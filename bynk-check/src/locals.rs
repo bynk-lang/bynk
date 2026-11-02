@@ -85,16 +85,26 @@ impl LocalsSink {
         let Some(file) = &self.file else {
             return;
         };
-        self.files
-            .entry(file.clone())
-            .or_default()
-            .push(LocalBinding {
-                name,
-                def_span,
-                kind,
-                ty,
-                scope,
-            });
+        let entries = self.files.entry(file.clone()).or_default();
+        // #2701: an `is` binding in a left-nested `&&` chain is in scope in
+        // every later operand, so the checker records it once per operand: one
+        // binding, whose scope grows to cover them all.
+        if let Some(prev) = entries
+            .iter_mut()
+            .rev()
+            .take(8)
+            .find(|b| b.def_span == def_span && b.name == name)
+        {
+            prev.scope = prev.scope.merge(scope);
+            return;
+        }
+        entries.push(LocalBinding {
+            name,
+            def_span,
+            kind,
+            ty,
+            scope,
+        });
     }
 
     /// Drain the recorded bindings, each file's entries ordered by def span.
