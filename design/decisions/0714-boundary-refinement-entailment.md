@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A context boundary admits a strictly stronger refinement where a weaker one is expected (`MaxLength(4)` into `MaxLength(8)`, `Positive` into `NonNegative`), decided by one entailment engine shared with the deploy gate, with `Decimal` ranges now decided by value ([#2802](https://github.com/bynk-lang/bynk/issues/2802))
----
+# 0714 — A context boundary admits a stronger refinement by entailment
 
-## ADR: boundary-refinement-entailment
-title: A context boundary admits a stronger refinement by entailment
-summary: refinements_match decides entailment over the closed predicate vocabulary, boundary-only, through an engine shared with the deploy gate
+- **Status:** Accepted (v0.491)
 
 **Context.** Spec §6.5 said a more restrictive sending side is admitted into a more permissive receiving one, but `refinements_match` implemented that only for an unrefined receiver and otherwise required equal canonical predicate sets. The deploy-gate classifier (`contract_compat`) already reasoned by entailment, so the compiler rejected a program the gate called compatible. The cross-context contract hash covers the callee's own contract, not the caller's argument type, so relaxing the matcher cannot cause a runtime 409.
 
