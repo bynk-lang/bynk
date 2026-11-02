@@ -172,6 +172,7 @@ fn shape_json(s: &EntryShape) -> serde_json::Value {
             json!({ "kind": "result", "ok": shape_json(t), "err": shape_json(e) })
         }
         EntryShape::Unit => json!({ "kind": "unit" }),
+        EntryShape::Named(name) => json!({ "kind": "named", "name": name }),
         EntryShape::Recursive(name) => json!({ "kind": "recursive", "name": name }),
         EntryShape::Other(display) => json!({ "kind": "other", "display": display }),
     }
@@ -1865,5 +1866,52 @@ mod tests {
         assert!(v["entries"].as_array().unwrap().is_empty());
         assert!(v["files"].as_array().unwrap().is_empty());
         assert!(!v["diagnostics"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn compile_describes_opaque_map_result_set_and_generic_params() {
+        let v = compile_json(
+            "context app.more\n\
+             \n\
+             type Token = opaque String\n\
+             type Page[T] = { items: List[T] }\n\
+             \n\
+             service s {\n\
+             \x20 on call(t: Token, m: Map[String, Int], r: Result[Int, String], u: Set[Int], p: Page[Int]) -> Effect[Int] { 1 }\n\
+             }\n",
+        );
+        assert_eq!(v["ok"], true, "{v}");
+        let params = v["entries"][0]["params"].as_array().unwrap();
+        assert_eq!(params[0]["shape"]["kind"], "opaque");
+        assert_eq!(params[0]["base"], "String");
+        assert_eq!(params[0]["refined"], false);
+        assert_eq!(params[1]["shape"]["kind"], "map");
+        assert_eq!(params[1]["shape"]["key"]["base"], "String");
+        assert_eq!(params[1]["shape"]["value"]["base"], "Int");
+        assert_eq!(params[2]["shape"]["kind"], "result");
+        assert_eq!(params[2]["shape"]["err"]["base"], "String");
+        assert_eq!(params[3]["shape"]["kind"], "set");
+        assert_eq!(params[4]["shape"]["kind"], "other");
+        assert_eq!(params[4]["shape"]["display"], "Page[Int]");
+    }
+
+    #[test]
+    fn compile_caps_the_expansion_depth() {
+        // Eight nested records: past the cap a record is named, not expanded.
+        let mut src = String::from("context app.deep\n\ntype R0 = { n: Int }\n");
+        for i in 1..8 {
+            src.push_str(&format!("type R{i} = {{ inner: R{} }}\n", i - 1));
+        }
+        src.push_str("\nservice s {\n  on call(r: R7) -> Effect[Int] { 1 }\n}\n");
+        let v = compile_json(&src);
+        assert_eq!(v["ok"], true, "{v}");
+        let mut shape = &v["entries"][0]["params"][0]["shape"];
+        let mut depth = 0;
+        while shape["kind"] == "record" {
+            shape = &shape["fields"][0]["shape"];
+            depth += 1;
+        }
+        assert_eq!(depth, 6);
+        assert_eq!(shape, &serde_json::json!({"kind": "named", "name": "R1"}));
     }
 }

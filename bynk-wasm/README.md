@@ -43,8 +43,10 @@ compiles for the `browser` platform.
 `bynk_compile` also reports each `service`'s `on call(…)` handler as `entries`
 (empty on failure), so a host can build a run's arguments without parsing the
 source. It is derived from the checker's resolved types, and only the program's
-own contexts are listed (never injected first-party units). The field is
-additive: the rest of the result is unchanged.
+own contexts are listed (never injected first-party units). A named type's fields are resolved in the scope of the unit that declares it.
+Expansion is capped at 6 nested records/sums (a wide DAG would otherwise grow
+exponentially); past that a type is reported by name. The field is additive:
+the rest of the result is unchanged.
 
 ```ts
 interface CompileResult {
@@ -76,6 +78,7 @@ type Shape =
   | { kind: "map"; key: Shape; value: Shape }
   | { kind: "result"; ok: Shape; err: Shape }
   | { kind: "unit" }
+  | { kind: "named"; name: string }                    // a record/sum nested deeper than 6 levels: not expanded
   | { kind: "recursive"; name: string }                // a type already being described above it
   | { kind: "other"; display: string };               // a generic record instance, a function, ...: no value to build
 ```
