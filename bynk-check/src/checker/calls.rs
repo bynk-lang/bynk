@@ -1524,6 +1524,24 @@ pub(crate) fn check_static_call(
                 &format!("{}.{}", type_name.name, method.name),
             ),
         }
+        // #2634: a flattened cross-unit op whose signature names a type the
+        // consumer binds to a different shape is refused at the call (the
+        // refs above are recorded first, so a refused call still indexes).
+        if let Some((unit, name, in_param)) = &op.boundary_conflict {
+            let err = rebranded_return_mismatch(
+                &format!("{}.{}", type_name.name, method.name),
+                name,
+                unit,
+                *in_param,
+                span,
+                ctx,
+            );
+            ctx.errors.push(err);
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
         // P4c (#2628): a `D1` statement's SQL is a literal.
         d1::check_sql_argument(
             cap.derived_from.as_ref(),
@@ -2681,6 +2699,21 @@ pub(crate) fn check_method_call(
         );
         return check_numeric_parse_static(id, method, args, span, ctx);
     }
+    // #2622: the `Decimal` statics — `Decimal.parse(s)` / `Decimal.fromInt(n)`.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && id.name == DECIMAL
+        && ctx.lookup(DECIMAL).is_none()
+        && !ctx.input.types.contains_key(DECIMAL)
+    {
+        ctx.callees.insert(
+            expr_id,
+            Callee::Intrinsic {
+                ns: DECIMAL,
+                op: method.name.clone(),
+            },
+        );
+        return check_decimal_static(method, args, span, ctx);
+    }
     // v0.86 (ADR 0112): the `Duration.millis(n)` static constructor — the way to
     // build a `Duration` from a runtime `Int` (the literal covers constants).
     if let ExprKind::Ident(id) = &receiver.kind
@@ -2949,6 +2982,17 @@ pub(crate) fn check_method_call(
             );
             return check_bytes_kernel_method(method, args, span, ctx);
         }
+        // #2622: the `Decimal` kernel.
+        Ty::Base(BaseType::Decimal) => {
+            ctx.callees.insert(
+                expr_id,
+                Callee::Kernel {
+                    recv: recv_ty,
+                    op: method.name.clone(),
+                },
+            );
+            return check_decimal_kernel_method(method, args, span, ctx);
+        }
         // v0.22a: the string kernel (ADR 0046).
         Ty::Base(BaseType::String) => {
             ctx.callees.insert(
@@ -3152,6 +3196,7 @@ pub(crate) fn check_method_call(
                 BaseType::Duration => return check_duration_kernel_method(method, args, span, ctx),
                 BaseType::Instant => return check_instant_kernel_method(method, args, span, ctx),
                 BaseType::Bytes => return check_bytes_kernel_method(method, args, span, ctx),
+                BaseType::Decimal => return check_decimal_kernel_method(method, args, span, ctx),
                 BaseType::Bool => {}
             }
         }
@@ -5113,6 +5158,7 @@ fn check_cross_context_capability_call(
             &format!("{consumed}.{cap}.{}", method.name),
             &name,
             consumed,
+            false,
             span,
             ctx,
         ));
@@ -5128,6 +5174,7 @@ fn rebranded_return_mismatch(
     callee: &str,
     name: &str,
     consumed: &str,
+    in_param: bool,
     span: Span,
     ctx: &Ctx,
 ) -> CompileError {
@@ -5141,13 +5188,18 @@ fn rebranded_return_mismatch(
         "bynk.boundary.structural_mismatch",
         span,
         format!(
-            "cross-context call `{callee}` returns `{consumed}`'s type `{name}`, but `{name}` in \
-             `{caller}` is a different type"
+            "cross-context call `{callee}` {} `{consumed}`'s type `{name}`, but `{name}` in \
+             `{caller}` is a different type",
+            if in_param {
+                "takes as a parameter"
+            } else {
+                "returns"
+            }
         ),
     )
     .with_note(
-        "a returned value takes the receiving context's type of the same name, so the two \
-         must be structurally compatible; rename one of them",
+        "a value crossing the boundary takes the receiving context's type of the same name, so \
+         the two must be structurally compatible; rename one of them",
     )
 }
 
@@ -5612,6 +5664,7 @@ fn check_cross_context_call(
             &format!("{consumed}.{}", method.name),
             &name,
             consumed,
+            false,
             span,
             ctx,
         ));

@@ -1,0 +1,12 @@
+context auth.sessions
+
+consumes tokens { Jwt }
+
+type Token = { id: Int }
+
+service login {
+  on call(secret: String) -> Effect[Int] given Jwt {
+    let token <- Jwt.sign("u1", secret)
+    token.id
+  }
+}

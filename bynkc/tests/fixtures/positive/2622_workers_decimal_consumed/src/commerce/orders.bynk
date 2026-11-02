@@ -1,0 +1,18 @@
+context commerce.orders
+
+// #2622: the caller builds a `Decimal` and receives one back; the callee's
+// codec parses the wire string and re-checks its refinements.
+uses commerce.money
+consumes commerce.payment
+
+service placeOrder {
+  on call(total: Money) -> Effect[Result[Decimal, Int]] {
+    commerce.payment.authorise(total)
+  }
+}
+
+service quick {
+  on call() -> Effect[Result[Decimal, Int]] {
+    commerce.payment.authorise(Money { amount: 5.00d, fee: 1.00d })
+  }
+}

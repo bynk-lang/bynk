@@ -1,0 +1,5 @@
+commons demo
+
+fn cheap(price: Decimal) -> Bool {
+  price < 9.99
+}

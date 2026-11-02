@@ -151,7 +151,8 @@ increments.
   now lists the built primitives under the compiler's names: `Int`, `Float`
   (ADR 0040), `String`, `Bool`, `Bytes` (ADR 0142), `Instant` (ADR 0114),
   `Duration` (ADR 0112) and `Unit`. Its earlier `Decimal` and `Timestamp` were
-  renamed to `Float` and `Instant`; there is no exact-decimal primitive.
+  renamed to `Float` and `Instant`; the exact-decimal primitive was then built
+  separately as `Decimal` (#2622).
 - **`Int` precision** — *closed by #1657*. `Int` is the JS safe-integer domain,
   ±(2^53 − 1), enforced at every entry: the lexer, the JSON boundary (both
   directions), `Int.parse`, `Int` division by zero and the Float→`Int`

@@ -2609,6 +2609,8 @@ pub(crate) fn expr_reads_ident(e: &Expr, name: &str) -> bool {
 enum ConstLit {
     Int(i64),
     Float(f64),
+    /// #2622: a decimal literal's coefficient (with any `-`) and scale.
+    Decimal(String, u32),
     Str(String),
     Bool(bool),
     Unit,
@@ -2619,6 +2621,7 @@ impl ConstLit {
         match self {
             ConstLit::Int(n) => n.to_string(),
             ConstLit::Float(v) => v.to_string(),
+            ConstLit::Decimal(coef, scale) => bynk_syntax::decimal::render(coef, *scale),
             ConstLit::Str(s) => format!("{s:?}"),
             ConstLit::Bool(b) => b.to_string(),
             ConstLit::Unit => "()".to_string(),
@@ -2886,6 +2889,12 @@ pub struct CapabilityOpInfo {
     pub return_ty: TyId,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
+    /// #2634: for a flattened cross-unit operation, `(unit, type name, in a
+    /// parameter)` of the
+    /// first type in its signature that the consumer binds to a structurally
+    /// different declaration. Reported only when the op is called, as the
+    /// qualified `U.Cap.op` call does.
+    pub boundary_conflict: Option<(String, String, bool)>,
 }
 
 /// The synthetic record type name for `trace(Cap.op)`'s call records (v0.117):
@@ -4319,6 +4328,10 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
         }
         ExprKind::FloatLit { .. } => admit_refined_literal(expr, expected, ctx)
             .or(Some(tys.intern(Ty::Base(BaseType::Float)))),
+        // #2622: a `Decimal` literal, admitted into a refined `Decimal` type
+        // like any other literal.
+        ExprKind::DecimalLit { .. } => admit_refined_literal(expr, expected, ctx)
+            .or(Some(tys.intern(Ty::Base(BaseType::Decimal)))),
         // v0.86 (ADR 0112): a `Duration` literal always takes the base
         // `Duration` (no refined `Duration` types exist).
         ExprKind::DurationLit { .. } => Some(tys.intern(Ty::Base(BaseType::Duration))),
@@ -4560,6 +4573,26 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             Some(tys.intern(Ty::Base(BaseType::String)))
         }
         ExprKind::FieldAccess { receiver, field } => {
+            // #2622: `RoundingMode.X` names a mode only as the mode argument of
+            // a `Decimal` `round`/`div`; anywhere else it has no value.
+            if let ExprKind::Ident(id) = &receiver.kind
+                && id.name == "RoundingMode"
+                && ctx.lookup(id.name.as_str()).is_none()
+                && !ctx.input.types.contains_key(id.name.as_str())
+            {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.types.rounding_mode_position",
+                        expr.span,
+                        format!(
+                            "`RoundingMode.{}` names a mode only as the mode argument of a `Decimal`'s `round` or `div`",
+                            field.name
+                        ),
+                    )
+                    .with_note("write the mode where the rounding happens: `price.round(2, RoundingMode.HalfEven)`"),
+                );
+                return None;
+            }
             // #2341 (L4): `ErrorStatus.X` is a `RawError` status, read
             // syntactically at that argument; anywhere else it has no value.
             if let ExprKind::Ident(id) = &receiver.kind
@@ -5059,7 +5092,7 @@ pub struct VariantInfo {
 /// Project a return type produced in the consumed context's namespace into
 /// the caller's namespace by re-resolving named types that exist on both
 /// sides. The structural shape stays the same; the brand changes.
-fn rebrand_return_type(
+pub(crate) fn rebrand_return_type(
     t: TyId,
     caller_types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
@@ -5134,7 +5167,7 @@ fn rebrand_return_type(
 /// rebrand agree on which names are swapped. `receiving` is the caller's
 /// [`projected_types`], which resolves the names the caller's declaration
 /// reaches but does not bind (an export's unexported field type).
-fn rebrand_conflict(
+pub(crate) fn rebrand_conflict(
     t: TyId,
     provider_types: &HashMap<String, Arc<TypeDecl>>,
     caller_types: &HashMap<String, Arc<TypeDecl>>,

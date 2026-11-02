@@ -1,0 +1,18 @@
+context mirror
+
+// #2634: a flattened `Fetch` op's `BytesResponse` (a std type) resolves, so a
+// field of it reads. (A user type named like an exported one is refused at the
+// `consumes` by `bynk.consumes.name_conflict`, so only an unexported name can
+// collide; see `2634_flattened_cap_collision_*`.)
+
+consumes bynk { Fetch }
+
+service note {
+	on call(url: String) -> Effect[Int] given Fetch {
+		let got <- Fetch.receiveBytes(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None }, FetchOptions { timeout: None, redirect: Follow })
+		match got {
+			Ok(r) => Effect.pure(r.status)
+			Err(_) => Effect.pure(-1)
+		}
+	}
+}

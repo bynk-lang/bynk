@@ -114,6 +114,7 @@
   "reservedKeywords": [
     "Bool",
     "Bytes",
+    "Decimal",
     "Duration",
     "Effect",
     "Err",

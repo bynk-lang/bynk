@@ -1,0 +1,8 @@
+commons commerce.money
+
+type Amount = Decimal where Positive
+
+type Money = {
+  amount: Amount,
+  fee: Decimal where InRange(0.00d, 5.00d),
+}

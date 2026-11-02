@@ -571,12 +571,22 @@ module.exports = grammar({
       choice(
         seq(optional("-"), $.number_literal),
         seq(optional("-"), $.float_literal),
+        seq(optional("-"), $.decimal_literal),
         $.string_literal,
       ),
 
     _base_type: ($) => $.base_type,
     base_type: () =>
-      choice("Int", "String", "Bool", "Float", "Duration", "Instant", "Bytes"),
+      choice(
+        "Int",
+        "String",
+        "Bool",
+        "Float",
+        "Duration",
+        "Instant",
+        "Bytes",
+        "Decimal",
+      ),
 
     _type_ref: ($) =>
       choice(
@@ -1913,6 +1923,7 @@ module.exports = grammar({
         $.block,
         $.number_literal,
         $.float_literal,
+        $.decimal_literal,
         $.string_literal,
         $.boolean_literal,
         $.unit_literal,
@@ -2140,6 +2151,8 @@ module.exports = grammar({
     // as a method call on an integer literal.
     float_literal: () =>
       /[0-9]+(_[0-9]+)*\.[0-9]+(_[0-9]+)*([eE][+-]?[0-9]+(_[0-9]+)*)?|[0-9]+(_[0-9]+)*[eE][+-]?[0-9]+(_[0-9]+)*/,
+    // #2622: a decimal literal - digits, an optional fraction, a trailing `d`.
+    decimal_literal: () => /[0-9]+(_[0-9]+)*(\.[0-9]+(_[0-9]+)*)?d/,
     string_literal: ($) =>
       choice(
         seq(

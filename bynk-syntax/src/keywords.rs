@@ -21,6 +21,10 @@ pub const KEYWORDS: &[KeywordInfo] = &[
         "The binary base type — an immutable octet sequence, erased to `Uint8Array` (`Bytes.fromUtf8(s)`).",
     ),
     k(
+        "Decimal",
+        "The exact decimal base type — an arbitrary-precision coefficient with a scale (`1.20d`).",
+    ),
+    k(
         "Duration",
         "The time-span base type, in milliseconds (`5.minutes`).",
     ),

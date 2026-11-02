@@ -720,6 +720,7 @@ fn locate<'a>(
         // failed one.
         ExprKind::IntLit { .. }
         | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
         | ExprKind::DurationLit { .. }
         | ExprKind::StrLit(_)
         | ExprKind::InterpStr(_)
@@ -1035,6 +1036,7 @@ fn find_stmt_run_in_expr(e: &Expr, target: Span) -> Option<StmtRun<'_>> {
         // statements' values), so a run inside it stops being extractable.
         ExprKind::IntLit { .. }
         | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
         | ExprKind::DurationLit { .. }
         | ExprKind::StrLit(_)
         | ExprKind::InterpStr(_)
@@ -1223,6 +1225,7 @@ fn expr_matches(e: &Expr, pred: &impl Fn(&Statement) -> bool) -> bool {
         // values), so `pred` is never asked about the statements inside it.
         ExprKind::IntLit { .. }
         | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
         | ExprKind::DurationLit { .. }
         | ExprKind::StrLit(_)
         | ExprKind::InterpStr(_)

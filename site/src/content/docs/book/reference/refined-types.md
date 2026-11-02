@@ -23,6 +23,9 @@ is no `.unsafe` escape hatch (that is opaque-only).
 | `Positive` | value > 0 |
 | `InRange(lo, hi)` | lo ≤ value ≤ hi (inclusive) |
 
+These apply to `Int`, `Float` and `Decimal`. The `InRange` bounds are literals of
+the base's own type: `0`, `0.0` or `0.00d`.
+
 ### String
 
 | Predicate | Holds when |
@@ -148,7 +151,7 @@ fn tag(n: Name)   -> String { "user:".concat(n) }  // a refined arg widens too
 This is the same rule refinement already follows for arithmetic, comparison, and
 ordering keys: a refined value widens to its base wherever it is *read*, so no new
 mental model is needed. The inherited set is each base's entire kernel — the
-String, numeric, `Duration`, `Instant`, and `Bytes` kernels defined in the
+String, numeric (`Int`, `Float`, `Decimal`), `Duration`, `Instant`, and `Bytes` kernels defined in the
 [static semantics](/book/spec/static-semantics/). `Bool` has no kernel, so a
 `Bool`-based refinement inherits nothing.
 

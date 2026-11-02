@@ -375,13 +375,33 @@ falls back to comparing such values by identity: a record imported from another
 unit is not walked through its fields. A nullary variant read from storage or decoded
 from JSON equals the same variant written in source.
 
+**`Decimal` arithmetic** (#2622). `Decimal` is an exact base-10 type. `+`, `-` and
+`*` on two `Decimal` operands, and unary `-`, are exact: a sum or difference has
+the larger of the two scales, a product the sum of them, and the result is never
+rounded. `/` is rejected (`bynk.types.decimal_division_unscaled`); division is
+`a.div(b, scale, mode)`, the quotient at exactly `scale` fraction digits rounded
+by `mode`, and a zero divisor faults. The `scale` of `div` and `round` MUST be an `Int` from 0 to 100; any other scale faults. More generally every `Decimal` MUST have a scale of 0 to 100 and canonical text of at most 1000 characters, and an operation (`+`, `-`, `*`, `round`, `div`, `Decimal.fromInt`) whose result would break that faults at the operation; a literal that would is `bynk.lex.decimal_literal_too_large`. `d.round(scale, mode)` returns `d` at
+exactly `scale` fraction digits: a larger scale pads with zeros, a smaller one
+rounds by `mode`. `mode` is written `RoundingMode.<mode>` for one of `Down`,
+`Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown`, `HalfEven`, read where the
+rounding happens, and is not a first-class value
+(`bynk.types.unknown_rounding_mode`, `bynk.types.rounding_mode_position`). A
+`Decimal` and an `Int` or `Float` operand never mix, in arithmetic or in
+comparison (`bynk.types.no_numeric_coercion`). `==` and the ordering operators
+compare by numeric value, so `1.20 == 1.2`. The kernel also has `scale()`,
+`toString()`, `abs()`, `min`, `max`, `toInt() -> Option[Int]` (`Some` only for a
+whole number in the safe-`Int` range) and `toFloat()`; the statics are
+`Decimal.parse(s) -> Option[Decimal]` (plain decimal text only) and
+`Decimal.fromInt(n)`.
+
 **`Float` equality** (v0.21). `==`/`!=` on `Float` follow the host's IEEE
 754 semantics, and both classic surprises apply: `0.1 + 0.2 != 0.3`
 (decimal fractions are not exact doubles), and a `NaN` produced by
 arithmetic is **unequal to itself**, including inside a record or a list
 (structural equality compares each `Float` with these same semantics). Exact `Float` equality is rarely the
-test a program needs — compare with an explicit tolerance, or work in
-`Int` units. Division by zero and overflow in `Float` arithmetic follow
+test a program needs — compare with an explicit tolerance, or use `Decimal`
+for a quantity that must be exact, such as money
+([§6.1.1](/book/spec/type-system/#611-base-types)). Division by zero and overflow in `Float` arithmetic follow
 the host (`Infinity`/`NaN`); no Bynk-level guard applies **in arithmetic**
 (boundaries are guarded: [§7.2](/book/spec/emission/#72-targets)).
 

@@ -1,0 +1,5 @@
+commons demo
+
+fn cents(price: Decimal) -> Decimal {
+  price.round(2, 1)
+}

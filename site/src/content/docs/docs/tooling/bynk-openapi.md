@@ -60,6 +60,7 @@ a client generator, a documentation renderer, or a linter in CI.
 | `Option[T]`, `Result[T, E]` | `oneOf` of the `Some`/`None` and `Ok`/`Err` objects the codec writes |
 | `List[T]`; `Map[K, V]` | `array`; an array of `[key, value]` pairs |
 | `Bytes` | `string` with `contentEncoding: base64` |
+| `Decimal` | `string` with a decimal `pattern` and `x-bynk-base: Decimal`; a refinement is in `x-bynk-refinements` and the description, with no numeric `minimum`/`maximum` |
 | a named type | one entry in `components/schemas`, shared by `$ref` |
 
 The responses are the handler's, not the whole `HttpResult` vocabulary: the

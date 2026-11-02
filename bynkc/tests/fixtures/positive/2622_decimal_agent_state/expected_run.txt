@@ -1,0 +1,2 @@
+# #2622: a Decimal in stored state reloads exactly; run by bynkc/tests/behaviour_fixtures.rs.
+passed=3 failed=0

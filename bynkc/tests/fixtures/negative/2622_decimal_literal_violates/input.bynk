@@ -1,0 +1,7 @@
+commons demo
+
+type Price = Decimal where Positive
+
+fn free() -> Price {
+  0.00d
+}

@@ -704,7 +704,7 @@ pub(crate) fn emit_project(
     // rebranded type nominally distinct (v0.4 §6.2).
     if ctx.unit_kind == UnitKind::Context {
         stmts.extend(emit_context_rebrands(&references, commons, ctx));
-        stmts.extend(emit_consumed_type_reexports(&references, ctx));
+        stmts.extend(emit_consumed_type_reexports(&references, commons, ctx));
     }
     stmts.append(&mut body);
     // #1476: `ctx.runtime_use` is fully populated now — every producer above has
@@ -2199,24 +2199,58 @@ fn called_consumed_services(
 /// imports from a consumed context. `compose.ts` names every type in a
 /// wrapper's signature as `handlers.<Name>` (it imports no type names of its
 /// own), so a consumed `Batch` in a handler's parameters must be a member of
-/// `handlers` too, the way a `uses`d commons type is through its rebrand
-/// alias. Type-only (`export { type Batch }`): `compose.ts` uses the name in
-/// type position only, a consumed refined alias has no value to re-export
-/// (TS1205 under `isolatedModules`), and a value re-export would deepen the
-/// caller's dependency on the callee's module. Only names the module imports
+/// `handlers` too (a consumed *adapter's* type — `R2Upload` — likewise, #2647:
+/// it is imported from the adapter's module by the same statement), the way a
+/// `uses`d commons type is through its rebrand alias. Type-only
+/// (`export { type Batch }`): `compose.ts` uses the name in type position
+/// only, a consumed refined alias has no value to re-export (TS1205 under
+/// `isolatedModules`), and a value re-export would deepen the caller's
+/// dependency on the callee's module. Only names the module imports
 /// are re-exported, so each is bound here.
 fn emit_consumed_type_reexports(
     refs: &ExternalReferences,
+    commons: &TypedCommons,
     ctx: &EmitProjectCtx,
 ) -> Vec<bynk_ts::TsStmt> {
     if ctx.target != BuildTarget::Workers {
         return Vec::new();
     }
+    // #2647: a consumed *adapter's* types are re-exported only when some
+    // service handler's parameter names them, in the handler kinds below. A consumed
+    // context's are re-exported whenever imported, as before.
+    let handler_param_types: HashSet<String> = commons
+        .commons
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Service(s) => Some(s),
+            _ => None,
+        })
+        .flat_map(|s| s.handlers.iter())
+        // The kinds whose `compose.ts` wrapper types its parameters with
+        // `qualified_ts_type_ref` (call, cron, queue `message`, http); an
+        // `event` handler's other parameters never reach `compose.ts`.
+        .filter(|h| {
+            matches!(
+                h.kind,
+                bynk_syntax::ast::HandlerKind::Call
+                    | bynk_syntax::ast::HandlerKind::Http { .. }
+                    | bynk_syntax::ast::HandlerKind::Cron { .. }
+                    | bynk_syntax::ast::HandlerKind::Message
+            )
+        })
+        .flat_map(|h| h.params.iter())
+        .flat_map(|p| workers::named_types_in(&p.type_ref))
+        .collect();
     let mut names: Vec<String> = refs
         .by_commons
         .iter()
-        .filter(|(unit, _)| !ctx.consumed_adapters.contains(unit.as_str()))
-        .flat_map(|(_, set)| set.iter())
+        .flat_map(|(unit, set)| {
+            let adapter = ctx.consumed_adapters.contains(unit.as_str());
+            let handler_param_types = &handler_param_types;
+            set.iter()
+                .filter(move |n| !adapter || handler_param_types.contains(n.as_str()))
+        })
         .filter(|n| ctx.imported_from_kind.get(n.as_str()) == Some(&UnitKind::Context))
         .map(|n| format!("type {}", ts_ident(n)))
         .collect();
@@ -2845,6 +2879,7 @@ fn collect_refs_in_expr(
         }
         ExprKind::IntLit { .. }
         | ExprKind::FloatLit { .. }
+        | ExprKind::DecimalLit { .. }
         | ExprKind::DurationLit { .. }
         | ExprKind::StrLit(_)
         | ExprKind::BoolLit(_)
@@ -5593,6 +5628,11 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_eq();
     }
 
+    /// Record that this lowering referenced a `Decimal` runtime helper (#2622).
+    pub(crate) fn note_decimal(&self, name: &'static str) {
+        self.runtime_use().note_decimal(name);
+    }
+
     /// Record that this lowering emitted an `Int` domain trap (#1657), so the
     /// module imports the helpers.
     fn note_int(&self) {
@@ -6057,7 +6097,35 @@ fn ts_base(b: BaseType) -> &'static str {
         // v0.110 (ADR 0142): `Bytes` is the one base type that does NOT erase
         // to `number` — it lowers to an immutable octet sequence, `Uint8Array`.
         BaseType::Bytes => "globalThis.Uint8Array",
+        // #2622: a `Decimal` is a frozen `{ coefficient, scale }` over `bigint`,
+        // named structurally so no module needs a type import for it.
+        BaseType::Decimal => DECIMAL_TS_TYPE,
     }
+}
+
+/// #2622: the TypeScript type of a `Decimal` (see `runtime/src/decimal.ts`).
+pub(crate) const DECIMAL_TS_TYPE: &str = "{ readonly coefficient: bigint; readonly scale: number }";
+
+/// #2622: a `Decimal` literal as a TypeScript object literal - no runtime
+/// import. `coef` is the signed coefficient digits.
+pub(crate) fn decimal_ts_literal(coef: &str, scale: u32) -> String {
+    format!(
+        "{{ coefficient: {}n, scale: {scale} }}",
+        decimal_signed_coef(coef)
+    )
+}
+
+/// #2622: a coefficient as a signed `bigint` literal body: no leading zeros
+/// (`007n` is not valid TypeScript) and no negative zero.
+pub(crate) fn decimal_signed_coef(coef: &str) -> String {
+    let (neg, mag) = match coef.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, coef),
+    };
+    let mag = mag.trim_start_matches('0');
+    let mag = if mag.is_empty() { "0" } else { mag };
+    let sign = if neg && mag != "0" { "-" } else { "" };
+    format!("{sign}{mag}")
 }
 
 pub(crate) fn ts_type_ref(r: &TypeRef) -> String {
@@ -7069,7 +7137,63 @@ pub(crate) fn escape_ts_string(s: &str) -> String {
 /// for why the message keeps its own already-escaped copy of the pattern
 /// separate from the condition's raw, unescaped one).
 pub fn pred_condition_and_message(pred: &PredKind, receiver: &str) -> (bynk_ts::TsExpr, String) {
+    pred_condition_and_message_for(pred, receiver, None)
+}
+
+/// #2622: the condition a `Decimal` value must satisfy for `pred`, as inline
+/// TypeScript over the `{ coefficient, scale }` object (no runtime import).
+fn decimal_pred_condition(pred: &PredKind, recv: &str) -> Option<(String, String)> {
+    match pred {
+        PredKind::NonNegative => Some((
+            format!("({recv}).coefficient >= 0n"),
+            "must be non-negative".to_string(),
+        )),
+        PredKind::Positive => Some((
+            format!("({recv}).coefficient > 0n"),
+            "must be positive".to_string(),
+        )),
+        PredKind::InRangeD(a, b) => Some((
+            decimal_range_condition(recv, a, b),
+            format!(
+                "must be in range [{}, {}]",
+                bynk_syntax::decimal::render(&a.coef, a.scale),
+                bynk_syntax::decimal::render(&b.coef, b.scale)
+            ),
+        )),
+        _ => None,
+    }
+}
+
+/// `lo <= recv <= hi` over `Decimal` objects, comparing at a common scale with
+/// `bigint` arithmetic so the check needs no helper import.
+pub(crate) fn decimal_range_condition(
+    recv: &str,
+    lo: &bynk_syntax::ast::DecimalBound,
+    hi: &bynk_syntax::ast::DecimalBound,
+) -> String {
+    let bound = |op: &str, b: &bynk_syntax::ast::DecimalBound| {
+        let coef = decimal_signed_coef(&b.coef);
+        format!(
+            "(({recv}).coefficient * 10n ** globalThis.BigInt({}) {op} ({coef}n) * 10n ** globalThis.BigInt(({recv}).scale))",
+            b.scale
+        )
+    };
+    format!("({} && {})", bound(">=", lo), bound("<=", hi))
+}
+
+/// [`pred_condition_and_message`] knowing the receiver's base type: a
+/// `Decimal` is an object, so its numeric predicates are not `recv > 0`.
+pub fn pred_condition_and_message_for(
+    pred: &PredKind,
+    receiver: &str,
+    base: Option<BaseType>,
+) -> (bynk_ts::TsExpr, String) {
     use bynk_ts::{TsBinaryOp, TsExpr, TsLit};
+    if (base == Some(BaseType::Decimal) || matches!(pred, PredKind::InRangeD(..)))
+        && let Some((cond, msg)) = decimal_pred_condition(pred, receiver)
+    {
+        return (TsExpr::Ident(cond), msg);
+    }
 
     let recv = || TsExpr::Ident(receiver.to_string());
     let recv_length = || TsExpr::Member {
@@ -7114,6 +7238,8 @@ pub fn pred_condition_and_message(pred: &PredKind, receiver: &str) -> (bynk_ts::
                 format!("must be in range [{a}, {b}]"),
             )
         }
+        // Handled above (a `Decimal` base); not reachable for another base.
+        PredKind::InRangeD(..) => unreachable!("decimal predicates return early"),
         PredKind::NonEmpty => (
             cmp(TsBinaryOp::GreaterThan, recv_length(), num("0".to_string())),
             "must be non-empty".to_string(),
@@ -7260,11 +7386,12 @@ mod runtime_tests {
             [("equality".to_string(), "js".to_string())].into();
         let files = runtime_files::closure_files(&reached);
         let paths: Vec<String> = files.iter().map(|(p, _)| p.display().to_string()).collect();
-        // equality -> bytes -> result.
+        // equality -> bytes -> result, and equality -> decimal (#2622).
         assert_eq!(
             paths,
             [
                 "__bynk_runtime/bytes.ts",
+                "__bynk_runtime/decimal.ts",
                 "__bynk_runtime/equality.ts",
                 "__bynk_runtime/result.ts"
             ]
