@@ -7,9 +7,7 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 import { Tag as __CommonsTag } from "../labels.js";
 
 export type Tag = __CommonsTag & { readonly __ctxBrand?: "shop.lookup" };
-export const Tag = {
-  label(self: Tag): string { return __CommonsTag.label(self); },
-};
+export const Tag = __CommonsTag;
 
 export interface Directory {
   find(key: string): globalThis.Promise<Tag>;

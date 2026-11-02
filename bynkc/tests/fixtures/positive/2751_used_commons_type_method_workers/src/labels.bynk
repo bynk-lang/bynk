@@ -1,7 +1,7 @@
 commons labels
 
-// #2751: methods attached to a record type and to a sum type, called from a
-// context that `uses` this commons.
+// #2751: methods attached to a record type, a sum type and a generic type,
+// called from contexts that `uses` this commons.
 
 type Shade = enum { Light, Dark }
 
@@ -15,6 +15,16 @@ fn Tag.suffixed(self, s: String) -> String {
   "\(self.name)\(s)"
 }
 
+// A static method (no `self`).
+fn Tag.named(n: String) -> Tag {
+  Tag { name: n, shade: Light }
+}
+
+// A public type's private method: never reachable from an importer.
+private fn Tag.secret(self) -> Int {
+  1
+}
+
 fn Shade.code(self) -> Int {
   match self {
     Light => 1,
@@ -24,4 +34,11 @@ fn Shade.code(self) -> Int {
 
 fn dark() -> Shade {
   Dark
+}
+
+// A generic type with a bounded method: its hidden comparator is passed.
+type Bag[A] = { items: List[A] }
+
+fn Bag.largest(self) -> Option[A] where A: Ord {
+  self.items.max((x) => x)
 }

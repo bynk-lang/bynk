@@ -16,9 +16,16 @@ fn shout(t: Tag) -> String {
   t.suffixed("!")
 }
 
+fn top(b: Bag[Int]) -> Int {
+  match b.largest() {
+    Some(n) => n,
+    None => 0,
+  }
+}
+
 service lookup {
   on call(key: String) -> Effect[String] given Directory {
     let t <- Directory.find(key)
-    "\(t.label())\(shout(t))\(t.shade.code())"
+    "\(t.label())\(shout(t))\(t.shade.code())\(Tag.named("n").label())\(top(Bag { items: [3, 9, 4] }))"
   }
 }

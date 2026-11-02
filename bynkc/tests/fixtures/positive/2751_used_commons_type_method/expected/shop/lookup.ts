@@ -2,22 +2,34 @@
 // context shop.lookup
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
+import { __bynkCmpInt } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
-import { Shade as __CommonsShade, Tag as __CommonsTag, dark } from "../labels.js";
+import { Bag as __CommonsBag, Shade as __CommonsShade, Tag as __CommonsTag, dark } from "../labels.js";
 
+export type Bag<A> = __CommonsBag<A> & { readonly __ctxBrand?: "shop.lookup" };
+export const Bag = __CommonsBag;
 export type Shade = __CommonsShade & { readonly __ctxBrand?: "shop.lookup" };
-export const Shade = {
-  code(self: Shade): number { return __CommonsShade.code(self); },
-};
+export const Shade = __CommonsShade;
 export type Tag = __CommonsTag & { readonly __ctxBrand?: "shop.lookup" };
-export const Tag = {
-  label(self: Tag): string { return __CommonsTag.label(self); },
-  suffixed(self: Tag, s: string): string { return __CommonsTag.suffixed(self, s); },
-};
+export const Tag = __CommonsTag;
 
 export function shout(t: Tag): string {
   return Tag.suffixed(t, "!");
+}
+
+export function top(b: Bag<number>): number {
+  const __r0 = Bag.largest(b, __bynkCmpInt);
+  switch (__r0.tag) {
+    case "Some": {
+      const n = __r0.value;
+      return n;
+    }
+    case "None": {
+      return 0;
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
 }
 
 export interface Directory {
@@ -37,7 +49,7 @@ export const __RealDirectoryProvider = { token: __DirectoryToken, factory: () =>
 export const lookup = {
   async call(key: string, deps: { Directory: Directory }): globalThis.Promise<string> {
     const t = await deps.Directory.find(key);
-    return `${String(Tag.label(t))}${String(shout(t))}${String(Shade.code(t.shade))}`;
+    return `${String(Tag.label(t))}${String(shout(t))}${String(Shade.code(t.shade))}${String(Tag.label(Tag.named("n")))}${String(top({ items: [3, 9, 4] }))}`;
   },
 };
 

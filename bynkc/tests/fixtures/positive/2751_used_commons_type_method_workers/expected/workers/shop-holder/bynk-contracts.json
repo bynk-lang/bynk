@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "holder": "cf324d9eaf7367df"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "holder": "Svc(\"holder\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
+}

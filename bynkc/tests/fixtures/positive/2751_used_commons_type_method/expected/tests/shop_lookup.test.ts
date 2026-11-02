@@ -38,15 +38,16 @@ function __makeTestDeps() {
 }
 
 // case tier: unit
-async function test_a_used_commons__method_is_called_from_a_service_and_a_fn() {
+async function test_a_used_commons__methods_are_called_from_a_service_and_a_fn() {
   try {
     const deps = __makeTestDeps();
-    const { lookup, shout } = __ns_shop_lookup;
-    const { Shade, Tag, dark } = __ns_labels;
+    const { lookup, shout, top } = __ns_shop_lookup;
+    const { Bag, Shade, Tag, dark } = __ns_labels;
+    type Bag<A> = __ns_labels.Bag<A>;
     type Shade = __ns_labels.Shade;
     type Tag = __ns_labels.Tag;
     const s = await lookup.call("x", deps);
-    if (!(s === "xx!2")) { throw __bynkExpectFailure("tests/shop/lookup.test.bynk:4:12", 129, 140, "expect s == \"xx!2\"\n  expected: s == \"xx!2\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("xx!2"))); }
+    if (!(s === "xx!2n9")) { throw __bynkExpectFailure("tests/shop/lookup.test.bynk:4:12", 131, 144, "expect s == \"xx!2n9\"\n  expected: s == \"xx!2n9\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("xx!2n9"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -60,11 +61,12 @@ async function test_a_used_commons__method_is_called_from_a_service_and_a_fn() {
 async function test_a_used_commons__method_is_called_from_a_test_case() {
   try {
     const deps = __makeTestDeps();
-    const { lookup, shout } = __ns_shop_lookup;
-    const { Shade, Tag, dark } = __ns_labels;
+    const { lookup, shout, top } = __ns_shop_lookup;
+    const { Bag, Shade, Tag, dark } = __ns_labels;
+    type Bag<A> = __ns_labels.Bag<A>;
     type Shade = __ns_labels.Shade;
     type Tag = __ns_labels.Tag;
-    if (!(Tag.label({ name: "a", shade: dark() }) === "a")) { throw __bynkExpectFailure("tests/shop/lookup.test.bynk:8:12", 218, 265, "expect Tag { name: \"a\", shade: dark() }.label() == \"a\"\n  expected: Tag { name: \"a\", shade: dark() }.label() == \"a\"\n  actual:   " + __bynkShow((Tag.label({ name: "a", shade: dark() }))) + " == " + __bynkShow(("a"))); }
+    if (!(Tag.label({ name: "a", shade: dark() }) === "a")) { throw __bynkExpectFailure("tests/shop/lookup.test.bynk:8:12", 222, 269, "expect Tag { name: \"a\", shade: dark() }.label() == \"a\"\n  expected: Tag { name: \"a\", shade: dark() }.label() == \"a\"\n  actual:   " + __bynkShow((Tag.label({ name: "a", shade: dark() }))) + " == " + __bynkShow(("a"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -88,14 +90,14 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a used commons' method is called from a service and a fn", "a used commons' method is called from a test case"];
+export const __bynkCases: readonly string[] = ["a used commons' methods are called from a service and a fn", "a used commons' method is called from a test case"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a used commons' method is called from a service and a fn")) {
+  if (want("a used commons' methods are called from a service and a fn")) {
     const started = __bynkCaseNow();
-    const r = { name: "a used commons' method is called from a service and a fn", ...(await test_a_used_commons__method_is_called_from_a_service_and_a_fn()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "a used commons' methods are called from a service and a fn", ...(await test_a_used_commons__methods_are_called_from_a_service_and_a_fn()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

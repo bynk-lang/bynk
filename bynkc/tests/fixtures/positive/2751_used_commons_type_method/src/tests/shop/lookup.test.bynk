@@ -1,7 +1,7 @@
 suite shop.lookup {
-  case "a used commons' method is called from a service and a fn" {
+  case "a used commons' methods are called from a service and a fn" {
     let s <- lookup.call("x")
-    expect s == "xx!2"
+    expect s == "xx!2n9"
   }
 
   case "a used commons' method is called from a test case" {
