@@ -165,6 +165,26 @@ fn adding_a_field_bumps_the_version_and_reordering_does_not() {
     assert!(lock.contains("additive = true"), "{lock}");
 }
 
+/// #2688: an existing record field that gains a default is a recorded
+/// (additive) change, so the lock's history stays honest for the
+/// "lost its default" check.
+#[test]
+fn a_record_field_that_gains_a_default_bumps_the_version() {
+    let p = Project::new("gained-default");
+    let src = |prefs: &str| with_decl(prefs, &cart("  store byId: Map[String, Prefs]"));
+    p.build_ok(&src("type Prefs = { theme: String, size: Int }"));
+    assert_eq!(agent_version(&p.lock()), "1");
+
+    p.build_ok(&src("type Prefs = { theme: String, size: Int = 12 }"));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "{lock}");
+    assert!(lock.contains("additive = true"), "{lock}");
+
+    // Losing it again is refused.
+    let err = p.build_err(&src("type Prefs = { theme: String, size: Int }"));
+    assert!(err.contains("lost its default"), "{err}");
+}
+
 #[test]
 fn retyping_retyping_inside_a_record_and_changing_kind_are_refused() {
     let p = Project::new("retype");
