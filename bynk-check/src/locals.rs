@@ -55,6 +55,8 @@ pub struct LocalsSink {
     file: Option<PathBuf>,
     /// Set for synthetic (toolchain-injected) files only.
     muted: bool,
+    /// (file, name, def site) → indices into that file's entries.
+    index: HashMap<(PathBuf, String, Span), Vec<usize>>,
 }
 
 impl LocalsSink {
@@ -86,18 +88,24 @@ impl LocalsSink {
             return;
         };
         let entries = self.files.entry(file.clone()).or_default();
-        // #2701: an `is` binding in a left-nested `&&` chain is in scope in
-        // every later operand, so the checker records it once per operand: one
-        // binding, whose scope grows to cover them all.
-        if let Some(prev) = entries
-            .iter_mut()
-            .rev()
-            .take(8)
-            .find(|b| b.def_span == def_span && b.name == name)
-        {
-            prev.scope = prev.scope.merge(scope);
-            return;
+        // #2701: an `is` binding is recorded once per region it is in scope in
+        // (a left-nested `&&` chain records it per operand). The same binding
+        // (same file, name and def site) with an overlapping scope is one
+        // entry; a disjoint scope is its own entry, never the hull of the two,
+        // so the gap between them (where an outer same-named binding may be
+        // the one in scope) stays out of scope.
+        let slot = self
+            .index
+            .entry((file.clone(), name.clone(), def_span))
+            .or_default();
+        for &i in slot.iter() {
+            let prev: &mut LocalBinding = &mut entries[i];
+            if prev.scope.start <= scope.end && scope.start <= prev.scope.end {
+                prev.scope = prev.scope.merge(scope);
+                return;
+            }
         }
+        slot.push(entries.len());
         entries.push(LocalBinding {
             name,
             def_span,
@@ -109,6 +117,7 @@ impl LocalsSink {
 
     /// Drain the recorded bindings, each file's entries ordered by def span.
     pub fn take_files(&mut self) -> FileLocals {
+        self.index.clear();
         let mut files = std::mem::take(&mut self.files);
         for locals in files.values_mut() {
             locals.sort_by_key(|b| (b.def_span.start, b.def_span.end));

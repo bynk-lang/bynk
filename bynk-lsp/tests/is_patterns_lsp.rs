@@ -49,6 +49,22 @@ fn rec(pt: Point) -> Int {
     0
   }
 }
+
+fn negand(o: Option[Int], w: Int) -> Int {
+  if !(o is Some(w) && w > 0) {
+    w + 1000
+  } else {
+    w + 2000
+  }
+}
+
+fn imp(o: Option[Int], z: Int) -> Int {
+  if o is Some(z) implies z > 0 {
+    z + 3000
+  } else {
+    z + 4000
+  }
+}
 ";
 
 const PATH: &str = "demo/isbind.bynk";
@@ -139,11 +155,13 @@ fn is_bindings_are_locals_with_their_types() {
     assert_eq!(ty("why"), "Int");
     // Recorded once each, not once per checker visit.
     for name in ["v", "p", "q", "n", "lead", "others", "x", "why"] {
-        assert_eq!(
-            locals.iter().filter(|l| l.name == name).count(),
-            1,
-            "`{name}` should be recorded once: {locals:?}"
-        );
+        let mut defs: Vec<_> = locals
+            .iter()
+            .filter(|l| l.name == name)
+            .map(|l| l.def_span.start)
+            .collect();
+        defs.dedup();
+        assert_eq!(defs.len(), 1, "`{name}` should be one binding: {locals:?}");
     }
 }
 
@@ -210,4 +228,60 @@ fn is_bindings_are_not_in_scope_outside_their_branch() {
         .map(|b| b.name.as_str())
         .collect();
     assert!(visible.contains(&"v"), "{visible:?}");
+}
+
+/// Review of #2746: a binding visible in two disjoint regions (the right
+/// operand and the else-branch) is not visible in the gap between them, where
+/// a same-named outer binding is the one in scope.
+#[test]
+fn a_disjoint_is_scope_does_not_swallow_the_gap() {
+    let (result, root) = analyse("gap");
+    let locals = locals(&result);
+    for (name, param_needle, is_needle, then_use, else_use, prefix) in [
+        ("w", "w: Int", "Some(w)", "w + 1000", "w + 2000", "w"),
+        ("z", "z: Int", "Some(z)", "z + 3000", "z + 4000", "z"),
+    ] {
+        let param_def = offset_of(param_needle, 0);
+        let is_def = offset_of(is_needle, 0) + 5;
+        let (then_at, else_at) = (offset_of(then_use, 0), offset_of(else_use, 0));
+        let nav = bynk_ide::locals_nav::local_definition_at;
+        // `negand`: the then-branch is the gap (outer `w`); `imp`: the
+        // then-branch is the gap too (outer `z`). The else-branch sees the
+        // `is` binding in both.
+        assert_eq!(
+            nav(locals, SRC, then_at).map(|s| s.start),
+            Some(param_def),
+            "{name}: then-branch use resolves to the outer binding"
+        );
+        assert_eq!(
+            nav(locals, SRC, else_at).map(|s| s.start),
+            Some(is_def),
+            "{name}: else-branch use resolves to the `is` binding"
+        );
+        let sites: Vec<usize> = bynk_ide::locals_nav::local_sites_at(locals, SRC, param_def)
+            .expect("sites")
+            .iter()
+            .map(|s| s.start)
+            .collect();
+        assert!(
+            sites.contains(&then_at) && !sites.contains(&else_at),
+            "{name}: references/rename of the outer binding: {sites:?}"
+        );
+        let is_sites: Vec<usize> = bynk_ide::locals_nav::local_sites_at(locals, SRC, is_def)
+            .expect("sites")
+            .iter()
+            .map(|s| s.start)
+            .collect();
+        assert!(
+            is_sites.contains(&else_at) && !is_sites.contains(&then_at),
+            "{name}: references/rename of the `is` binding: {is_sites:?}"
+        );
+        let hover = hover_at(&result, &root, then_at).expect("hover");
+        assert!(
+            hover.contains(&format!("param {prefix}")),
+            "{name}: {hover}"
+        );
+        let hover = hover_at(&result, &root, else_at).expect("hover");
+        assert!(hover.contains(&format!("let {prefix}")), "{name}: {hover}");
+    }
 }
