@@ -339,8 +339,9 @@ error, skips the text it covers, and goes on, so a file is lexed in full and
 **every** lexical error in it is reported, in source order, beside the
 syntactic and semantic diagnostics for the rest of the file. What is skipped is
 the offending character; a malformed, out-of-range or unterminated literal; an
-unclosed doc-block opener; or a `///` doc habit. An unterminated or malformed
-string literal is skipped to the end of its line.
+unclosed doc-block opener; or a `///` doc habit. An unterminated string literal
+is skipped to the end of its line; a malformed one that does close is skipped
+through its closing delimiter.
 
 The skipped text yields no token. A syntax error that starts in it, or at the
 token right after it, is its echo and is not reported. A file with a lexical

@@ -636,6 +636,14 @@ fn string_error_resume(bytes: &[u8], pos: usize, err: &CompileError) -> usize {
     let mut p = open.body;
     while p < bytes.len() {
         match bytes[p] {
+            b'\\' if !open.raw && bytes.get(p + 1) == Some(&b'(') => {
+                // An interpolation hole: its own strings and parens are not
+                // the literal's closer.
+                match hole_end(bytes, p + 2) {
+                    Some(end) => p = end,
+                    None => return fallback,
+                }
+            }
             b'\\' if !open.raw => p += 2,
             b'\n' if !open.multi => return fallback,
             b'"' if open.multi => {
@@ -655,6 +663,39 @@ fn string_error_resume(bytes: &[u8], pos: usize, err: &CompileError) -> usize {
         }
     }
     fallback
+}
+
+/// The offset just past the `)` closing an interpolation hole whose body starts
+/// at `from`, skipping nested parens and string literals. `None` if it does not
+/// close before a newline or the end.
+fn hole_end(bytes: &[u8], from: usize) -> Option<usize> {
+    let (mut p, mut depth) = (from, 1usize);
+    while p < bytes.len() {
+        match bytes[p] {
+            b'\n' => return None,
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(p + 1);
+                }
+            }
+            b'"' => {
+                p += 1;
+                while p < bytes.len() && bytes[p] != b'"' {
+                    match bytes[p] {
+                        b'\n' => return None,
+                        b'\\' => p += 1,
+                        _ => {}
+                    }
+                    p += 1;
+                }
+            }
+            _ => {}
+        }
+        p += 1;
+    }
+    None
 }
 
 fn tokenize_mode_recovering(
@@ -2868,6 +2909,19 @@ mod tests {
     }
 
     /// #2807: the parse errors a skipped character causes are dropped; others stay.
+    #[test]
+    fn string_recovery_skips_a_hole_holding_a_string() {
+        let src = "fn f() { show(\"a\\q \\(g(\"x\")) b\", 1) }\nfn k() $";
+        let (tokens, errors) = tokenize_recovering(src);
+        let cats: Vec<_> = errors.iter().map(|e| e.category).collect();
+        assert_eq!(
+            cats,
+            ["bynk.lex.bad_escape", "bynk.lex.unexpected_character"]
+        );
+        // `, 1) }` after the literal still lexes: nothing of the hole leaked.
+        assert!(!tokens.iter().any(|t| t.kind == TokenKind::StrLit));
+    }
+
     #[test]
     fn lex_echoes_are_dropped() {
         let src = "commons d\n\nfn f(a: Int, b: Int) -> Int { a $ b }\n";
