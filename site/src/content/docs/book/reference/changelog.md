@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.492.2** | "A `system` suite call with a `Wire(…)` body to a route whose handler declares `headers: RequestHeaders` (a `@raw` route too) passes the headers to the request, as a typed call does; it converted them to a string, and the generated test failed to type-check" |
 | **v0.492.1** | A `system` case can call a service whose result is a refined type from a commons the context under test `uses`; the call was typed as `()` and rejected with `bynk.effect.bind_on_non_effect` because the suite's `uses` replaced the target's ([#2832](https://github.com/bynk-lang/bynk/issues/2832)) |
 | **v0.492.0** | "`%` is a targeted error, `bynk.parse.no_remainder_operator`, that points at `Int.rem` and `Int.mod` and fixes simple operands to `.rem`; Bynk still has no `%` operator (#2804)" |
 | **v0.491.2** | A cross-context call's result now type-checks in the emitted TypeScript when its type is a `uses`d commons type both contexts rebrand, or a record or sum whose field is such a type; the cast of [#2825](https://github.com/bynk-lang/bynk/issues/2825) covers both ([#2828](https://github.com/bynk-lang/bynk/issues/2828)) |
