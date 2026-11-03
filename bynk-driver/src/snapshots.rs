@@ -172,7 +172,9 @@ impl SnapshotRun {
     /// nothing changes. Returns the counts either way.
     pub fn settle(&self, report: &Report) -> std::io::Result<Counts> {
         if self.update {
-            for f in &report.files {
+            // Only the build's own snapshot files are written: the report may be
+            // forged by test output on a human-format run.
+            for f in report.files.iter().filter(|f| self.live.contains(&f.file)) {
                 match &f.content {
                     Change::Absent => {}
                     Change::Write(text) => {

@@ -13,6 +13,10 @@ case "two snapshots in one case" {
 	expect d.tags matches snapshot "tags"
 }
 
+case "constructor" {
+	expect read("d-4", 6) matches snapshot "__proto__"
+}
+
 case "a retired case" {
 	expect read("d-3", 5) matches snapshot "gone"
 }

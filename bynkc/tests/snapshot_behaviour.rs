@@ -124,12 +124,14 @@ fn a_missing_snapshot_fails_and_the_flag_records_it() {
     let written = test(&p, &["--update-snapshots"]);
     assert!(written.ok, "{}", written.all());
     assert!(
-        written.stdout.contains("snapshots: 4 written"),
+        written.stdout.contains("snapshots: 5 written"),
         "{}",
         written.stdout
     );
     let stored = snapshot(&p);
     assert_eq!(stored["a delivery reads"]["first"]["id"], "d-1");
+    // Names are plain keys, even ones an object inherits.
+    assert_eq!(stored["constructor"]["__proto__"]["id"], "d-4");
     assert_eq!(stored["two snapshots in one case"]["tags"][0], "b");
     // Sorted keys, two-space indent, a closing newline: reviewable text.
     let text = fs::read_to_string(p.join(SNAP_FILE)).unwrap();
@@ -173,7 +175,7 @@ fn a_changed_value_fails_with_a_diff_and_the_flag_updates_it() {
     let updated = test(&p, &["--update-snapshots"]);
     assert!(updated.ok, "{}", updated.all());
     assert!(
-        updated.stdout.contains("snapshots: 4 updated"),
+        updated.stdout.contains("snapshots: 5 updated"),
         "{}",
         updated.stdout
     );
@@ -266,7 +268,7 @@ fn a_deleted_suite_leaves_an_obsolete_file() {
     let reported = test(&p, &[]);
     assert!(reported.ok, "{}", reported.all());
     assert!(
-        reported.stdout.contains("snapshots: 4 obsolete"),
+        reported.stdout.contains("snapshots: 5 obsolete"),
         "{}",
         reported.stdout
     );
@@ -286,7 +288,7 @@ fn json_and_ndjson_carry_the_counts() {
     let doc: serde_json::Value = serde_json::from_str(&first.stdout).expect("a document");
     assert_eq!(
         doc["snapshots"],
-        serde_json::json!({"written": 4, "updated": 0, "obsolete": 0})
+        serde_json::json!({"written": 5, "updated": 0, "obsolete": 0})
     );
     let again = test(&p, &["--format", "json"]);
     let doc: serde_json::Value = serde_json::from_str(&again.stdout).expect("a document");
@@ -307,7 +309,7 @@ fn json_and_ndjson_carry_the_counts() {
     assert_eq!(end["type"], "run-end");
     assert_eq!(
         end["snapshots"],
-        serde_json::json!({"written": 0, "updated": 4, "obsolete": 0})
+        serde_json::json!({"written": 0, "updated": 5, "obsolete": 0})
     );
 }
 
