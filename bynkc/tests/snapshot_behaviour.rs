@@ -334,3 +334,24 @@ fn update_snapshots_is_refused_where_it_cannot_record() {
     }
     assert!(!p.join(SNAP_FILE).exists());
 }
+
+#[test]
+fn a_corrupt_file_fails_and_a_filtered_update_leaves_it_alone() {
+    if !ready() {
+        return;
+    }
+    let p = project("corrupt");
+    fs::create_dir_all(p.join("snapshots/tests")).unwrap();
+    fs::write(p.join(SNAP_FILE), "not json").unwrap();
+    let failed = test(&p, &[]);
+    assert!(
+        !failed.ok && failed.all().contains("not a JSON object"),
+        "{}",
+        failed.all()
+    );
+    let filtered = test(&p, &["--update-snapshots", "--case", "a delivery reads"]);
+    assert!(filtered.ok, "{}", filtered.all());
+    assert_eq!(fs::read_to_string(p.join(SNAP_FILE)).unwrap(), "not json");
+    assert!(test(&p, &["--update-snapshots"]).ok);
+    assert!(snapshot(&p).get("a delivery reads").is_some());
+}

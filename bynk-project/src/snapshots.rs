@@ -45,8 +45,14 @@ fn walk(dir: &Path, prefix: &str, out: &mut BTreeMap<String, String>) -> io::Res
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
+        // A symlink is neither followed nor read: it could loop, or inline a
+        // file from outside the project.
+        let kind = std::fs::symlink_metadata(&path)?.file_type();
+        if kind.is_symlink() {
+            continue;
+        }
         let key = format!("{prefix}/{name}");
-        if path.is_dir() {
+        if kind.is_dir() {
             walk(&path, &key, out)?;
         } else if name.ends_with(SNAPSHOT_SUFFIX) {
             out.insert(key, std::fs::read_to_string(&path)?);

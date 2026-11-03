@@ -613,7 +613,13 @@ impl<'a> Parser<'a> {
     /// words are contextual — an expression is never followed by a bare
     /// identifier, so `matches` here is unambiguous (as `faults` is).
     fn parse_snapshot_clause(&mut self) -> Result<Option<SnapshotClause>, CompileError> {
-        if self.peek_kind() != Some(TokenKind::Ident) || self.nth_text(0) != "matches" {
+        // Only `matches snapshot` commits: a bare `matches` begins the next
+        // statement (a variable of that name) and is left alone.
+        if self.peek_kind() != Some(TokenKind::Ident)
+            || self.nth_text(0) != "matches"
+            || self.nth_kind(1) != Some(TokenKind::Ident)
+            || self.nth_text(1) != "snapshot"
+        {
             return Ok(None);
         }
         let matches_tok = self.bump().unwrap();

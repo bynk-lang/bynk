@@ -5181,4 +5181,11 @@ mod snapshot_clause_tests {
         let twice = format_source(&once, &FormatOptions::default()).expect("formats again");
         assert_eq!(once, twice);
     }
+
+    /// A statement that starts with a variable named `matches` still parses.
+    #[test]
+    fn a_bare_matches_after_an_expect_is_the_next_statement() {
+        let src = "suite demo\n\ncase \"c\" {\n\tlet matches = 1\n\texpect true\n\texpect matches == 1\n}\n";
+        format_source(src, &FormatOptions::default()).expect("formats");
+    }
 }

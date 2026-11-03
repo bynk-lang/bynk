@@ -137,7 +137,10 @@ export function __bynkSnapshotReport(): { file: string; written: number; updated
       if (had) (next[c] ??= __bynkDict())[n] = base[c]![n];
     }
     const entry: { file: string; written: number; updated: number; obsolete: number; content?: string | null } = { file, written, updated, obsolete };
-    if (__bynkSnapshotUpdate && (written > 0 || updated > 0 || obsolete > 0 || stored === "corrupt")) {
+    // A corrupt file is rewritten only by a run that took every snapshot in it: a
+    // filtered run would otherwise drop the cases it did not run.
+    const complete = info.live.every(([c, n]) => __bynkHas(__bynkSnapshotTaken[file] ?? {}, c) && __bynkHas(__bynkSnapshotTaken[file]![c]!, n));
+    if (__bynkSnapshotUpdate && (written > 0 || updated > 0 || obsolete > 0 || stored === "corrupt") && (stored !== "corrupt" || complete)) {
       entry.content = globalThis.Object.keys(next).length === 0 ? null : __bynkSnapshotPretty(next) + "\n";
     }
     out.push(entry);
