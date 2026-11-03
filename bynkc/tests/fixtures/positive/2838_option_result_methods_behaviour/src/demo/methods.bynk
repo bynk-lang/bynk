@@ -1,0 +1,19 @@
+context demo.methods {
+  ---
+  The `Option`/`Result` methods that complete the flat style: `isNone`,
+  `orElse`, `filter`, `isErr` and `ok`.
+  ---
+  fn missing(o: Option[Int]) -> Bool { o.isNone() }
+
+  fn firstOf(a: Option[Int], b: Option[Int]) -> Option[Int] {
+    a.orElse(() => b)
+  }
+
+  fn onlyPositive(o: Option[Int]) -> Option[Int] {
+    o.filter((n) => n > 0)
+  }
+
+  fn failed(r: Result[Int, String]) -> Bool { r.isErr() }
+
+  fn success(r: Result[Int, String]) -> Option[Int] { r.ok() }
+}

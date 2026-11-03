@@ -1914,6 +1914,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run.",
         &["let_stmt", "effect_let_stmt"],
     ),
+    hint(d(
+        "bynk.parse.let_else_staircase",
+        "Nested `match`es on `Option`/`Result` that each carry on in one arm and give up in the other, which `let … else` writes flat. A hint with a machine-applicable rewrite; never fails a build and is hidden from the terminal (hint).",
+    )),
     dg(
         "bynk.parse.let_pattern_annotation",
         "A `let` with a pattern carries a type annotation; the pattern's names take their types from the value.",
@@ -1933,6 +1937,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.malformed_float_literal",
         "A float literal is missing a digit on one side of the `.` (`1.`, `.5`).",
         &["float_literal"],
+    ),
+    dg(
+        "bynk.parse.match_ends_block",
+        "A `match` ends the block it is in, because a block has no expression statements; a second `match` straight after it cannot follow.",
+        &["block"],
     ),
     d(
         "bynk.parse.migrate_after_handler",
@@ -3559,6 +3568,13 @@ const fn warn(mut info: DiagnosticInfo) -> DiagnosticInfo {
     info
 }
 
+/// Downgrades a [`d`]/[`dg`]-built entry to `Hint` severity (#2838) — a
+/// non-failing suggestion shown by the editor but not by the terminal.
+const fn hint(mut info: DiagnosticInfo) -> DiagnosticInfo {
+    info.severity = Severity::Hint;
+    info
+}
+
 /// The category segment of a code (the part between the first two dots), e.g.
 /// `"types"` for `"bynk.types.type_mismatch"`.
 pub fn category(code: &str) -> &str {
@@ -3671,6 +3687,7 @@ pub fn render_markdown() -> String {
             let severity = match info.severity {
                 Severity::Error => "—",
                 Severity::Warning => "Warning",
+                Severity::Hint => "Hint",
             };
             out.push_str(&format!(
                 "| {} | {} | {} | {} |\n",

@@ -281,6 +281,12 @@ pub fn print_project_failure(failure: &project::ProjectFailure) {
     }
 }
 
+/// #2838: a hint is for the editor and machine-readable surfaces; the terminal
+/// reports (`check`, `build`) leave it out.
+fn is_hint(ae: &project::AttributedError) -> bool {
+    bynk_syntax::Severity::for_error(&ae.error) == bynk_syntax::Severity::Hint
+}
+
 /// v0.89 (ADR 0117): print a successful build's non-failing warnings, with
 /// real per-file ariadne context now that a successful build's `snapshots`
 /// (mirroring `ProjectFailure::snapshots`) make that possible. A warning whose
@@ -291,7 +297,7 @@ pub fn print_project_warnings(
     snapshots: &[(PathBuf, String)],
     display_root: &Path,
 ) {
-    for w in warnings {
+    for w in warnings.iter().filter(|w| !is_hint(w)) {
         match attributed_snapshot(w, snapshots, display_root) {
             Some((label, text)) => print_attributed(w, &label, text, snapshots, display_root),
             None => {
@@ -323,7 +329,7 @@ pub fn print_project_warnings_short(
     snapshots: &[(PathBuf, String)],
     display_root: &Path,
 ) {
-    for w in warnings {
+    for w in warnings.iter().filter(|w| !is_hint(w)) {
         match attributed_snapshot(w, snapshots, display_root) {
             Some((label, text)) => eprintln!("{}", bynk_render::short_line(&label, text, &w.error)),
             // Every entry in `warnings` is warning-severity by construction
@@ -500,7 +506,7 @@ pub fn project_failure_short_lines(failure: &project::ProjectFailure) -> Vec<Str
 /// `print_project_failure`'s bare `[category]: message` (silently correct only
 /// because that list is errors-only by construction).
 pub fn print_project_check(check: &project::ProjectCheck) {
-    for ae in &check.errors {
+    for ae in check.errors.iter().filter(|ae| !is_hint(ae)) {
         match attributed_snapshot(ae, &check.snapshots, &check.display_root) {
             Some((label, text)) => {
                 print_attributed(ae, &label, text, &check.snapshots, &check.display_root);
@@ -529,6 +535,7 @@ pub fn project_check_short_lines(check: &project::ProjectCheck) -> Vec<String> {
     check
         .errors
         .iter()
+        .filter(|ae| !is_hint(ae))
         .map(
             |ae| match attributed_snapshot(ae, &check.snapshots, &check.display_root) {
                 Some((label, text)) => bynk_render::short_line(&label, text, &ae.error),
@@ -1142,6 +1149,7 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         let filename = shown(input);
         match bynk_emit::check_with_warnings(&source, &filename) {
             Ok(warnings) => {
+                let warnings = bynk_render::without_hints(&warnings);
                 if !warnings.is_empty() {
                     if short {
                         bynk_render::print_errors_short(&warnings, &source, &filename);

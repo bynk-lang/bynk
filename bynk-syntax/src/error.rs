@@ -73,6 +73,11 @@ pub enum Applicability {
 pub enum Severity {
     Error,
     Warning,
+    /// #2838: a suggestion, quieter than a warning. Never fails a build, is
+    /// hidden from the `bynk check` / `bynk build` terminal output, and is
+    /// surfaced by the editor (an LSP hint) and the machine-readable surfaces.
+    /// Its machine-applicable fix is still taken by `check --fix`.
+    Hint,
 }
 
 impl Severity {
@@ -245,6 +250,7 @@ impl CompileError {
         let kind = match Severity::for_error(self) {
             Severity::Error => ReportKind::Error,
             Severity::Warning => ReportKind::Warning,
+            Severity::Hint => ReportKind::Advice,
         };
         // Spans are byte offsets into the UTF-8 source, but ariadne is handed
         // char offsets ([`Self::char_range`]), each converted against the text

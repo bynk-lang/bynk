@@ -1,0 +1,37 @@
+suite hooks.read {
+  case "the staircase and its flat form agree on every path" {
+    let s = Some("x")
+    let ok: Result[Int, String] = Ok(7)
+    let bad: Result[Int, String] = Err("nope")
+    expect readNested(s, s, s, ok) == readFlat(s, s, s, ok)
+    expect readNested(None, s, s, ok) == readFlat(None, s, s, ok)
+    expect readNested(s, None, s, ok) == readFlat(s, None, s, ok)
+    expect readNested(s, s, None, ok) == readFlat(s, s, None, ok)
+    expect readNested(s, s, s, bad) == readFlat(s, s, s, bad)
+    expect readNested(None, None, None, bad) == readFlat(None, None, None, bad)
+  }
+
+  case "the flat form yields the success value and each failure" {
+    let s = Some("x")
+    let ok: Result[Int, String] = Ok(7)
+    let bad: Result[Int, String] = Err("nope")
+    expect readFlat(s, s, s, ok) == Ok("x/x/x/7")
+    expect readFlat(None, s, s, ok) == Err(MissingEvent)
+    expect readFlat(s, None, s, ok) == Err(MissingDelivery)
+    expect readFlat(s, s, None, ok) == Err(NotUtf8)
+    expect readFlat(s, s, s, bad) == Err(NotJson)
+  }
+
+  case "a binding fallback behaves the same flat" {
+    let ok1: Result[Int, String] = Ok(1)
+    let ok2: Result[Int, String] = Ok(2)
+    let bad1: Result[Int, String] = Err("one")
+    let bad2: Result[Int, String] = Err("two")
+    expect sumNested(ok1, ok2) == sumFlat(ok1, ok2)
+    expect sumNested(bad1, ok2) == sumFlat(bad1, ok2)
+    expect sumNested(ok1, bad2) == sumFlat(ok1, bad2)
+    expect sumFlat(ok1, ok2) == Ok(4)
+    expect sumFlat(bad1, bad2) == Err("a: one")
+    expect sumFlat(ok1, bad2) == Err("b: two")
+  }
+}
