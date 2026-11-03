@@ -1123,6 +1123,16 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             for s in pre.stmts() {
                 write_line(out, indent, s);
             }
+            // #2836: `expect r is Ok(_)` lowers to a `.tag ===` test, and a bare
+            // `if (!(r.tag === "Ok")) throw` makes tsc narrow `r` to `Ok` for the
+            // rest of the case — so a later exhaustive `match r` has an
+            // impossible `case "Err":` (TS2678). Laundering the boolean through an
+            // identity arrow keeps the check but gives tsc no guard to narrow by.
+            let cond = if matches!(a.value.kind, ExprKind::Is { .. }) {
+                format!("((__c: boolean) => __c)({cond})")
+            } else {
+                cond
+            };
             write_line(
                 out,
                 indent,

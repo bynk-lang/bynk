@@ -100,13 +100,13 @@ async function test_hex_is_lowercase_out_and_either_case_in() {
     const { frame, hexOf, hexRoundTrips, unsignedOrder, urlRoundTrips } = __ns_frames;
     if (!(hexOf("hi") === "6869")) { throw __bynkExpectFailure("tests/frames.test.bynk:28:12", 1000, 1021, "expect hexOf(\"hi\") == \"6869\"\n  expected: hexOf(\"hi\") == \"6869\"\n  actual:   " + __bynkShow((hexOf("hi"))) + " == " + __bynkShow(("6869"))); }
     const __r0 = __bynkBytesFromHex("6869");
-    if (!(__r0.tag === "Some")) { throw __bynkExpectFailure("tests/frames.test.bynk:29:12", 1033, 1065, "expect Bytes.fromHex(\"6869\") is Some(_)"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "Some"))) { throw __bynkExpectFailure("tests/frames.test.bynk:29:12", 1033, 1065, "expect Bytes.fromHex(\"6869\") is Some(_)"); }
     const __r1 = __bynkBytesFromHex("6A6b");
-    if (!(__r1.tag === "Some")) { throw __bynkExpectFailure("tests/frames.test.bynk:30:12", 1077, 1109, "expect Bytes.fromHex(\"6A6b\") is Some(_)"); }
+    if (!(((__c: boolean) => __c)(__r1.tag === "Some"))) { throw __bynkExpectFailure("tests/frames.test.bynk:30:12", 1077, 1109, "expect Bytes.fromHex(\"6A6b\") is Some(_)"); }
     const __r2 = __bynkBytesFromHex("abc");
-    if (!(__r2.tag === "None")) { throw __bynkExpectFailure("tests/frames.test.bynk:31:12", 1121, 1149, "expect Bytes.fromHex(\"abc\") is None"); }
+    if (!(((__c: boolean) => __c)(__r2.tag === "None"))) { throw __bynkExpectFailure("tests/frames.test.bynk:31:12", 1121, 1149, "expect Bytes.fromHex(\"abc\") is None"); }
     const __r3 = __bynkBytesFromHex("0x00");
-    if (!(__r3.tag === "None")) { throw __bynkExpectFailure("tests/frames.test.bynk:32:12", 1161, 1190, "expect Bytes.fromHex(\"0x00\") is None"); }
+    if (!(((__c: boolean) => __c)(__r3.tag === "None"))) { throw __bynkExpectFailure("tests/frames.test.bynk:32:12", 1161, 1190, "expect Bytes.fromHex(\"0x00\") is None"); }
     if (!(hexRoundTrips(new globalThis.TextEncoder().encode("héllo")))) { throw __bynkExpectFailure("tests/frames.test.bynk:33:12", 1202, 1241, "expect hexRoundTrips(Bytes.fromUtf8(\"héllo\"))"); }
     if (!(hexRoundTrips(new globalThis.Uint8Array()))) { throw __bynkExpectFailure("tests/frames.test.bynk:34:12", 1253, 1281, "expect hexRoundTrips(Bytes.empty())"); }
     return { pass: true };
@@ -125,13 +125,13 @@ async function test_base64url_is_unpadded_out_and_padding_optional_in() {
     const { frame, hexOf, hexRoundTrips, unsignedOrder, urlRoundTrips } = __ns_frames;
     if (!(__bynkBytesToBase64Url(new globalThis.TextEncoder().encode("fo")) === "Zm8")) { throw __bynkExpectFailure("tests/frames.test.bynk:38:12", 1359, 1402, "expect Bytes.fromUtf8(\"fo\").toBase64Url() == \"Zm8\"\n  expected: Bytes.fromUtf8(\"fo\").toBase64Url() == \"Zm8\"\n  actual:   " + __bynkShow((__bynkBytesToBase64Url(new globalThis.TextEncoder().encode("fo")))) + " == " + __bynkShow(("Zm8"))); }
     const __r0 = __bynkBytesFromBase64Url("Zm8");
-    if (!(__r0.tag === "Some")) { throw __bynkExpectFailure("tests/frames.test.bynk:39:12", 1414, 1451, "expect Bytes.fromBase64Url(\"Zm8\") is Some(_)"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "Some"))) { throw __bynkExpectFailure("tests/frames.test.bynk:39:12", 1414, 1451, "expect Bytes.fromBase64Url(\"Zm8\") is Some(_)"); }
     const __r1 = __bynkBytesFromBase64Url("Zm8=");
-    if (!(__r1.tag === "Some")) { throw __bynkExpectFailure("tests/frames.test.bynk:40:12", 1463, 1501, "expect Bytes.fromBase64Url(\"Zm8=\") is Some(_)"); }
+    if (!(((__c: boolean) => __c)(__r1.tag === "Some"))) { throw __bynkExpectFailure("tests/frames.test.bynk:40:12", 1463, 1501, "expect Bytes.fromBase64Url(\"Zm8=\") is Some(_)"); }
     const __r2 = __bynkBytesFromBase64Url("+/8=");
-    if (!(__r2.tag === "None")) { throw __bynkExpectFailure("tests/frames.test.bynk:41:12", 1513, 1548, "expect Bytes.fromBase64Url(\"+/8=\") is None"); }
+    if (!(((__c: boolean) => __c)(__r2.tag === "None"))) { throw __bynkExpectFailure("tests/frames.test.bynk:41:12", 1513, 1548, "expect Bytes.fromBase64Url(\"+/8=\") is None"); }
     const __r3 = __bynkBytesFromBase64Url("Z");
-    if (!(__r3.tag === "None")) { throw __bynkExpectFailure("tests/frames.test.bynk:42:12", 1560, 1592, "expect Bytes.fromBase64Url(\"Z\") is None"); }
+    if (!(((__c: boolean) => __c)(__r3.tag === "None"))) { throw __bynkExpectFailure("tests/frames.test.bynk:42:12", 1560, 1592, "expect Bytes.fromBase64Url(\"Z\") is None"); }
     if (!(urlRoundTrips(new globalThis.TextEncoder().encode("héllo wörld")))) { throw __bynkExpectFailure("tests/frames.test.bynk:43:12", 1604, 1650, "expect urlRoundTrips(Bytes.fromUtf8(\"héllo wörld\"))"); }
     return { pass: true };
   } catch (e) {

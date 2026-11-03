@@ -103,7 +103,7 @@ async function test_records_the_observed_calls() {
     const { AuthId, authorise } = __ns_commerce_payment;
     type AuthId = __ns_commerce_payment.AuthId;
     const r = await authorise.call(100, deps);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/payment.test.bynk:7:12", 173, 183, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/payment.test.bynk:7:12", 173, 183, "expect r is Ok(_)"); }
     if (!(((__obs.log["Logger.log"] ?? []).length >= 1))) { throw __bynkExpectFailure("tests/payment.test.bynk:8:12", 195, 212, "expect Logger.log called"); }
     if (!(((__obs.log["Logger.log"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/payment.test.bynk:9:12", 224, 249, "expect Logger.log called 2 times"); }
     if (!(((__obs.log["Logger.warn"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/payment.test.bynk:10:12", 261, 284, "expect Logger.warn called once"); }

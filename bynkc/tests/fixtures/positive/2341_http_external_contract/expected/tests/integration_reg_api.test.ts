@@ -187,7 +187,7 @@ async function test_the_router_passes_the_request_s_headers() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_whoami(__requestHeaders(["Authorization: Bearer xyz"]), "");
-    if (!(r.tag === "Ok" && r.value === "token xyz")) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1110, 1130, "expect r is Ok(\"token xyz\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "token xyz"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1110, 1130, "expect r is Ok(\"token xyz\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -204,7 +204,7 @@ async function test_a_RawError_answers_its_own_status() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_whoami(__requestHeaders([]), "");
-    if (!(r.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1253, 1270, "expect r is Unauthorized"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1253, 1270, "expect r is Unauthorized"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -221,7 +221,7 @@ async function test_headers_and_body_travel_together() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_PUT_packages_Param_name("widgets", "v1", __requestHeaders(["X-Request-Id: r2"]), "");
-    if (!(r.tag === "Ok" && r.value === "widgets v1 r2 -")) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1434, 1460, "expect r is Ok(\"widgets v1 r2 -\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "widgets v1 r2 -"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1434, 1460, "expect r is Ok(\"widgets v1 r2 -\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -238,7 +238,7 @@ async function test_a_contract_body_s_error_field_reads_as_the_variant_s_message
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_PUT_packages_Param_name("widgets", "v1", __requestHeaders([]), "");
-    if (!(r.tag === "Conflict" && r.message === "conflict")) { throw __bynkExpectFailure("tests/api.bynk:46:10", 1635, 1660, "expect r is Conflict(\"conflict\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Conflict" && r.message === "conflict"))) { throw __bynkExpectFailure("tests/api.bynk:46:10", 1635, 1660, "expect r is Conflict(\"conflict\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -255,7 +255,7 @@ async function test_a_body_that_is_not_Bynk_s_shape_reads_with_an_empty_message(
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_DELETE_packages_Param_name("widgets", "");
-    if (!(r.tag === "ServiceUnavailable" && r.message === "")) { throw __bynkExpectFailure("tests/api.bynk:51:10", 1807, 1834, "expect r is ServiceUnavailable(\"\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "ServiceUnavailable" && r.message === ""))) { throw __bynkExpectFailure("tests/api.bynk:51:10", 1807, 1834, "expect r is ServiceUnavailable(\"\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -272,9 +272,9 @@ async function test_under_a_sum_of_actors__headers_keep_their_declared_place() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const u = await __sysdrive_api_http_POST_notes_Param_id("n1", "hi", __requestHeaders(["X-Trace: t9"]), ("bob" as any), "User");
-    if (!(u.tag === "Ok" && u.value === "bob n1 hi t9")) { throw __bynkExpectFailure("tests/api.bynk:56:10", 2012, 2035, "expect u is Ok(\"bob n1 hi t9\")"); }
+    if (!(((__c: boolean) => __c)(u.tag === "Ok" && u.value === "bob n1 hi t9"))) { throw __bynkExpectFailure("tests/api.bynk:56:10", 2012, 2035, "expect u is Ok(\"bob n1 hi t9\")"); }
     const s = await __sysdrive_api_http_POST_notes_Param_id("n2", "yo", __requestHeaders(["X-Trace: t8"]), "", "Sender");
-    if (!(s.tag === "Ok" && s.value === "sender n2 yo t8")) { throw __bynkExpectFailure("tests/api.bynk:58:10", 2137, 2163, "expect s is Ok(\"sender n2 yo t8\")"); }
+    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "sender n2 yo t8"))) { throw __bynkExpectFailure("tests/api.bynk:58:10", 2137, 2163, "expect s is Ok(\"sender n2 yo t8\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

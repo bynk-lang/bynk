@@ -106,7 +106,7 @@ async function test_a_good_quote_is_accepted() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"2.50\", \"total\": \"1\"}", "");
-    if (!(r.tag === "Handled")) { throw __bynkExpectFailure("tests/api.bynk:6:10", 318, 333, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:6:10", 318, 333, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -122,7 +122,7 @@ async function test_a_non_positive_unit_is_refused_at_its_path() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"-1.00\", \"total\": \"1\"}", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "RefinementViolation")) { throw __bynkExpectFailure("tests/api.bynk:11:10", 506, 543, "expect r is Rejected(RefinementViolation(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:11:10", 506, 543, "expect r is Rejected(RefinementViolation(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -138,7 +138,7 @@ async function test_a_negative_total_is_refused_by_its_inline_refinement() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"1.00\", \"total\": \"-3\"}", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "RefinementViolation")) { throw __bynkExpectFailure("tests/api.bynk:16:10", 726, 763, "expect r is Rejected(RefinementViolation(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:16:10", 726, 763, "expect r is Rejected(RefinementViolation(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -154,7 +154,7 @@ async function test_a_leading_zero_is_a_structural_mismatch() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"007\", \"total\": \"1\"}", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "StructuralMismatch")) { throw __bynkExpectFailure("tests/api.bynk:21:10", 931, 967, "expect r is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:21:10", 931, 967, "expect r is Rejected(StructuralMismatch(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

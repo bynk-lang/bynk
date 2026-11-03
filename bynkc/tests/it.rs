@@ -136,6 +136,8 @@ mod events_workers_wiring;
 mod example_tests_behaviour;
 #[path = "examples.rs"]
 mod examples;
+#[path = "expect_is_narrowing_behaviour.rs"]
+mod expect_is_narrowing_behaviour;
 #[path = "expr_types_capture.rs"]
 mod expr_types_capture;
 #[path = "expression_depth_limit.rs"]

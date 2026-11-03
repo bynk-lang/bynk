@@ -1,0 +1,5 @@
+context parse
+
+fn parse(n: Int) -> Result[Int, String] {
+	if n > 0 { Ok(n) } else { Err("not positive") }
+}

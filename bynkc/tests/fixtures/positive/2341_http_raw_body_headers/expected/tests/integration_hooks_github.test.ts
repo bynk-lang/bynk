@@ -163,7 +163,7 @@ async function test_a_signed_raw_body_arrives_with_its_headers() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_github_http_POST_github(__requestHeaders(["X-GitHub-Event: push"]), new globalThis.TextEncoder().encode("{\"ref\":\"main\"}"), "");
-    if (!(r.tag === "Ok" && r.value === "push eyJyZWYiOiJtYWluIn0=")) { throw __bynkExpectFailure("tests/github.bynk:13:10", 473, 509, "expect r is Ok(\"push eyJyZWYiOiJtYWluIn0=\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "push eyJyZWYiOiJtYWluIn0="))) { throw __bynkExpectFailure("tests/github.bynk:13:10", 473, 509, "expect r is Ok(\"push eyJyZWYiOiJtYWluIn0=\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -180,7 +180,7 @@ async function test_a_forged_raw_body_is_refused_before_the_handler_reads_a_head
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_forged_github_http_POST_github(__requestHeaders(["X-GitHub-Event: push"]), new globalThis.TextEncoder().encode("{}"), "");
-    if (!(r.tag === "Rejected" && r.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/github.bynk:18:10", 707, 734, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/github.bynk:18:10", 707, 734, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -197,7 +197,7 @@ async function test_headers_may_follow_a_raw_body() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_github_http_POST_echo(new globalThis.TextEncoder().encode("hi"), __requestHeaders(["X-Trace: t2"]), "");
-    if (!(r.tag === "Ok" && r.value === "t2 aGk=")) { throw __bynkExpectFailure("tests/github.bynk:23:10", 889, 907, "expect r is Ok(\"t2 aGk=\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "t2 aGk="))) { throw __bynkExpectFailure("tests/github.bynk:23:10", 889, 907, "expect r is Ok(\"t2 aGk=\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -214,7 +214,7 @@ async function test_a_Wire_body_sent_with_headers_meets_the_route_s_media_type()
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_github_http_POST_github(__requestHeaders(["X-GitHub-Event: ping"]), "{}", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType")) { throw __bynkExpectFailure("tests/github.bynk:30:10", 1215, 1253, "expect r is Rejected(UnsupportedMediaType(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType"))) { throw __bynkExpectFailure("tests/github.bynk:30:10", 1215, 1253, "expect r is Rejected(UnsupportedMediaType(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -231,7 +231,7 @@ async function test_headers_may_follow_a_Wire_body() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_github_http_POST_echo("hi", __requestHeaders(["X-Trace: t3"]), "");
-    if (!(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "t3 aGk=")) { throw __bynkExpectFailure("tests/github.bynk:35:10", 1399, 1426, "expect r is Handled(Ok(\"t3 aGk=\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "t3 aGk="))) { throw __bynkExpectFailure("tests/github.bynk:35:10", 1399, 1426, "expect r is Handled(Ok(\"t3 aGk=\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

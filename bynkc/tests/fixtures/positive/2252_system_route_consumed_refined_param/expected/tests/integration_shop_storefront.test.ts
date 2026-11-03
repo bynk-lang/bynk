@@ -99,7 +99,7 @@ async function test_a_route_parameter_of_a_consumed_refined_type_is_validated() 
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_items_Param_sku(("abc" as any), "");
-    if (!(r.tag === "Ok" && r.value === "listed")) { throw __bynkExpectFailure("tests/storefront_system.bynk:8:10", 405, 422, "expect r is Ok(\"listed\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "listed"))) { throw __bynkExpectFailure("tests/storefront_system.bynk:8:10", 405, 422, "expect r is Ok(\"listed\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

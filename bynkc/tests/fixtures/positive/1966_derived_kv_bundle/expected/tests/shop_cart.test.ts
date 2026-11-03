@@ -493,7 +493,7 @@ async function test_instances_are_separate() {
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const __r0 = await remember.call("a", "1", deps);
     const r = await peek.call("a", deps);
-    if (!(r.tag === "None")) { throw __bynkExpectFailure("tests/shop/cart.bynk:14:9", 377, 386, "expect r is None"); }
+    if (!(((__c: boolean) => __c)(r.tag === "None"))) { throw __bynkExpectFailure("tests/shop/cart.bynk:14:9", 377, 386, "expect r is None"); }
     if (!(((__obs.log["PriceCache.get"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/shop/cart.bynk:15:9", 395, 421, "expect PriceCache.get called once"); }
     return { pass: true };
   } catch (e) {
@@ -573,7 +573,7 @@ async function test_instances_are_separate_at_integration() {
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const __r0 = await remember.call("a", "1", deps);
     const r = await peek.call("a", deps);
-    if (!(r.tag === "None")) { throw __bynkExpectFailure("tests/shop/cart.bynk:27:9", 686, 695, "expect r is None"); }
+    if (!(((__c: boolean) => __c)(r.tag === "None"))) { throw __bynkExpectFailure("tests/shop/cart.bynk:27:9", 686, 695, "expect r is None"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

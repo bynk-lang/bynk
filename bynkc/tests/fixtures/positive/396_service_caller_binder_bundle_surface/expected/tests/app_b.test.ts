@@ -42,7 +42,7 @@ async function test_whoami_reads_a_caller_identity_at_the_unit_tier() {
     const deps = __makeTestDeps();
     const { whoami } = __ns_app_b;
     const r = await whoami.call("ping", { ...deps, identity: ("app.a" as any) });
-    if (!(r.tag === "Ok" && r.value === "app.a")) { throw __bynkExpectFailure("tests/whoami.test.bynk:4:12", 136, 152, "expect r is Ok(\"app.a\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "app.a"))) { throw __bynkExpectFailure("tests/whoami.test.bynk:4:12", 136, 152, "expect r is Ok(\"app.a\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

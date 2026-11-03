@@ -92,7 +92,7 @@ async function test_a_system_suite_reads_a_reached_refined_field() {
     const { Repo } = __ns_t_core;
     type Repo = __ns_t_core.Repo;
     const r = await __sysdrive_api_http_GET_first("");
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/t/web_system.bynk:12:12", 423, 433, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/t/web_system.bynk:12:12", 423, 433, "expect r is Ok(_)"); }
     const t = { repo: ("s" as any) };
     const s: string = t.repo;
     if (!(s === "s")) { throw __bynkExpectFailure("tests/t/web_system.bynk:15:12", 502, 510, "expect s == \"s\"\n  expected: s == \"s\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("s"))); }

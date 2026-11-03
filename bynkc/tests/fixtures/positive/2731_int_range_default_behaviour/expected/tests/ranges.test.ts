@@ -51,9 +51,9 @@ async function test_a_negative_range_lands_inside_it() {
     const d = (-1 as any);
     if (!(d === -1)) { throw __bynkExpectFailure("tests/ranges.test.bynk:5:12", 162, 169, "expect d == -1\n  expected: d == -1\n  actual:   " + __bynkShow((d)) + " == " + __bynkShow((-1))); }
     const __r0 = Debt.of(-3);
-    if (!(__r0.tag === "Ok")) { throw __bynkExpectFailure("tests/ranges.test.bynk:6:12", 181, 201, "expect Debt.of(-3) is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "Ok"))) { throw __bynkExpectFailure("tests/ranges.test.bynk:6:12", 181, 201, "expect Debt.of(-3) is Ok(_)"); }
     const __r1 = Debt.of(0);
-    if (!(__r1.tag === "Err")) { throw __bynkExpectFailure("tests/ranges.test.bynk:7:12", 213, 233, "expect Debt.of(0) is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r1.tag === "Err"))) { throw __bynkExpectFailure("tests/ranges.test.bynk:7:12", 213, 233, "expect Debt.of(0) is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -45,7 +45,7 @@ async function test_the_service_answers() {
     const { all, current, isDone } = __ns_t_lib;
     type Status = __ns_t_lib.Status;
     const r = await Status.http_GET(deps);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/t/web.bynk:6:12", 227, 237, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/t/web.bynk:6:12", 227, 237, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

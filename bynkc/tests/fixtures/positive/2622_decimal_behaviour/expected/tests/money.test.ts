@@ -254,17 +254,17 @@ async function test_money_in_a_refined_type() {
     const unit: Price = ({ coefficient: 499n, scale: 2 } as any);
     if (!(__bynkDecimalEqual(lineTotal(unit, 3), { coefficient: 1497n, scale: 2 }))) { throw __bynkExpectFailure("tests/money.test.bynk:27:12", 764, 792, "expect lineTotal(unit, 3) == 14.97d\n  expected: lineTotal(unit, 3) == 14.97d\n  actual:   " + __bynkDecimalShow((lineTotal(unit, 3))) + " == " + __bynkDecimalShow(({ coefficient: 1497n, scale: 2 }))); }
     const __r0 = Price.of({ coefficient: 499n, scale: 2 });
-    if (!(__r0.tag === "Ok")) { throw __bynkExpectFailure("tests/money.test.bynk:28:12", 804, 828, "expect Price.of(4.99d) is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "Ok"))) { throw __bynkExpectFailure("tests/money.test.bynk:28:12", 804, 828, "expect Price.of(4.99d) is Ok(_)"); }
     const __r1 = Price.of({ coefficient: 0n, scale: 0 });
-    if (!(__r1.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:29:12", 840, 862, "expect Price.of(0d) is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r1.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:29:12", 840, 862, "expect Price.of(0d) is Err(_)"); }
     const __r2 = Price.of(__bynkDecimalNeg({ coefficient: 100n, scale: 2 }));
-    if (!(__r2.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:30:12", 874, 900, "expect Price.of(-1.00d) is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r2.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:30:12", 874, 900, "expect Price.of(-1.00d) is Err(_)"); }
     const rate: Rate = ({ coefficient: 20n, scale: 2 } as any);
     if (!(__bynkDecimalEqual(withTax({ coefficient: 10000n, scale: 2 }, rate), { coefficient: 12000n, scale: 2 }))) { throw __bynkExpectFailure("tests/money.test.bynk:32:12", 939, 972, "expect withTax(100.00d, rate) == 120.00d\n  expected: withTax(100.00d, rate) == 120.00d\n  actual:   " + __bynkDecimalShow((withTax({ coefficient: 10000n, scale: 2 }, rate))) + " == " + __bynkDecimalShow(({ coefficient: 12000n, scale: 2 }))); }
     const __r3 = Rate.of({ coefficient: 100n, scale: 2 });
-    if (!(__r3.tag === "Ok")) { throw __bynkExpectFailure("tests/money.test.bynk:33:12", 984, 1007, "expect Rate.of(1.00d) is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(__r3.tag === "Ok"))) { throw __bynkExpectFailure("tests/money.test.bynk:33:12", 984, 1007, "expect Rate.of(1.00d) is Ok(_)"); }
     const __r4 = Rate.of({ coefficient: 101n, scale: 2 });
-    if (!(__r4.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:34:12", 1019, 1043, "expect Rate.of(1.01d) is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r4.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:34:12", 1019, 1043, "expect Rate.of(1.01d) is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -357,19 +357,19 @@ async function test_conversions() {
     type Receipt = __ns_money.Receipt;
     type Wide = __ns_money.Wide;
     const __r0 = __bynkDecimalParse("12.50");
-    if (!(__r0.tag === "Some")) { throw __bynkExpectFailure("tests/money.test.bynk:69:12", 2378, 2411, "expect Decimal.parse(\"12.50\") is Some(_)"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "Some"))) { throw __bynkExpectFailure("tests/money.test.bynk:69:12", 2378, 2411, "expect Decimal.parse(\"12.50\") is Some(_)"); }
     const __r1 = __bynkDecimalParse("1e3");
-    if (!(__r1.tag === "None")) { throw __bynkExpectFailure("tests/money.test.bynk:70:12", 2423, 2451, "expect Decimal.parse(\"1e3\") is None"); }
+    if (!(((__c: boolean) => __c)(__r1.tag === "None"))) { throw __bynkExpectFailure("tests/money.test.bynk:70:12", 2423, 2451, "expect Decimal.parse(\"1e3\") is None"); }
     const __r2 = __bynkDecimalParse("+1");
-    if (!(__r2.tag === "None")) { throw __bynkExpectFailure("tests/money.test.bynk:71:12", 2463, 2490, "expect Decimal.parse(\"+1\") is None"); }
+    if (!(((__c: boolean) => __c)(__r2.tag === "None"))) { throw __bynkExpectFailure("tests/money.test.bynk:71:12", 2463, 2490, "expect Decimal.parse(\"+1\") is None"); }
     const __r3 = __bynkDecimalParse(".5");
-    if (!(__r3.tag === "None")) { throw __bynkExpectFailure("tests/money.test.bynk:72:12", 2502, 2529, "expect Decimal.parse(\".5\") is None"); }
+    if (!(((__c: boolean) => __c)(__r3.tag === "None"))) { throw __bynkExpectFailure("tests/money.test.bynk:72:12", 2502, 2529, "expect Decimal.parse(\".5\") is None"); }
     const __r4 = __bynkDecimalParse("");
-    if (!(__r4.tag === "None")) { throw __bynkExpectFailure("tests/money.test.bynk:73:12", 2541, 2566, "expect Decimal.parse(\"\") is None"); }
+    if (!(((__c: boolean) => __c)(__r4.tag === "None"))) { throw __bynkExpectFailure("tests/money.test.bynk:73:12", 2541, 2566, "expect Decimal.parse(\"\") is None"); }
     if (!(__bynkDecimalEqual(parsed("0012.50"), { coefficient: 125n, scale: 1 }))) { throw __bynkExpectFailure("tests/money.test.bynk:74:12", 2578, 2604, "expect parsed(\"0012.50\") == 12.5d\n  expected: parsed(\"0012.50\") == 12.5d\n  actual:   " + __bynkDecimalShow((parsed("0012.50"))) + " == " + __bynkDecimalShow(({ coefficient: 125n, scale: 1 }))); }
     if (!(__bynkEq(__bynkDecimalToInt({ coefficient: 4200n, scale: 2 }), Some(42)))) { throw __bynkExpectFailure("tests/money.test.bynk:75:12", 2616, 2642, "expect 42.00d.toInt() == Some(42)\n  expected: 42.00d.toInt() == Some(42)\n  actual:   " + __bynkShow((__bynkDecimalToInt({ coefficient: 4200n, scale: 2 }))) + " == " + __bynkShow((Some(42)))); }
     const __r5 = __bynkDecimalToInt({ coefficient: 425n, scale: 1 });
-    if (!(__r5.tag === "None")) { throw __bynkExpectFailure("tests/money.test.bynk:76:12", 2654, 2675, "expect 42.5d.toInt() is None"); }
+    if (!(((__c: boolean) => __c)(__r5.tag === "None"))) { throw __bynkExpectFailure("tests/money.test.bynk:76:12", 2654, 2675, "expect 42.5d.toInt() is None"); }
     if (!(__bynkDecimalToString(__bynkDecimalFromInt(7)) === "7")) { throw __bynkExpectFailure("tests/money.test.bynk:77:12", 2687, 2723, "expect Decimal.fromInt(7).toString() == \"7\"\n  expected: Decimal.fromInt(7).toString() == \"7\"\n  actual:   " + __bynkShow((__bynkDecimalToString(__bynkDecimalFromInt(7)))) + " == " + __bynkShow(("7"))); }
     if (!(__bynkDecimalToFloat({ coefficient: 1n, scale: 1 }) === 0.1)) { throw __bynkExpectFailure("tests/money.test.bynk:78:12", 2735, 2756, "expect 0.1d.toFloat() == 0.1\n  expected: 0.1d.toFloat() == 0.1\n  actual:   " + __bynkShow((__bynkDecimalToFloat({ coefficient: 1n, scale: 1 }))) + " == " + __bynkShow((0.1))); }
     return { pass: true };
@@ -429,9 +429,9 @@ async function test_a_sum_payload_of_a_refined_decimal_round_trips() {
     if (!(encodeReceipt(Receipt.Paid(({ coefficient: 1250n, scale: 2 } as any))) === "{\"kind\":\"Paid\",\"amount\":\"12.50\"}")) { throw __bynkExpectFailure("tests/money.test.bynk:95:12", 3332, 3405, "expect encodeReceipt(Paid(12.50d)) == \"{\\\"kind\\\":\\\"Paid\\\",\\\"amount\\\":\\\"12.50\\\"}\"\n  expected: encodeReceipt(Paid(12.50d)) == \"{\\\"kind\\\":\\\"Paid\\\",\\\"amount\\\":\\\"12.50\\\"}\"\n  actual:   " + __bynkShow((encodeReceipt(Receipt.Paid(({ coefficient: 1250n, scale: 2 } as any))))) + " == " + __bynkShow(("{\"kind\":\"Paid\",\"amount\":\"12.50\"}"))); }
     if (!(__bynkEq(decodeReceipt("{\"kind\":\"Paid\",\"amount\":\"3.10\"}"), Some(Receipt.Paid(({ coefficient: 310n, scale: 2 } as any)))))) { throw __bynkExpectFailure("tests/money.test.bynk:96:12", 3417, 3494, "expect decodeReceipt(\"{\\\"kind\\\":\\\"Paid\\\",\\\"amount\\\":\\\"3.10\\\"}\") == Some(Paid(3.10d))\n  expected: decodeReceipt(\"{\\\"kind\\\":\\\"Paid\\\",\\\"amount\\\":\\\"3.10\\\"}\") == Some(Paid(3.10d))\n  actual:   " + __bynkDecimalShow((decodeReceipt("{\"kind\":\"Paid\",\"amount\":\"3.10\"}"))) + " == " + __bynkDecimalShow((Some(Receipt.Paid(({ coefficient: 310n, scale: 2 } as any)))))); }
     const __r0 = decodeReceipt("{\"kind\":\"Paid\",\"amount\":\"0\"}");
-    if (!(__r0.tag === "None")) { throw __bynkExpectFailure("tests/money.test.bynk:97:12", 3506, 3567, "expect decodeReceipt(\"{\\\"kind\\\":\\\"Paid\\\",\\\"amount\\\":\\\"0\\\"}\") is None"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "None"))) { throw __bynkExpectFailure("tests/money.test.bynk:97:12", 3506, 3567, "expect decodeReceipt(\"{\\\"kind\\\":\\\"Paid\\\",\\\"amount\\\":\\\"0\\\"}\") is None"); }
     const __r1 = decodeReceipt("{\"kind\":\"Paid\",\"amount\":7}");
-    if (!(__r1.tag === "None")) { throw __bynkExpectFailure("tests/money.test.bynk:98:12", 3579, 3636, "expect decodeReceipt(\"{\\\"kind\\\":\\\"Paid\\\",\\\"amount\\\":7}\") is None"); }
+    if (!(((__c: boolean) => __c)(__r1.tag === "None"))) { throw __bynkExpectFailure("tests/money.test.bynk:98:12", 3579, 3636, "expect decodeReceipt(\"{\\\"kind\\\":\\\"Paid\\\",\\\"amount\\\":7}\") is None"); }
     if (!(amountText(Receipt.Paid(({ coefficient: 15n, scale: 1 } as any))) === "1.5")) { throw __bynkExpectFailure("tests/money.test.bynk:99:12", 3648, 3679, "expect amountText(Paid(1.5d)) == \"1.5\"\n  expected: amountText(Paid(1.5d)) == \"1.5\"\n  actual:   " + __bynkShow((amountText(Receipt.Paid(({ coefficient: 15n, scale: 1 } as any))))) + " == " + __bynkShow(("1.5"))); }
     if (!(amountText(Receipt.Pending) === "pending")) { throw __bynkExpectFailure("tests/money.test.bynk:100:12", 3691, 3723, "expect amountText(Pending) == \"pending\"\n  expected: amountText(Pending) == \"pending\"\n  actual:   " + __bynkShow((amountText(Receipt.Pending))) + " == " + __bynkShow(("pending"))); }
     return { pass: true };
@@ -485,13 +485,13 @@ async function test_a_mocked_refined_decimal_lands_inside_a_negative_range() {
     const d = ({ coefficient: -100n, scale: 2 } as any);
     if (!(__bynkDecimalToString(d) === "-1.00")) { throw __bynkExpectFailure("tests/money.test.bynk:112:12", 3971, 3994, "expect d.toString() == \"-1.00\"\n  expected: d.toString() == \"-1.00\"\n  actual:   " + __bynkShow((__bynkDecimalToString(d))) + " == " + __bynkShow(("-1.00"))); }
     const __r0 = Debt.of(__bynkDecimalNeg({ coefficient: 300n, scale: 2 }));
-    if (!(__r0.tag === "Ok")) { throw __bynkExpectFailure("tests/money.test.bynk:113:12", 4006, 4030, "expect Debt.of(-3.00d) is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "Ok"))) { throw __bynkExpectFailure("tests/money.test.bynk:113:12", 4006, 4030, "expect Debt.of(-3.00d) is Ok(_)"); }
     const __r1 = Debt.of({ coefficient: 0n, scale: 0 });
-    if (!(__r1.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:114:12", 4042, 4063, "expect Debt.of(0d) is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r1.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:114:12", 4042, 4063, "expect Debt.of(0d) is Err(_)"); }
     const w = ({ coefficient: 1n, scale: 0 } as any);
     if (!(__bynkDecimalToString(w) === "1")) { throw __bynkExpectFailure("tests/money.test.bynk:116:12", 4097, 4116, "expect w.toString() == \"1\"\n  expected: w.toString() == \"1\"\n  actual:   " + __bynkShow((__bynkDecimalToString(w))) + " == " + __bynkShow(("1"))); }
     const __r2 = Wide.of({ coefficient: 15n, scale: 1 });
-    if (!(__r2.tag === "Ok")) { throw __bynkExpectFailure("tests/money.test.bynk:117:12", 4128, 4150, "expect Wide.of(1.5d) is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(__r2.tag === "Ok"))) { throw __bynkExpectFailure("tests/money.test.bynk:117:12", 4128, 4150, "expect Wide.of(1.5d) is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -595,7 +595,7 @@ async function test_a_decimal_field_round_trips_as_a_JSON_string() {
     if (!(globalThis.JSON.stringify(__serialise_Line(line)) === "{\"sku\":\"a-1\",\"unit\":\"4.50\",\"qty\":2}")) { throw __bynkExpectFailure("tests/money.test.bynk:142:12", 5049, 5117, "expect Json.encode(line) == \"{\\\"sku\\\":\\\"a-1\\\",\\\"unit\\\":\\\"4.50\\\",\\\"qty\\\":2}\"\n  expected: Json.encode(line) == \"{\\\"sku\\\":\\\"a-1\\\",\\\"unit\\\":\\\"4.50\\\",\\\"qty\\\":2}\"\n  actual:   " + __bynkShow((globalThis.JSON.stringify(__serialise_Line(line)))) + " == " + __bynkShow(("{\"sku\":\"a-1\",\"unit\":\"4.50\",\"qty\":2}"))); }
     const back = decodeLine("{\"sku\": \"a-1\", \"unit\": \"4.5\", \"qty\": 2}");
     if (!(__bynkEq(back, Some(line)))) { throw __bynkExpectFailure("tests/money.test.bynk:144:12", 5208, 5226, "expect back == Some(line)\n  expected: back == Some(line)\n  actual:   " + __bynkDecimalShow((back)) + " == " + __bynkDecimalShow((Some(line)))); }
-    if (!(back.tag === "Some")) { throw __bynkExpectFailure("tests/money.test.bynk:145:12", 5238, 5253, "expect back is Some(_)"); }
+    if (!(((__c: boolean) => __c)(back.tag === "Some"))) { throw __bynkExpectFailure("tests/money.test.bynk:145:12", 5238, 5253, "expect back is Some(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -619,13 +619,13 @@ async function test_a_malformed_decimal_on_the_wire_is_rejected_at_the_field_pat
     type Receipt = __ns_money.Receipt;
     type Wide = __ns_money.Wide;
     const __r0 = ((__s: string): Result<__ns_money.Line, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Line(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_money.Line); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"sku\": \"a\", \"unit\": \"1e3\", \"qty\": 1}");
-    if (!(__r0.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:149:12", 5343, 5421, "expect Json.decode[Line](\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"1e3\\\", \\\"qty\\\": 1}\") is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:149:12", 5343, 5421, "expect Json.decode[Line](\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"1e3\\\", \\\"qty\\\": 1}\") is Err(_)"); }
     const __r1 = ((__s: string): Result<__ns_money.Line, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Line(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_money.Line); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"sku\": \"a\", \"unit\": 4.5, \"qty\": 1}");
-    if (!(__r1.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:150:12", 5433, 5507, "expect Json.decode[Line](\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": 4.5, \\\"qty\\\": 1}\") is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r1.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:150:12", 5433, 5507, "expect Json.decode[Line](\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": 4.5, \\\"qty\\\": 1}\") is Err(_)"); }
     const __r2 = ((__s: string): Result<__ns_money.Line, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Line(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_money.Line); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"sku\": \"a\", \"unit\": \"-1.00\", \"qty\": 1}");
-    if (!(__r2.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:151:12", 5519, 5599, "expect Json.decode[Line](\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"-1.00\\\", \\\"qty\\\": 1}\") is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r2.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:151:12", 5519, 5599, "expect Json.decode[Line](\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"-1.00\\\", \\\"qty\\\": 1}\") is Err(_)"); }
     const __r3 = ((__s: string): Result<__ns_money.Line, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Line(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_money.Line); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"sku\": \"a\", \"unit\": \"+1.00\", \"qty\": 1}");
-    if (!(__r3.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:152:12", 5611, 5691, "expect Json.decode[Line](\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"+1.00\\\", \\\"qty\\\": 1}\") is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r3.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:152:12", 5611, 5691, "expect Json.decode[Line](\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"+1.00\\\", \\\"qty\\\": 1}\") is Err(_)"); }
     if (!(lineError("{\"sku\": \"a\", \"unit\": \"1e3\", \"qty\": 1}") === "StructuralMismatch $.unit")) { throw __bynkExpectFailure("tests/money.test.bynk:153:12", 5703, 5794, "expect lineError(\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"1e3\\\", \\\"qty\\\": 1}\") == \"StructuralMismatch $.unit\"\n  expected: lineError(\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"1e3\\\", \\\"qty\\\": 1}\") == \"StructuralMismatch $.unit\"\n  actual:   " + __bynkShow((lineError("{\"sku\": \"a\", \"unit\": \"1e3\", \"qty\": 1}"))) + " == " + __bynkShow(("StructuralMismatch $.unit"))); }
     if (!(lineError("{\"sku\": \"a\", \"unit\": 4.5, \"qty\": 1}") === "StructuralMismatch $.unit")) { throw __bynkExpectFailure("tests/money.test.bynk:154:12", 5806, 5893, "expect lineError(\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": 4.5, \\\"qty\\\": 1}\") == \"StructuralMismatch $.unit\"\n  expected: lineError(\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": 4.5, \\\"qty\\\": 1}\") == \"StructuralMismatch $.unit\"\n  actual:   " + __bynkShow((lineError("{\"sku\": \"a\", \"unit\": 4.5, \"qty\": 1}"))) + " == " + __bynkShow(("StructuralMismatch $.unit"))); }
     if (!(lineError("{\"sku\": \"a\", \"unit\": \"0.00\", \"qty\": 1}") === "RefinementViolation $.unit")) { throw __bynkExpectFailure("tests/money.test.bynk:155:12", 5905, 5998, "expect lineError(\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"0.00\\\", \\\"qty\\\": 1}\") == \"RefinementViolation $.unit\"\n  expected: lineError(\"{\\\"sku\\\": \\\"a\\\", \\\"unit\\\": \\\"0.00\\\", \\\"qty\\\": 1}\") == \"RefinementViolation $.unit\"\n  actual:   " + __bynkShow((lineError("{\"sku\": \"a\", \"unit\": \"0.00\", \"qty\": 1}"))) + " == " + __bynkShow(("RefinementViolation $.unit"))); }

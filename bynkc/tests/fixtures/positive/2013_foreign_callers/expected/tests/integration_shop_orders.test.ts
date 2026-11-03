@@ -74,7 +74,7 @@ async function test_a_context_reaches_the_sum_as_Caller() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __callService(deps.env.SHOP_ORDERS, "status", "a" as __JsonValue, __ns_shop_orders.__deserialise_Result_String_String, "integration", "226b9939f85e69ea", deps.env, "shop.orders");
-    if (!(r.tag === "Ok" && r.value === "a for integration")) { throw __bynkExpectFailure("tests/orders_system.test.bynk:4:12", 125, 153, "expect r is Ok(\"a for integration\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "a for integration"))) { throw __bynkExpectFailure("tests/orders_system.test.bynk:4:12", 125, 153, "expect r is Ok(\"a for integration\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -90,7 +90,7 @@ async function test_legacy_reaches_the_sum_as_itself() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __callService(deps.env.SHOP_ORDERS, "status", "a" as __JsonValue, __ns_shop_orders.__deserialise_Result_String_String, "Legacy", "226b9939f85e69ea", deps.env, "shop.orders");
-    if (!(r.tag === "Ok" && r.value === "a for legacy")) { throw __bynkExpectFailure("tests/orders_system.test.bynk:8:12", 260, 283, "expect r is Ok(\"a for legacy\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "a for legacy"))) { throw __bynkExpectFailure("tests/orders_system.test.bynk:8:12", 260, 283, "expect r is Ok(\"a for legacy\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -76,7 +76,7 @@ async function test_case_one() {
     type AuthId = __ns_commerce_payment.AuthId;
     type PaymentError = __ns_commerce_payment.PaymentError;
     const r = await authorise.call(10, deps);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/payment.test.bynk:6:12", 121, 131, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/payment.test.bynk:6:12", 121, 131, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -94,7 +94,7 @@ async function test_case_two() {
     type AuthId = __ns_commerce_payment.AuthId;
     type PaymentError = __ns_commerce_payment.PaymentError;
     const r = await authorise.call(20, deps);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/payment.test.bynk:11:12", 200, 210, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/payment.test.bynk:11:12", 200, 210, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -112,7 +112,7 @@ async function test_case_three() {
     type AuthId = __ns_commerce_payment.AuthId;
     type PaymentError = __ns_commerce_payment.PaymentError;
     const r = await authorise.call(0, deps);
-    if (!(r.tag === "Err")) { throw __bynkExpectFailure("tests/payment.test.bynk:16:12", 280, 291, "expect r is Err(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err"))) { throw __bynkExpectFailure("tests/payment.test.bynk:16:12", 280, 291, "expect r is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

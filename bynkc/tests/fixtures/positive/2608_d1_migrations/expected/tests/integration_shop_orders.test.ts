@@ -94,7 +94,7 @@ async function test_the_seeded_order_already_exists_over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_orders_Param_id("seed", "");
-    if (!(r.tag === "Conflict")) { throw __bynkExpectFailure("tests/shop/system.bynk:5:10", 224, 240, "expect r is Conflict(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Conflict"))) { throw __bynkExpectFailure("tests/shop/system.bynk:5:10", 224, 240, "expect r is Conflict(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

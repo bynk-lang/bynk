@@ -46,7 +46,7 @@ async function test_a_placed_order_is_confirmed_and_holds_its_stock() {
     const { Order, Problem, Stock, __makeOrder, __makeStock, authorise, label, pick, place, status, stock } = __ns_shop_orders;
     type Problem = __ns_shop_orders.Problem;
     const r = await place.call("a", 2, 7, deps);
-    if (!(r.tag === "Ok" && r.value === "placed 14")) { throw __bynkExpectFailure("tests/orders.test.bynk:4:12", 125, 145, "expect r is Ok(\"placed 14\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "placed 14"))) { throw __bynkExpectFailure("tests/orders.test.bynk:4:12", 125, 145, "expect r is Ok(\"placed 14\")"); }
     const s = await status.call("a", deps);
     if (!(s === "placed")) { throw __bynkExpectFailure("tests/orders.test.bynk:6:12", 187, 200, "expect s == \"placed\"\n  expected: s == \"placed\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("placed"))); }
     const left = await stock.call(deps);
@@ -68,9 +68,9 @@ async function test_the_same_order_cannot_be_placed_twice() {
     const { Order, Problem, Stock, __makeOrder, __makeStock, authorise, label, pick, place, status, stock } = __ns_shop_orders;
     type Problem = __ns_shop_orders.Problem;
     const first = await place.call("b", 1, 7, deps);
-    if (!(first.tag === "Ok")) { throw __bynkExpectFailure("tests/orders.test.bynk:13:12", 355, 369, "expect first is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(first.tag === "Ok"))) { throw __bynkExpectFailure("tests/orders.test.bynk:13:12", 355, 369, "expect first is Ok(_)"); }
     const second = await place.call("b", 1, 7, deps);
-    if (!(second.tag === "Err" && second.error.tag === "Taken")) { throw __bynkExpectFailure("tests/orders.test.bynk:15:12", 421, 441, "expect second is Err(Taken)"); }
+    if (!(((__c: boolean) => __c)(second.tag === "Err" && second.error.tag === "Taken"))) { throw __bynkExpectFailure("tests/orders.test.bynk:15:12", 421, 441, "expect second is Err(Taken)"); }
     const left = await stock.call(deps);
     if (!(left === 4)) { throw __bynkExpectFailure("tests/orders.test.bynk:17:12", 482, 491, "expect left == 4\n  expected: left == 4\n  actual:   " + __bynkShow((left)) + " == " + __bynkShow((4))); }
     return { pass: true };
@@ -90,7 +90,7 @@ async function test_too_little_stock_rejects_the_order_and_holds_nothing() {
     const { Order, Problem, Stock, __makeOrder, __makeStock, authorise, label, pick, place, status, stock } = __ns_shop_orders;
     type Problem = __ns_shop_orders.Problem;
     const r = await place.call("c", 9, 7, deps);
-    if (!(r.tag === "Err" && r.error.tag === "NoStock")) { throw __bynkExpectFailure("tests/orders.test.bynk:22:12", 607, 624, "expect r is Err(NoStock)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error.tag === "NoStock"))) { throw __bynkExpectFailure("tests/orders.test.bynk:22:12", 607, 624, "expect r is Err(NoStock)"); }
     const s = await status.call("c", deps);
     if (!(s === "rejected")) { throw __bynkExpectFailure("tests/orders.test.bynk:24:12", 666, 681, "expect s == \"rejected\"\n  expected: s == \"rejected\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("rejected"))); }
     const left = await stock.call(deps);
@@ -112,7 +112,7 @@ async function test_a_declined_card_releases_the_stock_and_rejects_the_order() {
     const { Order, Problem, Stock, __makeOrder, __makeStock, authorise, label, pick, place, status, stock } = __ns_shop_orders;
     type Problem = __ns_shop_orders.Problem;
     const r = await place.call("d", 2, 0, deps);
-    if (!(r.tag === "Err" && r.error.tag === "Declined")) { throw __bynkExpectFailure("tests/orders.test.bynk:31:12", 851, 869, "expect r is Err(Declined)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error.tag === "Declined"))) { throw __bynkExpectFailure("tests/orders.test.bynk:31:12", 851, 869, "expect r is Err(Declined)"); }
     const s = await status.call("d", deps);
     if (!(s === "rejected")) { throw __bynkExpectFailure("tests/orders.test.bynk:33:12", 911, 926, "expect s == \"rejected\"\n  expected: s == \"rejected\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("rejected"))); }
     const left = await stock.call(deps);

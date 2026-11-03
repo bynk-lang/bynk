@@ -610,7 +610,7 @@ async function test_no_secret_is_set() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const s = await secret.call("API_KEY", deps);
-    if (!(s.tag === "None")) { throw __bynkExpectFailure("tests/demo/plat.bynk:23:10", 572, 581, "expect s is None"); }
+    if (!(((__c: boolean) => __c)(s.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:23:10", 572, 581, "expect s is None"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -946,7 +946,7 @@ async function test_kv_is_fresh_per_case() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const r = await lookup.call("a", deps);
-    if (!(r.tag === "None")) { throw __bynkExpectFailure("tests/demo/plat.bynk:57:10", 1274, 1283, "expect r is None"); }
+    if (!(((__c: boolean) => __c)(r.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:57:10", 1274, 1283, "expect r is None"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1229,7 +1229,7 @@ async function test_the_doubles_hold_at_the_integration_tier() {
     const t = await clock.call(deps);
     const s = await secret.call("API_KEY", deps);
     if (!(t === 0)) { throw __bynkExpectFailure("tests/demo/plat.bynk:92:10", 2550, 2556, "expect t == 0\n  expected: t == 0\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((0))); }
-    if (!(s.tag === "None")) { throw __bynkExpectFailure("tests/demo/plat.bynk:93:10", 2566, 2575, "expect s is None"); }
+    if (!(((__c: boolean) => __c)(s.tag === "None"))) { throw __bynkExpectFailure("tests/demo/plat.bynk:93:10", 2566, 2575, "expect s is None"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

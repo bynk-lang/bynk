@@ -1,0 +1,15 @@
+suite parse
+
+// #2836: driven by bynkc/tests/expect_is_narrowing_behaviour.rs. An
+// `expect r is Ok(_)` guard narrows `r` in the emitted TypeScript; the
+// exhaustive `match` that follows must still type-check under tsc.
+
+case "match after expect is" {
+	let r = parse(3)
+	expect r is Ok(_)
+	let out = match r {
+		Ok(v) => v
+		Err(_) => 0
+	}
+	expect out == 3
+}

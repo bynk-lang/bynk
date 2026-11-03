@@ -107,10 +107,10 @@ async function test_a_hold_expires_sixteen_minutes_on__over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_holds_Param_id("h1", "");
-    if (!(r.tag === "Ok" && r.value === true)) { throw __bynkExpectFailure("tests/system.bynk:6:10", 282, 295, "expect r is Ok(true)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === true))) { throw __bynkExpectFailure("tests/system.bynk:6:10", 282, 295, "expect r is Ok(true)"); }
     __bynkAdvanceClock(960000);
     const e = await __sysdrive_api_http_GET_holds_Param_id("h1", "");
-    if (!(e.tag === "Ok" && e.value === true)) { throw __bynkExpectFailure("tests/system.bynk:9:10", 385, 398, "expect e is Ok(true)"); }
+    if (!(((__c: boolean) => __c)(e.tag === "Ok" && e.value === true))) { throw __bynkExpectFailure("tests/system.bynk:9:10", 385, 398, "expect e is Ok(true)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -126,10 +126,10 @@ async function test_fourteen_minutes_is_not_enough__over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_holds_Param_id("h1", "");
-    if (!(r.tag === "Ok" && r.value === true)) { throw __bynkExpectFailure("tests/system.bynk:14:10", 519, 532, "expect r is Ok(true)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === true))) { throw __bynkExpectFailure("tests/system.bynk:14:10", 519, 532, "expect r is Ok(true)"); }
     __bynkAdvanceClock(840000);
     const e = await __sysdrive_api_http_GET_holds_Param_id("h1", "");
-    if (!(e.tag === "Ok" && e.value === false)) { throw __bynkExpectFailure("tests/system.bynk:17:10", 622, 636, "expect e is Ok(false)"); }
+    if (!(((__c: boolean) => __c)(e.tag === "Ok" && e.value === false))) { throw __bynkExpectFailure("tests/system.bynk:17:10", 622, 636, "expect e is Ok(false)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -145,9 +145,9 @@ async function test_the_clock_starts_at_the_epoch__over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_holds_Param_id("h1", "");
-    if (!(r.tag === "Ok" && r.value === true)) { throw __bynkExpectFailure("tests/system.bynk:22:10", 756, 769, "expect r is Ok(true)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === true))) { throw __bynkExpectFailure("tests/system.bynk:22:10", 756, 769, "expect r is Ok(true)"); }
     const e = await __sysdrive_api_http_GET_holds_Param_id("h1", "");
-    if (!(e.tag === "Ok" && e.value === false)) { throw __bynkExpectFailure("tests/system.bynk:24:10", 829, 843, "expect e is Ok(false)"); }
+    if (!(((__c: boolean) => __c)(e.tag === "Ok" && e.value === false))) { throw __bynkExpectFailure("tests/system.bynk:24:10", 829, 843, "expect e is Ok(false)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

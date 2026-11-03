@@ -212,8 +212,8 @@ async function test_a_signed_notice_is_accepted__and_a_replay_too() {
     const n = { id: "evt_1", event: "payment.captured" };
     const a = await __sysdrive_webhooks_http_POST_webhooks_processor(n, "");
     const b = await __sysdrive_webhooks_http_POST_webhooks_processor(n, "");
-    if (!(a.tag === "Ok" && a.value === "payment.captured evt_1")) { throw __bynkExpectFailure("tests/hooks.bynk:8:10", 413, 446, "expect a is Ok(\"payment.captured evt_1\")"); }
-    if (!(b.tag === "Ok" && b.value === "payment.captured evt_1")) { throw __bynkExpectFailure("tests/hooks.bynk:9:10", 456, 489, "expect b is Ok(\"payment.captured evt_1\")"); }
+    if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "payment.captured evt_1"))) { throw __bynkExpectFailure("tests/hooks.bynk:8:10", 413, 446, "expect a is Ok(\"payment.captured evt_1\")"); }
+    if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "payment.captured evt_1"))) { throw __bynkExpectFailure("tests/hooks.bynk:9:10", 456, 489, "expect b is Ok(\"payment.captured evt_1\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -230,7 +230,7 @@ async function test_a_raw_body_is_signed_as_sent() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_webhooks_http_POST_webhooks_processor("{\"id\": \"evt_2\", \"event\": \"payment.failed\"}", "");
-    if (!(r.tag === "Handled")) { throw __bynkExpectFailure("tests/hooks.bynk:14:10", 650, 665, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/hooks.bynk:14:10", 650, 665, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -247,7 +247,7 @@ async function test_a_signature_over_a_malformed_body_passes_the_seam_and_fails_
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_webhooks_http_POST_webhooks_processor("{not json", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "MalformedJson")) { throw __bynkExpectFailure("tests/hooks.bynk:19:10", 829, 860, "expect r is Rejected(MalformedJson(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "MalformedJson"))) { throw __bynkExpectFailure("tests/hooks.bynk:19:10", 829, 860, "expect r is Rejected(MalformedJson(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -267,9 +267,9 @@ async function test_unsigned__forged_and_stale_notices_are_refused() {
     const none = await __sysdrive_noauth_webhooks_http_POST_webhooks_processor(n, "");
     const forged = await __sysdrive_forged_webhooks_http_POST_webhooks_processor(n, "");
     const stale = await __sysdrive_stale_webhooks_http_POST_webhooks_processor(n, "");
-    if (!(none.tag === "Rejected" && none.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks.bynk:27:10", 1185, 1215, "expect none is Rejected(Unauthorized)"); }
-    if (!(forged.tag === "Rejected" && forged.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks.bynk:28:10", 1225, 1257, "expect forged is Rejected(Unauthorized)"); }
-    if (!(stale.tag === "Rejected" && stale.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks.bynk:29:10", 1267, 1298, "expect stale is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(none.tag === "Rejected" && none.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:27:10", 1185, 1215, "expect none is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:28:10", 1225, 1257, "expect forged is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(stale.tag === "Rejected" && stale.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:29:10", 1267, 1298, "expect stale is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -286,7 +286,7 @@ async function test_a_forged_raw_notice_is_refused_before_the_body_is_read() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_rawforged_webhooks_http_POST_webhooks_processor("{not json", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks.bynk:34:10", 1454, 1481, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:34:10", 1454, 1481, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -304,8 +304,8 @@ async function test_a_body_only_signature_is_accepted__and_a_forged_one_refused(
     const deps = __makeHarness();
     const ok = await __sysdrive_webhooks_http_POST_webhooks_legacy("hi", "");
     const forged = await __sysdrive_forged_webhooks_http_POST_webhooks_legacy("hi", "");
-    if (!(ok.tag === "Ok" && ok.value === "legacy hi")) { throw __bynkExpectFailure("tests/hooks.bynk:40:10", 1683, 1704, "expect ok is Ok(\"legacy hi\")"); }
-    if (!(forged.tag === "Rejected" && forged.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks.bynk:41:10", 1714, 1746, "expect forged is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "legacy hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:40:10", 1683, 1704, "expect ok is Ok(\"legacy hi\")"); }
+    if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:41:10", 1714, 1746, "expect forged is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -322,7 +322,7 @@ async function test_a_notice_signed_with_the_env_secret_is_accepted() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_webhooks_http_POST_webhooks_processor({ id: "evt_3", event: "payment.captured" }, "");
-    if (!(r.tag === "Ok" && r.value === "payment.captured evt_3")) { throw __bynkExpectFailure("tests/hooks_env.bynk:8:10", 367, 400, "expect r is Ok(\"payment.captured evt_3\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "payment.captured evt_3"))) { throw __bynkExpectFailure("tests/hooks_env.bynk:8:10", 367, 400, "expect r is Ok(\"payment.captured evt_3\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -339,7 +339,7 @@ async function test_a_forged_notice_is_refused_under_an_env_secret_too() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_forged_webhooks_http_POST_webhooks_processor({ id: "evt_3", event: "payment.captured" }, "");
-    if (!(r.tag === "Rejected" && r.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks_env.bynk:13:10", 584, 611, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks_env.bynk:13:10", 584, 611, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

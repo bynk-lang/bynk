@@ -100,7 +100,7 @@ async function test_a_borrowed_record_crosses_inside_a_list_and_an_option() {
     const os = await __callService(deps.env.SHOP_LEDGER, "echo", __ns_shop_ledger.__serialise_List_Order([o, o]), __ns_shop_ledger.__deserialise_List_Order, "integration", "5ec0507cbf4df93c", deps.env, "shop.ledger");
     if (!((os).length === 2)) { throw __bynkExpectFailure("tests/system.bynk:17:12", 622, 638, "expect os.length() == 2\n  expected: os.length() == 2\n  actual:   " + __bynkShow(((os).length)) + " == " + __bynkShow((2))); }
     const f = await __callService(deps.env.SHOP_LEDGER, "first", __ns_shop_ledger.__serialise_List_Order(os), __ns_shop_ledger.__deserialise_Option_Order, "integration", "f3c615f6c053d6dc", deps.env, "shop.ledger");
-    if (!(f.tag === "Some")) { throw __bynkExpectFailure("tests/system.bynk:19:12", 685, 697, "expect f is Some(_)"); }
+    if (!(((__c: boolean) => __c)(f.tag === "Some"))) { throw __bynkExpectFailure("tests/system.bynk:19:12", 685, 697, "expect f is Some(_)"); }
     const p = await __callService(deps.env.SHOP_POST, "send", "p2" as __JsonValue, __ns_shop_post.__deserialise_Parcel, "integration", "856befaf27902680", deps.env, "shop.post");
     const has = await __callService(deps.env.SHOP_LEDGER, "present", __ns_shop_ledger.__serialise_Option_Parcel(Some(p)), (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j), "integration", "ee692a633f10b09c", deps.env, "shop.ledger");
     if (!(has)) { throw __bynkExpectFailure("tests/system.bynk:22:12", 787, 790, "expect has"); }
