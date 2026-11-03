@@ -166,7 +166,7 @@ async function test_a_captured_delivery_reaches_the_handler_over_the_wire() {
     const deps = __makeHarness();
     const push: string = __fixture_fixtures_2fgithub_2fpush_2ejson;
     const r = await __sysdrive_github_http_POST_github(__requestHeaders(["X-GitHub-Event: push"]), new globalThis.TextEncoder().encode(push), "");
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/system.bynk:8:10", 290, 300, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/system.bynk:8:10", 290, 300, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -96,11 +96,11 @@ async function test_a_limiter_refuses_past_its_limit_and_recovers__over_the_wire
     const deps = __makeHarness();
     const first = await __sysdrive_api_http_GET_read_Param_key("k", "");
     const second = await __sysdrive_api_http_GET_read_Param_key("k", "");
-    if (!(first.tag === "Ok" && first.value === true)) { throw __bynkExpectFailure("tests/registry/system.bynk:7:10", 344, 361, "expect first is Ok(true)"); }
-    if (!(second.tag === "Ok" && second.value === false)) { throw __bynkExpectFailure("tests/registry/system.bynk:8:10", 371, 390, "expect second is Ok(false)"); }
+    if (!(((__c: boolean) => __c)(first.tag === "Ok" && first.value === true))) { throw __bynkExpectFailure("tests/registry/system.bynk:7:10", 344, 361, "expect first is Ok(true)"); }
+    if (!(((__c: boolean) => __c)(second.tag === "Ok" && second.value === false))) { throw __bynkExpectFailure("tests/registry/system.bynk:8:10", 371, 390, "expect second is Ok(false)"); }
     __bynkAdvanceClock(10000);
     const again = await __sysdrive_api_http_GET_read_Param_key("k", "");
-    if (!(again.tag === "Ok" && again.value === true)) { throw __bynkExpectFailure("tests/registry/system.bynk:11:10", 483, 500, "expect again is Ok(true)"); }
+    if (!(((__c: boolean) => __c)(again.tag === "Ok" && again.value === true))) { throw __bynkExpectFailure("tests/registry/system.bynk:11:10", 483, 500, "expect again is Ok(true)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

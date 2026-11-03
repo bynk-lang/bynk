@@ -4287,8 +4287,9 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
             // #1751/#1752: a test emitted out of line (inside a short-circuit
             // arrow) doesn't narrow its receiver here; read through the
             // variant the checker proved instead.
-            let unnarrowed = cx.unnarrowed_is_tests.contains(&e.span);
-            let payload = variant_payload(&value_text, &variant.name, unnarrowed);
+            // #2836: every tag-based `is` test is emitted un-narrowing (see
+            // `lower_is`), so its payload is always read through the proven variant.
+            let payload = variant_payload(&value_text, &variant.name, true);
             // v0.13: refinement narrowing re-binds the value's name to the
             // branded refined type, read from the forced receiver temp.
             if bindings.is_empty()
@@ -4419,11 +4420,7 @@ fn emit_is_test_bindings(e: &Expr, cx: &mut LowerCtx, out: &mut Vec<String>, fou
                             // #1765 review: out of line, the dispatch below
                             // starts from the whole union, so its last arm (a
                             // bare `else`) isn't narrowed to this variant.
-                            let payload = variant_payload(
-                                &value_text,
-                                &variant.name,
-                                cx.unnarrowed_is_tests.contains(&e.span),
-                            );
+                            let payload = variant_payload(&value_text, &variant.name, true);
                             pairs.push((local, payload + "." + &field));
                         }
                         (
@@ -8865,6 +8862,17 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
             pattern_match_tests(&v, scrut_ty, pattern, cx, &mut tests);
             tests.join(" && ")
         }
+    };
+    // #2836: a bare `r.tag === "Ok"` condition makes tsc narrow `r` for the code
+    // it guards, so a later exhaustive `match r` (after `expect r is Ok(_)`, or in
+    // the `else` of `if r is Err(_)`) has an impossible `case "Err":` (TS2678).
+    // Passing the boolean through an identity arrow keeps the test and hands tsc
+    // nothing to narrow by; the bindings read the payload through the proven
+    // variant instead (`variant_payload`).
+    let text = if matches!(pattern, Pattern::Variant { .. } | Pattern::Or(..)) && text != "true" {
+        format!("((__c: boolean) => __c)({text})")
+    } else {
+        text
     };
     pre.finish(text)
 }

@@ -43,7 +43,7 @@ async function test_rate_rejects_negative() {
     const { Rate } = __ns_shipping_rates;
     type Rate = __ns_shipping_rates.Rate;
     const r = Rate.fromInt(-1);
-    if (!(r.tag === "Err")) { throw __bynkExpectFailure("tests/rates.test.bynk:4:12", 96, 107, "expect r is Err(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err"))) { throw __bynkExpectFailure("tests/rates.test.bynk:4:12", 96, 107, "expect r is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -60,7 +60,7 @@ async function test_rate_accepts_non_negative() {
     const { Rate } = __ns_shipping_rates;
     type Rate = __ns_shipping_rates.Rate;
     const r = Rate.fromInt(3);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/rates.test.bynk:9:12", 189, 199, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/rates.test.bynk:9:12", 189, 199, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

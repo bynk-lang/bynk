@@ -104,7 +104,7 @@ async function test_a_RawStreamed_body_arrives_over_HTTP__read_back_as_Ok() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_files_Param_key("wire", "");
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/store.bynk:41:10", 1103, 1113, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/store.bynk:41:10", 1103, 1113, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -120,7 +120,7 @@ async function test_a_nested_stream_carrying_record_streams_too() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_shelves_Param_name("kept", "");
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/store.bynk:46:10", 1237, 1247, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/store.bynk:46:10", 1237, 1247, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

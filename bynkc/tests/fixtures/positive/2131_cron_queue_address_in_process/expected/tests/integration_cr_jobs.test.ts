@@ -159,7 +159,7 @@ async function test_the_count_is_read_over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const c = await __sysdrive_api_http_GET_count("");
-    if (!(c.tag === "Ok" && c.value === 0)) { throw __bynkExpectFailure("tests/jobs_system.bynk:4:10", 117, 127, "expect c is Ok(0)"); }
+    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs_system.bynk:4:10", 117, 127, "expect c is Ok(0)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

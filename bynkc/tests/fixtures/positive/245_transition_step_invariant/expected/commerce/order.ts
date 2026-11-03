@@ -73,7 +73,7 @@ export class Order {
       const __old = { ...__zeroOfOrderState(), ...__prior };
       __rehydrateOrderState(__old, __prior);
       const __new = s;
-      if (!((!(__old.status.tag === "Paid") || __new.status.tag === "Paid"))) {
+      if (!((!(((__c: boolean) => __c)(__old.status.tag === "Paid")) || ((__c: boolean) => __c)(__new.status.tag === "Paid")))) {
         globalThis.console.error("InvariantViolation Order.paid_is_terminal", { agent: "Order", invariant: "paid_is_terminal" });
         throw __invariantViolation("Order", "paid_is_terminal", "transition", "commerce/order.bynk:17:14");
       }

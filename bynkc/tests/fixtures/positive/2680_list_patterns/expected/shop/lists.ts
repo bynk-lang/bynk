@@ -152,7 +152,7 @@ export function secondOf(xs: readonly number[]): number {
 }
 
 export function pick(xs: readonly number[]): number {
-  if ((xs.length === 1 || xs.length === 2)) {
+  if (((__c: boolean) => __c)((xs.length === 1 || xs.length === 2))) {
     let x;
     if (xs.length === 1) {
       x = xs[0];

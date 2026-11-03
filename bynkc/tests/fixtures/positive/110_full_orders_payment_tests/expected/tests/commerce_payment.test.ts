@@ -76,7 +76,7 @@ async function test_authorise_returns_Ok_for_a_small_positive_amount() {
     type AuthId = __ns_commerce_payment.AuthId;
     type PaymentError = __ns_commerce_payment.PaymentError;
     const result = await authorise.call(100, deps);
-    if (!(result.tag === "Ok")) { throw __bynkExpectFailure("tests/payment.test.bynk:6:12", 167, 182, "expect result is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(result.tag === "Ok"))) { throw __bynkExpectFailure("tests/payment.test.bynk:6:12", 167, 182, "expect result is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

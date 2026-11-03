@@ -45,7 +45,7 @@ async function test_bare_sum_mock_takes_the_first_declared_variant() {
     type OrderId = __ns_demo_shapes.OrderId;
     type Status = __ns_demo_shapes.Status;
     const s = Status.Active(0);
-    if (!(s.tag === "Active")) { throw __bynkExpectFailure("tests/shapes.test.bynk:6:12", 208, 222, "expect s is Active(_)"); }
+    if (!(((__c: boolean) => __c)(s.tag === "Active"))) { throw __bynkExpectFailure("tests/shapes.test.bynk:6:12", 208, 222, "expect s is Active(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

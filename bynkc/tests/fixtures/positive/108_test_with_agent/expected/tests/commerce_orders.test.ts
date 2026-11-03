@@ -46,7 +46,7 @@ async function test_agent_place_reports_Ok() {
     type OrderError = __ns_commerce_orders.OrderError;
     type OrderId = __ns_commerce_orders.OrderId;
     const r = await __makeOrder(OrderId.unsafe("ORD-1")).place(50, deps);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/orders.test.bynk:4:12", 123, 133, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/orders.test.bynk:4:12", 123, 133, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -65,7 +65,7 @@ async function test_agent_place_reports_NotPlaced_for_zero() {
     type OrderError = __ns_commerce_orders.OrderError;
     type OrderId = __ns_commerce_orders.OrderId;
     const r = await __makeOrder(OrderId.unsafe("ORD-2")).place(0, deps);
-    if (!(r.tag === "Err")) { throw __bynkExpectFailure("tests/orders.test.bynk:9:12", 253, 264, "expect r is Err(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err"))) { throw __bynkExpectFailure("tests/orders.test.bynk:9:12", 253, 264, "expect r is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

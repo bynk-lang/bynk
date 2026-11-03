@@ -783,7 +783,7 @@ async function test_instances_are_separate() {
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const __r0 = await write.call("a", new globalThis.TextEncoder().encode("idx"), deps);
     const body = await fetch.call("a", deps);
-    if (!(body.tag === "None")) { throw __bynkExpectFailure("tests/registry/store.bynk:45:9", 1345, 1357, "expect body is None"); }
+    if (!(((__c: boolean) => __c)(body.tag === "None"))) { throw __bynkExpectFailure("tests/registry/store.bynk:45:9", 1345, 1357, "expect body is None"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -862,7 +862,7 @@ async function test_instances_are_separate_at_integration() {
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const __r0 = await write.call("a", new globalThis.TextEncoder().encode("idx"), deps);
     const body = await fetch.call("a", deps);
-    if (!(body.tag === "None")) { throw __bynkExpectFailure("tests/registry/store.bynk:58:9", 1727, 1739, "expect body is None"); }
+    if (!(((__c: boolean) => __c)(body.tag === "None"))) { throw __bynkExpectFailure("tests/registry/store.bynk:58:9", 1727, 1739, "expect body is None"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

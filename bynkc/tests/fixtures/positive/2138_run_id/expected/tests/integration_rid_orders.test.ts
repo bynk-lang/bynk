@@ -97,7 +97,7 @@ async function test_an_order_keyed_by_run_id_is_new() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_orders_Param_id(`o1-${String(__bynkRunId)}`, "");
-    if (!(r.tag === "Ok" && r.value === true)) { throw __bynkExpectFailure("tests/system.bynk:6:10", 295, 308, "expect r is Ok(true)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === true))) { throw __bynkExpectFailure("tests/system.bynk:6:10", 295, 308, "expect r is Ok(true)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

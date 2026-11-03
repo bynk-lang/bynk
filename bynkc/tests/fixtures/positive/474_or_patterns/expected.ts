@@ -120,14 +120,14 @@ export function smallOption(o: Option<number>): string {
 }
 
 export function describe(s: BookingState): string {
-  if ((s.tag === "Held" || s.tag === "Confirmed")) {
+  if (((__c: boolean) => __c)((s.tag === "Held" || s.tag === "Confirmed"))) {
     let r, rsv;
     if (s.tag === "Held") {
-      r = s.room;
-      rsv = s.rsv;
+      r = (s as Extract<typeof s, { tag: "Held" }>).room;
+      rsv = (s as Extract<typeof s, { tag: "Held" }>).rsv;
     } else {
-      r = s.room;
-      rsv = s.rsv;
+      r = (s as Extract<typeof s, { tag: "Confirmed" }>).room;
+      rsv = (s as Extract<typeof s, { tag: "Confirmed" }>).rsv;
     }
     return `room ${String(r)} rsv ${String(rsv)}`;
   } else {
@@ -136,7 +136,7 @@ export function describe(s: BookingState): string {
 }
 
 export function isActive(s: BookingState): boolean {
-  return (s.tag === "Held" || s.tag === "Confirmed");
+  return ((__c: boolean) => __c)((s.tag === "Held" || s.tag === "Confirmed"));
 }
 
 export function classify(s: Status): string {

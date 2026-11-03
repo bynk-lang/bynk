@@ -33,8 +33,8 @@ export const AppError = {
 export function withBinding(a: Option<number>, r: Result<number, string>): Result<number, string> {
   let __r0: number;
   __r0_out: {
-    if (a.tag === "Some") {
-      const v = a.value;
+    if (((__c: boolean) => __c)(a.tag === "Some")) {
+      const v = (a as Extract<typeof a, { tag: "Some" }>).value;
       const __r1 = r;
       if (__r1.tag === "Err") return __r1;
       __r0 = __r1.value + v; break __r0_out;

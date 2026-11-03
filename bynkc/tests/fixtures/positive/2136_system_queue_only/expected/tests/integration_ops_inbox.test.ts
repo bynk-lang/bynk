@@ -131,7 +131,7 @@ async function test_a_job_is_acked_through_the_Worker_s_queue_entry() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_inbox({ id: "j1", attempt: 1 });
-    if (!(r.tag === "Ack")) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:6:12", 310, 318, "expect r is Ack"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ack"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:6:12", 310, 318, "expect r is Ack"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -148,8 +148,8 @@ async function test_the_consumer_s_state_carries_across_deliveries_in_a_case() {
     const deps = __makeHarness();
     const a = await __sysdrive_message_inbox({ id: "j2", attempt: 1 });
     const b = await __sysdrive_message_inbox({ id: "j2", attempt: 2 });
-    if (!(a.tag === "Ack")) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:12:12", 517, 525, "expect a is Ack"); }
-    if (!(b.tag === "Retry" && b.reason === "already seen")) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:13:12", 537, 563, "expect b is Retry(\"already seen\")"); }
+    if (!(((__c: boolean) => __c)(a.tag === "Ack"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:12:12", 517, 525, "expect a is Ack"); }
+    if (!(((__c: boolean) => __c)(b.tag === "Retry" && b.reason === "already seen"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:13:12", 537, 563, "expect b is Retry(\"already seen\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -165,7 +165,7 @@ async function test_a_retry_carries_the_consumer_s_reason() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_inbox({ id: "j3", attempt: 4 });
-    if (!(r.tag === "Retry" && r.reason === "too many attempts")) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:18:12", 686, 717, "expect r is Retry(\"too many attempts\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Retry" && r.reason === "too many attempts"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:18:12", 686, 717, "expect r is Retry(\"too many attempts\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

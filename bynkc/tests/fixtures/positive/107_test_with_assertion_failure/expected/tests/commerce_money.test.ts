@@ -43,7 +43,7 @@ async function test_deliberate_failure() {
     const { Money } = __ns_commerce_money;
     type Money = __ns_commerce_money.Money;
     const m = Money.fromMinorUnits(10);
-    if (!(m.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:6:12", 213, 224, "expect m is Err(_)"); }
+    if (!(((__c: boolean) => __c)(m.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:6:12", 213, 224, "expect m is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

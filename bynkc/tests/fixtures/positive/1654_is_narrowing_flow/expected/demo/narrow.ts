@@ -50,43 +50,43 @@ export function both(n: number, m: number): number {
 }
 
 export function positive(o: Option<number>): boolean {
-  return o.tag === "Some" && ((() => { const v = o.value; return v > 0; })());
+  return ((__c: boolean) => __c)(o.tag === "Some") && ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; return v > 0; })());
 }
 
 export function bigRoom(b: Booking): boolean {
-  return (b.tag === "Held") && ((() => { const g = b.guest; const r = b.room; return r > 100; })()) && ((() => { const g = b.guest; const r = b.room; return g !== ""; })());
+  return (((__c: boolean) => __c)(b.tag === "Held")) && ((() => { const g = (b as Extract<typeof b, { tag: "Held" }>).guest; const r = (b as Extract<typeof b, { tag: "Held" }>).room; return r > 100; })()) && ((() => { const g = (b as Extract<typeof b, { tag: "Held" }>).guest; const r = (b as Extract<typeof b, { tag: "Held" }>).room; return g !== ""; })());
 }
 
 export function nonNegativeIfSome(o: Option<number>): boolean {
-  return (!(o.tag === "Some") || ((() => { const v = o.value; return v >= 0; })()));
+  return (!(((__c: boolean) => __c)(o.tag === "Some")) || ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; return v >= 0; })()));
 }
 
 export function orZero(o: Option<number>): number {
-  if (!(o.tag === "Some")) {
+  if (!(((__c: boolean) => __c)(o.tag === "Some"))) {
     return 0;
   } else {
-    const v = o.value;
+    const v = (o as Extract<typeof o, { tag: "Some" }>).value;
     return v;
   }
 }
 
 export function sumOrZero(a: Option<number>, b: Option<number>): number {
-  if (!(a.tag === "Some") || !(b.tag === "Some")) {
+  if (!(((__c: boolean) => __c)(a.tag === "Some")) || !(((__c: boolean) => __c)(b.tag === "Some"))) {
     return 0;
   } else {
-    const x = a.value;
-    const y = b.value;
+    const x = (a as Extract<typeof a, { tag: "Some" }>).value;
+    const y = (b as Extract<typeof b, { tag: "Some" }>).value;
     return x + y;
   }
 }
 
 export function either(a: Option<number>, b: Option<number>): number {
-  return (a.tag === "Some" || b.tag === "Some" ? 1 : 0);
+  return (((__c: boolean) => __c)(a.tag === "Some") || ((__c: boolean) => __c)(b.tag === "Some") ? 1 : 0);
 }
 
 export function eitherOr(a: Option<number>, b: Option<number>, r: Result<number, string>): Result<number, string> {
   let __r1: number;
-  if (a.tag === "Some" || b.tag === "Some") {
+  if (((__c: boolean) => __c)(a.tag === "Some") || ((__c: boolean) => __c)(b.tag === "Some")) {
     const __r0 = r;
     if (__r0.tag === "Err") return __r0;
     __r1 = __r0.value;

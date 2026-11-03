@@ -100,7 +100,7 @@ async function test_alice_s_order_does_not_fault() {
     type Order = __ns_shop_orders.Order;
     type UserId = __ns_shop_orders.UserId;
     const r = await api.http_POST_orders({ sku: "w" }, { ...deps, identity: (("alice" as any) as any) });
-    if (!(r.tag === "Created" && r.value === 7)) { throw __bynkExpectFailure("tests/shop/orders.bynk:16:12", 566, 581, "expect r is Created(7)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === 7))) { throw __bynkExpectFailure("tests/shop/orders.bynk:16:12", 566, 581, "expect r is Created(7)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

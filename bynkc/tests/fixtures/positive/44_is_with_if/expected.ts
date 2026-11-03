@@ -5,8 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function useValue(r: Result<number, string>): number {
-  if (r.tag === "Ok") {
-    const n = r.value;
+  if (((__c: boolean) => __c)(r.tag === "Ok")) {
+    const n = (r as Extract<typeof r, { tag: "Ok" }>).value;
     return n;
   } else {
     return 0;

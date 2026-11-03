@@ -381,7 +381,7 @@ async function test_a_local_named_like_an_asset() {
     const r = await __bynkAssetGet((style).url);
     const __r0 = "shadowed";
     if (!(__r0 === "shadowed")) { throw __bynkExpectFailure("tests/r/counter.bynk:32:10", 699, 718, "expect style == \"shadowed\"\n  expected: style == \"shadowed\"\n  actual:   " + __bynkShow((__r0)) + " == " + __bynkShow(("shadowed"))); }
-    if (!(r.tag === "Raw")) { throw __bynkExpectFailure("tests/r/counter.bynk:33:10", 728, 742, "expect r is Raw(_, _)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/r/counter.bynk:33:10", 728, 742, "expect r is Raw(_, _)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

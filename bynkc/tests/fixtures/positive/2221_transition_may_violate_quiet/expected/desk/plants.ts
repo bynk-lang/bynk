@@ -64,7 +64,7 @@ export class Dial {
       const __old = { ...__zeroOfDialState(), ...__prior };
       __rehydrateDialState(__old, __prior);
       const __new = s;
-      if (!((!(__old.level.tag === "Low") || __new.level.tag === "Low"))) {
+      if (!((!(((__c: boolean) => __c)(__old.level.tag === "Low")) || ((__c: boolean) => __c)(__new.level.tag === "Low")))) {
         globalThis.console.error("InvariantViolation Dial.low_stays_low", { agent: "Dial", invariant: "low_stays_low" });
         throw __invariantViolation("Dial", "low_stays_low", "transition", "desk/plants.bynk:15:14");
       }
@@ -125,7 +125,7 @@ export class Plant {
       const __old = { ...__zeroOfPlantState(), ...__prior };
       __rehydratePlantState(__old, __prior);
       const __new = s;
-      if (!((!(__old.stage.tag === "Seed") || __new.stage.tag === "Grown"))) {
+      if (!((!(((__c: boolean) => __c)(__old.stage.tag === "Seed")) || ((__c: boolean) => __c)(__new.stage.tag === "Grown")))) {
         globalThis.console.error("InvariantViolation Plant.seeds_must_grow", { agent: "Plant", invariant: "seeds_must_grow" });
         throw __invariantViolation("Plant", "seeds_must_grow", "transition", "desk/plants.bynk:32:14");
       }
@@ -188,7 +188,7 @@ export class Counter {
       const __old = { ...__zeroOfCounterState(), ...__prior };
       __rehydrateCounterState(__old, __prior);
       const __new = s;
-      if (!((!(__old.stage.tag === "Seed") || __new.count > __old.count))) {
+      if (!((!(((__c: boolean) => __c)(__old.stage.tag === "Seed")) || __new.count > __old.count))) {
         globalThis.console.error("InvariantViolation Counter.grows_count", { agent: "Counter", invariant: "grows_count" });
         throw __invariantViolation("Counter", "grows_count", "transition", "desk/plants.bynk:49:14");
       }

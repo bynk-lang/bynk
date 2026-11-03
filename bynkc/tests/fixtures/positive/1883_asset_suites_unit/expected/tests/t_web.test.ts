@@ -88,7 +88,7 @@ async function test_the_favicon_is_at_its_fixed_path() {
     const { link, style } = __ns_t_page;
     if (!(favicon.url === "/favicon.ico")) { throw __bynkExpectFailure("tests/t/web.bynk:13:12", 466, 495, "expect favicon.url == \"/favicon.ico\"\n  expected: favicon.url == \"/favicon.ico\"\n  actual:   " + __bynkShow((favicon.url)) + " == " + __bynkShow(("/favicon.ico"))); }
     const r = await __bynkAssetGet((favicon).url);
-    if (!(r.tag === "Raw")) { throw __bynkExpectFailure("tests/t/web.bynk:15:12", 537, 551, "expect r is Raw(_, _)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/t/web.bynk:15:12", 537, 551, "expect r is Raw(_, _)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

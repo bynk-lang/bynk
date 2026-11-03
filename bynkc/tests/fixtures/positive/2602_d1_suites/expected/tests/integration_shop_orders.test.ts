@@ -94,9 +94,9 @@ async function test_a_duplicate_order_over_the_wire_is_a_409() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_orders_Param_id("x", "");
-    if (!(r.tag === "Created" && r.value === "x")) { throw __bynkExpectFailure("tests/shop/system.bynk:6:10", 233, 250, "expect r is Created(\"x\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "x"))) { throw __bynkExpectFailure("tests/shop/system.bynk:6:10", 233, 250, "expect r is Created(\"x\")"); }
     const again = await __sysdrive_api_http_POST_orders_Param_id("x", "");
-    if (!(again.tag === "Conflict")) { throw __bynkExpectFailure("tests/shop/system.bynk:8:10", 315, 335, "expect again is Conflict(_)"); }
+    if (!(((__c: boolean) => __c)(again.tag === "Conflict"))) { throw __bynkExpectFailure("tests/shop/system.bynk:8:10", 315, 335, "expect again is Conflict(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
