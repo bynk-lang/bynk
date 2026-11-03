@@ -1007,7 +1007,8 @@ pub(crate) fn emit_suite_fn(
     commons: &TypedCommons,
     runtime_use: &RuntimeUse,
 ) -> Vec<bynk_ts::TsStmt> {
-    emit_free_fn_in(f, commons, false, runtime_use, false)
+    // A suite is only ever built for `bynkc test`, which guards every contract.
+    emit_free_fn_in(f, commons, true, runtime_use, false)
 }
 
 fn emit_free_fn_in(

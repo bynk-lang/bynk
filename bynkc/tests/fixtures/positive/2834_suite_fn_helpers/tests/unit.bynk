@@ -36,3 +36,13 @@ property "a helper is callable from a property" {
 		expect refinedCount() == 3
 	}
 }
+
+fn positive(n: Int) -> Int
+  requires pos: n > 0
+{
+	n
+}
+
+case "a helper's contract is enforced" {
+	expect positive(2) == 2
+}
