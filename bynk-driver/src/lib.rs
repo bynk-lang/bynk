@@ -261,7 +261,7 @@ impl From<discovery::DiscoveryError> for ProjectOptionsError {
 /// [`bynk_render::print_errors`]. The `ProjectFailure → CompileError` flattening
 /// stays here, above `bynk-render`, so there is no `render → emit` edge.
 pub fn print_project_failure(failure: &project::ProjectFailure) {
-    for ae in &failure.errors {
+    for ae in failure.errors.iter().filter(|ae| !is_hint(ae)) {
         match attributed_snapshot(ae, &failure.snapshots, &failure.display_root) {
             Some((label, text)) => {
                 print_attributed(ae, &label, text, &failure.snapshots, &failure.display_root);
@@ -462,8 +462,10 @@ fn shown(path: &Path) -> String {
 /// attributed error is positioned against its file's snapshot; an unattributed
 /// (project-level) error falls back to `<severity>[<category>]: <message>`.
 pub fn print_project_failure_short(failure: &project::ProjectFailure) {
-    for line in project_failure_short_lines(failure) {
-        eprintln!("{line}");
+    // #2838: the lines keep hints for the machine consumers that re-parse them
+    // (the `test --format json` document); the terminal drops them.
+    for ae in failure.errors.iter().filter(|ae| !is_hint(ae)) {
+        eprintln!("{}", failure_short_line(failure, ae));
     }
 }
 
@@ -484,18 +486,21 @@ pub fn project_failure_short_lines(failure: &project::ProjectFailure) -> Vec<Str
     failure
         .errors
         .iter()
-        .map(
-            |ae| match attributed_snapshot(ae, &failure.snapshots, &failure.display_root) {
-                Some((label, text)) => bynk_render::short_line(&label, text, &ae.error),
-                None => format!(
-                    "{}[{}]: {}",
-                    bynk_render::severity_word(&ae.error),
-                    ae.error.category,
-                    ae.error.message
-                ),
-            },
-        )
+        .map(|ae| failure_short_line(failure, ae))
         .collect()
+}
+
+/// One error of `failure` as its single `--format short` line.
+fn failure_short_line(failure: &project::ProjectFailure, ae: &project::AttributedError) -> String {
+    match attributed_snapshot(ae, &failure.snapshots, &failure.display_root) {
+        Some((label, text)) => bynk_render::short_line(&label, text, &ae.error),
+        None => format!(
+            "{}[{}]: {}",
+            bynk_render::severity_word(&ae.error),
+            ae.error.category,
+            ae.error.message
+        ),
+    }
 }
 
 /// Render every diagnostic from a [`project::ProjectCheck`] (finding #64) with

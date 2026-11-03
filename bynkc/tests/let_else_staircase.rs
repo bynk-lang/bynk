@@ -308,3 +308,31 @@ fn the_single_file_compile_does_not_print_the_hint() {
     assert!(out.status.success(), "{stderr}");
     assert!(!stderr.contains("let_else_staircase"), "{stderr}");
 }
+
+/// A project holding a staircase and an unrelated type error: the build fails
+/// on the error and the terminal output does not carry the hint.
+#[test]
+fn a_failed_project_build_does_not_print_the_hint() {
+    let dir = std::env::temp_dir().join(format!("bynk-staircase-fail-{}", std::process::id()));
+    let src = dir.join("src/demo");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(
+        src.join("steps.bynk"),
+        commons(&format!("{READ}\n\nfn broken() -> Int {{ \"nope\" }}")),
+    )
+    .unwrap();
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .arg("compile")
+        .arg(dir.join("src"))
+        .arg("-o")
+        .arg(dir.join("out"))
+        .output()
+        .expect("bynkc runs");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("return_mismatch"),
+        "the real error shows: {stderr}"
+    );
+    assert!(!stderr.contains("let_else_staircase"), "{stderr}");
+}
