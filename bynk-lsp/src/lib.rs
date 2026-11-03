@@ -914,6 +914,7 @@ impl Backend {
                     severity: Some(match d.severity {
                         bynk_syntax::Severity::Error => DiagnosticSeverity::ERROR,
                         bynk_syntax::Severity::Warning => DiagnosticSeverity::WARNING,
+                        bynk_syntax::Severity::Hint => DiagnosticSeverity::HINT,
                     }),
                     code: Some(tower_lsp::lsp_types::NumberOrString::String(
                         d.error.category.to_string(),
@@ -5936,6 +5937,7 @@ fn make_diagnostic(
     let severity = match d.severity {
         bynk_syntax::Severity::Error => DiagnosticSeverity::ERROR,
         bynk_syntax::Severity::Warning => DiagnosticSeverity::WARNING,
+        bynk_syntax::Severity::Hint => DiagnosticSeverity::HINT,
     };
     let mut related_information: Vec<DiagnosticRelatedInformation> = Vec::new();
     let mut label_notes: Vec<&str> = Vec::new();
@@ -6678,6 +6680,25 @@ mod tests {
             .unwrap()
             .expect("a committed round answers");
         assert_eq!(model.lock, contract_diff_request::LockWire::Unreadable);
+    }
+
+    /// #2838: a hint-severity diagnostic reaches the editor as an LSP hint.
+    #[test]
+    fn a_hint_diagnostic_maps_to_the_lsp_hint_severity() {
+        let text = "context app\n";
+        let positions = crate::position::PositionMap::new(text);
+        let uri = Url::parse("file:///z.bynk").unwrap();
+        let d = bynk_ide::Diagnostic {
+            severity: bynk_syntax::Severity::Hint,
+            error: bynk_syntax::CompileError::new(
+                "bynk.parse.let_else_staircase",
+                bynk_syntax::span::Span::new(0, 7),
+                "msg",
+            ),
+            label_files: Vec::new(),
+        };
+        let diagnostic = make_diagnostic(&d, &positions, &uri, &ProjectFiles::new());
+        assert_eq!(diagnostic.severity, Some(DiagnosticSeverity::HINT));
     }
 
     /// A label with nowhere to point — in a toolchain-injected unit, or in a

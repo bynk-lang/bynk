@@ -131,7 +131,9 @@ impl ErrorSink {
         display_canonical_names(&mut error);
         let attributed = AttributedError::new(file.map(Path::to_path_buf), error);
         match bynk_syntax::Severity::for_error(&attributed.error) {
-            bynk_syntax::Severity::Warning => self.warnings.push(attributed),
+            bynk_syntax::Severity::Warning | bynk_syntax::Severity::Hint => {
+                self.warnings.push(attributed)
+            }
             bynk_syntax::Severity::Error => self.entries.push(attributed),
         }
     }

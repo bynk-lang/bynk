@@ -1,0 +1,2 @@
+# #2838: the nested `match` staircase and its `let … else` rewrite behave identically.
+passed=3 failed=0

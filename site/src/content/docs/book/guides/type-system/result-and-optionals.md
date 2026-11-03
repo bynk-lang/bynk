@@ -80,7 +80,9 @@ commons demo {
 }
 ```
 
-`let <pattern> = <value> else { … }` keeps the steps flat. When the value
+`let <pattern> = <value> else { … }` keeps the steps flat (the compiler hints
+at this rewrite for a staircase two `match`es deep, and `bynk check --fix`
+applies it; see [Flatten a staircase](/book/guides/type-system/match/#flatten-a-staircase)). When the value
 matches the pattern, its names are bound for the rest of the block; when it
 does not, the `else` block is what the block produces instead:
 
@@ -119,6 +121,28 @@ that branch's value, and the function carries on. In an effectful body, use
 `<-` to match an effect's result: `let Ok(id) <- Orders.open(cart) else { … }`.
 See [Undo earlier steps when a later one fails](/book/guides/program-structure/consume-services/#undo-earlier-steps-when-a-later-one-fails)
 for that form undoing calls to other contexts.
+
+## Methods on `Option` and `Result` {#methods}
+
+For the small cases a `match` is too much for, both types carry methods:
+
+| `Option[T]` | |
+| --- | --- |
+| `map(f)`, `andThen(f)` | transform the value, or chain a step that may be absent |
+| `getOrElse(x)`, `orElse(f)` | a default value, or a fallback `Option` (`f: () -> Option[T]`, run only on `None`) |
+| `filter(p)` | keep the value only when `p` holds |
+| `isSome()`, `isNone()` | test presence |
+| `okOr(err)` | turn an absence into an `Err` |
+
+| `Result[T, E]` | |
+| --- | --- |
+| `map(f)`, `andThen(f)`, `mapErr(f)` | transform the value or the error, or chain a fallible step |
+| `getOrElse(x)` | a default value |
+| `isOk()`, `isErr()` | test the outcome |
+| `ok()` | keep the value, dropping the error (`Option[T]`) |
+
+There is one name per operation: chaining a step is `andThen` (not `flatMap`)
+on `Option` and `Result`.
 
 ## Related
 

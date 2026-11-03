@@ -362,8 +362,16 @@ fn positive_fixtures() {
                     // `expected_error.txt`). Absent file ⇒ the build must emit
                     // no warnings — so a positive fixture cannot start warning
                     // silently.
-                    let rendered_warnings: String = out
+                    // #2838: a hint is a suggestion, not a warning.
+                    let warnings: Vec<_> = out
                         .warnings
+                        .iter()
+                        .filter(|w| {
+                            bynk_syntax::Severity::for_error(&w.error)
+                                != bynk_syntax::Severity::Hint
+                        })
+                        .collect();
+                    let rendered_warnings: String = warnings
                         .iter()
                         .map(|w| format!("{} {}\n", w.error.category, w.error.message))
                         .collect();
@@ -381,7 +389,7 @@ fn positive_fixtures() {
                                 ));
                             }
                         }
-                    } else if !out.warnings.is_empty() {
+                    } else if !warnings.is_empty() {
                         all_ok = false;
                         report.push_str(&format!(
                             "\n--- unexpected warning(s) ---\n{rendered_warnings}\n"

@@ -1,0 +1,20 @@
+---
+level: minor
+probes: ts_writes, diagnostic_coverage
+changelog: A nested `match` staircase gets a `let … else` hint with a fix, `Option`/`Result` gain `isNone`, `orElse`, `filter`, `isErr` and `ok`, and a second `match` in a block names the rule
+---
+
+## ADR: let-else-staircase-hint
+title: A nested match staircase is offered `let … else` as a hint, under a new hint severity
+summary: Detection shape, the hint severity, and the five Option/Result methods
+
+**Context.** `let … else` (#2010) flattens a chain of fallible steps, but nothing led an author to it: writing a webhook receiver (`bynk-lang/github-hooks`) took three 3–4-level `match` staircases before the flat form was found. A few missing `Option`/`Result` methods (`isNone`, `orElse`, `filter`, `isErr`, `ok`) kept the flat style from being complete, and two `match`es in a row in a block gave only "expected `}` to close the block".
+
+**Decision.**
+
+- **The hint.** A block whose tail is a `match` with exactly two arms — one continuing arm (`Some(x)`/`Ok(x)`, the payload a name or `_`) and one fallback (`None`, `Err(_)`/`Err(name)`, or `_`), neither guarded — whose continuing arm itself ends in such a `match`, is a staircase. From two steps deep it raises `bynk.parse.let_else_staircase` at the outermost step, once per staircase, with a machine-applicable rewrite of the whole chain to `let P = e else { … }`, or `else match { Err(name) => … }` when the fallback binds. The rewrite is the §5.6 desugaring read backwards, so it preserves meaning; statements between steps are kept in place. Shapes that stay quiet: a lone two-arm `match`, a `match` with three or more arms, a `match` that is not a block's tail (a `let` value, an argument), a guarded arm, and the `match` a `let … else` already stands for. A staircase containing a comment is hinted without a fix, since the rewrite would drop the comment. Detection is syntactic, in the parser, where the source text for the rewrite is at hand.
+- **Hint severity.** `bynk_syntax::Severity` gains `Hint`, built in the registry by `hint(…)`. A hint never fails a build, never counts toward errors or warnings, and is not printed by `bynk check` or `bynk build`; `bynk check --fix` still applies its fix. The LSP maps it to `DiagnosticSeverity::HINT`; the MCP tools and the wasm compile result carry it as `severity: "hint"`; ariadne renders it as advice. Hints ride the warnings channel, so each terminal printer filters them out once.
+- **Methods.** `Option.isNone()`, `Option.orElse(f: () -> Option[T])` (the thunk runs only on `None`), `Option.filter(p)`, `Result.isErr()` and `Result.ok() -> Option[T]`, lowered inline like their siblings, so no runtime helper. There is no `flatMap` alias for `andThen`: one name per operation, and the unknown-method diagnostic for `flatMap` on `Option`/`Result` carries a note naming `andThen`.
+- **Mid-block `match`.** A `match` that ends a block and is followed by another `match` is `bynk.parse.match_ends_block`, naming the rule and pointing at `let _ = match …` and `let … else`. Expression statements stay out of scope; the block grammar is unchanged.
+
+**Consequences.** An author who writes the staircase is shown the flat form in the editor, and CI output stays clean. The severity enum grew a third member, so any new exhaustive match over it must handle hints. Completion and signature help list the new methods because they read the kernel method table. Hover, semantic tokens and the grammar are unchanged.

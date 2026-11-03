@@ -209,6 +209,25 @@ impl<'a> Parser<'a> {
             (tail, close.span, true)
         } else {
             let tail = self.parse_expr()?;
+            self.check_staircase(&tail);
+            // #2838: a block has no expression statements, so a `match` ends
+            // it. A second `match` straight after is the common slip; say why
+            // it cannot follow rather than only that a `}` was expected.
+            if matches!(tail.kind, ExprKind::Match { .. })
+                && self.peek_kind() == Some(TokenKind::Match)
+            {
+                let next = self.peek().unwrap().span;
+                return Err(CompileError::new(
+                    "bynk.parse.match_ends_block",
+                    next,
+                    "a `match` ends the block it is in, so another `match` cannot follow it",
+                )
+                .with_label(tail.span, "this `match` is the block's final value")
+                .with_note(
+                    "bind the first with `let _ = match …`, or flatten a chain of fallible \
+                     steps with `let … else`",
+                ));
+            }
             let close = self.expect(TokenKind::RBrace, "to close the block")?;
             (tail, close.span, false)
         };
