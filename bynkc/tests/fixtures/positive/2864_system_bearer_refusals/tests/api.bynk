@@ -11,6 +11,11 @@ suite pay.api as system {
 		expect r is Ok("activity for ada")
 	}
 
+	case "a non-ASCII identity round-trips through the signed token" {
+		let r <- api.GET("/activity") by Reader("ünï")
+		expect r is Ok("activity for ünï")
+	}
+
 	case "a missing token is refused" {
 		let r <- api.GET("/activity") by Nobody
 		expect r is Rejected(Unauthorized)

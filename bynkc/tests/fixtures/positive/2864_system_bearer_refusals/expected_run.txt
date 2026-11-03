@@ -1,5 +1,5 @@
 # #1660: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
 # #2864: the last two cases claim the seam admitted a bad token; it did not.
-passed=6 failed=2
+passed=7 failed=2
 fail a forged token is not handled
 fail an expired token is not handled

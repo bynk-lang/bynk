@@ -61,7 +61,7 @@ function __makeHarness() {
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
-function __b64url(s: string): string { return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function __b64url(s: string): string { return __bytesB64url(new TextEncoder().encode(s)); }
 function __bytesB64url(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 async function __bynkSignHs256(payload: Record<string, unknown>, secret: string): Promise<string> {
   const h = __b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
@@ -173,6 +173,23 @@ async function test_a_correctly_signed_token_is_admitted() {
   }
 }
 
+async function test_a_non_ASCII_identity_round_trips_through_the_signed_token() {
+  try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_GET_activity(("ünï" as any));
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "activity for ünï"))) { throw __bynkExpectFailure("tests/api.bynk:16:10", 704, 733, "expect r is Ok(\"activity for ünï\")"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 async function test_a_missing_token_is_refused() {
   try {
     __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
@@ -180,7 +197,7 @@ async function test_a_missing_token_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_noauth_api_http_GET_activity("");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:16:10", 664, 691, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:21:10", 826, 853, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -197,7 +214,7 @@ async function test_a_forged_token_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_forged_api_http_GET_activity("");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:21:10", 783, 810, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:26:10", 945, 972, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -214,7 +231,7 @@ async function test_an_expired_token_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_expired_api_http_GET_activity("");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:26:10", 905, 932, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1067, 1094, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -231,7 +248,7 @@ async function test_a_forged_raw_request_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_rawforged_api_http_POST_notes("\"hi\"", "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1044, 1071, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1206, 1233, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -248,7 +265,7 @@ async function test_an_expired_raw_request_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_rawexpired_api_http_POST_notes("\"hi\"", "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1186, 1213, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1348, 1375, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -265,7 +282,7 @@ async function test_a_forged_token_is_not_handled() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_forged_api_http_GET_activity("");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:43:10", 1444, 1459, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:48:10", 1606, 1621, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -282,7 +299,7 @@ async function test_an_expired_token_is_not_handled() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_expired_api_http_GET_activity("");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:48:10", 1558, 1573, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:53:10", 1720, 1735, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -306,7 +323,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a correctly signed token is admitted", "a missing token is refused", "a forged token is refused", "an expired token is refused", "a forged raw request is refused", "an expired raw request is refused", "a forged token is not handled", "an expired token is not handled"];
+export const __bynkCases: readonly string[] = ["a correctly signed token is admitted", "a non-ASCII identity round-trips through the signed token", "a missing token is refused", "a forged token is refused", "an expired token is refused", "a forged raw request is refused", "an expired raw request is refused", "a forged token is not handled", "an expired token is not handled"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -314,6 +331,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a correctly signed token is admitted")) {
     const started = __bynkCaseNow();
     const r = { name: "a correctly signed token is admitted", ...(await test_a_correctly_signed_token_is_admitted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a non-ASCII identity round-trips through the signed token")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a non-ASCII identity round-trips through the signed token", ...(await test_a_non_ASCII_identity_round_trips_through_the_signed_token()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
