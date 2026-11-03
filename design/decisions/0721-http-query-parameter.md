@@ -1,12 +1,6 @@
----
-level: minor
-changelog: An `on http` handler reads the query string through a typed `query` parameter, decoded and validated at the boundary, or a raw `RequestQuery` view (#2854)
-probes: emit_diagnostics, ts_writes, ts_any, diagnostic_coverage
----
+# 0721 — An HTTP handler reads the query string through a typed `query` parameter
 
-## ADR: http-query-parameter
-title: An HTTP handler reads the query string through a typed `query` parameter
-summary: `query: T` decodes and validates at the boundary; `query: RequestQuery` is the raw view
+- **Status:** Accepted (v0.498)
 
 **Context.** A handler could not see the query string at all. The router matched on `url.pathname` and dropped the rest, and a handler parameter had to be a `:name` path parameter, `body` or `headers` (`bynk.http.extra_param`). Filtering, pagination and options on a `GET` had to be encoded as path segments, which does not scale and is not how HTTP APIs are written. A query is a boundary fact like a path parameter or a body: the language's strength is typed, refined input checked before the handler runs. #918 named the gap and #2341 set the pattern for headers (`headers: RequestHeaders`).
 
