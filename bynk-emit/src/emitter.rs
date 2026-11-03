@@ -61,7 +61,7 @@ pub(crate) use events_fanout::emit_events_fanout_do;
 pub(crate) use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub(crate) use workers::emit_worker_compose;
-pub(crate) use workers_entry::emit_worker_entry;
+pub(crate) use workers_entry::{emit_worker_entry, table_has_plain_json};
 pub(crate) use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod cmp;

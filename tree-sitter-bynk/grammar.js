@@ -853,6 +853,9 @@ module.exports = grammar({
         // v0.142 (ADR 0166): the optional `limits { }` policy, likewise a
         // header-position `from http` concern restricted by the checker.
         optional(field("limits", $.limits_policy)),
+        // #2858: the optional `json { }` policy, likewise a header-position
+        // `from http` concern restricted by the checker.
+        optional(field("json", $.json_policy)),
         // v0.140 (ADR 0163): a handler may carry one or more `@name(args)`
         // annotations (`@cache(maxAge: 5.minutes)`, `@limit(maxBody: …)`) —
         // the same shape `store_annotation` already gives store fields.
@@ -894,6 +897,18 @@ module.exports = grammar({
         "}",
       ),
     limits_field: ($) =>
+      seq(field("name", $.identifier), ":", field("value", $._expression)),
+    // #2858: `json { <name>: <value>, … }`. `json` is a contextual keyword (like
+    // `limits`); the one field name, `options`, is an ordinary identifier matched
+    // by the checker.
+    json_policy: ($) =>
+      seq(
+        "json",
+        "{",
+        repeat(seq($.json_field, optional(","))),
+        "}",
+      ),
+    json_field: ($) =>
       seq(field("name", $.identifier), ":", field("value", $._expression)),
     // v0.44: `from <protocol>` on the service header.
     // v0.103: `from websocket(in: I, out: O)` binds the inbound/outbound frame

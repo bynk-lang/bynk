@@ -150,6 +150,28 @@ export function byteStreamBody(stream: AsyncIterable<Uint8Array>): ReadableStrea
   return pullBody(stream, (chunk) => (chunk.byteLength === 0 ? [] : [chunk]));
 }
 
+// #2858: a plain-JSON route's body serialiser. The generated `Option` encoder
+// reads `__bynkPlainJson` and writes `Some(v)` as `v` and `None` as `null`
+// instead of the tagged object; this sets it for the one synchronous
+// serialisation and restores it, so a tagged route in the same Worker (and
+// every cross-context, queue and agent-state codec) is unaffected. The flag
+// lives on `globalThis`, so serialisation MUST stay synchronous: an `await`
+// between set and restore would leak it into a concurrent request. Generic
+// `Codable` witnesses (`codec.ts`) always write the tagged form and are out of
+// scope: a route body is serialised by its monomorphic generated encoder.
+export function withPlainJson<T>(serialise: (v: T) => JsonValue): (v: T) => JsonValue {
+  return (v) => {
+    const g = globalThis as { __bynkPlainJson?: boolean };
+    const prev = g.__bynkPlainJson;
+    g.__bynkPlainJson = true;
+    try {
+      return serialise(v);
+    } finally {
+      g.__bynkPlainJson = prev;
+    }
+  };
+}
+
 export function httpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,

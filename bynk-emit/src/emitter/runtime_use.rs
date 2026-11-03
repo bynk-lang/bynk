@@ -132,6 +132,10 @@ pub(crate) struct RuntimeUse {
     /// ordering kernels reference.
     cmp: RefCell<std::collections::BTreeSet<&'static str>>,
     icu: Cell<bool>,
+    /// #2858: the project has a plain-JSON route, so the generated `Option`
+    /// encoders carry the plain branch `withPlainJson` switches on. Absent, they
+    /// are emitted byte-for-byte as before.
+    plain_json: Cell<bool>,
     boundary_codec: Cell<bool>,
     json_codec: Cell<bool>,
     /// #1934: the module constructs an `HttpResult` variant. A source module
@@ -165,6 +169,16 @@ pub(crate) struct RuntimeUse {
 }
 
 impl RuntimeUse {
+    /// Record that the project has a plain-JSON route (#2858).
+    pub fn set_plain_json(&self, on: bool) {
+        self.plain_json.set(on);
+    }
+
+    /// Whether the `Option` encoders carry the plain-JSON branch (#2858).
+    pub fn plain_json(&self) -> bool {
+        self.plain_json.get()
+    }
+
     /// Record that the module references the `Bytes` runtime helpers.
     pub fn note_bytes(&self) {
         self.bytes.set(true);

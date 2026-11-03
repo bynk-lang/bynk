@@ -332,6 +332,37 @@ unchanged, so this is opt-in.
 See [HTTP → Request body limits](/book/reference/http/#request-body-limits) for the
 precedence rule, how the bytes read are counted, and the field tables.
 
+## Serve JSON to non-Bynk clients
+
+Bynk writes an `Option` in a response body as `{"kind": "Some", "value": …}`, which
+every non-Bynk consumer then has to special-case. Opt the service into plain JSON,
+so `Some(v)` is `v` and `None` is `null`:
+
+```bynk
+context activity
+
+type Activity = { id: String, action: Option[String], deleted: Option[Bool] }
+
+service api from http {
+  json { options: plain }
+
+  on GET("/activity/:id") (id: String) -> Effect[HttpResult[Activity]] by r: Visitor {
+    Ok(Activity { id: id, action: Some("opened"), deleted: None })
+  }
+
+  @json(options: tagged)       // this one route keeps Bynk's tagged form
+  on GET("/activity/:id/raw") (id: String) -> Effect[HttpResult[Option[String]]] by r: Visitor {
+    Ok(Some("x"))
+  }
+}
+```
+
+`GET /activity/1` answers `{"id":"1","action":"opened","deleted":null}`. A Bynk
+client still reads it. Plain mode refuses an `Option[Option[T]]` or `Option[()]` in a response
+type (`Some(None)` and `None` would both be `null`).
+
+See [HTTP → JSON for non-Bynk clients](/book/reference/http/#json-for-non-bynk-clients).
+
 ## Build and run
 
 HTTP services compile to a Cloudflare Worker with `--target workers`. See

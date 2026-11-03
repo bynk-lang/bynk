@@ -876,6 +876,26 @@ pub const LIMITS_FIELDS: &[(&str, &str)] = &[(
     "the maximum request body size in bytes (a positive `Int`)",
 )];
 
+/// #2858: the response-JSON policy fields, offered at a field-name position
+/// inside a `json { }` block (and as `@json( … )` arguments). The closed set is
+/// this one.
+pub const JSON_FIELDS: &[(&str, &str)] = &[(
+    "options",
+    "how `Option` is written in response bodies: `tagged` (Bynk's `{\"kind\": …}` form) or `plain` (`v` / `null`)",
+)];
+
+/// #2858: the values of a `json` / `@json` `options`.
+pub const JSON_OPTIONS_VALUES: &[(&str, &str)] = &[
+    (
+        "tagged",
+        "Bynk's tagged form: `{\"kind\": \"Some\", \"value\": v}` / `{\"kind\": \"None\"}` (the default)",
+    ),
+    (
+        "plain",
+        "plain JSON for non-Bynk clients: `Some(v)` is `v`, `None` is `null`",
+    ),
+];
+
 /// v0.140 (ADR 0163): the `@cache` handler-annotation arguments, offered at an
 /// argument-name position inside `@cache( … )`. `maxAge` is required (the freshness
 /// window); `scope` is optional (`public`/`private`, default `private`), as is
@@ -1102,6 +1122,73 @@ pub fn in_limits_field_position(text: &str, offset: usize) -> bool {
     }
     // `offset` arrives on a char boundary from the position converter, but
     // slice defensively — a mid-codepoint offset must degrade, not panic.
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
+
+/// #2858: the cursor is at a field-*name* position inside a `json { … }` block.
+/// Mirrors [`in_limits_field_position`].
+pub fn in_json_field_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_brace(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "json" {
+        return false;
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
+
+/// #2858: the cursor is at the value of `options:` — inside `json { … }` or
+/// `@json( … )` — where `tagged` / `plain` are offered.
+pub fn in_json_options_value_position(text: &str, offset: usize) -> bool {
+    let Some(head) = text.get(..offset.min(text.len())) else {
+        return false;
+    };
+    let in_block = innermost_open_brace(text, offset)
+        .is_some_and(|open| word_before_brace(text, open) == "json");
+    let in_annotation = innermost_open_paren(text, offset).is_some_and(|open| {
+        word_before_brace(text, open) == "json"
+            && text[..open]
+                .trim_end()
+                .trim_end_matches("json")
+                .trim_end()
+                .ends_with('@')
+    });
+    if !in_block && !in_annotation {
+        return false;
+    }
+    let line = head.rsplit(['\n', ',', '(', '{']).next().unwrap_or("");
+    line.trim_start()
+        .strip_prefix("options")
+        .and_then(|rest| rest.trim_start().strip_prefix(':'))
+        .is_some_and(|value| {
+            value
+                .chars()
+                .all(|c| c.is_alphabetic() || c.is_whitespace())
+        })
+}
+
+/// #2858: the cursor is at an argument-*name* position inside a `@json( … )`
+/// annotation. Mirrors [`in_cache_arg_position`].
+pub fn in_json_arg_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_paren(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "json" {
+        return false;
+    }
+    let head = text[..open].trim_end();
+    let before = head[..head.len() - "json".len()].trim_end();
+    if !before.ends_with('@') {
+        return false;
+    }
     let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
         return false;
     };
@@ -4271,6 +4358,29 @@ fn Box.size(self) -> Int { 1 }
         let _ = in_cors_field_position(doc, mid);
         let _ = in_security_field_position(doc, mid);
         let _ = in_limits_field_position(doc, mid);
+        let _ = in_json_field_position(doc, mid);
+        let _ = in_json_options_value_position(doc, mid);
+    }
+
+    #[test]
+    fn json_positions_inside_the_section_and_the_annotation() {
+        // #2858: a field name in `json { }`, the `options:` value in either
+        // form, and an argument name in `@json( )`.
+        let name = "service api from http {\n  json {\n    ";
+        assert!(in_json_field_position(name, name.len()));
+        assert!(!in_json_options_value_position(name, name.len()));
+        let value = "service api from http {\n  json {\n    options: ";
+        assert!(!in_json_field_position(value, value.len()));
+        assert!(in_json_options_value_position(value, value.len()));
+        let ann = "service api from http {\n  @json(";
+        assert!(in_json_arg_position(ann, ann.len()));
+        let ann_value = "service api from http {\n  @json(options: pl";
+        assert!(in_json_options_value_position(ann_value, ann_value.len()));
+        // A `limits { }` block is not a `json` block, nor a bare `json(` call.
+        let limits = "service api from http {\n  limits {\n    options: ";
+        assert!(!in_json_options_value_position(limits, limits.len()));
+        let call = "fn f() { json(";
+        assert!(!in_json_arg_position(call, call.len()));
     }
 
     #[test]

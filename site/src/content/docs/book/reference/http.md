@@ -914,6 +914,68 @@ method) is `bynk.http.limit_on_bodyless`; a duplicate `@limit` on one handler is
 `bynk.http.limit_unknown_arg`; and a non-positive-`Int` `maxBody` is
 `bynk.http.limit_bad_max_body`.
 
+## JSON for non-Bynk clients
+
+An `Ok(value)` body is the value as JSON, with an `Option[U]` written in Bynk's
+**tagged** form, `{"kind": "Some", "value": v}` or `{"kind": "None"}`. A Bynk
+client reads that, but `curl | jq`, a dashboard and a script expect `"action":
+"opened"` and `"deleted": null`. A service (or one route) can opt its response
+bodies into **plain JSON**:
+
+```bynk
+context api
+
+type Activity = { id: String, action: Option[String], deleted: Option[Bool] }
+
+service api from http {
+  json { options: plain }
+
+  on GET("/activity") () -> Effect[HttpResult[List[Activity]]] by r: Visitor {
+    Ok([Activity { id: "a1", action: Some("opened"), deleted: None }])
+  }
+}
+```
+
+```json
+[{"id":"a1","action":"opened","deleted":null}]
+```
+
+In plain mode `Some(v)` is written `v` and `None` is written `null` (the key is
+never dropped), at any depth: in a record, a `List`, a `Map` value, a sum
+variant's field. Everything else about the encoding is unchanged. Bynk's own
+decoder reads the plain shape too ([ADR 0450](/book/reference/types/#the-json-codec)),
+so a Bynk client still reads the response.
+
+### The `json { }` section and `@json`
+
+| | Form | Notes |
+|---|---|---|
+| Service default | `json { options: plain }` | header position, after `cors`, `security` and `limits`; at most once (`bynk.parse.duplicate_json`); `from http` only (`bynk.http.json_not_http`) |
+| Per-route override | `@json(options: tagged)` or `@json(options: plain)` | on an `on http` handler; at most once (`bynk.http.json_duplicate`) |
+
+`options` is the only field, and its value is `tagged` (the default) or `plain`
+(`bynk.http.json_unknown_field`, `bynk.http.json_invalid_field`,
+`bynk.http.json_unknown_arg`, `bynk.http.json_invalid_arg`). The effective mode is
+**the route's `@json`, then the service's `json { }`, then `tagged`**. A service
+with neither is byte-for-byte unchanged.
+
+### An `Option` whose payload can be `null` is refused
+
+Plain mode must read back what it wrote. If an `Option[U]`'s payload `U` can
+itself be `null`, `Some(U)` and `None` would both be written `null`. So an
+`Option[Option[T]]` or an `Option[()]` anywhere in a plain route's response
+type, through records, sums, containers and generic arguments, is
+`bynk.json.nested_option_plain`, and the message names the payload. Model the
+distinction as a sum type, or keep that route `tagged`.
+
+### What plain mode does not change
+
+Only `Ok`, `Created` and `Accepted` **response bodies** of `from http` routes.
+Request bodies already decode plain JSON. Cross-context calls, queue messages,
+agent state, `Json.encode`, `Streaming` (SSE) events and the contract hashes keep
+the tagged form, so `decode(encode(x)) == x` still holds everywhere else.
+`bynk openapi` describes a plain route's `Option` as nullable.
+
 ## Request lifecycle
 
 ```mermaid

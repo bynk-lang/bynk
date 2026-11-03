@@ -553,6 +553,10 @@ that form and also the forms other JSON producers use for an optional value:
 | `{"kind": "Some", "value": v}`, with no other keys | `Some(v)`, `v` checked as `U` |
 | any other value `v` | `Some(v)`, `v` checked as `U` |
 
+An HTTP route can opt its response bodies into the plain form instead (`Some(v)`
+as `v`, `None` as `null`); `Json.encode` and every other boundary keep the tagged
+form. See [HTTP → JSON for non-Bynk clients](/book/reference/http/#json-for-non-bynk-clients).
+
 The tagged forms are tried first, so whatever `Json.encode` writes decodes back
 to the same value, even for an `Option[Option[T]]`. The same decoder runs at
 every boundary, so an HTTP request body, a cross-context call and a stored agent
