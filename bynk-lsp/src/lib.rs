@@ -1545,13 +1545,19 @@ impl Backend {
         use tower_lsp::lsp_types::{
             DidChangeWatchedFilesRegistrationOptions, FileSystemWatcher, GlobPattern,
         };
-        let watchers = ["**/*.bynk", "**/bynk.toml", "**/bynk.schema.lock"]
-            .into_iter()
-            .map(|g| FileSystemWatcher {
-                glob_pattern: GlobPattern::String(g.to_string()),
-                kind: None, // create | change | delete
-            })
-            .collect();
+        let watchers = [
+            "**/*.bynk",
+            "**/bynk.toml",
+            "**/bynk.schema.lock",
+            // #2841: a suite `fixture` reads from `fixtures/`.
+            "**/fixtures/**",
+        ]
+        .into_iter()
+        .map(|g| FileSystemWatcher {
+            glob_pattern: GlobPattern::String(g.to_string()),
+            kind: None, // create | change | delete
+        })
+        .collect();
         let registration = Registration {
             id: "bynk-watched-files".to_string(),
             method: "workspace/didChangeWatchedFiles".to_string(),
@@ -4937,9 +4943,12 @@ impl LanguageServer for Backend {
                 }
             } else if open_docs.contains(&ev.uri) {
                 uris_to_refresh.push(ev.uri.clone());
-            } else if ev.uri.path().ends_with(".bynk")
+            } else if (ev.uri.path().ends_with(".bynk") || is_fixture_file(&ev.uri))
                 && let Some(root) = self.root_for_uri(&ev.uri).await
             {
+                // #2841: an edit to a fixture file re-analyses its project, so
+                // a `fixture` that now names a missing file (or a restored one)
+                // shows at once.
                 roots_to_reanalyse.insert(root);
             }
         }
@@ -5886,6 +5895,12 @@ fn lsp_symbol_kind(kind: bynk_check::index::SymbolKind) -> SymbolKind {
 /// Whether a watched-file URI names a `bynk.toml` manifest — the trigger for a
 /// live config reload. Matches on the file-name component (not a path suffix),
 /// so a file like `notbynk.toml` doesn't spuriously fire.
+/// #2841: whether `uri` is a file under a `fixtures/` directory — the folder a
+/// suite's `fixture` declarations read from.
+fn is_fixture_file(uri: &Url) -> bool {
+    uri.path().split('/').any(|seg| seg == "fixtures")
+}
+
 fn is_bynk_toml(uri: &Url) -> bool {
     let Ok(path) = uri.to_file_path() else {
         return false;

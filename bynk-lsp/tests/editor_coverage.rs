@@ -86,6 +86,15 @@ fn every_contextual_keyword_has_a_hover_path() {
             "private: no hover path — describe_private_at returned None"
         );
     }
+    // #2841: `fixture` is a keyword only at the head of a suite `fixture` declaration.
+    let fixture = "suite Scaffold {\n  fixture note = \"fixtures/note.txt\"\n}\n";
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "fixture") {
+        let offset = fixture.find(kw.word).expect("`fixture` is in the fixture");
+        assert!(
+            symbols::describe_fixture_at(fixture, offset).is_some(),
+            "fixture: no hover path — describe_fixture_at returned None"
+        );
+    }
     // Constrained generics slice 1: `derives` is a keyword only in a type
     // declaration's trailing `derives Ord` clause.
     let derives = "context Scaffold\n\ntype Priority = enum { Low, High } derives Ord\n";
@@ -96,10 +105,12 @@ fn every_contextual_keyword_has_a_hover_path() {
             "derives: no hover path — describe_derives_at returned None"
         );
     }
-    for kw in CONTEXTUAL_KEYWORDS
-        .iter()
-        .filter(|k| !matches!(k.word, "advance" | "par" | "derives" | "private"))
-    {
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| {
+        !matches!(
+            k.word,
+            "advance" | "par" | "derives" | "private" | "fixture"
+        )
+    }) {
         let offset = source
             .find(kw.word)
             .expect("contextual keyword is in the fixture");

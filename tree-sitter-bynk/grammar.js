@@ -270,6 +270,7 @@ module.exports = grammar({
         $.consumes_decl,
         $.env_clause,
         $.stub_clause,
+        $.fixture_decl,
         $.fn_decl,
         $.case,
         $.property_decl,
@@ -466,6 +467,16 @@ module.exports = grammar({
       seq(
         optional(field("visibility", $.visibility_modifier)),
         "embed",
+        field("name", $.identifier),
+        "=",
+        field("path", $.string_literal),
+      ),
+
+    // #2841: `fixture name = "fixtures/…"` in a suite body — a project file's
+    // text as a `String` constant for the suite's cases. Contextual `fixture`.
+    fixture_decl: ($) =>
+      seq(
+        "fixture",
         field("name", $.identifier),
         "=",
         field("path", $.string_literal),

@@ -62,6 +62,7 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
             .workers_dev(workers.workers_dev)
             .asset_files(discovery::list_asset_folder(input)?)
             .embed_files(discovery::list_embed_folder(input)?)
+            .fixture_files(discovery::list_fixture_folder(input)?)
             .migration_files(discovery::list_migration_folder(input)?))
     } else {
         let sources = discovery::read_bynk_tree_single(input)?;
@@ -69,6 +70,7 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
             .sources(sources)
             .asset_files(discovery::list_asset_folder(input)?)
             .embed_files(discovery::list_embed_folder(input)?)
+            .fixture_files(discovery::list_fixture_folder(input)?)
             .migration_files(discovery::list_migration_folder(input)?))
     }
 }
@@ -89,6 +91,8 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
     let asset_files = discovery::list_asset_folder(input)?;
     // #2387, slice 2: the `embeds/` folder, listed the same way.
     let embed_files = discovery::list_embed_folder(input)?;
+    // #2841: the `fixtures/` folder, listed the same way.
+    let fixture_files = discovery::list_fixture_folder(input)?;
     // P4b (#2608): the `migrations/` folder, listed the same way.
     let migration_files = discovery::list_migration_folder(input)?;
     // #2554: the older contracts each callee still accepts. Read here, with
@@ -110,6 +114,7 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
                 .workers_dev(workers.workers_dev)
                 .asset_files(asset_files)
                 .embed_files(embed_files)
+                .fixture_files(fixture_files)
                 .migration_files(migration_files.clone())
                 .contracts_lock(contracts_lock)
         }
@@ -117,6 +122,7 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
             .sources(sources)
             .asset_files(asset_files)
             .embed_files(embed_files)
+            .fixture_files(fixture_files)
             .migration_files(migration_files)
             .contracts_lock(contracts_lock),
     })

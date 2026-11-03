@@ -40,6 +40,19 @@ pub fn assemble_index(
         if let SourceUnit::Suite(suite) = pf.unit() {
             let path = pf.identity_path();
             let ns = crate::test_suites::suite_helper_namespace(&suite.target.joined(), &path);
+            // #2841: a fixture is a constant of the suite, like an embed.
+            for f in &suite.fixtures {
+                builder.add_leaf_def(
+                    &ns,
+                    SymbolKind::Embed,
+                    &f.name.name,
+                    SiteRef {
+                        path: path.clone(),
+                        span: f.name.span,
+                    },
+                    symbol_modifiers(&ns, None),
+                );
+            }
             for f in &suite.fns {
                 if let FnName::Free(id) = &f.name {
                     builder.add_def(

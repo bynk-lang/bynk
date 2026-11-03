@@ -1,0 +1,5 @@
+suite demo.desk {
+  case "another suite" {
+    expect note.length() > 0
+  }
+}

@@ -106,6 +106,7 @@ Not lexer keywords: the lexer treats these as ordinary identifiers, and they car
 | `advance` | Move the test harness's clock forward in a `case` (`advance Clock by 15.minutes`). |
 | `derives` | After a type declaration's body, opts the type into a constraint (`type Priority = enum { Low, High } derives Ord`): the type is then ordered by declaration order. |
 | `drop` | Inside a `migrate` step, discard a stored field's value on purpose (`drop owner`). |
+| `fixture` | In a suite, declares a project file's text as a `String` constant for its cases (`fixture issue = "fixtures/issue.json"`): test-only, read from the `fixtures/` folder and never deployed. |
 | `key` | The agent's identity field — one per agent; keys the store. |
 | `migrate` | An agent's migration step: carries a stored record from an older schema version to the current shape (`migrate from 1 (old: CartV1) { … }`). |
 | `par` | Opens a concurrent binding block (`par { let a <- e1  let b <- e2 }`): every effect is issued before any is awaited, and the block completes when all have settled. |

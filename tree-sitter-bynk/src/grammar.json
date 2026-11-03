@@ -584,6 +584,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "fixture_decl"
+        },
+        {
+          "type": "SYMBOL",
           "name": "fn_decl"
         },
         {
@@ -1674,6 +1678,35 @@
         {
           "type": "STRING",
           "value": "embed"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "="
+        },
+        {
+          "type": "FIELD",
+          "name": "path",
+          "content": {
+            "type": "SYMBOL",
+            "name": "string_literal"
+          }
+        }
+      ]
+    },
+    "fixture_decl": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "fixture"
         },
         {
           "type": "FIELD",

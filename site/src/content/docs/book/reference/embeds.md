@@ -87,6 +87,8 @@ it is unaffected.
 
 ## Embed or asset
 
+A suite's test input is a [`fixture`](/book/reference/fixtures/), which is never deployed.
+
 | | `asset` | `embed` |
 | --- | --- | --- |
 | Folder | `assets/` | `embeds/` |

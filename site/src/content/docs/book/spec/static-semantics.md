@@ -2148,6 +2148,18 @@ predicate surface as `invariant`/`ensures` (one predicate surface, ADR 0144). A
 `suite` MUST target an existing unit and MUST NOT duplicate a case description
 (`bynk.suite.unknown_target`, `bynk.suite.duplicate_case_name`).
 
+A suite MAY declare `fixture name = "path"` declarations (#2841). The path MUST be
+relative to the project root and inside its `fixtures/` folder, name a regular
+UTF-8 text file with no NUL byte of at most 4 MiB, and not be absolute or contain
+`..` (`bynk.fixture.unsafe_path`, `bynk.fixture.outside_fixtures_dir`,
+`bynk.fixture.missing_file`, `bynk.fixture.unreadable_file`,
+`bynk.fixture.invalid_encoding`, `bynk.fixture.binary_content`,
+`bynk.fixture.too_large`). The name is a `String` constant in the case scope of
+the declaring suite alone, and MUST NOT repeat another fixture of the suite or a
+name already in scope there (`bynk.fixture.duplicate`, `bynk.resolve.name_conflict`).
+The text follows an `embed`'s (§5.12a): a leading byte-order mark dropped, line
+endings normalised to `\n`. A fixture is emitted into test output only.
+
 A suite MAY declare helper `fn`s (#2834). A helper MUST be a free function
 that does not return an `Effect` (`bynk.suite.fn_method`, `bynk.suite.fn_effectful`),
 MUST NOT repeat the name of another helper of its suite or of any value in scope in

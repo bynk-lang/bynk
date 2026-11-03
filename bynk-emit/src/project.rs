@@ -589,6 +589,13 @@ pub struct CompileOptions {
     /// `bynk.embed.missing_file` rather than text made up for a file nobody
     /// read.
     pub embed_files: Option<assets::EmbedFolder>,
+    /// #2841: the project's `fixtures/` folder, listed by the caller with a
+    /// reader for the bytes of only the files a suite's `fixture` declaration
+    /// names ([`assets::AssetFolder::fixtures_on_disk`]), exactly as
+    /// [`CompileOptions::embed_files`] does for `embeds/`. Fixtures are test
+    /// input: nothing in a deployable reads them. `None` means no filesystem
+    /// was consulted.
+    pub fixture_files: Option<assets::FixtureFolder>,
     /// P4b (#2608): the project's `migrations/` folder, listed by the caller
     /// ([`assets::AssetFolder::migrations_on_disk`]). Every file in a declared
     /// `D1` database's directory is read, checked, copied beside the Worker's
@@ -664,6 +671,7 @@ impl CompileOptions {
             workers_dev: None,
             asset_files: None,
             embed_files: None,
+            fixture_files: None,
             migration_files: None,
             snapshot_files: None,
             remote_tests: None,
@@ -691,6 +699,7 @@ impl CompileOptions {
             workers_dev: None,
             asset_files: None,
             embed_files: None,
+            fixture_files: None,
             migration_files: None,
             snapshot_files: None,
             remote_tests: None,
@@ -786,6 +795,12 @@ impl CompileOptions {
     /// #2387, slice 2: the listed `embeds/` folder. See the field's own doc.
     pub fn embed_files(mut self, folder: assets::EmbedFolder) -> Self {
         self.embed_files = Some(folder);
+        self
+    }
+
+    /// #2841: the listed `fixtures/` folder. See the field's own doc.
+    pub fn fixture_files(mut self, folder: assets::FixtureFolder) -> Self {
+        self.fixture_files = Some(folder);
         self
     }
 
@@ -894,6 +909,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.roots.project_root(),
         options.asset_files.as_ref(),
         options.embed_files.as_ref(),
+        options.fixture_files.as_ref(),
         options.migration_files.as_ref(),
         options.snapshot_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
@@ -992,6 +1008,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         options.roots.project_root(),
         options.asset_files.as_ref(),
         options.embed_files.as_ref(),
+        options.fixture_files.as_ref(),
         options.migration_files.as_ref(),
         options.snapshot_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
@@ -1062,6 +1079,7 @@ pub fn compile_in_memory(
         &SchemaLock::Off,
         None,
         &root,
+        None,
         None,
         None,
         None,
@@ -1141,6 +1159,7 @@ pub(crate) fn compile_files_in_memory_locked(
         None,
         None,
         None,
+        None,
         false,
         tys,
     );
@@ -1213,6 +1232,7 @@ pub fn analyse_in_memory_with_types(
         &SchemaLock::Off,
         None,
         &root,
+        None,
         None,
         None,
         None,
@@ -1323,6 +1343,7 @@ pub fn analyse_in_memory_project(
         &SchemaLock::Off,
         None,
         &project_root,
+        None,
         None,
         None,
         None,
@@ -2525,6 +2546,9 @@ fn run_checks(
     // #2387, slice 2: the listed `embeds/` folder
     // (`CompileOptions::embed_files`), with the same `None` meaning.
     embed_files: Option<&assets::EmbedFolder>,
+    // #2841: the listed `fixtures/` folder (`CompileOptions::fixture_files`),
+    // with the same `None` meaning.
+    fixture_files: Option<&assets::FixtureFolder>,
     // P4b (#2608): the listed `migrations/` folder
     // (`CompileOptions::migration_files`). `None` when no filesystem was
     // consulted: nothing is checked, and no test database is migrated.
@@ -2788,6 +2812,18 @@ fn run_checks(
     bynk_check::embeds::phase_embed_files(&parsed, available_embeds, &mut errors);
     let embed_text = embed_files
         .map(|folder| bynk_check::embeds::read_declared_embeds(&parsed, folder, &mut errors))
+        .unwrap_or_default();
+    // -- 6a0'''. #2841: likewise every suite `fixture` names a file in
+    //           `fixtures/`, then the declared files alone are read, as text.
+    let no_fixtures = BTreeSet::new();
+    let available_fixtures: Option<&BTreeSet<String>> = match (fixture_files, mode) {
+        (Some(folder), _) => Some(folder.files()),
+        (None, Mode::Build) => Some(&no_fixtures),
+        (None, _) => None,
+    };
+    bynk_check::fixtures::phase_fixture_files(&parsed, available_fixtures, &mut errors);
+    let fixture_text = fixture_files
+        .map(|folder| bynk_check::fixtures::read_declared_fixtures(&parsed, folder, &mut errors))
         .unwrap_or_default();
     // -- 6a0''. P4b (#2608): each `D1` instance's migrations directory,
     //           checked and read; a directory no instance owns is a warning.
@@ -3203,6 +3239,7 @@ fn run_checks(
     let test_asset_files = TestAssetFiles {
         served: &asset_served,
         bytes: asset_bytes.as_ref().unwrap_or(&no_asset_bytes),
+        fixtures: &fixture_text,
     };
     // #1975: a user adapter's binding module, for a test that builds the
     // binding for real. A first-party adapter's binding reaches the platform
@@ -5957,6 +5994,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             false,
             &Arc::new(Types::new()),
         );
@@ -6233,6 +6271,7 @@ mod tests {
             &SchemaLock::Off,
             None,
             roots.project_root(),
+            None,
             None,
             None,
             None,

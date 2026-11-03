@@ -62,6 +62,25 @@ case "a ping is acknowledged" {
 A helper is private to its suite and pure; see
 [Helper functions in a suite](/book/reference/testing/#helpers).
 
+## Test with a real payload
+
+Capture a real input from its producer (a webhook delivery, an API response)
+into the project's `fixtures/` folder, and read it with a `fixture`:
+
+```bynk,fragment
+suite github.events
+
+fixture issueOpened = "fixtures/github/issues-opened.json"
+
+case "a real issues delivery decodes" {
+  let r = read(Some("issues"), Some("d-1"), Bytes.fromUtf8(issueOpened))
+  expect r is Ok(_)
+}
+```
+
+The file is never part of the deployable. See
+[Test fixtures](/book/reference/fixtures/).
+
 ## Fabricate values with `Val[T]`
 
 `Val[T]` produces a value of `T`. For a refined type it satisfies the

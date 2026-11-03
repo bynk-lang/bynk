@@ -242,6 +242,10 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
         "Inside a `migrate` step, discard a stored field's value on purpose (`drop owner`).",
     ),
     k(
+        "fixture",
+        "In a suite, declares a project file's text as a `String` constant for its cases (`fixture issue = \"fixtures/issue.json\"`): test-only, read from the `fixtures/` folder and never deployed.",
+    ),
+    k(
         "key",
         "The agent's identity field — one per agent; keys the store.",
     ),

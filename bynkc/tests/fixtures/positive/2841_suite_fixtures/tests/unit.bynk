@@ -1,0 +1,29 @@
+suite hooks.github
+
+--- A captured delivery, kept beside the tests instead of inlined.
+fixture push = "fixtures/github/push.json"
+fixture ping = "fixtures/github/ping.json"
+
+fn pingBody() -> Bytes {
+	Bytes.fromUtf8(ping)
+}
+
+fn delivery(event: String) -> RequestHeaders {
+	RequestHeaders.of(["X-GitHub-Event: \(event)"])
+}
+
+case "a fixture is a String constant" {
+	expect push.contains("refs/heads/main")
+	// Newlines are normalised, so the same file reads the same on any checkout.
+	expect !push.contains("\r")
+}
+
+case "a fixture reaches a handler as the body" {
+	let r <- github.POST("/github", delivery("push"), Bytes.fromUtf8(push)) by GitHub
+	expect r is Ok(_)
+}
+
+case "a helper may read a fixture, and its text is exact" {
+	expect ping == "{\"zen\":\"Keep it logically awesome.\"}\n"
+	expect pingBody().length() == 37
+}

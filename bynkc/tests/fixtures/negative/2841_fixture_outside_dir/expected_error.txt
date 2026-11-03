@@ -1,0 +1,1 @@
+bynk.fixture.outside_fixtures_dir
