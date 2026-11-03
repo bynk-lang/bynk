@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage
-changelog: A reserved word names a field or a member where the name is a label (`a.type`, `{ type: String }`, `Sorted.from`), and keyword field shorthand is a targeted error (#2837, #2778)
----
+# 0716 — A reserved word can be a name wherever the name is a label, never where it binds
 
-## ADR: keywords-as-labels
-title: A reserved word can be a name wherever the name is a label, never where it binds
-summary: Field labels admit a keyword before `:`, members admit one on the `.`'s line, and shorthand stays refused with a fix
+- **Status:** Accepted (v0.493)
 
 **Context.** A record field is a JSON key (`reference/wire-format.md`), and a
 third-party payload picks its own keys. A GitHub webhook carries `type` on every
