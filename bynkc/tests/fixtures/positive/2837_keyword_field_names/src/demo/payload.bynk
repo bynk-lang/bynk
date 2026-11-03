@@ -1,0 +1,54 @@
+---
+#2837, #2778: reserved words as labels. A GitHub-style payload keyed `type`,
+`from` and `self` decodes and encodes, and `Sorted.from` is declared and called.
+---
+commons demo.payload
+
+type Account = { login: String, type: String }
+
+type Event = { type: String, from: Int, self: Bool, do: Option[String], account: Account }
+
+type Change =
+  | Push(from: String, to: String)
+  | Close(type: String)
+
+type Sorted = { items: List[String] }
+
+fn Sorted.from(items: List[String]) -> Sorted { Sorted { items: items } }
+
+fn Sorted.do(self) -> Int { self.items.length() }
+
+fn isOrg(a: Account) -> Bool { a.type == "Organization" }
+
+fn build(t: String, f: Int) -> Event {
+  Event {
+    type: t,
+    from: f,
+    self: true,
+    do: None,
+    account: Account { login: "bynk-lang", type: "Organization" },
+  }
+}
+
+fn kindOf(e: Event) -> String {
+  match e {
+    Event { type: t, from: f, .. } => t.concat(f.toString())
+  }
+}
+
+fn changed(c: Change) -> String {
+  match c {
+    Push(from: f, to: t) => f.concat(t)
+    Close(type: t) => t
+  }
+}
+
+fn count(xs: List[String]) -> Int { Sorted.from(xs).do() }
+
+fn load(s: String) -> Result[Event, JsonError] { Json.decode[Event](s) }
+
+fn save(e: Event) -> String { Json.encode(e) }
+
+fn selfFlag(e: Event) -> Bool { e.self }
+
+fn rewrite(e: Event) -> Event { Event { ...e, type: "pull_request", from: e.from + 1 } }

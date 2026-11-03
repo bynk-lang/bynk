@@ -1,0 +1,27 @@
+// #2837: a payload with `type`, `from` and `self` keys round-trips through
+// `Json.decode` and `Json.encode`, and a keyword names a field, a payload field
+// and a method.
+suite demo.payload {
+  case "decodes a payload keyed by reserved words" {
+    match load("{\"type\": \"push\", \"from\": 7, \"self\": true, \"do\": null, \"account\": {\"login\": \"octo\", \"type\": \"Organization\"}}") {
+      Ok(e) => {
+        expect e.type == "push"
+        expect e.from == 7
+        expect selfFlag(e)
+        expect isOrg(e.account)
+        expect kindOf(e) == "push7"
+      }
+      Err(_) => expect false
+    }
+  }
+
+  case "encodes the keys back" {
+    expect save(rewrite(build("push", 1))) == "{\"type\":\"pull_request\",\"from\":2,\"self\":true,\"do\":{\"kind\":\"None\"},\"account\":{\"login\":\"bynk-lang\",\"type\":\"Organization\"}}"
+  }
+
+  case "a payload field and a method are named by keywords" {
+    expect changed(Push("a", "b")) == "ab"
+    expect changed(Close("done")) == "done"
+    expect count(["x", "y"]) == 2
+  }
+}

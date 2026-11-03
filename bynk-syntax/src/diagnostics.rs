@@ -1989,6 +1989,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["identifier"],
     ),
     dg(
+        "bynk.parse.keyword_field_shorthand",
+        "A reserved keyword was used as a field shorthand, which would bind a variable of that name.",
+        &["identifier"],
+    ),
+    dg(
         "bynk.parse.self_outside_method",
         "`self` used outside a method or handler.",
         &["self_expr"],

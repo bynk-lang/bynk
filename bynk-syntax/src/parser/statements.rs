@@ -14,8 +14,8 @@ impl<'a> Parser<'a> {
         let first = self.expect_ident("after `fn`")?;
         // A method declaration uses `TypeName.methodName`; a free function
         // is just an identifier. Disambiguate on the next token.
-        let name = if self.eat(TokenKind::Dot).is_some() {
-            let method = self.expect_ident("after `.` in a method declaration")?;
+        let name = if let Some(dot) = self.eat(TokenKind::Dot) {
+            let method = self.expect_member_name("after `.` in a method declaration", dot.span)?;
             FnName::Method {
                 type_name: first,
                 method_name: method,

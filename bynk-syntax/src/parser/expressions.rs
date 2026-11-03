@@ -621,7 +621,7 @@ impl<'a> Parser<'a> {
                             lit = &self.source[e.span.range()]
                         )));
                     }
-                    let member = self.expect_ident("after `.` in field access or method call")?;
+                    let member = self.expect_member_name("after `.` in field access or method call", dot.span)?;
                     // v0.22b: explicit type arguments on a method/static —
                     // `Json.decode[T](…)`. The v0.20b same-line-`[` rule
                     // applies: a `[` opening a new line is a list literal.
@@ -1227,6 +1227,23 @@ impl<'a> Parser<'a> {
                 Some(TokenKind::Ident),
                 Some(TokenKind::Colon) | Some(TokenKind::Comma) | Some(TokenKind::RBrace),
             ) => true,
+            // `T { type: ... }` — a keyword label (#2837).
+            (Some(k), Some(TokenKind::Colon)) if is_reserved_keyword(k) => true,
+            // `T { type }` / `T { type, … }` — keyword shorthand, which the
+            // field initialiser refuses with a targeted error. Keywords that
+            // are also expression heads stay out: `T { None }` is not this.
+            (Some(k), Some(TokenKind::Comma | TokenKind::RBrace))
+                if is_reserved_keyword(k)
+                    && !matches!(
+                        k,
+                        TokenKind::True
+                            | TokenKind::False
+                            | TokenKind::None
+                            | TokenKind::Self_
+                    ) =>
+            {
+                true
+            }
             _ => false,
         }
     }
@@ -1301,7 +1318,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_field_init(&mut self) -> Result<FieldInit, CompileError> {
-        let name = self.expect_ident("as a record-field initialiser name")?;
+        if let Some(err) = self.keyword_shorthand_error(false) {
+            return Err(err);
+        }
+        let name = self.expect_label("as a record-field initialiser name")?;
         // `name : expr` (full form) or `name ,` / `name }` (shorthand).
         if self.eat(TokenKind::Colon).is_some() {
             let value = self.parse_expr()?;
@@ -1895,7 +1915,10 @@ impl<'a> Parser<'a> {
                 }
                 _ => {}
             }
-            let name = self.expect_ident("as a record pattern field name")?;
+            if let Some(err) = self.keyword_shorthand_error(true) {
+                return Err(err);
+            }
+            let name = self.expect_label("as a record pattern field name")?;
             let sub = if self.eat(TokenKind::Colon).is_some() {
                 Some(self.parse_pattern()?)
             } else {
@@ -2088,10 +2111,10 @@ impl<'a> Parser<'a> {
         // A named field is a lowercase-style ident immediately followed by `:`;
         // everything else is a positional sub-pattern.
         if let Some(t) = self.peek()
-            && t.kind == TokenKind::Ident
+            && (t.kind == TokenKind::Ident || self.at_keyword_label())
             && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::Colon)
         {
-            let field = self.expect_ident("as a named pattern field")?;
+            let field = self.expect_label("as a named pattern field")?;
             self.expect(TokenKind::Colon, "after a named pattern field")?;
             let pattern = self.parse_pattern()?;
             let span = field.span.merge(pattern.span());

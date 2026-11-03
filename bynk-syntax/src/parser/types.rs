@@ -256,7 +256,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_record_field(&mut self) -> Result<RecordField, CompileError> {
-        let name = self.expect_ident("as a record field name")?;
+        let name = self.expect_label("as a record field name")?;
         self.expect(TokenKind::Colon, "after the field name")?;
         let type_ref = self.parse_type_ref("as the field type")?;
         let mut refinement = None;
@@ -517,7 +517,7 @@ impl<'a> Parser<'a> {
     /// with the lead, and `bynk fmt`'s comment-loss guard refuses rather than
     /// lose it.
     fn parse_variant_field(&mut self) -> Result<VariantField, CompileError> {
-        let name = self.expect_ident("as a variant payload field name")?;
+        let name = self.expect_label("as a variant payload field name")?;
         self.expect(TokenKind::Colon, "after the variant payload field name")?;
         let type_ref = self.parse_type_ref("as the variant payload field type")?;
         // #2607 (Decision A): a default belongs to a record's field only. A
