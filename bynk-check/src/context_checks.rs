@@ -2754,7 +2754,7 @@ fn check_service_decls(
             let TypeRef::HttpResult(body, _) = inner.as_ref() else {
                 continue;
             };
-            if let Some(payload) = null_payload_option(body, &table.types, &mut HashSet::new()) {
+            if let Some(payload) = null_payload_option(body, &resolved.types, &mut HashSet::new()) {
                 errors.push(
                     CompileError::new(
                         "bynk.json.nested_option_plain",

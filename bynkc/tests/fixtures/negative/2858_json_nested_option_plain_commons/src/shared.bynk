@@ -1,0 +1,3 @@
+commons shared
+
+type Row = { id: String, note: Option[Option[String]] }
