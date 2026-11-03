@@ -22,4 +22,16 @@ suite hooks.github as system {
 		let r <- github.POST("/echo", Bytes.fromUtf8("hi"), RequestHeaders.of(["X-Trace: t2"])) by Visitor
 		expect r is Ok("t2 aGk=")
 	}
+
+	// A `Wire` is text, so the JSON-only route refuses it; the headers still
+	// reach the request in their own slot ahead of the body.
+	case "a Wire body sent with headers meets the route's media type" {
+		let r <- github.POST("/github", RequestHeaders.of(["X-GitHub-Event: ping"]), Wire("{}"))
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "headers may follow a Wire body" {
+		let r <- github.POST("/echo", Wire("hi"), RequestHeaders.of(["X-Trace: t3"])) by Visitor
+		expect r is Handled(Ok("t3 aGk="))
+	}
 }

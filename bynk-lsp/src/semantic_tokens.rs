@@ -70,6 +70,12 @@ pub const TOK_DECORATOR: u32 = 10;
 /// Legend index of the `interface` token type (constraint names in a bound).
 pub const TOK_INTERFACE: u32 = 15;
 
+/// Legend index of the `method` token type.
+pub const TOK_METHOD: u32 = 7;
+
+/// Legend index of the `property` token type.
+pub const TOK_PROPERTY: u32 = 8;
+
 /// Legend index of the `keyword` token type (#2618: `private` in modifier
 /// position, a contextual keyword the editor grammars may not know).
 pub const TOK_KEYWORD: u32 = 17;
@@ -162,6 +168,10 @@ pub fn semantic_tokens(
     // Name segments never overlap (the index invariant), so a position
     // sort fully determines the protocol's relative encoding.
     raw.sort_by_key(|(span, _, _)| (span.start, span.end));
+    // #2837: the lexical keyword-name tokens overlap the index's at a keyword
+    // field or method the index also knows; the sort is stable and the index's
+    // entries come first, so keeping the first of a span keeps the index's.
+    raw.dedup_by_key(|(span, _, _)| (span.start, span.end));
     let mut data = Vec::with_capacity(raw.len());
     // One line index for the whole snapshot: a `semanticTokens/full` request
     // emits a position per token, so scanning from byte 0 each time is O(n²)

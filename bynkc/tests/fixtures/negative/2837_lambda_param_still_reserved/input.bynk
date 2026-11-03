@@ -1,0 +1,3 @@
+commons demo
+
+fn f(xs: List[Int]) -> List[Int] { xs.map((type) => type) }

@@ -207,6 +207,40 @@ async function test_headers_may_follow_a_raw_body() {
   }
 }
 
+async function test_a_Wire_body_sent_with_headers_meets_the_route_s_media_type() {
+  try {
+    __bynkEnv = { GITHUB_SECRET: "test-github" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_github_http_POST_github(__requestHeaders(["X-GitHub-Event: ping"]), "{}", "");
+    if (!(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType")) { throw __bynkExpectFailure("tests/github.bynk:30:10", 1215, 1253, "expect r is Rejected(UnsupportedMediaType(_))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_headers_may_follow_a_Wire_body() {
+  try {
+    __bynkEnv = { GITHUB_SECRET: "test-github" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_github_http_POST_echo("hi", __requestHeaders(["X-Trace: t3"]), "");
+    if (!(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "t3 aGk=")) { throw __bynkExpectFailure("tests/github.bynk:35:10", 1399, 1426, "expect r is Handled(Ok(\"t3 aGk=\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -221,7 +255,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a signed raw body arrives with its headers", "a forged raw body is refused before the handler reads a header", "headers may follow a raw body"];
+export const __bynkCases: readonly string[] = ["a signed raw body arrives with its headers", "a forged raw body is refused before the handler reads a header", "headers may follow a raw body", "a Wire body sent with headers meets the route's media type", "headers may follow a Wire body"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -241,6 +275,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("headers may follow a raw body")) {
     const started = __bynkCaseNow();
     const r = { name: "headers may follow a raw body", ...(await test_headers_may_follow_a_raw_body()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Wire body sent with headers meets the route's media type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Wire body sent with headers meets the route's media type", ...(await test_a_Wire_body_sent_with_headers_meets_the_route_s_media_type()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("headers may follow a Wire body")) {
+    const started = __bynkCaseNow();
+    const r = { name: "headers may follow a Wire body", ...(await test_headers_may_follow_a_Wire_body()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

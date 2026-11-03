@@ -1895,6 +1895,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `invariant` was declared after a handler; invariants precede handlers.",
     ),
     dg(
+        "bynk.parse.keyword_field_shorthand",
+        "A reserved keyword was used as a field shorthand, which would bind a variable of that name.",
+        &["identifier"],
+    ),
+    dg(
         "bynk.parse.lambda_pattern_annotation",
         "A lambda parameter with a record pattern carries a type annotation; the pattern's type name already gives the parameter's type.",
         &["lambda_param"],

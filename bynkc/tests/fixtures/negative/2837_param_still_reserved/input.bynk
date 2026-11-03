@@ -1,0 +1,3 @@
+commons demo
+
+fn f(type: Int) -> Int { 1 }

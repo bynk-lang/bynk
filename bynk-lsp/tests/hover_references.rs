@@ -1059,3 +1059,77 @@ fn run_id_hovers_as_the_test_run() {
         "a bound `run` is an ordinary value"
     );
 }
+
+/// #2837 — a reserved word used as a field or method name is a `property` or
+/// `method` token (not left to the editor grammar's `keyword`), and hovers as
+/// the field or method it names.
+#[test]
+fn keyword_named_members_get_property_and_method_tokens() {
+    let (r, rel, text, root) = analysed(
+        "../bynkc/tests/fixtures/positive/2837_keyword_field_names/src",
+        "payload.bynk",
+    );
+    let legend = bynk_lsp::index_queries::semantic_tokens_legend();
+    let ty = |name: &str| {
+        legend
+            .token_types
+            .iter()
+            .position(|t| t.as_str() == name)
+            .unwrap_or_else(|| panic!("`{name}` is in the legend")) as u32
+    };
+    let (property, method) = (ty("property"), ty("method"));
+    let tokens = bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &rel, &text, None);
+    let mut abs = Vec::new();
+    let (mut line, mut col) = (0u32, 0u32);
+    for t in &tokens {
+        if t.delta_line > 0 {
+            line += t.delta_line;
+            col = t.delta_start;
+        } else {
+            col += t.delta_start;
+        }
+        abs.push(((line, col), (t.length, t.token_type)));
+    }
+    let token_at = |off: usize| {
+        let l = text[..off].matches('\n').count() as u32;
+        let c = (off - text[..off].rfind('\n').map_or(0, |n| n + 1)) as u32;
+        abs.iter().find(|(p, _)| *p == (l, c)).map(|(_, t)| *t)
+    };
+    for (anchor, needle, len, want) in [
+        ("type Account", "type:", 4, property),
+        ("a.type", "type", 4, property),
+        ("fn Sorted.from", "from", 4, method),
+    ] {
+        let off = at(&text, anchor, needle);
+        assert_eq!(token_at(off), Some((len, want)), "{anchor}");
+    }
+    let off = at(&text, "a.type", "type");
+    let hover = hover_at(&r, &rel, &text, &root, off).expect("`a.type` hovers");
+    assert!(
+        hover.contains("type: String") && hover.contains("field of `Account`"),
+        "{hover}"
+    );
+}
+
+/// #2837 — the lexical pass covers what the index leaves untokenised: a
+/// reserved word as a static call's name, and as a construction or pattern label.
+#[test]
+fn keyword_names_the_index_misses_get_lexical_tokens() {
+    let (_, _, text, _) = analysed(
+        "../bynkc/tests/fixtures/positive/2837_keyword_field_names/src",
+        "payload.bynk",
+    );
+    let spans = bynk_lsp::symbols::keyword_name_token_spans(&text);
+    let has = |anchor: &str, needle: &str, is_method: bool| {
+        let off = at(&text, anchor, needle);
+        assert!(
+            spans.iter().any(|(s, m)| s.start == off && *m == is_method),
+            "{anchor}"
+        );
+    };
+    has("Sorted.from(xs)", "from", true);
+    has("Sorted.from(xs).do", "do", true);
+    has("    type: t,", "type", false);
+    has("Event { type: t, from: f", "from", false);
+    has("Push(from: f", "from", false);
+}

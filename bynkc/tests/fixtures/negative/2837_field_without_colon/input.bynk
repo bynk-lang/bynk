@@ -1,0 +1,3 @@
+commons demo
+
+type A = { type String }

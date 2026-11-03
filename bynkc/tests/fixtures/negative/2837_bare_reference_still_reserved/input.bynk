@@ -1,0 +1,5 @@
+commons demo
+
+type A = { type: String }
+
+fn f(a: A) -> String { type }

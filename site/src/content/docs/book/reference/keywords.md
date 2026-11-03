@@ -7,6 +7,13 @@ title: Keywords
 
 Bynk reserves names in four tiers. The first two are lexer keywords; the third are words the lexer treats as plain identifiers; the fourth are compiler-known type names. Only the **hard keywords** can never be used as an identifier. A last section lists the ambient built-in functions, which reserve nothing.
 
+A hard keyword is still allowed where a name is a *label* rather than a binding, so a field can carry the key a third-party payload uses (`type`, `from`, `self`):
+
+- a record field, a construction initialiser, a record or named pattern field and a variant payload field, when the keyword is followed by `:` (`{ type: String }`, `Account { type: "Org" }`, `Account { type: t, .. }`, `Push(from: String)`). `kind` stays reserved as a variant payload field.
+- a member after `.`, a field access or a method call, and a method declaration, when the keyword is on the same line as the `.` (`a.type`, `fn Sorted.from(…)`, `Sorted.from(xs)`).
+
+A keyword is never a parameter, a `let` or lambda binding or a bare reference, so field shorthand is refused: `Account { type, .. }` and `Account { type }` are `bynk.parse.keyword_field_shorthand`. Write `type: type_` in a pattern and `type: <value>` in a construction.
+
 ## Hard keywords
 
 Reserved everywhere — these **61** words can never be used as an identifier.

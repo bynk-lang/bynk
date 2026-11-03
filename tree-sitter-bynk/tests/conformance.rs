@@ -1051,6 +1051,24 @@ const EXCLUDED_PARSE_TIME_FIXTURES: &[(&str, &str)] = &[
          single `identifier` token cannot see, so a record pattern parameter is \
          accepted there whatever its fields are called (#2712)",
     ),
+    (
+        "2837_bare_reference_still_reserved",
+        "declined: a keyword that is not valid in the parser state lexes as an \
+         `identifier`, so the grammar reads a bare `type` as a variable where the \
+         compiler refuses it; excluding it would need the keyword list \
+         `bynk.parse.reserved_keyword` also declines to duplicate (#2837)",
+    ),
+    (
+        "2837_construction_shorthand",
+        "declined: same as `bynk.parse.reserved_keyword` — the grammar reads \
+         `Account { type }` as a field shorthand named by an `identifier` (#2837)",
+    ),
+    (
+        "2837_record_pattern_shorthand",
+        "declined: same as `bynk.parse.reserved_keyword` — the grammar reads \
+         `Account { type, .. }` as a shorthand binding named by an `identifier` \
+         (#2837)",
+    ),
 ];
 
 #[test]

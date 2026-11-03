@@ -2346,6 +2346,21 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_INTERFACE)),
         );
+        // #2837: a reserved word written as a field or method name.
+        dt.extend(
+            crate::symbols::keyword_name_token_spans(text)
+                .into_iter()
+                .map(|(s, is_method)| {
+                    (
+                        s,
+                        if is_method {
+                            crate::semantic_tokens::TOK_METHOD
+                        } else {
+                            crate::semantic_tokens::TOK_PROPERTY
+                        },
+                    )
+                }),
+        );
         // #2618: each `private` modifier, as `keyword`.
         dt.extend(
             crate::symbols::private_modifier_token_spans(text)

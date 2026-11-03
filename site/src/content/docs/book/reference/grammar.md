@@ -37,7 +37,11 @@ tokens.
 {{#grammar identifier}}
 
 A name: a letter followed by letters, digits, or underscores. Used for
-declarations, parameters, fields, and bindings.
+declarations, parameters, fields, and bindings. A reserved word is an
+`identifier` only where the name is a label: a field name followed by `:`, or a
+member name on the same line as the `.` before it
+([reserved words as field names](/book/reference/types/#keyword-field-names)).
+This is a lookahead the editor grammar leaves to the compiler.
 
 **Static semantics.**
 {{#grammar-semantics identifier}}

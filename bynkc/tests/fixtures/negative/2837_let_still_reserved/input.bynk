@@ -1,0 +1,6 @@
+commons demo
+
+fn f() -> Int {
+  let from = 1
+  from
+}
