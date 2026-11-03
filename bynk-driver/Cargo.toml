@@ -16,6 +16,7 @@ homepage.workspace = true
 # builds locally but has no version and fails `cargo publish`.
 bynk-emit.workspace = true
 bynk-fmt.workspace = true
+bynk-project.workspace = true
 bynk-render.workspace = true
 # `doc_examples` lexes and parses a unit to find its doc comments (#2461).
 bynk-syntax.workspace = true

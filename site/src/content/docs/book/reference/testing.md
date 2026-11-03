@@ -551,6 +551,64 @@ case "the store recovers" {
 }
 ```
 
+### Snapshotting a value — `expect <value> matches snapshot "<name>"` {#snapshots}
+
+Asserting a large structured value field by field is unreviewable when it is big and
+rots when its shape grows. A **snapshot** compares the whole value instead: `expect
+v matches snapshot "name"` encodes `v` the way `Json.encode` does and compares that
+JSON with the snapshot stored for the case.
+
+```bynk,fragment
+case "an issues delivery reads whole" {
+  let r = read("{\"id\":\"d-1\",\"action\":{\"kind\":\"Opened\"}}")
+  expect r matches snapshot "issues opened"
+}
+```
+
+- **The value need only be `Codable`**, not a `Bool`: the domain `Json.encode`
+  accepts (`bynk.test.snapshot_not_codable` otherwise). `Option`s and sums are in
+  their tagged form, and an `Err` is a value like any other. A value that
+  mentions an instant or a random id is not stable; stub `Clock` and `Random`
+  (already deterministic under test) so it is.
+- **The name is a string literal**, unique within its case
+  (`bynk.test.snapshot_name_not_literal`, `bynk.test.snapshot_duplicate_name`), so
+  the compiler knows every snapshot a suite takes. `matches` and `snapshot` are
+  contextual words: elsewhere they are ordinary names.
+- **Snapshots are stored per suite file**, in `snapshots/<suite file>.snap.json`
+  under the project root (the file's path from the project root, without `.bynk`,
+  so `tests/hooks.bynk` has `snapshots/tests/hooks.snap.json`). The file is one
+  JSON object keyed by case name, then snapshot name; keys are sorted at every
+  level and the text is indented two spaces, so a change is a readable diff. The
+  files are ordinary text, reviewed in the pull request like code.
+- **The compiler inlines the stored file into the test module**, so the harness
+  reads nothing at test time. Only `bynk test --update-snapshots` writes, from the
+  driver, never from the emitted test.
+
+The outcomes, by run:
+
+| State | `bynk test` | `bynk test --update-snapshots` |
+|---|---|---|
+| The value equals the stored snapshot | passes | nothing changes |
+| The value differs | fails, showing a line diff (`-` stored, `+` actual) | the file is updated, and counted *updated* |
+| No snapshot is stored | **fails** — never passes silently, so CI cannot pass an unreviewed snapshot | the snapshot is written, and counted *written* |
+| A stored snapshot no case takes any more (**obsolete**) | passes, and is counted *obsolete* | it is deleted |
+
+An obsolete snapshot is one whose case or name is gone from the suite, or whose
+whole suite file no longer takes a snapshot. The run reports the **written**,
+**updated** and **obsolete** counts in every output format: a `snapshots:` line in
+`rich`, a `snapshots` object `{ "written", "updated", "obsolete" }` on the
+[JSON document](#machine-readable-output---format-json) and on the NDJSON
+`run-end`. They are absent for a project with no snapshot. With `--case` or
+`--suite`, only the snapshots of the cases that ran are compared or updated, and
+none is obsolete because its case was filtered out.
+
+A snapshot is for a case in a unit-tier suite. It is refused in a `property`
+(`bynk.test.snapshot_in_property`: the body runs for many inputs) and in a
+`system`-tier case or an integration or system suite
+(`bynk.test.snapshot_needs_unit_suite`). `--update-snapshots` is refused with
+`--against`, `--smoke`, `--coverage`, `--inspect` and `--no-run`: a snapshot is
+recorded from an in-process run of the project's own suites.
+
 ## Tiers — the `as <tier>` clause {#tiers-the-as-tier-clause}
 
 A `case` runs at one of three **tiers**, declared with an `as <tier>` clause in its
@@ -1447,6 +1505,8 @@ each case `{ name, outcome, message?, location? }` with `outcome` one of `"pass"
 or `"fail"`. A project that doesn't compile yields `error.kind == "compile"`
 (the diagnostic lines); a runner that crashes mid-stream yields
 `error.kind == "runtime"` with the observed prefix and captured stderr.
+
+A project that takes [snapshots](#snapshots) gains a last field, `snapshots`: `{ "written", "updated", "obsolete" }`, the counts of snapshots the run wrote, updated and found obsolete (deleted, under `--update-snapshots`).
 
 Add `--no-run` for **discovery**: `bynkc test --no-run --format json` lists every
 suite and case **without running them** — a pure compile (no `tsc`, no Node, no

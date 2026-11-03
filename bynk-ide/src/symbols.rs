@@ -1030,8 +1030,99 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
     spans
 }
 
+/// #2842: one `expect … matches snapshot "<name>"` claim of a suite: the case
+/// it is in, its name, the claim's `matches snapshot "<name>"` span, and the
+/// spans of the two contextual words.
+pub struct SnapshotSite {
+    pub case: String,
+    pub name: String,
+    pub clause: Span,
+    pub words: [Span; 2],
+}
+
+/// Every snapshot claim in a suite's cases, in source order. Empty for any
+/// other unit, and for a source that does not parse.
+pub fn snapshot_sites(source: &str) -> Vec<SnapshotSite> {
+    let Ok(tokens) = tokenize(source) else {
+        return Vec::new();
+    };
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let Some(SourceUnit::Suite(suite)) = unit else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for case in &suite.cases {
+        for e in bynk_check::test_suites::snapshot_expects(&case.body) {
+            let Some(clause) = &e.snapshot else { continue };
+            // The words are the first two identifier tokens of the clause.
+            let words: Vec<Span> = tokens
+                .iter()
+                .filter(|t| {
+                    t.kind == bynk_syntax::lexer::TokenKind::Ident
+                        && t.span.start >= clause.span.start
+                        && t.span.end <= clause.span.end
+                })
+                .take(2)
+                .map(|t| t.span)
+                .collect();
+            let [matches, snapshot] = words[..] else {
+                continue;
+            };
+            out.push(SnapshotSite {
+                case: case.name.clone(),
+                name: clause.name.clone(),
+                clause: clause.span,
+                words: [matches, snapshot],
+            });
+        }
+    }
+    out
+}
+
+/// #2842: the contextual `matches` and `snapshot` of every snapshot claim, for
+/// the `keyword` semantic token (an editor grammar that matches by spelling
+/// cannot tell them from a binding of the same name).
+pub fn snapshot_keyword_spans(source: &str) -> Vec<Span> {
+    snapshot_sites(source)
+        .into_iter()
+        .flat_map(|s| s.words)
+        .collect()
+}
+
+/// #2842: the project-relative file (`snapshots/….snap.json`) that holds the
+/// snapshots of the suite file at `rel`.
+pub fn snapshot_file_for(rel: &Path) -> String {
+    bynk_project::snapshots::snapshot_path(rel)
+}
+
+/// #2842 (ADR 0156): hover for a snapshot claim: the snapshot the file under
+/// `snapshots/` holds for it, or that none is recorded yet. `stored` is that
+/// file's text (`None` when it does not exist). `None` away from a claim.
+pub fn describe_snapshot_at(source: &str, offset: usize, stored: Option<&str>) -> Option<String> {
+    let site = snapshot_sites(source)
+        .into_iter()
+        .find(|s| s.clause.start <= offset && offset < s.clause.end)?;
+    let recorded = stored
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
+        .and_then(|v| v.get(&site.case)?.get(&site.name).cloned());
+    let head = format!(
+        "```bynk\nexpect <value> matches snapshot \"{}\"\n```\n\nCompares the value's canonical JSON (`Json.encode`, keys sorted) with the snapshot stored for case `\"{}\"`.",
+        site.name, site.case
+    );
+    Some(match recorded {
+        Some(value) => {
+            let pretty = serde_json::to_string_pretty(&value).unwrap_or_default();
+            format!("{head}\n\nStored:\n\n```json\n{pretty}\n```")
+        }
+        None => format!(
+            "{head}\n\nNot yet recorded: `bynk test --update-snapshots` writes it, and a run without the flag fails until it does."
+        ),
+    })
+}
+
 /// #2618: the span of every `private` modifier on the unit's declarations
-/// (and, #2841, every suite `fixture` keyword), for the `keyword` semantic token. `private` is contextual, so an editor
+/// (and, #2841, every suite `fixture` keyword), for the `keyword` semantic token.
+/// `private` is contextual, so an editor
 /// grammar that matches keywords by spelling cannot tell the modifier from a
 /// binding named `private`; the parse can.
 pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
@@ -4493,5 +4584,38 @@ mod tests {
         let src = "suite window\n";
         assert_eq!(own_declaration_name(src), None);
         assert_eq!(doc_link_unit(src).as_deref(), Some("window"));
+    }
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    const SUITE: &str = "suite shape\n\ncase \"reads\" {\n  expect read(1) matches snapshot \"first\"\n  let matches = 1\n}\n";
+
+    /// #2842: the contextual words are keyword tokens only inside a claim.
+    #[test]
+    fn the_words_of_a_claim_are_keyword_spans() {
+        let words: Vec<&str> = snapshot_keyword_spans(SUITE)
+            .into_iter()
+            .map(|s| &SUITE[s.start..s.end])
+            .collect();
+        assert_eq!(words, ["matches", "snapshot"]);
+    }
+
+    #[test]
+    fn hover_shows_the_stored_snapshot_or_says_it_is_missing() {
+        let at = SUITE.find("snapshot \"first\"").unwrap();
+        let stored = r#"{"reads":{"first":{"id":"a"}}}"#;
+        let with = describe_snapshot_at(SUITE, at, Some(stored)).expect("hovers");
+        assert!(
+            with.contains("Stored:") && with.contains("\"id\": \"a\""),
+            "{with}"
+        );
+        let without = describe_snapshot_at(SUITE, at, None).expect("hovers");
+        assert!(without.contains("Not yet recorded"), "{without}");
+        // A binding named `matches` is an ordinary name.
+        let other = SUITE.rfind("matches").unwrap();
+        assert!(describe_snapshot_at(SUITE, other, None).is_none());
     }
 }

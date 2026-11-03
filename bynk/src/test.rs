@@ -208,6 +208,10 @@ fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
     if args.smoke_unsafe {
         argv.push("--smoke-unsafe".into());
     }
+    // #2842: record snapshots rather than compare.
+    if args.update_snapshots {
+        argv.push("--update-snapshots".into());
+    }
     // #2685: the statuses each route can answer, which a smoke case's answer is
     // compared against. The walk is `bynk-ide`'s, so `bynk` makes it and hands
     // `bynkc` the result; the table is only for a run that calls routes.

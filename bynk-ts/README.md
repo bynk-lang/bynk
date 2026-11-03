@@ -42,7 +42,7 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
     │   └── bynk-lower     AST → IR helpers
     ├── bynk-emit          build sequencing, TS emission       + ts, ir, lower, project
     │   ├── bynk-strip     TS → JS type-stripping              + ts
-    │   └── bynk-driver    shared CLI command bodies           + fmt, render, ts
+    │   └── bynk-driver    shared CLI command bodies           + fmt, project, render, ts
     └── bynk-ide           non-bailing editor analysis         + project, fmt
 bynk-std                   first-party sources and bindings, as data
 ```
@@ -66,7 +66,7 @@ that just needs bytes (golden fixtures, `bynk-wasm`'s JS-facing API).
 
 ```toml
 [dependencies]
-bynk-ts = "0.495"
+bynk-ts = "0.496"
 ```
 
 ```rust

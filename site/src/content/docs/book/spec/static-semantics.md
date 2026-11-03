@@ -2495,6 +2495,29 @@ for it.
 
 {{#grammar-semantics faults_expr}}
 
+### §5.9f Snapshot claim
+
+A **snapshot claim**, `expect <value> matches snapshot "<name>"` (#2842), asserts
+that a value's canonical JSON equals the snapshot stored for its case and name
+([§7.4.12b](/book/spec/runtime-library/#7412b-the-snapshot-claim)). Unlike every
+other `expect`, its subject is not a `Bool`. Well-formedness:
+
+- the claim MUST occur inside a `case` body (`bynk.expect.outside_case`), and not in
+  a `property` or a history property (`bynk.test.snapshot_in_property`), whose body
+  runs once per generated input;
+- the value MUST be `Codable` ([§6](/book/spec/type-system/)): the domain
+  `Json.encode` accepts (`bynk.test.snapshot_not_codable`);
+- the name MUST be a string literal (`bynk.test.snapshot_name_not_literal`), so the
+  snapshots a suite takes are known at compile time, and MUST be unique within its
+  case (`bynk.test.snapshot_duplicate_name`);
+- the case MUST be in a unit suite and not `system`-tier
+  (`bynk.test.snapshot_needs_unit_suite`): snapshots are stored per unit suite file
+  and compared by the in-process harness.
+
+The claim has no value of its own and is a statement of the case body.
+
+{{#grammar-semantics snapshot_expr}}
+
 ## §5.10 Collections
 
 *(v0.20b)* `List[T]` and `Map[K, V]` are built-in generic types

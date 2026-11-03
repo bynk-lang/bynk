@@ -187,6 +187,15 @@ pub struct TestArgs {
     /// deployment. In process and against `dev` every route is called.
     #[arg(long, requires = "smoke")]
     pub smoke_unsafe: bool,
+    /// Record snapshots instead of comparing against them: write a snapshot that
+    /// is not stored yet, refresh one whose value changed, and delete the
+    /// obsolete ones (those no `expect … matches snapshot` names any more).
+    /// Without it a missing snapshot fails the case, a changed one fails with a
+    /// diff, and an obsolete one is only reported. The files are
+    /// `snapshots/<suite file>.snap.json`, for review like code. Cannot be
+    /// combined with `--against`, `--smoke`, `--coverage`, `--inspect` or `--no-run`.
+    #[arg(long)]
+    pub update_snapshots: bool,
 }
 
 /// Where `test` writes its output: `-o`, or `<input>/out`.
@@ -231,6 +240,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         smoke,
         print,
         smoke_unsafe,
+        update_snapshots,
     } = args;
     // `json` is "machine-readable": the document or the stream. `stream` says
     // which; everything that prints a document goes through `print_run`.
@@ -246,6 +256,30 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         };
         crate::test_stream::print_run(true, &TestRun::runtime_error(message, None));
         return ExitCode::FAILURE;
+    }
+    // #2842: `--update-snapshots` records what an in-process run computed, so it
+    // is refused where the run is not that, or is not a full run of the suites.
+    if update_snapshots {
+        let with = [
+            (against.is_some(), "--against"),
+            (smoke, "--smoke"),
+            (coverage, "--coverage"),
+            (inspect, "--inspect"),
+            (no_run, "--no-run"),
+        ]
+        .into_iter()
+        .find_map(|(set, flag)| set.then_some(flag));
+        if let Some(flag) = with {
+            let message = format!(
+                "`--update-snapshots` cannot be combined with `{flag}`: snapshots are recorded from an in-process run of the project's own suites."
+            );
+            if json {
+                crate::test_stream::print_run(stream, &TestRun::runtime_error(message, None));
+            } else {
+                eprintln!("{program} test: {message}");
+            }
+            return ExitCode::FAILURE;
+        }
     }
     // #2138: `--against` — resolve and check the target before anything is
     // built, so a refused run makes no request. `dev` is the `bynk` driver's
@@ -368,7 +402,12 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         let o = match crate::try_project_options(&input)
             .map_err(|e| e.to_string())
             .and_then(|o| Ok(o.schema_registry(crate::schema_lock::read_only(&input)?)))
-        {
+            // #2842: the stored snapshots, inlined into the test modules.
+            .and_then(|o| {
+                let files = bynk_project::snapshots::read_snapshot_files(&input)
+                    .map_err(|e| format!("could not read `snapshots/`: {e}"))?;
+                Ok(o.snapshot_files(files))
+            }) {
             Ok(o) => o.contracts(true),
             Err(e) => {
                 if json {
@@ -524,6 +563,19 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         crate::test_stream::print_run(stream, &TestRun::discovered(discovery_suites(&out)));
         return ExitCode::SUCCESS;
     }
+    // #2842: the project's snapshots for this run. A remote or smoke run builds
+    // only some of the suites, so it neither compares nor reports them.
+    let snapshot_run = if smoke || remote.is_some() {
+        None
+    } else {
+        let stored = bynk_project::snapshots::read_snapshot_files(&input).unwrap_or_default();
+        crate::snapshots::SnapshotRun::new(
+            update_snapshots,
+            &input,
+            out.snapshot_files.clone(),
+            stored,
+        )
+    };
     // #2138: the cases the remote build skipped, and the target, named before
     // the first request.
     if let Some(run) = remote.as_mut() {
@@ -806,6 +858,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 &smoke_skips,
                 &out.discovered,
                 &doc_aliases,
+                snapshot_run.as_ref(),
             ) {
                 Ok(code) => code,
                 Err(e) => {
@@ -866,6 +919,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             &smoke_skips,
             &out.discovered,
             &doc_aliases,
+            snapshot_run.as_ref(),
         ) {
             Ok(code) => return code,
             Err(e) => start_failures.push(start_failure(&path, &e)),
@@ -997,6 +1051,8 @@ fn finish_runner(
     local_skips: &[(String, bynk_emit::project::RemoteSkip)],
     discovered: &[bynk_emit::project::DiscoveredSuite],
     aliases: &[(String, String)],
+    // #2842: the project's snapshots, when the run reports them.
+    snapshots: Option<&crate::snapshots::SnapshotRun>,
 ) -> std::io::Result<ExitCode> {
     if let Some(hex) = seed_hex {
         cmd.env("BYNK_TEST_SEED", hex);
@@ -1026,6 +1082,14 @@ fn finish_runner(
                 .map(|(suite, skip)| (suite.as_str(), skip.case.as_str())),
         )
         .apply(program, &mut cmd);
+    if let Some(run) = snapshots {
+        if run.update {
+            cmd.env(crate::snapshots::UPDATE_ENV, "1");
+        }
+        if format == TestFormat::Rich {
+            cmd.env(crate::snapshots::REPORT_ENV, "1");
+        }
+    }
     if format == TestFormat::Ndjson {
         // #2267: forward each event as the runner writes it.
         cmd.env("BYNK_TEST_FORMAT", "ndjson");
@@ -1036,11 +1100,21 @@ fn finish_runner(
                 .map(|(suite, k)| (suite.clone(), k.case.clone(), k.reason.clone()))
                 .collect(),
             transport: remote.map(crate::remote::RemoteRun::transport),
+            snapshots,
         });
         let status =
             crate::test_stream::forward(cmd, &mut events, &mut std::io::stdout().lock(), aliases)?;
         for warning in events.warnings() {
             eprintln!("{}", warning.line(program));
+        }
+        // #2842: the files are written once the run is over, and only if the
+        // runner got as far as its report.
+        if let Some(run) = snapshots
+            && let Some(report) = run.report_for(events.snapshot_report())
+            && let Err(e) = run.settle(&report)
+        {
+            eprintln!("{program} test: could not update snapshots: {e}");
+            return Ok(ExitCode::FAILURE);
         }
         events.unmatched().report(program);
         return Ok(exit_from(status.success()));
@@ -1054,7 +1128,23 @@ fn finish_runner(
         let stderr = crate::doc_examples::apply_aliases(&stderr, aliases);
         let parsed = crate::test_json::parse_ndjson(&stdout);
         let unmatched = parsed.unmatched.clone();
+        let snapshot_report = parsed.snapshots.clone();
         let mut doc = parsed.into_document(&stderr).with_tiers(discovered);
+        // #2842: counts in the document; the files are written as the report says.
+        let mut settle_failed = None;
+        if let Some(run) = snapshots {
+            let counts = match run.report_for(snapshot_report.as_ref()) {
+                Some(report) => match run.settle(&report) {
+                    Ok(counts) => counts,
+                    Err(e) => {
+                        settle_failed = Some(e);
+                        run.counts(Some(&report))
+                    }
+                },
+                None => run.counts(None),
+            };
+            doc = doc.with_snapshots(Some(counts));
+        }
         let skipped: Vec<(String, String, String)> = selected_skips
             .iter()
             .map(|(suite, k)| (suite.clone(), k.case.clone(), k.reason.clone()))
@@ -1068,8 +1158,12 @@ fn finish_runner(
             eprintln!("{}", warning.line(program));
         }
         unmatched.report(program);
+        if let Some(e) = settle_failed {
+            eprintln!("{program} test: could not update snapshots: {e}");
+            return Ok(ExitCode::FAILURE);
+        }
         Ok(exit_from(out.status.success()))
-    } else if aliases.is_empty() {
+    } else if aliases.is_empty() && snapshots.is_none() {
         let status = cmd
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -1078,7 +1172,24 @@ fn finish_runner(
     } else {
         // #2461: a doc test's output names the real file, not the synthetic
         // one it was compiled from, so the lines are rewritten on the way.
-        Ok(exit_from(run_aliased(cmd, aliases)?.success()))
+        // #2842: and the snapshot report line is taken out of the output.
+        let (status, report) = run_aliased(cmd, aliases)?;
+        if let Some(run) = snapshots {
+            let counts = match run.report_for(report.as_ref()) {
+                Some(report) => match run.settle(&report) {
+                    Ok(counts) => counts,
+                    Err(e) => {
+                        eprintln!("{program} test: could not update snapshots: {e}");
+                        return Ok(ExitCode::FAILURE);
+                    }
+                },
+                None => run.counts(None),
+            };
+            if let Some(line) = run.summary_line(counts) {
+                println!("{line}");
+            }
+        }
+        Ok(exit_from(status.success()))
     }
 }
 
@@ -1087,13 +1198,19 @@ fn finish_runner(
 fn run_aliased(
     mut cmd: ProcCommand,
     aliases: &[(String, String)],
-) -> std::io::Result<std::process::ExitStatus> {
+) -> std::io::Result<(std::process::ExitStatus, Option<crate::snapshots::Report>)> {
     use std::io::{BufRead, BufReader, Write};
     // Reads raw bytes a line at a time (as `test_stream::forward` does), so a
     // line that is not UTF-8 is passed on lossily and never ends the reading: a
     // pipe nobody reads fills and stalls the child. A final line with no newline
     // keeps having none.
-    fn forward(pipe: impl std::io::Read, aliases: &[(String, String)], mut out: impl Write) {
+    fn forward(
+        pipe: impl std::io::Read,
+        aliases: &[(String, String)],
+        mut out: impl Write,
+        report: Option<&mut Option<crate::snapshots::Report>>,
+    ) {
+        let mut report = report;
         let mut reader = BufReader::new(pipe);
         let mut buffer = Vec::new();
         loop {
@@ -1103,6 +1220,13 @@ fn run_aliased(
                 Ok(_) => {}
             }
             let line = String::from_utf8_lossy(&buffer);
+            // #2842: the runner's snapshot report is for the driver, not the terminal.
+            if let Some(found) = report.as_deref_mut()
+                && let Some(parsed) = crate::snapshots::Report::from_marked_line(&line)
+            {
+                *found = Some(parsed);
+                continue;
+            }
             let line = crate::doc_examples::apply_aliases(&line, aliases);
             let _ = out.write_all(line.as_bytes());
             let _ = out.flush();
@@ -1113,15 +1237,16 @@ fn run_aliased(
     let err_aliases = aliases.to_vec();
     let errors = std::thread::spawn(move || {
         if let Some(pipe) = stderr_pipe {
-            forward(pipe, &err_aliases, std::io::stderr().lock());
+            forward(pipe, &err_aliases, std::io::stderr().lock(), None);
         }
     });
+    let mut report = None;
     if let Some(pipe) = child.stdout.take() {
-        forward(pipe, aliases, std::io::stdout().lock());
+        forward(pipe, aliases, std::io::stdout().lock(), Some(&mut report));
     }
     let status = child.wait()?;
     let _ = errors.join();
-    Ok(status)
+    Ok((status, report))
 }
 
 fn exit_from(success: bool) -> ExitCode {

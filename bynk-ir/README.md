@@ -43,7 +43,7 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
     │   └── bynk-lower     AST → IR helpers
     ├── bynk-emit          build sequencing, TS emission       + ts, ir, lower, project
     │   ├── bynk-strip     TS → JS type-stripping              + ts
-    │   └── bynk-driver    shared CLI command bodies           + fmt, render, ts
+    │   └── bynk-driver    shared CLI command bodies           + fmt, project, render, ts
     └── bynk-ide           non-bailing editor analysis         + project, fmt
 bynk-std                   first-party sources and bindings, as data
 ```
@@ -63,7 +63,7 @@ build otherwise.
 
 ```toml
 [dependencies]
-bynk-ir = "0.495"
+bynk-ir = "0.496"
 ```
 
 `bynk-ir` values are constructed by `bynk-lower`'s own helpers, not built by

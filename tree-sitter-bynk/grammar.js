@@ -1633,7 +1633,10 @@ module.exports = grammar({
         PREC.expect,
         seq(
           "expect",
-          field("cond", choice($.observation_expr, $.faults_expr, $._expression)),
+          field(
+            "cond",
+            choice($.observation_expr, $.faults_expr, $.snapshot_expr, $._expression),
+          ),
         ),
       ),
 
@@ -1648,6 +1651,18 @@ module.exports = grammar({
         field("call", $._expression),
         optional(field("principal", $.call_site_actor)),
         "faults",
+      ),
+
+    // #2842: a snapshot claim — `expect <value> matches snapshot "<name>"`
+    // compares the value's canonical JSON with a stored snapshot. `matches` and
+    // `snapshot` are contextual, as `faults` is: an expression is never followed
+    // by a bare identifier, so the words alone decide.
+    snapshot_expr: ($) =>
+      seq(
+        field("value", $._expression),
+        "matches",
+        "snapshot",
+        field("name", $.string_literal),
       ),
 
     // v0.117: an observation — a `Cap.op` seam reference followed by one of the

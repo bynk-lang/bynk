@@ -1471,8 +1471,8 @@ meaning: [§5.5](/book/spec/static-semantics/#55-effects-capabilities--providers
 
 {{#grammar expect_expr}}
 
-`expect` and a `Bool` predicate, or — inside a `case` — an `observation_expr`
-or a `faults_expr`. Well-formedness: §5.
+`expect` and a `Bool` predicate, or — inside a `case` — an `observation_expr`,
+a `faults_expr` or a `snapshot_expr`. Well-formedness: §5.
 
 ### §4.8.9 observation_expr (v0.117)
 
@@ -1494,6 +1494,17 @@ A fault claim (#1706): an effectful call followed by `faults`, claiming that
 awaiting the call throws rather than returns. `faults` is contextual: outside an
 `expect` subject it is an ordinary identifier. Well-formedness — the subject is a
 call of type `Effect[_]`, and the claim is not made at the `system` tier: §5.
+
+### §4.8.9aa snapshot_expr (#2842)
+
+{{#grammar snapshot_expr}}
+
+A snapshot claim: a value followed by `matches snapshot` and a string literal that
+names the snapshot, as the subject of an `expect`. `matches` and `snapshot` are
+contextual: outside an `expect` subject they are ordinary identifiers, and a
+`matches` that does not continue as `matches snapshot "<name>"` is
+`bynk.test.snapshot_name_not_literal` at parse time when the name is not a literal.
+Well-formedness: §5.
 
 ### §4.8.9b trace_expr (v0.117)
 

@@ -80,6 +80,8 @@ pub(crate) fn process_tests(
     emitted_barrels: &mut HashSet<PathBuf>,
     // #1883, slice 3: the declared assets, for `svc.GET(asset)` in a case.
     asset_files: &TestAssetFiles,
+    // #2842: the stored snapshot files, by project-relative path.
+    snapshot_files: Option<&BTreeMap<String, String>>,
     // P4b (#2608): each `D1` database's migrations, run on every test database.
     d1_migrations: &D1Migrations,
     // #1975: each user adapter's binding module, as an extensionless path
@@ -165,6 +167,7 @@ pub(crate) fn process_tests(
                 unit_callees,
             ),
             d1_migrations,
+            snapshot_files,
             tys,
         );
         if let Some((path, program, source_map, runnable)) = emit_out {
@@ -1190,6 +1193,7 @@ fn emit_integration_module(
         program,
         printed.source_map,
         RunnableTest {
+            snapshot_files: Vec::new(),
             // #2185: headed by the suite's tier, `system` — the runner's
             // `PREFIX` (`emit_test_main`) strips the same text back off.
             target_name: format!("system · {suite}"),
@@ -2864,6 +2868,9 @@ pub(crate) struct RunnableTest {
     /// v0.67: the suite's cases, in declaration (emission) order, retained for
     /// `--no-run` discovery.
     cases: Vec<DiscoveredCase>,
+    /// #2842: the snapshot files (`snapshots/…snap.json`) the module's suites take
+    /// a snapshot into. The module exports `__bynkSnapshotReport` iff non-empty.
+    pub(crate) snapshot_files: Vec<String>,
 }
 
 /// v0.67: the `path:line:col` of a test-name literal, structured for discovery.
@@ -3183,6 +3190,8 @@ fn emit_test_module(
     uses_emit: bool,
     // P4b (#2608): each `D1` database's migrations.
     d1_migrations: &D1Migrations,
+    // #2842: the stored snapshot files, inlined for the suites that take one.
+    snapshot_files: Option<&BTreeMap<String, String>>,
     tys: &Arc<Types>,
 ) -> Option<(PathBuf, TsProgram, Option<String>, RunnableTest)> {
     // #914: the test-scaffold module's runtime import list is emitted below as a
@@ -3437,6 +3446,14 @@ fn emit_test_module(
     }
     if let Some(text) = &fixture_consts {
         stmts.push(TsStmt::raw(text.clone(), None));
+    }
+    // #2842: the stored snapshots and their comparison, for a suite that takes one.
+    let snapshot_keys = module_snapshot_keys(indices, parsed);
+    if !snapshot_keys.is_empty() {
+        stmts.push(TsStmt::raw(
+            snapshot_harness(&snapshot_keys, snapshot_files),
+            None,
+        ));
     }
     // #1994: a target whose handlers use `~>` gets the execution-context
     // double its deps carry as `__exec`, and the settle helper that awaits
@@ -3736,6 +3753,9 @@ fn emit_test_module(
                 &runtime_use,
                 suite,
                 hidden,
+                (!test_suites::snapshot_expects(&case.body).is_empty())
+                    .then(|| bynk_project::snapshots::snapshot_path(&parsed[i].identity_path()))
+                    .as_deref(),
                 tys,
             );
             // v0.70: merge this case's body checkpoints into the module map under
@@ -4079,6 +4099,7 @@ fn emit_test_module(
             envs: Vec::new(),
             remote: false,
             generative: has_properties,
+            snapshot_files: snapshot_keys.keys().cloned().collect(),
         },
     ))
 }
@@ -4395,6 +4416,72 @@ fn relative_import_for_test(target_dir: &Path) -> String {
 /// (slice 2, ADR 0104). The explicit form is equivalent and strip-clean.
 fn expectation_runtime_helpers() -> String {
     include_str!("../emitter/test_runtime/expectation.ts").to_string()
+}
+
+/// #2842: the snapshots each of the module's suite files takes, keyed by the
+/// file's snapshot path ([`bynk_project::snapshots::snapshot_path`]): every
+/// `(case, name)` pair its `expect … matches snapshot` claims name, in source
+/// order. Empty when no suite of the module takes one.
+fn module_snapshot_keys(
+    indices: &[usize],
+    parsed: &[ParsedFile],
+) -> BTreeMap<String, Vec<(String, String)>> {
+    let mut out: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+    for &i in indices {
+        let Some(test_decl) = parsed[i].test() else {
+            continue;
+        };
+        let mut pairs: Vec<(String, String)> = Vec::new();
+        for case in &test_decl.cases {
+            for e in test_suites::snapshot_expects(&case.body) {
+                let name = e.snapshot.as_ref().expect("filtered").name.clone();
+                let pair = (case.name.clone(), name);
+                if !pairs.contains(&pair) {
+                    pairs.push(pair);
+                }
+            }
+        }
+        if !pairs.is_empty() {
+            out.insert(
+                bynk_project::snapshots::snapshot_path(&parsed[i].identity_path()),
+                pairs,
+            );
+        }
+    }
+    out
+}
+
+/// #2842: the snapshot runtime and `__bynkSnapshotFiles`, the stored text of each
+/// of the module's snapshot files (`null` for one not yet recorded) beside the
+/// keys its claims name. Inlined so the harness reads nothing at test time.
+fn snapshot_harness(
+    keys: &BTreeMap<String, Vec<(String, String)>>,
+    stored: Option<&BTreeMap<String, String>>,
+) -> String {
+    let mut out = include_str!("../emitter/test_runtime/snapshot.ts").to_string();
+    out.push_str("const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {\n");
+    for (file, pairs) in keys {
+        let text = stored
+            .and_then(|files| files.get(file))
+            .map_or_else(|| "null".to_string(), |t| bynk_project::json_string(t));
+        let live: Vec<String> = pairs
+            .iter()
+            .map(|(c, n)| {
+                format!(
+                    "[{}, {}]",
+                    bynk_project::json_string(c),
+                    bynk_project::json_string(n)
+                )
+            })
+            .collect();
+        out.push_str(&format!(
+            "  {}: {{ stored: {text}, live: [{}] }},\n",
+            bynk_project::json_string(file),
+            live.join(", ")
+        ));
+    }
+    out.push_str("};\n");
+    out
 }
 
 /// #2052: the `__bynkEvent_<svc>` helper behind each `svc.event(payload[,
@@ -6925,6 +7012,8 @@ fn emit_test_case_function(
     // #1860: the run's suite ordinal, when some `stub` is suite-scoped.
     suite: Option<usize>,
     hidden: &BTreeMap<String, String>,
+    // #2842: the snapshot file the case takes a snapshot into, when it takes one.
+    snapshot_file: Option<&str>,
     tys: &Arc<Types>,
 ) -> TsStmt {
     // #291: a case some `stub` clause is scoped to passes its name to
@@ -6936,6 +7025,13 @@ fn emit_test_case_function(
     });
     let mut out = String::new();
     out.push_str("  try {\n");
+    if let Some(file) = snapshot_file {
+        out.push_str(&format!(
+            "    __bynkSnapshotCase({}, {});\n",
+            bynk_project::json_string(file),
+            bynk_project::json_string(&case.name)
+        ));
+    }
     if let Some(env) = &env {
         let entries: Vec<(String, TsExpr)> = env
             .iter()
@@ -9504,7 +9600,23 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
     let duration_entry =
         || TsObjectEntry::Prop("durationMs".to_string(), member(ident("r"), "durationMs"));
 
-    let ndjson_branch = block(vec![
+    // #2842: the modules that take a snapshot export `__bynkSnapshotReport`; the
+    // run hands the driver every selected one's report — as an event in the stream,
+    // and as one marked line in the human output when the driver asks for it.
+    let snapshot_modules: Vec<String> = sorted
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| !t.snapshot_files.is_empty())
+        .map(|(i, _)| format!("[{i}, test_{i}]"))
+        .collect();
+    let snapshot_report = (!snapshot_modules.is_empty()).then(|| {
+        format!(
+            "const __snapshotFiles = ([{}] as const).filter(([i]) => active.includes(modules[i]!)).flatMap(([, t]) => t.__bynkSnapshotReport());",
+            snapshot_modules.join(", ")
+        )
+    });
+
+    let mut ndjson_stmts = vec![
         const_(
             "emit",
             TsExpr::Arrow {
@@ -9678,7 +9790,18 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
             // (`JSON.stringify` drops an undefined) unless a filter went unmatched.
             TsObjectEntry::Prop("unmatched".to_string(), call(ident("unmatched"), vec![])),
         ]),
-    ]);
+    ];
+    // #2842: the snapshot report goes ahead of `run-end`.
+    let run_end = ndjson_stmts.pop();
+    if let Some(decl) = &snapshot_report {
+        ndjson_stmts.push(TsStmt::raw(decl.clone(), None));
+        ndjson_stmts.push(TsStmt::raw(
+            "emit({ type: \"snapshots\", files: __snapshotFiles });".to_string(),
+            None,
+        ));
+    }
+    ndjson_stmts.extend(run_end);
+    let ndjson_branch = block(ndjson_stmts);
 
     let human_branch = block(vec![
         console_log(str_lit("Running tests...\n")),
@@ -9754,6 +9877,20 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         )),
         expr_stmt(call(ident("reportUnmatched"), vec![])),
     ]);
+    // #2842: under `BYNK_SNAPSHOT_REPORT=1` the driver reads the report from one
+    // marked line at the end of the human output and strips it.
+    let human_branch = match &snapshot_report {
+        Some(decl) => block(vec![
+            human_branch,
+            TsStmt::raw(
+                format!(
+                    "{decl}\nif (process.env.BYNK_SNAPSHOT_REPORT === \"1\") {{ globalThis.console.log(\"\\u0001bynk-snapshots \" + globalThis.JSON.stringify(__snapshotFiles)); }}"
+                ),
+                None,
+            ),
+        ]),
+        None => human_branch,
+    };
 
     main_body.push(TsStmt::if_else_same_line_stmt(
         strict_eq(
@@ -10672,6 +10809,7 @@ mod tests {
     #[test]
     fn emit_test_main_threads_the_case_and_suite_filter() {
         let tests = vec![RunnableTest {
+            snapshot_files: Vec::new(),
             target_name: "commerce.money".to_string(),
             module_path: std::path::PathBuf::from("tests/commerce_money.test.ts"),
             kind: "unit",
@@ -10727,6 +10865,7 @@ mod tests {
              expected/tests/main.ts"
         );
         let tests = vec![RunnableTest {
+            snapshot_files: Vec::new(),
             target_name: "commerce.payment".to_string(),
             module_path: std::path::PathBuf::from("commerce_payment.test.js"),
             kind: "unit",

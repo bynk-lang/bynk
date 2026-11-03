@@ -68,7 +68,7 @@ bynkc fmt [INPUTS] [--check] [--indent <INDENT>] [--indent-width <N>] [--max-lin
 Discover and run test declarations in a project. Compiles the project (including all generated `tests/*.test.ts` modules), then invokes Node.js on the aggregated runner script. Requires `tsc` and `node` to be on PATH
 
 ```text
-bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect] [--seed <SEED>] [--case <NAME>] [--suite <NAME>] [--partial-selection] [--coverage] [--against <TARGET>] [--skip-unsupported] [--settle <DURATION>] [--smoke] [--print] [--smoke-unsafe]
+bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect] [--seed <SEED>] [--case <NAME>] [--suite <NAME>] [--partial-selection] [--coverage] [--against <TARGET>] [--skip-unsupported] [--settle <DURATION>] [--smoke] [--print] [--smoke-unsafe] [--update-snapshots]
 ```
 
 | Argument | Required | Default | Description |
@@ -89,3 +89,4 @@ bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect
 | `--smoke` | no | — | Run a smoke test of every `from http` route instead of the project's own suites (#2658): each route is called with arguments `Val` fabricates and must not answer a 5xx or a body that does not decode; a route with a JSON body must reject a malformed one, and a route behind an actor must refuse a call with no credential. A route whose arguments or principal can't be fabricated is skipped and named. Combine with `--against` to smoke a running system |
 | `--print` | no | — | With `--smoke`, print the synthesised suites as `.bynk` source and run nothing: a starting point to copy into `tests/` and extend |
 | `--smoke-unsafe` | no | — | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). Without it a named target sees only `GET` requests, since fabricated writes would land on a shared deployment. In process and against `dev` every route is called |
+| `--update-snapshots` | no | — | Record snapshots instead of comparing against them: write a snapshot that is not stored yet, refresh one whose value changed, and delete the obsolete ones (those no `expect … matches snapshot` names any more). Without it a missing snapshot fails the case, a changed one fails with a diff, and an obsolete one is only reported. The files are `snapshots/<suite file>.snap.json`, for review like code. Cannot be combined with `--against`, `--smoke`, `--coverage`, `--inspect` or `--no-run` |

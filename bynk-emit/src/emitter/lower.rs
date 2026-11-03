@@ -1046,6 +1046,40 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
                 None => write_line(out, indent, &format!("const {bind_name} = await {value};")),
             }
         }
+        Statement::Expect(a) if a.snapshot.is_some() => {
+            // #2842: `expect <value> matches snapshot "<name>"` compares the
+            // value's `Json.encode` text with the snapshot the module inlined
+            // (`__bynkSnapshotCheck`, `test_runtime/snapshot.ts`).
+            let clause = a.snapshot.as_ref().expect("guarded by is_some");
+            let span_start = a.span.start;
+            let span_end = a.span.end;
+            let location = expect_location(cx, span_start);
+            let src = expect_source_text(cx, a.value.span);
+            let mut pre = Pre::new();
+            let json = json_encode_text(&mut pre, &a.value, cx);
+            for s in pre.stmts() {
+                write_line(out, indent, s);
+            }
+            let name = bynk_project::json_string(&clause.name);
+            let shown = crate::emitter::escape_ts_string(&clause.name);
+            match json {
+                Some(json) => write_line(
+                    out,
+                    indent,
+                    &format!(
+                        "{{ const __d = __bynkSnapshotCheck({name}, {json}); if (__d !== undefined) {{ throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, \"expect {src} matches snapshot \\\"{shown}\\\"\\n  \" + __d); }} }}",
+                    ),
+                ),
+                // The checker typed the value; a missing type is drift, said at run time.
+                None => write_line(
+                    out,
+                    indent,
+                    &format!(
+                        "throw __bynkExpectFailure(\"{location}\", {span_start}, {span_end}, \"expect {src} matches snapshot \\\"{shown}\\\"\\n  the value's type is not known to the snapshot\");",
+                    ),
+                ),
+            }
+        }
         Statement::Expect(a) => {
             // Inside a test case body, `expect <pred>` lowers to a runtime check
             // that throws an ExpectationError so the surrounding test-case runner
@@ -3839,44 +3873,10 @@ fn lower_json_codec_call(
         Some(Callee::Intrinsic { ns, .. }) if *ns == JSON
     ) && args.len() == 1
     {
-        // Constrained generics slice 3: a value whose type mentions a type
-        // parameter encodes through the codec witness of that type.
         if method.name == "encode"
-            && let Some(arg_ty) = cx.commons().expr_types.get(&args[0].id).map(|te| te.ty)
-            && super::codec::has_var(arg_ty, cx.commons())
+            && let Some(text) = json_encode_text(&mut pre, &args[0], cx)
         {
-            if cx.in_test_scaffold() {
-                note_ground_roots(arg_ty, cx);
-            }
-            let codec = cx.codec(arg_ty);
-            let v = pre.lower(&args[0], cx);
-            return Some(pre.finish(format!("globalThis.JSON.stringify({codec}.encode({v}))")));
-        }
-        if method.name == "encode"
-            && let Some(arg_ty) = cx
-                .commons()
-                .expr_types
-                .get(&args[0].id)
-                .map(|te| &te.ty)
-                .cloned()
-            && let Some(tref) = ty_to_type_ref(arg_ty, tys)
-        {
-            // #917: a test-scaffold module's target/`uses` types export no codec
-            // of their own — record the root so the module that spliced this
-            // body in can generate its own `serialise_*`/`deserialise_*` closure,
-            // the same way a workers cross-context caller generates one for a
-            // consumed context's boundary types (#661). P6.28: pushes the `TyId`
-            // already in hand, not a re-derived `TypeRef` — `tref` below still
-            // exists for this call site's own, separate codec-rendering use.
-            if cx.in_test_scaffold() {
-                cx.runtime_use().note_json_codec_root(arg_ty);
-            }
-            let v = pre.lower(&args[0], cx);
-            // #1435 (Arc E slice 1): boundary-print, same treatment as this
-            // file's own `serialise_expr_via` call site above.
-            let ser =
-                bynk_ts::print_expr(&serialisation::serialise_expr(&tref, &v, cx.runtime_use()));
-            return Some(pre.finish(format!("globalThis.JSON.stringify({ser})")));
+            return Some(pre.finish(text));
         }
         if matches!(method.name.as_str(), "decode" | "decodeSql")
             && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
@@ -3955,6 +3955,41 @@ fn lower_json_codec_call(
     }
     let text: Option<String> = None;
     text.map(|expr| pre.finish(expr))
+}
+
+/// `Json.encode(arg)`'s text: `globalThis.JSON.stringify(<serialised arg>)`, with
+/// the codec roots the module needs recorded. Shared by the `Json.encode` call
+/// and the snapshot `expect` (#2842), so both encode a value one way. `None`
+/// when the argument's type is unknown to the lowering.
+fn json_encode_text(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<String> {
+    let tys = cx.commons().tys();
+    // Constrained generics slice 3: a value whose type mentions a type
+    // parameter encodes through the codec witness of that type.
+    let arg_ty = cx.commons().expr_types.get(&arg.id).map(|te| te.ty)?;
+    if super::codec::has_var(arg_ty, cx.commons()) {
+        if cx.in_test_scaffold() {
+            note_ground_roots(arg_ty, cx);
+        }
+        let codec = cx.codec(arg_ty);
+        let v = pre.lower(arg, cx);
+        return Some(format!("globalThis.JSON.stringify({codec}.encode({v}))"));
+    }
+    let tref = ty_to_type_ref(arg_ty, tys)?;
+    // #917: a test-scaffold module's target/`uses` types export no codec
+    // of their own — record the root so the module that spliced this
+    // body in can generate its own `serialise_*`/`deserialise_*` closure,
+    // the same way a workers cross-context caller generates one for a
+    // consumed context's boundary types (#661). P6.28: pushes the `TyId`
+    // already in hand, not a re-derived `TypeRef` — `tref` below still
+    // exists for this call site's own, separate codec-rendering use.
+    if cx.in_test_scaffold() {
+        cx.runtime_use().note_json_codec_root(arg_ty);
+    }
+    let v = pre.lower(arg, cx);
+    // #1435 (Arc E slice 1): boundary-print, same treatment as this
+    // file's own `serialise_expr_via` call site above.
+    let ser = bynk_ts::print_expr(&serialisation::serialise_expr(&tref, &v, cx.runtime_use()));
+    Some(format!("globalThis.JSON.stringify({ser})"))
 }
 
 /// #917 and constrained generics slice 3: record the variable-free parts of a

@@ -272,6 +272,8 @@ mod schema_lock_check_and_test_cli;
 mod semantic_tokens_index;
 #[path = "signature_auth.rs"]
 mod signature_auth;
+#[path = "snapshot_behaviour.rs"]
+mod snapshot_behaviour;
 #[path = "snippets.rs"]
 mod snippets;
 #[path = "source_map.rs"]

@@ -888,6 +888,7 @@ pub fn phase_integration_bodies(
                     tys,
                 );
                 check_faults_tier(case, case_effective_tier(case, d), &mut body_errs);
+                check_snapshot_placement(case, true, &mut body_errs);
                 check_event_address_tier(
                     case,
                     case_effective_tier(case, d),
@@ -1575,6 +1576,11 @@ fn check_test_bodies(
             );
             let tier = case_effective_tier(case, test_decl);
             check_faults_tier(case, tier, &mut errors);
+            check_snapshot_placement(
+                case,
+                tier == bynk_syntax::ast::TestTier::System,
+                &mut errors,
+            );
             check_bad_signature_tier(case, tier, &mut errors);
             if tier != bynk_syntax::ast::TestTier::System {
                 crossing.check_case(target_name, case, tier, &mut errors);
@@ -1603,10 +1609,78 @@ fn check_test_bodies(
             );
             crossing.check_property(target_name, prop, &mut errors);
             check_advance_in_property(prop, &mut errors);
+            check_snapshot_in_property(prop, &mut errors);
         }
     }
 
     errors
+}
+
+/// Every `expect … matches snapshot` in `block`, at any depth, in source order
+/// (#2842).
+pub fn snapshot_expects(block: &Block) -> Vec<&bynk_syntax::ast::ExpectStmt> {
+    blocks_deep(block)
+        .into_iter()
+        .flat_map(flat_statements)
+        .filter_map(|s| match s {
+            Statement::Expect(e) if e.snapshot.is_some() => Some(e),
+            _ => None,
+        })
+        .collect()
+}
+
+/// #2842: where a snapshot may be taken. A snapshot is a stored file per unit
+/// suite file, compared in the unit harness, so a `system`-tier case or an
+/// integration/system suite has none (`bynk.test.snapshot_needs_unit_suite`);
+/// within a case its names are unique (`bynk.test.snapshot_duplicate_name`).
+fn check_snapshot_placement(case: &Case, no_store: bool, errors: &mut Vec<CompileError>) {
+    let mut seen: HashSet<&str> = HashSet::new();
+    for e in snapshot_expects(&case.body) {
+        let clause = e.snapshot.as_ref().expect("snapshot_expects filters");
+        if no_store {
+            errors.push(
+                CompileError::new(
+                    "bynk.test.snapshot_needs_unit_suite",
+                    clause.span,
+                    "a snapshot is not available in a `system`-tier case or an integration or system suite",
+                )
+                .with_note(
+                    "snapshots are stored per unit suite file; take the snapshot in a unit-tier `case` of a suite that targets a unit",
+                ),
+            );
+        } else if !seen.insert(clause.name.as_str()) {
+            errors.push(
+                CompileError::new(
+                    "bynk.test.snapshot_duplicate_name",
+                    clause.name_span,
+                    format!(
+                        "case `\"{}\"` already has a snapshot named `\"{}\"`",
+                        case.name, clause.name
+                    ),
+                )
+                .with_note("a snapshot is keyed by its case and name, so give each `matches snapshot` in a case its own name"),
+            );
+        }
+    }
+}
+
+/// #2842: a `property` runs its body once per generated input, so a snapshot
+/// there would be keyed by a case that has no single value.
+fn check_snapshot_in_property(
+    prop: &bynk_syntax::ast::PropertyDecl,
+    errors: &mut Vec<CompileError>,
+) {
+    for e in snapshot_expects(&prop.forall.body) {
+        let clause = e.snapshot.as_ref().expect("snapshot_expects filters");
+        errors.push(
+            CompileError::new(
+                "bynk.test.snapshot_in_property",
+                clause.span,
+                "a snapshot can only be taken in a `case`, not in a `property`",
+            )
+            .with_note("a property runs its body for many generated inputs; snapshot a fixed value in a `case`"),
+        );
+    }
 }
 
 /// #2137: `advance Clock by …` moves a `case`'s harness clock. A `property`

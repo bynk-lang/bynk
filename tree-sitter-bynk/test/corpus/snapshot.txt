@@ -1,0 +1,38 @@
+================================================================================
+Snapshot claim — expect <value> matches snapshot "<name>" (#2842)
+================================================================================
+
+suite demo.hooks {
+  case "a delivery reads" {
+    expect read(1) matches snapshot "issues opened"
+    let matches = 1
+    let snapshot = 2
+    expect matches == snapshot
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (case
+      (string_literal)
+      (expect_expr
+        (snapshot_expr
+          (call
+            (identifier)
+            (number_literal))
+          (string_literal)))
+      (let_stmt
+        (identifier)
+        (number_literal))
+      (let_stmt
+        (identifier)
+        (number_literal))
+      (expect_expr
+        (binary_expr
+          (identifier)
+          (identifier))))))
