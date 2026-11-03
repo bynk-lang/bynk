@@ -1,0 +1,25 @@
+suite hooks.github {
+	case "a raw route reads its headers in a unit test" {
+		let r <- github.POST("/github", RequestHeaders.of(["X-GitHub-Event: ping"]), Bytes.fromUtf8("{}")) by GitHub
+		expect r is Ok("ping e30=")
+	}
+}
+
+suite hooks.github as system {
+	env { GITHUB_SECRET = "test-github" }
+
+	case "a signed raw body arrives with its headers" {
+		let r <- github.POST("/github", RequestHeaders.of(["X-GitHub-Event: push"]), Bytes.fromUtf8("{\"ref\":\"main\"}"))
+		expect r is Ok("push eyJyZWYiOiJtYWluIn0=")
+	}
+
+	case "a forged raw body is refused before the handler reads a header" {
+		let r <- github.POST("/github", RequestHeaders.of(["X-GitHub-Event: push"]), Bytes.fromUtf8("{}")) by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "headers may follow a raw body" {
+		let r <- github.POST("/echo", Bytes.fromUtf8("hi"), RequestHeaders.of(["X-Trace: t2"])) by Visitor
+		expect r is Ok("t2 aGk=")
+	}
+}

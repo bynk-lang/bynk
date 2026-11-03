@@ -586,8 +586,10 @@ service registry from http {
   An unbounded binary upload is the denial of service
   [body limits](#request-body-limits) exist to stop.
 - **Buffered, not streamed.** The body is read whole, up to the cap, before the
-  handler runs. Streaming a request body into the handler, multipart or form
-  decoding, and reading request headers in a handler are not part of this.
+  handler runs. Streaming a request body into the handler, and multipart or form
+  decoding, are not part of this. A `@raw` handler can still take
+  [`headers: RequestHeaders`](#request-headers) alongside its body, say to read
+  a webhook's event-name header.
 - **Signatures.** A `Signature` actor on a `@raw` route computes its HMAC over the
   octets as received, and the handler gets those same bytes.
 - **The content type is a contract, not a security boundary.** The handler still

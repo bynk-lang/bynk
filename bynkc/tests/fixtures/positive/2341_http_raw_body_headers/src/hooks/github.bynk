@@ -1,0 +1,23 @@
+context hooks.github
+
+// A webhook sender that signs the raw octets it sends, the way GitHub does.
+actor GitHub { auth = Signature(secret = "GITHUB_SECRET", header = "X-Hub-Signature-256") }
+
+service github from http {
+	limits { maxBody: 256 }
+
+	// A raw body and the request's headers together: the seam verifies the
+	// signature over the octets as received, and the handler reads the event
+	// name from a header the actor does not describe.
+	@raw(contentType: "application/json")
+	on POST("/github") (headers: RequestHeaders, body: Bytes) -> Effect[HttpResult[String]] by GitHub {
+		let event = headers.get("X-GitHub-Event")?
+		Ok("\(event) \(body.toBase64())")
+	}
+
+	// `headers` after the body, on a route a visitor may call.
+	@raw(contentType: "*/*")
+	on POST("/echo") (body: Bytes, headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(headers.get("x-trace").getOrElse("-")) \(body.toBase64())")
+	}
+}
