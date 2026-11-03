@@ -1747,12 +1747,14 @@ fn cap_op_param_names(cx: &LowerCtx, cap: &str, op: &str) -> Vec<String> {
 /// hoists is placed inside the `try`, not in the enclosing statement's
 /// prelude: a fault raised while evaluating the call's arguments is the call
 /// faulting too, and must not escape the claim.
-/// #2135: the driver name a reserved bad-signature principal drives: `by
-/// Forged` (a wrong secret) or `by Stale` (a timestamp past the tolerance).
+/// #2135, #2864: the driver name a reserved bad-credential principal drives:
+/// `by Forged` (a wrong secret), `by Stale` (a timestamp past the tolerance)
+/// or `by Expired` (a Bearer token whose `exp` has passed).
 fn bad_signature_driver(actor: &str) -> Option<&'static str> {
     match actor {
         "Forged" => Some("forged"),
         "Stale" => Some("stale"),
+        "Expired" => Some("expired"),
         _ => None,
     }
 }

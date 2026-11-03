@@ -2735,7 +2735,7 @@ fn block_has_advance(block: &Block) -> bool {
 /// yet: the request reaches the real seam without a token and can only be
 /// refused with a `401` (`bynk.test.oidc_needs_in_process`). ADR 0212 D1: the
 /// check gates exactly what the emitter emits. A call driven `by Nobody` (or
-/// `by Forged`/`by Stale`) is left to the checks of those principals.
+/// `by Forged`/`by Stale`/`by Expired`) is left to the checks of those principals.
 fn check_unsigned_route_at_system(
     case: &Case,
     callees: &HashMap<ExprId, checker::Callee>,
@@ -2863,7 +2863,7 @@ fn check_faults_tier(
             let what = if name == "Nobody" {
                 "the missing credential"
             } else {
-                "the bad signature"
+                "the bad credential"
             };
             errors.push(
                 CompileError::new(
@@ -2910,15 +2910,16 @@ fn block_uses_nobody(block: &Block) -> bool {
     })
 }
 
-/// #2135: whether `name` is a reserved bad-signature principal (`by Forged`,
-/// `by Stale`).
+/// #2135, #2864: whether `name` is a reserved bad-credential principal (`by
+/// Forged`, `by Stale`, `by Expired`).
 fn is_bad_signature_name(name: &str) -> bool {
-    matches!(name, "Forged" | "Stale")
+    matches!(name, "Forged" | "Stale" | "Expired")
 }
 
 /// #2135: `bynk.test.forged_needs_system` — a case below `system` that drives
-/// `by Forged` or `by Stale`. Only the `system` driver signs a request, so
-/// only there does the real `Signature` seam see the bad signature; in
+/// `by Forged`, `by Stale` or `by Expired`. Only the `system` driver signs a
+/// request, so only there does the real `Signature` or `Bearer` seam see the
+/// bad credential; in
 /// process the seam is skipped and the handler would just run. Every block of
 /// the body counts, as for `by Nobody` (#1849).
 fn check_bad_signature_tier(
@@ -2955,7 +2956,7 @@ fn check_bad_signature_tier(
                 ),
             )
             .with_note(format!(
-                "`by {name}` sends a bad signature to the real `Signature` seam, which only the `system` driver reaches; in process the seam is skipped. Move the case into a `suite … as system`"
+                "`by {name}` sends a bad credential to the real `Signature` or `Bearer` seam, which only the `system` driver reaches; in process the seam is skipped. Move the case into a `suite … as system`"
             )),
         );
     }
