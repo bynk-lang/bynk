@@ -3098,6 +3098,7 @@ pub fn type_ref_str(t: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         // v0.20b: the built-in collection types.

@@ -131,6 +131,7 @@ Compiler-known type constructors. They are not lexer keywords — you may use th
 | `Query` | The lazy storage-read type, `Query[T]`. |
 | `QueueResult` | The queue handler result type (non-generic). |
 | `RequestHeaders` | An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`). |
+| `RequestQuery` | An HTTP handler's read-only view of the request's query string (`query: RequestQuery`). |
 | `Set` | The immutable set type, `Set[T]`. |
 | `Stream` | The value-over-time primitive, `Stream[T]`. |
 | `TokenClaims` | An `Oidc` actor's verified token claims, read through its binder (`who.claims`). |

@@ -398,6 +398,7 @@ fn shape_of(
         TypeRef::QueueResult(_) => Shape::Named("QueueResult".into()),
         TypeRef::Asset(_) => Shape::Named("Asset".into()),
         TypeRef::RequestHeaders(_) => Shape::Named("RequestHeaders".into()),
+        TypeRef::RequestQuery(_) => Shape::Named("RequestQuery".into()),
         TypeRef::TokenClaims(_) => Shape::Named("TokenClaims".into()),
         TypeRef::BoundaryRejection(_) => Shape::Named("BoundaryRejection".into()),
         TypeRef::Fn(..)

@@ -339,6 +339,9 @@ pub enum Ty {
     /// `RequestHeaders` — an HTTP handler's read-only view of the request's
     /// headers (#2341, decision A). Non-generic and opaque, with no wire form.
     RequestHeaders,
+    /// `RequestQuery` (#2854) — an HTTP handler's read-only view of the
+    /// request's query string.
+    RequestQuery,
     /// `TokenClaims` (#2380, L5) — an `Oidc` actor's verified token claims,
     /// read through its binder's `.claims`.
     TokenClaims,
@@ -455,6 +458,7 @@ impl Ty {
             Ty::BoundaryRejection => "BoundaryRejection".to_string(),
             Ty::Asset => "Asset".to_string(),
             Ty::RequestHeaders => "RequestHeaders".to_string(),
+            Ty::RequestQuery => "RequestQuery".to_string(),
             Ty::TokenClaims => "TokenClaims".to_string(),
             Ty::List(t) => format!("List[{}]", types.display(*t)),
             Ty::Set(t) => format!("Set[{}]", types.display(*t)),
@@ -3177,6 +3181,7 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
@@ -3213,6 +3218,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
@@ -3254,6 +3260,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
@@ -3351,6 +3358,8 @@ pub(crate) fn unify(
             | Ty::BoundaryRejection
             | Ty::Asset
             | Ty::RequestHeaders
+            | Ty::RequestQuery
+
             | Ty::TokenClaims
             | Ty::List(_)
             | Ty::Set(_)
@@ -3425,6 +3434,7 @@ pub fn record_type_refs(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -3527,6 +3537,7 @@ fn first_unresolved_type_name<'a>(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -3606,6 +3617,7 @@ pub fn resolve_type_ref(
         TypeRef::QueueResult(_) => Ty::QueueResult,
         TypeRef::Asset(_) => Ty::Asset,
         TypeRef::RequestHeaders(_) => Ty::RequestHeaders,
+        TypeRef::RequestQuery(_) => Ty::RequestQuery,
         TypeRef::TokenClaims(_) => Ty::TokenClaims,
         TypeRef::BoundaryRejection(_) => Ty::BoundaryRejection,
         // v0.119 (ADR 0155): `History[Agent]` is not a value type — it is a
@@ -3709,6 +3721,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         (Ty::QueueResult, Ty::QueueResult) | (Ty::BoundaryRejection, Ty::BoundaryRejection) => true,
         (Ty::Asset, Ty::Asset) => true,
         (Ty::RequestHeaders, Ty::RequestHeaders) => true,
+        (Ty::RequestQuery, Ty::RequestQuery) => true,
         (Ty::TokenClaims, Ty::TokenClaims) => true,
         (Ty::ValidationError, Ty::ValidationError) => true,
         (Ty::JsonError, Ty::JsonError) => true,
@@ -3746,6 +3759,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
             | Ty::BoundaryRejection
             | Ty::Asset
             | Ty::RequestHeaders
+            | Ty::RequestQuery
             | Ty::TokenClaims
             | Ty::List(_)
             | Ty::Set(_)
@@ -5252,6 +5266,7 @@ pub(crate) fn rebrand_return_type(
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
@@ -5484,6 +5499,7 @@ fn structurally_compatible_inner(
         (Ty::QueueResult, Ty::QueueResult) | (Ty::BoundaryRejection, Ty::BoundaryRejection) => true,
         (Ty::Asset, Ty::Asset) => true,
         (Ty::RequestHeaders, Ty::RequestHeaders) => true,
+        (Ty::RequestQuery, Ty::RequestQuery) => true,
         (Ty::TokenClaims, Ty::TokenClaims) => true,
         (
             Ty::Named {
@@ -5544,6 +5560,7 @@ fn structurally_compatible_inner(
             | Ty::BoundaryRejection
             | Ty::Asset
             | Ty::RequestHeaders
+            | Ty::RequestQuery
             | Ty::TokenClaims
             | Ty::List(_)
             | Ty::Set(_)

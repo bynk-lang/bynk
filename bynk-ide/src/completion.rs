@@ -913,6 +913,65 @@ pub const RAW_ARGS: &[(&str, &str)] = &[(
     "the media type the route accepts, a string literal (`\"*/*\"` for any) — another `Content-Type` is a `415`",
 )];
 
+/// #2854: the special parameter names an `on http` handler may declare beside
+/// its `:name` path parameters, offered at a parameter-*name* position, with the
+/// type each takes.
+pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
+    (
+        "query",
+        "RequestQuery",
+        "the query string: a record `T` decoded and validated before the handler runs (`400` on a violation), or a raw `RequestQuery` view",
+    ),
+    (
+        "headers",
+        "RequestHeaders",
+        "the request's headers, read-only",
+    ),
+    (
+        "body",
+        "T",
+        "the request body, parsed and validated before the handler runs (not on `GET` or `DELETE`)",
+    ),
+];
+
+/// #2854: the cursor is at a parameter-*name* position in the parameter list of an
+/// `on <METHOD>("…") ( … )` HTTP handler header: the innermost open paren follows
+/// the route's closing `)`, itself opened by an HTTP method after `on`, and the
+/// current parameter (since the last `,`) has no `:` yet.
+pub fn in_http_param_name_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_paren(text, offset) else {
+        return false;
+    };
+    let head = text[..open].trim_end();
+    if !head.ends_with(')') {
+        return false;
+    }
+    let Some(route_open) = innermost_open_paren(head, head.len() - 1) else {
+        return false;
+    };
+    let before = text[..route_open].trim_end();
+    let Some(method_start) = before
+        .rfind(|c: char| !c.is_ascii_alphanumeric())
+        .map(|i| i + 1)
+    else {
+        return false;
+    };
+    if !matches!(
+        &before[method_start..],
+        "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+    ) {
+        return false;
+    }
+    if !before[..method_start].trim_end().ends_with("on") {
+        return false;
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
+
 /// The byte index of the innermost `{` still open at `offset` (a naive scan that,
 /// like [`record_construction_receiver`], does not skip braces inside strings or
 /// comments — acceptable for a completion heuristic).
@@ -1762,6 +1821,14 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("parse", "parse(s: String) -> Option[Decimal]"),
             ("fromInt", "fromInt(n: Int) -> Decimal"),
+        ],
+    ),
+    // #2854: the test-side constructors of a handler's raw `query`.
+    (
+        "RequestQuery",
+        &[
+            ("of", "of(pairs: List[String]) -> RequestQuery"),
+            ("empty", "empty() -> RequestQuery"),
         ],
     ),
     (
@@ -4347,6 +4414,25 @@ fn Box.size(self) -> Int { 1 }
         // An ordinary handler param list is not a `@limit` position.
         let doc5 = "on GET(\"/x\") by v: Visitor (";
         assert!(!in_limit_arg_position(doc5, doc5.len()));
+    }
+
+    #[test]
+    fn http_param_name_position_in_a_handler_header() {
+        let doc = "service api from http {\n  on GET(\"/x\") (";
+        assert!(in_http_param_name_position(doc, doc.len()));
+        let doc2 = "service api from http {\n  on POST(\"/x/:id\") (id: String, ";
+        assert!(in_http_param_name_position(doc2, doc2.len()));
+        // After the `:` it is a type position.
+        let doc3 = "service api from http {\n  on GET(\"/x\") (query: ";
+        assert!(!in_http_param_name_position(doc3, doc3.len()));
+        // The route string's own parens, and a call, are not parameter lists.
+        let doc4 = "service api from http {\n  on GET(";
+        assert!(!in_http_param_name_position(doc4, doc4.len()));
+        let doc5 = "fn f(x: Int) -> Int {\n  g(";
+        assert!(!in_http_param_name_position(doc5, doc5.len()));
+        // A non-HTTP handler has no such parameters.
+        let doc6 = "service s from cron {\n  on schedule(\"* * * * *\") (";
+        assert!(!in_http_param_name_position(doc6, doc6.len()));
     }
 
     #[test]

@@ -19,6 +19,8 @@ pub mod types {
     pub const DECIMAL: &str = "Decimal";
     /// #2341 (L4): an HTTP handler's read-only view of the request's headers.
     pub const REQUEST_HEADERS: &str = "RequestHeaders";
+    /// #2854: an HTTP handler's read-only view of the request's query string.
+    pub const REQUEST_QUERY: &str = "RequestQuery";
     /// #2380 (L5): an `Oidc` actor's verified token claims.
     pub const TOKEN_CLAIMS: &str = "TokenClaims";
     pub const HTTP_RESULT: &str = "HttpResult";

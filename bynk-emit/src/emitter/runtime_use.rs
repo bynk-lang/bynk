@@ -114,6 +114,12 @@ pub(crate) struct RuntimeUse {
     /// #2341 (L4): a system-tier driver sends a test's headers
     /// (`__requestHeaderPairs`).
     request_header_pairs: Cell<bool>,
+    /// #2854: the module builds a `RequestQuery` (`__requestQuery`).
+    request_query: Cell<bool>,
+    /// #2854: a typed query becomes a query string (`__queryString`).
+    query_string: Cell<bool>,
+    /// #2854: a system-tier driver sends a test's query (`__requestQuerySearch`).
+    request_query_search: Cell<bool>,
     /// #2380 (L5): the module builds a `TokenClaims` (`__tokenClaims`).
     token_claims: Cell<bool>,
     /// #1652: the module references `__bynkEq` (structural `==`).
@@ -222,6 +228,36 @@ impl RuntimeUse {
     /// Whether `__requestHeaderPairs` must be imported (#2341).
     pub fn request_header_pairs(&self) -> bool {
         self.request_header_pairs.get()
+    }
+
+    /// Record that the module builds a `RequestQuery` value (#2854).
+    pub fn note_request_query(&self) {
+        self.request_query.set(true);
+    }
+
+    /// Whether `__requestQuery` must be imported (#2854).
+    pub fn request_query(&self) -> bool {
+        self.request_query.get()
+    }
+
+    /// Record that a typed query becomes a query string (#2854).
+    pub fn note_query_string(&self) {
+        self.query_string.set(true);
+    }
+
+    /// Whether `__queryString` must be imported (#2854).
+    pub fn query_string(&self) -> bool {
+        self.query_string.get()
+    }
+
+    /// Record that a system-tier driver sends a test's query (#2854).
+    pub fn note_request_query_search(&self) {
+        self.request_query_search.set(true);
+    }
+
+    /// Whether `__requestQuerySearch` must be imported (#2854).
+    pub fn request_query_search(&self) -> bool {
+        self.request_query_search.get()
     }
 
     /// Record that the module builds a `TokenClaims` value (#2380).

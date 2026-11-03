@@ -24,6 +24,10 @@ import {
   mediaTypeMatches,
   requestHeaders,
   requestHeaderPairs,
+  requestQuery,
+  requestQuerySearch,
+  queryObject,
+  queryString,
   renderRejection,
   responseToHttpResult,
   type CorsPolicy,
@@ -841,4 +845,101 @@ test("renderRejection: a response that is not a rejection passes through unasked
   });
   assert.equal(called, false);
   assert.equal(res.status, 204);
+});
+
+// #2854: a handler's `query` — typed and raw.
+const queryRequest = (search: string) => new Request(`https://test/activity${search}`);
+
+test("queryObject: reads each declared field off the query string", () => {
+  const fields = [
+    { name: "repo", kind: "string", list: false, option: false },
+    { name: "limit", kind: "int", list: false, option: false },
+    { name: "fresh", kind: "bool", list: false, option: false },
+    { name: "kind", kind: "enum", list: false, option: false },
+    { name: "tag", kind: "string", list: true, option: false },
+  ] as const;
+  const r = queryObject(queryRequest("?repo=a%2Fb&limit=100&fresh=true&kind=Push&tag=x&tag=y&utm=1"), fields);
+  assert.deepEqual(r, {
+    ok: true,
+    value: { repo: "a/b", limit: 100, fresh: true, kind: { kind: "Push" }, tag: ["x", "y"] },
+  });
+});
+
+test("queryObject: absent keys stay absent, and unknown keys are ignored", () => {
+  const r = queryObject(queryRequest("?other=1"), [{ name: "limit", kind: "int", list: false, option: false }]);
+  assert.deepEqual(r, { ok: true, value: {} });
+});
+
+test("queryObject: a value that is not its field's type passes on as text", () => {
+  const r = queryObject(queryRequest("?limit=many&fresh=yes"), [
+    { name: "limit", kind: "int", list: false, option: false },
+    { name: "fresh", kind: "bool", list: false, option: false },
+  ]);
+  assert.deepEqual(r, { ok: true, value: { limit: "many", fresh: "yes" } });
+});
+
+test("queryObject: a repeated key on a single-valued field is refused", () => {
+  const r = queryObject(queryRequest("?limit=1&limit=2"), [{ name: "limit", kind: "int", list: false, option: false }]);
+  assert.equal(r.ok, false);
+  if (!r.ok) {
+    assert.deepEqual(r.error, {
+      kind: "StructuralMismatch",
+      path: "query.limit",
+      expected: "a single value",
+      actual: "2 values",
+    });
+  }
+});
+
+test("requestQuery: get, all and params read the raw string", () => {
+  const q = requestQuery(queryRequest("?q=one&q=two&z=a+b%21"));
+  assert.deepEqual(q.get("q"), { tag: "Some", value: "one" });
+  assert.deepEqual(q.get("nope"), { tag: "None" });
+  assert.deepEqual(q.all("q"), ["one", "two"]);
+  assert.deepEqual(q.all("nope"), []);
+  assert.deepEqual([...q.params()], [["q", ["one", "two"]], ["z", ["a b!"]]]);
+});
+
+test("requestQuery: a test's pairs round-trip into the driver's query string", () => {
+  assert.equal(requestQuerySearch(requestQuery(["q=one", "q=two"])), "?q=one&q=two");
+  assert.equal(requestQuerySearch(requestQuery([])), "");
+});
+
+test("queryString: a record's wire form becomes a query string", () => {
+  assert.equal(
+    queryString({
+      repo: { kind: "Some", value: "a/b" },
+      since: { kind: "None" },
+      kind: { kind: "Push" },
+      tag: ["x", "y"],
+      fresh: true,
+      limit: 100,
+    }),
+    "?repo=a%2Fb&kind=Push&tag=x&tag=y&fresh=true&limit=100",
+  );
+  assert.equal(queryString({ since: { kind: "None" }, tag: [] }), "");
+});
+
+// #2854, decision E: a `GET` that depends on its query answers each query with
+// its own validator. The `ETag` is a hash of the body that query produced, so a
+// client revalidating one query is never told `304` for another.
+test("a revalidation for one query is not answered 304 for another", async () => {
+  const answer = (limit: number) =>
+    httpResultToResponse(HttpResult.Ok(`up to ${limit}`), (v: string) => v as JsonValue, { weakEtag: true });
+  const ten = answer(10);
+  const twenty = answer(20);
+  assert.notEqual(ten.headers.get("etag"), twenty.headers.get("etag"));
+  const revalidate = (etag: string | null) =>
+    new Request("https://test/activity?limit=20", { headers: { "if-none-match": etag ?? "" } });
+  // The validator of `?limit=10` does not revalidate `?limit=20`...
+  const stale = notModifiedIfMatch(answer(20), revalidate(ten.headers.get("etag")));
+  assert.equal(stale.status, 200);
+  // ...and its own does.
+  const fresh = notModifiedIfMatch(answer(20), revalidate(twenty.headers.get("etag")));
+  assert.equal(fresh.status, 304);
+});
+
+test("queryObject: an Option field wraps a present value, so `None` is not the envelope", () => {
+  const r = queryObject(queryRequest("?kind=None"), [{ name: "kind", kind: "enum", list: false, option: true }]);
+  assert.deepEqual(r, { ok: true, value: { kind: { kind: "Some", value: { kind: "None" } } } });
 });
