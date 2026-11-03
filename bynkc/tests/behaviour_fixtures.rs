@@ -460,7 +460,11 @@ for f in $FILES; do sed -i.bak 's/{needle}/void 0/' "$f"; done
 /// rely on it must turn red, while the other principal's case stays green.
 #[test]
 fn a_lax_bearer_verifier_fails_the_forged_and_expired_cases() {
-    if cfg!(windows) || !(tool_exists("tsc") && tool_exists("node")) {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: the `tsc` shim is a POSIX shell script");
+        return;
+    }
+    if !(tool_exists("tsc") && tool_exists("node")) {
         if require::is_required(REQUIRE_ENV) {
             panic!("tsc and node are required, but {REQUIRE_ENV} is set and one is missing");
         }
