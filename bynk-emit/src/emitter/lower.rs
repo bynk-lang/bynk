@@ -1562,7 +1562,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             // v0.154 (ADR 0178): a `Result` operand whose error type differs from
             // the enclosing return's is converted by a declared embedding
             // (`embeds E as V`) — the same rule the checker accepted it under.
-            let embed = if is_option {
+            let embed = if is_option || cx.question_fails_case() {
                 None
             } else {
                 embed_conversion(operand_ty, cx)
@@ -1570,7 +1570,21 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             let inner_expr = pre.lower(inner, cx);
             let tmp = cx.fresh();
             pre.push(format!("const {tmp} = {inner_expr};"));
-            if is_option {
+            if cx.question_fails_case() {
+                // #2857: a case returns a `CaseResult`, not the operand's
+                // `Result` — so the `?` fails the case, reporting the `Err`
+                // value at the `?`'s location. (The checker rejects an `Option`
+                // operand outside an `HttpResult` handler.)
+                let (start, end) = (e.span.start, e.span.end);
+                let location = expect_location(cx, start);
+                let src = expect_source_text(cx, e.span);
+                let test = format!("{tmp}.tag === \"Err\"");
+                let detail =
+                    format!("\"{src}\\n  the operand was Err: \" + __bynkShow({tmp}.error)");
+                pre.push(format!(
+                    "if ({test}) {{ throw __bynkExpectFailure(\"{location}\", {start}, {end}, {detail}); }}"
+                ));
+            } else if is_option {
                 pre.push(format!(
                     "if ({tmp}.tag === \"None\") return HttpResult.NotFound;"
                 ));
@@ -7761,6 +7775,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
     // outer `let` rename, popped once the body is lowered so the
     // registration doesn't leak past the lambda.
     cx.shadow_scopes.push(HashMap::new());
+    cx.lambda_depth += 1;
     for p in &lambda.params {
         cx.declare_binder(&p.name.name);
     }
@@ -7822,6 +7837,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
     cx.is_temp_hoist = saved_hoist;
     cx.tail_slot = saved_slot;
     cx.return_ty = saved;
+    cx.lambda_depth -= 1;
     cx.shadow_scopes.pop();
     result
 }
