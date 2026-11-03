@@ -130,7 +130,7 @@ async function test_a_typed_query_round_trips_through_the_router() {
     const { Kind } = __ns_activity_api;
     type Kind = __ns_activity_api.Kind;
     const r = await __sysdrive_api_http_GET_activity({ repo: Some(("bynk-lang/bynk" as any)), since: Some(("2026-11-01" as any)), kind: Some(Kind.Push), tag: ["a", "b"], fresh: true, limit: (100 as any) }, "");
-    if (!(r.tag === "Ok" && r.value === "bynk-lang/bynk 2026-11-01 2 true 100")) { throw __bynkExpectFailure("tests/api.bynk:26:10", 998, 1045, "expect r is Ok(\"bynk-lang/bynk 2026-11-01 2 true 100\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "bynk-lang/bynk 2026-11-01 2 true 100"))) { throw __bynkExpectFailure("tests/api.bynk:26:10", 998, 1045, "expect r is Ok(\"bynk-lang/bynk 2026-11-01 2 true 100\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -146,7 +146,7 @@ async function test_absent_keys_take_None_and_their_defaults() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("", "");
-    if (!(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 0 false 50")) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1152, 1188, "expect r is Handled(Ok(\"any - 0 false 50\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 0 false 50"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1152, 1188, "expect r is Handled(Ok(\"any - 0 false 50\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -162,7 +162,7 @@ async function test_unknown_keys_are_ignored() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?utm_source=x&limit=5", "");
-    if (!(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 0 false 5")) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1300, 1335, "expect r is Handled(Ok(\"any - 0 false 5\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 0 false 5"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1300, 1335, "expect r is Handled(Ok(\"any - 0 false 5\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -178,7 +178,7 @@ async function test_repeated_keys_fill_a_list() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?tag=a&tag=b&tag=c", "");
-    if (!(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 3 false 50")) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1445, 1481, "expect r is Handled(Ok(\"any - 3 false 50\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 3 false 50"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1445, 1481, "expect r is Handled(Ok(\"any - 3 false 50\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -194,7 +194,7 @@ async function test_a_limit_out_of_range_is_refused_before_the_handler() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?limit=0", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "RefinementViolation")) { throw __bynkExpectFailure("tests/api.bynk:46:10", 1606, 1643, "expect r is Rejected(RefinementViolation(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:46:10", 1606, 1643, "expect r is Rejected(RefinementViolation(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -210,7 +210,7 @@ async function test_a_malformed_day_is_refused_before_the_handler() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?since=yesterday", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "RefinementViolation")) { throw __bynkExpectFailure("tests/api.bynk:51:10", 1771, 1808, "expect r is Rejected(RefinementViolation(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:51:10", 1771, 1808, "expect r is Rejected(RefinementViolation(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -226,7 +226,7 @@ async function test_a_non_numeric_limit_is_a_structural_mismatch() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?limit=many", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "StructuralMismatch")) { throw __bynkExpectFailure("tests/api.bynk:56:10", 1930, 1966, "expect r is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:56:10", 1930, 1966, "expect r is Rejected(StructuralMismatch(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -242,7 +242,7 @@ async function test_a_repeated_key_on_a_single_valued_field_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?limit=1&limit=2", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "StructuralMismatch")) { throw __bynkExpectFailure("tests/api.bynk:61:10", 2099, 2135, "expect r is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:61:10", 2099, 2135, "expect r is Rejected(StructuralMismatch(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -258,7 +258,7 @@ async function test_an_unknown_enum_variant_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?kind=Nope", "");
-    if (!(r.tag === "Rejected")) { throw __bynkExpectFailure("tests/api.bynk:66:10", 2246, 2262, "expect r is Rejected(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected"))) { throw __bynkExpectFailure("tests/api.bynk:66:10", 2246, 2262, "expect r is Rejected(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -274,7 +274,7 @@ async function test_a_path_parameter_meets_the_query() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity_Param_owner(String("octo"), "?limit=9", "");
-    if (!(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "octo 9")) { throw __bynkExpectFailure("tests/api.bynk:71:10", 2384, 2410, "expect r is Handled(Ok(\"octo 9\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "octo 9"))) { throw __bynkExpectFailure("tests/api.bynk:71:10", 2384, 2410, "expect r is Handled(Ok(\"octo 9\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -290,7 +290,7 @@ async function test_the_raw_view_over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_echo(__requestQuery(["q=one", "q=two"]), "");
-    if (!(r.tag === "Ok" && r.value === "one 2 1")) { throw __bynkExpectFailure("tests/api.bynk:76:10", 2526, 2544, "expect r is Ok(\"one 2 1\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "one 2 1"))) { throw __bynkExpectFailure("tests/api.bynk:76:10", 2526, 2544, "expect r is Ok(\"one 2 1\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -307,8 +307,8 @@ async function test_a_cached_route_answers_each_query_on_its_path_separately() {
     const deps = __makeHarness();
     const a = await __sysdrive_raw_api_http_GET_cached("?limit=10", "");
     const b = await __sysdrive_raw_api_http_GET_cached("?limit=20", "");
-    if (!(a.tag === "Handled" && a.value.tag === "Ok" && a.value.value === "limit 10")) { throw __bynkExpectFailure("tests/api.bynk:83:10", 2788, 2816, "expect a is Handled(Ok(\"limit 10\"))"); }
-    if (!(b.tag === "Handled" && b.value.tag === "Ok" && b.value.value === "limit 20")) { throw __bynkExpectFailure("tests/api.bynk:84:10", 2826, 2854, "expect b is Handled(Ok(\"limit 20\"))"); }
+    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "Ok" && a.value.value === "limit 10"))) { throw __bynkExpectFailure("tests/api.bynk:83:10", 2788, 2816, "expect a is Handled(Ok(\"limit 10\"))"); }
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "Ok" && b.value.value === "limit 20"))) { throw __bynkExpectFailure("tests/api.bynk:84:10", 2826, 2854, "expect b is Handled(Ok(\"limit 20\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
