@@ -2787,7 +2787,7 @@ mod tests {
             "commons demo {\n  fn f(a: Int) -> Int {\n    a.\n    let x = 1\n    x\n  }\n}",
         ] {
             let errs = parse_str(src).expect_err(src);
-            assert_eq!(errs[0].code, "bynk.parse.reserved_keyword", "{src}");
+            assert_eq!(errs[0].category, "bynk.parse.reserved_keyword", "{src}");
         }
     }
 
@@ -2802,7 +2802,7 @@ mod tests {
             )
         };
         let errs = parse_str(&pat("")).expect_err("pattern shorthand");
-        assert_eq!(errs[0].code, "bynk.parse.keyword_field_shorthand");
+        assert_eq!(errs[0].category, "bynk.parse.keyword_field_shorthand");
         let fix = &errs[0].suggestions[0];
         assert_eq!(fix.edits[0].1, "type: type_");
         assert!(matches!(
@@ -2817,7 +2817,7 @@ mod tests {
             "commons demo {\n  type A = { type: String }\n  fn f() -> A { A { type } }\n}",
         )
         .expect_err("construction shorthand");
-        assert_eq!(errs[0].code, "bynk.parse.keyword_field_shorthand");
+        assert_eq!(errs[0].category, "bynk.parse.keyword_field_shorthand");
         assert!(errs[0].suggestions.is_empty());
     }
 
