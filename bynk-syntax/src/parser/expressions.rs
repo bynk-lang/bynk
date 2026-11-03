@@ -621,7 +621,8 @@ impl<'a> Parser<'a> {
                             lit = &self.source[e.span.range()]
                         )));
                     }
-                    let member = self.expect_member_name("after `.` in field access or method call", dot.span)?;
+                    let member = self
+                        .expect_member_name("after `.` in field access or method call", dot.span)?;
                     // v0.22b: explicit type arguments on a method/static —
                     // `Json.decode[T](…)`. The v0.20b same-line-`[` rule
                     // applies: a `[` opening a new line is a list literal.
@@ -1236,10 +1237,7 @@ impl<'a> Parser<'a> {
                 if is_reserved_keyword(k)
                     && !matches!(
                         k,
-                        TokenKind::True
-                            | TokenKind::False
-                            | TokenKind::None
-                            | TokenKind::Self_
+                        TokenKind::True | TokenKind::False | TokenKind::None | TokenKind::Self_
                     ) =>
             {
                 true

@@ -2813,8 +2813,10 @@ mod tests {
         let errs = parse_str(&pat("let type_ = 1")).expect_err("pattern shorthand");
         assert_eq!(errs[0].suggestions[0].edits[0].1, "type: type_2");
 
-        let errs = parse_str("commons demo {\n  type A = { type: String }\n  fn f() -> A { A { type } }\n}")
-            .expect_err("construction shorthand");
+        let errs = parse_str(
+            "commons demo {\n  type A = { type: String }\n  fn f() -> A { A { type } }\n}",
+        )
+        .expect_err("construction shorthand");
         assert_eq!(errs[0].code, "bynk.parse.keyword_field_shorthand");
         assert!(errs[0].suggestions.is_empty());
     }
