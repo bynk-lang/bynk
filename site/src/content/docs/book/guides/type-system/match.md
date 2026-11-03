@@ -43,6 +43,65 @@ fn label(o: Option[Int]) -> String {
 }
 ```
 
+## Flatten a staircase of fallible steps {#flatten-a-staircase}
+
+A `match` per fallible step nests every later step one level deeper. When each
+`match` has one arm that carries on (`Some(x)` or `Ok(x)`) and one that gives
+up, `let … else` says the same thing flat:
+
+```bynk
+commons demo {
+  type Problem = enum { MissingEvent, MissingDelivery, NotNumber }
+
+  fn read(
+    event: Option[String],
+    delivery: Option[String],
+    count: Result[Int, String]
+  ) -> Result[String, Problem] {
+    match event {
+      None => Err(MissingEvent),
+      Some(e) => match delivery {
+        None => Err(MissingDelivery),
+        Some(d) => match count {
+          Err(_) => Err(NotNumber),
+          Ok(n) => Ok("\(e)/\(d)/\(n)"),
+        },
+      },
+    }
+  }
+}
+```
+
+```bynk
+commons demo {
+  type Problem = enum { MissingEvent, MissingDelivery, NotNumber }
+
+  fn read(
+    event: Option[String],
+    delivery: Option[String],
+    count: Result[Int, String]
+  ) -> Result[String, Problem] {
+    let Some(e) = event else { Err(MissingEvent) }
+    let Some(d) = delivery else { Err(MissingDelivery) }
+    let Ok(n) = count else { Err(NotNumber) }
+    Ok("\(e)/\(d)/\(n)")
+  }
+}
+```
+
+The two mean the same: a `let … else` is the `match` with the rest of the block
+as its first arm. The compiler offers this rewrite as a **hint** once a
+staircase is two steps deep (`bynk.parse.let_else_staircase`): the editor shows
+it with a quick fix, `bynk check --fix` applies it, and `bynk check` itself
+stays quiet. A fallback that uses the failure (`Err(why) => …`) becomes
+`else match { Err(why) => … }`. See
+[Sequence fallible steps with `let … else`](/book/guides/type-system/result-and-optionals/#let-else).
+
+A block has no expression statements, so a `match` ends the block it is in. A
+second `match` straight after it is refused with
+`bynk.parse.match_ends_block`: bind the first (`let _ = match …`) or use
+`let … else`.
+
 ## Match on a primitive value
 
 `match` also dispatches a primitive `Int`, `String`, or `Bool` against literal

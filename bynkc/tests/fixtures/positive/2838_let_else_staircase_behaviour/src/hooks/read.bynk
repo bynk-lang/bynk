@@ -1,0 +1,72 @@
+context hooks.read {
+  exports transparent { Failure }
+
+  type Failure = enum { MissingEvent, MissingDelivery, NotUtf8, NotJson }
+
+  ---
+  The staircase as first written: one `match` per fallible step.
+  ---
+  fn readNested(
+    event: Option[String],
+    delivery: Option[String],
+    text: Option[String],
+    parsed: Result[Int, String]
+  ) -> Result[String, Failure] {
+    match event {
+      None => Err(MissingEvent),
+      Some(e) => match delivery {
+        None => Err(MissingDelivery),
+        Some(d) => match text {
+          None => Err(NotUtf8),
+          Some(t) => match parsed {
+            Err(_) => Err(NotJson),
+            Ok(n) => Ok("\(e)/\(d)/\(t)/\(n)"),
+          },
+        },
+      },
+    }
+  }
+
+  ---
+  The same steps flat, which is the rewrite the hint offers.
+  ---
+  fn readFlat(
+    event: Option[String],
+    delivery: Option[String],
+    text: Option[String],
+    parsed: Result[Int, String]
+  ) -> Result[String, Failure] {
+    let Some(e) = event else { Err(MissingEvent) }
+    let Some(d) = delivery else { Err(MissingDelivery) }
+    let Some(t) = text else { Err(NotUtf8) }
+    let Ok(n) = parsed else { Err(NotJson) }
+    Ok("\(e)/\(d)/\(t)/\(n)")
+  }
+
+  ---
+  A fallback that binds, with a statement between the steps.
+  ---
+  fn sumNested(a: Result[Int, String], b: Result[Int, String]) -> Result[Int, String] {
+    match a {
+      Err(why) => Err("a: \(why)"),
+      Ok(x) => {
+        let doubled = x * 2
+        match b {
+          Err(why) => Err("b: \(why)"),
+          Ok(y) => Ok(doubled + y),
+        }
+      },
+    }
+  }
+
+  fn sumFlat(a: Result[Int, String], b: Result[Int, String]) -> Result[Int, String] {
+    let Ok(x) = a else match {
+      Err(why) => Err("a: \(why)"),
+    }
+    let doubled = x * 2
+    let Ok(y) = b else match {
+      Err(why) => Err("b: \(why)"),
+    }
+    Ok(doubled + y)
+  }
+}

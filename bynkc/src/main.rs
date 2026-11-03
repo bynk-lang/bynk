@@ -199,8 +199,10 @@ fn run_compile(
                     return ExitCode::FAILURE;
                 }
                 // ADR 0117: render non-failing warnings with source context.
-                if !compiled.warnings.is_empty() {
-                    bynkc::print_errors(&compiled.warnings, &source, &filename);
+                // #2838: a hint is for the editor, not the terminal.
+                let warnings = bynkc::without_hints(&compiled.warnings);
+                if !warnings.is_empty() {
+                    bynkc::print_errors(&warnings, &source, &filename);
                 }
                 ExitCode::SUCCESS
             }

@@ -204,6 +204,8 @@ mod key_bound_fixes;
 mod keywords_reference;
 #[path = "kv_behaviour.rs"]
 mod kv_behaviour;
+#[path = "let_else_staircase.rs"]
+mod let_else_staircase;
 #[path = "locals_capture.rs"]
 mod locals_capture;
 #[path = "malformed_project_config_behaviour.rs"]

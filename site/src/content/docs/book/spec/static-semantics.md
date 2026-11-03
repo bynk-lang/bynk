@@ -562,9 +562,13 @@ built-in value methods on the compiler-known generic receivers — *not*
 free functions, which would collide by bare name on `uses` import
 (`bynk.resolve.duplicate_fn`). On `Option[T]`: `o.map(f)`,
 `o.andThen(f)` (the function MUST return an `Option`), `o.getOrElse(x)`,
-`o.isSome()`, `o.okOr(e) -> Result[T, E]`. On `Result[T, E]`: `r.map(f)`,
+`o.isSome()`, `o.isNone()`, `o.orElse(f)` (`f: () -> Option[T]`, run only
+on `None`), `o.filter(p)` (`p: T -> Bool`), `o.okOr(e) -> Result[T, E]`.
+On `Result[T, E]`: `r.map(f)`,
 `r.andThen(f)` (the function MUST return a `Result` with the receiver's
-error type), `r.mapErr(f)`, `r.getOrElse(x)`, `r.isOk()`. The function
+error type), `r.mapErr(f)`, `r.getOrElse(x)`, `r.isOk()`, `r.isErr()`,
+`r.ok() -> Option[T]` (#2838; there is no `flatMap` alias of `andThen`
+on either type). The function
 argument's parameters type contextually from the receiver and its return
 is read from the actual (the v0.20a pass-2 rule) — so a lambda body that
 itself needs an expected type (a bare `Ok`/`Err`/`None`/`[]`) annotates a

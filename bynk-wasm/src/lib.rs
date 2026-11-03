@@ -94,7 +94,7 @@ pub struct Diagnostic {
     /// Byte offsets of the diagnostic span (for the editor's inline lint range).
     pub from: usize,
     pub to: usize,
-    /// `"error"` or `"warning"`.
+    /// `"error"`, `"warning"` or `"hint"` (#2838).
     pub severity: String,
     /// The stable diagnostic category (e.g. `bynk.parse.expected_token`).
     pub category: String,
@@ -232,6 +232,7 @@ fn severity_str(err: &CompileError) -> &'static str {
     match bynk_syntax::Severity::for_error(err) {
         bynk_syntax::Severity::Error => "error",
         bynk_syntax::Severity::Warning => "warning",
+        bynk_syntax::Severity::Hint => "hint",
     }
 }
 
@@ -1026,6 +1027,32 @@ mod tests {
         \x20   now\n\
         \x20 }\n\
         }\n";
+
+    /// #2838: a hint rides the compile result with `severity: "hint"`, and
+    /// does not stop the compile.
+    #[test]
+    fn a_staircase_hint_is_reported_with_the_hint_severity() {
+        let src = "context app.demo\n\
+            \n\
+            fn f(a: Option[Int], b: Option[Int]) -> Int {\n\
+            \x20 match a {\n\
+            \x20   None => 0,\n\
+            \x20   Some(x) => match b {\n\
+            \x20     None => 1,\n\
+            \x20     Some(y) => x + y,\n\
+            \x20   },\n\
+            \x20 }\n\
+            }\n";
+        let r = compile(src, Platform::Browser);
+        assert!(r.ok, "compile failed");
+        let hints: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| d.category == "bynk.parse.let_else_staircase")
+            .collect();
+        assert_eq!(hints.len(), 1);
+        assert_eq!(hints[0].severity, "hint");
+    }
 
     /// ADR 0615 (#2442): the graph carries the runtime modules the program
     /// reaches and no more, every runtime file is `support`, and every relative

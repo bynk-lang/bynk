@@ -262,7 +262,7 @@ impl From<discovery::DiscoveryError> for ProjectOptionsError {
 /// [`bynk_render::print_errors`]. The `ProjectFailure → CompileError` flattening
 /// stays here, above `bynk-render`, so there is no `render → emit` edge.
 pub fn print_project_failure(failure: &project::ProjectFailure) {
-    for ae in &failure.errors {
+    for ae in failure.errors.iter().filter(|ae| !is_hint(ae)) {
         match attributed_snapshot(ae, &failure.snapshots, &failure.display_root) {
             Some((label, text)) => {
                 print_attributed(ae, &label, text, &failure.snapshots, &failure.display_root);
@@ -282,6 +282,12 @@ pub fn print_project_failure(failure: &project::ProjectFailure) {
     }
 }
 
+/// #2838: a hint is for the editor and machine-readable surfaces; the terminal
+/// reports (`check`, `build`) leave it out.
+fn is_hint(ae: &project::AttributedError) -> bool {
+    bynk_syntax::Severity::for_error(&ae.error) == bynk_syntax::Severity::Hint
+}
+
 /// v0.89 (ADR 0117): print a successful build's non-failing warnings, with
 /// real per-file ariadne context now that a successful build's `snapshots`
 /// (mirroring `ProjectFailure::snapshots`) make that possible. A warning whose
@@ -292,7 +298,7 @@ pub fn print_project_warnings(
     snapshots: &[(PathBuf, String)],
     display_root: &Path,
 ) {
-    for w in warnings {
+    for w in warnings.iter().filter(|w| !is_hint(w)) {
         match attributed_snapshot(w, snapshots, display_root) {
             Some((label, text)) => print_attributed(w, &label, text, snapshots, display_root),
             None => {
@@ -324,7 +330,7 @@ pub fn print_project_warnings_short(
     snapshots: &[(PathBuf, String)],
     display_root: &Path,
 ) {
-    for w in warnings {
+    for w in warnings.iter().filter(|w| !is_hint(w)) {
         match attributed_snapshot(w, snapshots, display_root) {
             Some((label, text)) => eprintln!("{}", bynk_render::short_line(&label, text, &w.error)),
             // Every entry in `warnings` is warning-severity by construction
@@ -457,8 +463,10 @@ fn shown(path: &Path) -> String {
 /// attributed error is positioned against its file's snapshot; an unattributed
 /// (project-level) error falls back to `<severity>[<category>]: <message>`.
 pub fn print_project_failure_short(failure: &project::ProjectFailure) {
-    for line in project_failure_short_lines(failure) {
-        eprintln!("{line}");
+    // #2838: the lines keep hints for the machine consumers that re-parse them
+    // (the `test --format json` document); the terminal drops them.
+    for ae in failure.errors.iter().filter(|ae| !is_hint(ae)) {
+        eprintln!("{}", failure_short_line(failure, ae));
     }
 }
 
@@ -479,18 +487,21 @@ pub fn project_failure_short_lines(failure: &project::ProjectFailure) -> Vec<Str
     failure
         .errors
         .iter()
-        .map(
-            |ae| match attributed_snapshot(ae, &failure.snapshots, &failure.display_root) {
-                Some((label, text)) => bynk_render::short_line(&label, text, &ae.error),
-                None => format!(
-                    "{}[{}]: {}",
-                    bynk_render::severity_word(&ae.error),
-                    ae.error.category,
-                    ae.error.message
-                ),
-            },
-        )
+        .map(|ae| failure_short_line(failure, ae))
         .collect()
+}
+
+/// One error of `failure` as its single `--format short` line.
+fn failure_short_line(failure: &project::ProjectFailure, ae: &project::AttributedError) -> String {
+    match attributed_snapshot(ae, &failure.snapshots, &failure.display_root) {
+        Some((label, text)) => bynk_render::short_line(&label, text, &ae.error),
+        None => format!(
+            "{}[{}]: {}",
+            bynk_render::severity_word(&ae.error),
+            ae.error.category,
+            ae.error.message
+        ),
+    }
 }
 
 /// Render every diagnostic from a [`project::ProjectCheck`] (finding #64) with
@@ -501,7 +512,7 @@ pub fn project_failure_short_lines(failure: &project::ProjectFailure) -> Vec<Str
 /// `print_project_failure`'s bare `[category]: message` (silently correct only
 /// because that list is errors-only by construction).
 pub fn print_project_check(check: &project::ProjectCheck) {
-    for ae in &check.errors {
+    for ae in check.errors.iter().filter(|ae| !is_hint(ae)) {
         match attributed_snapshot(ae, &check.snapshots, &check.display_root) {
             Some((label, text)) => {
                 print_attributed(ae, &label, text, &check.snapshots, &check.display_root);
@@ -530,6 +541,7 @@ pub fn project_check_short_lines(check: &project::ProjectCheck) -> Vec<String> {
     check
         .errors
         .iter()
+        .filter(|ae| !is_hint(ae))
         .map(
             |ae| match attributed_snapshot(ae, &check.snapshots, &check.display_root) {
                 Some((label, text)) => bynk_render::short_line(&label, text, &ae.error),
@@ -1143,6 +1155,7 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         let filename = shown(input);
         match bynk_emit::check_with_warnings(&source, &filename) {
             Ok(warnings) => {
+                let warnings = bynk_render::without_hints(&warnings);
                 if !warnings.is_empty() {
                     if short {
                         bynk_render::print_errors_short(&warnings, &source, &filename);

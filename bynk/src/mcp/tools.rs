@@ -249,6 +249,7 @@ fn diagnostic_lines(ws: &Workspace, project: &Project, only: Option<&Path>) -> V
             severity: match d.severity {
                 bynk_syntax::error::Severity::Error => Severity::Error,
                 bynk_syntax::error::Severity::Warning => Severity::Warning,
+                bynk_syntax::error::Severity::Hint => Severity::Hint,
             },
             code: Some(d.error.category.to_string()),
             message: d.error.message.clone(),

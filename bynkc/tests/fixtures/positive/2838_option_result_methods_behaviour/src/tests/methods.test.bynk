@@ -1,0 +1,27 @@
+suite demo.methods {
+  case "isNone is the negation of isSome" {
+    expect missing(None)
+    expect !missing(Some(1))
+  }
+
+  case "orElse keeps a present value and falls back otherwise" {
+    expect firstOf(Some(1), Some(2)) == Some(1)
+    expect firstOf(None, Some(2)) == Some(2)
+    expect firstOf(None, None) == None
+  }
+
+  case "filter keeps a value only when the predicate holds" {
+    expect onlyPositive(Some(3)) == Some(3)
+    expect onlyPositive(Some(-3)) == None
+    expect onlyPositive(None) == None
+  }
+
+  case "isErr and ok split a Result" {
+    let good: Result[Int, String] = Ok(5)
+    let bad: Result[Int, String] = Err("no")
+    expect !failed(good)
+    expect failed(bad)
+    expect success(good) == Some(5)
+    expect success(bad) == None
+  }
+}

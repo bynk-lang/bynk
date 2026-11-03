@@ -15,6 +15,7 @@ use crate::lexer::{
 use crate::span::Span;
 mod declarations;
 mod expressions;
+mod staircase;
 mod statements;
 mod types;
 

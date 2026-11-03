@@ -512,7 +512,18 @@ pub fn severity_word(err: &CompileError) -> &'static str {
     match Severity::for_error(err) {
         Severity::Error => "error",
         Severity::Warning => "warning",
+        Severity::Hint => "hint",
     }
+}
+
+/// `errors` without the [`Severity::Hint`] entries — what a terminal prints
+/// (#2838): hints are for the editor and the machine-readable surfaces.
+pub fn without_hints(errors: &[CompileError]) -> Vec<CompileError> {
+    errors
+        .iter()
+        .filter(|e| Severity::for_error(e) != Severity::Hint)
+        .cloned()
+        .collect()
 }
 
 /// Render a list of compile errors as plain `[category] message` lines (with
@@ -535,6 +546,21 @@ pub fn render_project_errors(errors: &[CompileError]) -> String {
 mod tests {
     use super::*;
     use bynk_syntax::span::Span;
+
+    /// #2838: a hint is worded `hint`, and a terminal drops it.
+    #[test]
+    fn a_hint_is_worded_as_one_and_dropped_for_the_terminal() {
+        let hint = CompileError::new(
+            "bynk.parse.let_else_staircase",
+            Span::new(0, 1),
+            "flatten this",
+        );
+        let other = CompileError::new("bynk.test", Span::new(0, 1), "kept");
+        assert_eq!(severity_word(&hint), "hint");
+        let kept = without_hints(&[hint, other]);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].category, "bynk.test");
+    }
 
     /// Spans are byte offsets; ariadne 0.6 defaults to character indexing.
     /// On a line with non-ASCII text before the span, the char-indexed
