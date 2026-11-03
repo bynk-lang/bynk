@@ -346,10 +346,18 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
 
     t("FetchProvider.sendWith: a timeout that elapses is Err(Timeout)", async () => {
       // A fetch that answers only when its signal aborts, as the platform does.
+      // A real fetch holds the event loop open while it waits; this mock holds
+      // nothing, and Node 22's `AbortSignal.timeout` timer is unref'd, so a
+      // keep-alive stands in until the abort (else the run ends with the
+      // promise still pending).
       await withFetch(
         (_url, init) =>
           new Promise((_resolve, reject) => {
-            init.signal.addEventListener("abort", () => reject(init.signal.reason));
+            const keepAlive = setInterval(() => {}, 1000);
+            init.signal.addEventListener("abort", () => {
+              clearInterval(keepAlive);
+              reject(init.signal.reason);
+            });
           }),
         async (calls) => {
           const res = await new b.FetchProvider().sendWith(request(), {
