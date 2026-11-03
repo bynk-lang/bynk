@@ -22,6 +22,7 @@ suite demo.payload {
   case "a payload field and a method are named by keywords" {
     expect changed(Push("a", "b")) == "ab"
     expect changed(Close("done")) == "done"
+    expect changed(Step("go")) == "go"
     expect count(["x", "y"]) == 2
   }
 }

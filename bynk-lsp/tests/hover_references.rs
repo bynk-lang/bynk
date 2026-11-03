@@ -1105,7 +1105,10 @@ fn keyword_named_members_get_property_and_method_tokens() {
     }
     let off = at(&text, "a.type", "type");
     let hover = hover_at(&r, &rel, &text, &root, off).expect("`a.type` hovers");
-    assert!(hover.contains("type"), "{hover}");
+    assert!(
+        hover.contains("type: String") && hover.contains("field of `Account`"),
+        "{hover}"
+    );
 }
 
 /// #2837 — the lexical pass covers what the index leaves untokenised: a

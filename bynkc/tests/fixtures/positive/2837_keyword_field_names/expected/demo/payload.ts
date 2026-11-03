@@ -31,11 +31,13 @@ export const Event = {
 
 export type Change =
     { readonly tag: "Push"; readonly from: string; readonly to: string }
-  | { readonly tag: "Close"; readonly type: string };
+  | { readonly tag: "Close"; readonly type: string }
+  | { readonly tag: "Step"; readonly do: string };
 
 export const Change = {
   Push: (from: string, to: string): Change => ({ tag: "Push", from, to }),
   Close: (type: string): Change => ({ tag: "Close", type }),
+  Step: (__id_do: string): Change => ({ tag: "Step", do: __id_do }),
 };
 
 export interface Sorted {
@@ -75,6 +77,10 @@ export function changed(c: Change): string {
     case "Close": {
       const t = c.type;
       return t;
+    }
+    case "Step": {
+      const d = c.do;
+      return d;
     }
   }
   throw new globalThis.Error("non-exhaustive match");

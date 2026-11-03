@@ -101,7 +101,8 @@ async function test_a_payload_field_and_a_method_are_named_by_keywords() {
     type Sorted = __ns_demo_payload.Sorted;
     if (!(changed(Change.Push("a", "b")) === "ab")) { throw __bynkExpectFailure("tests/demo/payload.bynk:23:12", 918, 949, "expect changed(Push(\"a\", \"b\")) == \"ab\"\n  expected: changed(Push(\"a\", \"b\")) == \"ab\"\n  actual:   " + __bynkShow((changed(Change.Push("a", "b")))) + " == " + __bynkShow(("ab"))); }
     if (!(changed(Change.Close("done")) === "done")) { throw __bynkExpectFailure("tests/demo/payload.bynk:24:12", 961, 993, "expect changed(Close(\"done\")) == \"done\"\n  expected: changed(Close(\"done\")) == \"done\"\n  actual:   " + __bynkShow((changed(Change.Close("done")))) + " == " + __bynkShow(("done"))); }
-    if (!(count(["x", "y"]) === 2)) { throw __bynkExpectFailure("tests/demo/payload.bynk:25:12", 1005, 1027, "expect count([\"x\", \"y\"]) == 2\n  expected: count([\"x\", \"y\"]) == 2\n  actual:   " + __bynkShow((count(["x", "y"]))) + " == " + __bynkShow((2))); }
+    if (!(changed(Change.Step("go")) === "go")) { throw __bynkExpectFailure("tests/demo/payload.bynk:25:12", 1005, 1032, "expect changed(Step(\"go\")) == \"go\"\n  expected: changed(Step(\"go\")) == \"go\"\n  actual:   " + __bynkShow((changed(Change.Step("go")))) + " == " + __bynkShow(("go"))); }
+    if (!(count(["x", "y"]) === 2)) { throw __bynkExpectFailure("tests/demo/payload.bynk:26:12", 1044, 1066, "expect count([\"x\", \"y\"]) == 2\n  expected: count([\"x\", \"y\"]) == 2\n  actual:   " + __bynkShow((count(["x", "y"]))) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

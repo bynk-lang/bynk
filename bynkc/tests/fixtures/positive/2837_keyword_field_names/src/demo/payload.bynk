@@ -11,6 +11,7 @@ type Event = { type: String, from: Int, self: Bool, do: Option[String], account:
 type Change =
   | Push(from: String, to: String)
   | Close(type: String)
+  | Step(do: String)
 
 type Sorted = { items: List[String] }
 
@@ -40,6 +41,7 @@ fn changed(c: Change) -> String {
   match c {
     Push(from: f, to: t) => f.concat(t)
     Close(type: t) => t
+    Step(do: d) => d
   }
 }
 

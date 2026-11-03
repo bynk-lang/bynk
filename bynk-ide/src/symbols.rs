@@ -1011,6 +1011,10 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
 /// says what it is. The index already tokens a field's declaration and uses;
 /// the caller keeps the index's token where both have one.
 ///
+/// Wider than the parser: it does not know the file parses, so it also tokens
+/// a keyword in broken code that the parser would refuse (a `foo.` then a
+/// keyword on the same line, say). Harmless for a colour, wrong for nothing else.
+///
 /// Lexical, so it needs no parse: the two admitting contexts are the same
 /// token shapes the parser tests. A keyword label opens an entry
 /// (`{`, `,` or `(` before it) and a member shares a line with its `.`.
