@@ -63,7 +63,7 @@ and the language server's analysis layer (`bynk-ide`) depends on neither — so
 
 ```toml
 [dependencies]
-bynk-strip = "0.491"
+bynk-strip = "0.492"
 ```
 
 ```rust

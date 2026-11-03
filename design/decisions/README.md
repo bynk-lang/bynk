@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0715](0715-no-remainder-operator.md) | **Bynk has no `%` operator; `%` is a diagnostic that points at `rem` and `mod`** (v0.492) — Diagnostic only, chosen by the maintainer 2026-11-02 | Accepted (v0.492) |
 | [0714](0714-boundary-refinement-entailment.md) | **A context boundary admits a stronger refinement by entailment** (v0.491) — refinements_match decides entailment over the closed predicate vocabulary, boundary-only, through an engine shared with the deploy gate | Accepted (v0.491) |
 | [0713](0713-sort-by-descending.md) | **sortByDescending on List and Query** (v0.490) — Stable exact-reverse sort over any Ord key; discharges ADR 0116's deferral | Accepted (v0.490) |
 | [0712](0712-lexer-error-recovery.md) | **The lexer recovers from a lexical error and reports them all** (v0.489.1) — Skip the offending text, keep lexing, drop the syntax errors it causes, and keep the formatter strict | Accepted (v0.489.1) |

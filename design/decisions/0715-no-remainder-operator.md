@@ -1,12 +1,6 @@
----
-level: minor
-changelog: "`%` is a targeted error, `bynk.parse.no_remainder_operator`, that points at `Int.rem` and `Int.mod` and fixes simple operands to `.rem`; Bynk still has no `%` operator (#2804)"
-probes: diagnostic_coverage
----
+# 0715 — Bynk has no `%` operator; `%` is a diagnostic that points at `rem` and `mod`
 
-## ADR: no-remainder-operator
-title: Bynk has no `%` operator; `%` is a diagnostic that points at `rem` and `mod`
-summary: Diagnostic only, chosen by the maintainer 2026-11-02
+- **Status:** Accepted (v0.492)
 
 **Context.** A program ported from a C-family language writes `a % b`. Until #2807 it lexed
 as `bynk.lex.unexpected_character`, which says nothing about `Int.rem` and `Int.mod`
