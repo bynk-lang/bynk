@@ -5444,6 +5444,17 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// #2856: whether the addressed http handler's Bearer/Oidc `by` has no
+    /// binder, so its `deps` has no `identity` for an in-process call to pass.
+    pub(crate) fn is_binderless_handler(&self, service: &str, key: &str) -> bool {
+        match &self.mode {
+            BodyMode::TestCase { sum_handlers, .. } => {
+                sum_handlers.contains(&(service.to_string(), format!("nobinder:{key}")))
+            }
+            _ => false,
+        }
+    }
+
     /// #2380 (L5): whether the addressed http handler binds an `Oidc` actor,
     /// so an in-process call passes it `deps.claims`.
     pub(crate) fn is_oidc_handler(&self, service: &str, key: &str) -> bool {

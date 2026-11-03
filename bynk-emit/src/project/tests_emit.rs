@@ -2980,6 +2980,26 @@ fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String, String)> {
             };
             out.insert((name.clone(), key));
         }
+        // #2856: a Bearer/Oidc route whose `by` has no binder mints no
+        // identity (`deps` carries no `identity` field), so an in-process call
+        // must not pass one; recorded under a `nobinder:` key.
+        for h in &decl.handlers {
+            if let bynk_ir::IrHandlerKind::Http { method, path } =
+                bynk_lower::lower_handler_kind_ir(&h.kind)
+                && (bynk_check::actors::bearer_seam_for(h, &t.actors)
+                    .is_some_and(|s| s.binder.is_none())
+                    || bynk_check::actors::oidc_seam_for(h, &t.actors)
+                        .is_some_and(|s| s.binder.is_none()))
+            {
+                out.insert((
+                    name.clone(),
+                    format!(
+                        "nobinder:{}",
+                        crate::emitter::http_handler_method_name_ir(method, &path)
+                    ),
+                ));
+            }
+        }
         // #2380 (L5): an `Oidc` route that binds its actor, recorded under an
         // `oidc:` key, so an in-process call gives it `deps.claims`.
         for h in &decl.handlers {
