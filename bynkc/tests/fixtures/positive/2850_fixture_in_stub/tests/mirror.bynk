@@ -1,0 +1,19 @@
+suite mirror
+
+--- A captured upstream reply, stubbed in as the response body.
+fixture reply = "fixtures/upstream.json"
+
+stub Fetch.send(_) returns Ok(Response { status: 200, headers: Map.empty(), body: reply })
+
+case "a fixture is the body of a suite-level stub" {
+	let b <- body.call("https://upstream.test/")
+	expect b == reply
+}
+
+case "a fixture is the body of a case-level stub" {
+	stub Fetch.send(_) returns each [Ok(Response { status: 200, headers: Map.empty(), body: reply }), Err(Network)]
+	let first <- body.call("https://upstream.test/")
+	let second <- body.call("https://upstream.test/")
+	expect first.length() == 37
+	expect second == ""
+}
