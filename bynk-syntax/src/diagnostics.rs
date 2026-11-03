@@ -1950,6 +1950,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.nesting_too_deep",
         "An expression or type nests deeper than the parser's fixed limit.",
     ),
+    d(
+        "bynk.parse.no_remainder_operator",
+        "`%` is not an operator; use `Int.rem` (the dividend's sign) or `Int.mod` (the divisor's).",
+    ),
     dg(
         "bynk.parse.non_associative",
         "A non-associative operator was chained (e.g. `a == b == c`).",

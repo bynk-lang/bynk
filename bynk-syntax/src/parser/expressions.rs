@@ -484,6 +484,7 @@ impl<'a> Parser<'a> {
             let op = match self.peek_kind() {
                 Some(TokenKind::Star) => BinOp::Mul,
                 Some(TokenKind::Slash) => BinOp::Div,
+                Some(TokenKind::Percent) => break Err(self.no_remainder_operator(&lhs)),
                 _ => break Ok(lhs),
             };
             self.bump();
@@ -503,6 +504,43 @@ impl<'a> Parser<'a> {
         };
         self.depth -= folds;
         result
+    }
+
+    /// #2804: Bynk has no `%`. The cursor is on the `%` after `lhs`. The error
+    /// is raised at the operator; when both operands are simple names or integer
+    /// literals it carries a fix to `lhs.rem(rhs)`, the C-family sign.
+    fn no_remainder_operator(&mut self, lhs: &Expr) -> CompileError {
+        let percent = self.bump().expect("the caller peeked a `%`").span;
+        let mut err = CompileError::new(
+            "bynk.parse.no_remainder_operator",
+            percent,
+            "Bynk has no `%` operator",
+        )
+        .with_note(
+            "use `a.rem(b)` for the C-family remainder, which takes the dividend's sign, \
+             or `a.mod(b)` for the modulo, which takes the divisor's sign",
+        );
+        // The right operand is parsed only to measure the fix; a failure to
+        // parse it leaves the error without one.
+        let simple = |e: &Expr| match &e.kind {
+            ExprKind::Ident(id) => Some(id.name.clone()),
+            ExprKind::IntLit { lexeme, .. } => Some(lexeme.clone()),
+            _ => None,
+        };
+        let lhs_text = match &lhs.kind {
+            ExprKind::Ident(id) => Some(id.name.clone()),
+            _ => None,
+        };
+        if let (Some(l), Ok(rhs)) = (lhs_text, self.parse_unary())
+            && let Some(r) = simple(&rhs)
+        {
+            err = err.with_suggestion(
+                "write `.rem`",
+                vec![(lhs.span.merge(rhs.span), format!("{l}.rem({r})"))],
+                Applicability::MaybeIncorrect,
+            );
+        }
+        err
     }
 
     fn parse_unary(&mut self) -> Result<Expr, CompileError> {

@@ -367,6 +367,10 @@ pub enum TokenKind {
     Star,
     #[token("/")]
     Slash,
+    /// #2804: not an operator. Bynk has no `%`; it lexes so the parser can say
+    /// so and point at `Int.rem` / `Int.mod`, not report a stray character.
+    #[token("%")]
+    Percent,
     #[token("!")]
     Bang,
     #[token("=")]
@@ -516,6 +520,7 @@ impl TokenKind {
             Minus => "`-`",
             Star => "`*`",
             Slash => "`/`",
+            Percent => "`%`",
             Bang => "`!`",
             Eq => "`=`",
             Lt => "`<`",
@@ -2173,11 +2178,11 @@ mod tests {
     fn operators() {
         use TokenKind::*;
         assert_eq!(
-            kinds("-> == != <= >= && || + - * / ! = < > ( ) { } [ ] , : . @"),
+            kinds("-> == != <= >= && || + - * / % ! = < > ( ) { } [ ] , : . @"),
             vec![
-                Arrow, EqEq, BangEq, LtEq, GtEq, AmpAmp, PipePipe, Plus, Minus, Star, Slash, Bang,
-                Eq, Lt, Gt, LParen, RParen, LBrace, RBrace, LBracket, RBracket, Comma, Colon, Dot,
-                At,
+                Arrow, EqEq, BangEq, LtEq, GtEq, AmpAmp, PipePipe, Plus, Minus, Star, Slash,
+                Percent, Bang, Eq, Lt, Gt, LParen, RParen, LBrace, RBrace, LBracket, RBracket,
+                Comma, Colon, Dot, At,
             ],
         );
     }
