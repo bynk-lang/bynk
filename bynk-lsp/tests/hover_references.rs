@@ -1099,8 +1099,6 @@ fn keyword_named_members_get_property_and_method_tokens() {
         ("type Account", "type:", 4, property),
         ("a.type", "type", 4, property),
         ("fn Sorted.from", "from", 4, method),
-        ("Sorted.from(xs)", "from", 4, method),
-        ("Sorted.from(xs).do", "do()", 2, method),
     ] {
         let off = at(&text, anchor, needle);
         assert_eq!(token_at(off), Some((len, want)), "{anchor}");
@@ -1108,4 +1106,27 @@ fn keyword_named_members_get_property_and_method_tokens() {
     let off = at(&text, "a.type", "type");
     let hover = hover_at(&r, &rel, &text, &root, off).expect("`a.type` hovers");
     assert!(hover.contains("type"), "{hover}");
+}
+
+/// #2837 — the lexical pass covers what the index leaves untokenised: a
+/// reserved word as a static call's name, and as a construction or pattern label.
+#[test]
+fn keyword_names_the_index_misses_get_lexical_tokens() {
+    let (_, _, text, _) = analysed(
+        "../bynkc/tests/fixtures/positive/2837_keyword_field_names/src",
+        "payload.bynk",
+    );
+    let spans = bynk_lsp::symbols::keyword_name_token_spans(&text);
+    let has = |anchor: &str, needle: &str, is_method: bool| {
+        let off = at(&text, anchor, needle);
+        assert!(
+            spans.iter().any(|(s, m)| s.start == off && *m == is_method),
+            "{anchor}"
+        );
+    };
+    has("Sorted.from(xs)", "from", true);
+    has("Sorted.from(xs).do", "do", true);
+    has("    type: t,", "type", false);
+    has("Event { type: t, from: f", "from", false);
+    has("Push(from: f", "from", false);
 }

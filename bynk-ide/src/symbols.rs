@@ -1003,6 +1003,50 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
     items.iter().filter_map(CommonsItem::private_span).collect()
 }
 
+/// #2837: the span of every reserved word written as a name, with whether it
+/// names a method (called, or declared with `fn T.name(`) rather than a field.
+/// A keyword admitted as a label (`{ type: String }`) or as a member on the
+/// `.`'s line (`a.type`, `Sorted.from(xs)`) is lexed as a keyword, so a client
+/// that colours by spelling shows it as one; a `property` or `method` token
+/// says what it is. The index already tokens a field's declaration and uses;
+/// the caller keeps the index's token where both have one.
+///
+/// Lexical, so it needs no parse: the two admitting contexts are the same
+/// token shapes the parser tests. A keyword label opens an entry
+/// (`{`, `,` or `(` before it) and a member shares a line with its `.`.
+pub fn keyword_name_token_spans(source: &str) -> Vec<(Span, bool)> {
+    use bynk_syntax::lexer::TokenKind;
+    use bynk_syntax::parser::is_reserved_keyword;
+    let Ok(tokens) = tokenize(source) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (i, t) in tokens.iter().enumerate() {
+        if !is_reserved_keyword(t.kind) {
+            continue;
+        }
+        let prev = i.checked_sub(1).map(|j| &tokens[j]);
+        let next = tokens.get(i + 1).map(|n| n.kind);
+        match prev {
+            Some(p)
+                if p.kind == TokenKind::Dot && !source[p.span.end..t.span.start].contains('\n') =>
+            {
+                out.push((t.span, next == Some(TokenKind::LParen)));
+            }
+            Some(p)
+                if matches!(
+                    p.kind,
+                    TokenKind::LBrace | TokenKind::Comma | TokenKind::LParen
+                ) && next == Some(TokenKind::Colon) =>
+            {
+                out.push((t.span, false));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 /// Constrained generics slice 0: the span of every constraint name in a bound
 /// — a type parameter's (`T: Eq` on a `fn`, `type` or capability operation)
 /// and a method's `where A: Eq` entries — so the editor can classify them as

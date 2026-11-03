@@ -1692,7 +1692,7 @@ fn parse_string_literal(lexeme: &str, span: Span) -> Result<String, CompileError
     crate::lexer::decode_string_literal(lexeme, span)
 }
 
-fn is_reserved_keyword(kind: TokenKind) -> bool {
+pub fn is_reserved_keyword(kind: TokenKind) -> bool {
     use TokenKind::*;
     matches!(
         kind,
