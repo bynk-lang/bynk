@@ -1,0 +1,3 @@
+commons lib.money
+
+type Cents = Int where NonNegative

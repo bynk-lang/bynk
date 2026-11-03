@@ -1,0 +1,9 @@
+context boundary.provider
+
+uses lib.money
+
+service price {
+  on call(n: Int) -> Effect[Result[Cents, Int]] {
+    Effect.pure(Err(n))
+  }
+}

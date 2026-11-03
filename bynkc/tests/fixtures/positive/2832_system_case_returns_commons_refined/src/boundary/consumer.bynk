@@ -1,0 +1,12 @@
+context boundary.consumer
+
+consumes boundary.provider as Provider
+
+uses lib.money
+
+service askPrice {
+  on call(n: Int) -> Effect[Result[Cents, Int]] {
+    let r <- Provider.price(n)
+    Effect.pure(r)
+  }
+}
