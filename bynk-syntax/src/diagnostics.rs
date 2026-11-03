@@ -1439,6 +1439,34 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["http_handler"],
     ),
     d(
+        "bynk.http.json_duplicate",
+        "A handler carries more than one `@json` annotation.",
+    ),
+    d(
+        "bynk.http.json_invalid_arg",
+        "A `@json` annotation's `options` argument is missing or is not `tagged` or `plain`.",
+    ),
+    d(
+        "bynk.http.json_invalid_field",
+        "A `json { }` policy's `options` is not `tagged` or `plain`.",
+    ),
+    d(
+        "bynk.http.json_not_http",
+        "A `json { }` policy appears on a service that is not `from http`.",
+    ),
+    d(
+        "bynk.http.json_on_non_http",
+        "A `@json` annotation is placed on a handler that is not `on http`.",
+    ),
+    d(
+        "bynk.http.json_unknown_arg",
+        "A `@json` annotation has an argument outside the closed set (`options`).",
+    ),
+    d(
+        "bynk.http.json_unknown_field",
+        "A `json { }` policy declares a field outside the closed set (`options`).",
+    ),
+    d(
         "bynk.http.limit_bad_max_body",
         "A `@limit` annotation's `maxBody` is missing or not a positive `Int` literal.",
     ),
@@ -1570,6 +1598,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.invariant.not_bool",
         "An invariant predicate does not have type `Bool`.",
+    ),
+    d(
+        "bynk.json.nested_option_plain",
+        "A plain-JSON route's response type contains `Option[Option[T]]`, whose `Some(None)` and `None` would both be written `null`.",
     ),
     dg(
         "bynk.lambda.unannotated_param",
@@ -1832,6 +1864,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["service_decl"],
     ),
     dg(
+        "bynk.parse.duplicate_json",
+        "A service declares more than one `json { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
         "bynk.parse.duplicate_limits",
         "A service declares more than one `limits { }` policy.",
         &["service_decl"],
@@ -2024,7 +2061,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     dg(
         "bynk.parse.policy_order",
-        "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`.",
+        "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`, `json`.",
         &["service_decl"],
     ),
     dg(

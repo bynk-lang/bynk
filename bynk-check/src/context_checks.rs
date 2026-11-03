@@ -2733,6 +2733,45 @@ fn check_service_decls(
         }
     }
 
+    // #2858: validate each service's `json { }` policy, then refuse the one
+    // ambiguous shape (`Option[Option[T]]`) in any plain-mode route's response.
+    for service in table.services.values() {
+        if let Some(policy) = &service.json {
+            validate_json_policy(service, policy, errors);
+        }
+        if !matches!(service.protocol, ServiceProtocol::Http) {
+            continue;
+        }
+        for handler in &service.handlers {
+            if !matches!(handler.kind, HandlerKind::Http { .. })
+                || effective_json_options(service.json.as_ref(), handler) != JsonOptions::Plain
+            {
+                continue;
+            }
+            let TypeRef::Effect(inner, _) = &handler.return_type else {
+                continue;
+            };
+            let TypeRef::HttpResult(body, _) = inner.as_ref() else {
+                continue;
+            };
+            if has_nested_option(body, &table.types, &mut HashSet::new()) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.json.nested_option_plain",
+                        body.span(),
+                        format!(
+                            "`{}` contains an `Option[Option[T]]`, which plain JSON cannot tell apart: `Some(None)` and `None` would both be written `null`",
+                            ts_type_ref_display(body),
+                        ),
+                    )
+                    .with_note(
+                        "model the inner absence as a sum type, or keep this route's `Option`s tagged with `@json(options: tagged)`",
+                    ),
+                );
+            }
+        }
+    }
+
     // v0.10a: validate `on cron` handler shape and check for duplicate
     // schedules across all services in this context (the generated
     // `scheduled` dispatcher routes on `event.cron`, so duplicates are
@@ -4372,6 +4411,152 @@ fn validate_limits_policy(
     }
 }
 
+/// #2858: validate a service's `json { }` policy. The response encoding is a
+/// property of the HTTP surface, so the section is only legal on a `from http`
+/// service; the closed field set is `options`, whose value is the bare
+/// identifier `tagged` or `plain`.
+fn validate_json_policy(
+    service: &ServiceDecl,
+    policy: &JsonPolicy,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::Http) {
+        errors.push(
+            CompileError::new(
+                "bynk.http.json_not_http",
+                policy.span,
+                "a `json { }` policy is only valid on a `from http` service",
+            )
+            .with_note("the response JSON encoding governs the HTTP surface, which only a `from http` service has"),
+        );
+        return;
+    }
+    for field in &policy.fields {
+        if field.name.name != "options" {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.json_unknown_field",
+                    field.name.span,
+                    format!("unknown `json` field `{}`", field.name.name),
+                )
+                .with_note("the only field is `options`"),
+            );
+        }
+    }
+    if let Some(expr) = policy.field("options")
+        && JsonOptions::from_expr(expr).is_none()
+    {
+        errors.push(CompileError::new(
+            "bynk.http.json_invalid_field",
+            expr.span,
+            "`json` `options` must be `tagged` or `plain`",
+        ));
+    }
+}
+
+/// #2858: validate `@json(options: tagged | plain)` on an HTTP handler.
+fn validate_json_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
+    let mut options: Option<&AnnotationArg> = None;
+    for arg in &ann.args {
+        match arg.label.as_ref().map(|l| l.name.as_str()) {
+            Some("options") => options = Some(arg),
+            _ => errors.push(
+                CompileError::new(
+                    "bynk.http.json_unknown_arg",
+                    arg.span,
+                    "`@json` accepts only the `options:` argument",
+                )
+                .with_note("write `@json(options: plain)`"),
+            ),
+        }
+    }
+    match options {
+        None => errors.push(
+            CompileError::new(
+                "bynk.http.json_invalid_arg",
+                ann.span,
+                "`@json` needs an `options:` argument",
+            )
+            .with_note("write `@json(options: plain)`"),
+        ),
+        Some(arg) if JsonOptions::from_expr(&arg.value).is_none() => {
+            errors.push(CompileError::new(
+                "bynk.http.json_invalid_arg",
+                arg.span,
+                "`@json` `options` must be `tagged` or `plain`",
+            ));
+        }
+        Some(_) => {}
+    }
+}
+
+/// #2858: whether writing `t` as plain JSON meets an `Option[Option[T]]`
+/// anywhere — through containers, named records and sums, and generic
+/// instantiations (with their type arguments substituted). `seen` guards a
+/// recursive type.
+fn has_nested_option(
+    t: &TypeRef,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    seen: &mut HashSet<String>,
+) -> bool {
+    match t {
+        TypeRef::Option(inner, _) => {
+            matches!(inner.as_ref(), TypeRef::Option(..)) || has_nested_option(inner, types, seen)
+        }
+        TypeRef::List(a, _)
+        | TypeRef::Set(a, _)
+        | TypeRef::Effect(a, _)
+        | TypeRef::HttpResult(a, _) => has_nested_option(a, types, seen),
+        TypeRef::Map(k, v, _) => {
+            has_nested_option(k, types, seen) || has_nested_option(v, types, seen)
+        }
+        TypeRef::Result(a, b, _) => {
+            has_nested_option(a, types, seen) || has_nested_option(b, types, seen)
+        }
+        TypeRef::Named(id) => {
+            if !seen.insert(id.name.clone()) {
+                return false;
+            }
+            match types.get(&id.name).map(|d| &d.body) {
+                Some(TypeBody::Record(r)) => r
+                    .fields
+                    .iter()
+                    .any(|f| has_nested_option(&f.type_ref, types, seen)),
+                Some(TypeBody::Sum(s)) => s
+                    .variants
+                    .iter()
+                    .flat_map(|v| &v.payload)
+                    .any(|f| has_nested_option(&f.type_ref, types, seen)),
+                _ => false,
+            }
+        }
+        TypeRef::App { name, args, .. } => {
+            let key = bynk_check_wire_key(&name.name, args);
+            if !seen.insert(key) {
+                return false;
+            }
+            let fields = crate::wire::record_inst_fields(&name.name, args, types)
+                .map(|fs| fs.into_iter().map(|(_, t)| t).collect::<Vec<_>>())
+                .or_else(|| {
+                    crate::wire::sum_inst_variants(&name.name, args, types).map(|vs| {
+                        vs.into_iter()
+                            .flat_map(|(_, fs)| fs.into_iter().map(|(_, t)| t))
+                            .collect()
+                    })
+                })
+                .unwrap_or_default();
+            args.iter().any(|a| has_nested_option(a, types, seen))
+                || fields.iter().any(|f| has_nested_option(f, types, seen))
+        }
+        _ => false,
+    }
+}
+
+/// The `seen` key of a generic instantiation.
+fn bynk_check_wire_key(name: &str, args: &[TypeRef]) -> String {
+    crate::wire::inst_codec_suffix(name, args)
+}
+
 /// #2341 (decision C): `on rejected(why: BoundaryRejection) -> HttpResult[()]`
 /// (or `Effect[HttpResult[()]]`) renders the router's own rejections. At most
 /// one per service, one `BoundaryRejection` parameter, no `by` (it runs before
@@ -4629,6 +4814,7 @@ fn validate_handler_annotations(
     let mut seen_cache = false;
     let mut seen_limit = false;
     let mut seen_raw = false;
+    let mut seen_json = false;
     for ann in &handler.annotations {
         match ann.name.name.as_str() {
             "cache" => {
@@ -4733,13 +4919,36 @@ fn validate_handler_annotations(
                     );
                 }
             }
+            "json" => {
+                if seen_json {
+                    errors.push(CompileError::new(
+                        "bynk.http.json_duplicate",
+                        ann.span,
+                        "a handler carries at most one `@json` annotation",
+                    ));
+                    continue;
+                }
+                seen_json = true;
+                if !matches!(handler.kind, HandlerKind::Http { .. }) {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.json_on_non_http",
+                            ann.span,
+                            "`@json` is only valid on an `on http` handler",
+                        )
+                        .with_note("it chooses how an HTTP response body writes `Option`"),
+                    );
+                    continue;
+                }
+                validate_json_args(ann, errors);
+            }
             other => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit` and `@raw`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw` and `@json`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),

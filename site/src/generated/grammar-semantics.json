@@ -1430,6 +1430,10 @@
       "summary": "A service declares more than one `cors { }` policy."
     },
     {
+      "code": "bynk.parse.duplicate_json",
+      "summary": "A service declares more than one `json { }` policy."
+    },
+    {
       "code": "bynk.parse.duplicate_limits",
       "summary": "A service declares more than one `limits { }` policy."
     },
@@ -1443,7 +1447,7 @@
     },
     {
       "code": "bynk.parse.policy_order",
-      "summary": "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`."
+      "summary": "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`, `json`."
     },
     {
       "code": "bynk.resolve.duplicate_service",

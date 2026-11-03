@@ -39,8 +39,8 @@ use bynk_ide::wire_contract::{
 };
 use bynk_ide::{AnalysisRoots, ContextBoundaryInfo, ProjectDiagnostics, SchemaLock};
 use bynk_syntax::ast::{
-    BaseType, Handler, HttpMethod, HttpVariantPayload, PredKind, ServiceDecl, ServiceProtocol,
-    TypeDecl, TypeRef, http_variant,
+    BaseType, Handler, HttpMethod, HttpVariantPayload, JsonOptions, PredKind, ServiceDecl,
+    ServiceProtocol, TypeDecl, TypeRef, effective_json_options, http_variant,
 };
 use bynk_syntax::error::Severity;
 use serde_json::{Map, Value, json};
@@ -349,6 +349,7 @@ pub fn document(
             types: &sel.info.types,
             model: &model.boundary,
             names: &names,
+            plain: effective_json_options(sel.service.json.as_ref(), handler) == JsonOptions::Plain,
         };
         let op = operation(&r, &mut components, sel, handler, model, *method, path);
         // OpenAPI treats templated paths that differ only in parameter names
@@ -786,6 +787,10 @@ impl Components {
 /// qualified by their unit (`orders.Money`, `billing.Money`).
 struct SchemaNames {
     colliding: BTreeSet<String>,
+    /// #2858: names rendered by both a tagged and a plain-JSON route. A plain
+    /// route's copy writes its `Option`s as nullable, so it is a distinct
+    /// component, suffixed `.plain`; the tagged copy keeps the bare name.
+    both_modes: BTreeSet<String>,
 }
 
 impl SchemaNames {
@@ -794,7 +799,18 @@ impl SchemaNames {
         // instantiation's name is its codec key (`Page_Item`), and its identity
         // is the generic's declaration plus each argument's.
         let mut seen: HashMap<String, BTreeSet<String>> = HashMap::new();
-        for (sel, _, model) in models {
+        let mut modes: HashMap<String, BTreeSet<bool>> = HashMap::new();
+        for (sel, h, model) in models {
+            let plain = effective_json_options(sel.service.json.as_ref(), h) == JsonOptions::Plain;
+            for n in model
+                .boundary
+                .types
+                .iter()
+                .map(|t| t.name.clone())
+                .chain(model.boundary.instantiations.iter().map(|i| i.ts_name()))
+            {
+                modes.entry(n).or_default().insert(plain);
+            }
             let decl_id = |name: &str| {
                 sel.info
                     .types
@@ -828,14 +844,24 @@ impl SchemaNames {
                 .filter(|(_, decls)| decls.len() > 1)
                 .map(|(n, _)| n)
                 .collect(),
+            both_modes: modes
+                .into_iter()
+                .filter(|(_, m)| m.len() > 1)
+                .map(|(n, _)| n)
+                .collect(),
         }
     }
 
-    fn of(&self, unit: &str, name: &str) -> String {
-        if self.colliding.contains(name) {
+    fn of(&self, unit: &str, name: &str, plain: bool) -> String {
+        let base = if self.colliding.contains(name) {
             format!("{unit}.{name}")
         } else {
             name.to_string()
+        };
+        if plain && self.both_modes.contains(name) {
+            format!("{base}.plain")
+        } else {
+            base
         }
     }
 }
@@ -846,11 +872,13 @@ struct Renderer<'a> {
     types: &'a HashMap<String, std::sync::Arc<TypeDecl>>,
     model: &'a WireModel,
     names: &'a SchemaNames,
+    /// #2858: the route renders its `Option`s as plain JSON (`U` or `null`).
+    plain: bool,
 }
 
 impl Renderer<'_> {
     fn component_ref(&self, name: &str) -> Value {
-        json!({ "$ref": format!("#/components/schemas/{}", self.names.of(self.unit, name)) })
+        json!({ "$ref": format!("#/components/schemas/{}", self.names.of(self.unit, name, self.plain)) })
     }
 
     /// A path parameter's schema. A refined scalar is inlined so the
@@ -877,7 +905,7 @@ impl Renderer<'_> {
             WireRef::Decimal => Value::Object(base_schema(BaseType::Decimal)),
             WireRef::Named { name } => {
                 if let Some(t) = self.model.types.iter().find(|t| &t.name == name) {
-                    let n = self.names.of(self.unit, name);
+                    let n = self.names.of(self.unit, name, self.plain);
                     // Reserve before rendering so a self-referential type ends.
                     if !components.schemas.contains_key(&n) {
                         components.schemas.insert(n.clone(), Value::Null);
@@ -998,6 +1026,10 @@ impl Renderer<'_> {
             }),
             WireInst::OptionInst { inner } => {
                 let v = self.ref_schema(components, &shape(inner));
+                // #2858: a plain route writes `Some(u)` as `u` and `None` as `null`.
+                if self.plain {
+                    return json!({ "anyOf": [v, { "type": "null" }] });
+                }
                 json!({ "oneOf": [
                     variant_schema(wire::WIRE_DISCRIMINANT, "Some", vec![("value".into(), v, true)]),
                     variant_schema(wire::WIRE_DISCRIMINANT, "None", vec![]),
@@ -1012,7 +1044,7 @@ impl Renderer<'_> {
                 ]})
             }
             WireInst::RecordInst { name, args } => {
-                let n = self.names.of(self.unit, key);
+                let n = self.names.of(self.unit, key, self.plain);
                 if let Some(fields) = wire::record_inst_fields(name, args, self.types) {
                     // #2607 (Decision I): a defaulted field of a generic record
                     // is optional at every instantiation, as in a plain one.
@@ -1042,7 +1074,7 @@ impl Renderer<'_> {
                 json!({ "$ref": format!("#/components/schemas/{n}") })
             }
             WireInst::SumInst { name, args } => {
-                let n = self.names.of(self.unit, key);
+                let n = self.names.of(self.unit, key, self.plain);
                 if let Some(variants) = wire::sum_inst_variants(name, args, self.types) {
                     let vs: Vec<Value> = variants
                         .iter()

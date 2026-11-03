@@ -1829,6 +1829,37 @@ over those octets. A `Bytes` body without `@raw` keeps its base64-in-JSON form. 
 [§7.4.3](/book/spec/runtime-library/#743-httpresult) for the runtime lowering and
 its position in the dispatch order.
 
+### §5.7.5 Response JSON encoding (#2858) {#response-json}
+
+A `from http` service MAY declare a single **`json { }`** section in header
+position after `limits { }`, and an `on http` handler MAY carry a single
+**`@json`** annotation that overrides it. Both choose how an `Option` is written
+in the handler's response body.
+
+The **`json { }`** section is legal only on a `from http` service
+(`bynk.http.json_not_http`) and at most once per service
+(`bynk.parse.duplicate_json`). Its only field is **`options`**, whose value is the
+bare identifier `tagged` or `plain` (`bynk.http.json_invalid_field`); any other
+field is `bynk.http.json_unknown_field`. **`@json(options: tagged | plain)`** is
+legal only on an `on http` handler (`bynk.http.json_on_non_http`), at most once
+(`bynk.http.json_duplicate`), takes only `options` (`bynk.http.json_unknown_arg`)
+and requires it (`bynk.http.json_invalid_arg`).
+
+The **effective mode** of a route is its `@json`, else its service's `json { }`,
+else `tagged`. In `tagged` mode an `Option[U]` is written `{"kind": "Some",
+"value": u}` or `{"kind": "None"}`. In `plain` mode `Some(u)` is written as `u`
+and `None` as `null`, the key always present, at any depth. The mode applies to
+the `Ok`, `Created` and `Accepted` bodies only; request decoding, cross-context
+calls, queues, agent state, `Json.encode`, SSE events and contract hashes keep the
+tagged form and are unchanged.
+
+**Injectivity.** Plain mode would write `Some(None)` and `None` of an
+`Option[Option[T]]` identically, so an `Option[Option[T]]` reachable from the
+response type of a `plain` route (through record and sum fields, `List`, `Set`,
+`Map`, `Result`, and generic arguments after substitution) is
+`bynk.json.nested_option_plain`. A service or route with neither declaration is
+unchanged.
+
 A **`from websocket(in: I, out: O)`** service (v0.103) binds the inbound frame
 type `I` and the server-sent frame type `O` on its header, and declares the
 connection-lifecycle handlers:

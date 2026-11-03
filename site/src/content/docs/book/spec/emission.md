@@ -376,6 +376,16 @@ handler authentication seam (method discovery and rejection are credential-less,
 as with the CORS preflight); a `HEAD` runs `GET`'s seam unchanged. These are
 synthesised router responses and do not touch the `HttpResult` sum.
 
+A route whose effective JSON mode is `plain`
+([§5.7.5](/book/spec/static-semantics/#response-json)) serialises its `Ok`,
+`Created` and `Accepted` body through `withPlainJson(serialise_T)`. The one
+generated `__serialise_Option_*` encoder carries both forms: while `withPlainJson`
+has set the module flag `__bynkPlainJson`, it writes `Some(v)` as `v` and `None`
+as `null`; otherwise it writes the tagged object. The flag is set only for that
+one synchronous serialisation and restored afterwards, and the plain branch is
+emitted only in a project that has a plain route, so a project without one is
+byte-for-byte unchanged.
+
 A service that declares a **`cors { }`** policy
 ([§5.7.1](/book/spec/static-semantics/#cors)) additionally emits, in `index.ts`, a
 synthesised `CorsPolicy` constant plus two behaviours. First, a **preflight**
