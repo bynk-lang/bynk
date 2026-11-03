@@ -1,0 +1,13 @@
+context mirror
+
+consumes bynk { Fetch }
+
+service body {
+	on call(url: String) -> Effect[String] given Fetch {
+		let res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })
+		match res {
+			Ok(r) => Effect.pure(r.body)
+			Err(_) => Effect.pure("")
+		}
+	}
+}

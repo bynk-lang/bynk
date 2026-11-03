@@ -189,6 +189,11 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                     crate::symbols::describe_self_at(text, a.offset, entries, tys)
                 });
             if let Some(content) = local {
+                // #2854: an HTTP handler's typed `query` also lists the keys it
+                // reads off the query string, their types and defaults.
+                if let Some(section) = query_param_section(a, text) {
+                    return Some(format!("{content}\n\n{section}"));
+                }
                 return Some(content);
             }
         }
@@ -605,6 +610,73 @@ fn header_handler_at(text: &str, offset: usize) -> Option<(String, bynk_syntax::
         }
     }
     None
+}
+
+/// #2854: when the cursor is on the `query` parameter (or a use of it) of an
+/// `on http` handler whose type is a record, the keys the router reads off the
+/// query string: each field's type, and whether it is required, optional, or
+/// defaulted (with the default). Empty for the raw `RequestQuery` view and for
+/// anything that is not that parameter.
+fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
+    use bynk_syntax::ast::{CommonsItem, HandlerKind, SourceUnit, TypeBody, TypeRef};
+    let word_start = text[..a.offset]
+        .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .map_or(0, |i| i + 1);
+    let word_end = a.offset
+        + text[a.offset..]
+            .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .unwrap_or(text.len() - a.offset);
+    if &text[word_start..word_end] != "query" {
+        return None;
+    }
+    let (unit, _) = crate::symbols::own_declaration_name(text)?;
+    let info = a.boundary_info.get(&unit)?;
+    let tokens = bynk_syntax::lexer::tokenize(text).ok()?;
+    let (parsed, _errs) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, text);
+    let items: &[CommonsItem] = match parsed.as_ref()? {
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Commons(_) | SourceUnit::Suite(_) => return None,
+    };
+    let handler = items.iter().find_map(|item| {
+        let CommonsItem::Service(s) = item else {
+            return None;
+        };
+        s.handlers.iter().find(|h| {
+            matches!(h.kind, HandlerKind::Http { .. })
+                && h.span.start <= a.offset
+                && a.offset < h.span.end
+        })
+    })?;
+    let param = handler.params.iter().find(|p| p.name.name == "query")?;
+    let TypeRef::Named(id) = &param.type_ref else {
+        return None;
+    };
+    let Some(TypeBody::Record(record)) = info.types.get(&id.name).map(|t| &t.body) else {
+        return None;
+    };
+    let mut out = String::from(
+        "**Query string** — decoded and validated before the handler runs; unknown keys are ignored.\n\n| key | type | |\n|---|---|---|\n",
+    );
+    for f in &record.fields {
+        let note = match (&f.type_ref, &f.init) {
+            (_, Some(init)) => format!("default `{}`", bynk_fmt::expr_to_string(init)),
+            (TypeRef::Option(..), None) => "optional".to_string(),
+            (TypeRef::List(..), None) => "repeatable, required".to_string(),
+            _ => "required".to_string(),
+        };
+        let note = match (&f.type_ref, &f.init) {
+            (TypeRef::List(..), Some(_)) => format!("repeatable, {note}"),
+            _ => note,
+        };
+        out.push_str(&format!(
+            "| `{}` | `{}` | {} |\n",
+            f.name.name,
+            bynk_check::context_checks::ts_type_ref_display(&f.type_ref),
+            note
+        ));
+    }
+    Some(out)
 }
 
 /// The Markdown facts shared by rung 1's appendix and rung 4's standalone

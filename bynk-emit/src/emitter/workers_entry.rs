@@ -780,6 +780,7 @@ pub(crate) fn emit_worker_entry(
             if let bynk_ir::IrHandlerKind::Http { method, path } =
                 bynk_lower::lower_handler_kind_ir(&h.kind)
             {
+                let query_fields = query_field_specs(h, &path, &table.types);
                 http_routes.push(HttpRoute {
                     service: (*sname).clone(),
                     method,
@@ -808,6 +809,7 @@ pub(crate) fn emit_worker_entry(
                     max_body: effective_max_body(service.limits.as_ref(), h),
                     raw: h.raw_content_type().map(str::to_string),
                     rejected: rejected_surface(service, sname),
+                    query_fields,
                 });
             }
         }
@@ -1033,6 +1035,18 @@ pub(crate) fn emit_worker_entry(
             .any(|p| p.name.name == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
     }) {
         imports.push("__requestHeaders".to_string());
+    }
+    // #2854: a route taking `query` decodes it (typed) or views it (raw).
+    if http_routes.iter().any(|r| r.query_fields.is_some()) {
+        imports.push("__queryObject".to_string());
+    }
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "query" && matches!(p.type_ref, TypeRef::RequestQuery(_)))
+    }) {
+        imports.push("__requestQuery".to_string());
     }
     // #2341 (decision C): a service with `on rejected` renders its rejections.
     if http_routes.iter().any(|r| r.rejected.is_some()) {
@@ -1850,6 +1864,12 @@ pub(crate) fn emit_worker_entry(
             crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.request_query() {
+        append_missing_bindings(&mut imports, crate::emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
+    }
+    if runtime_use.query_string() {
+        append_missing_bindings(&mut imports, crate::emitter::QUERY_STRING_RUNTIME_IMPORTS);
+    }
     if runtime_use.eq() {
         append_missing_bindings(&mut imports, crate::emitter::EQ_RUNTIME_IMPORTS);
     }
@@ -2454,6 +2474,75 @@ struct HttpRoute {
     /// `on rejected` (`rejected_<service>`), when it declares one. The route's
     /// synthesised rejections are rendered through it.
     rejected: Option<String>,
+    /// #2854: the fields of the handler's typed `query` record, as the runtime's
+    /// `queryObject` reads them off the query string: `(name, wire kind, list)`.
+    /// `None` when the route has no typed `query` (a raw `RequestQuery` is not
+    /// decoded).
+    query_fields: Option<Vec<(String, &'static str, bool, bool)>>,
+}
+
+/// #2854: the wire kind of one query-string value of type `r`, as the runtime's
+/// `QueryField.kind` names it.
+fn query_leaf_kind(
+    r: &TypeRef,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> &'static str {
+    use bynk_syntax::ast::{BaseType, TypeBody};
+    let of_base = |b: &BaseType| match b {
+        BaseType::Int => "int",
+        BaseType::Bool => "bool",
+        _ => "string",
+    };
+    match r {
+        TypeRef::Base(b, _) => of_base(b),
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Refined { base, .. }) | Some(TypeBody::Opaque { base, .. }) => {
+                of_base(base)
+            }
+            Some(TypeBody::Sum(_)) => "enum",
+            _ => "string",
+        },
+        _ => "string",
+    }
+}
+
+/// #2854: the fields of a handler's typed `query` record, or `None` when the
+/// handler has no `query` parameter, or it is the raw `RequestQuery` view (or a
+/// path parameter named `query`).
+fn query_field_specs(
+    h: &Handler,
+    path: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<Vec<(String, &'static str, bool, bool)>> {
+    use bynk_syntax::ast::TypeBody;
+    if path.split('/').any(|seg| seg == ":query") {
+        return None;
+    }
+    let p = h.params.iter().find(|p| p.name.name == "query")?;
+    let TypeRef::Named(id) = &p.type_ref else {
+        return None;
+    };
+    let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
+        return None;
+    };
+    Some(
+        rec.fields
+            .iter()
+            .map(|f| {
+                let (inner, list, option) = match &f.type_ref {
+                    TypeRef::List(inner, _) => (inner.as_ref(), true, false),
+                    TypeRef::Option(inner, _) => (inner.as_ref(), false, true),
+                    other => (other, false, false),
+                };
+                (
+                    f.name.name.clone(),
+                    query_leaf_kind(inner, types),
+                    list,
+                    option,
+                )
+            })
+            .collect(),
+    )
 }
 
 /// v0.142 (ADR 0165): resolve a route's effective request-body ceiling in bytes.
@@ -2694,6 +2783,65 @@ fn emit_http_route_dispatch(
         // #2341 (decision A): `headers` is the request's headers, read-only.
         if pname == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
             call_args.push(call(ident("__requestHeaders"), vec![ident("request")]));
+            continue;
+        }
+        // #2854 (decision B): `query: RequestQuery` is the raw query string.
+        let query_is_path = route.path.split('/').any(|seg| seg == ":query");
+        if pname == "query" && !query_is_path && matches!(p.type_ref, TypeRef::RequestQuery(_)) {
+            call_args.push(call(ident("__requestQuery"), vec![ident("request")]));
+            continue;
+        }
+        // #2854 (decision A): a typed `query` is decoded off the query string
+        // and validated before the handler runs, answering `400` as a `body`
+        // does. The runtime reads the fields into a JSON object, which the
+        // record's own codec then checks (refinements, defaults, `Option`s).
+        if pname == "query"
+            && !query_is_path
+            && let Some(fields) = &route.query_fields
+        {
+            let spec: Vec<TsExpr> = fields
+                .iter()
+                .map(|(name, kind, list, option)| {
+                    TsExpr::object(vec![
+                        ("name".to_string(), str_lit(name.clone())),
+                        ("kind".to_string(), str_lit(*kind)),
+                        ("list".to_string(), bool_lit(*list)),
+                        ("option".to_string(), bool_lit(*option)),
+                    ])
+                })
+                .collect();
+            guarded.push(const_(
+                "__q",
+                call(
+                    ident("__queryObject"),
+                    vec![ident("request"), TsExpr::array(spec)],
+                ),
+            ));
+            guarded.push(if_(
+                TsExpr::Unary {
+                    op: bynk_ts::TsUnaryOp::Not,
+                    expr: Box::new(member(ident("__q"), "ok")),
+                },
+                return_(Some(stamp_rejection(
+                    json_response(member(ident("__q"), "error"), 400),
+                    cors_const,
+                    security_const,
+                    rejected,
+                ))),
+            ));
+            let dser = deserialise_call(&p.type_ref, "__q.value", "query", ru);
+            guarded.push(const_("__r_query", dser));
+            guarded.push(if_(
+                strict_eq(member(ident("__r_query"), "tag"), str_lit("Err")),
+                return_(Some(stamp_rejection(
+                    json_response(member(ident("__r_query"), "error"), 400),
+                    cors_const,
+                    security_const,
+                    rejected,
+                ))),
+            ));
+            guarded.push(const_("query", member(ident("__r_query"), "value")));
+            call_args.push(ident("query"));
             continue;
         }
         // It's a path parameter — extract from __m.params and construct. The

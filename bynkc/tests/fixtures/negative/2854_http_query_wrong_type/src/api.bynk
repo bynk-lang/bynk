@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+  on GET("/x") (query: Int) -> Effect[HttpResult[()]] by v: Visitor {
+    NoContent
+  }
+}

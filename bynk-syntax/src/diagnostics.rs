@@ -1440,7 +1440,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.http.extra_param",
-        "A handler parameter is not a path parameter, `body` or `headers`.",
+        "A handler parameter is not a path parameter, `body`, `headers` or `query`.",
         &["http_handler"],
     ),
     dg(
@@ -1484,6 +1484,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.http.path_param_not_stringy",
         "A path parameter's type is not constructible from a string.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.query_field_not_stringy",
+        "A field of an HTTP handler's `query` record has a type a query string cannot carry.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.query_not_http",
+        "A `RequestQuery` appears on a handler that is not an HTTP route.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.query_wrong_type",
+        "An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`.",
         &["http_handler"],
     ),
     d(
@@ -3420,6 +3435,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.rejection_at_boundary",
         "`BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
+    ),
+    d(
+        "bynk.types.request_query_at_boundary",
+        "`RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     d(
         "bynk.types.return_mismatch",

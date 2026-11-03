@@ -3126,6 +3126,10 @@ pub enum TypeRef {
     /// Non-generic and opaque: `get`, `bearer`, `clientIp`. Never stored or
     /// sent (it has no wire form).
     RequestHeaders(Span),
+    /// `RequestQuery` (#2854, decision B) — an HTTP handler's read-only view
+    /// of the request's query string, the type of its `query` parameter when
+    /// it wants raw access: `get`, `all`, `params`. Never stored or sent.
+    RequestQuery(Span),
     /// `TokenClaims` (#2380, L5) — the verified claims of an `Oidc` actor's
     /// token, read through its binder (`who.claims`). Read-only, never stored
     /// or sent.
@@ -3201,6 +3205,7 @@ impl TypeRef {
             TypeRef::QueueResult(s) => *s,
             TypeRef::Asset(s) => *s,
             TypeRef::RequestHeaders(s) => *s,
+            TypeRef::RequestQuery(s) => *s,
             TypeRef::TokenClaims(s) => *s,
             TypeRef::BoundaryRejection(s) => *s,
             TypeRef::List(_, s) => *s,
@@ -3258,6 +3263,7 @@ pub fn stream_path(
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
+            | TypeRef::RequestQuery(_)
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
@@ -3374,6 +3380,7 @@ pub fn generic_record_is_recursive(
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
+            | TypeRef::RequestQuery(_)
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
