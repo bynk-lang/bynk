@@ -15,6 +15,15 @@ use bynk_syntax::lexer::tokenize;
 use bynk_syntax::parser::parse_unit_with_recovery;
 use bynk_syntax::span::Span;
 
+/// #2834: a suite's helper `fn`s as declarations, so they hover and
+/// go-to-definition like any `fn`. Empty for every other unit.
+fn suite_fn_items(unit: &SourceUnit) -> Vec<CommonsItem> {
+    match unit {
+        SourceUnit::Suite(s) => s.fns.iter().cloned().map(CommonsItem::Fn).collect(),
+        _ => Vec::new(),
+    }
+}
+
 /// Return the source span of the declaration named `name` in the given
 /// source text. Returns `None` if no declaration matches.
 ///
@@ -35,11 +44,12 @@ pub fn find_declaration_span(source: &str, name: &str) -> Option<Span> {
     let tokens = tokenize(source).ok()?;
     let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
     let unit = unit?;
+    let suite_fns = suite_fn_items(&unit);
     let items: &[CommonsItem] = match &unit {
         SourceUnit::Commons(c) => &c.items,
         SourceUnit::Context(c) => &c.items,
         SourceUnit::Adapter(a) => &a.items,
-        SourceUnit::Suite(_) => &[],
+        SourceUnit::Suite(_) => &suite_fns,
     };
     items
         .iter()
@@ -54,11 +64,12 @@ pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
     let tokens = tokenize(source).ok()?;
     let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
     let unit = unit?;
+    let suite_fns = suite_fn_items(&unit);
     let items: &[CommonsItem] = match &unit {
         SourceUnit::Commons(c) => &c.items,
         SourceUnit::Context(c) => &c.items,
         SourceUnit::Adapter(a) => &a.items,
-        SourceUnit::Suite(_) => &[],
+        SourceUnit::Suite(_) => &suite_fns,
     };
     // S4a (#1966): a derived capability is rendered with its base, which the
     // unit selects in a `consumes U { Base }`.

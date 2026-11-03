@@ -1,0 +1,11 @@
+suite hooks.github as integration {
+	// The same name as the unit suite's helper: each suite's helpers are its own.
+	fn gh(event: String) -> RequestHeaders {
+		RequestHeaders.of(["X-GitHub-Event: integration-\(event)"])
+	}
+
+	case "an integration case calls its own helper" {
+		let r <- github.POST("/github", gh("push"), Bytes.fromUtf8("{}")) by GitHub
+		expect r is Ok("integration-push e30=")
+	}
+}

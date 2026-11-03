@@ -1,0 +1,48 @@
+suite hooks.github
+
+--- Request headers for a GitHub delivery.
+fn gh(event: String) -> RequestHeaders {
+	RequestHeaders.of(["X-GitHub-Event: \(event)"])
+}
+
+fn payload(ref: String) -> Bytes {
+	Bytes.fromUtf8("{\"ref\":\"\(ref)\"}")
+}
+
+fn refinedCount() -> Int {
+	3
+}
+
+// `Val[T]` is test-only surface, allowed in a helper.
+fn noRetries() -> Retries {
+	Val[Retries](0)
+}
+
+case "a helper builds the headers and the body" {
+	let r <- github.POST("/github", gh("push"), payload("main")) by GitHub
+	expect r is Ok("push eyJyZWYiOiJtYWluIn0=")
+}
+
+case "a helper may call another helper and use test-only values" {
+	let n = refinedCount() + 1
+	let r <- github.POST("/github", gh("ping"), Bytes.fromUtf8("{}")) by GitHub
+	expect n == 4
+	expect noRetries() == 0
+	expect r is Ok("ping e30=")
+}
+
+property "a helper is callable from a property" {
+	for all n: Int {
+		expect refinedCount() == 3
+	}
+}
+
+fn positive(n: Int) -> Int
+  requires pos: n > 0
+{
+	n
+}
+
+case "a helper's contract is enforced" {
+	expect positive(2) == 2
+}

@@ -320,6 +320,7 @@ pub(crate) fn process_integration_tests(
             for case in &d.cases {
                 case_inputs.push(SystemCaseInput {
                     case,
+                    suite_fns: &d.fns,
                     tier: super::case_effective_tier(case, d),
                     env: bynk_check::test_env::case_env(d, case),
                     source: parsed[i].source(),
@@ -441,6 +442,8 @@ fn foreign_caller_secrets(p: &str, unit_tables: &HashMap<String, UnitTable>) -> 
 /// in, so [`emit_integration_module`] maps each case body under its own source.
 struct SystemCaseInput<'a> {
     case: &'a Case,
+    /// #2834: the declaring suite's helper `fn`s.
+    suite_fns: &'a [FnDecl],
     /// The case's effective tier, which its suite default may supply.
     tier: bynk_syntax::ast::TestTier,
     /// #2134: the variables and secrets the case runs with (its suite's
@@ -825,6 +828,7 @@ fn emit_integration_module(
             let (expr_types, callees) = test_suites::typecheck_integration_case_body(
                 participants,
                 view,
+                input.suite_fns,
                 input.case,
                 cross_context,
                 unit_tables,
@@ -1005,6 +1009,7 @@ fn emit_integration_module(
         (typed.expr_types, typed.callees) = test_suites::typecheck_integration_case_body(
             participants,
             view,
+            input.suite_fns,
             case,
             cross_context,
             unit_tables,
@@ -1012,6 +1017,17 @@ fn emit_integration_module(
             &mut throwaway_refs,
             tys,
         );
+        // #2834: the suite's helpers, declared ahead of the body.
+        let helper_src = suite_fn_decls(
+            input.suite_fns,
+            test_suites::integration_resolved(view, cross_context, &[]),
+            participants.first().and_then(|p| unit_tables.get(p)),
+            &mut typed,
+            &runtime_use,
+            &mut harness_bound,
+            tys,
+        );
+        case_out.push_str(&helper_src);
         // #1875 review: the check pass accepted this body from the same
         // inputs, so an error here means the two have drifted, and the
         // lowering would silently fall back to untyped output.
@@ -1042,7 +1058,8 @@ fn emit_integration_module(
         for (p, names) in &participant_types {
             let named: Vec<String> = names
                 .iter()
-                .filter(|n| names_ident(&body_src, n))
+                // A helper may name a participant's type though no case does.
+                .filter(|n| names_ident(&body_src, n) || names_ident(&helper_src, n))
                 .cloned()
                 .collect();
             if named.is_empty() {
@@ -3706,6 +3723,7 @@ fn emit_test_module(
                 };
             let mut case_stmt = emit_test_case_function(
                 &runner_name,
+                &test_decl.fns,
                 case,
                 with_env.then(|| bynk_check::test_env::case_env(test_decl, case)),
                 deps_factory,
@@ -3782,6 +3800,7 @@ fn emit_test_module(
             let prop_stmt = if prop_is_history(prop) {
                 emit_test_history_property_function(
                     &runner_name,
+                    &test_decl.fns,
                     prop,
                     prop_ordinal,
                     target_name,
@@ -3800,6 +3819,7 @@ fn emit_test_module(
             } else {
                 emit_test_property_function(
                     &runner_name,
+                    &test_decl.fns,
                     prop,
                     prop_ordinal,
                     target_name,
@@ -6887,9 +6907,61 @@ fn async_test_runner_fn(
     )
 }
 
+/// #2834: the suite's helper `fn`s as local function declarations, for a runner
+/// to splice in ahead of its body. Each runner declares its own suite's helpers,
+/// after the scope setup, so a helper sees the same unqualified target names a
+/// case does and stays private to its suite. `resolved` is the suite's view
+/// *without* the helpers (they are added here, as the check pass adds them); the
+/// helpers' types are merged into `typed`, and their names into `bound` so a
+/// case `let` that reuses one is renamed. A helper's body carries no source map.
+fn suite_fn_decls(
+    suite_fns: &[FnDecl],
+    mut resolved: ResolvedCommons,
+    target: Option<&UnitTable>,
+    typed: &mut checker::TypedCommons,
+    runtime_use: &RuntimeUse,
+    bound: &mut HashSet<String>,
+    tys: &Arc<Types>,
+) -> String {
+    if suite_fns.is_empty() {
+        return String::new();
+    }
+    let mut errs: Vec<CompileError> = Vec::new();
+    let (expr_types, callees) = test_suites::check_suite_fns(
+        suite_fns,
+        &mut resolved,
+        target,
+        &mut errs,
+        &mut RefSink::new(),
+        &mut LocalsSink::new(),
+        tys,
+    );
+    debug_assert!(
+        errs.is_empty(),
+        "suite helpers re-typed for emission reported errors the check pass did not: {:?}",
+        errs.iter().map(|e| e.category).collect::<Vec<_>>()
+    );
+    typed.expr_types.extend(expr_types);
+    typed.callees.extend(callees);
+    test_suites::add_suite_fns_to_typed(typed, suite_fns);
+    let mut out = String::new();
+    for f in suite_fns {
+        let FnName::Free(name) = &f.name else {
+            continue;
+        };
+        bound.insert(name.name.clone());
+        let stmts = emitter::emit_suite_fn(f, typed, runtime_use);
+        let printed: String = stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
+        out.push_str(&reindent_by(&printed, "    "));
+    }
+    out
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_test_case_function(
     runner_name: &str,
+    // #2834: the declaring suite's helper `fn`s.
+    suite_fns: &[FnDecl],
     case: &Case,
     // #2134: the case's `env` entries, when the module holds `__bynkEnv`
     // (some case in it has entries): set first, and cleared on the way out
@@ -6939,7 +7011,7 @@ fn emit_test_case_function(
             2,
         ));
     }
-    let harness_bound = emit_test_scope_setup(
+    let mut harness_bound = emit_test_scope_setup(
         &mut out,
         deps_factory,
         target_name,
@@ -6972,6 +7044,7 @@ fn emit_test_case_function(
         unit_consumes_aliases,
     ) {
         test_suites::register_call_record_types(&mut resolved, target_name, unit_tables);
+        test_suites::add_suite_fns(&mut resolved, suite_fns);
         let mut throwaway_errors: Vec<CompileError> = Vec::new();
         let mut throwaway_refs = RefSink::new();
         // P6.21 review: `callees` is real output here now, not discarded —
@@ -6997,6 +7070,28 @@ fn emit_test_case_function(
                 .map(|e| e.category)
                 .collect::<Vec<_>>()
         );
+    }
+    // #2834: the suite's helpers, declared ahead of the body.
+    if !suite_fns.is_empty()
+        && let Some((helper_view, _)) = test_suites::build_privileged_resolved(
+            target_name,
+            unit_tables,
+            unit_uses,
+            unit_consumes,
+            unit_consumes_aliases,
+        )
+    {
+        let mut helper_view = helper_view;
+        test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
+        out.push_str(&suite_fn_decls(
+            suite_fns,
+            helper_view,
+            unit_tables.get(target_name),
+            &mut typed,
+            runtime_use,
+            &mut harness_bound,
+            tys,
+        ));
     }
     let cross = bynk_check::resolver::CrossContextInfo::default();
     let test_services: HashSet<String> = unit_tables
@@ -8121,6 +8216,8 @@ fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsExpr {
 #[allow(clippy::too_many_arguments)]
 fn emit_test_property_function(
     runner_name: &str,
+    // #2834: the declaring suite's helper `fn`s.
+    suite_fns: &[FnDecl],
     prop: &PropertyDecl,
     prop_ordinal: usize,
     target_name: &str,
@@ -8162,7 +8259,10 @@ fn emit_test_property_function(
         unit_consumes,
         unit_consumes_aliases,
     )
-    .map(|(r, _)| r);
+    .map(|(mut r, _)| {
+        test_suites::add_suite_fns(&mut r, suite_fns);
+        r
+    });
     // P7.2: deferred, not narrowed. `v`'s real type varies per binding, and
     // for `Int` (and refined-`Int`) bindings the *internal* property-test
     // representation is `bigint` (see `rng.int(...)`'s own `n`-suffixed
@@ -8207,6 +8307,27 @@ fn emit_test_property_function(
         hidden,
         tys,
     );
+    // #2834: the suite's helpers, declared ahead of the `where` filter and body.
+    if !suite_fns.is_empty()
+        && let Some((mut helper_view, _)) = test_suites::build_privileged_resolved(
+            target_name,
+            unit_tables,
+            unit_uses,
+            unit_consumes,
+            unit_consumes_aliases,
+        )
+    {
+        test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
+        out.push_str(&suite_fn_decls(
+            suite_fns,
+            helper_view,
+            unit_tables.get(target_name),
+            &mut typed,
+            runtime_use,
+            &mut harness_bound,
+            tys,
+        ));
+    }
     let cross = bynk_check::resolver::CrossContextInfo::default();
     let binding_names: Vec<String> = prop
         .forall
@@ -8396,6 +8517,8 @@ fn emit_test_property_function(
 #[allow(clippy::too_many_arguments)]
 fn emit_test_history_property_function(
     runner_name: &str,
+    // #2834: the declaring suite's helper `fn`s.
+    suite_fns: &[FnDecl],
     prop: &PropertyDecl,
     prop_ordinal: usize,
     target_name: &str,
@@ -8469,6 +8592,19 @@ fn emit_test_history_property_function(
         unit_consumes_aliases,
     ) {
         test_suites::register_call_record_types(&mut resolved, target_name, unit_tables);
+        // #2834: the suite's helpers are callable from the predicate.
+        let mut helper_view = test_suites::build_privileged_resolved(
+            target_name,
+            unit_tables,
+            unit_uses,
+            unit_consumes,
+            unit_consumes_aliases,
+        )
+        .map(|(mut r, _)| {
+            test_suites::register_call_record_types(&mut r, target_name, unit_tables);
+            r
+        });
+        test_suites::add_suite_fns(&mut resolved, suite_fns);
         let inner = TypeRef::Named(Ident {
             name: agent_name.to_string(),
             span: prop.span,
@@ -8530,6 +8666,17 @@ fn emit_test_history_property_function(
                 scope,
                 tys,
             );
+            if let Some(helper_view) = helper_view.take() {
+                out.push_str(&suite_fn_decls(
+                    suite_fns,
+                    helper_view,
+                    unit_tables.get(target_name),
+                    &mut typed,
+                    runtime_use,
+                    &mut harness_bound,
+                    tys,
+                ));
+            }
         }
         // Carry the synthetic call/step/state types into the lowering commons so
         // `is` on the call sum and field access on the step resolve.

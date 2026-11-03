@@ -1025,6 +1025,7 @@ impl<'a> Formatter<'a> {
                         &t.uses,
                         &t.envs,
                         &t.stubs,
+                        &t.fns,
                         &t.cases,
                         &t.properties,
                         &t.trailing_comments,
@@ -1041,6 +1042,7 @@ impl<'a> Formatter<'a> {
                     &t.uses,
                     &t.envs,
                     &t.stubs,
+                    &t.fns,
                     &t.cases,
                     &t.properties,
                     &t.trailing_comments,
@@ -1049,11 +1051,13 @@ impl<'a> Formatter<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn format_test_body(
         &mut self,
         uses: &[UsesDecl],
         envs: &[EnvClause],
         stubs: &[StubClause],
+        fns: &[FnDecl],
         cases: &[Case],
         properties: &[PropertyDecl],
         trailing_comments: &[Comment],
@@ -1082,12 +1086,22 @@ impl<'a> Formatter<'a> {
             self.format_stub_clause(pv);
             first = false;
         }
-        // `cases` and `properties` are separate lists, so merge them back
-        // into source order rather than printing every property last.
-        let mut members: Vec<(usize, Result<&Case, &PropertyDecl>)> = cases
+        // `fns`, `cases` and `properties` are separate lists, so merge them
+        // back into source order rather than printing them by kind.
+        enum Member<'a> {
+            Fn(&'a FnDecl),
+            Case(&'a Case),
+            Property(&'a PropertyDecl),
+        }
+        let mut members: Vec<(usize, Member)> = fns
             .iter()
-            .map(|c| (c.name_span.start, Ok(c)))
-            .chain(properties.iter().map(|p| (p.name_span.start, Err(p))))
+            .map(|f| (f.span.start, Member::Fn(f)))
+            .chain(cases.iter().map(|c| (c.name_span.start, Member::Case(c))))
+            .chain(
+                properties
+                    .iter()
+                    .map(|p| (p.name_span.start, Member::Property(p))),
+            )
             .collect();
         members.sort_by_key(|(start, _)| *start);
         for (_, member) in members {
@@ -1095,8 +1109,9 @@ impl<'a> Formatter<'a> {
                 self.newline();
             }
             match member {
-                Ok(c) => self.format_case(c),
-                Err(p) => self.format_property(p),
+                Member::Fn(f) => self.format_fn_decl(f),
+                Member::Case(c) => self.format_case(c),
+                Member::Property(p) => self.format_property(p),
             }
             first = false;
         }

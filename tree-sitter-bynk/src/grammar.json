@@ -584,6 +584,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "fn_decl"
+        },
+        {
+          "type": "SYMBOL",
           "name": "case"
         },
         {

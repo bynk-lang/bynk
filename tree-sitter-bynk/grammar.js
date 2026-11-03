@@ -270,6 +270,7 @@ module.exports = grammar({
         $.consumes_decl,
         $.env_clause,
         $.stub_clause,
+        $.fn_decl,
         $.case,
         $.property_decl,
       ),

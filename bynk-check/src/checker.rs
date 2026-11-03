@@ -62,6 +62,7 @@ use refinements::*;
 
 pub use calls::{
     BYNK_LIST_DEPRECATED, check_const_decl, check_event_field_default, check_state_initialiser,
+    check_suite_fn,
 };
 pub use d1::row_bool_fields;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
@@ -1575,6 +1576,7 @@ pub fn check_handler_body(
         in_agent_handler: agent_state_ty.is_some(),
         in_service_handler,
         in_fn_body: false,
+        test_values: false,
     };
     // Check the body and validate it matches the return type.
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {
@@ -1725,6 +1727,7 @@ pub fn check_body(
         in_agent_handler: false,
         in_service_handler: false,
         in_fn_body: false,
+        test_values: false,
     };
     if let Some(w) = where_pred {
         let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
@@ -1890,6 +1893,7 @@ pub fn check_invariants(
             in_agent_handler: false,
             in_service_handler: false,
             in_fn_body: false,
+            test_values: false,
         };
         let pred_ty = type_of(&inv.predicate, Some(bool_ty), &mut ctx);
         if let Some(t) = pred_ty
@@ -2041,6 +2045,7 @@ pub(crate) fn check_contracts(
             in_agent_handler: false,
             in_service_handler: false,
             in_fn_body: false,
+            test_values: false,
         };
         let pred_ty = type_of(&c.predicate, Some(bool_ty), &mut ctx);
         if let Some(t) = pred_ty
@@ -2272,6 +2277,7 @@ pub fn check_transitions(
             in_agent_handler: false,
             in_service_handler: false,
             in_fn_body: false,
+            test_values: false,
         };
         let pred_ty = type_of(&tr.predicate, Some(bool_ty), &mut ctx);
         if let Some(t) = pred_ty
@@ -2460,6 +2466,7 @@ pub fn check_migrations(
             in_agent_handler: false,
             in_service_handler: false,
             in_fn_body: false,
+            test_values: false,
         };
         for item in &step.items {
             let value = match item {
@@ -2864,6 +2871,9 @@ pub(crate) struct Ctx<'a> {
     /// context to pass is the needs-context analysis's question
     /// ([`crate::exec_plan`]), not this body's.
     pub in_fn_body: bool,
+    /// #2834: a suite-local helper `fn` body, which is not a `case` but may
+    /// use test-only values (`Val[T]`).
+    pub test_values: bool,
 }
 
 /// Per-capability info for checker dispatch within a handler body.

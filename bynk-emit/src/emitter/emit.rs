@@ -997,6 +997,27 @@ pub(crate) fn emit_free_fn(
     contracts: bool,
     runtime_use: &RuntimeUse,
 ) -> Vec<bynk_ts::TsStmt> {
+    emit_free_fn_in(f, commons, contracts, runtime_use, true)
+}
+
+/// #2834: a suite-local helper `fn` — [`emit_free_fn`] without the `export`,
+/// since it is declared inside a test runner and called from its body.
+pub(crate) fn emit_suite_fn(
+    f: &FnDecl,
+    commons: &TypedCommons,
+    runtime_use: &RuntimeUse,
+) -> Vec<bynk_ts::TsStmt> {
+    // A suite is only ever built for `bynkc test`, which guards every contract.
+    emit_free_fn_in(f, commons, true, runtime_use, false)
+}
+
+fn emit_free_fn_in(
+    f: &FnDecl,
+    commons: &TypedCommons,
+    contracts: bool,
+    runtime_use: &RuntimeUse,
+    export: bool,
+) -> Vec<bynk_ts::TsStmt> {
     let FnName::Free(name) = &f.name else {
         return Vec::new();
     };
@@ -1065,16 +1086,21 @@ pub(crate) fn emit_free_fn(
     // preceding item, or nothing at all for the very first top-level
     // statement), but a doc comment sits flush above the declaration it
     // documents, no blank between them.
+    let function = bynk_ts::TsDecl::Function {
+        name: ts_ident(&name.name),
+        generics,
+        params,
+        return_type: Some(ts_type_ref_to_ts_type(&f.return_type, None)),
+        body: vec![raw_body],
+        is_async,
+        inline: false,
+    };
     let mut fn_stmt = bynk_ts::TsStmt::decl(
-        bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::Function {
-            name: ts_ident(&name.name),
-            generics,
-            params,
-            return_type: Some(ts_type_ref_to_ts_type(&f.return_type, None)),
-            body: vec![raw_body],
-            is_async,
-            inline: false,
-        })),
+        if export {
+            bynk_ts::TsDecl::Export(Box::new(function))
+        } else {
+            function
+        },
         None,
     );
     fn_stmt.no_blank_before = f.documentation.is_some();

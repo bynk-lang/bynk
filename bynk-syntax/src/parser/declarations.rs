@@ -621,6 +621,7 @@ impl<'a> Parser<'a> {
         let mut envs = Vec::new();
         let mut cases = Vec::new();
         let mut properties = Vec::new();
+        let mut fns = Vec::new();
         // Cover the header (`test <target>`) so the unit span stays valid even
         // when every item is dropped by error recovery. Only consulted in
         // fragment form (see `parse_commons_body`).
@@ -673,7 +674,7 @@ impl<'a> Parser<'a> {
                         return Err(CompileError::new(
                             "bynk.parse.uses_after_decls",
                             t.span,
-                            "`uses` clauses must appear before any `stub`, `env`, `case`, or `property` declarations in a fragment-form test",
+                            "`uses` clauses must appear before any `stub`, `env`, `fn`, `case`, or `property` declarations in a fragment-form test",
                         ));
                     }
                     match self.parse_uses_decl() {
@@ -748,6 +749,22 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
+                // #2834: a suite-local helper `fn`.
+                Some(TokenKind::Fn) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_fn_decl() {
+                        Ok(mut f) => {
+                            f.documentation = doc;
+                            f.trivia.leading = leading;
+                            f.trivia.trailing = self.take_trailing_trivia();
+                            last_span = f.span;
+                            fns.push(f);
+                            seen_non_uses = true;
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
                 _ => {
                     let t = match self.peek() {
                         Some(t) => t,
@@ -760,15 +777,15 @@ impl<'a> Parser<'a> {
                         }
                     };
                     let note = if brace {
-                        "the body of a suite contains zero or more `uses`, `stub`, `env`, `case`, or `property` declarations"
+                        "the body of a suite contains zero or more `uses`, `stub`, `env`, `fn`, `case`, or `property` declarations"
                     } else {
-                        "in fragment-form suites, the body is a sequence of `uses`, `stub`, `env`, `case`, or `property` declarations to end of file"
+                        "in fragment-form suites, the body is a sequence of `uses`, `stub`, `env`, `fn`, `case`, or `property` declarations to end of file"
                     };
                     let err = CompileError::new(
                         "bynk.parse.expected_item",
                         t.span,
                         format!(
-                            "expected `uses`, `stub`, `env`, `case \"name\"`, or `property \"name\"` declaration, found {}",
+                            "expected `uses`, `stub`, `env`, `fn`, `case \"name\"`, or `property \"name\"` declaration, found {}",
                             t.kind.describe()
                         ),
                     )
@@ -801,6 +818,7 @@ impl<'a> Parser<'a> {
             envs,
             cases,
             properties,
+            fns,
             tier,
             form: if brace {
                 CommonsForm::Brace

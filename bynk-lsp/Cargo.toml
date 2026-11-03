@@ -25,6 +25,7 @@ categories = ["development-tools", "compilers"]
 #   #2462:             documentation_links   → ../examples/rate-limiter
 exclude = [
     "tests/hover_references.rs",
+    "tests/suite_helpers.rs",
     "tests/declaration_spans.rs",
     "tests/project_model.rs",
     "tests/document_link_fixture.rs",

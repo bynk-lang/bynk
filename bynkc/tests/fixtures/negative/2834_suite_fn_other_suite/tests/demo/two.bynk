@@ -1,0 +1,5 @@
+suite demo.desk {
+  case "another suite cannot" {
+    expect triple(2) == 6
+  }
+}

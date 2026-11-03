@@ -1,0 +1,7 @@
+suite demo.desk {
+  fn triple(n: Int) -> Int { n * 3 }
+
+  case "the declaring suite uses it" {
+    expect triple(2) == 6
+  }
+}

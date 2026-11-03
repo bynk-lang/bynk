@@ -31,6 +31,37 @@ takes the same `Bool` predicate an `invariant` does (`is`, `implies`, the
 operators, pure methods) — one predicate surface across code and tests — and a
 failure reports the predicate structure: `expected` versus `actual`.
 
+## Share a fixture with a helper `fn`
+
+When several cases need the same request or value, declare a `fn` in the suite
+instead of repeating it in each case. A helper can build test-only values and is
+never part of the deployable:
+
+```bynk,fragment
+suite hooks.github
+
+fn gh(event: String) -> RequestHeaders {
+  RequestHeaders.of(["X-GitHub-Event: \(event)"])
+}
+
+fn payload() -> Bytes {
+  Bytes.fromUtf8("{\"ref\":\"main\"}")
+}
+
+case "a push is recorded" {
+  let r <- github.POST("/github", gh("push"), payload()) by GitHub
+  expect r is Ok("recorded")
+}
+
+case "a ping is acknowledged" {
+  let r <- github.POST("/github", gh("ping"), payload()) by GitHub
+  expect r is Ok("pong")
+}
+```
+
+A helper is private to its suite and pure; see
+[Helper functions in a suite](/book/reference/testing/#helpers).
+
 ## Fabricate values with `Val[T]`
 
 `Val[T]` produces a value of `T`. For a refined type it satisfies the

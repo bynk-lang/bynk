@@ -210,7 +210,7 @@ pub(crate) fn check_ident(
         // view is closed over its imported functions and types only, so a
         // constant whose type it lacks is reported here rather than typed as
         // unknown.
-        if ty.is_none() && ctx.in_test_body {
+        if ty.is_none() && (ctx.in_test_body || ctx.test_values) {
             ctx.errors.push(
                 CompileError::new(
                     "bynk.resolve.unknown_type",
@@ -379,7 +379,7 @@ pub(crate) fn check_val(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    if !ctx.in_test_body {
+    if !ctx.in_test_body && !ctx.test_values {
         ctx.errors.push(
             CompileError::new(
                 "bynk.val.outside_test",
