@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes, diagnostic_coverage
-changelog: A nested `match` staircase gets a `let … else` hint with a fix, `Option`/`Result` gain `isNone`, `orElse`, `filter`, `isErr` and `ok`, and a second `match` in a block names the rule
----
+# 0717 — A nested match staircase is offered `let … else` as a hint, under a new hint severity
 
-## ADR: let-else-staircase-hint
-title: A nested match staircase is offered `let … else` as a hint, under a new hint severity
-summary: Detection shape, the hint severity, and the five Option/Result methods
+- **Status:** Accepted (v0.494)
 
 **Context.** `let … else` (#2010) flattens a chain of fallible steps, but nothing led an author to it: writing a webhook receiver (`bynk-lang/github-hooks`) took three 3–4-level `match` staircases before the flat form was found. A few missing `Option`/`Result` methods (`isNone`, `orElse`, `filter`, `isErr`, `ok`) kept the flat style from being complete, and two `match`es in a row in a block gave only "expected `}` to close the block".
 
