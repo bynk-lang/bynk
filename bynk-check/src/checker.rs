@@ -3028,6 +3028,20 @@ pub fn named_ty(decl: &TypeDecl, tys: &Types) -> TyId {
     named_ty_with_args(decl, Vec::new(), tys)
 }
 
+/// #2863: the note on `bynk.types.interpolation_non_scalar`. A `JsonError`
+/// has fields that interpolate, so its note points at them; any other type gets the
+/// list of scalar types and how to stringify `Bytes`, `Duration` and `Instant`.
+fn interpolation_non_scalar_note(ty: TyId, tys: &Types) -> &'static str {
+    match &*tys.get(ty) {
+        Ty::JsonError => {
+            "a `JsonError` has no string form; interpolate its fields, e.g. `\"\\(e.kind) at \\(e.path): \\(e.message)\"`"
+        }
+        _ => {
+            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`, `Duration` via `toString()`, `Instant` via `toIso()`/`toString()`"
+        }
+    }
+}
+
 /// v0.158 (ADR 0184): the compiler-known `MapEntry[K, V]` record — the element
 /// a `store Map[K, V]`'s `.entries` query yields. A nominal generic record
 /// (`{ key: K, value: V }`), so it flows through `unify`/`compatible`/`display`
@@ -4481,9 +4495,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                             hole.span,
                             format!("type `{}` has no string form here", other.display(tys)),
                         )
-                        .with_note(
-                            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`, `Duration` via `toString()`, `Instant` via `toIso()`/`toString()`",
-                        ),
+                        .with_note(interpolation_non_scalar_note(other, tys)),
                     ),
                     // The hole already produced its own error — don't pile on.
                     None => {}

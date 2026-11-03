@@ -873,6 +873,18 @@ mod tests {
         assert!(!h.contains("never returns"), "{h}");
     }
 
+    /// #2863: the built-in `JsonError` hovers with its fields.
+    #[test]
+    fn json_error_hovers_with_its_fields() {
+        let src =
+            "commons demo.m\n\nfn f(s: String) -> Result[Int, JsonError] { Json.decode[Int](s) }\n";
+        let h = hover_at(src, "JsonError", 0).expect("`JsonError` hovers");
+        assert!(
+            h.contains("`kind`") && h.contains("`path`") && h.contains("`message`"),
+            "{h}"
+        );
+    }
+
     /// Constrained generics slice 1: `derives` and the constraint names it and
     /// a bound carry each hover; an `Ord` lookalike elsewhere does not.
     #[test]
