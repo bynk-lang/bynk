@@ -5,5 +5,5 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function isOk(r: Result<number, string>): boolean {
-  return r.tag === "Ok";
+  return ((__c: boolean) => __c)(r.tag === "Ok");
 }

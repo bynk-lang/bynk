@@ -73,7 +73,7 @@ async function test_a_field_of_an_Ok_payload() {
     const { Item, api, calc, intake, sweeper } = __ns_app_web;
     type Item = __ns_app_web.Item;
     const r = await api.http_GET_item(deps);
-    if (!(r.tag === "Ok" && ((() => { const item = r.value; return item.sku.startsWith("wid"); })()))) { throw __bynkExpectFailure("tests/app/web.bynk:14:12", 491, 534, "expect r is Ok(item) && item.sku.startsWith(\"wid\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok") && ((() => { const item = (r as Extract<typeof r, { tag: "Ok" }>).value; return item.sku.startsWith("wid"); })()))) { throw __bynkExpectFailure("tests/app/web.bynk:14:12", 491, 534, "expect r is Ok(item) && item.sku.startsWith(\"wid\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

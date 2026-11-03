@@ -58,8 +58,8 @@ export function book(b: Booking): Booking {
 
 export function stmtIf(o: Option<number>): number {
   const __r0 = id(o);
-  if (__r0.tag === "Some") {
-    const v = __r0.value;
+  if (((__c: boolean) => __c)(__r0.tag === "Some")) {
+    const v = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
     return v;
   } else {
     return 0;
@@ -71,8 +71,8 @@ export function valueIf(o: Option<number>, k: number): number {
     case 0: {
       const __r0 = id(o);
       return (() => {
-    if (__r0.tag === "Some") {
-      const v = __r0.value;
+    if (((__c: boolean) => __c)(__r0.tag === "Some")) {
+      const v = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
       return v;
     } else {
       return 1;
@@ -88,20 +88,20 @@ export function valueIf(o: Option<number>, k: number): number {
 
 export function andChain(b: Booking): boolean {
   const __r0 = book(b);
-  return (__r0.tag === "Held") && ((() => { const g = __r0.guest; const r = __r0.room; return r > 100; })()) && ((() => { const g = __r0.guest; const r = __r0.room; return g !== ""; })());
+  return (((__c: boolean) => __c)(__r0.tag === "Held")) && ((() => { const g = (__r0 as Extract<typeof __r0, { tag: "Held" }>).guest; const r = (__r0 as Extract<typeof __r0, { tag: "Held" }>).room; return r > 100; })()) && ((() => { const g = (__r0 as Extract<typeof __r0, { tag: "Held" }>).guest; const r = (__r0 as Extract<typeof __r0, { tag: "Held" }>).room; return g !== ""; })());
 }
 
 export function implication(o: Option<number>): boolean {
   const __r0 = id(o);
-  return (!(__r0.tag === "Some") || ((() => { const v = __r0.value; return v >= 0; })()));
+  return (!(((__c: boolean) => __c)(__r0.tag === "Some")) || ((() => { const v = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value; return v >= 0; })()));
 }
 
 export function negatedElse(o: Option<number>): number {
   const __r0 = id(o);
-  if (!(__r0.tag === "Some")) {
+  if (!(((__c: boolean) => __c)(__r0.tag === "Some"))) {
     return 0;
   } else {
-    const v = __r0.value;
+    const v = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
     return v;
   }
 }
@@ -118,12 +118,12 @@ export function refinement(n: number, m: number): number {
 
 export function orPattern(b: Booking): string {
   const __r0 = book(b);
-  if ((__r0.tag === "Held" || __r0.tag === "Waitlisted")) {
+  if (((__c: boolean) => __c)((__r0.tag === "Held" || __r0.tag === "Waitlisted"))) {
     let g;
     if (__r0.tag === "Held") {
-      g = __r0.guest;
+      g = (__r0 as Extract<typeof __r0, { tag: "Held" }>).guest;
     } else {
-      g = __r0.guest;
+      g = (__r0 as Extract<typeof __r0, { tag: "Waitlisted" }>).guest;
     }
     return g;
   } else {
@@ -133,15 +133,15 @@ export function orPattern(b: Booking): string {
 
 export function nestedReceiver(o: Option<Option<number>>, d: Option<number>): number {
   const __r0 = ((() => {
-    if (o.tag === "Some") {
-      const i = o.value;
+    if (((__c: boolean) => __c)(o.tag === "Some")) {
+      const i = (o as Extract<typeof o, { tag: "Some" }>).value;
       return i;
     } else {
       return d;
     }
   })());
-  if (__r0.tag === "Some") {
-    const v = __r0.value;
+  if (((__c: boolean) => __c)(__r0.tag === "Some")) {
+    const v = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
     return v;
   } else {
     return 0;
@@ -151,10 +151,10 @@ export function nestedReceiver(o: Option<Option<number>>, d: Option<number>): nu
 export function negatedOr(a: Option<number>, b: Option<number>): number {
   const __r0 = id(a);
   let __r1!: Option<number>;
-  if (!(__r0.tag === "Some") || (() => { __r1 = id(b); return !(__r1.tag === "Some"); })()) {
+  if (!(((__c: boolean) => __c)(__r0.tag === "Some")) || (() => { __r1 = id(b); return !(((__c: boolean) => __c)(__r1.tag === "Some")); })()) {
     return 0;
   } else {
-    const x = __r0.value;
+    const x = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
     const y = (__r1 as Extract<typeof __r1, { tag: "Some" }>).value;
     return x + y;
   }
@@ -164,10 +164,10 @@ export function negatedOrValue(a: Option<number>, b: Option<number>): number {
   const __r0 = id(a);
   let __r1!: Option<number>;
   const n = (() => {
-    if (!(__r0.tag === "Some") || (() => { __r1 = id(b); return !(__r1.tag === "Some"); })()) {
+    if (!(((__c: boolean) => __c)(__r0.tag === "Some")) || (() => { __r1 = id(b); return !(((__c: boolean) => __c)(__r1.tag === "Some")); })()) {
       return 0;
     } else {
-      const x = __r0.value;
+      const x = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
       const y = (__r1 as Extract<typeof __r1, { tag: "Some" }>).value;
       return x + y;
     }
@@ -179,10 +179,10 @@ export function negatedOrThree(a: Option<number>, b: Option<number>, c: Option<n
   const __r0 = id(a);
   let __r1!: Option<number>;
   let __r2!: Option<number>;
-  if (!(__r0.tag === "Some") || (() => { __r1 = id(b); return !(__r1.tag === "Some"); })() || (() => { __r2 = id(c); return !(__r2.tag === "Some"); })()) {
+  if (!(((__c: boolean) => __c)(__r0.tag === "Some")) || (() => { __r1 = id(b); return !(((__c: boolean) => __c)(__r1.tag === "Some")); })() || (() => { __r2 = id(c); return !(((__c: boolean) => __c)(__r2.tag === "Some")); })()) {
     return 0;
   } else {
-    const x = __r0.value;
+    const x = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
     const y = (__r1 as Extract<typeof __r1, { tag: "Some" }>).value;
     const z = (__r2 as Extract<typeof __r2, { tag: "Some" }>).value;
     return x + y + z;
@@ -193,10 +193,10 @@ export function negatedOrRightNested(a: Option<number>, b: Option<number>, c: Op
   const __r0 = id(a);
   let __r1!: Option<number>;
   let __r2!: Option<number>;
-  if (!(__r0.tag === "Some") || (() => { __r1 = id(b); return (!(__r1.tag === "Some") || (() => { __r2 = id(c); return !(__r2.tag === "Some"); })()); })()) {
+  if (!(((__c: boolean) => __c)(__r0.tag === "Some")) || (() => { __r1 = id(b); return (!(((__c: boolean) => __c)(__r1.tag === "Some")) || (() => { __r2 = id(c); return !(((__c: boolean) => __c)(__r2.tag === "Some")); })()); })()) {
     return 0;
   } else {
-    const x = __r0.value;
+    const x = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
     const y = (__r1 as Extract<typeof __r1, { tag: "Some" }>).value;
     const z = (__r2 as Extract<typeof __r2, { tag: "Some" }>).value;
     return x + y + z;
@@ -205,7 +205,7 @@ export function negatedOrRightNested(a: Option<number>, b: Option<number>, c: Op
 
 export function plainAnd(c: boolean, b: Option<number>): number {
   let __r0!: Option<number>;
-  if (c && (() => { __r0 = id(b); return __r0.tag === "Some"; })()) {
+  if (c && (() => { __r0 = id(b); return ((__c: boolean) => __c)(__r0.tag === "Some"); })()) {
     const y = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
     return y;
   } else {
@@ -215,7 +215,7 @@ export function plainAnd(c: boolean, b: Option<number>): number {
 
 export function plainImplies(c: boolean, b: Option<number>): number {
   let __r0!: Option<number>;
-  if ((!(c) || (() => { __r0 = id(b); return !(__r0.tag === "Some"); })())) {
+  if ((!(c) || (() => { __r0 = id(b); return !(((__c: boolean) => __c)(__r0.tag === "Some")); })())) {
     return 0;
   } else {
     const y = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
@@ -226,6 +226,6 @@ export function plainImplies(c: boolean, b: Option<number>): number {
 export function inLambda(c: boolean, b: Option<number>, xs: readonly number[]): boolean {
   return c || (xs).some((__x: number) => ((e: number) => {
 const __r0 = id(b);
-  return __r0.tag === "Some" && ((() => { const y = __r0.value; return y === e; })());
+  return ((__c: boolean) => __c)(__r0.tag === "Some") && ((() => { const y = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value; return y === e; })());
 })(__x));
 }

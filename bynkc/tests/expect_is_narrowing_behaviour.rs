@@ -48,7 +48,7 @@ fn match_after_expect_is_type_checks() {
     let mut report = String::from_utf8_lossy(&out.stdout).into_owned();
     report.push_str(&String::from_utf8_lossy(&out.stderr));
     assert!(
-        out.status.success() && report.contains("1 passed, 0 failed"),
+        out.status.success() && report.contains("5 passed, 0 failed"),
         "expected the case to type-check and pass, got:\n{report}"
     );
 }

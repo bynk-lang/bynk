@@ -19,5 +19,5 @@ export function helper(): Outcome {
 
 export function check(x: boolean): boolean {
   let __r0!: Outcome;
-  return x && (() => { __r0 = helper(); return __r0.tag === "Hit"; })();
+  return x && (() => { __r0 = helper(); return ((__c: boolean) => __c)(__r0.tag === "Hit"); })();
 }

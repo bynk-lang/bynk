@@ -19,8 +19,8 @@ export function classify(n: number): Outcome {
 
 export function label(n: number): number {
   const __r0 = classify(n);
-  if (__r0.tag === "Hit") {
-    const score = __r0.score;
+  if (((__c: boolean) => __c)(__r0.tag === "Hit")) {
+    const score = (__r0 as Extract<typeof __r0, { tag: "Hit" }>).score;
     return score;
   } else {
     return 0;

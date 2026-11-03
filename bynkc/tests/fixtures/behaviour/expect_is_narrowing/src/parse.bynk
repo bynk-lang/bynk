@@ -3,3 +3,25 @@ context parse
 fn parse(n: Int) -> Result[Int, String] {
 	if n > 0 { Ok(n) } else { Err("not positive") }
 }
+
+// #2836: production code — the `else` of an `is` test, with and without a
+// binding, then an exhaustive `match` on the same value.
+fn orZero(n: Int) -> Int {
+	let r = parse(n)
+	if r is Err(_) { 0 } else {
+		match r {
+			Ok(v) => v
+			Err(_) => 1
+		}
+	}
+}
+
+fn describe(n: Int) -> String {
+	let r = parse(n)
+	if r is Err(e) { e } else {
+		match r {
+			Ok(_) => "ok"
+			Err(_) => "err"
+		}
+	}
+}

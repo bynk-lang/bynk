@@ -289,7 +289,7 @@ async function __prop_test_no_accepted_spend_without_a_prior_accepted_top_up() {
     ];
     const __body = async (__run: globalThis.Array<{ h: number, args: unknown[] }>) => {
       const run = __run;
-      if (!((run).every((__x: __History_Wallet_Step) => ((s) => (!((s.call.tag === "Spend" && s.accepted)) || (((__xs: readonly __History_Wallet_Step[], __s: __History_Wallet_Step) => __xs.slice(0, __xs.indexOf(__s)))(run, s)).some((__x: __History_Wallet_Step) => ((p) => p.call.tag === "TopUp" && p.accepted)(__x))))(__x)))) { throw __bynkExpectFailure("tests/wallet.test.bynk:7:14", 367, 494, "expect run.all((s) =>\n        (s.call is Spend && s.accepted)\n          implies run.upTo(s).any((p) => p.call is TopUp && p.accepted))"); }
+      if (!((run).every((__x: __History_Wallet_Step) => ((s) => (!((((__c: boolean) => __c)(s.call.tag === "Spend") && s.accepted)) || (((__xs: readonly __History_Wallet_Step[], __s: __History_Wallet_Step) => __xs.slice(0, __xs.indexOf(__s)))(run, s)).some((__x: __History_Wallet_Step) => ((p) => ((__c: boolean) => __c)(p.call.tag === "TopUp") && p.accepted)(__x))))(__x)))) { throw __bynkExpectFailure("tests/wallet.test.bynk:7:14", 367, 494, "expect run.all((s) =>\n        (s.call is Spend && s.accepted)\n          implies run.upTo(s).any((p) => p.call is TopUp && p.accepted))"); }
     };
     const __drive = (seq: globalThis.Array<{ h: number, args: unknown[] }>) => (__ns_demo_wallet as any).__bynkDriveHistory_Wallet(seq, deps);
     return await __bynkRunHistory({ seed: __bynkMix(__bynkSeed, 0), cases: 60, maxLen: 16, handlers: __handlers, drive: __drive, body: __body, name: "no accepted spend without a prior accepted top-up", location: "tests/wallet.test.bynk", file: "tests/wallet.test.bynk" });

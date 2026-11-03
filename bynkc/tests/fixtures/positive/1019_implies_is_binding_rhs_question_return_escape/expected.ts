@@ -19,12 +19,12 @@ export function risky(): Result<number, string> {
 
 export function check(o: Outcome, threshold: number): Result<boolean, string> {
   let __r1: boolean;
-  if (o.tag === "Hit") {
+  if (((__c: boolean) => __c)(o.tag === "Hit")) {
     const __r0 = risky();
     if (__r0.tag === "Err") return __r0;
     __r1 = __r0.value > threshold;
   } else {
     __r1 = true;
   }
-  return Ok((!(o.tag === "Hit") || __r1));
+  return Ok((!(((__c: boolean) => __c)(o.tag === "Hit")) || __r1));
 }

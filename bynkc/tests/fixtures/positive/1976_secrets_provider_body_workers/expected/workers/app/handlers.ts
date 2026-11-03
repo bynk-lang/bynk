@@ -58,7 +58,7 @@ export const mode = {
 export const key = {
   async call(deps: { Secrets: bynk.Secrets }): globalThis.Promise<boolean> {
     const k = await deps.Secrets.get("API_KEY");
-    return k.tag === "Some";
+    return ((__c: boolean) => __c)(k.tag === "Some");
   },
 };
 
@@ -109,7 +109,7 @@ export class Gate {
   async open(deps: { Secrets: bynk.Secrets }): globalThis.Promise<boolean> {
     const __state = await this.loadState();
     const k = await deps.Secrets.get("AGENT_KEY");
-    return k.tag === "Some";
+    return ((__c: boolean) => __c)(k.tag === "Some");
   }
 
   async fetch(request: globalThis.Request): globalThis.Promise<globalThis.Response> {
