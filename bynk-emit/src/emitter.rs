@@ -4895,6 +4895,10 @@ pub(crate) struct LowerCtx<'a> {
     /// enclosing function — the residual gap `hoist_if_as_statement` (built for
     /// T2.1's `if`-hoisting) also closes here, once this flag says it's needed.
     pub(crate) emitted_early_return: bool,
+    /// #2857: how many lambdas enclose the expression being lowered. A `?`
+    /// at depth 0 of a test case body fails the case; inside a lambda it keeps
+    /// its meaning (a `return` from the arrow).
+    pub(crate) lambda_depth: usize,
     /// #1750: where a block's tail value goes. `None` (the default) is a
     /// `return`, the right sink for a function, lambda or arrow body. `Some` is
     /// set while a value-position `if`/`match`/block that contains a `?` is
@@ -4994,6 +4998,7 @@ impl<'a> LowerCtx<'a> {
             source_map: None,
             emitted_await: false,
             emitted_early_return: false,
+            lambda_depth: 0,
             tail_slot: None,
             cmp_scope: HashMap::new(),
             codec_scope: HashMap::new(),
@@ -5453,6 +5458,17 @@ impl<'a> LowerCtx<'a> {
             }
             _ => false,
         }
+    }
+
+    /// #2857: whether `?` here fails the case — a test or integration case
+    /// body, outside any lambda. A case's function returns a `CaseResult`, so
+    /// there is nowhere for an `Err` to propagate to.
+    pub(crate) fn question_fails_case(&self) -> bool {
+        self.lambda_depth == 0
+            && matches!(
+                &self.mode,
+                BodyMode::TestCase { .. } | BodyMode::IntegrationCase { .. }
+            )
     }
 
     /// #1975: whether this is a test `case` body.
