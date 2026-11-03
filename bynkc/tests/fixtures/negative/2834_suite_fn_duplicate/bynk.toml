@@ -1,0 +1,6 @@
+[project]
+name = "suite-fn-dup"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

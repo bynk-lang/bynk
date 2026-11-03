@@ -1,0 +1,9 @@
+suite demo.desk as system {
+  // `check` is the target's service: a helper may not take its name at any tier.
+  fn check(n: Int) -> Int { n + 1 }
+
+  case "a clash" {
+    let n <- demo.desk.check(5)
+    expect n == 5
+  }
+}

@@ -7,6 +7,7 @@ use crate::index::{IndexBuilder, ProjectIndex, RefSink, SiteRef, SymbolKind};
 use crate::project_model::UnitInfo;
 use crate::resolver::{self, MethodTable as ResolverMethodTable};
 use bynk_project::{ParsedFile, UnitKind};
+use bynk_syntax::ast::SourceUnit;
 use bynk_syntax::ast::{
     ActorDecl, AgentDecl, AssetDecl, BaseType, Block, CapRef, CapabilityDecl, CommonsItem,
     ConstDecl, EmbedDecl, EventDecl, ExportKind, Expr, ExprId, ExprKind, FnDecl, FnName,
@@ -33,6 +34,27 @@ pub fn assemble_index(
     builder.set_uses(uses);
     builder.set_consumes(unit_consumes.clone());
     for pf in parsed {
+        // #2834: a suite's helper `fn`s are definitions in the suite's own
+        // namespace (`test_suites::suite_helper_namespace`); its cases are
+        // not declarations.
+        if let SourceUnit::Suite(suite) = pf.unit() {
+            let path = pf.identity_path();
+            let ns = crate::test_suites::suite_helper_namespace(&suite.target.joined(), &path);
+            for f in &suite.fns {
+                if let FnName::Free(id) = &f.name {
+                    builder.add_def(
+                        &ns,
+                        SymbolKind::Fn,
+                        &id.name,
+                        SiteRef {
+                            path: path.clone(),
+                            span: id.span,
+                        },
+                        symbol_modifiers(&ns, None),
+                    );
+                }
+            }
+        }
         if matches!(pf.kind(), UnitKind::Test | UnitKind::Integration) {
             continue;
         }

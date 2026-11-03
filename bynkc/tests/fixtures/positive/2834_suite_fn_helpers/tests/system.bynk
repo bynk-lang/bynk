@@ -1,0 +1,30 @@
+suite hooks.github as system {
+	env { GITHUB_SECRET = "test-github" }
+
+	fn gh(event: String) -> RequestHeaders {
+		RequestHeaders.of(["X-GitHub-Event: \(event)"])
+	}
+
+	fn push() -> Bytes {
+		Bytes.fromUtf8("{\"ref\":\"main\"}")
+	}
+
+	// A helper that names a participant's type, though no case does.
+	fn noRetries() -> Retries {
+		Val[Retries](0)
+	}
+
+	case "a helper-built request reaches the handler over the wire" {
+		let r <- github.POST("/github", gh("push"), push())
+		expect r is Ok("push eyJyZWYiOiJtYWluIn0=")
+	}
+
+	case "a forged request is refused" {
+		let r <- github.POST("/github", gh("push"), push()) by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a helper names a participant type" {
+		expect noRetries() == 0
+	}
+}

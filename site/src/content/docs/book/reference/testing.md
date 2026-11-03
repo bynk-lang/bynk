@@ -745,6 +745,45 @@ stub Pricing.quote(_) never                        // never completes
 
 See [`bynk.stub.*` errors](/book/troubleshooting/integration-errors/).
 
+## Helper functions in a suite {#helpers}
+
+A suite may declare plain **`fn`s** for its cases and properties to call: a
+request builder, a fixture, an expected value. They sit among the suite's other
+items, in the fragment form and inside a block `suite x { … }` alike, and are
+written like any function:
+
+```bynk,fragment
+suite hooks.github
+
+--- Request headers for one GitHub delivery.
+fn gh(event: String, delivery: String) -> RequestHeaders {
+  RequestHeaders.of(["X-GitHub-Event: \(event)", "X-GitHub-Delivery: \(delivery)"])
+}
+
+case "an issue event is recorded" {
+  let r <- github.POST("/github", gh("issues", "d-1"), Bytes.fromUtf8("{}")) by GitHub
+  expect r is Ok("accepted")
+}
+```
+
+- **Every tier.** A helper is callable from a `case` or `property` at `unit`,
+  `integration` and `system`, and from the other helpers of its suite.
+- **Test-only.** A helper is checked in the suite's view and emitted into the
+  test module alone. The deployable output is the same with or without it, and a
+  helper adds nothing to the target's surface. So a helper may use what a test
+  body may, such as [`Val[T]`](#val), `RequestHeaders.of` and `TokenClaims.of`.
+- **Pure.** A helper returns a value. One that returns an `Effect` is
+  `bynk.suite.fn_effectful`: build the value in the helper and run the effect in
+  the `case`. A method (`fn Type.name`) is `bynk.suite.fn_method`.
+- **Private to its suite.** Another suite, even one targeting the same unit,
+  cannot call it, and may declare a helper of the same name. A suite split across
+  files is, as for [`stub`](#stub) and [`env`](#env), one suite per file.
+- **No shadowing.** A helper whose name is already in a case's scope (a function,
+  type, constant, embed, asset, service or agent of the target or of a commons
+  it `uses`) is `bynk.suite.fn_name_clash`. Two helpers of one suite with one
+  name are `bynk.suite.duplicate_fn`.
+- **Not exported.** There is no way to share helpers across suites.
+
 ## Configuring a suite — `env { … }` {#env}
 
 A suite or case declares the variables and secrets its participants see with an

@@ -2148,6 +2148,14 @@ predicate surface as `invariant`/`ensures` (one predicate surface, ADR 0144). A
 `suite` MUST target an existing unit and MUST NOT duplicate a case description
 (`bynk.suite.unknown_target`, `bynk.suite.duplicate_case_name`).
 
+A suite MAY declare helper `fn`s (#2834). A helper MUST be a free function
+that does not return an `Effect` (`bynk.suite.fn_method`, `bynk.suite.fn_effectful`),
+MUST NOT repeat the name of another helper of its suite or of any value in scope in
+its cases (`bynk.suite.duplicate_fn`, `bynk.suite.fn_name_clash`), and is visible to
+the `case`s, `property` bodies and other helpers of the suite that declares it,
+and to no other suite. A helper body is checked in its suite's view and MAY use
+test-only values such as `Val[T]`. It is emitted into test output only.
+
 A suite below `system` sees its target as the target sees itself, so the
 target's private declarations (§5.1c) are in scope in its cases, stubs and
 properties: tests routinely exercise helpers. The exception covers the target

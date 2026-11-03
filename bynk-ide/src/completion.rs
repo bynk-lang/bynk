@@ -2258,6 +2258,24 @@ fn free_function_candidates(
     // Offer the current unit's own fns and the fns of each imported module.
     let mut out: Vec<Completion> = Vec::new();
     let mut seen: BTreeSet<String> = BTreeSet::new();
+    // #2834: in a suite, its own helper `fn`s lead. Only the buffer's suite
+    // contributes: a helper is private to the suite that declares it.
+    if let Some(SourceUnit::Suite(suite)) = parse_source_unit(doc_text) {
+        for f in &suite.fns {
+            if let FnName::Free(id) = &f.name
+                && seen.insert(id.name.clone())
+            {
+                out.push(
+                    Completion::item(
+                        id.name.clone(),
+                        CompletionKind::Function,
+                        Some(format!("{} — `this suite`", free_fn_signature(&id.name, f))),
+                    )
+                    .with_doc(f.documentation.as_deref()),
+                );
+            }
+        }
+    }
     for u in &units {
         let own = u.name == current;
         if !own && !imported.contains(&u.name) {

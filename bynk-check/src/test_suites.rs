@@ -819,9 +819,20 @@ pub fn phase_integration_bodies(
             let Some(d) = parsed[i].integration() else {
                 continue;
             };
+            // #2834: as for a unit suite, a system suite's helpers are
+            // definitions of their own file's namespace.
+            let namespace = if d.fns.is_empty() {
+                harness_name.clone()
+            } else {
+                let ns = suite_helper_namespace(&harness_name, &parsed[i].identity_path());
+                let mut resolution = uses_targets.clone();
+                resolution.extend(participants.iter().cloned());
+                refs.declare_namespace(&ns, resolution);
+                ns
+            };
             refs.enter_file(
                 &parsed[i].identity_path(),
-                &harness_name,
+                &namespace,
                 parsed[i].is_synthetic(),
             );
             // #1814: a reached type resolves in the view, but the suite may
@@ -840,10 +851,22 @@ pub fn phase_integration_bodies(
             );
             let system_actors =
                 target_test_actors(participants.first().and_then(|t| unit_tables.get(t)));
+            // #2834: the suite's helpers, checked once in the harness view.
+            let mut helper_view = integration_resolved(&view, &cross_context, &[]);
+            check_suite_fns(
+                &d.fns,
+                &mut helper_view,
+                participants.first().and_then(|p| unit_tables.get(p)),
+                &mut body_errs,
+                refs,
+                &mut LocalsSink::new(),
+                tys,
+            );
             for case in &d.cases {
                 let (_, case_callees) = typecheck_integration_case_body(
                     &participants,
                     &view,
+                    &d.fns,
                     case,
                     &cross_context,
                     unit_tables,
@@ -942,6 +965,8 @@ pub fn phase_integration_bodies(
 pub fn typecheck_integration_case_body(
     participants: &[String],
     view: &SuiteView,
+    // #2834: the declaring suite's helper `fn`s, callable from the body.
+    suite_fns: &[FnDecl],
     case: &Case,
     cross_context: &resolver::CrossContextInfo,
     unit_tables: &HashMap<String, UnitTable>,
@@ -952,54 +977,7 @@ pub fn typecheck_integration_case_body(
     HashMap<ExprId, checker::TypedExpr>,
     HashMap<ExprId, checker::Callee>,
 ) {
-    // Names in scope: the harness view (#1814: closed over reached types).
-    let SuiteView {
-        types,
-        fns,
-        methods,
-        ..
-    } = view.clone();
-
-    let synthetic_commons = Commons {
-        name: QualifiedName {
-            parts: vec![Ident {
-                name: "integration".to_string(),
-                span: Span::default(),
-            }],
-            span: Span::default(),
-        },
-        items: Vec::new(),
-        uses: Vec::new(),
-        documentation: None,
-        form: CommonsForm::Brace,
-        span: Span::default(),
-        trivia: Trivia::default(),
-        trailing_comments: Vec::new(),
-    };
-    // `synthetic_commons` declares nothing of its own (`items: Vec::new()`
-    // above) — every entry in `types`/`fns`/`methods` was merged in from a
-    // `uses`/participant unit, so an empty local table (no local types, no
-    // local events) is the correct answer here, not a stand-in for one.
-    let no_local_types = HashMap::new();
-    let no_local_events = HashMap::new();
-    let resolved = ResolvedCommons::new(
-        synthetic_commons,
-        types,
-        &no_local_types,
-        fns,
-        methods,
-        HashMap::new(),
-        &no_local_events,
-        cross_context.clone(),
-        HashMap::new(),
-        // Test-scaffold body, not a real context emission — never rebranded.
-        false,
-        HashSet::new(),
-    )
-    // #1883, slice 3: the assets the case may name and fetch.
-    .with_assets(view.assets.clone())
-    .with_embeds(view.embeds.clone())
-    .with_consts(view.consts.clone());
+    let resolved = integration_resolved(view, cross_context, suite_fns);
 
     let unit_span = case.span;
     let synthetic_return = TypeRef::Effect(
@@ -1046,6 +1024,209 @@ pub fn typecheck_integration_case_body(
             callees: &mut callees,
         },
     );
+    (expr_types, callees)
+}
+
+/// The harness-root [`ResolvedCommons`] a `system` case (or a suite helper) is
+/// checked in: names from the harness view (#1814: closed over reached types),
+/// plus the declaring suite's helper `fn`s (#2834).
+pub fn integration_resolved(
+    view: &SuiteView,
+    cross_context: &resolver::CrossContextInfo,
+    suite_fns: &[FnDecl],
+) -> ResolvedCommons {
+    let SuiteView {
+        types,
+        fns,
+        methods,
+        ..
+    } = view.clone();
+
+    let synthetic_commons = Commons {
+        name: QualifiedName {
+            parts: vec![Ident {
+                name: "integration".to_string(),
+                span: Span::default(),
+            }],
+            span: Span::default(),
+        },
+        items: Vec::new(),
+        uses: Vec::new(),
+        documentation: None,
+        form: CommonsForm::Brace,
+        span: Span::default(),
+        trivia: Trivia::default(),
+        trailing_comments: Vec::new(),
+    };
+    // `synthetic_commons` declares nothing of its own (`items: Vec::new()`
+    // above) — every entry in `types`/`fns`/`methods` was merged in from a
+    // `uses`/participant unit, so an empty local table (no local types, no
+    // local events) is the correct answer here, not a stand-in for one.
+    let no_local_types = HashMap::new();
+    let no_local_events = HashMap::new();
+    let mut resolved = ResolvedCommons::new(
+        synthetic_commons,
+        types,
+        &no_local_types,
+        fns,
+        methods,
+        HashMap::new(),
+        &no_local_events,
+        cross_context.clone(),
+        HashMap::new(),
+        // Test-scaffold body, not a real context emission — never rebranded.
+        false,
+        HashSet::new(),
+    )
+    // #1883, slice 3: the assets the case may name and fetch.
+    .with_assets(view.assets.clone())
+    .with_embeds(view.embeds.clone())
+    .with_consts(view.consts.clone());
+    add_suite_fns(&mut resolved, suite_fns);
+    resolved
+}
+
+/// #2834: add a suite's helper `fn`s to the view its bodies are checked in. The
+/// helpers are the suite's alone: the unit's own table, and with it everything
+/// the deployable emits, never sees them.
+pub fn add_suite_fns(resolved: &mut ResolvedCommons, suite_fns: &[FnDecl]) {
+    for f in suite_fns {
+        if let FnName::Free(name) = &f.name {
+            resolved
+                .fns
+                .entry(name.name.clone())
+                .or_insert_with(|| Arc::new(f.clone()));
+        }
+    }
+}
+
+/// #2834: the index namespace a suite with helpers records under: its target
+/// (or, for a `system` suite, its harness) and the file it is declared in.
+pub fn suite_helper_namespace(target: &str, file: &std::path::Path) -> String {
+    format!("{target}#helpers:{}", file.display())
+}
+
+/// #2834: the typed-commons counterpart of [`add_suite_fns`], for lowering.
+pub fn add_suite_fns_to_typed(typed: &mut checker::TypedCommons, suite_fns: &[FnDecl]) {
+    for f in suite_fns {
+        if let FnName::Free(name) = &f.name {
+            typed
+                .fns
+                .entry(name.name.clone())
+                .or_insert_with(|| Arc::new(f.clone()));
+        }
+    }
+}
+
+/// #2834: the value names `resolved` already binds in a case body's scope, so a
+/// helper may not shadow one (`bynk.suite.fn_name_clash`).
+fn bound_value_names(resolved: &ResolvedCommons, target: Option<&UnitTable>) -> HashSet<String> {
+    let mut names: HashSet<String> = HashSet::new();
+    names.extend(resolved.fns.keys().cloned());
+    names.extend(resolved.types.keys().cloned());
+    names.extend(resolved.consts.keys().cloned());
+    names.extend(resolved.embeds.keys().cloned());
+    names.extend(resolved.assets.keys().cloned());
+    // The runner declares these itself, ahead of the helpers.
+    names.insert("deps".to_string());
+    if let Some(t) = target {
+        names.extend(t.services.keys().cloned());
+        names.extend(t.agents.keys().cloned());
+    }
+    names
+}
+
+/// #2834: check a suite's helper `fn`s. Each must be a free, pure function
+/// whose name no value in the case scope already uses and no sibling repeats;
+/// the helpers are then added to `resolved` (the suite's view) and their
+/// bodies checked in it. Returns the bodies' `expr_types` and
+/// `Callee` classification for the emit path, which re-checks with throwaway
+/// sinks.
+#[allow(clippy::too_many_arguments)]
+pub fn check_suite_fns(
+    suite_fns: &[FnDecl],
+    resolved: &mut ResolvedCommons,
+    target: Option<&UnitTable>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    locals: &mut LocalsSink,
+    tys: &Arc<Types>,
+) -> (
+    HashMap<ExprId, checker::TypedExpr>,
+    HashMap<ExprId, checker::Callee>,
+) {
+    let mut expr_types = HashMap::new();
+    let mut callees = HashMap::new();
+    if suite_fns.is_empty() {
+        return (expr_types, callees);
+    }
+    let taken = bound_value_names(resolved, target);
+    add_suite_fns(resolved, suite_fns);
+    let resolved = &*resolved;
+    let mut seen: HashSet<&str> = HashSet::new();
+    for f in suite_fns {
+        let FnName::Free(name) = &f.name else {
+            errors.push(
+                CompileError::new(
+                    "bynk.suite.fn_method",
+                    f.span,
+                    format!(
+                        "a suite helper must be a free function, but `{}` is a method",
+                        f.name.display()
+                    ),
+                )
+                .with_note("declare the method in the target or a `commons`; a suite `fn` is a plain helper its cases call by name"),
+            );
+            continue;
+        };
+        if !seen.insert(name.name.as_str()) {
+            errors.push(CompileError::new(
+                "bynk.suite.duplicate_fn",
+                name.span,
+                format!("this suite declares the helper `{}` twice", name.name),
+            ));
+            continue;
+        }
+        if taken.contains(&name.name) || name.name.starts_with("__") {
+            errors.push(
+                CompileError::new(
+                    "bynk.suite.fn_name_clash",
+                    name.span,
+                    format!(
+                        "the suite helper `{}` has the name of a declaration already in scope in its cases",
+                        name.name
+                    ),
+                )
+                .with_note("rename the helper; a suite `fn` does not shadow the target's or an imported name"),
+            );
+            continue;
+        }
+        if matches!(f.return_type, TypeRef::Effect(..)) {
+            errors.push(
+                CompileError::new(
+                    "bynk.suite.fn_effectful",
+                    f.return_type.span(),
+                    format!("the suite helper `{}` returns an `Effect`", name.name),
+                )
+                .with_note("a suite helper is a pure function; build the value in the helper and run the effect in the `case`"),
+            );
+            continue;
+        }
+        refs.set_owner(f.name.display());
+        checker::check_suite_fn(
+            f,
+            resolved,
+            &mut expr_types,
+            &mut callees,
+            errors,
+            refs,
+            &mut HintSink::new(),
+            locals,
+            &mut RequirementSink::new(),
+            tys,
+        );
+        refs.clear_owner();
+    }
     (expr_types, callees)
 }
 
@@ -1236,17 +1417,58 @@ fn check_test_bodies(
         ));
         // v0.25: test-case edges record in the test file, resolving bare
         // names through the *target* unit's namespace.
+        // #2834: a suite with helpers is its own namespace for the index, so
+        // its helpers are definitions of its own — two suites of one target
+        // may each declare a `gh`. Its bare names resolve as the target's do.
+        let namespace = if test_decl.fns.is_empty() {
+            target_name.to_string()
+        } else {
+            let ns = suite_helper_namespace(target_name, &parsed[i].identity_path());
+            let mut resolution = vec![target_name.to_string()];
+            resolution.extend(unit_uses.get(target_name).into_iter().flatten().cloned());
+            resolution.extend(
+                unit_consumes
+                    .get(target_name)
+                    .into_iter()
+                    .flatten()
+                    .cloned(),
+            );
+            refs.declare_namespace(&ns, resolution);
+            ns
+        };
         refs.enter_file(
             &parsed[i].identity_path(),
-            target_name,
+            &namespace,
             parsed[i].is_synthetic(),
         );
         // #2517: and so do the case and property locals.
         locals.enter_file(&parsed[i].identity_path(), parsed[i].is_synthetic());
+        // #2834: the suite's helpers, checked once in the target's view.
+        if !test_decl.fns.is_empty()
+            && let Some((mut helper_view, _)) = build_privileged_resolved(
+                target_name,
+                unit_tables,
+                unit_uses,
+                unit_consumes,
+                unit_consumes_aliases,
+            )
+        {
+            register_call_record_types(&mut helper_view, target_name, unit_tables);
+            check_suite_fns(
+                &test_decl.fns,
+                &mut helper_view,
+                unit_tables.get(target_name),
+                &mut errors,
+                refs,
+                locals,
+                tys,
+            );
+        }
         for case in &test_decl.cases {
             check_test_case_body(
                 target_name,
                 target_kind,
+                &test_decl.fns,
                 case,
                 unit_tables,
                 unit_uses,
@@ -1274,6 +1496,7 @@ fn check_test_bodies(
             check_property_body(
                 target_name,
                 target_kind,
+                &test_decl.fns,
                 prop,
                 unit_tables,
                 unit_uses,
@@ -2934,6 +3157,7 @@ fn typecheck_case_body_recording(
 fn check_test_case_body(
     target_name: &str,
     target_kind: UnitKind,
+    suite_fns: &[FnDecl],
     case: &Case,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
@@ -2954,6 +3178,7 @@ fn check_test_case_body(
         return;
     };
     register_call_record_types(&mut resolved, target_name, unit_tables);
+    add_suite_fns(&mut resolved, suite_fns);
     let _ = target_kind;
     let _ = typecheck_case_body_recording(
         target_name,
@@ -3776,6 +4001,7 @@ pub fn check_history_binding(
 fn check_property_body(
     target_name: &str,
     target_kind: UnitKind,
+    suite_fns: &[FnDecl],
     prop: &PropertyDecl,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
@@ -3796,6 +4022,7 @@ fn check_property_body(
         return;
     };
     register_call_record_types(&mut resolved, target_name, unit_tables);
+    add_suite_fns(&mut resolved, suite_fns);
     let _ = target_kind;
 
     // Bind each `for all x: T` into the predicate scope, checking generability.
