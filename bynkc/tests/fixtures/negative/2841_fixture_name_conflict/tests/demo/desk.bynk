@@ -1,0 +1,7 @@
+suite demo.desk
+
+fixture double = "fixtures/a.txt"
+
+case "uses it" {
+  expect double.length() > 0
+}

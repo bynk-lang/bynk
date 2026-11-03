@@ -156,6 +156,7 @@ pub(crate) fn process_tests(
                 unit_tables,
                 asset_files,
             ),
+            fixture_consts(indices, parsed, asset_files),
             binding_modules,
             schema_versions,
             target_uses_emit(
@@ -320,7 +321,7 @@ pub(crate) fn process_integration_tests(
             for case in &d.cases {
                 case_inputs.push(SystemCaseInput {
                     case,
-                    suite_fns: &d.fns,
+                    suite_fns: test_suites::SuiteItems::of(d),
                     tier: super::case_effective_tier(case, d),
                     env: bynk_check::test_env::case_env(d, case),
                     source: parsed[i].source(),
@@ -387,6 +388,7 @@ pub(crate) fn process_integration_tests(
             participants.first().and_then(|target| {
                 asset_harness(target, unit_uses, unit_consumes, unit_tables, asset_files)
             }),
+            fixture_consts(indices, parsed, asset_files),
             remote,
             d1_migrations,
             errors,
@@ -443,7 +445,7 @@ fn foreign_caller_secrets(p: &str, unit_tables: &HashMap<String, UnitTable>) -> 
 struct SystemCaseInput<'a> {
     case: &'a Case,
     /// #2834: the declaring suite's helper `fn`s.
-    suite_fns: &'a [FnDecl],
+    suite_fns: test_suites::SuiteItems<'a>,
     /// The case's effective tier, which its suite default may supply.
     tier: bynk_syntax::ast::TestTier,
     /// #2134: the variables and secrets the case runs with (its suite's
@@ -474,6 +476,9 @@ fn emit_integration_module(
     cases: &[SystemCaseInput],
     // #1883, slice 3: `asset_harness`'s text, when the target ships assets.
     asset_harness: Option<String>,
+    // #2841: the module-level `string` constant for each fixture file a suite
+    // here declares ([`fixture_consts`]).
+    fixture_consts: Option<String>,
     // #2138: a remote test build — drivers reach the target's URLs, and a case
     // a remote run can't honour is refused (into `errors`) or skipped.
     remote: Option<&crate::project::RemoteTests>,
@@ -695,6 +700,9 @@ fn emit_integration_module(
     // #1883, slice 3: the embedded files and `__bynkAssetGet`, for an asset
     // fetch in a case.
     if let Some(text) = &asset_harness {
+        stmts.push(TsStmt::raw(text.clone(), None));
+    }
+    if let Some(text) = &fixture_consts {
         stmts.push(TsStmt::raw(text.clone(), None));
     }
 
@@ -1020,7 +1028,7 @@ fn emit_integration_module(
         // #2834: the suite's helpers, declared ahead of the body.
         let helper_src = suite_fn_decls(
             input.suite_fns,
-            test_suites::integration_resolved(view, cross_context, &[]),
+            test_suites::integration_resolved(view, cross_context, test_suites::SuiteItems::NONE),
             participants.first().and_then(|p| unit_tables.get(p)),
             &mut typed,
             &runtime_use,
@@ -3173,6 +3181,9 @@ fn emit_test_module(
     hidden: &BTreeMap<String, String>,
     // #1883, slice 3: `asset_harness`'s text, when the target ships assets.
     asset_harness: Option<String>,
+    // #2841: the module-level `string` constant for each fixture file a suite
+    // here declares ([`fixture_consts`]).
+    fixture_consts: Option<String>,
     binding_modules: &HashMap<String, String>,
     schema_versions: &HashMap<String, i64>,
     // #2050: whether the target's handlers emit ([`target_uses_emit`]).
@@ -3431,6 +3442,9 @@ fn emit_test_module(
     // #1883, slice 3: the embedded files and `__bynkAssetGet`, for an asset
     // fetch in a case.
     if let Some(text) = &asset_harness {
+        stmts.push(TsStmt::raw(text.clone(), None));
+    }
+    if let Some(text) = &fixture_consts {
         stmts.push(TsStmt::raw(text.clone(), None));
     }
     // #2842: the stored snapshots and their comparison, for a suite that takes one.
@@ -3723,7 +3737,7 @@ fn emit_test_module(
                 };
             let mut case_stmt = emit_test_case_function(
                 &runner_name,
-                &test_decl.fns,
+                test_suites::SuiteItems::of(test_decl),
                 case,
                 with_env.then(|| bynk_check::test_env::case_env(test_decl, case)),
                 deps_factory,
@@ -3800,7 +3814,7 @@ fn emit_test_module(
             let prop_stmt = if prop_is_history(prop) {
                 emit_test_history_property_function(
                     &runner_name,
-                    &test_decl.fns,
+                    test_suites::SuiteItems::of(test_decl),
                     prop,
                     prop_ordinal,
                     target_name,
@@ -3819,7 +3833,7 @@ fn emit_test_module(
             } else {
                 emit_test_property_function(
                     &runner_name,
-                    &test_decl.fns,
+                    test_suites::SuiteItems::of(test_decl),
                     prop,
                     prop_ordinal,
                     target_name,
@@ -6915,7 +6929,7 @@ fn async_test_runner_fn(
 /// helpers' types are merged into `typed`, and their names into `bound` so a
 /// case `let` that reuses one is renamed. A helper's body carries no source map.
 fn suite_fn_decls(
-    suite_fns: &[FnDecl],
+    suite_fns: test_suites::SuiteItems<'_>,
     mut resolved: ResolvedCommons,
     target: Option<&UnitTable>,
     typed: &mut checker::TypedCommons,
@@ -6927,8 +6941,16 @@ fn suite_fn_decls(
         return String::new();
     }
     let mut errs: Vec<CompileError> = Vec::new();
+    // The fixtures are constants in the view the helpers are checked in.
+    test_suites::add_suite_fns(
+        &mut resolved,
+        test_suites::SuiteItems {
+            fns: &[],
+            fixtures: suite_fns.fixtures,
+        },
+    );
     let (expr_types, callees) = test_suites::check_suite_fns(
-        suite_fns,
+        suite_fns.fns,
         &mut resolved,
         target,
         &mut errs,
@@ -6943,9 +6965,18 @@ fn suite_fn_decls(
     );
     typed.expr_types.extend(expr_types);
     typed.callees.extend(callees);
-    test_suites::add_suite_fns_to_typed(typed, suite_fns);
+    test_suites::add_suite_fns_to_typed(typed, suite_fns.fns);
     let mut out = String::new();
-    for f in suite_fns {
+    // #2841: each fixture is a local name for its file's module-level constant.
+    for f in suite_fns.fixtures {
+        bound.insert(f.name.name.clone());
+        out.push_str(&format!(
+            "    const {}: string = {};\n",
+            f.name.name,
+            fixture_ident(&f.path)
+        ));
+    }
+    for f in suite_fns.fns {
         let FnName::Free(name) = &f.name else {
             continue;
         };
@@ -6960,8 +6991,8 @@ fn suite_fn_decls(
 #[allow(clippy::too_many_arguments)]
 fn emit_test_case_function(
     runner_name: &str,
-    // #2834: the declaring suite's helper `fn`s.
-    suite_fns: &[FnDecl],
+    // #2834/#2841: the declaring suite's helper `fn`s and fixtures.
+    suite_fns: test_suites::SuiteItems<'_>,
     case: &Case,
     // #2134: the case's `env` entries, when the module holds `__bynkEnv`
     // (some case in it has entries): set first, and cleared on the way out
@@ -8216,8 +8247,8 @@ fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsExpr {
 #[allow(clippy::too_many_arguments)]
 fn emit_test_property_function(
     runner_name: &str,
-    // #2834: the declaring suite's helper `fn`s.
-    suite_fns: &[FnDecl],
+    // #2834/#2841: the declaring suite's helper `fn`s and fixtures.
+    suite_fns: test_suites::SuiteItems<'_>,
     prop: &PropertyDecl,
     prop_ordinal: usize,
     target_name: &str,
@@ -8517,8 +8548,8 @@ fn emit_test_property_function(
 #[allow(clippy::too_many_arguments)]
 fn emit_test_history_property_function(
     runner_name: &str,
-    // #2834: the declaring suite's helper `fn`s.
-    suite_fns: &[FnDecl],
+    // #2834/#2841: the declaring suite's helper `fn`s and fixtures.
+    suite_fns: test_suites::SuiteItems<'_>,
     prop: &PropertyDecl,
     prop_ordinal: usize,
     target_name: &str,
@@ -10007,6 +10038,60 @@ fn sanitise_case_name(name: &str, index: &mut usize) -> String {
 pub(crate) struct TestAssetFiles<'a> {
     pub(crate) served: &'a BTreeMap<String, String>,
     pub(crate) bytes: &'a BTreeMap<String, Vec<u8>>,
+    /// #2841: the text of each declared suite `fixture` file, by normalised path.
+    pub(crate) fixtures: &'a BTreeMap<String, String>,
+}
+
+/// #2841: the TypeScript identifier of the module-level constant holding a
+/// fixture file's text — a function of the normalised path alone, so suites that
+/// name one file share one constant and a runner can name it without state.
+fn fixture_ident(path: &str) -> String {
+    let key = crate::project::assets::normalise_asset_path(path);
+    let mut out = String::from("__fixture_");
+    for b in key.bytes() {
+        if b.is_ascii_alphanumeric() {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("_{b:02x}"));
+        }
+    }
+    out
+}
+
+/// #2841: one module-level `const <ident>: string = "<text>"` for each distinct
+/// fixture file the suites in `indices` declare, in path order — the text is in
+/// the test module once, however many suites and runners read it, and never
+/// anywhere else (a deployable is built without suites). `None` when no suite
+/// here declares a fixture, so a module without one is unchanged.
+fn fixture_consts(
+    indices: &[usize],
+    parsed: &[ParsedFile],
+    files: &TestAssetFiles,
+) -> Option<String> {
+    let mut paths: BTreeSet<String> = BTreeSet::new();
+    for &i in indices {
+        if let bynk_syntax::ast::SourceUnit::Suite(s) = parsed[i].unit() {
+            for f in &s.fixtures {
+                paths.insert(crate::project::assets::normalise_asset_path(&f.path));
+            }
+        }
+    }
+    let stmts: Vec<TsStmt> = paths
+        .iter()
+        .filter_map(|p| {
+            let text = files.fixtures.get(p)?;
+            Some(TsStmt::const_stmt(
+                TsBindingName::Ident(fixture_ident(p)),
+                Some(TsType::named("string")),
+                TsExpr::Lit(TsLit::Str(text.clone())),
+                None,
+            ))
+        })
+        .collect();
+    if stmts.is_empty() {
+        return None;
+    }
+    Some(stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect())
 }
 
 /// #1883, slice 3 ([DECISION F]): the TypeScript that lets a case fetch an

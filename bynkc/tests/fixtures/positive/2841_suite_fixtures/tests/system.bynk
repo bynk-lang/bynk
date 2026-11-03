@@ -1,0 +1,10 @@
+suite hooks.github as system {
+	env { GITHUB_SECRET = "test-github" }
+
+	fixture push = "fixtures/github/push.json"
+
+	case "a captured delivery reaches the handler over the wire" {
+		let r <- github.POST("/github", RequestHeaders.of(["X-GitHub-Event: push"]), Bytes.fromUtf8(push))
+		expect r is Ok(_)
+	}
+}

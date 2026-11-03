@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.496**.
+written against **v0.497**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.497.0** | A `suite` can declare `fixture` files whose text is a `String` constant for its cases, read from `fixtures/` and never deployed |
 | **v0.496.0** | "`expect v matches snapshot \"name\"` compares a value's canonical JSON with a stored snapshot, and `bynk test --update-snapshots` records, refreshes and prunes the `snapshots/` files" |
 | **v0.495.0** | A `suite` can declare pure helper `fn`s that its `case` and `property` bodies call, private to the suite and emitted into test output only |
 | **v0.494.0** | A nested `match` staircase gets a `let … else` hint with a fix, `Option`/`Result` gain `isNone`, `orElse`, `filter`, `isErr` and `ok`, and a second `match` in a block names the rule |

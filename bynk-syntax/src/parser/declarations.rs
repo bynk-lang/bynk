@@ -622,6 +622,7 @@ impl<'a> Parser<'a> {
         let mut cases = Vec::new();
         let mut properties = Vec::new();
         let mut fns = Vec::new();
+        let mut fixtures = Vec::new();
         // Cover the header (`test <target>`) so the unit span stays valid even
         // when every item is dropped by error recovery. Only consulted in
         // fragment form (see `parse_commons_body`).
@@ -674,7 +675,7 @@ impl<'a> Parser<'a> {
                         return Err(CompileError::new(
                             "bynk.parse.uses_after_decls",
                             t.span,
-                            "`uses` clauses must appear before any `stub`, `env`, `fn`, `case`, or `property` declarations in a fragment-form test",
+                            "`uses` clauses must appear before any `stub`, `env`, `fixture`, `fn`, `case`, or `property` declarations in a fragment-form test",
                         ));
                     }
                     match self.parse_uses_decl() {
@@ -749,6 +750,23 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
+                // #2841: `fixture name = "path"` — contextual, a keyword only
+                // here (a suite body item), so `fixture` stays a usable name.
+                Some(TokenKind::Ident) if self.at_fixture_decl() => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_fixture_decl() {
+                        Ok(mut f) => {
+                            f.documentation = doc;
+                            f.trivia.leading = leading;
+                            f.trivia.trailing = self.take_trailing_trivia();
+                            last_span = f.span;
+                            fixtures.push(f);
+                            seen_non_uses = true;
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
                 // #2834: a suite-local helper `fn`.
                 Some(TokenKind::Fn) => {
                     let next_span = self.peek().unwrap().span;
@@ -777,15 +795,15 @@ impl<'a> Parser<'a> {
                         }
                     };
                     let note = if brace {
-                        "the body of a suite contains zero or more `uses`, `stub`, `env`, `fn`, `case`, or `property` declarations"
+                        "the body of a suite contains zero or more `uses`, `stub`, `env`, `fixture`, `fn`, `case`, or `property` declarations"
                     } else {
-                        "in fragment-form suites, the body is a sequence of `uses`, `stub`, `env`, `fn`, `case`, or `property` declarations to end of file"
+                        "in fragment-form suites, the body is a sequence of `uses`, `stub`, `env`, `fixture`, `fn`, `case`, or `property` declarations to end of file"
                     };
                     let err = CompileError::new(
                         "bynk.parse.expected_item",
                         t.span,
                         format!(
-                            "expected `uses`, `stub`, `env`, `fn`, `case \"name\"`, or `property \"name\"` declaration, found {}",
+                            "expected `uses`, `stub`, `env`, `fixture`, `fn`, `case \"name\"`, or `property \"name\"` declaration, found {}",
                             t.kind.describe()
                         ),
                     )
@@ -819,6 +837,7 @@ impl<'a> Parser<'a> {
             cases,
             properties,
             fns,
+            fixtures,
             tier,
             form: if brace {
                 CommonsForm::Brace
@@ -909,6 +928,32 @@ impl<'a> Parser<'a> {
 
     /// #2134: whether the cursor is at an `env {` clause head. `env` is a
     /// contextual word, so it is recognised only when a `{` follows it.
+    /// #2841: at `fixture name = …` — the contextual `fixture` followed by a
+    /// name, so a stray identifier `fixture` still reports as an unknown item.
+    fn at_fixture_decl(&self) -> bool {
+        self.peek_kind() == Some(TokenKind::Ident)
+            && self.nth_text(0) == "fixture"
+            && self.nth_kind(1) == Some(TokenKind::Ident)
+    }
+
+    /// #2841: `fixture name = "path"` (the leading `fixture` not yet consumed).
+    /// The path is a plain string literal; placement, path safety and the
+    /// file's content are checker concerns.
+    fn parse_fixture_decl(&mut self) -> Result<FixtureDecl, CompileError> {
+        let kw = self.expect(TokenKind::Ident, "to start a `fixture` declaration")?;
+        let name = self.expect_ident("after `fixture`")?;
+        self.expect(TokenKind::Eq, "after the fixture name")?;
+        let (path, path_span) = self.expect_str_lit("for the fixture file's path")?;
+        Ok(FixtureDecl {
+            name,
+            path,
+            path_span,
+            documentation: None,
+            span: kw.span.merge(path_span),
+            trivia: Trivia::default(),
+        })
+    }
+
     fn at_env_clause(&self) -> bool {
         self.peek_kind() == Some(TokenKind::Ident)
             && self.nth_text(0) == "env"

@@ -84,11 +84,13 @@ pub fn compile_options_single(root: impl Into<PathBuf>) -> bynk_emit::project::C
     let sources = read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
     let assets = list_assets(&root);
     let embeds = list_embeds(&root);
+    let fixtures = list_fixtures(&root);
     let migrations = list_migrations(&root);
     bynk_emit::project::CompileOptions::single(root)
         .sources(sources)
         .asset_files(assets)
         .embed_files(embeds)
+        .fixture_files(fixtures)
         .migration_files(migrations)
 }
 
@@ -109,11 +111,13 @@ pub fn compile_options_split(
     let sources = read_all(bynk_emit::project::discover_project_files(&roots));
     let assets = list_assets(&project_root);
     let embeds = list_embeds(&project_root);
+    let fixtures = list_fixtures(&project_root);
     let migrations = list_migrations(&project_root);
     bynk_emit::project::CompileOptions::split(project_root, paths)
         .sources(sources)
         .asset_files(assets)
         .embed_files(embeds)
+        .fixture_files(fixtures)
         .migration_files(migrations)
 }
 
@@ -131,6 +135,12 @@ fn list_migrations(project_root: &std::path::Path) -> bynk_emit::project::assets
 }
 
 /// #2387, slice 2: the project's `embeds/` folder, listed the same way.
+/// #2841: the project's `fixtures/` folder, as the driver lists it.
+fn list_fixtures(project_root: &std::path::Path) -> bynk_emit::project::assets::FixtureFolder {
+    bynk_emit::project::assets::AssetFolder::fixtures_on_disk(project_root)
+        .unwrap_or_else(|e| panic!("list `{}/fixtures`: {e}", project_root.display()))
+}
+
 fn list_embeds(project_root: &std::path::Path) -> bynk_emit::project::assets::EmbedFolder {
     bynk_emit::project::assets::AssetFolder::embeds_on_disk(project_root)
         .unwrap_or_else(|e| panic!("list `{}/embeds`: {e}", project_root.display()))

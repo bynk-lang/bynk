@@ -57,6 +57,22 @@ pub fn is_in_embeds_dir(path: &str) -> bool {
     segs.next() == Some(PROJECT_EMBEDS_DIR) && segs.next().is_some()
 }
 
+/// The project's test-fixture folder, relative to the project root (#2841).
+/// Nothing in it is deployed: a suite's `fixture` reads a file's text into test
+/// output only. It is listed and read as an [`AssetFolder`] ([`FixtureFolder`]).
+pub const PROJECT_FIXTURES_DIR: &str = "fixtures";
+
+/// The project's `fixtures/` folder as the compiler sees it (#2841).
+pub type FixtureFolder = AssetFolder;
+
+/// Whether the normalised `path` names a file inside the fixtures folder —
+/// `fixtures/<at least one more segment>`.
+pub fn is_in_fixtures_dir(path: &str) -> bool {
+    let normalised = normalise_asset_path(path);
+    let mut segs = normalised.split('/');
+    segs.next() == Some(PROJECT_FIXTURES_DIR) && segs.next().is_some()
+}
+
 /// Standard-library P4b (#2608): the project's D1 migrations folder,
 /// relative to the project root. Each `D1` instance's migrations are
 /// `migrations/<database>/NNNN_<name>.sql`; it is listed and read as an
@@ -101,6 +117,11 @@ impl AssetFolder {
     /// the same listing and the same refusals, a different directory.
     pub fn embeds_on_disk(project_root: &Path) -> io::Result<Self> {
         Self::on_disk_in(project_root, PROJECT_EMBEDS_DIR, false)
+    }
+
+    /// [`AssetFolder::on_disk`] for the project's `fixtures/` folder (#2841).
+    pub fn fixtures_on_disk(project_root: &Path) -> io::Result<Self> {
+        Self::on_disk_in(project_root, PROJECT_FIXTURES_DIR, false)
     }
 
     /// [`AssetFolder::on_disk`] for the project's `migrations/` folder
@@ -186,6 +207,11 @@ pub fn list_asset_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
 /// [`list_asset_files`] for the project's `embeds/` folder (#2387).
 pub fn list_embed_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
     list_files_in(project_root, PROJECT_EMBEDS_DIR, false)
+}
+
+/// [`list_asset_files`] for the project's `fixtures/` folder (#2841).
+pub fn list_fixture_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
+    list_files_in(project_root, PROJECT_FIXTURES_DIR, false)
 }
 
 /// [`list_asset_files`] for the project's `migrations/` folder (#2608), except

@@ -1,0 +1,1 @@
+bynk.fixture.invalid_encoding

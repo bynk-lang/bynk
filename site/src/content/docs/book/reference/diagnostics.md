@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **723** codes in total.
+There are **732** codes in total.
 
 ## Agents
 
@@ -353,6 +353,15 @@ There are **723** codes in total.
 | `bynk.event.unknown_subscription` | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
 | `bynk.exec.unavailable` | A call to, or reference to, a function that hands work to the execution context (`~>`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
 | `bynk.fault.todo` | A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning). |  | Warning |
+| `bynk.fixture.binary_content` | A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| `bynk.fixture.duplicate` | A suite declares two `fixture`s of the same name. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| `bynk.fixture.invalid_encoding` | A suite's `fixture` names a file that is not valid UTF-8. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| `bynk.fixture.missing_file` | A suite's `fixture` names a file that is not in the project's `fixtures/` folder. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| `bynk.fixture.outside_fixtures_dir` | A suite's `fixture` names a file outside the project's `fixtures/` folder. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| `bynk.fixture.too_large` | A suite's `fixture` names a file over the 4 MiB limit for one fixture file. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| `bynk.fixture.unreadable_file` | A suite's `fixture` names a listed file that could not be read. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| `bynk.fixture.unsafe_path` | A suite's `fixture` path is empty, absolute or contains a `..` segment. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| `bynk.fixture.unused` | A suite declares a `fixture` that none of its cases, properties or helpers uses (warning). | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | Warning |
 | `bynk.fmt.comment_loss` | The formatter would drop a comment, so it leaves the file unchanged. |  | — |
 | `bynk.fmt.mixed_comment_syntax` | A file mixes the retired `--` comment or `--|` doc spellings with a line that reads differently under the old and new comment rules (#2203), so the formatter leaves it unchanged. |  | — |
 | `bynk.fmt.roundtrip` | The formatter's output does not re-parse to the same program, so it leaves the file unchanged. |  | — |

@@ -1,0 +1,7 @@
+suite demo.desk
+
+fixture note = "fixtures/absent.txt"
+
+case "uses it" {
+  expect note.length() > 0
+}

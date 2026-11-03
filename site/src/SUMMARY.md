@@ -128,6 +128,7 @@
   - [WebSocket](reference/websocket.md)
   - [Static assets](reference/assets.md)
   - [Embedded text](reference/embeds.md)
+  - [Test fixtures](reference/fixtures.md)
   - [Named constants](reference/constants.md)
   - [Actors](reference/actors.md)
   - [Testing](reference/testing.md)

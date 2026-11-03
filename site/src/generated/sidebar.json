@@ -537,6 +537,10 @@
         "link": "/book/reference/embeds/"
       },
       {
+        "label": "Test fixtures",
+        "link": "/book/reference/fixtures/"
+      },
+      {
         "label": "Named constants",
         "link": "/book/reference/constants/"
       },
