@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A `suite` can declare pure helper `fn`s that its `case` and `property` bodies call, private to the suite and emitted into test output only
-probes: emit_diagnostics, diagnostic_coverage
----
+# 0718 — A suite declares pure, private, test-only helper functions
 
-## ADR: suite-local-fn-helpers
-title: A suite declares pure, private, test-only helper functions
-summary: Suite bodies admit `fn`; helpers are pure, per-suite, test-only and may not shadow a name in scope
+- **Status:** Accepted (v0.495)
 
 **Context.** A suite body admitted only `uses`, `stub`, `env`, `case` and `property`, so a fixture or request builder shared across cases had to be copied into every case. The only workaround was to put the helper in the target or a `commons`, which ships test-only code in the deployable unit and cannot build test-only values (`Val[T]`). Surfaced writing a GitHub webhook receiver as a dogfooding example (#2834).
 

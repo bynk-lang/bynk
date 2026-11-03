@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.494**.
+written against **v0.495**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.495.0** | A `suite` can declare pure helper `fn`s that its `case` and `property` bodies call, private to the suite and emitted into test output only |
 | **v0.494.0** | A nested `match` staircase gets a `let … else` hint with a fix, `Option`/`Result` gain `isNone`, `orElse`, `filter`, `isErr` and `ok`, and a second `match` in a block names the rule |
 | **v0.493.0** | A reserved word names a field or a member where the name is a label (`a.type`, `{ type: String }`, `Sorted.from`), and keyword field shorthand is a targeted error (#2837, #2778) |
 | **v0.492.2** | "A `system` suite call with a `Wire(…)` body to a route whose handler declares `headers: RequestHeaders` (a `@raw` route too) passes the headers to the request, as a typed call does; it converted them to a string, and the generated test failed to type-check" |

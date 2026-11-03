@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0718](0718-suite-local-fn-helpers.md) | **A suite declares pure, private, test-only helper functions** (v0.495) — Suite bodies admit `fn`; helpers are pure, per-suite, test-only and may not shadow a name in scope | Accepted (v0.495) |
 | [0717](0717-let-else-staircase-hint.md) | **A nested match staircase is offered `let … else` as a hint, under a new hint severity** (v0.494) — Detection shape, the hint severity, and the five Option/Result methods | Accepted (v0.494) |
 | [0716](0716-keywords-as-labels.md) | **A reserved word can be a name wherever the name is a label, never where it binds** (v0.493) — Field labels admit a keyword before `:`, members admit one on the `.`'s line, and shorthand stays refused with a fix | Accepted (v0.493) |
 | [0715](0715-no-remainder-operator.md) | **Bynk has no `%` operator; `%` is a diagnostic that points at `rem` and `mod`** (v0.492) — Diagnostic only, chosen by the maintainer 2026-11-02 | Accepted (v0.492) |
