@@ -448,7 +448,10 @@ for f in $FILES; do sed -i.bak 's/{needle}/void 0/' "$f"; done
             )
         })
         .collect();
-    assert!(!cases.is_empty(), "the mutated run reported no cases: {doc}");
+    assert!(
+        !cases.is_empty(),
+        "the mutated run reported no cases: {doc}"
+    );
     cases
 }
 

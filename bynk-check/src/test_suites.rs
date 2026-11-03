@@ -5048,8 +5048,11 @@ service api from http {
         }
         hooks_case(" as system", "    let r <- webhooks.POST(\"/hook\", \"x\") by Expired\n    expect r is Rejected(Unauthorized)")
             .assert_reports("bynk.test.expired_needs_bearer_route");
-        hooks_case(" as system", "    let r <- jobs.call(1) by Expired\n    expect r == 1")
-            .assert_reports("bynk.test.expired_needs_bearer_route");
+        hooks_case(
+            " as system",
+            "    let r <- jobs.call(1) by Expired\n    expect r == 1",
+        )
+        .assert_reports("bynk.test.expired_needs_bearer_route");
     }
 
     #[test]
