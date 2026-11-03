@@ -352,7 +352,12 @@ the crate elsewhere would only move who builds it. Its wasm32 CI build is also t
     `wrangler`, `serialisation`, …) become a deliberate public API of `bynk-emit`, in its own PR.
   - `tests_emit.rs` (11,022 lines) splits into modules as it moves, under #1533's T1–T3 split
     tests and its no-orphan-context veto.
-  - `bynk-strip` and `bynk-wasm` switch to the driver's output types.
+  - The output types (`ProjectOutput`, `Artefacts`, `Document`) stay in `bynk-emit`, because they are
+    what code generation produces. Only the orchestration moves. `bynk-strip` reads nothing else
+    from `bynk_emit::project` outside its tests, so it keeps depending on `bynk-emit` and not on the
+    driver. `bynk-driver` then depends on `bynk-strip` (E1). If `bynk-strip` sat above the driver
+    instead, `bynk` → `bynk-strip` → `bynk-driver` would put a new step on the build chain (H-2).
+  - `bynk-wasm` switches to the driver for orchestration.
   - This moves `options_sources`, `fs_below_driver` and `emit_diagnostics` (§3).
 - **D2.** Merge `bynk-render` into `bynk-driver` once §9 has removed `bynkc`. This amends ADR 0100.
   Two other users move with it:
@@ -374,6 +379,10 @@ the crate elsewhere would only move who builds it. Its wasm32 CI build is also t
   section already expected ("link `bynk-emit`'s test emission and run node").
   `bynk-driver::test_runner` holds the shared logic, so this replaces the three places that start
   a `bynkc` process.
+  - `bynk compile --emit js` reaches `bynk-strip` today only through the `bynkc` it starts
+    (`bynkc/src/main.rs`'s `EmitFormat::Js` arms). In-process, the driver calls
+    `strip_project_to_js` itself, adding a `bynk-driver` → `bynk-strip` edge. So `bynk-strip`
+    stays published under H-4 after E3: an installed binary reaches it.
 - **E2.** Retire the compiler lookup (`BYNK_BYNKC` → `PATH` → sibling) and ADR 0434's skew gate,
   along with `bynk doctor`'s skew report. Nothing is left to skew against.
 - **E3.** `bynkc` becomes a name the `bynk` executable answers to, for one release, and is then
