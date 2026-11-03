@@ -97,7 +97,7 @@ async function test_a_route_that_sends_answers() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettle(deps, api.http_GET(deps));
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/tally.bynk:5:9", 80, 90, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/tally.bynk:5:9", 80, 90, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -158,7 +158,7 @@ async function test_the_route_answers_at_the_integration_tier() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettle(deps, api.http_GET(deps));
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/tally.bynk:16:9", 312, 322, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/tally.bynk:16:9", 312, 322, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

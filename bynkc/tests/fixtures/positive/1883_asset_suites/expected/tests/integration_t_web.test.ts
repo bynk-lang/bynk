@@ -109,9 +109,9 @@ async function test_the_page_links_a_served_stylesheet() {
     const { style } = __ns_t_page;
     const { favicon } = __ns_t_web;
     const page = await __sysdrive_api_http_GET("");
-    if (!(page.tag === "Ok")) { throw __bynkExpectFailure("tests/t/web_system.bynk:5:12", 187, 200, "expect page is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(page.tag === "Ok"))) { throw __bynkExpectFailure("tests/t/web_system.bynk:5:12", 187, 200, "expect page is Ok(_)"); }
     const css = await __bynkAssetGet((style).url);
-    if (!(css.tag === "Raw")) { throw __bynkExpectFailure("tests/t/web_system.bynk:7:12", 242, 258, "expect css is Raw(_, _)"); }
+    if (!(((__c: boolean) => __c)(css.tag === "Raw"))) { throw __bynkExpectFailure("tests/t/web_system.bynk:7:12", 242, 258, "expect css is Raw(_, _)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

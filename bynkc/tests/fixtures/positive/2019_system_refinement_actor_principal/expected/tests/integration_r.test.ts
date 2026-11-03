@@ -180,7 +180,7 @@ async function test_a_plain_user_is_forbidden_by_the_Worker() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_admin(("root" as any), {});
-    if (!(r.tag === "Forbidden")) { throw __bynkExpectFailure("tests/system.bynk:24:10", 827, 841, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/system.bynk:24:10", 827, 841, "expect r is Forbidden"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -181,7 +181,7 @@ async function test_a_service_handler_s_agent_call_emits() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_POST_bump(deps);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/app.bynk:25:10", 710, 720, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/app.bynk:25:10", 710, 720, "expect r is Ok(_)"); }
     if (!(((__obs.log["Events.emit"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/app.bynk:26:10", 730, 753, "expect Events.emit called once"); }
     return { pass: true };
   } catch (e) {
@@ -214,7 +214,7 @@ async function test_a_service_handler_s_own_emit_is_observed() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_POST_note(deps);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/app.bynk:31:10", 856, 866, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/app.bynk:31:10", 856, 866, "expect r is Ok(_)"); }
     if (!(((__obs.log["Events.emit"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/app.bynk:32:10", 876, 899, "expect Events.emit called once"); }
     return { pass: true };
   } catch (e) {

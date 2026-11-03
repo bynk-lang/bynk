@@ -72,8 +72,8 @@ async function test_a_Raw_body__through_an_is_test() {
     const { api } = __ns_app_web;
     const r = await api.http_GET_raw(deps);
     void ((() => {
-        if (r.tag === "Raw") {
-          const body = r.body;
+        if (((__c: boolean) => __c)(r.tag === "Raw")) {
+          const body = (r as Extract<typeof r, { tag: "Raw" }>).body;
           if (!(__bynkBytesToBase64(body) === "aGk=")) { throw __bynkExpectFailure("tests/app/web.bynk:16:14", 616, 641, "expect body.toBase64() == \"aGk=\"\n  expected: body.toBase64() == \"aGk=\"\n  actual:   " + __bynkShow((__bynkBytesToBase64(body))) + " == " + __bynkShow(("aGk="))); }
           return undefined;
         } else {

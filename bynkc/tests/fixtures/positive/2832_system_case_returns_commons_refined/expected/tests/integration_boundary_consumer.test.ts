@@ -72,7 +72,7 @@ async function test_price_crosses_back() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __callService(deps.env.BOUNDARY_CONSUMER, "askPrice", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(1), __ns_boundary_consumer.__deserialise_Result_Cents_Int, "integration", "e673a306edd722c3", deps.env, "boundary.consumer");
-    if (!(r.tag === "Err")) { throw __bynkExpectFailure("tests/consumer_system.test.bynk:10:12", 442, 453, "expect r is Err(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err"))) { throw __bynkExpectFailure("tests/consumer_system.test.bynk:10:12", 442, 453, "expect r is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

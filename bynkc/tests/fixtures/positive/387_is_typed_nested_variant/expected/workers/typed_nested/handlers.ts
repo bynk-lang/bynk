@@ -15,9 +15,9 @@ export const Fault = {
 };
 
 export function describe(r: Result<number, Fault>): string {
-  if (r.tag === "Err" && r.error.tag === "Denied") {
+  if (((__c: boolean) => __c)(r.tag === "Err" && r.error.tag === "Denied")) {
     return "denied";
   } else {
-    return (r.tag === "Ok" ? "ok" : "other");
+    return (((__c: boolean) => __c)(r.tag === "Ok") ? "ok" : "other");
   }
 }

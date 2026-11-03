@@ -46,7 +46,7 @@ async function test_a_record_keyed_map_body_is_looked_up_by_value() {
     type Status = __ns_shop.Status;
     const m: ReadonlyMap<OrderId, number> = __bynkMapInsert<OrderId, number>(new globalThis.Map<OrderId, number>(), { region: "eu", n: 7 }, 3);
     const r = await api.http_POST_total(m, deps);
-    if (!(r.tag === "Ok" && r.value === 3)) { throw __bynkExpectFailure("tests/shop.bynk:6:10", 192, 202, "expect r is Ok(3)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === 3))) { throw __bynkExpectFailure("tests/shop.bynk:6:10", 192, 202, "expect r is Ok(3)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -65,7 +65,7 @@ async function test_an_absent_key_reads_as_zero() {
     type Status = __ns_shop.Status;
     const m: ReadonlyMap<OrderId, number> = __bynkMapInsert<OrderId, number>(new globalThis.Map<OrderId, number>(), { region: "us", n: 7 }, 3);
     const r = await api.http_POST_total(m, deps);
-    if (!(r.tag === "Ok" && r.value === 0)) { throw __bynkExpectFailure("tests/shop.bynk:12:10", 368, 378, "expect r is Ok(0)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === 0))) { throw __bynkExpectFailure("tests/shop.bynk:12:10", 368, 378, "expect r is Ok(0)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -84,7 +84,7 @@ async function test_the_map_is_echoed_back() {
     type Status = __ns_shop.Status;
     const m: ReadonlyMap<OrderId, number> = __bynkMapInsert<OrderId, number>(new globalThis.Map<OrderId, number>(), { region: "eu", n: 1 }, 5);
     const r = await api.http_POST_echo(m, deps);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/shop.bynk:18:10", 538, 548, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/shop.bynk:18:10", 538, 548, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -103,7 +103,7 @@ async function test_a_set_body_counts_its_distinct_members() {
     type Status = __ns_shop.Status;
     const s: ReadonlySet<Status> = __bynkSetOf<Status>([Status.Open, Status.Shipped, Status.Open]);
     const r = await api.http_POST_status(s, deps);
-    if (!(r.tag === "Ok" && r.value === 2)) { throw __bynkExpectFailure("tests/shop.bynk:24:10", 696, 706, "expect r is Ok(2)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === 2))) { throw __bynkExpectFailure("tests/shop.bynk:24:10", 696, 706, "expect r is Ok(2)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -203,7 +203,8 @@ fn refusal_error(code: &'static str, f: &FixtureDecl, key: &str, detail: &str) -
         "bynk.fixture.unreadable_file" => "could not be read",
         "bynk.fixture.invalid_encoding" => "is not UTF-8 text",
         "bynk.fixture.binary_content" => "is not text",
-        _ => "is too large for a fixture",
+        "bynk.fixture.too_large" => "is too large for a fixture",
+        other => unreachable!("`{other}` is not a fixture refusal code"),
     };
     CompileError::new(
         code,

@@ -57,7 +57,7 @@ async function test_the_service_answers() {
     const { logo } = __ns_t_web;
     const { badge } = __ns_t_brand;
     const r = await logo.http_GET(deps);
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/t/web.bynk:6:12", 224, 234, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/t/web.bynk:6:12", 224, 234, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

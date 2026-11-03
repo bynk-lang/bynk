@@ -48,7 +48,7 @@ export const first = {
 
 export const present = {
   async call(o: Option<Parcel>, deps: {}): globalThis.Promise<boolean> {
-    return o.tag === "Some";
+    return ((__c: boolean) => __c)(o.tag === "Some");
   },
 };
 

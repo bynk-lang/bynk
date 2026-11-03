@@ -76,7 +76,7 @@ async function test_positive_amount_authorises() {
     type AuthId = __ns_commerce_payment.AuthId;
     type PaymentError = __ns_commerce_payment.PaymentError;
     const result = await authorise.call(100, deps);
-    if (!(result.tag === "Ok")) { throw __bynkExpectFailure("tests/payment.test.bynk:6:12", 145, 160, "expect result is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(result.tag === "Ok"))) { throw __bynkExpectFailure("tests/payment.test.bynk:6:12", 145, 160, "expect result is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -94,7 +94,7 @@ async function test_zero_amount_is_declined() {
     type AuthId = __ns_commerce_payment.AuthId;
     type PaymentError = __ns_commerce_payment.PaymentError;
     const result = await authorise.call(0, deps);
-    if (!(result.tag === "Err")) { throw __bynkExpectFailure("tests/payment.test.bynk:11:12", 248, 264, "expect result is Err(_)"); }
+    if (!(((__c: boolean) => __c)(result.tag === "Err"))) { throw __bynkExpectFailure("tests/payment.test.bynk:11:12", 248, 264, "expect result is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

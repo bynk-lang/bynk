@@ -174,7 +174,7 @@ async function test_a_helper_built_request_reaches_the_handler_over_the_wire() {
     const { Retries } = __ns_hooks_github;
     type Retries = __ns_hooks_github.Retries;
     const r = await __sysdrive_github_http_POST_github(gh("push"), push(), "");
-    if (!(r.tag === "Ok" && r.value === "push eyJyZWYiOiJtYWluIn0=")) { throw __bynkExpectFailure("tests/system.bynk:19:10", 480, 516, "expect r is Ok(\"push eyJyZWYiOiJtYWluIn0=\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "push eyJyZWYiOiJtYWluIn0="))) { throw __bynkExpectFailure("tests/system.bynk:19:10", 480, 516, "expect r is Ok(\"push eyJyZWYiOiJtYWluIn0=\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -202,7 +202,7 @@ async function test_a_forged_request_is_refused() {
     const { Retries } = __ns_hooks_github;
     type Retries = __ns_hooks_github.Retries;
     const r = await __sysdrive_forged_github_http_POST_github(gh("push"), push(), "");
-    if (!(r.tag === "Rejected" && r.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/system.bynk:24:10", 632, 659, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/system.bynk:24:10", 632, 659, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

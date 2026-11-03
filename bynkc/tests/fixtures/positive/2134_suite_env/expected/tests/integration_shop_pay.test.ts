@@ -105,7 +105,7 @@ async function test_system__the_Worker_reads_the_suite_env() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_processor("");
-    if (!(r.tag === "Ok" && r.value === "fake")) { throw __bynkExpectFailure("tests/pay_system.bynk:12:10", 380, 395, "expect r is Ok(\"fake\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "fake"))) { throw __bynkExpectFailure("tests/pay_system.bynk:12:10", 380, 395, "expect r is Ok(\"fake\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -122,7 +122,7 @@ async function test_system__a_case_env_overrides_the_suite_s_on_the_Worker() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_processor("");
-    if (!(r.tag === "Ok" && r.value === "live")) { throw __bynkExpectFailure("tests/pay_system.bynk:18:10", 556, 571, "expect r is Ok(\"live\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "live"))) { throw __bynkExpectFailure("tests/pay_system.bynk:18:10", 556, 571, "expect r is Ok(\"live\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -139,7 +139,7 @@ async function test_system__a_token_signed_with_the_env_secret_is_admitted() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me(("ada" as any));
-    if (!(r.tag === "Ok" && r.value === "ada")) { throw __bynkExpectFailure("tests/pay_system.bynk:23:10", 691, 705, "expect r is Ok(\"ada\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/pay_system.bynk:23:10", 691, 705, "expect r is Ok(\"ada\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -156,7 +156,7 @@ async function test_system__a_later_case_sees_the_suite_value_again() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_processor("");
-    if (!(r.tag === "Ok" && r.value === "fake")) { throw __bynkExpectFailure("tests/pay_system.bynk:30:10", 921, 936, "expect r is Ok(\"fake\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "fake"))) { throw __bynkExpectFailure("tests/pay_system.bynk:30:10", 921, 936, "expect r is Ok(\"fake\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

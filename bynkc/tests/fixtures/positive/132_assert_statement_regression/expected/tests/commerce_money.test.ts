@@ -43,9 +43,9 @@ async function test_expect_as_statement_still_works() {
     const { Money } = __ns_commerce_money;
     type Money = __ns_commerce_money.Money;
     const m = Money.fromMinorUnits(5);
-    if (!(m.tag === "Ok")) { throw __bynkExpectFailure("tests/money.test.bynk:4:12", 113, 123, "expect m is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(m.tag === "Ok"))) { throw __bynkExpectFailure("tests/money.test.bynk:4:12", 113, 123, "expect m is Ok(_)"); }
     const n = Money.fromMinorUnits(-1);
-    if (!(n.tag === "Err")) { throw __bynkExpectFailure("tests/money.test.bynk:6:12", 172, 183, "expect n is Err(_)"); }
+    if (!(((__c: boolean) => __c)(n.tag === "Err"))) { throw __bynkExpectFailure("tests/money.test.bynk:6:12", 172, 183, "expect n is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

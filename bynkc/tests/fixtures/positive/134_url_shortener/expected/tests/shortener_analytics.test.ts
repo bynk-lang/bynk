@@ -100,7 +100,7 @@ async function test_long_url_accepts_a_typical_url() {
     type LongUrl = __ns_shortener_analytics.LongUrl;
     type ShortCode = __ns_shortener_analytics.ShortCode;
     const result = LongUrl.fromString("https://example.com/path");
-    if (!(result.tag === "Ok")) { throw __bynkExpectFailure("tests/shortener/analytics.bynk:20:12", 497, 512, "expect result is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(result.tag === "Ok"))) { throw __bynkExpectFailure("tests/shortener/analytics.bynk:20:12", 497, 512, "expect result is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

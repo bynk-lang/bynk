@@ -230,7 +230,7 @@ async function test_a_lone_signed_notice_is_accepted() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_hook("hi", "");
-    if (!(r.tag === "Ok" && r.value === "got hi")) { throw __bynkExpectFailure("tests/hooks.bynk:6:10", 250, 267, "expect r is Ok(\"got hi\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "got hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:6:10", 250, 267, "expect r is Ok(\"got hi\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -246,7 +246,7 @@ async function test_a_lone_notice_as_the_processor_is_accepted() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_hook("hi", "");
-    if (!(r.tag === "Ok" && r.value === "got hi")) { throw __bynkExpectFailure("tests/hooks.bynk:11:10", 382, 399, "expect r is Ok(\"got hi\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "got hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:11:10", 382, 399, "expect r is Ok(\"got hi\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -262,7 +262,7 @@ async function test_a_notice_to_the_sum_route_as_the_processor_is_signed() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_notify("hi", "", "Processor");
-    if (!(r.tag === "Ok" && r.value === "signed hi")) { throw __bynkExpectFailure("tests/hooks.bynk:16:10", 526, 546, "expect r is Ok(\"signed hi\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "signed hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:16:10", 526, 546, "expect r is Ok(\"signed hi\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -278,7 +278,7 @@ async function test_a_notice_to_the_sum_route_as_a_user_carries_a_token() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_notify("hi", ("bob" as any), "User");
-    if (!(r.tag === "Ok" && r.value === "bob: hi")) { throw __bynkExpectFailure("tests/hooks.bynk:21:10", 674, 692, "expect r is Ok(\"bob: hi\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "bob: hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:21:10", 674, 692, "expect r is Ok(\"bob: hi\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -296,9 +296,9 @@ async function test_unsigned__forged_and_stale_notices_to_the_sum_route_are_refu
     const none = await __sysdrive_noauth_api_http_POST_notify("hi", "");
     const forged = await __sysdrive_forged_api_http_POST_notify("hi", "");
     const stale = await __sysdrive_stale_api_http_POST_notify("hi", "");
-    if (!(none.tag === "Rejected" && none.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks.bynk:28:10", 932, 962, "expect none is Rejected(Unauthorized)"); }
-    if (!(forged.tag === "Rejected" && forged.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks.bynk:29:10", 972, 1004, "expect forged is Rejected(Unauthorized)"); }
-    if (!(stale.tag === "Rejected" && stale.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks.bynk:30:10", 1014, 1045, "expect stale is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(none.tag === "Rejected" && none.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:28:10", 932, 962, "expect none is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:29:10", 972, 1004, "expect forged is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(stale.tag === "Rejected" && stale.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:30:10", 1014, 1045, "expect stale is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -314,7 +314,7 @@ async function test_a_forged_raw_notice_to_the_sum_route_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_rawforged_api_http_POST_notify("hi", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/hooks.bynk:35:10", 1170, 1197, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:35:10", 1170, 1197, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -330,7 +330,7 @@ async function test_a_Bearer_primary_s_public_member_is_reached_with_no_token() 
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_greet("", "Visitor");
-    if (!(r.tag === "Ok" && r.value === "hello stranger")) { throw __bynkExpectFailure("tests/hooks.bynk:40:10", 1319, 1344, "expect r is Ok(\"hello stranger\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello stranger"))) { throw __bynkExpectFailure("tests/hooks.bynk:40:10", 1319, 1344, "expect r is Ok(\"hello stranger\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -346,7 +346,7 @@ async function test_a_Bearer_primary_s_member_is_reached_as_itself() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_greet(("ann" as any), "User");
-    if (!(r.tag === "Ok" && r.value === "hello ann")) { throw __bynkExpectFailure("tests/hooks.bynk:45:10", 1459, 1479, "expect r is Ok(\"hello ann\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello ann"))) { throw __bynkExpectFailure("tests/hooks.bynk:45:10", 1459, 1479, "expect r is Ok(\"hello ann\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -72,7 +72,7 @@ async function test_small_order_authorises_across_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __callService(deps.env.SHOP_ORDERS, "place", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(100), __ns_shop_orders.__deserialise_Result_Int_OrderError, "integration", "3a273aec9f70d0b4", deps.env, "shop.orders");
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("checkout.bynk:9:12", 323, 333, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("checkout.bynk:9:12", 323, 333, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -88,7 +88,7 @@ async function test_large_order_is_rejected_end_to_end() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __callService(deps.env.SHOP_ORDERS, "place", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(50000), __ns_shop_orders.__deserialise_Result_Int_OrderError, "integration", "3a273aec9f70d0b4", deps.env, "shop.orders");
-    if (!(r.tag === "Err")) { throw __bynkExpectFailure("checkout.bynk:14:12", 434, 445, "expect r is Err(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err"))) { throw __bynkExpectFailure("checkout.bynk:14:12", 434, 445, "expect r is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

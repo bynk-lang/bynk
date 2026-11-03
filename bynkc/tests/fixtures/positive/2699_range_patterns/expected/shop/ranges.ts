@@ -86,7 +86,7 @@ export function edge(reading: Option<number>): string {
 }
 
 export function nestedIs(o: Option<number>, xs: readonly number[]): boolean {
-  return o.tag === "Some" && o.value >= 0 && o.value <= 9 || xs.length >= 1 && xs[0] >= 0 && xs[0] <= 9;
+  return ((__c: boolean) => __c)(o.tag === "Some" && o.value >= 0 && o.value <= 9) || xs.length >= 1 && xs[0] >= 0 && xs[0] <= 9;
 }
 
 export function warm(r: Reading): boolean {

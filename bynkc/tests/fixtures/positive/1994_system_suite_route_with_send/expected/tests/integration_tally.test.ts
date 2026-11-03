@@ -115,7 +115,7 @@ async function test_the_route_answers_at_the_system_tier() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET("");
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/tally_system.bynk:6:10", 249, 259, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/tally_system.bynk:6:10", 249, 259, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

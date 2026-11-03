@@ -106,7 +106,7 @@ async function test_a_streamed_object_arrives_over_HTTP__read_back_as_Ok() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_echo_Param_text("frames", "");
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/store.bynk:94:10", 2871, 2881, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/store.bynk:94:10", 2871, 2881, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -122,7 +122,7 @@ async function test_a_missing_object_is_NotFound_over_HTTP() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_videos_Param_key("absent", "");
-    if (!(r.tag === "NotFound")) { throw __bynkExpectFailure("tests/store.bynk:99:10", 3000, 3013, "expect r is NotFound"); }
+    if (!(((__c: boolean) => __c)(r.tag === "NotFound"))) { throw __bynkExpectFailure("tests/store.bynk:99:10", 3000, 3013, "expect r is NotFound"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

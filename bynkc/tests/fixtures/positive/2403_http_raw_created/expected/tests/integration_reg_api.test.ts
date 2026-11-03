@@ -106,7 +106,7 @@ async function test_a_RawCreated_answers_201__read_back_as_Created() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_PUT_packages_Param_name("widgets", "1.0.0", "");
-    if (!(r.tag === "Created" && r.value === "widgets@1.0.0")) { throw __bynkExpectFailure("tests/api.bynk:26:10", 931, 960, "expect r is Created(\"widgets@1.0.0\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "widgets@1.0.0"))) { throw __bynkExpectFailure("tests/api.bynk:26:10", 931, 960, "expect r is Created(\"widgets@1.0.0\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -122,7 +122,7 @@ async function test_a_plain_text_RawCreated_still_reads_as_Created() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_notes("hi", "");
-    if (!(r.tag === "Created")) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1078, 1093, "expect r is Created(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1078, 1093, "expect r is Created(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -138,7 +138,7 @@ async function test_a_retry_answers_200() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_PUT_packages_Param_name("widgets", "same", "");
-    if (!(r.tag === "Ok" && r.value === "widgets unchanged")) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1205, 1233, "expect r is Ok(\"widgets unchanged\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "widgets unchanged"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1205, 1233, "expect r is Ok(\"widgets unchanged\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

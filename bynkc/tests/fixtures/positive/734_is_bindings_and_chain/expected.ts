@@ -5,8 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function sumIfAllOk(r1: Result<number, string>, r2: Result<number, string>, r3: Result<number, string>, r4: Result<number, string>, r5: Result<number, string>): number {
-  if (r1.tag === "Ok" && ((() => { const a = r1.value; return r2.tag === "Ok"; })()) && ((() => { const a = r1.value; const b = (r2 as Extract<typeof r2, { tag: "Ok" }>).value; return r3.tag === "Ok"; })()) && ((() => { const a = r1.value; const b = (r2 as Extract<typeof r2, { tag: "Ok" }>).value; const c = (r3 as Extract<typeof r3, { tag: "Ok" }>).value; return r4.tag === "Ok"; })()) && ((() => { const a = r1.value; const b = (r2 as Extract<typeof r2, { tag: "Ok" }>).value; const c = (r3 as Extract<typeof r3, { tag: "Ok" }>).value; const d = (r4 as Extract<typeof r4, { tag: "Ok" }>).value; return r5.tag === "Ok"; })())) {
-    const a = r1.value;
+  if (((__c: boolean) => __c)(r1.tag === "Ok") && ((() => { const a = (r1 as Extract<typeof r1, { tag: "Ok" }>).value; return ((__c: boolean) => __c)(r2.tag === "Ok"); })()) && ((() => { const a = (r1 as Extract<typeof r1, { tag: "Ok" }>).value; const b = (r2 as Extract<typeof r2, { tag: "Ok" }>).value; return ((__c: boolean) => __c)(r3.tag === "Ok"); })()) && ((() => { const a = (r1 as Extract<typeof r1, { tag: "Ok" }>).value; const b = (r2 as Extract<typeof r2, { tag: "Ok" }>).value; const c = (r3 as Extract<typeof r3, { tag: "Ok" }>).value; return ((__c: boolean) => __c)(r4.tag === "Ok"); })()) && ((() => { const a = (r1 as Extract<typeof r1, { tag: "Ok" }>).value; const b = (r2 as Extract<typeof r2, { tag: "Ok" }>).value; const c = (r3 as Extract<typeof r3, { tag: "Ok" }>).value; const d = (r4 as Extract<typeof r4, { tag: "Ok" }>).value; return ((__c: boolean) => __c)(r5.tag === "Ok"); })())) {
+    const a = (r1 as Extract<typeof r1, { tag: "Ok" }>).value;
     const b = (r2 as Extract<typeof r2, { tag: "Ok" }>).value;
     const c = (r3 as Extract<typeof r3, { tag: "Ok" }>).value;
     const d = (r4 as Extract<typeof r4, { tag: "Ok" }>).value;

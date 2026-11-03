@@ -39,8 +39,8 @@ export const Stay = {
 };
 
 export function two(o: Option<number>, p: Option<number>): number {
-  if (o.tag === "Some" && ((() => { const v = o.value; return p.tag === "Some"; })())) {
-    const v = o.value;
+  if (((__c: boolean) => __c)(o.tag === "Some") && ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; return ((__c: boolean) => __c)(p.tag === "Some"); })())) {
+    const v = (o as Extract<typeof o, { tag: "Some" }>).value;
     const w = (p as Extract<typeof p, { tag: "Some" }>).value;
     return v + w;
   } else {
@@ -49,34 +49,34 @@ export function two(o: Option<number>, p: Option<number>): number {
 }
 
 export function middle(o: Option<number>, p: Option<number>): boolean {
-  return o.tag === "Some" && ((() => { const v = o.value; return p.tag === "Some"; })()) && ((() => { const v = o.value; const w = (p as Extract<typeof p, { tag: "Some" }>).value; return v < w; })());
+  return ((__c: boolean) => __c)(o.tag === "Some") && ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; return ((__c: boolean) => __c)(p.tag === "Some"); })()) && ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; const w = (p as Extract<typeof p, { tag: "Some" }>).value; return v < w; })());
 }
 
 export function four(o: Option<number>, p: Option<number>, q: Option<number>): boolean {
-  return o.tag === "Some" && ((() => { const v = o.value; return p.tag === "Some"; })()) && ((() => { const v = o.value; const w = (p as Extract<typeof p, { tag: "Some" }>).value; return q.tag === "Some"; })()) && ((() => { const v = o.value; const w = (p as Extract<typeof p, { tag: "Some" }>).value; const x = (q as Extract<typeof q, { tag: "Some" }>).value; return v < w; })()) && ((() => { const v = o.value; const w = (p as Extract<typeof p, { tag: "Some" }>).value; const x = (q as Extract<typeof q, { tag: "Some" }>).value; return w < x; })());
+  return ((__c: boolean) => __c)(o.tag === "Some") && ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; return ((__c: boolean) => __c)(p.tag === "Some"); })()) && ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; const w = (p as Extract<typeof p, { tag: "Some" }>).value; return ((__c: boolean) => __c)(q.tag === "Some"); })()) && ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; const w = (p as Extract<typeof p, { tag: "Some" }>).value; const x = (q as Extract<typeof q, { tag: "Some" }>).value; return v < w; })()) && ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; const w = (p as Extract<typeof p, { tag: "Some" }>).value; const x = (q as Extract<typeof q, { tag: "Some" }>).value; return w < x; })());
 }
 
 export function rooms(b: Booking, c: Booking): boolean {
-  return b.tag === "Held" && ((() => { const g = b.guest; const r = b.room; return c.tag === "Held"; })()) && ((() => { const g = b.guest; const r = b.room; const h = (c as Extract<typeof c, { tag: "Held" }>).guest; const s = (c as Extract<typeof c, { tag: "Held" }>).room; return r < s; })()) && ((() => { const g = b.guest; const r = b.room; const h = (c as Extract<typeof c, { tag: "Held" }>).guest; const s = (c as Extract<typeof c, { tag: "Held" }>).room; return g !== h; })());
+  return ((__c: boolean) => __c)(b.tag === "Held") && ((() => { const g = (b as Extract<typeof b, { tag: "Held" }>).guest; const r = (b as Extract<typeof b, { tag: "Held" }>).room; return ((__c: boolean) => __c)(c.tag === "Held"); })()) && ((() => { const g = (b as Extract<typeof b, { tag: "Held" }>).guest; const r = (b as Extract<typeof b, { tag: "Held" }>).room; const h = (c as Extract<typeof c, { tag: "Held" }>).guest; const s = (c as Extract<typeof c, { tag: "Held" }>).room; return r < s; })()) && ((() => { const g = (b as Extract<typeof b, { tag: "Held" }>).guest; const r = (b as Extract<typeof b, { tag: "Held" }>).room; const h = (c as Extract<typeof c, { tag: "Held" }>).guest; const s = (c as Extract<typeof c, { tag: "Held" }>).room; return g !== h; })());
 }
 
 export function negated(o: Option<number>, p: Option<number>): number {
-  if (!(o.tag === "Some") || !(p.tag === "Some")) {
+  if (!(((__c: boolean) => __c)(o.tag === "Some")) || !(((__c: boolean) => __c)(p.tag === "Some"))) {
     return 0;
   } else {
-    const v = o.value;
-    const w = p.value;
+    const v = (o as Extract<typeof o, { tag: "Some" }>).value;
+    const w = (p as Extract<typeof p, { tag: "Some" }>).value;
     return v + w;
   }
 }
 
 export function implied(o: Option<number>, p: Option<number>): boolean {
-  return (!(o.tag === "Some") || ((() => { const v = o.value; return (p.tag === "Some" && ((() => { const w = p.value; return v < w; })())); })()));
+  return (!(((__c: boolean) => __c)(o.tag === "Some")) || ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; return (((__c: boolean) => __c)(p.tag === "Some") && ((() => { const w = (p as Extract<typeof p, { tag: "Some" }>).value; return v < w; })())); })()));
 }
 
 export function guestOf(o: Option<number>, s: Stay): string {
-  if (o.tag === "Some" && ((() => { const v = o.value; return ((s.tag === "Booked" || s.tag === "Queued")); })())) {
-    const v = o.value;
+  if (((__c: boolean) => __c)(o.tag === "Some") && ((() => { const v = (o as Extract<typeof o, { tag: "Some" }>).value; return (((__c: boolean) => __c)((s.tag === "Booked" || s.tag === "Queued"))); })())) {
+    const v = (o as Extract<typeof o, { tag: "Some" }>).value;
     let g;
     if (s.tag === "Booked") {
       g = (s as Extract<typeof s, { tag: "Booked" }>).guest;
@@ -90,8 +90,8 @@ export function guestOf(o: Option<number>, s: Stay): string {
 }
 
 export function okSum(a: Result<number, string>, b: Result<number, string>): number {
-  if (a.tag === "Ok" && ((() => { const x = a.value; return b.tag === "Ok"; })())) {
-    const x = a.value;
+  if (((__c: boolean) => __c)(a.tag === "Ok") && ((() => { const x = (a as Extract<typeof a, { tag: "Ok" }>).value; return ((__c: boolean) => __c)(b.tag === "Ok"); })())) {
+    const x = (a as Extract<typeof a, { tag: "Ok" }>).value;
     const y = (b as Extract<typeof b, { tag: "Ok" }>).value;
     return x + y;
   } else {

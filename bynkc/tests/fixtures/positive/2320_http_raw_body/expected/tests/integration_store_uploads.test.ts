@@ -267,7 +267,7 @@ async function test_a_raw_body_arrives_byte_for_byte__including_bytes_that_are_n
           case "Some": {
             const tree = __d.value;
             const r = await __sysdrive_uploads_http_PUT_api_Param_org_Param_package("acme", "widgets", tree, "");
-            if (!(r.tag === "Ok" && r.value === "acme/widgets gP8AAf7/AIA=")) { throw __bynkExpectFailure("tests/uploads.bynk:8:12", 296, 332, "expect r is Ok(\"acme/widgets gP8AAf7/AIA=\")"); }
+            if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "acme/widgets gP8AAf7/AIA="))) { throw __bynkExpectFailure("tests/uploads.bynk:8:12", 296, 332, "expect r is Ok(\"acme/widgets gP8AAf7/AIA=\")"); }
             return undefined;
           }
           case "None": {
@@ -293,7 +293,7 @@ async function test_a_body_over_the_service_cap_is_refused_on_the_bytes_read() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_uploads_http_POST_json("\"this body is a good deal longer than sixty-four bytes, which is the service cap\"", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "PayloadTooLarge")) { throw __bynkExpectFailure("tests/uploads.bynk:18:10", 583, 616, "expect r is Rejected(PayloadTooLarge(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "PayloadTooLarge"))) { throw __bynkExpectFailure("tests/uploads.bynk:18:10", 583, 616, "expect r is Rejected(PayloadTooLarge(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -310,7 +310,7 @@ async function test_a_raw_route_refuses_another_content_type() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_uploads_http_PUT_api_Param_org_Param_package(String("acme"), String("widgets"), "not a tree", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType")) { throw __bynkExpectFailure("tests/uploads.bynk:23:10", 765, 803, "expect r is Rejected(UnsupportedMediaType(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType"))) { throw __bynkExpectFailure("tests/uploads.bynk:23:10", 765, 803, "expect r is Rejected(UnsupportedMediaType(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -328,8 +328,8 @@ async function test_a_route_s_own_cap_wins_over_the_service_cap() {
     const deps = __makeHarness();
     const ok = await __sysdrive_raw_uploads_http_POST_blob("12345678", "");
     const big = await __sysdrive_raw_uploads_http_POST_blob("123456789", "");
-    if (!(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "MTIzNDU2Nzg=")) { throw __bynkExpectFailure("tests/uploads.bynk:29:10", 977, 1010, "expect ok is Handled(Ok(\"MTIzNDU2Nzg=\"))"); }
-    if (!(big.tag === "Rejected" && big.value.tag === "PayloadTooLarge")) { throw __bynkExpectFailure("tests/uploads.bynk:30:10", 1020, 1055, "expect big is Rejected(PayloadTooLarge(_))"); }
+    if (!(((__c: boolean) => __c)(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "MTIzNDU2Nzg="))) { throw __bynkExpectFailure("tests/uploads.bynk:29:10", 977, 1010, "expect ok is Handled(Ok(\"MTIzNDU2Nzg=\"))"); }
+    if (!(((__c: boolean) => __c)(big.tag === "Rejected" && big.value.tag === "PayloadTooLarge"))) { throw __bynkExpectFailure("tests/uploads.bynk:30:10", 1020, 1055, "expect big is Rejected(PayloadTooLarge(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -351,8 +351,8 @@ async function test_a_raw_body_is_signed_as_sent__and_a_forged_one_refused() {
             const payload = __d.value;
             const ok = await __sysdrive_uploads_http_POST_signed(payload, "");
             const forged = await __sysdrive_forged_uploads_http_POST_signed(payload, "");
-            if (!(ok.tag === "Ok" && ok.value === "gP8AAQ==")) { throw __bynkExpectFailure("tests/uploads.bynk:38:12", 1305, 1325, "expect ok is Ok(\"gP8AAQ==\")"); }
-            if (!(forged.tag === "Rejected" && forged.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/uploads.bynk:39:12", 1337, 1369, "expect forged is Rejected(Unauthorized)"); }
+            if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "gP8AAQ=="))) { throw __bynkExpectFailure("tests/uploads.bynk:38:12", 1305, 1325, "expect ok is Ok(\"gP8AAQ==\")"); }
+            if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:39:12", 1337, 1369, "expect forged is Rejected(Unauthorized)"); }
             return undefined;
           }
           case "None": {
@@ -384,9 +384,9 @@ async function test_a_multi_actor_raw_route_verifies_a_signer_over_the_octets__o
             const a = await __sysdrive_uploads_http_POST_either(payload, "", "Sender");
             const b = await __sysdrive_uploads_http_POST_either(payload, ("bob" as any), "User");
             const forged = await __sysdrive_forged_uploads_http_POST_either(payload, "");
-            if (!(a.tag === "Ok" && a.value === "sender gP8AAf7/")) { throw __bynkExpectFailure("tests/uploads.bynk:53:12", 1747, 1773, "expect a is Ok(\"sender gP8AAf7/\")"); }
-            if (!(b.tag === "Ok" && b.value === "bob gP8AAf7/")) { throw __bynkExpectFailure("tests/uploads.bynk:54:12", 1785, 1808, "expect b is Ok(\"bob gP8AAf7/\")"); }
-            if (!(forged.tag === "Rejected" && forged.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/uploads.bynk:55:12", 1820, 1852, "expect forged is Rejected(Unauthorized)"); }
+            if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "sender gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:53:12", 1747, 1773, "expect a is Ok(\"sender gP8AAf7/\")"); }
+            if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "bob gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:54:12", 1785, 1808, "expect b is Ok(\"bob gP8AAf7/\")"); }
+            if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:55:12", 1820, 1852, "expect forged is Rejected(Unauthorized)"); }
             return undefined;
           }
           case "None": {
@@ -413,8 +413,8 @@ async function test_a_multi_actor_raw_route_counts_the_bytes_read() {
     const deps = __makeHarness();
     const ok = await __sysdrive_raw_uploads_http_POST_either("short", "", "Sender");
     const big = await __sysdrive_raw_uploads_http_POST_either("this body is a good deal longer than sixty-four bytes, which is the service cap", "", "Sender");
-    if (!(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "sender c2hvcnQ=")) { throw __bynkExpectFailure("tests/uploads.bynk:66:10", 2163, 2199, "expect ok is Handled(Ok(\"sender c2hvcnQ=\"))"); }
-    if (!(big.tag === "Handled" && big.value.tag === "PayloadTooLarge")) { throw __bynkExpectFailure("tests/uploads.bynk:67:10", 2209, 2243, "expect big is Handled(PayloadTooLarge(_))"); }
+    if (!(((__c: boolean) => __c)(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "sender c2hvcnQ="))) { throw __bynkExpectFailure("tests/uploads.bynk:66:10", 2163, 2199, "expect ok is Handled(Ok(\"sender c2hvcnQ=\"))"); }
+    if (!(((__c: boolean) => __c)(big.tag === "Handled" && big.value.tag === "PayloadTooLarge"))) { throw __bynkExpectFailure("tests/uploads.bynk:67:10", 2209, 2243, "expect big is Handled(PayloadTooLarge(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -435,7 +435,7 @@ async function test_a_Bytes_body_without__raw_is_still_base64_in_JSON() {
           case "Some": {
             const b = __d.value;
             const r = await __sysdrive_uploads_http_POST_json(b, "");
-            if (!(r.tag === "Ok" && r.value === "aGk=")) { throw __bynkExpectFailure("tests/uploads.bynk:74:12", 2408, 2423, "expect r is Ok(\"aGk=\")"); }
+            if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "aGk="))) { throw __bynkExpectFailure("tests/uploads.bynk:74:12", 2408, 2423, "expect r is Ok(\"aGk=\")"); }
             return undefined;
           }
           case "None": {

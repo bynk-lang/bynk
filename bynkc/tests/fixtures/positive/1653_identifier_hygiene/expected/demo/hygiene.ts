@@ -328,8 +328,8 @@ export function half(a: number, b: number): number {
 }
 
 export function unwrapIs(o: Option<number>): number {
-  if (o.tag === "Some") {
-    const __r0 = o.value;
+  if (((__c: boolean) => __c)(o.tag === "Some")) {
+    const __r0 = (o as Extract<typeof o, { tag: "Some" }>).value;
     return __r0;
   } else {
     return 0;
@@ -368,8 +368,8 @@ export function labelOf(l: Labelled): string {
 }
 
 export function labelIs(l: Labelled): string {
-  if (l.tag === "Tagged") {
-    const t = l.$tag;
+  if (((__c: boolean) => __c)(l.tag === "Tagged")) {
+    const t = (l as Extract<typeof l, { tag: "Tagged" }>).$tag;
     return t;
   } else {
     return "";

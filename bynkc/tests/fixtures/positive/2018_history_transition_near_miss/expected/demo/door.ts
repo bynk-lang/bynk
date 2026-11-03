@@ -53,7 +53,7 @@ export class Door {
       const __old = { ...__zeroOfDoorState(), ...__prior };
       __rehydrateDoorState(__old, __prior);
       const __new = s;
-      if (!((!(__old.status.tag === "Closed") || __new.status.tag === "Closed"))) {
+      if (!((!(((__c: boolean) => __c)(__old.status.tag === "Closed")) || ((__c: boolean) => __c)(__new.status.tag === "Closed")))) {
         globalThis.console.error("InvariantViolation Door.closed_is_final", { agent: "Door", invariant: "closed_is_final" });
         throw __invariantViolation("Door", "closed_is_final", "transition", "demo/door.bynk:8:14");
       }

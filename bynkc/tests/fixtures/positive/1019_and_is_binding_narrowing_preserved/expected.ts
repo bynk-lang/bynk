@@ -19,16 +19,16 @@ export function risky(): Result<number, string> {
 
 export function check(o: Outcome): Result<number, string> {
   let __r1: boolean;
-  if (o.tag === "Hit") {
-    const score = o.score;
+  if (((__c: boolean) => __c)(o.tag === "Hit")) {
+    const score = (o as Extract<typeof o, { tag: "Hit" }>).score;
     const __r0 = risky();
     if (__r0.tag === "Err") return __r0;
     __r1 = __r0.value > 0;
   } else {
     __r1 = false;
   }
-  if (o.tag === "Hit" && __r1) {
-    const score = o.score;
+  if (((__c: boolean) => __c)(o.tag === "Hit") && __r1) {
+    const score = (o as Extract<typeof o, { tag: "Hit" }>).score;
     return Ok(score);
   } else {
     return Ok(0);

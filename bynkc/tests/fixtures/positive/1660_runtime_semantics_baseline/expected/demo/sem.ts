@@ -49,7 +49,7 @@ export function survivesJson(l: Light): boolean {
   switch (__r0.tag) {
     case "Ok": {
       const decoded = __r0.value;
-      return decoded.tag === "Green";
+      return ((__c: boolean) => __c)(decoded.tag === "Green");
     }
     case "Err": {
       return false;
@@ -161,7 +161,7 @@ export class Lamp {
 
   async isGreen(deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    return __state.light.tag === "Green";
+    return ((__c: boolean) => __c)(__state.light.tag === "Green");
   }
 
 }

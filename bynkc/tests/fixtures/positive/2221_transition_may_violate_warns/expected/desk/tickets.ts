@@ -64,7 +64,7 @@ export class Ticket {
       const __old = { ...__zeroOfTicketState(), ...__prior };
       __rehydrateTicketState(__old, __prior);
       const __new = s;
-      if (!((!(__old.state.tag === "Archived") || __new.state.tag === "Archived"))) {
+      if (!((!(((__c: boolean) => __c)(__old.state.tag === "Archived")) || ((__c: boolean) => __c)(__new.state.tag === "Archived")))) {
         globalThis.console.error("InvariantViolation Ticket.archived_is_final", { agent: "Ticket", invariant: "archived_is_final" });
         throw __invariantViolation("Ticket", "archived_is_final", "transition", "desk/tickets.bynk:12:14");
       }
@@ -151,7 +151,7 @@ export class Gate {
       const __old = { ...__zeroOfGateState(), ...__prior };
       __rehydrateGateState(__old, __prior);
       const __new = s;
-      if (!((!(__old.gate.tag === "Idle") || __new.gate.tag === "Running"))) {
+      if (!((!(((__c: boolean) => __c)(__old.gate.tag === "Idle")) || ((__c: boolean) => __c)(__new.gate.tag === "Running")))) {
         globalThis.console.error("InvariantViolation Gate.idle_must_start", { agent: "Gate", invariant: "idle_must_start" });
         throw __invariantViolation("Gate", "idle_must_start", "transition", "desk/tickets.bynk:43:14");
       }

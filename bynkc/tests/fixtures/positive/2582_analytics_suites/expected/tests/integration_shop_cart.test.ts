@@ -94,7 +94,7 @@ async function test_a_write_goes_over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_signup_Param_plan("pro", "");
-    if (!(r.tag === "Created" && r.value === "counted")) { throw __bynkExpectFailure("tests/shop/system.bynk:6:10", 218, 241, "expect r is Created(\"counted\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "counted"))) { throw __bynkExpectFailure("tests/shop/system.bynk:6:10", 218, 241, "expect r is Created(\"counted\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -97,7 +97,7 @@ async function test_the_agent_emits_across_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_bump("");
-    if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/system.bynk:6:12", 270, 280, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/system.bynk:6:12", 270, 280, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

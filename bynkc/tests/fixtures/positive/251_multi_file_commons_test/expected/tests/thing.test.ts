@@ -43,7 +43,7 @@ async function test_widget_rejects_negative() {
     const { Widget } = __ns_thing;
     type Widget = __ns_thing.Widget;
     const w = Widget.fromInt(-1);
-    if (!(w.tag === "Err")) { throw __bynkExpectFailure("tests/thing.test.bynk:4:12", 91, 102, "expect w is Err(_)"); }
+    if (!(((__c: boolean) => __c)(w.tag === "Err"))) { throw __bynkExpectFailure("tests/thing.test.bynk:4:12", 91, 102, "expect w is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -60,7 +60,7 @@ async function test_widget_accepts_non_negative() {
     const { Widget } = __ns_thing;
     type Widget = __ns_thing.Widget;
     const w = Widget.fromInt(7);
-    if (!(w.tag === "Ok")) { throw __bynkExpectFailure("tests/thing.test.bynk:9:12", 188, 198, "expect w is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(w.tag === "Ok"))) { throw __bynkExpectFailure("tests/thing.test.bynk:9:12", 188, 198, "expect w is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

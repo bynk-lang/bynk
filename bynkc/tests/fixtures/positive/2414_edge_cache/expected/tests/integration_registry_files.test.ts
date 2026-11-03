@@ -145,9 +145,9 @@ async function test_a_takedown_over_the_wire_purges() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_files_http_POST_takedown_Param_hex("abc", "");
-    if (!(r.tag === "Ok" && r.value === true)) { throw __bynkExpectFailure("tests/system.bynk:6:10", 273, 286, "expect r is Ok(true)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === true))) { throw __bynkExpectFailure("tests/system.bynk:6:10", 273, 286, "expect r is Ok(true)"); }
     const s = await __sysdrive_files_http_GET_status("");
-    if (!(s.tag === "Ok" && s.value === "up")) { throw __bynkExpectFailure("tests/system.bynk:8:10", 339, 352, "expect s is Ok(\"up\")"); }
+    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "up"))) { throw __bynkExpectFailure("tests/system.bynk:8:10", 339, 352, "expect s is Ok(\"up\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

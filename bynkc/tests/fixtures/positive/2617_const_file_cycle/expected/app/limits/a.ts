@@ -52,8 +52,8 @@ export function label(): string {
 
 export function maybeOr(fallback: number): number {
   const __r0 = Maybe();
-  if (__r0.tag === "Some") {
-    const n = __r0.value;
+  if (((__c: boolean) => __c)(__r0.tag === "Some")) {
+    const n = (__r0 as Extract<typeof __r0, { tag: "Some" }>).value;
     return n;
   } else {
     return fallback;

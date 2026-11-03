@@ -71,7 +71,7 @@ async function test_the_variant_is_matchable_with_wildcards() {
     const deps = __makeTestDeps();
     const { api } = __ns_f_files;
     const r = await api.http_GET_dl_latest(deps);
-    if (!(r.tag === "RawTagged")) { throw __bynkExpectFailure("tests/f/files.bynk:14:12", 534, 557, "expect r is RawTagged(_, _, _)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "RawTagged"))) { throw __bynkExpectFailure("tests/f/files.bynk:14:12", 534, 557, "expect r is RawTagged(_, _, _)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

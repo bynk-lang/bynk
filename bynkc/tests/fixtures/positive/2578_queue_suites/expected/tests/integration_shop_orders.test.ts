@@ -94,7 +94,7 @@ async function test_a_send_goes_over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_orders_Param_id("o-4", "");
-    if (!(r.tag === "Created" && r.value === "queued")) { throw __bynkExpectFailure("tests/shop/system.bynk:6:10", 215, 237, "expect r is Created(\"queued\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "queued"))) { throw __bynkExpectFailure("tests/shop/system.bynk:6:10", 215, 237, "expect r is Created(\"queued\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

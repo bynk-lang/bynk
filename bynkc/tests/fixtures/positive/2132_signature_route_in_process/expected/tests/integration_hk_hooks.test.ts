@@ -166,7 +166,7 @@ async function test_the_public_route_answers_over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_health("");
-    if (!(r.tag === "Ok" && r.value === "ok")) { throw __bynkExpectFailure("tests/hooks_system.bynk:4:10", 126, 139, "expect r is Ok(\"ok\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ok"))) { throw __bynkExpectFailure("tests/hooks_system.bynk:4:10", 126, 139, "expect r is Ok(\"ok\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
