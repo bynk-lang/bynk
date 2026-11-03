@@ -97,6 +97,8 @@ async function main(): Promise<void> {
     "a plain route writes v / null at every depth",
     plain,
   );
+  assert((await body("/filtered?limit=3")) === "3", "a plain route with a query");
+  assert((await body("/filtered")) === "null", "an absent query field is None, null");
   assert((await body("/top")) === "null", "a top-level None is null");
   assert(
     (await body("/tagged")) === '{"kind":"Some","value":"t"}',

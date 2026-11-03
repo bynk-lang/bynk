@@ -2857,6 +2857,24 @@ fn lower_method_call(
             _ => {}
         }
     }
+    // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
+    // runtime's query view from `"name=value"` pairs.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_QUERY)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_query();
+                return pre.finish(format!("__requestQuery({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_query();
+                return pre.finish("__requestQuery([])".to_string());
+            }
+            _ => {}
+        }
+    }
     // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
     // lowers to a host async iterable; `of` wraps a list as an async generator.
     // Emitted inline (no runtime import), like the collection kernels.
@@ -3166,6 +3184,16 @@ fn lower_method_call(
         } else {
             None
         };
+        let query_info = if is_raw {
+            cx.system_http_route_body(&(
+                id.name.clone(),
+                verb.as_str().to_string(),
+                format!("{path}{}", crate::emitter::QUERY_ROUTE_SUFFIX),
+            ))
+            .cloned()
+        } else {
+            None
+        };
         let rest: Vec<String> = args[1..]
             .iter()
             .enumerate()
@@ -3180,9 +3208,25 @@ fn lower_method_call(
                 // unconverted.
                 if matches!(
                     cx.commons().expr_ty(a.id).as_deref(),
-                    Some(Ty::RequestHeaders)
+                    Some(Ty::RequestHeaders | Ty::RequestQuery)
                 ) {
                     return lowered;
+                }
+                // #2854: a typed `query` record becomes the query string the
+                // raw driver appends to the URL.
+                if let Some((query_idx, ty)) = &query_info
+                    && *query_idx == i
+                {
+                    cx.note_query_string();
+                    return format!(
+                        "__queryString({})",
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                            ty,
+                            &format!("({lowered} as any)"),
+                            cx.system_http_type_ns(),
+                            cx.runtime_use()
+                        ))
+                    );
                 }
                 match &body_info {
                     // A named type's typed literal is unbranded in test-scaffold
@@ -3309,6 +3353,13 @@ fn lower_method_call(
                 }
                 None => format!("{{ ...deps, who: {{ tag: {actor:?} }} }}"),
             },
+            (_, Some(_))
+                if sum_key
+                    .as_deref()
+                    .is_some_and(|k| cx.is_binderless_handler(&id.name, k)) =>
+            {
+                "deps".to_string()
+            }
             (_, Some(identity)) => {
                 // #2380 (L5): an `Oidc` handler also reads its token's claims
                 // from `deps.claims`: the principal's, or none.
@@ -3606,7 +3657,7 @@ fn lower_method_call(
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
-            Ty::RequestHeaders | Ty::TokenClaims => {
+            Ty::RequestHeaders | Ty::RequestQuery | Ty::TokenClaims => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
                 return pre.finish(format!("({recv}).{}({})", method.name, args.join(", ")));
@@ -7296,6 +7347,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError

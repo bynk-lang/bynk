@@ -3742,6 +3742,9 @@ impl LanguageServer for Backend {
         // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
         // item start, offer the `@raw` snippet.
         items.extend(raw_completions(&text, offset, &line_prefix));
+        // #2854: in an `on http` handler's parameter list, offer the special
+        // parameter names (`query`, `headers`, `body`).
+        items.extend(http_param_completions(&text, offset));
         // #2640: at statement position in an effectful body, the `par` block.
         if completion::is_keyword_position(&line_prefix)
             && completion::in_effectful_body_position(&text, offset)
@@ -5437,6 +5440,25 @@ fn limit_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
         }];
     }
     Vec::new()
+}
+
+/// #2854: the special parameter names of an `on http` handler, at a
+/// parameter-name position in its header. Lexical, like the annotation cells.
+fn http_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
+    if !completion::in_http_param_name_position(text, offset) {
+        return Vec::new();
+    }
+    completion::HTTP_PARAMS
+        .iter()
+        .map(|(name, ty, doc)| CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::VARIABLE),
+            detail: Some((*doc).to_string()),
+            insert_text: Some(format!("{name}: ${{1:{ty}}}")),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        })
+        .collect()
 }
 
 /// The `@raw` completion cells, mirroring `limit_completions`: inside `@raw( … )` at

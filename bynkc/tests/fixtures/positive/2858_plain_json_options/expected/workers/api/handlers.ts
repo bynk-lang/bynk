@@ -36,9 +36,19 @@ export interface Activity {
 export const Activity = {
 };
 
+export interface Filter {
+  readonly limit: Option<number>;
+}
+
+export const Filter = {
+};
+
 export const plain = {
   async http_GET_plain(deps: {}): globalThis.Promise<HttpResult<Activity>> {
     return HttpResult.Ok({ id: "a1", action: Some("opened"), size: None, tags: [Some("x"), None], scores: new globalThis.Map(new globalThis.Map(new globalThis.Map<string, Option<number>>()).set("k", Some(1))).set("z", None), detail: Some({ note: None, count: 2 }), event: Event.Opened(Some("bob")) });
+  },
+  async http_GET_filtered(query: Filter, deps: {}): globalThis.Promise<HttpResult<Option<number>>> {
+    return HttpResult.Ok(query.limit);
   },
   async http_GET_top(deps: {}): globalThis.Promise<HttpResult<Option<string>>> {
     return HttpResult.Ok(None);
@@ -152,6 +162,23 @@ export function __deserialise_Event(json: __JsonValue, path: string = "$"): Resu
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_Filter(value: Filter): __JsonValue {
+  return {
+    limit: __serialise_Option_Int(value.limit),
+  };
+}
+
+export function __deserialise_Filter(json: __JsonValue, path: string = "$"): Result<Filter, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_limit = __deserialise_Option_Int(obj["limit"], `${path}.limit`);
+  if (__r_limit.tag === "Err") return __r_limit;
+  const __limit = __r_limit.value;
+  return Ok({ limit: __limit } as Filter);
 }
 
 

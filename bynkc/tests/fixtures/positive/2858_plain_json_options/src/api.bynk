@@ -19,6 +19,8 @@ type Activity = {
   event: Event,
 }
 
+type Filter = { limit: Option[Int] }
+
 service plain from http {
   json { options: plain }
 
@@ -32,6 +34,11 @@ service plain from http {
       detail: Some(Detail { note: None, count: 2 }),
       event: Opened(Some("bob")),
     })
+  }
+
+  // A typed `query` composes with plain responses.
+  on GET("/filtered") (query: Filter) -> Effect[HttpResult[Option[Int]]] by v: Visitor {
+    Ok(query.limit)
   }
 
   on GET("/top") () -> Effect[HttpResult[Option[String]]] by v: Visitor {

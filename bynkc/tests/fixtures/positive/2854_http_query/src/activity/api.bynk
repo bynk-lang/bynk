@@ -1,0 +1,60 @@
+context activity.api
+
+type RepoName = String where Matches("^[^/]+/[^/]+$")
+type Day = String where Matches("^\\d{4}-\\d{2}-\\d{2}$")
+type Limit = Int where InRange(1, 500)
+type Kind = enum { Push, Issue }
+
+type ActivityFilter = {
+	repo: Option[RepoName],
+	since: Option[Day],
+	kind: Option[Kind],
+	tag: List[String] = [],
+	fresh: Bool = false,
+	limit: Limit = 50,
+}
+
+type PriceFilter = {
+	price: Option[Decimal],
+	kind: Option[Kind],
+}
+
+service api from http {
+	// A typed query: decoded, defaulted and validated before the handler runs.
+	on GET("/activity") (query: ActivityFilter) -> Effect[HttpResult[String]] by r: Visitor {
+		let repo = match query.repo {
+			Some(r) => "\(r)"
+			None => "any"
+		}
+		let since = match query.since {
+			Some(d) => "\(d)"
+			None => "-"
+		}
+		Ok("\(repo) \(since) \(query.tag.length()) \(query.fresh) \(query.limit)")
+	}
+
+	// A path parameter beside the query.
+	on GET("/activity/:owner") (owner: String, query: ActivityFilter) -> Effect[HttpResult[String]] by r: Visitor {
+		Ok("\(owner) \(query.limit)")
+	}
+
+	// The raw view: dynamic keys, repeats and all.
+	on GET("/echo") (query: RequestQuery) -> Effect[HttpResult[String]] by r: Visitor {
+		let first = query.get("q").getOrElse("-")
+		Ok("\(first) \(query.all("q").length()) \(query.params().length())")
+	}
+
+	// A cached read that depends on its query: each query is its own response.
+	@cache(maxAge: 60.seconds, scope: public)
+	on GET("/cached") (query: ActivityFilter) -> Effect[HttpResult[String]] by r: Visitor {
+		Ok("limit \(query.limit)")
+	}
+
+	on GET("/priced") (query: PriceFilter) -> Effect[HttpResult[String]] by r: Visitor {
+		let price = match query.price {
+			Some(p) => "\(p)"
+			None => "-"
+		}
+		Ok(price)
+	}
+}

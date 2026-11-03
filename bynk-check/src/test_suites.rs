@@ -116,6 +116,9 @@ pub struct ResolvedStub {
     pub clauses: Vec<StubClause>,
     /// #291: parallel to `clauses` — which runs each clause applies to.
     pub clause_scopes: Vec<StubScope>,
+    /// #2850: parallel to `clauses` — the `fixture`s of the suite declaring each
+    /// clause, which its values and argument patterns may name.
+    pub clause_fixtures: Vec<Vec<FixtureDecl>>,
     /// The test file declaring the first clause — the recording context for
     /// edges in its value expressions (v0.25).
     ///
@@ -314,7 +317,7 @@ fn resolve_stubs(
     // Collect clauses tagged with the declaring file and the cases each
     // applies to. Case-scoped first so they precede suite-scoped clauses in
     // each capability's match order.
-    let mut collected: Vec<(StubClause, StubScope, PathBuf)> = Vec::new();
+    let mut collected: Vec<(StubClause, StubScope, PathBuf, Vec<FixtureDecl>)> = Vec::new();
     for &i in indices {
         let Some(t) = parsed[i].test() else { continue };
         for case in &t.cases {
@@ -323,6 +326,7 @@ fn resolve_stubs(
                     pc.clone(),
                     StubScope::Case(case.name.clone()),
                     parsed[i].identity_path(),
+                    t.fixtures.clone(),
                 ));
             }
         }
@@ -341,7 +345,12 @@ fn resolve_stubs(
             _ => StubScope::Every,
         };
         for pc in &t.stubs {
-            collected.push((pc.clone(), scope.clone(), parsed[i].identity_path()));
+            collected.push((
+                pc.clone(),
+                scope.clone(),
+                parsed[i].identity_path(),
+                t.fixtures.clone(),
+            ));
         }
     }
 
@@ -361,7 +370,7 @@ fn resolve_stubs(
     };
 
     let mut out: HashMap<String, ResolvedStub> = HashMap::new();
-    for (pc, scope, identity_path) in collected {
+    for (pc, scope, identity_path, fixtures) in collected {
         let cap_name = pc.capability.name.clone();
         let Some(cap_decl) = resolve_cap(&cap_name) else {
             // Commons have no seams at all; contexts may still name a
@@ -433,10 +442,12 @@ fn resolve_stubs(
             cap_decl: cap_decl.clone(),
             clauses: Vec::new(),
             clause_scopes: Vec::new(),
+            clause_fixtures: Vec::new(),
             identity_path: identity_path.clone(),
         });
         entry.clauses.push(pc);
         entry.clause_scopes.push(scope);
+        entry.clause_fixtures.push(fixtures);
     }
     out
 }
@@ -1384,7 +1395,7 @@ fn check_test_bodies(
     {
         for rp in stubs.values() {
             refs.enter_file(&rp.identity_path, target_name, false);
-            for clause in &rp.clauses {
+            for (clause_idx, clause) in rp.clauses.iter().enumerate() {
                 let Some(op) = rp
                     .cap_decl
                     .ops
@@ -1393,6 +1404,30 @@ fn check_test_bodies(
                 else {
                     continue;
                 };
+                // #2850: the declaring suite's fixtures are in scope in its
+                // clauses' values.
+                let clause_view = if rp.clause_fixtures[clause_idx].is_empty() {
+                    None
+                } else {
+                    build_privileged_resolved(
+                        target_name,
+                        unit_tables,
+                        unit_uses,
+                        unit_consumes,
+                        unit_consumes_aliases,
+                    )
+                    .map(|(mut view, _)| {
+                        add_suite_fns(
+                            &mut view,
+                            SuiteItems {
+                                fns: &[],
+                                fixtures: &rp.clause_fixtures[clause_idx],
+                            },
+                        );
+                        view
+                    })
+                };
+                let resolved = clause_view.as_ref().unwrap_or(resolved);
                 let check_value = |e: &Expr, errors: &mut Vec<CompileError>| {
                     if !stub_value_typechecks(e, op, resolved, tys) {
                         errors.push(CompileError::new(

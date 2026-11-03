@@ -3,7 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __withPlainJson, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __withPlainJson, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __queryObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -37,6 +37,19 @@ export default {
         }
       }
 
+      {
+        if ((method === "GET" || method === "HEAD") && path === "/filtered") {
+          __route = "GET /filtered";
+          const __q = __queryObject(request, [{ name: "limit", kind: "int", list: false, option: true }]);
+          if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_plain);
+          const __r_query = handlers.__deserialise_Filter(__q.value, "query");
+          if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_plain);
+          const query = __r_query.value;
+          const result = await surface.http_GET_filtered(query);
+          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_Int), { weakEtag: true }), request), __security_plain);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
       {
         if ((method === "GET" || method === "HEAD") && path === "/legacy") {
           __route = "GET /legacy";
@@ -76,6 +89,11 @@ export default {
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_String), { weakEtag: true }), request), __security_plain);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
+      }
+      if (path === "/filtered") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_plain);
       }
       if (path === "/legacy") {
         const __status = method === "OPTIONS" ? 204 : 405;

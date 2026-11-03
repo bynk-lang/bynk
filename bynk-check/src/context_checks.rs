@@ -1812,6 +1812,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", ts_type_ref_display(t)),
@@ -4635,7 +4636,8 @@ fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
 ///
 /// - Path must start with `/`, must not be `/_bynk/...` (reserved).
 /// - Every `:name` segment binds to a handler parameter of the same name.
-/// - Every parameter is either a path parameter or named `body`.
+/// - Every parameter is either a path parameter or named `body`, `headers` or
+///   `query`.
 /// - Path parameter types are constructible from `String` (`String`, refined
 ///   `String`, or opaque `String`).
 /// - GET / DELETE handlers may not have a `body` parameter.
@@ -4723,18 +4725,24 @@ fn validate_http_handler(
                 .with_note("`headers: RequestHeaders` gives the handler the request's headers"),
             );
         }
-        if !is_path && !is_body && !is_headers {
+        // #2854: `query` is the request's query string, a record `T` the router
+        // decodes and validates, or the raw `RequestQuery` view.
+        let is_query = !is_path && p.name.name == "query";
+        if is_query {
+            validate_query_param(p, types, errors);
+        }
+        if !is_path && !is_body && !is_headers && !is_query {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",
                     p.span,
                     format!(
-                        "handler parameter `{}` is not a path parameter and is not named `body` or `headers`",
+                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers` or `query`",
                         p.name.name
                     ),
                 )
                 .with_note(
-                    "HTTP handler parameters must match a `:name` path segment, or be named `body` or `headers`",
+                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers` or `query`",
                 ),
             );
         }
@@ -4783,6 +4791,91 @@ fn validate_http_handler(
                 ts_type_ref_display(&handler.return_type),
             ),
         ));
+    }
+}
+
+/// #2854: whether `r` reads off a query string as one value: a `String`, `Int`,
+/// `Bool` or `Decimal`, a refined or opaque type over one of those, or an enum
+/// (a sum none of whose variants carries a payload).
+fn is_query_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    let stringy_base = |b: &BaseType| {
+        matches!(
+            b,
+            BaseType::String | BaseType::Int | BaseType::Bool | BaseType::Decimal
+        )
+    };
+    match r {
+        TypeRef::Base(b, _) => stringy_base(b),
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Refined { base, .. }) | Some(TypeBody::Opaque { base, .. }) => {
+                stringy_base(base)
+            }
+            Some(TypeBody::Sum(s)) => s.variants.iter().all(|v| v.payload.is_empty()),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// #2854: whether `r` is a legal field type of a typed `query` record: a leaf,
+/// an `Option` of one, or a `List` of one (a key repeated).
+fn is_query_field_type(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    match r {
+        TypeRef::Option(inner, _) | TypeRef::List(inner, _) => is_query_leaf(inner, types),
+        other => is_query_leaf(other, types),
+    }
+}
+
+/// #2854: a HTTP handler's `query` parameter is `RequestQuery`, or a record
+/// whose fields are each a query leaf, an `Option` of one or a `List` of one.
+fn validate_query_param(
+    p: &Param,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    if matches!(p.type_ref, TypeRef::RequestQuery(_)) {
+        return;
+    }
+    let record = match &p.type_ref {
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Record(r)) => Some(r),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(record) = record else {
+        errors.push(
+            CompileError::new(
+                "bynk.http.query_wrong_type",
+                p.type_ref.span(),
+                format!(
+                    "an HTTP handler's `query` parameter must be a record type or `RequestQuery` (got `{}`)",
+                    ts_type_ref_display(&p.type_ref),
+                ),
+            )
+            .with_note(
+                "`query: Filter` decodes the query string into the record `Filter` and answers `400` when it does not fit; `query: RequestQuery` reads it raw",
+            ),
+        );
+        return;
+    };
+    for f in &record.fields {
+        if !is_query_field_type(&f.type_ref, types) {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.query_field_not_stringy",
+                    f.type_ref.span(),
+                    format!(
+                        "field `{}` of the `query` record has type `{}`, which a query string cannot carry",
+                        f.name.name,
+                        ts_type_ref_display(&f.type_ref),
+                    ),
+                )
+                .with_note(
+                    "a query field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key)",
+                ),
+            );
+        }
     }
 }
 
@@ -5455,6 +5548,22 @@ pub fn reject_fn_types(
                 )
                 .with_note(
                     "read the header you need (`headers.get(\"…\")`) and store or send that value instead",
+                ),
+            );
+        }
+        // #2854 (decision B): `RequestQuery`, the same way — read in the
+        // handler's `query` parameter, never stored or sent.
+        TypeRef::RequestQuery(span) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.request_query_at_boundary",
+                    *span,
+                    format!(
+                        "a `RequestQuery` type cannot appear in {what} — it is the request's query string, read in the handler that receives it, never persisted or sent"
+                    ),
+                )
+                .with_note(
+                    "read the value you need (`query.get(\"…\")`) and store or send that value instead",
                 ),
             );
         }

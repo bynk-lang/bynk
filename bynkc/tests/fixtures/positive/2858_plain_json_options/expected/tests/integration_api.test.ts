@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __queryString } from "../__bynk_runtime/http.js";
 import * as __ns_api from "../workers/api/handlers.js";
 import worker___ns_api from "../workers/api/index.js";
 
@@ -90,6 +90,18 @@ async function __sysdrive_plain_http_GET_plain(__sub: string) {
   const __req = new globalThis.Request(`https://test/plain`, { method: "GET", headers: { }, });
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpResult(__res, __ns_api.__deserialise_Activity);
+}
+async function __sysdrive_plain_http_GET_filtered(query: any, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/filtered${__queryString(__ns_api.__serialise_Filter(query))}`, { method: "GET", headers: { }, });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToHttpResult(__res, __ns_api.__deserialise_Option_Int);
+}
+async function __sysdrive_raw_plain_http_GET_filtered(query: string, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/filtered${query}`, { method: "GET", headers: { }, });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToHttpOutcome(__res, __ns_api.__deserialise_Option_Int);
 }
 async function __sysdrive_plain_http_GET_top(__sub: string) {
   const __h = __makeHarness();

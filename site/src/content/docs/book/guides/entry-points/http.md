@@ -31,6 +31,32 @@ A `:name` segment in the route becomes a parameter of the same name:
   }
 ```
 
+## Filter and paginate a `GET` with a typed query
+
+A `query` parameter whose type is a record reads the query string. The router
+decodes it, applies the defaults and checks the refinements before the handler
+runs, so the handler only ever sees a valid filter:
+
+```bynk,fragment
+type Limit = Int where InRange(1, 500)
+
+type Filter = {
+  owner: Option[String],
+  limit: Limit = 50,
+}
+
+service api from http {
+  on GET("/notes") (query: Filter) -> Effect[HttpResult[String]] by Visitor {
+    Ok("up to \(query.limit)")
+  }
+}
+```
+
+`GET /notes?owner=ada&limit=100` reaches the handler; `GET /notes?limit=0` is a
+`400` before it. Keys the record doesn't declare are ignored. For keys you can't
+name ahead of time, take a raw [`query: RequestQuery`](/book/reference/http/#request-query)
+instead. See [Query strings](/book/reference/http/#query-strings).
+
 ## Accept a request body
 
 A `body` parameter is parsed and validated from the request's JSON before the

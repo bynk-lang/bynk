@@ -19,6 +19,9 @@ export function compose(env: Env) {
     async http_GET_plain() {
       return handlers.plain.http_GET_plain(deps);
     },
+    async http_GET_filtered(query: handlers.Filter) {
+      return handlers.plain.http_GET_filtered(query, deps);
+    },
     async http_GET_top() {
       return handlers.plain.http_GET_top(deps);
     },
