@@ -175,7 +175,10 @@ impl<'a> Parser<'a> {
         let line = |out: &mut String, first: &mut bool, text: &str| {
             if !*first {
                 out.push('\n');
-                out.push_str(&base);
+                // A blank line stays empty rather than holding the indent.
+                if !text.is_empty() {
+                    out.push_str(&base);
+                }
             }
             *first = false;
             out.push_str(text);
@@ -240,7 +243,17 @@ impl<'a> Parser<'a> {
 
     /// [`Self::reindent`]ed `text`, rejoined with each later line at `base`.
     fn joined(&self, text: &str, base: &str) -> String {
-        self.reindent(text).join(&format!("\n{base}"))
+        let mut out = String::new();
+        for (i, line) in self.reindent(text).iter().enumerate() {
+            if i > 0 {
+                out.push('\n');
+                if !line.is_empty() {
+                    out.push_str(base);
+                }
+            }
+            out.push_str(line);
+        }
+        out
     }
 
     /// The leading whitespace of the line `at` is on.

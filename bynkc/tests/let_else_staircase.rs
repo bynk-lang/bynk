@@ -164,6 +164,42 @@ fn f(a: Option[Int], b: Option[Int], c: Option[Int], d: Option[Int]) -> Int {
 }
 
 #[test]
+fn a_wildcard_fallback_and_a_blank_line_come_out_fmt_clean() {
+    let src = commons(
+        "\
+fn f(a: Option[Int], b: Option[Int]) -> Int {
+  match a {
+    Some(x) => {
+      let twice = x * 2
+
+      let more = twice + 1
+      match b {
+        Some(y) => more + y,
+        _ => 1,
+      }
+    },
+    _ => 0,
+  }
+}",
+    );
+    let flat = fixed(&src);
+    assert!(
+        flat.contains(
+            "  let Some(x) = a else { 0 }\n  let twice = x * 2\n\n  let more = twice + 1\n  let Some(y) = b else { 1 }\n  more + y\n"
+        ),
+        "{flat:?}"
+    );
+    assert!(
+        flat.lines().all(|l| l == l.trim_end()),
+        "no whitespace-only or trailing-space lines: {flat:?}"
+    );
+    assert!(
+        bynk_emit::check_with_warnings(&flat, "t.bynk").is_ok(),
+        "{flat}"
+    );
+}
+
+#[test]
 fn a_two_arm_match_gets_no_hint() {
     let src = commons(
         "fn f(a: Option[Int]) -> Int {\n  match a {\n    None => 0,\n    Some(x) => x,\n  }\n}",
