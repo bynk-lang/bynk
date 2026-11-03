@@ -237,7 +237,7 @@ fn keeps_a_comment_inside_a_service_policy() {
 /// doc block between fields, which also warns.
 #[test]
 fn keeps_comments_in_every_policy_position() {
-    let source = "context api\n\nservice api from http {\n  cors {\n    // above\n    origins: [\"https://a.example.com\"], // same line\n    ---\n    keep me\n    ---\n\n    credentials: false\n    // before close\n  } // after close\n  security {\n    hsts: 180.days, // on security\n  }\n  limits {\n    // on limits\n    maxBody: 1_048_576,\n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"pong\")\n  }\n}\n";
+    let source = "context api\n\nservice api from http {\n  cors {\n    // above\n    origins: [\"https://a.example.com\"], // same line\n    ---\n    keep me\n    ---\n\n    credentials: false\n    // before close\n  } // after close\n  security {\n    hsts: 180.days, // on security\n  }\n  limits {\n    // on limits\n    maxBody: 1_048_576,\n  }\n  json {\n    // on json\n    options: plain,\n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"pong\")\n  }\n}\n";
     assert_eq!(orphan_warnings(source), 1);
     expect_kept("policy positions", source);
     let out = format_source(source, &FormatOptions::default()).unwrap();
@@ -250,6 +250,7 @@ fn keeps_comments_in_every_policy_position() {
         ("// before close", "// after close"),
         ("hsts:", "// on security"),
         ("// on limits", "maxBody:"),
+        ("// on json", "options:"),
     ] {
         assert!(
             out.find(before).unwrap() < out.find(after).unwrap(),
@@ -351,6 +352,7 @@ fn keeps_a_comment_on_the_line_of_an_opening_brace() {
         ("cors", policy("cors", "origins: [\"https://a.example.com\"],")),
         ("security", policy("security", "hsts: 180.days,")),
         ("limits", policy("limits", "maxBody: 1_048_576,")),
+        ("json", policy("json", "options: plain,")),
         (
             "fn",
             "commons d\n\nfn f() -> Int { // keep me\n  let x = 1\n  x\n}\n".to_string(),

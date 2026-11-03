@@ -512,6 +512,12 @@ fn operation(
         .collect();
     let mut parameters = Vec::new();
     let mut request_body = None;
+    // #2858: plain JSON is a property of the response body only. A request is
+    // decoded by the lenient decoder whichever mode the route answers in, so its
+    // schemas stay the tagged ones.
+    let request = Renderer { plain: false, ..*r };
+    let r_resp = r;
+    let r = &request;
     for p in &handler.params {
         let name = p.name.name.as_str();
         if name == "body" {
@@ -536,7 +542,7 @@ fn operation(
 
     op.insert(
         "responses".into(),
-        responses_of(r, components, handler, model),
+        responses_of(r_resp, components, handler, model),
     );
     Value::Object(op)
 }
@@ -867,6 +873,7 @@ impl SchemaNames {
 }
 
 /// Renders one handler's boundary types as JSON Schema.
+#[derive(Clone, Copy)]
 struct Renderer<'a> {
     unit: &'a str,
     types: &'a HashMap<String, std::sync::Arc<TypeDecl>>,

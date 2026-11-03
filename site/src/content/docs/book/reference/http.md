@@ -878,6 +878,9 @@ type, through records, sums, containers and generic arguments, is
 `bynk.json.nested_option_plain`. Model the inner absence as a sum type, or keep
 that route `tagged`.
 
+`Option[()]` is not covered by that rule: `()` is itself written `null`, so
+`Some(())` reads back as `None` in plain mode. Use a `Bool` or a sum instead.
+
 ### What plain mode does not change
 
 Only `Ok`, `Created` and `Accepted` **response bodies** of `from http` routes.
