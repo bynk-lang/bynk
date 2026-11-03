@@ -1,7 +1,7 @@
 # Crate hygiene — dependency edges, crate boundaries, the system model, and the installables
 
 - **Status:** Settled (#2776). Every question in §11 is closed; the maintainer confirmed the
-  adopted answers on 2026-11-02. Slicing next: A1–A3, C1–C2, B1 and E4a can start at once, and no slice
+  adopted answers on 2026-11-02. Slicing next: A1–A3, C1–C2, C4a, B1 and E4a can start at once, and no slice
   is authorised until its proposal is accepted.
 - **Spine:** [#2775](https://github.com/bynk-lang/bynk/issues/2775).
 - **Supersedes:** `post-trajectory-crate-hygiene.md` (spine
@@ -68,13 +68,15 @@ The graph has four kinds of residue:
   dependency it keeps away from the rest
 - only what an installed binary needs is published
 - the release ships `bynk` and, optionally, `bynk-lsp`
+- CI reports a failure from the cheapest test tier that catches it, and a costlier tier doesn't
+  hold a failed PR up (§7 C4)
 
 ### 1.1 What #1533's workstreams become
 
 | #1533 workstream | Disposition | Why |
 |---|---|---|
 | 1 — crate READMEs | **Done** | Every workspace crate has a `README.md` today. The layering diagrams are re-checked by §12's slices as they change the graph. |
-| 2 — crate-local unit tests | **Not carried** | Its `bynk-ir` → `bynk-check` finding (its S7) moves into §6 Q1. The rest needs fresh `test_density` numbers and its own proposal. |
+| 2 — crate-local unit tests | **Partly carried** | Its `bynk-ir` → `bynk-check` finding (its S7) moves into §6 Q1. §7 C4b moves the corpus tests that exercise one crate's API into that crate, so they run in the unit tier. Density targets are not carried (§14). |
 | 3 — comment rewrite | **Not carried** | It is independent of crate shape. Re-propose it on its own if still wanted. |
 | 4 — module decomposition | **Not carried as a workstream** | Its numbers are stale: files over 2,000 lines went from 20 to 42, and `bynk-lsp/src/lib.rs` from 6,535 to 10,926. Two files move with §8's slices and split as they move (`tests_emit.rs`, 11,022 lines, and `project.rs`, 6,604). The rest needs a fresh survey. |
 
@@ -134,6 +136,9 @@ is invisible to `test_mod_ranges`. That still applies to every module this track
   workspace entry, the way `bynk-testkit` is today.
 - **H-5 Retired crates point onward.** A crate that leaves the published set gets a final release
   whose README names its replacement. It is not yanked.
+- **H-6 Fail fast, never slower green.** A failing PR reports from the cheapest test tier that
+  catches the failure, and no costlier tier holds it up. A passing PR's wall-clock is no longer
+  than before the change. Workstream C proves both from CI timings (§7 C4).
 
 ## 5. Workstream A — dependency edges
 
@@ -288,7 +293,7 @@ the gated `ast_importers` count**, because `bynk-lower` imports the AST, and it 
 probe's floor. That's the price of the fold, and the reason it isn't the default. Either outcome
 beats today's: a separate crate whose separation buys nothing.
 
-## 7. Workstream C — published set and tooling crates
+## 7. Workstream C — published set, tooling crates and CI tiers
 
 - **C1.** Make `bynk-grammar` unpublished: `publish = false`, a path-only workspace entry, and out
   of both release workflows' crate lists.
@@ -297,6 +302,40 @@ beats today's: a separate crate whose separation buys nothing.
 - **C3.** Create one unpublished test crate, `bynk-tests`. It takes the `bynkc/tests` corpus,
   `bynk-testkit` and `bynk-grammar`. CI's `-p bynkc --test it` filters become `-p bynk-tests`.
   This is independent of §9 and can land first. It only moves files.
+- **C4. Tiered CI testing.** Added on 3 November 2026 at the maintainer's request, for fast
+  feedback and so that tests a failure has already made pointless don't hold up a failed merge.
+  Measured on a green `main` run (`41574731024`): the "Test suite (ubuntu-latest)" job takes
+  883s and is the critical path. Every other job finishes within 204s, in parallel. The job runs
+  one `cargo nextest run --workspace` over every crate's unit tests, the integration corpus and
+  the `workerd`/`wrangler`/`tsc` system tests together. The `ci` nextest profile sets
+  `fail-fast = false`, so a broken unit test is reported only after the whole system suite has
+  run. (Coverage is already off the PR path and the merge queue, so it's not part of this.)
+  - **C4a. Measure.** Split the Test suite job's 883s into compile time and run time, and break
+    the run time down by test group (nextest's JUnit output gives per-test durations). The
+    numbers go in the slice proposal and pick C4c's shape. It has no dependencies and can start
+    at once.
+  - **C4b. Classify every test into exactly one tier.**
+    - **Unit:** a crate's own tests, in its `src/` or its own `tests/`. The `bynk-tests` corpus
+      tests that call a single crate's API move into that crate.
+    - **Integration:** in-process pipeline tests and the fixture corpus, with no external
+      process.
+    - **System:** anything that starts the binary, `workerd`, `wrangler` or `tsc`.
+
+    `bynk-tests` groups its modules by tier, and `.config/nextest.toml` names one filterset per
+    tier. An xtask probe fails when a test matches no tier, or more than one. The docs and
+    ADR-index consistency checks (`decisions_index`, `grammar_reference`, `readme_layering`,
+    `cli_reference` and the like) aren't compiler tests, so they move to `xtask`, which the
+    `drift` job already runs. Depends on C3.
+  - **C4c. Gate the tiers.** The tiers run cheapest first. A failing tier stops the ones after
+    it, and the rest of the job's work is cancelled. `fail-fast = false` stays within a tier, so a
+    failing tier still reports all its failures. C4a's numbers pick between two shapes:
+    - **Compile time dominates:** the tiers run as consecutive steps in the one job, so nothing
+      compiles twice.
+    - **The system tier's run time dominates:** it becomes a separate job, alongside the others,
+      on a shared build. It is cancelled when an earlier tier fails.
+
+    Either way, the merge queue and the three-OS matrix use the same order. H-6 is checked by
+    comparing a green run and a seeded unit-test failure against C4a's baseline.
 
 `bynk-wasm` stays in this repository, unpublished (Q-C1). It has two consumers, the playground and
 the `vscode-bynk` web extension (ADRs 0517 and 0518). Both build from the release's
@@ -406,7 +445,8 @@ Each item names what would bring it back.
 
 ## 11. Settled questions
 
-All settled 2 November 2026, in the settling review of #2776.
+All settled 2 November 2026, in the settling review of #2776, except Q-C2, which the maintainer
+added and settled on 3 November 2026.
 
 | Question | Answer | Where |
 |---|---|---|
@@ -414,6 +454,7 @@ All settled 2 November 2026, in the settling review of #2776.
 | **Q-A2** How the checker stops depending on `bynk-fmt` | The expression printer moves into `bynk-syntax` | §5 A3 |
 | **Q-A3** How H-3 is enforced | An xtask probe, `unused_deps`, gated at 0 | §5 A4 |
 | **Q-C1** Whether `bynk-wasm` stays | Stays. Both consumers build from the `bynk-web-<tag>.tar.gz` release asset | §7 |
+| **Q-C2** How CI runs the tests (added 3 November 2026) | Three tiers (unit, integration, system), each gated on the one before, without lengthening the green path. C4a's measurements pick whether the system tier is its own job | §7 C4 |
 | **Q-E1** What happens to `bynkc` | An `argv[0]` alias of `bynk` (plus a `bynkc-<target>` asset) for one release, then dropped before 1.0 | §9 E3 |
 | **Q-E2** How the language server becomes `bynk-lsp` | `bynk-lsp` is the name, and `bynkc-lsp` is retired before 1.0.0. One release ships both names (assets *and* installers), `vscode-bynk` prefers `bynk-lsp`, then the old name drops | §9 E4 |
 | **§6 Q1** Where the model sits | Above `bynk-check` for B1–B3. B4 decides whether to move below | §6.3 |
@@ -429,9 +470,11 @@ Provisional. Each slice becomes an increment proposal, filed as a sub-issue of t
 |---|---|---|---|
 | 1 | A1, A2, A3 (separate PRs) | — | no |
 | 1 | C1, C2 | — | no |
+| 1 | C4a | — | no |
 | 1 | B1 (+ Q2/Q3 rename and merge if it passes) | the system-model ADR (§13) | `unconsumed_ir_items` (re-pointed by the rename) |
 | 2 | A4 | A1–A3 | adds `unused_deps` |
 | 2 | C3 | — | no |
+| 3 | C4b, then C4c | C3, C4a | no |
 | 2 | B2, B3 | B1 passed | no |
 | 3 | D1 (public `emitter` API, then the move) | — | `options_sources`, `fs_below_driver`, `emit_diagnostics` |
 | 4 | E1, E2 | D1 | no |
@@ -459,5 +502,6 @@ a crate: C1, the Q3 rename, D2, E3 and the §6 fold path.
 - **The expression IR**, refused in Part 15.1 with its own trigger.
 - **Changing emitted output, diagnostics or editor behaviour** (H-1). E5's header change is the one
   exception, and it is isolated.
-- **Comment rewrites, test-density targets and general module splits.** See §1.1.
+- **Comment rewrites, test-density targets and general module splits.** See §1.1. C4 moves and
+  classifies existing tests; it doesn't add tests or set coverage targets.
 - **New crates for build-time reasons alone.** See §10.
