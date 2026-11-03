@@ -1018,7 +1018,7 @@ fn emit_integration_module(
         let helper_src = suite_fn_decls(
             input.suite_fns,
             test_suites::integration_resolved(view, cross_context, &[]),
-            None,
+            participants.first().and_then(|p| unit_tables.get(p)),
             &mut typed,
             &runtime_use,
             &mut harness_bound,
@@ -8213,7 +8213,7 @@ fn emit_test_property_function(
     );
     // #2834: the suite's helpers, declared ahead of the `where` filter and body.
     if !suite_fns.is_empty()
-        && let Some((helper_view, _)) = test_suites::build_privileged_resolved(
+        && let Some((mut helper_view, _)) = test_suites::build_privileged_resolved(
             target_name,
             unit_tables,
             unit_uses,
@@ -8221,6 +8221,7 @@ fn emit_test_property_function(
             unit_consumes_aliases,
         )
     {
+        test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
         out.push_str(&suite_fn_decls(
             suite_fns,
             helper_view,
@@ -8503,7 +8504,10 @@ fn emit_test_history_property_function(
             unit_consumes,
             unit_consumes_aliases,
         )
-        .map(|(r, _)| r);
+        .map(|(mut r, _)| {
+            test_suites::register_call_record_types(&mut r, target_name, unit_tables);
+            r
+        });
         test_suites::add_suite_fns(&mut resolved, suite_fns);
         let inner = TypeRef::Named(Ident {
             name: agent_name.to_string(),

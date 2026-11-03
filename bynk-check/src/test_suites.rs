@@ -856,7 +856,7 @@ pub fn phase_integration_bodies(
             check_suite_fns(
                 &d.fns,
                 &mut helper_view,
-                None,
+                participants.first().and_then(|p| unit_tables.get(p)),
                 &mut body_errs,
                 refs,
                 &mut LocalsSink::new(),

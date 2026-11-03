@@ -1,0 +1,13 @@
+context demo.desk
+
+consumes demo.vault as Vault
+
+service check {
+  on call(n: Int) -> Effect[Int] {
+    Vault.open(n)
+  }
+}
+
+service local {
+  on call(n: Int) -> Effect[Int] { n + 1 }
+}
