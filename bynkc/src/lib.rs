@@ -39,7 +39,7 @@ pub use bynk_syntax::error::Severity;
 // unchanged. The `ProjectFailure` flatteners (below) stay here and delegate.
 pub use bynk_render::{
     print_errors, print_errors_short, print_project_errors, render_errors, render_errors_plain,
-    render_errors_short, render_project_errors,
+    render_errors_short, render_project_errors, without_hints,
 };
 
 pub use bynk_check::firstparty::Platform;

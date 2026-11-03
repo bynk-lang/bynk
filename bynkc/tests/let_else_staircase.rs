@@ -103,6 +103,67 @@ fn sum(a: Result[Int, String], b: Result[Int, String]) -> Result[Int, String] {
 }
 
 #[test]
+fn a_multi_line_fallback_is_reindented_with_the_flat_form() {
+    let src = commons(
+        "\
+fn f(a: Option[Int], b: Option[Int]) -> Result[Int, Problem] {
+  match a {
+    None => {
+      let code = 7
+      Err(Missing)
+    },
+    Some(x) => match b {
+      None => Err(Late),
+      Some(y) => Ok(x + y),
+    },
+  }
+}",
+    );
+    let flat = fixed(&src);
+    assert!(
+        flat.contains(
+            "  let Some(x) = a else {\n    let code = 7\n    Err(Missing)\n  }\n  let Some(y) = b else { Err(Late) }\n"
+        ),
+        "{flat}"
+    );
+    assert!(
+        bynk_emit::check_with_warnings(&flat, "t.bynk").is_ok(),
+        "{flat}"
+    );
+}
+
+#[test]
+fn nested_hints_never_apply_overlapping_edits() {
+    // A fallback that is itself a staircase: both are hinted, and a fix run
+    // takes one at a time rather than applying overlapping rewrites.
+    let src = commons(
+        "\
+fn f(a: Option[Int], b: Option[Int], c: Option[Int], d: Option[Int]) -> Int {
+  match a {
+    None => match b {
+      None => 0,
+      Some(x) => match c {
+        None => 1,
+        Some(y) => x + y,
+      },
+    },
+    Some(z) => match d {
+      None => 2,
+      Some(w) => z + w,
+    },
+  }
+}",
+    );
+    let found = hints(&src);
+    let edits = bynk_syntax::fix::edits(&src, found.iter());
+    let out = bynk_syntax::fix::apply(&src, &edits);
+    assert!(
+        bynk_emit::check_with_warnings(&out, "t.bynk").is_ok(),
+        "{out}"
+    );
+}
+
+#[test]
 fn a_two_arm_match_gets_no_hint() {
     let src = commons(
         "fn f(a: Option[Int]) -> Int {\n  match a {\n    None => 0,\n    Some(x) => x,\n  }\n}",
@@ -228,4 +289,22 @@ fn flat_map_points_at_and_then() {
 #[test]
 fn hints_do_not_fail_a_check() {
     assert!(bynk_emit::check_with_warnings(&commons(READ), "t.bynk").is_ok());
+}
+
+#[test]
+fn the_single_file_compile_does_not_print_the_hint() {
+    let dir = std::env::temp_dir().join(format!("bynk-staircase-cli-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("steps.bynk");
+    std::fs::write(&input, commons(READ)).unwrap();
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .arg("compile")
+        .arg(&input)
+        .arg("-o")
+        .arg(dir.join("steps.ts"))
+        .output()
+        .expect("bynkc runs");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{stderr}");
+    assert!(!stderr.contains("let_else_staircase"), "{stderr}");
 }

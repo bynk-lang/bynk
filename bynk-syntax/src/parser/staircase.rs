@@ -163,6 +163,9 @@ impl<'a> Parser<'a> {
     /// `whole`. `None` when it cannot be written without losing something: a
     /// comment inside the staircase, which the rewrite would drop.
     fn flatten(&self, steps: &[(&Expr, Link<'_>)], whole: Span) -> Option<String> {
+        // Deliberately broad: a `//` inside a string literal (`"https://…"`)
+        // also withholds the fix, which errs on the safe side of dropping a
+        // comment.
         if self.slice(whole).contains("//") {
             return None;
         }
@@ -186,12 +189,14 @@ impl<'a> Parser<'a> {
                     if bindings.iter().any(|b| matches!(b.pattern(), Pattern::Binding(_)))
             );
             let fallback = match (binds, l.fallback) {
-                (false, MatchBody::Expr(e)) => format!("{{ {} }}", self.slice(e.span)),
-                (false, MatchBody::Block(b)) => self.slice(b.span).to_string(),
+                (false, MatchBody::Expr(e)) => {
+                    format!("{{ {} }}", self.joined(self.slice(e.span), &base))
+                }
+                (false, MatchBody::Block(b)) => self.joined(self.slice(b.span), &base),
                 (true, body) => {
                     let body = match body {
-                        MatchBody::Expr(e) => self.slice(e.span),
-                        MatchBody::Block(b) => self.slice(b.span),
+                        MatchBody::Expr(e) => self.joined(self.slice(e.span), &base),
+                        MatchBody::Block(b) => self.joined(self.slice(b.span), &base),
                     };
                     format!(
                         "match {{ {} => {} }}",
@@ -231,6 +236,11 @@ impl<'a> Parser<'a> {
             }
         }
         Some(out)
+    }
+
+    /// [`Self::reindent`]ed `text`, rejoined with each later line at `base`.
+    fn joined(&self, text: &str, base: &str) -> String {
+        self.reindent(text).join(&format!("\n{base}"))
     }
 
     /// The leading whitespace of the line `at` is on.
