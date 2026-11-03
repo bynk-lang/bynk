@@ -75,6 +75,7 @@ pub struct DiagnosticLine {
 pub enum Severity {
     Error,
     Warning,
+    Hint,
 }
 
 impl Severity {
@@ -82,6 +83,7 @@ impl Severity {
         match self {
             Severity::Error => "error",
             Severity::Warning => "warning",
+            Severity::Hint => "hint",
         }
     }
 }
@@ -99,8 +101,13 @@ pub fn diagnostics(list: &[DiagnosticLine], scope: &str) -> String {
         .iter()
         .filter(|d| d.severity == Severity::Error)
         .count();
-    let warnings = list.len() - errors;
-    let mut out = format!("{errors} error(s), {warnings} warning(s) {scope}.\n\n");
+    let hints = list.iter().filter(|d| d.severity == Severity::Hint).count();
+    let warnings = list.len() - errors - hints;
+    let mut out = if hints == 0 {
+        format!("{errors} error(s), {warnings} warning(s) {scope}.\n\n")
+    } else {
+        format!("{errors} error(s), {warnings} warning(s), {hints} hint(s) {scope}.\n\n")
+    };
     for d in &sorted {
         let code = d
             .code
@@ -455,6 +462,42 @@ mod tests {
         let capped = cap_text(text, 7, Some("Pass `file`."));
         assert!(capped.starts_with("aaaa\n\n…(truncated: "), "{capped}");
         assert!(capped.ends_with("Pass `file`.)"), "{capped}");
+    }
+
+    /// #2838: a hint is listed with `hint` as its severity, after the errors
+    /// and warnings, and counted on its own.
+    #[test]
+    fn a_hint_is_listed_as_a_hint_and_counted_apart() {
+        let lines = vec![
+            DiagnosticLine {
+                path: "a.bynk".into(),
+                line: 1,
+                column: 1,
+                severity: Severity::Hint,
+                code: Some("bynk.parse.let_else_staircase".into()),
+                message: "flatten".into(),
+            },
+            DiagnosticLine {
+                path: "a.bynk".into(),
+                line: 5,
+                column: 1,
+                severity: Severity::Warning,
+                code: Some("bynk.w".into()),
+                message: "careful".into(),
+            },
+        ];
+        let text = diagnostics(&lines, "in the workspace");
+        assert!(
+            text.starts_with("0 error(s), 1 warning(s), 1 hint(s)"),
+            "{text}"
+        );
+        assert!(
+            text.contains("a.bynk:1:1 hint[bynk.parse.let_else_staircase]: flatten"),
+            "{text}"
+        );
+        let hint_at = text.find("hint[").unwrap();
+        let warning_at = text.find("warning[").unwrap();
+        assert!(warning_at < hint_at, "{text}");
     }
 
     #[test]

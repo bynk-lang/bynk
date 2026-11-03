@@ -209,6 +209,9 @@ pub const OPTION_METHODS: &[KernelMethod] = &[
     m("getOrElse", "getOrElse(default: T) -> T"),
     m("isSome", "isSome() -> Bool"),
     m("okOr", "okOr(err: E) -> Result[T, E]"),
+    m("isNone", "isNone() -> Bool"),
+    m("orElse", "orElse(f: () -> Option[T]) -> Option[T]"),
+    m("filter", "filter(p: T -> Bool) -> Option[T]"),
 ];
 
 /// `Result[T, E]` combinators (v0.22a).
@@ -218,6 +221,8 @@ pub const RESULT_METHODS: &[KernelMethod] = &[
     m("mapErr", "mapErr(f: E -> F) -> Result[T, F]"),
     m("getOrElse", "getOrElse(default: T) -> T"),
     m("isOk", "isOk() -> Bool"),
+    m("isErr", "isErr() -> Bool"),
+    m("ok", "ok() -> Option[T]"),
 ];
 /// #2683: `e.within(d)`, on every `Effect[T]`. It races `e` against a deadline
 /// and hands the abandoned effect to the execution context's `waitUntil`; it is

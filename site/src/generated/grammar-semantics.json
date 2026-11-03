@@ -122,6 +122,12 @@
       "summary": "An adapter `binding … requires { … }` entry has an unpinned version range."
     }
   ],
+  "block": [
+    {
+      "code": "bynk.parse.match_ends_block",
+      "summary": "A `match` ends the block it is in, because a block has no expression statements; a second `match` straight after it cannot follow."
+    }
+  ],
   "call": [
     {
       "code": "bynk.effect.fn_value_in_pure_context",

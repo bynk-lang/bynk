@@ -49,7 +49,7 @@ fn the_overlays_findings_across_the_corpus_are_pinned() {
                 // A warning (`308`'s orphan doc block) doesn't stop the unit.
                 (Some(u), errs)
                     if errs.iter().all(|e| {
-                        bynk_syntax::Severity::for_error(e) == bynk_syntax::Severity::Warning
+                        bynk_syntax::Severity::for_error(e) != bynk_syntax::Severity::Error
                     }) =>
                 {
                     Some(u)

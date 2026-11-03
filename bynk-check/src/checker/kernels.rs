@@ -2319,17 +2319,69 @@ pub(crate) fn check_option_kernel_method(
             let err = type_of(&args[0], None, ctx)?;
             Some(tys.intern(Ty::Result(inner, err)))
         }
+        "isNone" => {
+            if !arity(0, ctx) {
+                return None;
+            }
+            Some(tys.intern(Ty::Base(BaseType::Bool)))
+        }
+        "orElse" => {
+            if !arity(1, ctx) {
+                return None;
+            }
+            // #2838: the fallback is a thunk, so it is only run on `None`.
+            let want = tys.intern(Ty::Option(inner));
+            let ret = check_kernel_fn_arg(&args[0], vec![], "the `Option.orElse` function", ctx)?;
+            if compatible(ret, want, tys) {
+                Some(want)
+            } else {
+                ctx.errors.push(CompileError::new(
+                    "bynk.types.combinator_return_mismatch",
+                    args[0].span,
+                    format!(
+                        "the `Option.orElse` function must return `{}`, but returns `{}`",
+                        want.display(tys),
+                        ret.display(tys)
+                    ),
+                ));
+                None
+            }
+        }
+        "filter" => {
+            if !arity(1, ctx) {
+                return None;
+            }
+            let p = Ty::Fn {
+                params: vec![inner],
+                ret: tys.intern(Ty::Base(BaseType::Bool)),
+            };
+            check_arg(
+                &args[0],
+                tys.intern(p),
+                "the `Option.filter` predicate",
+                ctx,
+            );
+            Some(tys.intern(Ty::Option(inner)))
+        }
         _ => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
                     "the built-in `Option[{}]` type has no method `{}` — the kernel is \
-                     `map`, `andThen`, `getOrElse`, `isSome`, `okOr`",
+                     `map`, `andThen`, `getOrElse`, `isSome`, `isNone`, `orElse`, `filter`, `okOr`",
                     inner.display(tys),
                     method.name
                 ),
             ));
+            if method.name == "flatMap" {
+                // #2838 (decision B): one name per operation, no alias.
+                if let Some(last) = ctx.errors.last_mut() {
+                    *last = last
+                        .clone()
+                        .with_note("`flatMap` is spelled `andThen` on `Option`");
+                }
+            }
             for a in args {
                 let _ = type_of(a, None, ctx);
             }
@@ -2432,18 +2484,38 @@ pub(crate) fn check_result_kernel_method(
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }
+        "isErr" => {
+            if !arity(0, ctx) {
+                return None;
+            }
+            Some(tys.intern(Ty::Base(BaseType::Bool)))
+        }
+        "ok" => {
+            if !arity(0, ctx) {
+                return None;
+            }
+            Some(tys.intern(Ty::Option(ok)))
+        }
         _ => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
                     "the built-in `Result[{}, {}]` type has no method `{}` — the kernel is \
-                     `map`, `andThen`, `mapErr`, `getOrElse`, `isOk`",
+                     `map`, `andThen`, `mapErr`, `getOrElse`, `isOk`, `isErr`, `ok`",
                     ok.display(tys),
                     err.display(tys),
                     method.name
                 ),
             ));
+            if method.name == "flatMap" {
+                // #2838 (decision B): one name per operation, no alias.
+                if let Some(last) = ctx.errors.last_mut() {
+                    *last = last
+                        .clone()
+                        .with_note("`flatMap` is spelled `andThen` on `Result`");
+                }
+            }
             for a in args {
                 let _ = type_of(a, None, ctx);
             }

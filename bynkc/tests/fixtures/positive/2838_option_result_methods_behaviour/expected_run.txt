@@ -1,0 +1,2 @@
+# #2838: the five new Option/Result kernel methods run.
+passed=4 failed=0

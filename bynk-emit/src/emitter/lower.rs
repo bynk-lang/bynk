@@ -5921,6 +5921,24 @@ fn lower_option_kernel(
                 "((__o: Option<{t}>, __e: {err}) => __o.tag === \"Some\" ? Ok(__o.value) : Err(__e))({recv}, {error})"
             ))
         }
+        ("isNone", []) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!("({recv}.tag === \"None\")"))
+        }
+        ("orElse", [f]) => {
+            let recv = pre.lower(receiver, cx);
+            let f = pre.lower(f, cx);
+            Some(format!(
+                "((__o: Option<{t}>, __f: () => Option<{t}>) => __o.tag === \"Some\" ? __o : __f())({recv}, {f})"
+            ))
+        }
+        ("filter", [p]) => {
+            let recv = pre.lower(receiver, cx);
+            let p = pre.lower(p, cx);
+            Some(format!(
+                "((__o: Option<{t}>, __p: (x: {t}) => boolean) => __o.tag === \"Some\" && __p(__o.value) ? __o : None)({recv}, {p})"
+            ))
+        }
         _ => None,
     };
     text.map(|expr| pre.finish(expr))
@@ -6004,6 +6022,16 @@ fn lower_result_kernel(
         ("isOk", []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}.tag === \"Ok\")"))
+        }
+        ("isErr", []) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!("({recv}.tag === \"Err\")"))
+        }
+        ("ok", []) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!(
+                "((__r: Result<{t}, {et}>) => __r.tag === \"Ok\" ? Some(__r.value) : None)({recv})"
+            ))
         }
         _ => None,
     };
