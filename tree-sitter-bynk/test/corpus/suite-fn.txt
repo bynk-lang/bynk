@@ -35,3 +35,32 @@ suite shop.orders {
             (identifier)
             (number_literal))
           (number_literal))))))
+
+================================================================================
+Suite fixture declarations (#2841)
+================================================================================
+
+suite shop.orders {
+  fixture issue = "fixtures/github/issue.json"
+
+  case "decodes" {
+    expect issue == issue
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (fixture_decl
+      (identifier)
+      (string_literal))
+    (case
+      (string_literal)
+      (expect_expr
+        (binary_expr
+          (identifier)
+          (identifier))))))

@@ -1554,6 +1554,15 @@ the case body with any `stub` clauses. `env` is a contextual word, recognised
 only when a `{` follows it there. Well-formedness:
 [§5](/book/spec/static-semantics/#suite-env).
 
+### §4.9.2b fixture_decl
+
+{{#grammar fixture_decl}}
+
+`fixture`, a name, `=`, and a plain string literal naming a file relative to the
+project root. A suite item. `fixture` is a contextual word, recognised only at the
+head of a suite item followed by a name. Well-formedness:
+[§5.9](/book/spec/static-semantics/#59-testing-constructs).
+
 ### §4.9.3 property_decl (v0.114)
 
 {{#grammar property_decl}}

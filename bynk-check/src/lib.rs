@@ -47,6 +47,7 @@ pub mod exec_plan;
 pub mod exports;
 pub mod expr_types;
 pub mod firstparty;
+pub mod fixtures;
 pub mod hints;
 pub mod icu;
 pub mod index;

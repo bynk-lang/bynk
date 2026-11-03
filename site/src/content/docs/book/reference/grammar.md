@@ -2278,6 +2278,25 @@ env {
 
 **See also.** [Configuring a suite](/book/reference/testing/#env).
 
+### fixture_decl {#rule-fixture_decl}
+
+{{#grammar fixture_decl}}
+
+`fixture name = "path"` (#2841) — a suite item giving its cases one project
+file's text as a `String` constant, never deployed. The path is a plain string
+literal, relative to the project root, naming a file in its `fixtures/` folder.
+The path and content rules are checker concerns. `fixture` is a contextual word.
+
+**Example.**
+```bynk,fragment
+fixture issueOpened = "fixtures/github/issues-opened.json"
+```
+
+**Static semantics.**
+{{#grammar-semantics fixture_decl}}
+
+**See also.** [Test fixtures](/book/reference/fixtures/).
+
 ### env_entry {#rule-env_entry}
 
 {{#grammar env_entry}}

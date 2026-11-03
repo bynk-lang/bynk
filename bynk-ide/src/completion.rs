@@ -119,6 +119,18 @@ impl Completion {
     }
 }
 
+/// #2841: the text typed so far of a `fixture name = "…` path, when the cursor
+/// is inside that string.
+fn fixture_path_prefix(line_prefix: &str) -> Option<&str> {
+    let rest = line_prefix.trim_start().strip_prefix("fixture ")?;
+    let (name, after) = rest.split_once('=')?;
+    if name.trim().is_empty() || !name.trim().chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return None;
+    }
+    let partial = after.trim_start().strip_prefix('"')?;
+    (!partial.contains('"')).then_some(partial)
+}
+
 /// Produce completions for the cursor, given the text of the line up to the
 /// cursor, the current document text, and the project source root (if any).
 /// Without a project root, a project's dependencies are found from the
@@ -143,6 +155,24 @@ pub fn complete_in(
     // #2223: the project's own files and its dependencies' reachable units,
     // resolved once per request and only by the branches that name units.
     let split = || split_dependency_files(files, project_root);
+    // 0. #2841: inside a suite's `fixture name = "<cursor>` — the files in the
+    //    project's `fixtures/` folder.
+    if let Some(partial) = fixture_path_prefix(line_prefix) {
+        let files = project_root
+            .and_then(|root| bynk_project::assets::list_fixture_files(root).ok())
+            .unwrap_or_default();
+        return files
+            .into_iter()
+            .filter(|f| f.starts_with(partial.trim_start_matches("./")))
+            .map(|f| {
+                Completion::item(
+                    f,
+                    CompletionKind::Constant,
+                    Some("fixture file — test-only, never deployed".to_string()),
+                )
+            })
+            .collect();
+    }
     // 1. Inside `consumes U { … <cursor>` — the capabilities U exports.
     if let Some(unit) = consumes_brace_unit(line_prefix) {
         return capabilities_of_unit(&unit, doc_text, &split())
@@ -2261,6 +2291,22 @@ fn free_function_candidates(
     // #2834: in a suite, its own helper `fn`s lead. Only the buffer's suite
     // contributes: a helper is private to the suite that declares it.
     if let Some(SourceUnit::Suite(suite)) = parse_source_unit(doc_text) {
+        for f in &suite.fixtures {
+            if seen.insert(f.name.name.clone()) {
+                out.push(
+                    Completion::item(
+                        f.name.name.clone(),
+                        CompletionKind::Constant,
+                        Some(format!(
+                            "fixture {} = \"{}\" — `this suite`",
+                            f.name.name,
+                            bynk_fmt::escape_string(&f.path)
+                        )),
+                    )
+                    .with_doc(f.documentation.as_deref()),
+                );
+            }
+        }
         for f in &suite.fns {
             if let FnName::Free(id) = &f.name
                 && seen.insert(id.name.clone())

@@ -161,3 +161,79 @@ fn a_suite_helper_leaves_the_deployable_unchanged() {
         );
     }
 }
+
+/// #2841: a suite's `fixture` is test input. The deployable output is
+/// byte-for-byte the same whether or not a suite reads a fixture file.
+#[test]
+fn a_suite_fixture_leaves_the_deployable_unchanged() {
+    let without = project(
+        "fixture-without",
+        "suite shop.maths {\n  case \"doubles\" { expect double(3) == 6 }\n}\n",
+    );
+    let with = project(
+        "fixture-with",
+        "suite shop.maths {\n  fixture note = \"fixtures/note.txt\"\n\n  case \"reads\" { expect note.length() > 0 }\n}\n",
+    );
+    std::fs::create_dir_all(with.join("fixtures")).unwrap();
+    std::fs::write(with.join("fixtures/note.txt"), "a captured payload\n").unwrap();
+    for target in ["bundle", "workers"] {
+        let out = format!("out-{target}");
+        for root in [&without, &with] {
+            let (ok, text) = bynkc(root, &["compile", "--target", target, "-o", &out, "."]);
+            assert!(ok, "{target}: {text}");
+        }
+        let (a, b) = (tree(&without.join(&out)), tree(&with.join(&out)));
+        assert!(!a.is_empty(), "{target}: nothing was emitted");
+        let differing: Vec<_> = a
+            .keys()
+            .chain(b.keys())
+            .filter(|k| k.extension().is_none_or(|e| e != "map"))
+            .filter(|k| a.get(*k) != b.get(*k))
+            .collect();
+        assert!(
+            differing.is_empty(),
+            "{target}: a suite fixture changed the deployable: {differing:?}"
+        );
+        // And the fixture's text is in no file of it.
+        for (path, bytes) in &b {
+            assert!(
+                !String::from_utf8_lossy(bytes).contains("a captured payload"),
+                "{target}: {} carries the fixture's text",
+                path.display()
+            );
+        }
+    }
+}
+
+/// A fixture over 4 MiB is `bynk.fixture.too_large`; one at the cap is read.
+#[test]
+fn a_fixture_over_four_mib_is_refused() {
+    let suite = "suite shop.maths {\n  fixture big = \"fixtures/big.txt\"\n\n  case \"reads\" { expect big.length() > 0 }\n}\n";
+    let root = project("fixture-cap", suite);
+    std::fs::create_dir_all(root.join("fixtures")).unwrap();
+    std::fs::write(root.join("fixtures/big.txt"), vec![b'a'; 4 * 1024 * 1024]).unwrap();
+    let (ok, text) = bynkc(&root, &["check", "--format", "short", "."]);
+    assert!(ok, "a fixture at the cap is read: {text}");
+    std::fs::write(
+        root.join("fixtures/big.txt"),
+        vec![b'a'; 4 * 1024 * 1024 + 1],
+    )
+    .unwrap();
+    let (ok, text) = bynkc(&root, &["check", "--format", "short", "."]);
+    assert!(!ok, "{text}");
+    assert!(text.contains("bynk.fixture.too_large"), "{text}");
+}
+
+/// A fixture nothing uses is a warning, not an error.
+#[test]
+fn an_unused_fixture_is_a_warning() {
+    let root = project(
+        "fixture-unused",
+        "suite shop.maths {\n  fixture note = \"fixtures/note.txt\"\n\n  case \"doubles\" { expect double(3) == 6 }\n}\n",
+    );
+    std::fs::create_dir_all(root.join("fixtures")).unwrap();
+    std::fs::write(root.join("fixtures/note.txt"), "x").unwrap();
+    let (ok, text) = bynkc(&root, &["check", "--format", "short", "."]);
+    assert!(ok, "{text}");
+    assert!(text.contains("bynk.fixture.unused"), "{text}");
+}

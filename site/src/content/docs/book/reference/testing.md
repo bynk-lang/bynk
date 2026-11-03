@@ -784,6 +784,26 @@ case "an issue event is recorded" {
   name are `bynk.suite.duplicate_fn`.
 - **Not exported.** There is no way to share helpers across suites.
 
+## Test input from a file — `fixture` {#fixtures}
+
+A suite reads a project file's text into a `String` constant with a `fixture`
+declaration, so a realistic payload sits in `fixtures/` instead of an escaped
+literal in a case:
+
+```bynk,fragment
+suite github.events
+
+fixture issueOpened = "fixtures/github/issues-opened.json"
+
+case "a real issues delivery decodes" {
+  let r = read(Some("issues"), Some("d-1"), Bytes.fromUtf8(issueOpened))
+  expect r is Ok(_)
+}
+```
+
+It is visible to its own suite at every tier, and is never deployed. See
+[Test fixtures](/book/reference/fixtures/).
+
 ## Configuring a suite — `env { … }` {#env}
 
 A suite or case declares the variables and secrets its participants see with an

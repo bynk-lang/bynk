@@ -464,7 +464,8 @@ mod tests {
         // #2619 (raw and multi-line strings) added: escape_sequence (the
         // external `raw_string` token is not a rule). Net +1.
         // #2622 (`Decimal`) added: decimal_literal. Net +1.
-        assert_eq!(rules.len(), 187);
+        // #2841 (suite `fixture`) added: fixture_decl. Net +1.
+        assert_eq!(rules.len(), 188);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

@@ -1140,6 +1140,51 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.fault.todo",
         "A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning).",
     )),
+    dg(
+        "bynk.fixture.binary_content",
+        "A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text.",
+        &["fixture_decl"],
+    ),
+    dg(
+        "bynk.fixture.duplicate",
+        "A suite declares two `fixture`s of the same name.",
+        &["fixture_decl"],
+    ),
+    dg(
+        "bynk.fixture.invalid_encoding",
+        "A suite's `fixture` names a file that is not valid UTF-8.",
+        &["fixture_decl"],
+    ),
+    dg(
+        "bynk.fixture.missing_file",
+        "A suite's `fixture` names a file that is not in the project's `fixtures/` folder.",
+        &["fixture_decl"],
+    ),
+    dg(
+        "bynk.fixture.outside_fixtures_dir",
+        "A suite's `fixture` names a file outside the project's `fixtures/` folder.",
+        &["fixture_decl"],
+    ),
+    dg(
+        "bynk.fixture.too_large",
+        "A suite's `fixture` names a file over the 4 MiB limit for one fixture file.",
+        &["fixture_decl"],
+    ),
+    dg(
+        "bynk.fixture.unreadable_file",
+        "A suite's `fixture` names a listed file that could not be read.",
+        &["fixture_decl"],
+    ),
+    dg(
+        "bynk.fixture.unsafe_path",
+        "A suite's `fixture` path is empty, absolute or contains a `..` segment.",
+        &["fixture_decl"],
+    ),
+    warn(dg(
+        "bynk.fixture.unused",
+        "A suite declares a `fixture` that none of its cases, properties or helpers uses (warning).",
+        &["fixture_decl"],
+    )),
     d(
         "bynk.fmt.comment_loss",
         "The formatter would drop a comment, so it leaves the file unchanged.",

@@ -1025,6 +1025,7 @@ impl<'a> Formatter<'a> {
                         &t.uses,
                         &t.envs,
                         &t.stubs,
+                        &t.fixtures,
                         &t.fns,
                         &t.cases,
                         &t.properties,
@@ -1042,6 +1043,7 @@ impl<'a> Formatter<'a> {
                     &t.uses,
                     &t.envs,
                     &t.stubs,
+                    &t.fixtures,
                     &t.fns,
                     &t.cases,
                     &t.properties,
@@ -1057,6 +1059,7 @@ impl<'a> Formatter<'a> {
         uses: &[UsesDecl],
         envs: &[EnvClause],
         stubs: &[StubClause],
+        fixtures: &[FixtureDecl],
         fns: &[FnDecl],
         cases: &[Case],
         properties: &[PropertyDecl],
@@ -1089,13 +1092,15 @@ impl<'a> Formatter<'a> {
         // `fns`, `cases` and `properties` are separate lists, so merge them
         // back into source order rather than printing them by kind.
         enum Member<'a> {
+            Fixture(&'a FixtureDecl),
             Fn(&'a FnDecl),
             Case(&'a Case),
             Property(&'a PropertyDecl),
         }
-        let mut members: Vec<(usize, Member)> = fns
+        let mut members: Vec<(usize, Member)> = fixtures
             .iter()
-            .map(|f| (f.span.start, Member::Fn(f)))
+            .map(|f| (f.span.start, Member::Fixture(f)))
+            .chain(fns.iter().map(|f| (f.span.start, Member::Fn(f))))
             .chain(cases.iter().map(|c| (c.name_span.start, Member::Case(c))))
             .chain(
                 properties
@@ -1109,6 +1114,7 @@ impl<'a> Formatter<'a> {
                 self.newline();
             }
             match member {
+                Member::Fixture(f) => self.format_fixture_decl(f),
                 Member::Fn(f) => self.format_fn_decl(f),
                 Member::Case(c) => self.format_case(c),
                 Member::Property(p) => self.format_property(p),
@@ -1116,6 +1122,20 @@ impl<'a> Formatter<'a> {
             first = false;
         }
         self.emit_trailing_comments(trailing_comments);
+    }
+
+    /// #2841: `fixture name = "path"` on its own line.
+    fn format_fixture_decl(&mut self, f: &FixtureDecl) {
+        self.emit_leading_comments(&f.trivia.leading);
+        if let Some(doc) = &f.documentation {
+            self.emit_doc(doc);
+        }
+        self.push(&format!(
+            "fixture {} = \"{}\"",
+            f.name.name,
+            escape_string(&f.path)
+        ));
+        self.emit_trailing_comment_or_newline(f.trivia.trailing.as_deref());
     }
 
     fn format_case(&mut self, c: &Case) {

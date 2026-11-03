@@ -4836,6 +4836,32 @@
     }
   },
   {
+    "type": "fixture_decl",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "path": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "string_literal",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "fn_decl",
     "named": true,
     "fields": {
@@ -11882,6 +11908,10 @@
           "named": true
         },
         {
+          "type": "fixture_decl",
+          "named": true
+        },
+        {
           "type": "fn_decl",
           "named": true
         },
@@ -13537,6 +13567,10 @@
   },
   {
     "type": "faults",
+    "named": false
+  },
+  {
+    "type": "fixture",
     "named": false
   },
   {

@@ -51,6 +51,12 @@ pub fn find_declaration_span(source: &str, name: &str) -> Option<Span> {
         SourceUnit::Adapter(a) => &a.items,
         SourceUnit::Suite(_) => &suite_fns,
     };
+    // #2841: a suite's fixture is a declaration too.
+    if let SourceUnit::Suite(suite) = &unit
+        && let Some(f) = suite.fixtures.iter().find(|f| f.name.name == name)
+    {
+        return Some(f.name.span);
+    }
     items
         .iter()
         .filter_map(CommonsItem::name)
@@ -95,6 +101,12 @@ pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
             base_unit.as_deref(),
             base.as_ref(),
         ));
+    }
+    // #2841: a suite's fixture.
+    if let SourceUnit::Suite(suite) = &unit
+        && let Some(f) = suite.fixtures.iter().find(|f| f.name.name == name)
+    {
+        return Some(describe_fixture(f));
     }
     for item in items {
         if let Some(summary) = describe_item(item, name) {
@@ -670,6 +682,31 @@ pub fn describe_par_at(source: &str, offset: usize) -> Option<String> {
     )
 }
 
+/// #2841: a hover for the contextual `fixture` keyword under the cursor: an
+/// identifier spelled `fixture` followed by a name and `=`, the one position a
+/// suite body reads it as a declaration. `None` anywhere else.
+pub fn describe_fixture_at(source: &str, offset: usize) -> Option<String> {
+    use bynk_syntax::lexer::TokenKind;
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let t = tokens.get(idx)?;
+    if t.kind != TokenKind::Ident
+        || &source[t.span.start..t.span.end] != "fixture"
+        || tokens.get(idx + 1)?.kind != TokenKind::Ident
+        || tokens.get(idx + 2)?.kind != TokenKind::Eq
+    {
+        return None;
+    }
+    let doc = bynk_syntax::keywords::CONTEXTUAL_KEYWORDS
+        .iter()
+        .find(|k| k.word == "fixture")
+        .map(|k| k.meaning)
+        .unwrap_or_default();
+    Some(format!("```bynk\nfixture\n```\n\n{doc}"))
+}
+
 /// #2618: a hover for the contextual `private` modifier under the cursor:
 /// an identifier spelled `private` immediately before a `fn`, `type`,
 /// `messages`, `asset`, `embed` or `const` keyword, the one position the parser reads
@@ -993,8 +1030,8 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
     spans
 }
 
-/// #2618: the span of every `private` modifier on the unit's declarations,
-/// for the `keyword` semantic token. `private` is contextual, so an editor
+/// #2618: the span of every `private` modifier on the unit's declarations
+/// (and, #2841, every suite `fixture` keyword), for the `keyword` semantic token. `private` is contextual, so an editor
 /// grammar that matches keywords by spelling cannot tell the modifier from a
 /// binding named `private`; the parse can.
 pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
@@ -1011,7 +1048,16 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
         SourceUnit::Adapter(a) => &a.items,
         SourceUnit::Suite(_) => &[],
     };
-    items.iter().filter_map(CommonsItem::private_span).collect()
+    let mut spans: Vec<Span> = items.iter().filter_map(CommonsItem::private_span).collect();
+    // #2841: and each suite `fixture` keyword — contextual as well.
+    if let SourceUnit::Suite(s) = &unit {
+        spans.extend(
+            s.fixtures
+                .iter()
+                .map(|f| Span::new(f.span.start, f.span.start + "fixture".len())),
+        );
+    }
+    spans
 }
 
 /// #2837: the span of every reserved word written as a name, with whether it
@@ -2614,6 +2660,22 @@ pub(crate) fn describe_embed(e: &EmbedDecl) -> String {
         bynk_fmt::escape_string(&e.path)
     );
     if let Some(doc) = &e.documentation {
+        out.push('\n');
+        out.push_str(doc);
+        out.push('\n');
+    }
+    out
+}
+
+/// #2841: a fixture's hover: the declaration as written, then what it is. The
+/// file's size is not here: hover reads the source alone, not the folder.
+pub(crate) fn describe_fixture(f: &FixtureDecl) -> String {
+    let mut out = format!(
+        "```bynk\nfixture {} = \"{}\"\n```\n\nTest-only: the file's text as a `String` for this suite's cases; never deployed.\n",
+        f.name.name,
+        bynk_fmt::escape_string(&f.path)
+    );
+    if let Some(doc) = &f.documentation {
         out.push('\n');
         out.push_str(doc);
         out.push('\n');

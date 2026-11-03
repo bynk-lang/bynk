@@ -60,6 +60,16 @@ fn test_symbol(pm: &PositionMap, t: &SuiteDecl) -> DocumentSymbol {
             Vec::new(),
         ));
     }
+    for f in &t.fixtures {
+        children.push(make_symbol(
+            format!("fixture {}", f.name.name),
+            None,
+            SymbolKind::CONSTANT,
+            pm.range(f.span),
+            pm.range(f.name.span),
+            Vec::new(),
+        ));
+    }
     for f in &t.fns {
         children.push(fn_symbol(pm, f));
     }

@@ -109,6 +109,19 @@ pub fn list_embed_folder(
     })
 }
 
+/// #2841: the project's `fixtures/` folder, listed as [`list_asset_folder`]
+/// lists `assets/`, for `CompileOptions::fixture_files`.
+pub fn list_fixture_folder(
+    project_root: &Path,
+) -> Result<bynk_emit::project::assets::FixtureFolder, DiscoveryError> {
+    bynk_emit::project::assets::AssetFolder::fixtures_on_disk(project_root).map_err(|source| {
+        DiscoveryError {
+            path: project_root.join(bynk_emit::project::assets::PROJECT_FIXTURES_DIR),
+            source,
+        }
+    })
+}
+
 /// P4b (#2608): the project's `migrations/` folder, listed as
 /// [`list_asset_folder`] lists `assets/`, for `CompileOptions::migration_files`.
 pub fn list_migration_folder(

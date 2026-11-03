@@ -821,7 +821,7 @@ pub fn phase_integration_bodies(
             };
             // #2834: as for a unit suite, a system suite's helpers are
             // definitions of their own file's namespace.
-            let namespace = if d.fns.is_empty() {
+            let namespace = if SuiteItems::of(d).is_empty() {
                 harness_name.clone()
             } else {
                 let ns = suite_helper_namespace(&harness_name, &parsed[i].identity_path());
@@ -852,7 +852,20 @@ pub fn phase_integration_bodies(
             let system_actors =
                 target_test_actors(participants.first().and_then(|t| unit_tables.get(t)));
             // #2834: the suite's helpers, checked once in the harness view.
-            let mut helper_view = integration_resolved(&view, &cross_context, &[]);
+            let mut helper_view = integration_resolved(&view, &cross_context, SuiteItems::NONE);
+            check_suite_fixtures_in(
+                d,
+                &helper_view,
+                participants.first().and_then(|p| unit_tables.get(p)),
+                &mut body_errs,
+            );
+            add_suite_fns(
+                &mut helper_view,
+                SuiteItems {
+                    fns: &[],
+                    fixtures: &d.fixtures,
+                },
+            );
             check_suite_fns(
                 &d.fns,
                 &mut helper_view,
@@ -866,7 +879,7 @@ pub fn phase_integration_bodies(
                 let (_, case_callees) = typecheck_integration_case_body(
                     &participants,
                     &view,
-                    &d.fns,
+                    SuiteItems::of(d),
                     case,
                     &cross_context,
                     unit_tables,
@@ -966,7 +979,7 @@ pub fn typecheck_integration_case_body(
     participants: &[String],
     view: &SuiteView,
     // #2834: the declaring suite's helper `fn`s, callable from the body.
-    suite_fns: &[FnDecl],
+    suite_fns: SuiteItems<'_>,
     case: &Case,
     cross_context: &resolver::CrossContextInfo,
     unit_tables: &HashMap<String, UnitTable>,
@@ -1033,7 +1046,7 @@ pub fn typecheck_integration_case_body(
 pub fn integration_resolved(
     view: &SuiteView,
     cross_context: &resolver::CrossContextInfo,
-    suite_fns: &[FnDecl],
+    suite_fns: SuiteItems<'_>,
 ) -> ResolvedCommons {
     let SuiteView {
         types,
@@ -1086,11 +1099,57 @@ pub fn integration_resolved(
     resolved
 }
 
+/// #2834/#2841: what a suite declares for its bodies to use besides cases: its
+/// helper `fn`s and its `fixture` files.
+#[derive(Clone, Copy)]
+pub struct SuiteItems<'a> {
+    pub fns: &'a [FnDecl],
+    pub fixtures: &'a [FixtureDecl],
+}
+
+impl<'a> SuiteItems<'a> {
+    pub const NONE: SuiteItems<'static> = SuiteItems {
+        fns: &[],
+        fixtures: &[],
+    };
+
+    pub fn of(suite: &'a SuiteDecl) -> Self {
+        SuiteItems {
+            fns: &suite.fns,
+            fixtures: &suite.fixtures,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.fns.is_empty() && self.fixtures.is_empty()
+    }
+}
+
+/// #2841: a fixture, as the `String` constant the checker already knows an
+/// `embed` to be (the view's `embeds` map, read at an identifier).
+fn fixture_as_embed(f: &FixtureDecl) -> EmbedDecl {
+    EmbedDecl {
+        name: f.name.clone(),
+        path: f.path.clone(),
+        path_span: f.path_span,
+        documentation: f.documentation.clone(),
+        private: None,
+        span: f.span,
+        trivia: f.trivia.clone(),
+    }
+}
+
 /// #2834: add a suite's helper `fn`s to the view its bodies are checked in. The
 /// helpers are the suite's alone: the unit's own table, and with it everything
 /// the deployable emits, never sees them.
-pub fn add_suite_fns(resolved: &mut ResolvedCommons, suite_fns: &[FnDecl]) {
-    for f in suite_fns {
+pub fn add_suite_fns(resolved: &mut ResolvedCommons, items: SuiteItems<'_>) {
+    for f in items.fixtures {
+        resolved
+            .embeds
+            .entry(f.name.name.clone())
+            .or_insert_with(|| fixture_as_embed(f));
+    }
+    for f in items.fns {
         if let FnName::Free(name) = &f.name {
             resolved
                 .fns
@@ -1104,6 +1163,21 @@ pub fn add_suite_fns(resolved: &mut ResolvedCommons, suite_fns: &[FnDecl]) {
 /// (or, for a `system` suite, its harness) and the file it is declared in.
 pub fn suite_helper_namespace(target: &str, file: &std::path::Path) -> String {
     format!("{target}#helpers:{}", file.display())
+}
+
+/// #2841: the fixture-name rules and the unused warning for `suite`, against
+/// the case scope `resolved` (the view *before* the suite's own items join it).
+pub fn check_suite_fixtures_in(
+    suite: &SuiteDecl,
+    resolved: &ResolvedCommons,
+    target: Option<&UnitTable>,
+    errors: &mut Vec<CompileError>,
+) {
+    if suite.fixtures.is_empty() {
+        return;
+    }
+    let taken = bound_value_names(resolved, target);
+    crate::fixtures::check_suite_fixtures(suite, &taken, errors);
 }
 
 /// #2834: the typed-commons counterpart of [`add_suite_fns`], for lowering.
@@ -1161,7 +1235,13 @@ pub fn check_suite_fns(
         return (expr_types, callees);
     }
     let taken = bound_value_names(resolved, target);
-    add_suite_fns(resolved, suite_fns);
+    add_suite_fns(
+        resolved,
+        SuiteItems {
+            fns: suite_fns,
+            fixtures: &[],
+        },
+    );
     let resolved = &*resolved;
     let mut seen: HashSet<&str> = HashSet::new();
     for f in suite_fns {
@@ -1420,7 +1500,7 @@ fn check_test_bodies(
         // #2834: a suite with helpers is its own namespace for the index, so
         // its helpers are definitions of its own — two suites of one target
         // may each declare a `gh`. Its bare names resolve as the target's do.
-        let namespace = if test_decl.fns.is_empty() {
+        let namespace = if SuiteItems::of(test_decl).is_empty() {
             target_name.to_string()
         } else {
             let ns = suite_helper_namespace(target_name, &parsed[i].identity_path());
@@ -1443,8 +1523,9 @@ fn check_test_bodies(
         );
         // #2517: and so do the case and property locals.
         locals.enter_file(&parsed[i].identity_path(), parsed[i].is_synthetic());
-        // #2834: the suite's helpers, checked once in the target's view.
-        if !test_decl.fns.is_empty()
+        // #2834/#2841: the suite's fixtures and helpers, checked once in the
+        // target's view.
+        if !SuiteItems::of(test_decl).is_empty()
             && let Some((mut helper_view, _)) = build_privileged_resolved(
                 target_name,
                 unit_tables,
@@ -1454,6 +1535,19 @@ fn check_test_bodies(
             )
         {
             register_call_record_types(&mut helper_view, target_name, unit_tables);
+            check_suite_fixtures_in(
+                test_decl,
+                &helper_view,
+                unit_tables.get(target_name),
+                &mut errors,
+            );
+            add_suite_fns(
+                &mut helper_view,
+                SuiteItems {
+                    fns: &[],
+                    fixtures: &test_decl.fixtures,
+                },
+            );
             check_suite_fns(
                 &test_decl.fns,
                 &mut helper_view,
@@ -1468,7 +1562,7 @@ fn check_test_bodies(
             check_test_case_body(
                 target_name,
                 target_kind,
-                &test_decl.fns,
+                SuiteItems::of(test_decl),
                 case,
                 unit_tables,
                 unit_uses,
@@ -1496,7 +1590,7 @@ fn check_test_bodies(
             check_property_body(
                 target_name,
                 target_kind,
-                &test_decl.fns,
+                SuiteItems::of(test_decl),
                 prop,
                 unit_tables,
                 unit_uses,
@@ -3157,7 +3251,7 @@ fn typecheck_case_body_recording(
 fn check_test_case_body(
     target_name: &str,
     target_kind: UnitKind,
-    suite_fns: &[FnDecl],
+    suite_fns: SuiteItems<'_>,
     case: &Case,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
@@ -4001,7 +4095,7 @@ pub fn check_history_binding(
 fn check_property_body(
     target_name: &str,
     target_kind: UnitKind,
-    suite_fns: &[FnDecl],
+    suite_fns: SuiteItems<'_>,
     prop: &PropertyDecl,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,

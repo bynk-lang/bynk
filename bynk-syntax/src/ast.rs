@@ -412,6 +412,9 @@ pub struct SuiteDecl {
     pub cases: Vec<Case>,
     /// v0.114: generative `property` blocks (testing track slice 2).
     pub properties: Vec<PropertyDecl>,
+    /// #2841: `fixture name = "fixtures/…"` declarations — project files whose
+    /// text is a `String` constant in this suite's cases, never deployed.
+    pub fixtures: Vec<FixtureDecl>,
     /// #2834: suite-local helper `fn`s — pure, private to this suite, called
     /// from its `case` and `property` bodies and emitted only into test output.
     pub fns: Vec<FnDecl>,
@@ -810,6 +813,24 @@ pub struct EmbedDecl {
     /// is unit-private: visible across its own unit's files (and to that
     /// unit's suites), never through `uses`. `None` is the default, public.
     pub private: Option<Span>,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+/// `fixture name = "path"` (#2841): a project file's text as a `String`
+/// constant visible to the declaring suite's `case` and `property` bodies. A
+/// fixture is test-only: its text goes into test output, never into a deployable.
+///
+/// `path` is the literal's value with escapes applied, relative to the project
+/// root. The checker rejects a path that is absolute or contains a `..` segment
+/// (`bynk.fixture.unsafe_path`) or names a file outside the project's
+/// `fixtures/` folder (`bynk.fixture.outside_fixtures_dir`).
+#[derive(Debug, Clone)]
+pub struct FixtureDecl {
+    pub name: Ident,
+    pub path: String,
+    pub path_span: Span,
+    pub documentation: Option<Doc>,
     pub span: Span,
     pub trivia: Trivia,
 }

@@ -1148,6 +1148,13 @@ fn watch_fingerprint(project_root: &Path) -> u64 {
             record(&project_root.join(rel), &mut entries);
         }
     }
+    // #2841: and every file in `fixtures/`, so editing a suite's fixture
+    // re-runs the tests that read it.
+    if let Ok(fixtures) = bynk_emit::project::assets::list_fixture_files(project_root) {
+        for rel in fixtures {
+            record(&project_root.join(rel), &mut entries);
+        }
+    }
     // P4b (#2608): and every D1 migration, so a new one is applied.
     if let Ok(migrations) = bynk_emit::project::assets::list_migration_files(project_root) {
         for rel in migrations {
@@ -1184,6 +1191,24 @@ mod watch_tests {
         let after = watch_fingerprint(&root);
         let _ = std::fs::remove_dir_all(&root);
         assert_ne!(before, after, "an embed edit must trigger a rebuild");
+    }
+
+    /// #2841: an edit to a file in `fixtures/` changes the fingerprint too, so
+    /// `bynk dev` re-runs the tests that read it.
+    #[test]
+    fn a_fixture_edit_changes_the_watch_fingerprint() {
+        let root =
+            std::env::temp_dir().join(format!("bynk-dev-watch-fixture-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::create_dir_all(root.join("fixtures")).unwrap();
+        std::fs::write(root.join("src/a.bynk"), "commons a\n").unwrap();
+        std::fs::write(root.join("fixtures/push.json"), "{}").unwrap();
+        let before = watch_fingerprint(&root);
+        std::fs::write(root.join("fixtures/push.json"), "{\"ref\":1}").unwrap();
+        let after = watch_fingerprint(&root);
+        let _ = std::fs::remove_dir_all(&root);
+        assert_ne!(before, after, "a fixture edit must trigger a re-run");
     }
 
     /// P4b (#2608): a new migration changes the fingerprint, so `bynk dev`
