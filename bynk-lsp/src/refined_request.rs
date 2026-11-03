@@ -441,10 +441,22 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
             let mut pattern: Option<&str> = None;
             // #2867: random strings are never dates; offer real ones.
             if preds.clone().any(|k| matches!(k, PredKind::IsoDate)) {
+                let re = preds
+                    .clone()
+                    .find_map(|k| match k {
+                        PredKind::Matches(p) => Some(p),
+                        _ => None,
+                    })
+                    .and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
                 for d in ["2026-11-03", "2028-02-29", "2000-02-29"] {
-                    push(d.to_string(), &mut out);
+                    if re.as_ref().is_none_or(|re| re.find(d).is_some()) {
+                        push(d.to_string(), &mut out);
+                    }
                 }
-                return (out, None);
+                let note = out.is_empty().then(|| {
+                    "No sample date satisfies every clause; type a candidate below.".to_string()
+                });
+                return (out, note);
             }
             for k in preds {
                 match k {

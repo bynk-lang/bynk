@@ -3581,13 +3581,10 @@ pub fn prop_binding_generable(
     }
 }
 
-/// Whether a (field-inline) refinement carries a `Matches` predicate.
+/// Whether a (field-inline) refinement has no refinement-driven generator
+/// (`Matches`, `IsoDate`), the same set `Val[T]` pins (`refinement_needs_pin`).
 fn refinement_has_matches(refinement: Option<&Refinement>) -> bool {
-    refinement.is_some_and(|r| {
-        r.predicates
-            .iter()
-            .any(|p| matches!(p.kind, PredKind::Matches(_)))
-    })
+    refinement.is_some_and(crate::checker::refinement_needs_pin)
 }
 
 /// The refinement of a resolved refined/opaque named type, if any — used by the

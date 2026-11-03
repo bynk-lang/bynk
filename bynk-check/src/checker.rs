@@ -51,6 +51,7 @@ mod linearity;
 mod par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
+pub(crate) use refinements::refinement_needs_pin;
 pub use refinements::split_regex_flags;
 mod regex_ambiguity;
 mod usefulness;

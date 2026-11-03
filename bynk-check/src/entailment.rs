@@ -217,7 +217,7 @@ pub fn entailed(base: &str, sender: &[String], q: &str) -> bool {
     if sender.iter().any(|p| p == q) {
         return true;
     }
-    // #2867: a date is more than ten characters, so only `IsoDate` itself
+    // #2867: being a date is more than being ten characters long, so only `IsoDate` itself
     // satisfies `IsoDate` (it is still *sent* as `Length(10)` below).
     if q == "IsoDate" {
         return false;
