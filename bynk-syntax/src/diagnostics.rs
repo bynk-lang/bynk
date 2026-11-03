@@ -1298,6 +1298,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["given_clause"],
     ),
     dg(
+        "bynk.given.fn_outside_context",
+        "A function in a commons (or a suite) declares `given`; only a context function can.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.fn_unsupported",
+        "A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.missing_for_call",
+        "A call to a function that declares `given` from a body that does not declare those capabilities.",
+        &["given_clause"],
+    ),
+    dg(
         "bynk.given.undeclared_capability",
         "A handler uses a capability it did not declare with `given`.",
         &["given_clause"],

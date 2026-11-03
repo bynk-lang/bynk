@@ -814,6 +814,18 @@
       "summary": "`given B.Cap` names a capability the consumed context does not export."
     },
     {
+      "code": "bynk.given.fn_outside_context",
+      "summary": "A function in a commons (or a suite) declares `given`; only a context function can."
+    },
+    {
+      "code": "bynk.given.fn_unsupported",
+      "summary": "A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`."
+    },
+    {
+      "code": "bynk.given.missing_for_call",
+      "summary": "A call to a function that declares `given` from a body that does not declare those capabilities."
+    },
+    {
       "code": "bynk.given.undeclared_capability",
       "summary": "A handler uses a capability it did not declare with `given`."
     },

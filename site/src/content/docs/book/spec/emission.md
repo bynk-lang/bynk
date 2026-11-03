@@ -278,6 +278,14 @@ its `deps` (and on Workers its entry point and `compose` thread the request's co
 parameter is not part of the function's Bynk signature, and a function outside the set emits
 byte-for-byte as before.
 
+A context function that declares `given` (#2868) likewise takes a **hidden `deps` parameter**,
+after any comparator witnesses and before `__exec`. Its type is an object of exactly the
+capabilities the function names, so a capability call in the body (a lambda included) lowers as
+in a handler (`deps.Logger.error(…)`). Every call passes the caller's own `deps` on, which
+carries them because the caller must declare them (§5.3, *Capabilities*), and a function
+named as a value is wrapped in a closure over the `deps` in scope where it is named. A function
+with no `given` emits byte-for-byte as before.
+
 ### §7.3.3 Agents
 
 An agent emits a state `interface`, a **zero-value factory** that realises the

@@ -627,6 +627,14 @@ impl CapRef {
         self.context.is_some()
     }
 
+    /// How the reference is written: `Cap`, or `B.Cap` for a consumed context's.
+    pub fn display_name(&self) -> String {
+        match self.prefix() {
+            Some(p) => format!("{p}.{}", self.key()),
+            None => self.key().to_string(),
+        }
+    }
+
     /// The cross-context prefix (consumed-context qualified name or alias) as
     /// a dotted string, if any.
     pub fn prefix(&self) -> Option<String> {
@@ -2774,6 +2782,10 @@ pub struct FnDecl {
     pub name: FnName,
     pub params: Vec<Param>,
     pub return_type: TypeRef,
+    /// #2868: `given C1, C2` on a context-level function, parsed straight after
+    /// the return type: the capabilities the body may use, and that every
+    /// caller must itself have in scope. Empty when absent.
+    pub given: Vec<CapRef>,
     /// `where A: Eq, …`, parsed between the return type and the contract
     /// clauses; empty when absent. Bounds receiver type parameters (and may
     /// restate the method's own).

@@ -56,7 +56,11 @@ pub fn check_context_constraints(
 ) -> Vec<CompileError> {
     let mut errors = Vec::new();
     for item in &typed.commons.items {
-        if let CommonsItem::Fn(f) = item {
+        // #2868: a `given` function is typed with the context's declarations,
+        // after this pass; `check_handler_constraints` walks it.
+        if let CommonsItem::Fn(f) = item
+            && f.given.is_empty()
+        {
             walk_block_for_constraints(
                 &f.body,
                 typed,
@@ -110,6 +114,15 @@ pub fn check_handler_constraints(
                     .collect(),
             ),
             CommonsItem::Provider(p) => (p.ops.iter().map(|op| &op.body).collect(), Vec::new()),
+            // #2868: a `given` function, typed with the context's declarations.
+            CommonsItem::Fn(f) if !f.given.is_empty() => (
+                vec![&f.body],
+                f.requires
+                    .iter()
+                    .chain(&f.ensures)
+                    .map(|c| &c.predicate)
+                    .collect(),
+            ),
             _ => continue,
         };
         for body in bodies {
@@ -785,6 +798,18 @@ pub fn check_context_declarations(
         &mut errors,
         tys,
     );
+    check_given_fns(
+        typed,
+        cross_context,
+        &resolved,
+        &capability_info_map,
+        refs,
+        hints,
+        locals,
+        requirements,
+        &mut errors,
+        tys,
+    );
     check_agent_decls(
         typed,
         table,
@@ -1162,6 +1187,65 @@ fn check_provider_decls(
     // a cycle — the composition root cannot instantiate one in dependency
     // order. Self-provision (`provides X = … given X`) is the trivial cycle.
     detect_provider_dependency_cycles(&table.providers, errors);
+}
+
+/// #2868: type-check this file's context functions that declare `given`. They
+/// wait for the context's capability table, which a plain function's check
+/// (`check_record_in`) does not have. A function the declaration rules refuse
+/// (`given_fn_refusal`) was reported there and is not checked again.
+#[allow(clippy::too_many_arguments)]
+fn check_given_fns(
+    typed: &mut checker::TypedCommons,
+    cross_context: &resolver::CrossContextInfo,
+    resolved: &ResolvedCommons,
+    capability_info_map: &HashMap<String, CapabilityInfo>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+    requirements: &mut RequirementSink,
+    errors: &mut Vec<CompileError>,
+    tys: &Arc<Types>,
+) {
+    let fns: Vec<Arc<FnDecl>> = typed
+        .commons
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Fn(f) if !f.given.is_empty() => Some(Arc::new(f.clone())),
+            _ => None,
+        })
+        .collect();
+    for f in fns {
+        if checker::given_fn_refusal(&f, resolved.is_context).is_some() {
+            continue;
+        }
+        refs.set_owner(f.name.display());
+        let mut capabilities: HashMap<String, CapabilityInfo> = HashMap::new();
+        for cap_ref in &f.given {
+            if let Some(info) =
+                resolve_given_cap_ref(cap_ref, capability_info_map, cross_context, errors, refs)
+            {
+                capabilities.insert(cap_ref.key().to_string(), info);
+            }
+        }
+        checker::check_context_fn(
+            &f,
+            checker::FnCaps {
+                capabilities,
+                declared_capabilities: capability_info_map.clone(),
+            },
+            resolved,
+            &mut typed.expr_types,
+            &mut typed.callees,
+            errors,
+            refs,
+            hints,
+            locals,
+            requirements,
+            tys,
+        );
+        refs.clear_owner();
+    }
 }
 
 /// The agent handlers `body` calls, as `(agent, handler)` — read from the

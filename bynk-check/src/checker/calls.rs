@@ -38,6 +38,48 @@ pub(crate) fn check_fn(
     check_fn_in(
         f,
         false,
+        None,
+        input,
+        expr_types,
+        callees,
+        errors,
+        refs,
+        hints,
+        locals,
+        requirements,
+        tys,
+    );
+}
+
+/// #2868: the capability scope of a context function that declares `given`.
+pub struct FnCaps {
+    /// The function's own `given`, resolved, by deps key.
+    pub capabilities: HashMap<String, CapabilityInfo>,
+    /// Every capability the context declares, so a use outside `given` is
+    /// reported as undeclared rather than unknown.
+    pub declared_capabilities: HashMap<String, CapabilityInfo>,
+}
+
+/// #2868: check a context function that declares `given`, with its capabilities
+/// in scope.
+#[allow(clippy::too_many_arguments)]
+pub fn check_context_fn(
+    f: &FnDecl,
+    caps: FnCaps,
+    input: &ResolvedCommons,
+    expr_types: &mut HashMap<ExprId, TypedExpr>,
+    callees: &mut HashMap<ExprId, Callee>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+    requirements: &mut RequirementSink,
+    tys: &Types,
+) {
+    check_fn_in(
+        f,
+        false,
+        Some(caps),
         input,
         expr_types,
         callees,
@@ -65,9 +107,16 @@ pub fn check_suite_fn(
     requirements: &mut RequirementSink,
     tys: &Types,
 ) {
+    // #2868: a suite helper is no context function, so it cannot declare
+    // `given`; its cases get the target's capabilities instead.
+    if !f.given.is_empty() {
+        errors.extend(given_fn_refusal(f, false));
+        return;
+    }
     check_fn_in(
         f,
         true,
+        None,
         input,
         expr_types,
         callees,
@@ -86,6 +135,9 @@ pub fn check_suite_fn(
 pub(crate) fn check_fn_in(
     f: &FnDecl,
     test_values: bool,
+    // #2868: for a context function with `given`, the capabilities in scope
+    // (the declared ones, resolved) and every capability the context declares.
+    fn_caps: Option<FnCaps>,
     input: &ResolvedCommons,
     expr_types: &mut HashMap<ExprId, TypedExpr>,
     callees: &mut HashMap<ExprId, Callee>,
@@ -245,7 +297,33 @@ pub(crate) fn check_fn_in(
         effectful,
         agent_state_ty: None,
         commit_seen: false,
-        caps: CapabilityCtx::default(),
+        caps: match fn_caps {
+            Some(c) => {
+                let given_entries: Vec<(String, Span)> = f
+                    .given
+                    .iter()
+                    .map(|g| (g.key().to_string(), g.span))
+                    .collect();
+                CapabilityCtx {
+                    capabilities: c.capabilities,
+                    declared_capabilities: c.declared_capabilities,
+                    given_remaining: given_entries.iter().map(|(k, _)| k.clone()).collect(),
+                    given_used: HashSet::new(),
+                    given_entries,
+                    given_anchor: Some(f.return_type.span()),
+                }
+            }
+            // #2868: a plain effectful function in a context has no `given`, but
+            // a call to one that does is fixed by adding it, after the return type.
+            None => CapabilityCtx {
+                given_anchor: (input.is_context
+                    && !test_values
+                    && matches!(f.name, FnName::Free(_))
+                    && effectful)
+                    .then(|| f.return_type.span()),
+                ..CapabilityCtx::default()
+            },
+        },
         in_test_body: false,
         oidc_binder: None,
         test_services: HashMap::new(),
@@ -291,6 +369,10 @@ pub(crate) fn check_fn_in(
         )
         .with_label(f.return_type.span(), "declared return type");
         ctx.errors.push(with_of_hint(err, body_ty, return_ty, &ctx));
+    }
+    if !f.given.is_empty() {
+        let entries = ctx.caps.given_entries.clone();
+        report_unused_given(&mut ctx, &entries, f.return_type.span());
     }
 }
 
@@ -684,6 +766,72 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
     ctx.errors.push(err);
 }
 
+/// #2868: a call to (or reference to) a function that declares `given` is legal
+/// only where the caller has those capabilities itself. Checked at each call, so
+/// the rule is transitive without a graph walk: `f` calls `g`, so `f` declares
+/// `g`'s; a handler calls `f`, so it declares `f`'s. Recursion needs no special
+/// case. A test case supplies the capabilities its target's handlers would get.
+/// The capabilities the callee needs count as used by the caller.
+pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx) {
+    if callee.given.is_empty() {
+        return;
+    }
+    let mut missing: Vec<String> = Vec::new();
+    for c in &callee.given {
+        let key = c.key().to_string();
+        if ctx.caps.capabilities.contains_key(&key) {
+            ctx.caps.given_used.insert(key);
+        } else if !missing.contains(&c.display_name()) {
+            missing.push(c.display_name());
+        }
+    }
+    if missing.is_empty() || ctx.in_test_body {
+        return;
+    }
+    let list = missing.join(", ");
+    let mut err = CompileError::new(
+        "bynk.given.missing_for_call",
+        name.span,
+        format!(
+            "`{}` needs `given {list}`, which the enclosing body does not declare",
+            name.name
+        ),
+    )
+    .with_label(
+        callee.name.ident().span,
+        format!(
+            "`{}` declares `given {}`",
+            name.name,
+            callee
+                .given
+                .iter()
+                .map(|c| c.display_name())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    )
+    .with_note(if ctx.test_values {
+        // A suite helper is not a context function, so it cannot declare
+        // `given` to pass the capabilities on.
+        "a suite helper has no capabilities of its own to pass on: call it from a `case`, which gets the target's capabilities as its handlers do, or take the operation as a function parameter".to_string()
+    } else {
+        format!(
+            "a capability never appears in a body without appearing in the signature of every handler and function on the path to it: add `{list}` to the caller's `given` clause"
+        )
+    });
+    if !ctx.test_values
+        && let Some((span, insert)) =
+            given_insertion_edit(&ctx.caps.given_entries, ctx.caps.given_anchor, &list)
+    {
+        err = err.with_suggestion(
+            format!("add `{list}` to the `given` clause"),
+            vec![(span, insert)],
+            Applicability::MachineApplicable,
+        );
+    }
+    ctx.errors.push(err);
+}
+
 pub(crate) fn check_call(
     name: &Ident,
     type_args: &[TypeRef],
@@ -705,6 +853,7 @@ pub(crate) fn check_call(
             .insert(expr_id, Callee::Fn(Arc::clone(&fn_decl), Vec::new()));
         warn_bynk_list_deprecation(name, args, span, ctx);
         refuse_experimental_import(name, ctx);
+        require_callee_given(name, &fn_decl, ctx);
         let ret = check_call_against_fn(name, &fn_decl, type_args, args, expected, ctx);
         // Slice 1: the comparator witnesses the generic-call path resolved.
         if let Some(witnesses) = ctx.last_witness.take() {

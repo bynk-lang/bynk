@@ -1,0 +1,21 @@
+context shop.orders
+
+// #2868: a capability declared in one file ...
+capability Audit {
+	fn note(n: Int) -> Effect[()]
+}
+
+provides Audit = NoAudit {
+	fn note(n: Int) -> Effect[()] {}
+}
+
+// ... and one no handler lists, reached only through a `given` function.
+capability Meter {
+	fn bump() -> Effect[Int]
+}
+
+provides Meter = FixedMeter {
+	fn bump() -> Effect[Int] {
+		9
+	}
+}

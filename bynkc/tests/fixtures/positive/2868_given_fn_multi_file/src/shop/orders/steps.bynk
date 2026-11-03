@@ -1,0 +1,35 @@
+context shop.orders
+
+consumes bynk { Logger }
+
+// ... used by `given` functions in a file that has no handler, naming both a
+// sibling file's capability and a flattened first-party one.
+fn book(n: Int) -> Effect[Int] given Audit, Logger {
+	let _ <- Audit.note(n)
+	let _ <- Logger.info("recorded")
+	Effect.pure(n)
+}
+
+// Sends, so it takes the execution context as well as `deps`.
+fn announce(n: Int) -> Effect[Int] given Audit {
+	~> Audit.note(n)
+	Effect.pure(n)
+}
+
+// Contracts guard the call and forward `deps`.
+fn positive(n: Int) -> Effect[Int] given Audit
+	requires nonNegative: n >= 0
+	ensures atLeastN: result >= n
+{
+	let _ <- Audit.note(n)
+	Effect.pure(n + 1)
+}
+
+// A `given` function used as a value.
+fn ack(n: Int) -> Effect[()] given Audit {
+	Audit.note(n)
+}
+
+fn tick() -> Effect[Int] given Meter {
+	Meter.bump()
+}

@@ -433,7 +433,8 @@ implement them.
 
 `fn`, a function name or a `Type.method` name, an optional `[A, B]`
 **type-parameter list** (v0.20a; each parameter may carry bounds, §4.3.1b), a
-parameter list, `->`, a return type, an optional **`where` clause** (§4.3.1b), any
+parameter list, `->`, a return type, an optional **`given` clause** (§4.3.10, a
+context function only: #2868), an optional **`where` clause** (§4.3.1b), any
 number of **contract clauses** (v0.115), and a block body. Well-formedness: §5.
 
 ### §4.3.1b type_param / where_clause (constrained generics, slice 0)

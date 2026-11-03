@@ -712,6 +712,8 @@ module.exports = grammar({
         ")",
         "->",
         field("return_type", $._type_ref),
+        // #2868: a context function's capabilities, after the return type.
+        optional(field("given", $.given_clause)),
         // Constrained generics slice 0: a method's `where A: Eq` clause bounds
         // a receiver type's parameter.
         optional($.where_clause),
