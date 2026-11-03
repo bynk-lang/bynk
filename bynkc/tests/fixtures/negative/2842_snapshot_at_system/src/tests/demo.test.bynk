@@ -1,0 +1,7 @@
+suite demo as system {
+  // #2842: snapshots are stored per unit suite file.
+  case "a system case" {
+    let r <- api.GET("/a") by Visitor
+    expect r matches snapshot "no"
+  }
+}

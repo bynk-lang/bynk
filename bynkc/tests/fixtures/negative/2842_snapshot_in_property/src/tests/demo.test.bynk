@@ -1,0 +1,7 @@
+suite demo {
+  property "every n" {
+    for all n: Int {
+      expect run(n) matches snapshot "n"
+    }
+  }
+}

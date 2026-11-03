@@ -1,0 +1,22 @@
+suite shape
+
+// #2842: driven by bynkc/tests/snapshot_behaviour.rs, which records, changes and
+// removes the snapshots in a scratch copy.
+
+case "a delivery reads" {
+	expect read("d-1", 3) matches snapshot "first"
+}
+
+case "two snapshots in one case" {
+	let d = read("d-2", 4)
+	expect d matches snapshot "whole"
+	expect d.tags matches snapshot "tags"
+}
+
+case "constructor" {
+	expect read("d-4", 6) matches snapshot "__proto__"
+}
+
+case "a retired case" {
+	expect read("d-3", 5) matches snapshot "gone"
+}

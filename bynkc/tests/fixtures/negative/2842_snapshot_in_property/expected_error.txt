@@ -1,0 +1,1 @@
+bynk.test.snapshot_in_property a snapshot can only be taken in a `case`, not in a `property`

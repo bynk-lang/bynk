@@ -2367,6 +2367,12 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
         );
+        // #2842: the contextual `matches` and `snapshot` of a snapshot claim.
+        dt.extend(
+            crate::symbols::snapshot_keyword_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
         // #2619: escape sequences in every form of string literal, and a raw
         // literal's delimiters as `string`.
         dt.extend(
@@ -3052,11 +3058,23 @@ impl LanguageServer for Backend {
                     &a.unit_sources,
                 ),
             });
-        let content = crate::hover::hover_content(&crate::hover::HoverInput {
-            analysis,
-            doc,
-            path: uri.to_file_path().ok().as_deref(),
-            files: files.as_deref(),
+        // #2842: a `matches snapshot` claim hovers with the stored snapshot, read
+        // from the project's `snapshots/` folder (or "not yet recorded").
+        let snapshot_hover = match (&positioned, doc) {
+            (Some((a, rel, _)), Some((text, offset))) => {
+                let file = crate::symbols::snapshot_file_for(rel);
+                let stored = std::fs::read_to_string(a.project_root.join(&file)).ok();
+                crate::symbols::describe_snapshot_at(text, offset, stored.as_deref())
+            }
+            _ => None,
+        };
+        let content = snapshot_hover.or_else(|| {
+            crate::hover::hover_content(&crate::hover::HoverInput {
+                analysis,
+                doc,
+                path: uri.to_file_path().ok().as_deref(),
+                files: files.as_deref(),
+            })
         });
         // #2470: a refined type's hover gains its predicates in words and,
         // for a client that runs the command, a "Try values…" link.

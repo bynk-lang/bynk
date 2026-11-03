@@ -1,0 +1,9 @@
+context shape
+
+type Kind = | Open | Closed(n: Int)
+
+type Delivery = { id: String, kind: Kind, tags: List[String] }
+
+fn read(id: String, n: Int) -> Delivery {
+	Delivery { id: id, kind: Closed(n), tags: ["b", "a"] }
+}

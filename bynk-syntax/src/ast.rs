@@ -2933,9 +2933,25 @@ pub struct AdvanceStmt {
     pub trivia: Trivia,
 }
 
+/// #2842: the `matches snapshot "<name>"` tail of an `expect`. `matches` and
+/// `snapshot` are contextual words, matched by text like `faults`.
+#[derive(Debug, Clone)]
+pub struct SnapshotClause {
+    /// The snapshot's name (the literal's text), unique within its case.
+    pub name: String,
+    /// The `matches` keyword through the closing quote of the name.
+    pub span: Span,
+    /// The name literal.
+    pub name_span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct ExpectStmt {
     pub value: Expr,
+    /// #2842: `expect <value> matches snapshot "<name>"` compares `value`'s
+    /// canonical JSON to a stored snapshot instead of asserting a `Bool`. `None`
+    /// for every other `expect`.
+    pub snapshot: Option<SnapshotClause>,
     pub span: Span,
     pub trivia: Trivia,
 }
@@ -4367,6 +4383,7 @@ fn f(x: Int) -> Int {
             Statement::EffectLet(l) => let_slots("let<-", l, &mut out),
             Statement::Expect(ExpectStmt {
                 value,
+                snapshot: _,
                 span: _,
                 trivia: _,
             }) => out.push(("expect.value", value)),

@@ -2877,6 +2877,31 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     )),
     dg(
+        "bynk.test.snapshot_duplicate_name",
+        "A case takes two snapshots (`expect v matches snapshot \"name\"`) under one name; a snapshot is keyed by its case and name.",
+        &["snapshot_expr"],
+    ),
+    dg(
+        "bynk.test.snapshot_in_property",
+        "A `property` takes a snapshot; its body runs once per generated input, so the snapshot belongs in a `case` over a fixed value.",
+        &["snapshot_expr"],
+    ),
+    dg(
+        "bynk.test.snapshot_name_not_literal",
+        "`matches snapshot` is not followed by a string literal; a snapshot is named by a literal so the compiler knows every snapshot a suite takes.",
+        &["snapshot_expr"],
+    ),
+    dg(
+        "bynk.test.snapshot_needs_unit_suite",
+        "A snapshot is taken in a `system`-tier case or in an integration or system suite; snapshots are stored per unit suite file and compared in the unit harness.",
+        &["snapshot_expr"],
+    ),
+    dg(
+        "bynk.test.snapshot_not_codable",
+        "The value of an `expect … matches snapshot` is not `Codable`: a snapshot stores the value's `Json.encode` text, so it must be in the domain `Json.encode` accepts.",
+        &["snapshot_expr"],
+    ),
+    dg(
         "bynk.test.stale_needs_timestamp",
         "A case drives `by Stale` at a `Signature` route whose actor declares no `timestamp` header and `tolerance`, so there is no replay window for the seam to refuse a stale signature by.",
         &["case"],

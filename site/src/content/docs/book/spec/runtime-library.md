@@ -480,6 +480,36 @@ only difference, and `ServerError("")` is itself a legal return, so it does not
 reliably tell the two apart: by design (#1811), a `system` case observes
 responses, not faults.
 
+## §7.4.12b The snapshot claim
+
+A snapshot claim, `expect <value> matches snapshot "<name>"`
+([§5.9f](/book/spec/static-semantics/#59f-snapshot-claim)), compares the value with
+a stored snapshot. The contract:
+
+- **Encoding.** The value is encoded as `Json.encode` encodes it, then parsed back
+  and printed with the keys of every object sorted and an indent of two spaces. The
+  snapshot is that text; two values are equal when their texts are.
+- **Storage.** A suite file's snapshots are one JSON object in
+  `snapshots/<suite file without .bynk>.snap.json` under the project root, keyed by
+  case name and then snapshot name, printed the same way and ending in a newline.
+- **Inlining.** The build reads the project's `snapshots/` folder and inlines each
+  suite file's text into its test module. The harness reads no file at test time.
+- **Comparison.** A claim passes when the stored text equals the value's. It fails
+  when they differ, reporting a line diff, and when no snapshot is stored for the
+  case and name, so a missing snapshot is never a pass.
+- **Recording.** Under `bynk test --update-snapshots` a claim records its value
+  instead and passes. The runner reports, per snapshot file, the counts of
+  snapshots written (no stored value), updated (a different one) and obsolete (stored
+  for a case and name the suite no longer takes), and the file's new text. Only the
+  driver writes: it writes that text, deletes a file that becomes empty, and
+  deletes a `snapshots/` file no suite takes a snapshot into. Obsolete snapshots are
+  decided from the suite's source, not from the cases that ran, so a run filtered
+  by `--case` or `--suite` neither loses nor reports the snapshots of the cases it
+  skipped.
+- **Reporting.** Every output format carries the three counts: a `snapshots`
+  object on the JSON document and on the NDJSON `run-end`, and a summary line in
+  the `rich` output; none for a project that takes no snapshot.
+
 ## §7.4.13 The `par` join (#2640)
 
 `__bynkSettleAll(thunks)` is the runtime half of a `par` block (§4.8.7b). `thunks` is

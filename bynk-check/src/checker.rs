@@ -4149,6 +4149,33 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                         ),
                     );
                 }
+                if let Some(clause) = &a.snapshot {
+                    // #2842: a snapshot compares the value's canonical JSON, so
+                    // the value need only be `Codable` (the domain `Json.encode`
+                    // accepts), not a `Bool`.
+                    if let Some(actual) = type_of(&a.value, None, ctx)
+                        && (!codable::json_codable(actual, &ctx.input.types, tys, &ctx.type_vars)
+                            || actual == tys.intern(Ty::Unit))
+                    {
+                        let mut err = CompileError::new(
+                            "bynk.test.snapshot_not_codable",
+                            a.value.span,
+                            format!(
+                                "a snapshot stores the value as JSON, but `{}` is not `Codable`",
+                                actual.display(tys),
+                            ),
+                        )
+                        .with_label(clause.span, "snapshotted here")
+                        .with_note(
+                            "`Codable` types are the ones `Json.encode` accepts: base types, named types, and the built-in containers over them — not `()`, functions, effects, streams, or `bynk.crypto` keys",
+                        );
+                        if let Some(n) = codable::key_note(actual, &ctx.input.types, tys) {
+                            err = err.with_note(n);
+                        }
+                        ctx.errors.push(err);
+                    }
+                    continue;
+                }
                 let val_ty = type_of(&a.value, Some(tys.intern(Ty::Base(BaseType::Bool))), ctx);
                 if let Some(actual) = val_ty
                     && !compatible(actual, tys.intern(Ty::Base(BaseType::Bool)), tys)

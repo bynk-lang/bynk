@@ -1,0 +1,6 @@
+suite demo {
+  // #2842: a snapshot stores the value as JSON, so a stream is no snapshot.
+  case "a stream" {
+    expect Stream.of([1, 2]) matches snapshot "stream"
+  }
+}

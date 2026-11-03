@@ -1,0 +1,6 @@
+suite demo {
+  case "twice" {
+    expect read("a") matches snapshot "same"
+    expect read("b") matches snapshot "same"
+  }
+}

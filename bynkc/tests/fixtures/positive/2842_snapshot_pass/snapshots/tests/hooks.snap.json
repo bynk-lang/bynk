@@ -1,0 +1,51 @@
+{
+  "a malformed delivery is a snapshot of its error": {
+    "malformed": {
+      "error": "$.id: expected string, got number",
+      "kind": "Err"
+    }
+  },
+  "an opened issue decodes whole": {
+    "issues opened": {
+      "kind": "Ok",
+      "value": {
+        "action": {
+          "kind": "Opened"
+        },
+        "assignee": {
+          "kind": "Some",
+          "value": "mhgibbons"
+        },
+        "id": "d-1",
+        "labels": [
+          "bug",
+          "proposal"
+        ],
+        "repo": {
+          "name": "bynk",
+          "owner": "bynk-lang"
+        }
+      }
+    }
+  },
+  "an unassigned delivery keeps its None": {
+    "the id": "d-2",
+    "unassigned": {
+      "kind": "Ok",
+      "value": {
+        "action": {
+          "kind": "Closed"
+        },
+        "assignee": {
+          "kind": "None"
+        },
+        "id": "d-2",
+        "labels": [],
+        "repo": {
+          "name": "bynk",
+          "owner": "bynk-lang"
+        }
+      }
+    }
+  }
+}

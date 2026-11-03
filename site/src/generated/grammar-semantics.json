@@ -1432,6 +1432,28 @@
       "summary": "A `from <protocol>` names an unknown protocol (e.g. a transport like Kafka)."
     }
   ],
+  "snapshot_expr": [
+    {
+      "code": "bynk.test.snapshot_duplicate_name",
+      "summary": "A case takes two snapshots (`expect v matches snapshot \"name\"`) under one name; a snapshot is keyed by its case and name."
+    },
+    {
+      "code": "bynk.test.snapshot_in_property",
+      "summary": "A `property` takes a snapshot; its body runs once per generated input, so the snapshot belongs in a `case` over a fixed value."
+    },
+    {
+      "code": "bynk.test.snapshot_name_not_literal",
+      "summary": "`matches snapshot` is not followed by a string literal; a snapshot is named by a literal so the compiler knows every snapshot a suite takes."
+    },
+    {
+      "code": "bynk.test.snapshot_needs_unit_suite",
+      "summary": "A snapshot is taken in a `system`-tier case or in an integration or system suite; snapshots are stored per unit suite file and compared in the unit harness."
+    },
+    {
+      "code": "bynk.test.snapshot_not_codable",
+      "summary": "The value of an `expect … matches snapshot` is not `Codable`: a snapshot stores the value's `Json.encode` text, so it must be in the domain `Json.encode` accepts."
+    }
+  ],
   "some_expr": [
     {
       "code": "bynk.types.some_value_mismatch",

@@ -14,7 +14,8 @@
 //!   document holds for the case, in the same field order, behind `type` and
 //!   `suite`, so it carries `tier` and the generative fields too
 //! - `suite-end {name}`
-//! - `run-end {passed, failed, skipped?, transport?}`
+//! - `run-end {passed, failed, skipped?, transport?, snapshots?}`; `snapshots` is
+//!   `{written, updated, obsolete}`, present when the project takes snapshots
 //! - `error {kind, message?, diagnostics?, stderr?}`: the document's `error`
 //!   object, for a compile failure, a run the driver could not start or finish,
 //!   and a runner that died before `run-end`
@@ -75,6 +76,9 @@ struct RunEnd<'a> {
     skipped: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     transport: Option<&'a str>,
+    /// #2842: the snapshot counts; absent for a project with no snapshot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    snapshots: Option<crate::snapshots::Counts>,
 }
 
 #[derive(Serialize)]
@@ -127,13 +131,20 @@ fn suite_end(name: &str) -> String {
     })
 }
 
-fn run_end(passed: u32, failed: u32, skipped: u32, transport: Option<&str>) -> String {
+fn run_end(
+    passed: u32,
+    failed: u32,
+    skipped: u32,
+    transport: Option<&str>,
+    snapshots: Option<crate::snapshots::Counts>,
+) -> String {
     line(&RunEnd {
         r#type: "run-end",
         passed,
         failed,
         skipped,
         transport,
+        snapshots,
     })
 }
 
@@ -187,6 +198,7 @@ pub fn events_for(run: &TestRun) -> String {
             run.failed,
             run.skipped,
             run.transport.as_deref(),
+            run.snapshots,
         )),
     }
     out
@@ -212,6 +224,9 @@ pub struct StreamContext<'a> {
     pub skipped: Vec<Skipped>,
     /// `remote:<target>` under `--against`.
     pub transport: Option<String>,
+    /// #2842: the project's snapshots, when the run reports them: the `run-end`
+    /// carries their counts.
+    pub snapshots: Option<&'a crate::snapshots::SnapshotRun>,
 }
 
 /// Turns the runner's event lines into the stream's, one at a time.
@@ -225,6 +240,8 @@ pub struct Stream<'a> {
     pending: Vec<Warning>,
     /// Every warning the run raised, for the driver to write to stderr.
     warnings: Vec<Warning>,
+    /// #2842: the runner's `snapshots` event, once it has come.
+    snapshot_report: Option<crate::snapshots::Report>,
 }
 
 impl<'a> Stream<'a> {
@@ -235,7 +252,13 @@ impl<'a> Stream<'a> {
             unmatched: Unmatched::default(),
             pending: Vec::new(),
             warnings: Vec::new(),
+            snapshot_report: None,
         }
+    }
+
+    /// #2842: the snapshot report the runner sent, for the driver to settle.
+    pub fn snapshot_report(&self) -> Option<&crate::snapshots::Report> {
+        self.snapshot_report.as_ref()
     }
 
     /// The `--suite`/`--case` values the runner reported as selecting nothing:
@@ -304,6 +327,12 @@ impl<'a> Stream<'a> {
                 case_event(text("suite"), &case)
             }
             "suite-end" => suite_end(text("name")),
+            "snapshots" => {
+                self.snapshot_report = value
+                    .get("files")
+                    .map(crate::snapshots::Report::from_files_value);
+                String::new()
+            }
             "run-end" => {
                 self.ended = true;
                 self.unmatched = unmatched_from_event(&value);
@@ -337,6 +366,9 @@ impl<'a> Stream<'a> {
                     failed,
                     skipped,
                     self.context.transport.as_deref(),
+                    self.context
+                        .snapshots
+                        .map(|run| run.counts(self.snapshot_report.as_ref())),
                 ));
                 out
             }
@@ -434,6 +466,7 @@ mod tests {
             discovered: &[],
             skipped: Vec::new(),
             transport: None,
+            snapshots: None,
         }
     }
 

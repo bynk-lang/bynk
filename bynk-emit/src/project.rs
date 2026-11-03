@@ -386,6 +386,10 @@ pub struct ProjectOutput {
     /// reconciles cleanly against a later run's document (same suite name/kind,
     /// same case names). Ordered to match the runner (`emit_test_main`).
     pub discovered: Vec<DiscoveredSuite>,
+    /// #2842: the snapshot files (`snapshots/…snap.json`, project-relative) the
+    /// project's unit suites take a snapshot into. A `snapshots/` file not named
+    /// here belongs to no suite that still takes one: it is obsolete.
+    pub snapshot_files: BTreeSet<String>,
     /// #1078: the reconciled `bynk.schema.lock` content, `Some` whenever
     /// `CompileOptions::schema_registry` was `SchemaLock::On` for this build
     /// — `bynk-emit` computes it but never writes it; a building caller
@@ -591,6 +595,12 @@ pub struct CompileOptions {
     /// `wrangler.toml` and run on each test database. `None` means no
     /// filesystem was consulted.
     pub migration_files: Option<assets::AssetFolder>,
+    /// #2842: the project's `snapshots/` folder, read by the caller
+    /// ([`bynk_project::snapshots::read_snapshot_files`]): each file's text by its
+    /// project-relative path. A test module inlines the file for its own suite
+    /// file, so the harness reads nothing at test time. `None` (and an empty map)
+    /// means no snapshot is recorded, so every `matches snapshot` claim is missing.
+    pub snapshot_files: Option<BTreeMap<String, String>>,
     /// #2138 (end-to-end testing track §3.5, §3.7): `Some` when `bynk test
     /// --against` runs the `system` suites against a real runtime. The build
     /// then emits only the `system` suites, routes their drivers to the
@@ -655,6 +665,7 @@ impl CompileOptions {
             asset_files: None,
             embed_files: None,
             migration_files: None,
+            snapshot_files: None,
             remote_tests: None,
         }
     }
@@ -681,6 +692,7 @@ impl CompileOptions {
             asset_files: None,
             embed_files: None,
             migration_files: None,
+            snapshot_files: None,
             remote_tests: None,
         }
     }
@@ -774,6 +786,12 @@ impl CompileOptions {
     /// #2387, slice 2: the listed `embeds/` folder. See the field's own doc.
     pub fn embed_files(mut self, folder: assets::EmbedFolder) -> Self {
         self.embed_files = Some(folder);
+        self
+    }
+
+    /// #2842: the project's `snapshots/` files. See the field's own doc.
+    pub fn snapshot_files(mut self, files: BTreeMap<String, String>) -> Self {
+        self.snapshot_files = Some(files);
         self
     }
 
@@ -877,6 +895,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.asset_files.as_ref(),
         options.embed_files.as_ref(),
         options.migration_files.as_ref(),
+        options.snapshot_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
         tys,
     );
@@ -974,6 +993,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         options.asset_files.as_ref(),
         options.embed_files.as_ref(),
         options.migration_files.as_ref(),
+        options.snapshot_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
         tys,
     );
@@ -1042,6 +1062,7 @@ pub fn compile_in_memory(
         &SchemaLock::Off,
         None,
         &root,
+        None,
         None,
         None,
         None,
@@ -1119,6 +1140,7 @@ pub(crate) fn compile_files_in_memory_locked(
         asset_files,
         None,
         None,
+        None,
         false,
         tys,
     );
@@ -1191,6 +1213,7 @@ pub fn analyse_in_memory_with_types(
         &SchemaLock::Off,
         None,
         &root,
+        None,
         None,
         None,
         None,
@@ -1300,6 +1323,7 @@ pub fn analyse_in_memory_project(
         &SchemaLock::Off,
         None,
         &project_root,
+        None,
         None,
         None,
         None,
@@ -2505,6 +2529,8 @@ fn run_checks(
     // (`CompileOptions::migration_files`). `None` when no filesystem was
     // consulted: nothing is checked, and no test database is migrated.
     migration_files: Option<&assets::AssetFolder>,
+    // #2842: the project's `snapshots/` files (`CompileOptions::snapshot_files`).
+    snapshot_files: Option<&BTreeMap<String, String>>,
     // #2223: resolve `project_root`'s path dependencies and fold them in
     // (`bynk_check::packages::apply_graph`). Only a manifest-backed project
     // has any; an in-memory build never does.
@@ -3216,6 +3242,7 @@ fn run_checks(
         contracts,
         &mut emitted_barrels,
         &test_asset_files,
+        snapshot_files,
         &d1_migrations,
         &test_binding_modules,
         &schema_effective_versions.events,
@@ -4106,6 +4133,10 @@ fn build_output(
             modules: staged_modules,
         },
         discovered,
+        snapshot_files: runnable_tests
+            .iter()
+            .flat_map(|t| t.snapshot_files.iter().cloned())
+            .collect(),
         // Populated by `compile_project` from the run's warning sink (ADR 0117);
         // until then, the contracts lock's own (#2554).
         warnings: lock_warnings,
@@ -5925,6 +5956,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             false,
             &Arc::new(Types::new()),
         );
@@ -6201,6 +6233,7 @@ mod tests {
             &SchemaLock::Off,
             None,
             roots.project_root(),
+            None,
             None,
             None,
             None,

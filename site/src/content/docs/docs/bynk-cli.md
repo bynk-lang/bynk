@@ -616,7 +616,7 @@ Discover and run a project's test declarations — the same behaviour as
 Node.js) or `tsx` on `PATH`, exactly as `bynkc test`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--allow-skew]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--allow-skew]
 ```
 
 | Argument | Default | Meaning |
@@ -636,6 +636,7 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect]
 | `--smoke` | off | Run a smoke test of every `from http` route instead of the project's own suites. See [Smoke-testing every route](#smoke-testing-every-route). Combine with `--against` to smoke a running system. |
 | `--print` | off | With `--smoke`, print the synthesised suites as `.bynk` source and run nothing. |
 | `--smoke-unsafe` | off | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). |
+| `--update-snapshots` | off | Record snapshots instead of comparing: write each `expect … matches snapshot` that has no stored snapshot, refresh the ones whose value changed, and delete the obsolete ones, in `snapshots/<suite file>.snap.json`. Without it a missing snapshot fails the case, a changed one fails with a diff, and an obsolete one is only reported. See [Snapshots](/book/reference/testing/#snapshots). Incompatible with `--against`, `--smoke`, `--coverage`, `--inspect` and `--no-run`. |
 | `--allow-skew` | off | Run even when the resolved `bynkc` is a different **major** version from `bynk` (see [skew](#version-skew)). Also settable as `BYNK_ALLOW_SKEW=1`. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
@@ -687,6 +688,33 @@ bynk test --suite commerce.money --case "accepts positive"   # that case, only i
   a value may live in one member only: each value is judged against every member's
   suites together, and a member that holds none of the selected tests runs nothing.
 
+### Snapshots
+
+A case can compare a whole value with a stored snapshot (`expect v matches
+snapshot "name"`; see [Snapshots](/book/reference/testing/#snapshots)). The files
+live in `snapshots/<suite file>.snap.json` and are reviewed like code.
+
+```text
+bynk test                      # fails with a diff if a value changed, or has no snapshot
+bynk test --update-snapshots   # writes new snapshots, refreshes changed ones, deletes obsolete ones
+```
+
+- A missing snapshot **fails** without the flag, so CI cannot pass a snapshot nobody
+  reviewed. A snapshot no case takes any more is **obsolete**: the run reports it
+  and passes, and `--update-snapshots` deletes it.
+- Every format reports what the run did. `rich` ends with a line such as `snapshots:
+  2 written, 1 updated, 3 obsolete (remove with --update-snapshots)`, and nothing
+  when there is nothing to say. The `--format json` document has a last field
+  `"snapshots": { "written": 2, "updated": 1, "obsolete": 3 }`, and the NDJSON
+  `run-end` carries the same object. Both are absent for a project that takes no
+  snapshot. Under the flag, `obsolete` counts the snapshots deleted.
+- The files are written once the run has finished, from the runner's report, and
+  only by the driver. With `--case` or `--suite`, only the snapshots of the cases
+  that ran change.
+- `--update-snapshots` is refused with `--against`, `--smoke`, `--coverage`,
+  `--inspect` and `--no-run`. At a workspace root each member updates its own
+  `snapshots/`.
+
 ### Streaming results
 
 `--format ndjson` writes one JSON event per line as the run produces them, so a
@@ -700,7 +728,7 @@ and the right choice for CI that wants one result.
 | `suite-begin` | `type`, `name`, `kind`, `tests` |
 | `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, `violation`, `refusals`, `origin`, `warnings`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
 | `suite-end` | `type`, `name` |
-| `run-end` | `type`, `passed`, `failed`, `skipped` and `transport` (a remote run only) |
+| `run-end` | `type`, `passed`, `failed`, `skipped` and `transport` (a remote run only), then `snapshots` (`{ written, updated, obsolete }`, for a project that takes [snapshots](/book/reference/testing/#snapshots)) |
 | `error` | `type`, then the document's `error` object: `kind` (`compile` or `runtime`), `message`, `diagnostics`, `stderr` |
 
 - The stream ends with **exactly one** of `run-end` or `error`. A project that does

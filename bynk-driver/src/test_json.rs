@@ -42,6 +42,11 @@ pub struct TestRun {
     /// existing document's layout is unchanged.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<String>,
+    /// #2842: what the run did to the project's snapshots — written, updated and
+    /// obsolete counts. Absent for a project with no snapshot. Last field, so
+    /// every existing document's byte layout is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshots: Option<crate::snapshots::Counts>,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -267,6 +272,7 @@ impl TestRun {
             error: None,
             coverage: None,
             transport: None,
+            snapshots: None,
         }
     }
 
@@ -296,6 +302,7 @@ impl TestRun {
             error: None,
             coverage: None,
             transport: None,
+            snapshots: None,
         }
     }
 
@@ -317,6 +324,7 @@ impl TestRun {
             }),
             coverage: None,
             transport: None,
+            snapshots: None,
         }
     }
 
@@ -335,12 +343,19 @@ impl TestRun {
             }),
             coverage: None,
             transport: None,
+            snapshots: None,
         }
     }
 
     /// Attach each case's tier from the compile's case table, matched by suite
     /// and case name (the names the runner reports are the ones discovery lists).
     /// A case the table does not hold keeps whatever tier it has.
+    /// #2842: the snapshot counts the document reports.
+    pub fn with_snapshots(mut self, counts: Option<crate::snapshots::Counts>) -> Self {
+        self.snapshots = counts;
+        self
+    }
+
     pub fn with_tiers(mut self, discovered: &[bynk_emit::project::DiscoveredSuite]) -> Self {
         for suite in self.suites.iter_mut().flatten() {
             let Some(known) = discovered.iter().find(|d| d.name == suite.name) else {
@@ -470,6 +485,8 @@ pub struct ParsedRun {
     pub complete: bool,
     /// What a `--suite`/`--case` filter selected nothing for (#2273).
     pub unmatched: Unmatched,
+    /// #2842: the runner's snapshot report, when its build takes snapshots.
+    pub snapshots: Option<crate::snapshots::Report>,
 }
 
 impl ParsedRun {
@@ -487,6 +504,7 @@ impl ParsedRun {
                 error: None,
                 coverage: None,
                 transport: None,
+                snapshots: None,
             }
         } else {
             let trimmed = stderr.trim();
@@ -503,6 +521,7 @@ impl ParsedRun {
                 }),
                 coverage: None,
                 transport: None,
+                snapshots: None,
             }
         }
     }
@@ -545,6 +564,11 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
                 if let Some(suite) = run.suites.last_mut() {
                     suite.cases.push(case);
                 }
+            }
+            Some("snapshots") => {
+                run.snapshots = value
+                    .get("files")
+                    .map(crate::snapshots::Report::from_files_value);
             }
             Some("run-end") => {
                 run.complete = true;

@@ -241,6 +241,13 @@ pub fn complete_in(
     if after_clause_keyword(line_prefix, "where") && !is_for_all_where(line_prefix) {
         return predicate_name_candidates();
     }
+    // 4i. #2842: `expect <value> <cursor>` — the snapshot claim.
+    if is_snapshot_clause_position(line_prefix) {
+        return vec![Completion::snippet(
+            "matches snapshot",
+            "matches snapshot \"${1:name}\"",
+        )];
+    }
     // 5. Type position (`: T`, `-> T`, `[ … ]` type args) — built-ins, the
     //    `bynk`-surface transparent types, and project type declarations.
     if is_type_position(line_prefix) {
@@ -262,6 +269,44 @@ pub fn complete_in(
 }
 
 // -- Cursor-context detection (line-prefix scanning) --
+
+/// #2842: the cursor follows a complete-looking `expect <value> ` on its line, or
+/// a start of `matches` there, and no snapshot clause is written yet: where
+/// `matches snapshot "<name>"` can go. Lexical, like its neighbours: the value is
+/// taken to end at a name, a closing bracket, a quote or a digit.
+fn is_snapshot_clause_position(line: &str) -> bool {
+    let rest = line.trim_start();
+    let Some(body) = rest.strip_prefix("expect") else {
+        return false;
+    };
+    if !body.starts_with(char::is_whitespace) || body.contains("matches") {
+        return false;
+    }
+    // The word being typed after the value, if any, must begin `matches`.
+    let typed = body
+        .rsplit(char::is_whitespace)
+        .next()
+        .filter(|w| !w.is_empty() && body.ends_with(*w));
+    let value = match typed {
+        Some(word) if "matches".starts_with(word) => body[..body.len() - word.len()].trim_end(),
+        Some(_) => return false,
+        None if body.ends_with(char::is_whitespace) => body.trim_end(),
+        None => return false,
+    };
+    let Some(last) = value.chars().last() else {
+        return false;
+    };
+    let ends_a_value = last.is_alphanumeric() || matches!(last, '_' | ')' | ']' | '}' | '"');
+    // A trailing keyword or word operator is not the end of a value.
+    let last_word = value
+        .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .next();
+    ends_a_value
+        && !matches!(
+            last_word,
+            Some("and" | "or" | "not" | "is" | "if" | "else" | "match" | "faults" | "called")
+        )
+}
 
 /// `consumes U { … ` with the brace still open at the cursor → `Some(U)`.
 fn consumes_brace_unit(line: &str) -> Option<String> {
@@ -4572,5 +4617,32 @@ fn Box.size(self) -> Int { 1 }
         // pass even if a future recovery-parse change made the broken
         // content yield a spurious unit alongside it.
         assert_eq!(names, baseline, "{names:?}");
+    }
+}
+
+#[cfg(test)]
+mod snapshot_completion_tests {
+    use super::*;
+
+    fn labels(line: &str) -> Vec<String> {
+        complete(line, "", None)
+            .into_iter()
+            .map(|c| c.label)
+            .collect()
+    }
+
+    /// #2842: `matches snapshot` is offered after the value of an `expect`, while
+    /// the word is being typed, and nowhere else.
+    #[test]
+    fn matches_snapshot_follows_an_expect_value() {
+        let offered = |line: &str| labels(line).contains(&"matches snapshot".to_string());
+        assert!(offered("  expect read(1) "));
+        assert!(offered("  expect d.tags "));
+        assert!(offered("  expect read(1) mat"));
+        assert!(!offered("  expect read(1) matches snapshot \"x\" "));
+        assert!(!offered("  expect read(1) =="));
+        assert!(!offered("  expect read(1) and "));
+        assert!(!offered("  expect read(1) other"));
+        assert!(!offered("  let x = read(1) "));
     }
 }

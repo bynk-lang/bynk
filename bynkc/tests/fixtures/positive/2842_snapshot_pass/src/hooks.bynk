@@ -1,0 +1,27 @@
+context hooks
+
+// #2842: a decoder whose result is asserted whole, by snapshot, rather than
+// field by field.
+
+type Action = enum { Opened, Closed, Labeled }
+
+type Repo = { owner: String, name: String }
+
+type Delivery = {
+	id: String,
+	action: Action,
+	repo: Repo,
+	labels: List[String],
+	assignee: Option[String],
+}
+
+fn read(text: String) -> Result[Delivery, String] {
+	match Json.decode[Delivery](text) {
+		Ok(d) => Ok(d),
+		Err(e) => Err("\(e.path): \(e.message)"),
+	}
+}
+
+fn summary(d: Delivery) -> String {
+	"\(d.repo.owner)/\(d.repo.name) #\(d.id)"
+}

@@ -1,0 +1,11 @@
+context demo
+
+type Delivery = { id: String }
+
+fn read(id: String) -> Delivery {
+	Delivery { id: id }
+}
+
+fn run(n: Int) -> Int {
+	n
+}

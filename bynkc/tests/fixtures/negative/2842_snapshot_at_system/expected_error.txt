@@ -1,0 +1,1 @@
+bynk.test.snapshot_needs_unit_suite a snapshot is not available

@@ -7673,6 +7673,10 @@
                 },
                 {
                   "type": "SYMBOL",
+                  "name": "snapshot_expr"
+                },
+                {
+                  "type": "SYMBOL",
                   "name": "_expression"
                 }
               ]
@@ -7711,6 +7715,35 @@
         {
           "type": "STRING",
           "value": "faults"
+        }
+      ]
+    },
+    "snapshot_expr": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "value",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_expression"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "matches"
+        },
+        {
+          "type": "STRING",
+          "value": "snapshot"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "string_literal"
+          }
         }
       ]
     },
