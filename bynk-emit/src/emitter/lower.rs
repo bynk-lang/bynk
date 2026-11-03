@@ -3309,6 +3309,13 @@ fn lower_method_call(
                 }
                 None => format!("{{ ...deps, who: {{ tag: {actor:?} }} }}"),
             },
+            (_, Some(_))
+                if sum_key
+                    .as_deref()
+                    .is_some_and(|k| cx.is_binderless_handler(&id.name, k)) =>
+            {
+                "deps".to_string()
+            }
             (_, Some(identity)) => {
                 // #2380 (L5): an `Oidc` handler also reads its token's claims
                 // from `deps.claims`: the principal's, or none.

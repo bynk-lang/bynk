@@ -1,0 +1,23 @@
+context app
+
+consumes bynk { Logger }
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+service api from http {
+	on GET("/ping") () -> Effect[HttpResult[String]] by User given Logger {
+		let _ <- Logger.info("ping")
+		Ok("pong")
+	}
+
+	on GET("/me") () -> Effect[HttpResult[String]] by u: User given Logger {
+		let _ <- Logger.info("me")
+		Ok(u.identity)
+	}
+
+	on GET("/bare") () -> Effect[HttpResult[String]] by User {
+		Ok("bare")
+	}
+}

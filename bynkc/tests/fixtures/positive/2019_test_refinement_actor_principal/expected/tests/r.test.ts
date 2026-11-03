@@ -78,7 +78,7 @@ async function test_a_binder_less_refinement_route_is_answered() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_r;
     type UserId = __ns_r.UserId;
-    const r = await api.http_GET_gate({ ...deps, identity: (("root" as any) as any) });
+    const r = await api.http_GET_gate(deps);
     if (!(__bynkEq(r, HttpResult.Ok("admitted")))) { throw __bynkExpectFailure("tests/r.bynk:17:9", 471, 490, "expect r == Ok(\"admitted\")\n  expected: r == Ok(\"admitted\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("admitted")))); }
     return { pass: true };
   } catch (e) {
