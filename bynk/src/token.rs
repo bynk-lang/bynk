@@ -84,17 +84,17 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
         return Ok(list(&actors));
     };
     let found = resolve(&actors, name)?;
-    let secret_env = bearer_secret(found)?;
+    let env_var = bearer_env_var(found)?;
     let sub = req
         .sub
         .ok_or_else(|| format!("`--sub <ID>` is required to mint a token for `{name}`"))?;
     validate_sub(found, sub)?;
 
-    let secret = match std::env::var(&secret_env) {
+    let secret = match std::env::var(&env_var) {
         Ok(v) if !v.is_empty() => v,
         _ => {
             return Err(format!(
-                "`{secret_env}` is not set (or is empty): it is the secret the `{name}` actor \
+                "`{env_var}` is not set (or is empty): it is the secret the `{name}` actor \
                  declares, and `bynk token` reads it from the environment — never an argument"
             ));
         }
@@ -203,8 +203,8 @@ fn list(actors: &[Found]) -> String {
         .iter()
         .filter(|f| f.base.is_none() && scheme_of(&f.decl) == Some(Scheme::Bearer))
         .filter_map(|f| {
-            let secret = f.decl.scheme_arg("secret")?.value.as_str()?.to_string();
-            Some((qualified(f), secret))
+            let var = f.decl.scheme_arg("secret")?.value.as_str()?.to_string();
+            Some((qualified(f), var))
         })
         .collect();
     if rows.is_empty() {
@@ -212,8 +212,8 @@ fn list(actors: &[Found]) -> String {
     }
     let width = rows.iter().map(|(a, _)| a.len()).max().unwrap_or(0);
     let mut out = String::from("Bearer actors (mint with `bynk token <ACTOR> --sub <ID>`):");
-    for (actor, secret) in rows {
-        out.push_str(&format!("\n  {actor:<width$}  reads ${secret}"));
+    for (actor, var) in rows {
+        out.push_str(&format!("\n  {actor:<width$}  reads ${var}"));
     }
     out
 }
@@ -248,7 +248,7 @@ fn resolve<'a>(actors: &'a [Found], name: &str) -> Result<&'a Found, String> {
 }
 
 /// The env var a mintable actor's secret is read from, or why it is not mintable.
-fn bearer_secret(f: &Found) -> Result<String, String> {
+fn bearer_env_var(f: &Found) -> Result<String, String> {
     let name = &f.decl.name.name;
     if let Some(base) = &f.base {
         return Err(format!(

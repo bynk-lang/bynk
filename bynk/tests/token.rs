@@ -93,14 +93,23 @@ fn node(dir: &Path, script: &str, args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
 
+/// A `file://` URL for a runtime source, which node's ESM loader takes on every
+/// platform (a bare Windows path, or its `\\?\` canonical form, is not a module
+/// specifier).
 fn runtime(file: &str) -> String {
-    manifest_dir()
+    let path = manifest_dir()
         .join("../bynk-emit/src/emitter/runtime")
         .join(file)
         .canonicalize()
         .unwrap()
         .to_string_lossy()
-        .into_owned()
+        .replace('\\', "/");
+    let path = path.trim_start_matches("//?/");
+    if path.starts_with('/') {
+        format!("file://{path}")
+    } else {
+        format!("file:///{path}")
+    }
 }
 
 /// The verifier the emitted Worker runs, over each token it is handed.
