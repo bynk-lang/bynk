@@ -32,6 +32,21 @@ function daysIn(year: number, month: number): number {
   return [4, 6, 9, 11].includes(month) ? 30 : 31;
 }
 
+// #2867: the calendar rule, once. `IsoDate` and `Instant.fromIso` both ask
+// whether a year/month/day names a date that exists.
+function isRealDate(year: number, month: number, day: number): boolean {
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysIn(year, month);
+}
+
+// The `IsoDate` refinement (#2867): exactly `YYYY-MM-DD`, years 0000 to 9999,
+// and a date that exists. The date half of what `__bynkInstantFromIso` reads.
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export function __bynkIsIsoDate(s: string): boolean {
+  const m = ISO_DATE.exec(s);
+  return m !== null && isRealDate(Number(m[1]), Number(m[2]), Number(m[3]));
+}
+
 // Partial: `None` for anything outside the profile or the calendar. A leap
 // second (`:60`) is `None`, since epoch milliseconds cannot name it, and a
 // fraction past milliseconds is truncated toward the earlier instant. Hand
@@ -42,7 +57,7 @@ export function __bynkInstantFromIso(s: string): Option<number> {
     return None;
   }
   const [year, month, day, hour, minute, second] = m.slice(1, 7).map(Number);
-  if (month < 1 || month > 12 || day < 1 || day > daysIn(year, month)) {
+  if (!isRealDate(year, month, day)) {
     return None;
   }
   if (hour > 23 || minute > 59 || second > 59) {

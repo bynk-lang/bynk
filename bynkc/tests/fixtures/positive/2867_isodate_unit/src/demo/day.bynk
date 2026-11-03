@@ -1,0 +1,36 @@
+---
+#2867: `IsoDate` admits exactly the `YYYY-MM-DD` dates that exist, in a literal,
+in `.of` and in `Json.decode`.
+---
+commons demo.day
+
+type Day = String where IsoDate
+
+type Booking = { day: Day }
+
+fn today() -> Day {
+  "2026-11-03"
+}
+
+fn leapDay() -> Day {
+  "2028-02-29"
+}
+
+fn decodeDay(json: String) -> Result[Day, JsonError] {
+  Json.decode[Day](json)
+}
+
+fn decodeBooking(json: String) -> Result[Booking, JsonError] {
+  Json.decode[Booking](json)
+}
+
+fn startOfDay(day: Day) -> Option[Instant] {
+  Instant.fromIso("\(day)T00:00:00Z")
+}
+
+fn startOf(s: String) -> Option[Instant] {
+  match Day.of(s) {
+    Ok(d) => startOfDay(d)
+    Err(_) => None
+  }
+}

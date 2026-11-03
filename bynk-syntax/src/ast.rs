@@ -2672,6 +2672,40 @@ pub enum PredKind {
     NonNegative,
     Positive,
     NonEmpty,
+    /// #2867: a `String` that is a real calendar date, exactly `YYYY-MM-DD`
+    /// (years 0000-9999). The same date rule `Instant.fromIso` applies.
+    IsoDate,
+}
+
+/// #2867: is `s` exactly `YYYY-MM-DD` and a date that exists? The one
+/// compile-time statement of the rule `IsoDate` enforces; the runtime's
+/// `__bynkIsIsoDate` (`bynk-emit/runtime/src/time.ts`) is its TypeScript twin
+/// and shares the calendar with `Instant.fromIso`.
+pub fn is_iso_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+        return false;
+    }
+    let digits = |r: std::ops::Range<usize>| -> Option<u32> {
+        let part = &b[r];
+        if part.iter().all(u8::is_ascii_digit) {
+            Some(part.iter().fold(0, |n, d| n * 10 + u32::from(d - b'0')))
+        } else {
+            None
+        }
+    };
+    let (Some(year), Some(month), Some(day)) = (digits(0..4), digits(5..7), digits(8..10)) else {
+        return false;
+    };
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let days = match month {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        _ => return false,
+    };
+    (1..=days).contains(&day)
 }
 
 impl PredKind {
@@ -2685,6 +2719,7 @@ impl PredKind {
             PredKind::NonNegative => "NonNegative",
             PredKind::Positive => "Positive",
             PredKind::NonEmpty => "NonEmpty",
+            PredKind::IsoDate => "IsoDate",
         }
     }
 }
@@ -4841,5 +4876,44 @@ mod stream_path_tests {
         assert_eq!(path("Plain"), None);
         assert!(type_carries_stream("Shelf", &t));
         assert!(!type_carries_stream("Tree", &t));
+    }
+
+    /// #2867: the calendar rule at its edges.
+    #[test]
+    fn is_iso_date_decides_the_calendar() {
+        for ok in [
+            "2026-11-03",
+            "2028-02-29",
+            "2000-02-29",
+            "0000-01-01",
+            "9999-12-31",
+            "2026-04-30",
+            "2026-12-31",
+            "2400-02-29",
+        ] {
+            assert!(is_iso_date(ok), "{ok}");
+        }
+        for bad in [
+            "2026-02-30",
+            "2026-02-29",
+            "1900-02-29",
+            "2100-02-29",
+            "2026-04-31",
+            "2026-13-01",
+            "2026-00-10",
+            "2026-01-00",
+            "2026-1-1",
+            "yesterday",
+            "",
+            "2026-11-03 ",
+            "20261103",
+            "2026/11/03",
+            "+2026-11-03",
+            "2026-11-03T00:00:00Z",
+            "２０２６-11-03",
+            "2026-+1-03",
+        ] {
+            assert!(!is_iso_date(bad), "{bad:?}");
+        }
     }
 }

@@ -35,6 +35,15 @@ the base's own type: `0`, `0.0` or `0.00d`.
 | `MaxLength(n)` | length ≤ n |
 | `Length(n)` | length = n |
 | `Matches(regex)` | the whole string matches `regex` (anchored) |
+| `IsoDate` | a calendar date, exactly `YYYY-MM-DD` (years 0000-9999), and a date that exists |
+
+`IsoDate` is the date half of RFC 3339 and the date rule `Instant.fromIso`
+applies: months and days must exist (`2028-02-29` and `2000-02-29` do,
+`2026-02-29`, `1900-02-29`, `2026-02-30` and `2026-13-01` do not), and nothing
+but zero-padded `YYYY-MM-DD` is accepted. A string literal is checked at compile
+time; `.of`, `Json.decode` and the HTTP boundary (a `400 RefinementViolation`)
+apply the same rule. A `Day` stays a `String` everywhere else. For the day's
+first instant, `Instant.fromIso("\(day)T00:00:00Z")` is always `Some`.
 
 A predicate must apply to the base type (`bynk.types.predicate_base_mismatch`).
 An `InRange` with `lo > hi` is rejected (`bynk.types.inverted_range`), as is a set

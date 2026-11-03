@@ -31,6 +31,35 @@ A `:name` segment in the route becomes a parameter of the same name:
   }
 ```
 
+## Accept a date in a URL
+
+A path parameter of a refined type is checked before the handler runs.
+`IsoDate` refines a `String` to a calendar date, exactly `YYYY-MM-DD`, that
+exists:
+
+```bynk,fragment
+type Day = String where IsoDate
+```
+
+```bynk,fragment
+  on GET("/digest/:day") (day: Day) -> Effect[HttpResult[String]] by Visitor {
+    Ok(day)
+  }
+```
+
+`/digest/2026-02-30`, `/digest/2026-13-01` and `/digest/yesterday` are a `400`
+`RefinementViolation` at the boundary, so the handler never re-checks the
+calendar. The same rule holds for a body field, `Day.of(…)` and `Json.decode`,
+and a string literal such as `"2026-11-03"` is checked at compile time.
+
+A `Day` is still a `String`, so it interpolates and stores as one. To reach the
+day's first instant, pair it with `Instant.fromIso`, which is always `Some` for
+a `Day`; add `+ 1.days` for the next day:
+
+```bynk,fragment
+let start = Instant.fromIso("\(day)T00:00:00Z")
+```
+
 ## Accept a request body
 
 A `body` parameter is parsed and validated from the request's JSON before the

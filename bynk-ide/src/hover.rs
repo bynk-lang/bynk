@@ -392,6 +392,26 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         // #2620: the ambient `unreachable`/`todo`, last, so a declaration of the
         // same name (which shadows the built-in) is answered by a rung above.
         .or_else(|| describe_fault_builtin(&name, &text[span.end..]))
+        // #2867: the `IsoDate` refinement predicate, in a `where` clause.
+        .or_else(|| describe_iso_date_predicate(&name, &text[..span.start]))
+}
+
+/// #2867: hover for the `IsoDate` predicate name after `where` or `&&`: its rule
+/// and the `Instant` pairing the guide documents.
+fn describe_iso_date_predicate(name: &str, before: &str) -> Option<String> {
+    if name != "IsoDate" {
+        return None;
+    }
+    let line = before.rsplit('\n').next().unwrap_or(before);
+    (line.contains("where") || line.trim_end().ends_with("&&")).then(|| {
+        "```bynk\nIsoDate\n```\n\nA `String` refinement predicate: the value is a calendar date, \
+         exactly `YYYY-MM-DD` (years 0000 to 9999) and a date that exists \
+         (`2028-02-29` is valid; `2026-02-29` and `2026-13-01` are not). \
+         Checked at compile time for a literal, and at runtime by `.of`, `Json.decode` \
+         and the HTTP boundary. `Instant.fromIso(\"\\(day)T00:00:00Z\")` is always \
+         `Some` for such a value."
+            .to_string()
+    })
 }
 
 /// #2620: hover for a call to the ambient `unreachable(…)` / `todo(…)`: the
@@ -799,6 +819,20 @@ mod tests {
             "commons demo.m\n\nfn todo(n: Int) -> Int { n }\n\nfn g() -> Int { todo(1) }\n";
         let h = hover_at(shadowed, "todo", 1).expect("the user's `todo` hovers");
         assert!(!h.contains("never returns"), "{h}");
+    }
+
+    /// #2867: `IsoDate` hovers with its rule inside a `where` clause only.
+    #[test]
+    fn iso_date_predicate_hovers_in_where() {
+        let src = "commons demo.m\n\ntype Day = String where IsoDate\n";
+        let h = hover_at(src, "IsoDate", 0).expect("`IsoDate` hovers");
+        assert!(h.contains("YYYY-MM-DD") && h.contains("2028-02-29"), "{h}");
+        let elsewhere = "commons demo.m\n\nfn IsoDate() -> Int { 1 }\n";
+        let h = hover_at(elsewhere, "IsoDate", 0);
+        assert!(
+            h.as_deref().is_none_or(|h| !h.contains("calendar date")),
+            "{h:?}"
+        );
     }
 
     /// Constrained generics slice 1: `derives` and the constraint names it and

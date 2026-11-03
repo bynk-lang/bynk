@@ -2195,6 +2195,10 @@
         {
           "type": "STRING",
           "value": "NonEmpty"
+        },
+        {
+          "type": "STRING",
+          "value": "IsoDate"
         }
       ]
     },

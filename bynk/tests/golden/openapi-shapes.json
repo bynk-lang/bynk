@@ -63,6 +63,16 @@
           }
         ]
       },
+      "Day": {
+        "description": "Re-validated at the boundary: must be a calendar date (YYYY-MM-DD).",
+        "format": "date",
+        "maxLength": 10,
+        "minLength": 10,
+        "type": "string",
+        "x-bynk-refinements": [
+          "IsoDate"
+        ]
+      },
       "Handle": {
         "description": "Re-validated at the boundary: length must be at least 2; length must be at most 32.",
         "maxLength": 32,
@@ -75,6 +85,9 @@
       },
       "Order": {
         "properties": {
+          "due": {
+            "$ref": "#/components/schemas/Day"
+          },
           "note": {
             "oneOf": [
               {
@@ -126,6 +139,7 @@
           "qty",
           "note",
           "tags",
+          "due",
           "shape"
         ],
         "type": "object"

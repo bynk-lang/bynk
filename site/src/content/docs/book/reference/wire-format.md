@@ -294,7 +294,7 @@ It detects skew; it is not a credential and not a security control.
 - Predicates are a set: written as below, sorted by their UTF-8 bytes, with
   duplicates removed, and joined with `, `. They are `Positive`,
   `NonNegative`, `InRange(a, b)`, `InRangeF(a, b)`, `MinLength(n)`,
-  `MaxLength(n)`, `Length(n)` and `Matches("…")`; `NonEmpty` is written
+  `MaxLength(n)`, `Length(n)`, `IsoDate` and `Matches("…")`; `NonEmpty` is written
   `MinLength(1)`. Bounds are written as decimal numbers in their shortest
   round-trip form (`01` is `1`). A `Matches` pattern is quoted, with `\`, `"`
   and control characters backslash-escaped.

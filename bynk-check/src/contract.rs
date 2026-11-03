@@ -658,6 +658,8 @@ pub fn canon_predicate(p: &PredKind) -> String {
         // ever applies to `BaseType::String` (`refinements.rs`'s
         // `pred_applies_to`), so no base needs threading through here.
         PredKind::NonEmpty => "MinLength(1)".to_string(),
+        // #2867: its own canonical form; `entailment` knows it implies `Length(10)`.
+        PredKind::IsoDate => "IsoDate".to_string(),
     }
 }
 

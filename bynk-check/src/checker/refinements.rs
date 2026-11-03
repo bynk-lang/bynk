@@ -221,6 +221,7 @@ pub(crate) fn eval_predicate(pred: &PredKind, lit: &ConstLit) -> bool {
         (PredKind::MaxLength(k), ConstLit::Str(s)) => (s.chars().count() as i64) <= *k,
         (PredKind::Length(k), ConstLit::Str(s)) => s.chars().count() as i64 == *k,
         (PredKind::NonEmpty, ConstLit::Str(s)) => !s.is_empty(),
+        (PredKind::IsoDate, ConstLit::Str(s)) => bynk_syntax::ast::is_iso_date(s),
         (PredKind::Matches(pat), ConstLit::Str(s)) => {
             // Evaluated with the same engine semantics the emitted
             // `new RegExp(...)` runs under (ECMAScript, no flags).
@@ -586,7 +587,8 @@ pub(crate) fn check_refinement(
                     ));
                 }
             }
-            PredKind::NonNegative | PredKind::Positive | PredKind::NonEmpty => {}
+            PredKind::NonNegative | PredKind::Positive | PredKind::NonEmpty | PredKind::IsoDate => {
+            }
         }
     }
 
@@ -632,12 +634,13 @@ fn pred_applies_to(pred: &PredKind, base: BaseType) -> bool {
                 BaseType::Int | BaseType::Float | BaseType::Decimal
             )
             | (PredKind::NonEmpty, BaseType::String)
+            | (PredKind::IsoDate, BaseType::String)
     )
 }
 
 fn predicate_base_help(name: &str) -> &'static str {
     match name {
-        "Matches" | "MinLength" | "MaxLength" | "Length" | "NonEmpty" => {
+        "Matches" | "MinLength" | "MaxLength" | "Length" | "NonEmpty" | "IsoDate" => {
             "this predicate applies to `String` only"
         }
         "NonNegative" | "Positive" => "this predicate applies to `Int`, `Float` and `Decimal` only",
@@ -738,6 +741,11 @@ pub(crate) fn check_string_refinement_consistency(
             PredKind::MinLength(n) => min_len = min_len.max(*n),
             PredKind::MaxLength(n) => max_len = max_len.min(*n),
             PredKind::NonEmpty => min_len = min_len.max(1),
+            // #2867: `YYYY-MM-DD` is exactly ten characters.
+            PredKind::IsoDate => {
+                min_len = min_len.max(10);
+                max_len = max_len.min(10);
+            }
             PredKind::Length(n) => {
                 if let Some(prev) = exact_len {
                     if prev != *n {
@@ -783,7 +791,7 @@ pub(crate) fn refinement_needs_pin(refinement: &Refinement) -> bool {
     refinement
         .predicates
         .iter()
-        .any(|p| matches!(p.kind, PredKind::Matches(_)))
+        .any(|p| matches!(p.kind, PredKind::Matches(_) | PredKind::IsoDate))
 }
 
 /// The TypeScript zero-value expression for `type_ref` (with an optional

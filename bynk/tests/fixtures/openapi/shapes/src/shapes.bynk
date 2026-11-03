@@ -11,6 +11,8 @@ type Weight = Float where InRange(0.5, 250.0)
 
 type Handle = String where MinLength(2) && MaxLength(32)
 
+type Day = String where IsoDate
+
 ---
 A shape the caller draws: a circle or a rectangle.
 ---
@@ -23,6 +25,7 @@ type Order = {
   qty:   Quantity,
   note:  Option[String],
   tags:  List[Handle],
+  due:   Day,
   shape: Shape,
 }
 

@@ -1,0 +1,3 @@
+# #2867: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# IsoDate edge dates in a literal, .of and Json.decode.
+passed=6 failed=0

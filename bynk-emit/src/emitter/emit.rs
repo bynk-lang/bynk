@@ -251,6 +251,9 @@ fn emit_refined_type(
         if base == BaseType::Decimal && refinement.is_some() {
             runtime_use.note_decimal("__bynkDecimalToString");
         }
+        for p in refinement.iter().flat_map(|r| &r.predicates) {
+            runtime_use.note_predicate(&p.kind);
+        }
         checks
     };
     let cast_to_name = bynk_ts::TsExpr::As {

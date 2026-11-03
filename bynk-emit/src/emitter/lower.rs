@@ -1908,7 +1908,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                     match p.kind {
                         PredKind::NonEmpty => len = len.max(1),
                         PredKind::MinLength(k) | PredKind::Length(k) => len = len.max(k),
-                        PredKind::Matches(_) => return None,
+                        PredKind::Matches(_) | PredKind::IsoDate => return None,
                         _ => {}
                     }
                 }
@@ -8333,6 +8333,9 @@ fn pattern_match_tests(
                         path_ty
                     )
                 });
+            for p in &predicate.predicates {
+                cx.note_predicate(&p.kind);
+            }
             tests.push(refined_check_as_bool(path, base, Some(predicate)));
         }
         // #2680: a length test (none for `[..]`, which matches every list),
@@ -8790,6 +8793,9 @@ fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
             .map(|d| d.body.clone())
     {
         let recv = pre.absorb(cx.is_receiver_ref_forced(value));
+        for p in refinement.iter().flat_map(|r| &r.predicates) {
+            cx.note_predicate(&p.kind);
+        }
         return pre.finish(refined_check_as_bool(&recv, base, refinement.as_ref()));
     }
     let v = pre.absorb(cx.is_receiver_ref(value));
@@ -8916,6 +8922,7 @@ fn refined_check_as_bool(recv: &str, base: BaseType, refinement: Option<&Refinem
                     format!("({recv} >= {} && {recv} <= {})", a.lexeme, b.lexeme)
                 }
                 PredKind::NonEmpty => format!("{recv}.length > 0"),
+                PredKind::IsoDate => format!("__bynkIsIsoDate({recv})"),
                 PredKind::MinLength(n) => format!("{recv}.length >= {n}"),
                 PredKind::MaxLength(n) => format!("{recv}.length <= {n}"),
                 PredKind::Length(n) => format!("{recv}.length === {n}"),

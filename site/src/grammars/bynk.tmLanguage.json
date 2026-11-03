@@ -314,7 +314,7 @@
         },
         {
           "name": "support.function.predicate.bynk",
-          "match": "\\b(Matches|InRange|MinLength|MaxLength|Length|NonNegative|Positive|NonEmpty)\\b"
+          "match": "\\b(Matches|InRange|MinLength|MaxLength|Length|NonNegative|Positive|NonEmpty|IsoDate)\\b"
         },
         {
           "name": "entity.name.type.bynk",

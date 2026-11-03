@@ -1,0 +1,19 @@
+---
+#2867: a date-only path parameter and body field are fully validated at the boundary.
+---
+context shop.api
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+type Day = String where IsoDate
+type Booking = { day: Day }
+
+service api from http {
+  on GET("/x/:day") (day: Day) -> Effect[HttpResult[String]] by u: User {
+    Ok(day)
+  }
+  on POST("/book") (body: Booking) -> Effect[HttpResult[Booking]] by u: User {
+    Created(body)
+  }
+}

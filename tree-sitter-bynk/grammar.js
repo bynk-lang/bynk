@@ -573,6 +573,7 @@ module.exports = grammar({
         "NonNegative",
         "Positive",
         "NonEmpty",
+        "IsoDate",
       ),
     // v0.21/v0.142 (ADR 0166): a refinement-bound number may be negated —
     // `InRange(-1_000, 1_000_000)` — mirroring `parse_signed_num_literal`'s
