@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.498.2** | "`JsonError`'s `kind`, `path` and `message` are documented, offered by completion and hover, and named in the `interpolation_non_scalar` note (#2863)" |
+| **v0.498.1** | "`?` on a `Result` inside a test `case` fails the case, naming the `Err` and the `?`'s location, instead of emitting a `return` that failed `tsc` (#2857)" |
 | **v0.498.0** | An `on http` handler reads the query string through a typed `query` parameter, decoded and validated at the boundary, or a raw `RequestQuery` view (#2854) |
 | **v0.497.4** | A suite's `fixture` can be named in its `stub` clauses (#2850) |
 | **v0.497.3** | A test case no longer passes `identity` to a binder-less Bearer/Oidc handler, so one that takes `given` capabilities passes tsc (#2856) |

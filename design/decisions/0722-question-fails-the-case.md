@@ -1,12 +1,6 @@
----
-level: patch
-changelog: "`?` on a `Result` inside a test `case` fails the case, naming the `Err` and the `?`'s location, instead of emitting a `return` that failed `tsc` (#2857)"
-probes: ts_writes
----
+# 0722 — `?` in a test case fails the case
 
-## ADR: question-fails-the-case
-title: `?` in a test case fails the case
-summary: An Err reached by `?` in a case body fails the case rather than propagating
+- **Status:** Accepted (v0.498.1)
 
 **Context.** A `case` body is checked as returning `Effect[Result[(), ValidationError]]`, so `?` on a `Result` type-checked. The emitter lowered it as an early `return` of the `Err`, but the emitted case function returns a `CaseResult` (`{ pass, error? }`), so the output failed `tsc` (TS2345). The alternative to supporting `?` was a diagnostic refusing it.
 
