@@ -2478,7 +2478,7 @@ struct HttpRoute {
     /// `queryObject` reads them off the query string: `(name, wire kind, list)`.
     /// `None` when the route has no typed `query` (a raw `RequestQuery` is not
     /// decoded).
-    query_fields: Option<Vec<(String, &'static str, bool)>>,
+    query_fields: Option<Vec<(String, &'static str, bool, bool)>>,
 }
 
 /// #2854: the wire kind of one query-string value of type `r`, as the runtime's
@@ -2513,7 +2513,7 @@ fn query_field_specs(
     h: &Handler,
     path: &str,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
-) -> Option<Vec<(String, &'static str, bool)>> {
+) -> Option<Vec<(String, &'static str, bool, bool)>> {
     use bynk_syntax::ast::TypeBody;
     if path.split('/').any(|seg| seg == ":query") {
         return None;
@@ -2529,12 +2529,17 @@ fn query_field_specs(
         rec.fields
             .iter()
             .map(|f| {
-                let (inner, list) = match &f.type_ref {
-                    TypeRef::List(inner, _) => (inner.as_ref(), true),
-                    TypeRef::Option(inner, _) => (inner.as_ref(), false),
-                    other => (other, false),
+                let (inner, list, option) = match &f.type_ref {
+                    TypeRef::List(inner, _) => (inner.as_ref(), true, false),
+                    TypeRef::Option(inner, _) => (inner.as_ref(), false, true),
+                    other => (other, false, false),
                 };
-                (f.name.name.clone(), query_leaf_kind(inner, types), list)
+                (
+                    f.name.name.clone(),
+                    query_leaf_kind(inner, types),
+                    list,
+                    option,
+                )
             })
             .collect(),
     )
@@ -2796,11 +2801,12 @@ fn emit_http_route_dispatch(
         {
             let spec: Vec<TsExpr> = fields
                 .iter()
-                .map(|(name, kind, list)| {
+                .map(|(name, kind, list, option)| {
                     TsExpr::object(vec![
                         ("name".to_string(), str_lit(name.clone())),
                         ("kind".to_string(), str_lit(*kind)),
                         ("list".to_string(), bool_lit(*list)),
+                        ("option".to_string(), bool_lit(*option)),
                     ])
                 })
                 .collect();

@@ -39,7 +39,7 @@ export default {
       {
         if ((method === "GET" || method === "HEAD") && path === "/activity") {
           __route = "GET /activity";
-          const __q = __queryObject(request, [{ name: "repo", kind: "string", list: false }, { name: "since", kind: "string", list: false }, { name: "kind", kind: "enum", list: false }, { name: "tag", kind: "string", list: true }, { name: "fresh", kind: "bool", list: false }, { name: "limit", kind: "int", list: false }]);
+          const __q = __queryObject(request, [{ name: "repo", kind: "string", list: false, option: true }, { name: "since", kind: "string", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }, { name: "tag", kind: "string", list: true, option: false }, { name: "fresh", kind: "bool", list: false, option: false }, { name: "limit", kind: "int", list: false, option: false }]);
           if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const __r_query = handlers.__deserialise_ActivityFilter(__q.value, "query");
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -52,7 +52,7 @@ export default {
       {
         if ((method === "GET" || method === "HEAD") && path === "/cached") {
           __route = "GET /cached";
-          const __q = __queryObject(request, [{ name: "repo", kind: "string", list: false }, { name: "since", kind: "string", list: false }, { name: "kind", kind: "enum", list: false }, { name: "tag", kind: "string", list: true }, { name: "fresh", kind: "bool", list: false }, { name: "limit", kind: "int", list: false }]);
+          const __q = __queryObject(request, [{ name: "repo", kind: "string", list: false, option: true }, { name: "since", kind: "string", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }, { name: "tag", kind: "string", list: true, option: false }, { name: "fresh", kind: "bool", list: false, option: false }, { name: "limit", kind: "int", list: false, option: false }]);
           if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const __r_query = handlers.__deserialise_ActivityFilter(__q.value, "query");
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -71,12 +71,25 @@ export default {
         }
       }
       {
+        if ((method === "GET" || method === "HEAD") && path === "/priced") {
+          __route = "GET /priced";
+          const __q = __queryObject(request, [{ name: "price", kind: "string", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }]);
+          if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const __r_query = handlers.__deserialise_PriceFilter(__q.value, "query");
+          if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const query = __r_query.value;
+          const result = await surface.http_GET_priced(query);
+          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
         const __m = __matchPath("/activity/:owner", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /activity/:owner";
           const __raw_owner = __m.params["owner"];
           const owner = __raw_owner;
-          const __q = __queryObject(request, [{ name: "repo", kind: "string", list: false }, { name: "since", kind: "string", list: false }, { name: "kind", kind: "enum", list: false }, { name: "tag", kind: "string", list: true }, { name: "fresh", kind: "bool", list: false }, { name: "limit", kind: "int", list: false }]);
+          const __q = __queryObject(request, [{ name: "repo", kind: "string", list: false, option: true }, { name: "since", kind: "string", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }, { name: "tag", kind: "string", list: true, option: false }, { name: "fresh", kind: "bool", list: false, option: false }, { name: "limit", kind: "int", list: false, option: false }]);
           if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const __r_query = handlers.__deserialise_ActivityFilter(__q.value, "query");
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -102,6 +115,11 @@ export default {
         return __applySecurityHeaders(__res, __security_api);
       }
       if (path === "/echo") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (path === "/priced") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

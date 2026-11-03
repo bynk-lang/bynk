@@ -83,4 +83,24 @@ suite activity.api as system {
 		expect a is Handled(Ok("limit 10"))
 		expect b is Handled(Ok("limit 20"))
 	}
+
+	case "a decimal field reads canonical text" {
+		let r <- api.GET("/priced", Wire("?price=12.50"))
+		expect r is Handled(Ok("12.50"))
+	}
+
+	case "a malformed decimal is refused" {
+		let r <- api.GET("/priced", Wire("?price=.5"))
+		expect r is Rejected(_)
+	}
+
+	case "an optional enum is not fooled by the name None" {
+		let r <- api.GET("/priced", Wire("?kind=None"))
+		expect r is Rejected(_)
+	}
+
+	case "an optional enum takes a variant" {
+		let r <- api.GET("/priced", Wire("?kind=Issue"))
+		expect r is Handled(Ok("-"))
+	}
 }

@@ -711,6 +711,9 @@ export interface QueryField {
    *  unit variant named by the value, everything else is the text itself. */
   readonly kind: "string" | "int" | "bool" | "enum";
   readonly list: boolean;
+  /** An `Option` field: a present value is wrapped in `Some`, so a value that
+   *  reads like the envelope (`?kind=None`) is still the leaf's, not `None`. */
+  readonly option: boolean;
 }
 
 /** #2854 (decision A): decode the request's query string into the JSON object a
@@ -753,7 +756,8 @@ export function queryObject(
         },
       };
     } else {
-      out[f.name] = leaf(f.kind, values[0]);
+      const v = leaf(f.kind, values[0]);
+      out[f.name] = f.option ? { kind: "Some", value: v } : v;
     }
   }
   return { ok: true, value: out };

@@ -2,6 +2,7 @@
 // context activity.api
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -63,6 +64,14 @@ export interface ActivityFilter {
 export const ActivityFilter = {
 };
 
+export interface PriceFilter {
+  readonly price: Option<{ readonly coefficient: bigint; readonly scale: number }>;
+  readonly kind: Option<Kind>;
+}
+
+export const PriceFilter = {
+};
+
 export const api = {
   async http_GET_activity(query: ActivityFilter, deps: {}): globalThis.Promise<HttpResult<string>> {
     const repo = ((__d) => {
@@ -100,6 +109,21 @@ export const api = {
   },
   async http_GET_cached(query: ActivityFilter, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(`limit ${String(query.limit)}`);
+  },
+  async http_GET_priced(query: PriceFilter, deps: {}): globalThis.Promise<HttpResult<string>> {
+    const price = ((__d) => {
+    switch (__d.tag) {
+      case "Some": {
+        const p = __d.value;
+        return `${__bynkDecimalToString(p)}`;
+      }
+      case "None": {
+        return "-";
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  })(query.price);
+    return HttpResult.Ok(price);
   },
 };
 
@@ -201,6 +225,27 @@ export function __deserialise_Limit(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "RefinementViolation", path, violation: validated.error });
   }
   return Ok(validated.value as Limit);
+}
+
+export function __serialise_PriceFilter(value: PriceFilter): __JsonValue {
+  return {
+    price: __serialise_Option_Decimal(value.price),
+    kind: __serialise_Option_Kind(value.kind),
+  };
+}
+
+export function __deserialise_PriceFilter(json: __JsonValue, path: string = "$"): Result<PriceFilter, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_price = __deserialise_Option_Decimal(obj["price"], `${path}.price`);
+  if (__r_price.tag === "Err") return __r_price;
+  const __price = __r_price.value;
+  const __r_kind = __deserialise_Option_Kind(obj["kind"], `${path}.kind`);
+  if (__r_kind.tag === "Err") return __r_kind;
+  const __kind = __r_kind.value;
+  return Ok({ price: __price, kind: __kind } as PriceFilter);
 }
 
 export function __serialise_RepoName(value: RepoName): __JsonValue {
@@ -359,4 +404,49 @@ export function __deserialise_List_String(json: __JsonValue, path: string = "$")
   out.push(__el as string);
   }
   return Ok(out);
+}
+
+export function __serialise_Option_Decimal(value: Option<{ readonly coefficient: bigint; readonly scale: number }>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __bynkDecimalToString(value.value) as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_Decimal(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "string") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "decimal string", actual: typeof raw });
+  }
+  const __b_v = __bynkDecimalParseWire(raw);
+  if (__b_v.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "decimal string", actual: "invalid decimal" });
+  }
+  const __v = __b_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Decimal(json: __JsonValue, path: string = "$"): Result<Option<{ readonly coefficient: bigint; readonly scale: number }>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<{ readonly coefficient: bigint; readonly scale: number }>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<{ readonly coefficient: bigint; readonly scale: number }>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Decimal(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as { readonly coefficient: bigint; readonly scale: number }) as Option<{ readonly coefficient: bigint; readonly scale: number }>);
+    }
+  }
+  const __b = __option_value_Decimal(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as { readonly coefficient: bigint; readonly scale: number }) as Option<{ readonly coefficient: bigint; readonly scale: number }>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }

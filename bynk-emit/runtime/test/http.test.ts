@@ -852,11 +852,11 @@ const queryRequest = (search: string) => new Request(`https://test/activity${sea
 
 test("queryObject: reads each declared field off the query string", () => {
   const fields = [
-    { name: "repo", kind: "string", list: false },
-    { name: "limit", kind: "int", list: false },
-    { name: "fresh", kind: "bool", list: false },
-    { name: "kind", kind: "enum", list: false },
-    { name: "tag", kind: "string", list: true },
+    { name: "repo", kind: "string", list: false, option: false },
+    { name: "limit", kind: "int", list: false, option: false },
+    { name: "fresh", kind: "bool", list: false, option: false },
+    { name: "kind", kind: "enum", list: false, option: false },
+    { name: "tag", kind: "string", list: true, option: false },
   ] as const;
   const r = queryObject(queryRequest("?repo=a%2Fb&limit=100&fresh=true&kind=Push&tag=x&tag=y&utm=1"), fields);
   assert.deepEqual(r, {
@@ -866,20 +866,20 @@ test("queryObject: reads each declared field off the query string", () => {
 });
 
 test("queryObject: absent keys stay absent, and unknown keys are ignored", () => {
-  const r = queryObject(queryRequest("?other=1"), [{ name: "limit", kind: "int", list: false }]);
+  const r = queryObject(queryRequest("?other=1"), [{ name: "limit", kind: "int", list: false, option: false }]);
   assert.deepEqual(r, { ok: true, value: {} });
 });
 
 test("queryObject: a value that is not its field's type passes on as text", () => {
   const r = queryObject(queryRequest("?limit=many&fresh=yes"), [
-    { name: "limit", kind: "int", list: false },
-    { name: "fresh", kind: "bool", list: false },
+    { name: "limit", kind: "int", list: false, option: false },
+    { name: "fresh", kind: "bool", list: false, option: false },
   ]);
   assert.deepEqual(r, { ok: true, value: { limit: "many", fresh: "yes" } });
 });
 
 test("queryObject: a repeated key on a single-valued field is refused", () => {
-  const r = queryObject(queryRequest("?limit=1&limit=2"), [{ name: "limit", kind: "int", list: false }]);
+  const r = queryObject(queryRequest("?limit=1&limit=2"), [{ name: "limit", kind: "int", list: false, option: false }]);
   assert.equal(r.ok, false);
   if (!r.ok) {
     assert.deepEqual(r.error, {
@@ -937,4 +937,9 @@ test("a revalidation for one query is not answered 304 for another", async () =>
   // ...and its own does.
   const fresh = notModifiedIfMatch(answer(20), revalidate(twenty.headers.get("etag")));
   assert.equal(fresh.status, 304);
+});
+
+test("queryObject: an Option field wraps a present value, so `None` is not the envelope", () => {
+  const r = queryObject(queryRequest("?kind=None"), [{ name: "kind", kind: "enum", list: false, option: true }]);
+  assert.deepEqual(r, { ok: true, value: { kind: { kind: "Some", value: { kind: "None" } } } });
 });

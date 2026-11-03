@@ -115,6 +115,18 @@ async function __sysdrive_raw_api_http_GET_cached(query: string, __sub: string) 
   const __res = await __h.env.ACTIVITY_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_api_http_GET_priced(query: any, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/priced${__queryString(__ns_activity_api.__serialise_PriceFilter(query))}`, { method: "GET", headers: { }, });
+  const __res = await __h.env.ACTIVITY_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_GET_priced(query: string, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/priced${query}`, { method: "GET", headers: { }, });
+  const __res = await __h.env.ACTIVITY_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_wrongmethod_api(method: string, path: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test${path}`, { method });
@@ -318,6 +330,70 @@ async function test_a_cached_route_answers_each_query_on_its_path_separately() {
   }
 }
 
+async function test_a_decimal_field_reads_canonical_text() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_GET_priced("?price=12.50", "");
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "12.50"))) { throw __bynkExpectFailure("tests/api.bynk:89:10", 2967, 2992, "expect r is Handled(Ok(\"12.50\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_malformed_decimal_is_refused() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_GET_priced("?price=.5", "");
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected"))) { throw __bynkExpectFailure("tests/api.bynk:94:10", 3096, 3112, "expect r is Rejected(_)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_an_optional_enum_is_not_fooled_by_the_name_None() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_GET_priced("?kind=None", "");
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected"))) { throw __bynkExpectFailure("tests/api.bynk:99:10", 3234, 3250, "expect r is Rejected(_)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_an_optional_enum_takes_a_variant() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_GET_priced("?kind=Issue", "");
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "-"))) { throw __bynkExpectFailure("tests/api.bynk:104:10", 3358, 3379, "expect r is Handled(Ok(\"-\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -332,7 +408,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a typed query round-trips through the router", "absent keys take None and their defaults", "unknown keys are ignored", "repeated keys fill a list", "a limit out of range is refused before the handler", "a malformed day is refused before the handler", "a non-numeric limit is a structural mismatch", "a repeated key on a single-valued field is refused", "an unknown enum variant is refused", "a path parameter meets the query", "the raw view over the wire", "a cached route answers each query on its path separately"];
+export const __bynkCases: readonly string[] = ["a typed query round-trips through the router", "absent keys take None and their defaults", "unknown keys are ignored", "repeated keys fill a list", "a limit out of range is refused before the handler", "a malformed day is refused before the handler", "a non-numeric limit is a structural mismatch", "a repeated key on a single-valued field is refused", "an unknown enum variant is refused", "a path parameter meets the query", "the raw view over the wire", "a cached route answers each query on its path separately", "a decimal field reads canonical text", "a malformed decimal is refused", "an optional enum is not fooled by the name None", "an optional enum takes a variant"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -406,6 +482,30 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a cached route answers each query on its path separately")) {
     const started = __bynkCaseNow();
     const r = { name: "a cached route answers each query on its path separately", ...(await test_a_cached_route_answers_each_query_on_its_path_separately()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a decimal field reads canonical text")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a decimal field reads canonical text", ...(await test_a_decimal_field_reads_canonical_text()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a malformed decimal is refused")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a malformed decimal is refused", ...(await test_a_malformed_decimal_is_refused()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an optional enum is not fooled by the name None")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an optional enum is not fooled by the name None", ...(await test_an_optional_enum_is_not_fooled_by_the_name_None()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an optional enum takes a variant")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an optional enum takes a variant", ...(await test_an_optional_enum_takes_a_variant()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

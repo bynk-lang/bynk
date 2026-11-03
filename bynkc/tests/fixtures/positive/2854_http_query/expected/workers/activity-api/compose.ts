@@ -22,5 +22,8 @@ export function compose(env: Env) {
     async http_GET_cached(query: handlers.ActivityFilter) {
       return handlers.api.http_GET_cached(query, deps);
     },
+    async http_GET_priced(query: handlers.PriceFilter) {
+      return handlers.api.http_GET_priced(query, deps);
+    },
   };
 }

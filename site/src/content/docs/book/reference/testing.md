@@ -205,7 +205,7 @@ suite activity.api {
 ```
 
 For a raw `query: RequestQuery` a case builds the view from `"name=value"` pairs
-(percent-encoded as on the wire), or an empty one:
+(parsed as a query string, so `+` is a space and `&` starts another pair), or an empty one:
 `RequestQuery.of(["q=one", "q=two"])`, `RequestQuery.empty()`.
 
 At the `unit` and `integration` tiers the value reaches the handler directly,
