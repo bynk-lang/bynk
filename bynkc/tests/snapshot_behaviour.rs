@@ -351,6 +351,11 @@ fn a_corrupt_file_fails_and_a_filtered_update_leaves_it_alone() {
     );
     let filtered = test(&p, &["--update-snapshots", "--case", "a delivery reads"]);
     assert!(filtered.ok, "{}", filtered.all());
+    assert!(
+        !filtered.stdout.contains("written"),
+        "nothing was written:\n{}",
+        filtered.stdout
+    );
     assert_eq!(fs::read_to_string(p.join(SNAP_FILE)).unwrap(), "not json");
     assert!(test(&p, &["--update-snapshots"]).ok);
     assert!(snapshot(&p).get("a delivery reads").is_some());
