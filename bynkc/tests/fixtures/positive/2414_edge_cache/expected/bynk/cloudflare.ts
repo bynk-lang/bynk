@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
-import type { ValidationError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../__bynk_runtime/boundary.js";
 
 import { FetchError, Request, Response } from "../bynk.js";
@@ -309,6 +309,20 @@ export const SqlError = {
 };
 
 /**
+ * Why a typed `D1` read (`select[T]`, `firstAs[T]`) failed: `Sql` is the
+ * statement's own failure, `Decode` a row that did not fit `T` (a column
+ * whose stored value disagrees with its field's type).
+ */
+export type SqlReadError =
+    { readonly tag: "Sql"; readonly error: SqlError }
+  | { readonly tag: "Decode"; readonly error: JsonError };
+
+export const SqlReadError = {
+  Sql: (error: SqlError): SqlReadError => ({ tag: "Sql", error }),
+  Decode: (error: JsonError): SqlReadError => ({ tag: "Decode", error }),
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -547,6 +561,13 @@ export const __EdgeCacheToken: symbol = globalThis.Symbol("EdgeCache");
  * boolean: a flag column arrives as `0` or `1`, which `Json.decodeSql` reads
  * at a `Bool` field. An integer past ±2^53 cannot be represented and fails
  * the decode.
+ *
+ * `select[T]` and `firstAs[T]` read rows straight into a record `T`: the
+ * argument is the statement from `FROM` on, a string literal that must not
+ * itself begin with `SELECT`, and the compiler writes the column list from
+ * `T`'s field names (each quoted), runs the statement and decodes the rows.
+ * `select` gives `Result[List[T], SqlReadError]`, `firstAs` `Result[Option[T],
+ * SqlReadError]`; `T` must be a row, as for `Json.decodeSql`.
  *
  * `run` executes a write and reports what it changed. `batch` runs its
  * statements in order in one transaction: all apply, or none do and the
@@ -1019,6 +1040,39 @@ export function __deserialise_SqlError(json: __JsonValue, path: string = "$"): R
   }
   const __message = obj["message"];
       return Ok({ tag: "Failed", message: __message } as SqlError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_SqlReadError(value: SqlReadError): __JsonValue {
+  switch (value.tag) {
+    case "Sql": {
+      return { kind: "Sql", error: __serialise_SqlError(value.error) };
+    }
+    case "Decode": {
+      return { kind: "Decode", error: value.error as unknown as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_SqlReadError(json: __JsonValue, path: string = "$"): Result<SqlReadError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Sql": {
+  const __r_error = __deserialise_SqlError(obj["error"], `${path}.error`);
+  if (__r_error.tag === "Err") return __r_error;
+  const __error = __r_error.value;
+      return Ok({ tag: "Sql", error: __error } as SqlReadError);
+    }
+    case "Decode": {
+  const __error = obj["error"] as unknown as JsonError;
+      return Ok({ tag: "Decode", error: __error } as SqlReadError);
     }
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });

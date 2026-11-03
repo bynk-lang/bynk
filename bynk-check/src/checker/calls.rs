@@ -1612,6 +1612,22 @@ pub(crate) fn check_static_call(
             },
             true,
         );
+        // #2865: `select[T]` / `firstAs[T]` on a derived `D1` are lowered by
+        // the compiler over `all`/`first`, not declared operations.
+        if d1::is_typed_read(cap.derived_from.as_ref(), &method.name) {
+            if let Some((unit, base)) = &cap.derived_from {
+                refuse_experimental(&format!("{unit}.{base}.{}", method.name), method.span, ctx);
+            }
+            return d1::check_typed_read(
+                &type_name.name,
+                method,
+                type_args,
+                args,
+                span,
+                expr_id,
+                ctx,
+            );
+        }
         let Some(op) = cap.ops.iter().find(|o| o.name == method.name) else {
             ctx.errors.push(CompileError::new(
                 "bynk.capability.unknown_operation",

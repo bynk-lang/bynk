@@ -3415,6 +3415,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622).",
     ),
     dg(
+        "bynk.types.select_tail_has_select",
+        "A `D1` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.sequence_needs_result",
         "`sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`.",
         &["method_call"],
@@ -3426,12 +3431,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.sql_not_literal",
-        "A `D1` statement's SQL (the first argument of `all`, `first` or `run`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c).",
+        "A `D1` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c).",
         &["method_call", "record_construction", "record_spread"],
     ),
     dg(
         "bynk.types.sql_row_shape",
-        "`Json.decodeSql[T]`'s `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c).",
+        "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c).",
         &["method_call"],
     ),
     d(

@@ -2872,6 +2872,55 @@ fn lower_method_call(
             "(async function* () {{ for (const __e of {xs}) {{ yield __e; }} }})()"
         ));
     }
+    // #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
+    // a derived `D1`. The checker wrote the statement (`SELECT` + the column
+    // list from `T` + the literal tail); this runs it through `all`/`first`
+    // and decodes with the `decodeSql` codec, so no runtime op is involved.
+    // Keyed on the recorded callee, not the method name.
+    if let Some(Callee::D1Select {
+        cap,
+        row,
+        sql,
+        first,
+    }) = cx.commons().callees.get(&e.id).cloned()
+        && let Some(params) = args.get(1)
+    {
+        let tys = cx.commons().tys();
+        let target = if first {
+            row
+        } else {
+            tys.intern(Ty::List(row))
+        };
+        if let Some(decoder) = json_decoder_fn(target, true, cx) {
+            let params = pre.lower(params, cx);
+            let deps = if cx.in_test_case() {
+                "deps".to_string()
+            } else {
+                cx.cap_deps_expr().to_string()
+            };
+            let sql = escape_ts_string(&sql);
+            let (op, decode) = if first {
+                (
+                    "first",
+                    "if (__r.value.tag === \"None\") return Ok(None); \
+                     const __d = __decode(__r.value.value); \
+                     return __d.tag === \"Ok\" ? Ok(Some(__d.value)) : Err({ tag: \"Decode\", error: __d.error });",
+                )
+            } else {
+                (
+                    "all",
+                    "const __d = __decode(__r.value); \
+                     return __d.tag === \"Ok\" ? Ok(__d.value) : Err({ tag: \"Decode\", error: __d.error });",
+                )
+            };
+            return pre.finish(format!(
+                "(async () => {{ const __decode = {decoder}; \
+                 const __r = await {deps}.{cap}.{op}(\"{sql}\", {params}); \
+                 if (__r.tag === \"Err\") return Err({{ tag: \"Sql\", error: __r.error }}); \
+                 {decode} }})()"
+            ));
+        }
+    }
     // v0.15 cross-context capability call: `B.Cap.op(args)` /
     // `Alias.Cap.op(args)`. The provider is instantiated locally in
     // the composition root, so this lowers to an in-process
@@ -3873,7 +3922,6 @@ fn lower_json_codec_call(
     args: &[Expr],
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
-    let tys = cx.commons().tys();
     let mut pre = Pre::new();
     if matches!(
         cx.commons().callees.get(&e.id),
@@ -3887,81 +3935,77 @@ fn lower_json_codec_call(
         }
         if matches!(method.name.as_str(), "decode" | "decodeSql")
             && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-            && let rigid = super::codec::has_var(t, cx.commons())
-            && let Some(tref) = if rigid {
-                // A target that mentions a type parameter decodes through the
-                // codec witness; `tref` is then only a placeholder.
-                Some(TypeRef::Unit(bynk_syntax::span::Span::default()))
-            } else {
-                ty_to_type_ref(t, tys)
-            }
+            && let Some(decoder) = json_decoder_fn(t, method.name == "decodeSql", cx)
         {
-            // #917: in a test-scaffold module `T` may be foreign (owned by the
-            // suite target or one of its `uses`, never declared locally), so its
-            // TS type positions reach through the module's namespace qualifier —
-            // empty everywhere else, where this renders identically to `ts_ty`.
-            let ts = if cx.in_test_scaffold() && !rigid {
-                // #1437 (Arc E slice 2): `serialisation::ts_type_ref_qualified`
-                // deleted — folded into `serialisation::qualified_ts_type`,
-                // which bridges this file's own dotted-prefix qualifier
-                // convention (`json_codec_qual`'s values carry a trailing
-                // `.`) onto the general `TsType`-returning renderer
-                // (`emitter.rs`'s `ts_type_ref_qualified_multi_ts_type`,
-                // Arc C slice 33/#1401), which expects a bare namespace and
-                // appends its own separator. This call site stays
-                // `String`-based (`ts` feeds a hand-formatted signature
-                // string below), so it prints at the boundary via
-                // `bynk_ts::print_type`.
-                let qual = cx.runtime_use().json_codec_qual();
-                bynk_ts::print_type(&serialisation::qualified_ts_type(&tref, &qual))
-            } else {
-                ts_ty(t, tys)
-            };
-            // P6.28: pushes the `TyId` already in hand, not a re-derived
-            // `TypeRef` — `tref` above still exists for this call site's own,
-            // separate codec-rendering use.
-            if cx.in_test_scaffold() {
-                note_ground_roots(t, cx);
-            }
-            // #914: the wrapper below names `Result`, `JsonValue` and `JsonError`
-            // in its own signature and body, whichever arm the inner deserialiser
-            // takes — including the delegating ones, which record nothing. A
-            // module that curates its import list (the test-scaffold modules)
-            // otherwise emits all three unimported.
-            cx.runtime_use().note_json_codec();
-            // #1435 (Arc E slice 1): boundary-print, same treatment as above.
-            let des = if rigid {
-                format!("{}.decode(__j, \"$\")", cx.codec(t))
-            } else {
-                bynk_ts::print_expr(&serialisation::deserialise_expr(
-                    &tref,
-                    "__j",
-                    "$",
-                    cx.runtime_use(),
-                ))
-            };
-            let sql_bools = if method.name == "decodeSql" {
-                sql_bool_pass(t, cx)
-            } else {
-                String::new()
-            };
             let arg = pre.lower(&args[0], cx);
-            return Some(pre.finish(format!(
-                "((__s: string): Result<{ts}, JsonError> => {{ \
-                 let __j: __JsonValue; \
-                 try {{ __j = globalThis.JSON.parse(__s) as __JsonValue; }} \
-                 catch (__e) {{ return Err({{ kind: \"Malformed\", path: \"$\", message: String(__e) }}); }} \
-                 {sql_bools}const __r = {des}; \
-                 if (__r.tag === \"Ok\") return Ok(__r.value as {ts}); \
-                 const __be = __r.error; \
-                 return Err({{ kind: __be.kind, \
-                 path: (__be.kind === \"StructuralMismatch\" || __be.kind === \"RefinementViolation\") ? __be.path : \"$\", \
-                 message: __be.kind === \"StructuralMismatch\" ? `expected ${{__be.expected}}, got ${{String(__be.actual)}}` : __be.kind === \"RefinementViolation\" ? __be.violation.message : __be.details }}); }})({arg})"
-            )));
+            return Some(pre.finish(format!("({decoder})({arg})")));
         }
     }
     let text: Option<String> = None;
     text.map(|expr| pre.finish(expr))
+}
+
+/// The arrow function that decodes JSON text into `t`:
+/// `((__s: string): Result<T, JsonError> => …)`, for `Json.decode` /
+/// `Json.decodeSql` (`sql`: SQLite's `0`/`1` flags read as `Bool`) and for the
+/// typed `D1` reads (#2865), which apply it to the rows `all`/`first` return.
+/// `None` when `t` has no TS rendering.
+fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -> Option<String> {
+    let tys = cx.commons().tys();
+    let rigid = super::codec::has_var(t, cx.commons());
+    let tref = if rigid {
+        // A target that mentions a type parameter decodes through the
+        // codec witness; `tref` is then only a placeholder.
+        Some(TypeRef::Unit(bynk_syntax::span::Span::default()))
+    } else {
+        ty_to_type_ref(t, tys)
+    }?;
+    // #917: in a test-scaffold module `T` may be foreign (owned by the
+    // suite target or one of its `uses`, never declared locally), so its
+    // TS type positions reach through the module's namespace qualifier —
+    // empty everywhere else, where this renders identically to `ts_ty`.
+    let ts = if cx.in_test_scaffold() && !rigid {
+        let qual = cx.runtime_use().json_codec_qual();
+        bynk_ts::print_type(&serialisation::qualified_ts_type(&tref, &qual))
+    } else {
+        ts_ty(t, tys)
+    };
+    if cx.in_test_scaffold() {
+        note_ground_roots(t, cx);
+    }
+    // #914: the wrapper below names `Result`, `JsonValue` and `JsonError`
+    // in its own signature and body, whichever arm the inner deserialiser
+    // takes — including the delegating ones, which record nothing. A
+    // module that curates its import list (the test-scaffold modules)
+    // otherwise emits all three unimported.
+    cx.runtime_use().note_json_codec();
+    let des = if rigid {
+        format!("{}.decode(__j, \"$\")", cx.codec(t))
+    } else {
+        bynk_ts::print_expr(&serialisation::deserialise_expr(
+            &tref,
+            "__j",
+            "$",
+            cx.runtime_use(),
+        ))
+    };
+    let sql_bools = if sql {
+        sql_bool_pass(t, cx)
+    } else {
+        String::new()
+    };
+    Some(format!(
+        "(__s: string): Result<{ts}, JsonError> => {{ \
+         let __j: __JsonValue; \
+         try {{ __j = globalThis.JSON.parse(__s) as __JsonValue; }} \
+         catch (__e) {{ return Err({{ kind: \"Malformed\", path: \"$\", message: String(__e) }}); }} \
+         {sql_bools}const __r = {des}; \
+         if (__r.tag === \"Ok\") return Ok(__r.value as {ts}); \
+         const __be = __r.error; \
+         return Err({{ kind: __be.kind, \
+         path: (__be.kind === \"StructuralMismatch\" || __be.kind === \"RefinementViolation\") ? __be.path : \"$\", \
+         message: __be.kind === \"StructuralMismatch\" ? `expected ${{__be.expected}}, got ${{String(__be.actual)}}` : __be.kind === \"RefinementViolation\" ? __be.violation.message : __be.details }}); }}"
+    ))
 }
 
 /// `Json.encode(arg)`'s text: `globalThis.JSON.stringify(<serialised arg>)`, with

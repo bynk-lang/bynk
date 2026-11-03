@@ -1,0 +1,21 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Money = { cents: Int }
+type Order = { id: String, total: Money }
+type Status = enum { Open, Closed }
+type Plain = { id: String }
+
+service probe {
+  on call() -> Effect[Bool] given Orders {
+    let a <- Orders.select[Order]("FROM orders", [])
+    let b <- Orders.select[Status]("FROM orders", [])
+    let c <- Orders.select[List[Plain]]("FROM orders", [])
+    let d <- Orders.firstAs[Money]("FROM orders", [])
+    a is Ok(_) && b is Ok(_) && c is Ok(_) && d is Ok(_)
+  }
+}

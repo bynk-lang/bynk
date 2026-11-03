@@ -23,6 +23,7 @@ adapter bynk.cloudflare {
 		SqlStatement,
 		SqlRun,
 		SqlError,
+		SqlReadError,
 	}
 
 	---
@@ -310,6 +311,15 @@ adapter bynk.cloudflare {
 		| Failed(message: String)
 
 	---
+	Why a typed `D1` read (`select[T]`, `firstAs[T]`) failed: `Sql` is the
+	statement's own failure, `Decode` a row that did not fit `T` (a column
+	whose stored value disagrees with its field's type).
+	---
+	type SqlReadError =
+		| Sql(error: SqlError)
+		| Decode(error: JsonError)
+
+	---
 	An R2 bucket: objects stored and read as `Bytes` or streamed, with
 	metadata, conditional writes and multipart uploads. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
@@ -478,6 +488,13 @@ adapter bynk.cloudflare {
 	boolean: a flag column arrives as `0` or `1`, which `Json.decodeSql` reads
 	at a `Bool` field. An integer past ±2^53 cannot be represented and fails
 	the decode.
+
+	`select[T]` and `firstAs[T]` read rows straight into a record `T`: the
+	argument is the statement from `FROM` on, a string literal that must not
+	itself begin with `SELECT`, and the compiler writes the column list from
+	`T`'s field names (each quoted), runs the statement and decodes the rows.
+	`select` gives `Result[List[T], SqlReadError]`, `firstAs` `Result[Option[T],
+	SqlReadError]`; `T` must be a row, as for `Json.decodeSql`.
 
 	`run` executes a write and reports what it changed. `batch` runs its
 	statements in order in one transaction: all apply, or none do and the

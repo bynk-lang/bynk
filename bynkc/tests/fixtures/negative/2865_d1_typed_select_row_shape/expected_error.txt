@@ -1,0 +1,4 @@
+bynk.types.sql_row_shape `Orders.select` reads SQL rows, but field `total` of `Order` is not a column type
+bynk.types.sql_row_shape `Orders.select` reads SQL rows, but `Status` is not a row record or a `List` of one
+bynk.types.sql_row_shape `Orders.select` reads SQL rows, but `List[Plain]` is not a row record; `select` already returns a `List` of rows
+# exact

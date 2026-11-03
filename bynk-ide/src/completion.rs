@@ -1986,6 +1986,20 @@ fn member_candidates_from(
             }
         }
     });
+    // #2865: a derived `D1`'s typed reads, which the compiler lowers.
+    if derived_base.as_deref() == Some("D1") {
+        for member in ["select", "firstAs"] {
+            if let Some(sig) = crate::signature_help::d1_typed_read(member)
+                && seen.insert(member.to_string())
+            {
+                out.push(Completion::item(
+                    member.to_string(),
+                    CompletionKind::Member,
+                    Some(format!("{sig} — operation of `{receiver}`")),
+                ));
+            }
+        }
+    }
     if let Some(base) = derived_base.filter(|b| !followed.contains(b)) {
         for c in member_candidates_from(&base, doc_text, files, followed) {
             if seen.insert(c.label.clone()) {
@@ -3611,6 +3625,19 @@ mod tests {
             at.detail.as_deref(),
             Some("at(t: Int) -> Effect[()] — operation of `Timer`")
         );
+    }
+
+    /// #2865: a derived `D1` offers `select` / `firstAs` beside the base's ops.
+    #[test]
+    fn a_derived_d1_offers_the_typed_reads() {
+        let doc = "context a.b\n\nconsumes bynk.cloudflare { D1 }\n\ncapability Orders = D1\n";
+        let items = complete("    Orders.", doc, None);
+        for op in ["select", "firstAs", "all", "first"] {
+            assert!(
+                find(&items, op, CompletionKind::Member).is_some(),
+                "`{op}` offered"
+            );
+        }
     }
 
     #[test]

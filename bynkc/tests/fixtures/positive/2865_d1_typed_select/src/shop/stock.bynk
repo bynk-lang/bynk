@@ -1,0 +1,75 @@
+context shop.stock
+
+// #2865: `select[T]` and `firstAs[T]` write the column list from the row
+// type; the author's literal starts at `FROM`.
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Stock = D1
+
+type Item = { id: String, qty: Int, note: Option[String], live: Bool }
+
+// `qty` is read at `Text`: a stored word does not decode as an `Int`.
+type Loose = { id: String, qty: Int }
+
+service setup {
+	on call() -> Effect[Bool] given Stock {
+		let made <- Stock.run("CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, qty, note TEXT, live INTEGER NOT NULL DEFAULT 1, \"order\" TEXT)", [])
+		match made {
+			Ok(_) => true
+			Err(_) => false
+		}
+	}
+}
+
+service put {
+	on call(id: String, qty: Int, live: Bool) -> Effect[Bool] given Stock {
+		let r <- Stock.run("INSERT INTO items (id, qty, live) VALUES (?1, ?2, ?3)", [Text(id), Integer(qty), Boolean(live)])
+		r is Ok(_)
+	}
+}
+
+service putWord {
+	on call(id: String) -> Effect[Bool] given Stock {
+		let r <- Stock.run("INSERT INTO items (id, qty) VALUES (?1, 'many')", [Text(id)])
+		r is Ok(_)
+	}
+}
+
+service listing {
+	on call(min: Int) -> Effect[Result[List[Item], SqlReadError]] given Stock {
+		Stock.select[Item]("FROM items WHERE qty >= ?1 ORDER BY id", [Integer(min)])
+	}
+}
+
+service lookup {
+	on call(id: String) -> Effect[Result[Option[Item], SqlReadError]] given Stock {
+		Stock.firstAs[Item]("FROM items WHERE id = ?1", [Text(id)])
+	}
+}
+
+service loose {
+	on call() -> Effect[String] given Stock {
+		let r <- Stock.select[Loose]("FROM items ORDER BY id", [])
+		match r {
+			Ok(_) => "ok"
+			Err(Decode(_)) => "decode"
+			Err(Sql(_)) => "sql"
+		}
+	}
+}
+
+// A column the table lacks is the statement's own failure.
+service missing {
+	on call() -> Effect[String] given Stock {
+		let r <- Stock.select[Gone]("FROM items", [])
+		match r {
+			Ok(_) => "ok"
+			Err(Decode(_)) => "decode"
+			Err(Sql(_)) => "sql"
+		}
+	}
+}
+
+type Gone = { id: String, absent: String }

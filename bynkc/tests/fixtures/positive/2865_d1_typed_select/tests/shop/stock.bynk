@@ -1,0 +1,45 @@
+suite shop.stock
+
+case "select reads rows into the record, firstAs one row" {
+	let ok <- setup.call()
+	expect ok
+	let _ <- put.call("a", 5, true)
+	let _ <- put.call("b", 1, false)
+	let rows <- listing.call(2)
+	expect rows == Ok([Item { id: "a", qty: 5, note: None, live: true }])
+	let all <- listing.call(0)
+	expect all == Ok([
+		Item { id: "a", qty: 5, note: None, live: true },
+		Item { id: "b", qty: 1, note: None, live: false },
+	])
+	let one <- lookup.call("b")
+	expect one == Ok(Some(Item { id: "b", qty: 1, note: None, live: false }))
+	let none <- lookup.call("zzz")
+	expect none == Ok(None)
+}
+
+case "a stored value that disagrees with its field is a Decode error" {
+	let _ <- setup.call()
+	let _ <- putWord.call("w")
+	let r <- loose.call()
+	expect r == "decode"
+}
+
+case "a missing column is a Sql error" {
+	let _ <- setup.call()
+	let r <- missing.call()
+	expect r == "sql"
+}
+
+case "a typed select round-trips at integration" as integration {
+	let ok <- setup.call()
+	expect ok
+	let _ <- put.call("a", 5, true)
+	let rows <- listing.call(0)
+	expect rows == Ok([Item { id: "a", qty: 5, note: None, live: true }])
+	let one <- lookup.call("a")
+	expect one == Ok(Some(Item { id: "a", qty: 5, note: None, live: true }))
+	let _ <- putWord.call("w")
+	let r <- loose.call()
+	expect r == "decode"
+}

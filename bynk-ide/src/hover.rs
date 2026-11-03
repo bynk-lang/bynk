@@ -360,8 +360,12 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 crate::symbols::describe_variant_key(src, &callee)
             })
             .or_else(|| {
-                crate::signature_help::resolve_label(&callee, text, input.files)
-                    .map(|sig| format!("```bynk\n{sig}\n```"))
+                crate::signature_help::resolve_label(&callee, text, input.files).map(|sig| {
+                    format!(
+                        "```bynk\n{sig}\n```{}",
+                        typed_read_columns(&callee, &text[span.end..], text, input.files)
+                    )
+                })
             })
         })
         // 10. A project-wide scan (v1.1), then 11. the embedded first-party
@@ -392,6 +396,57 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         // #2620: the ambient `unreachable`/`todo`, last, so a declaration of the
         // same name (which shadows the built-in) is answered by a rung above.
         .or_else(|| describe_fault_builtin(&name, &text[span.end..]))
+}
+
+/// #2865: a `select[T]` / `firstAs[T]` call's hover names the statement the
+/// compiler writes: `SELECT` then `T`'s fields, quoted, ahead of the literal
+/// tail. Empty for any other callee, or when `T` is not a record found in the
+/// project or the buffer.
+fn typed_read_columns(
+    callee: &str,
+    after: &str,
+    text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> String {
+    use bynk_syntax::ast::{CommonsItem, SourceUnit, TypeBody};
+    if !(callee.ends_with(".select") || callee.ends_with(".firstAs")) {
+        return String::new();
+    }
+    let Some(row) = after
+        .strip_prefix('[')
+        .and_then(|r| r.split(']').next())
+        .map(str::trim)
+        .filter(|r| !r.is_empty() && r.chars().all(|c| c.is_alphanumeric() || c == '_'))
+    else {
+        return String::new();
+    };
+    let mut cols = None;
+    crate::completion::for_each_unit(text, files, |unit| {
+        let items = match unit {
+            SourceUnit::Commons(c) => &c.items,
+            SourceUnit::Context(c) => &c.items,
+            SourceUnit::Adapter(a) => &a.items,
+            _ => return,
+        };
+        for item in items {
+            if let CommonsItem::Type(t) = item
+                && t.name.name == row
+                && let TypeBody::Record(r) = &t.body
+                && cols.is_none()
+            {
+                cols = Some(
+                    r.fields
+                        .iter()
+                        .map(|f| format!("\"{}\"", f.name.name.replace('"', "\"\"")))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+            }
+        }
+    });
+    cols.map_or_else(String::new, |c| {
+        format!("\n\nThe compiler writes `SELECT {c}` ahead of the literal.")
+    })
 }
 
 /// #2620: hover for a call to the ambient `unreachable(…)` / `todo(…)`: the

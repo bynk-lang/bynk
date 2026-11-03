@@ -145,6 +145,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
                 _ => Vec::new(),
             }
         }
+        // #2865: a typed `D1` read decodes its row.
+        Some(Callee::D1Select { row, .. }) => vec![*row],
         Some(
             Callee::Fn(decl, ws)
             | Callee::FnValue(decl, ws)
