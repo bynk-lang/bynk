@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: "`bynk token <Actor>` mints a credential for the project's own `Bearer` actor, to call a guarded route by hand"
+changelog: `bynk token <Actor>` mints a credential for the project's own `Bearer` actor, to call a guarded route by hand
 ---
 
 ## ADR: bynk-token-mints-bearer-credentials

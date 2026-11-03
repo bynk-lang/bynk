@@ -270,6 +270,13 @@ fn only_bearer_actors_are_supported_and_each_refusal_says_why() {
         "{}",
         oidc.stderr
     );
+    let refined = token(&["Moderator", "--sub", "x"], &[("READER_SECRET", SECRET)]);
+    assert!(!refined.ok);
+    assert!(
+        refined.stderr.contains("refinement") && refined.stderr.contains("`Reader`"),
+        "{}",
+        refined.stderr
+    );
     let unknown = token(&["Nobody", "--sub", "x"], &[]);
     assert!(!unknown.ok);
     assert!(
@@ -302,4 +309,5 @@ fn bare_token_lists_the_bearer_actors_and_their_secrets() {
     assert!(out.stdout.contains("api.Reader") && out.stdout.contains("READER_SECRET"));
     assert!(out.stdout.contains("api.Admin") && out.stdout.contains("ADMIN_SECRET"));
     assert!(!out.stdout.contains("Hook") && !out.stdout.contains("Sso"));
+    assert!(!out.stdout.contains("Moderator"));
 }
