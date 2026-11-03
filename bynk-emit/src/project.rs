@@ -2072,7 +2072,8 @@ fn emit_unit(
         embed_text: embed_text.clone(),
         runtime_use: Default::default(),
     };
-    // #2858: any plain-JSON route in the project switches the generated `Option`
+    // #2858: any plain-JSON route in the project (project-wide, not per Worker;
+    // the branch is inert unless `withPlainJson` sets the flag) switches the generated `Option`
     // encoders to carry the plain branch (a response type can live in a commons
     // another unit's route serialises through).
     emit_ctx.runtime_use.set_plain_json(

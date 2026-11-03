@@ -815,7 +815,13 @@ impl SchemaNames {
                 .map(|t| t.name.clone())
                 .chain(model.boundary.instantiations.iter().map(|i| i.ts_name()))
             {
-                modes.entry(n).or_default().insert(plain);
+                let m = modes.entry(n).or_default();
+                m.insert(plain);
+                // A plain route's request body is rendered tagged, so a type it
+                // shares between request and response needs both renderings.
+                if plain && h.params.iter().any(|p| p.name.name == "body") {
+                    m.insert(false);
+                }
             }
             let decl_id = |name: &str| {
                 sel.info

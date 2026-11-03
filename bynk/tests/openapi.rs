@@ -503,3 +503,39 @@ fn plain_json_options_are_nullable() {
     assert_eq!(plain_note["anyOf"][0]["type"], "string");
     assert!(s["Row"]["properties"]["note"]["oneOf"].is_array());
 }
+
+/// #2858: a type shared by a plain route's request body and response renders the
+/// request tagged (`Row`) and the response nullable (`Row.plain`), whichever
+/// renders first.
+#[test]
+fn plain_route_request_and_response_share_a_type() {
+    let dir = scratch("plain-json-body");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"plainbody\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir.join("src/api.bynk"),
+        "context api\n\n\
+         type Row = { id: String, note: Option[String] }\n\n\
+         service api from http {\n  json { options: plain }\n\n  \
+           on POST(\"/rows\") (body: Row) -> Effect[HttpResult[Row]] by v: Visitor {\n    Ok(body)\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let op = &d["paths"]["/rows"]["post"];
+    assert_eq!(
+        op["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/Row"
+    );
+    assert_eq!(
+        op["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/Row.plain"
+    );
+    let s = &d["components"]["schemas"];
+    assert!(s["Row"]["properties"]["note"]["oneOf"].is_array());
+    assert_eq!(
+        s["Row.plain"]["properties"]["note"]["anyOf"][1]["type"],
+        "null"
+    );
+}
