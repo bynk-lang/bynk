@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`expect v matches snapshot \"name\"` compares a value's canonical JSON with a stored snapshot, and `bynk test --update-snapshots` records, refreshes and prunes the `snapshots/` files"
----
+# 0719 — A case compares a value with a stored snapshot, and only the driver writes it
 
-## ADR: snapshot-testing
-title: A case compares a value with a stored snapshot, and only the driver writes it
-summary: expect v matches snapshot "n", per-suite-file snapshots/ files inlined at compile time, recorded by bynk test --update-snapshots
+- **Status:** Accepted (v0.496)
 
 **Context.** Asserting a large structured value meant a field-by-field `expect` or a
 full expected literal, neither reviewable when the value is big nor stable when its
