@@ -2754,18 +2754,18 @@ fn check_service_decls(
             let TypeRef::HttpResult(body, _) = inner.as_ref() else {
                 continue;
             };
-            if has_nested_option(body, &table.types, &mut HashSet::new()) {
+            if let Some(payload) = null_payload_option(body, &table.types, &mut HashSet::new()) {
                 errors.push(
                     CompileError::new(
                         "bynk.json.nested_option_plain",
                         body.span(),
                         format!(
-                            "`{}` contains an `Option[Option[T]]`, which plain JSON cannot tell apart: `Some(None)` and `None` would both be written `null`",
-                            ts_type_ref_display(body),
+                            "`Option[{payload}]`: `Some({some})` and `None` would both write `null` in plain JSON",
+                            some = if payload == "()" { "()" } else { "…" },
                         ),
                     )
                     .with_note(
-                        "model the inner absence as a sum type, or keep this route's `Option`s tagged with `@json(options: tagged)`",
+                        "an `Option` payload that can itself be `null` (`Option[T]` or `()`) is ambiguous; model it as a sum type, or keep this route tagged with `@json(options: tagged)`",
                     ),
                 );
             }
@@ -4490,50 +4490,50 @@ fn validate_json_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
 }
 
-/// #2858: whether writing `t` as plain JSON meets an `Option[Option[T]]`
-/// anywhere — through containers, named records and sums, and generic
-/// instantiations (with their type arguments substituted). `seen` guards a
-/// recursive type.
-fn has_nested_option(
+/// #2858: the first `Option[U]` met writing `t` as plain JSON whose payload `U`
+/// can itself encode as `null` (`Option[T]` or `()`), as `U` displayed. Plain
+/// encoding would write `Some(null-payload)` and `None` identically. The walk
+/// goes through containers, named records and sums, and generic instantiations
+/// (with their type arguments substituted); `seen` guards a recursive type.
+fn null_payload_option(
     t: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
     seen: &mut HashSet<String>,
-) -> bool {
+) -> Option<String> {
     match t {
         TypeRef::Option(inner, _) => {
-            matches!(inner.as_ref(), TypeRef::Option(..)) || has_nested_option(inner, types, seen)
+            if matches!(inner.as_ref(), TypeRef::Option(..) | TypeRef::Unit(_)) {
+                return Some(ts_type_ref_display(inner));
+            }
+            null_payload_option(inner, types, seen)
         }
         TypeRef::List(a, _)
         | TypeRef::Set(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _) => has_nested_option(a, types, seen),
-        TypeRef::Map(k, v, _) => {
-            has_nested_option(k, types, seen) || has_nested_option(v, types, seen)
-        }
-        TypeRef::Result(a, b, _) => {
-            has_nested_option(a, types, seen) || has_nested_option(b, types, seen)
+        | TypeRef::HttpResult(a, _) => null_payload_option(a, types, seen),
+        TypeRef::Map(k, v, _) | TypeRef::Result(k, v, _) => {
+            null_payload_option(k, types, seen).or_else(|| null_payload_option(v, types, seen))
         }
         TypeRef::Named(id) => {
             if !seen.insert(id.name.clone()) {
-                return false;
+                return None;
             }
             match types.get(&id.name).map(|d| &d.body) {
                 Some(TypeBody::Record(r)) => r
                     .fields
                     .iter()
-                    .any(|f| has_nested_option(&f.type_ref, types, seen)),
+                    .find_map(|f| null_payload_option(&f.type_ref, types, seen)),
                 Some(TypeBody::Sum(s)) => s
                     .variants
                     .iter()
                     .flat_map(|v| &v.payload)
-                    .any(|f| has_nested_option(&f.type_ref, types, seen)),
-                _ => false,
+                    .find_map(|f| null_payload_option(&f.type_ref, types, seen)),
+                _ => None,
             }
         }
         TypeRef::App { name, args, .. } => {
-            let key = bynk_check_wire_key(&name.name, args);
-            if !seen.insert(key) {
-                return false;
+            if !seen.insert(bynk_check_wire_key(&name.name, args)) {
+                return None;
             }
             let fields = crate::wire::record_inst_fields(&name.name, args, types)
                 .map(|fs| fs.into_iter().map(|(_, t)| t).collect::<Vec<_>>())
@@ -4545,10 +4545,15 @@ fn has_nested_option(
                     })
                 })
                 .unwrap_or_default();
-            args.iter().any(|a| has_nested_option(a, types, seen))
-                || fields.iter().any(|f| has_nested_option(f, types, seen))
+            args.iter()
+                .find_map(|a| null_payload_option(a, types, seen))
+                .or_else(|| {
+                    fields
+                        .iter()
+                        .find_map(|f| null_payload_option(f, types, seen))
+                })
         }
-        _ => false,
+        _ => None,
     }
 }
 

@@ -1853,8 +1853,8 @@ the `Ok`, `Created` and `Accepted` bodies only; request decoding, cross-context
 calls, queues, agent state, `Json.encode`, SSE events and contract hashes keep the
 tagged form and are unchanged.
 
-**Injectivity.** Plain mode would write `Some(None)` and `None` of an
-`Option[Option[T]]` identically, so an `Option[Option[T]]` reachable from the
+**Injectivity.** Plain mode would write `Some(u)` and `None` of an
+`Option[U]` identically when `U` can itself encode as `null` (`Option[T]` or `()`), so such an `Option` reachable from the
 response type of a `plain` route (through record and sum fields, `List`, `Set`,
 `Map`, `Result`, and generic arguments after substitution) is
 `bynk.json.nested_option_plain`. A service or route with neither declaration is

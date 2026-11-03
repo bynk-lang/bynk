@@ -1601,7 +1601,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.json.nested_option_plain",
-        "A plain-JSON route's response type contains `Option[Option[T]]`, whose `Some(None)` and `None` would both be written `null`.",
+        "A plain-JSON route's response type contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`.",
     ),
     dg(
         "bynk.lambda.unannotated_param",

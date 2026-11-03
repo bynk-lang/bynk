@@ -332,7 +332,7 @@ service api from http {
 ```
 
 `GET /activity/1` answers `{"id":"1","action":"opened","deleted":null}`. A Bynk
-client still reads it. Plain mode refuses an `Option[Option[T]]` in a response
+client still reads it. Plain mode refuses an `Option[Option[T]]` or `Option[()]` in a response
 type (`Some(None)` and `None` would both be `null`).
 
 See [HTTP → JSON for non-Bynk clients](/book/reference/http/#json-for-non-bynk-clients).

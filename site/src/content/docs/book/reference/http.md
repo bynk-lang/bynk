@@ -870,16 +870,14 @@ so a Bynk client still reads the response.
 **the route's `@json`, then the service's `json { }`, then `tagged`**. A service
 with neither is byte-for-byte unchanged.
 
-### `Option[Option[T]]` is refused
+### An `Option` whose payload can be `null` is refused
 
-`Some(None)` and `None` would both be written `null`, so plain mode could not
-read the value back. An `Option[Option[T]]` anywhere in a plain route's response
+Plain mode must read back what it wrote. If an `Option[U]`'s payload `U` can
+itself be `null`, `Some(U)` and `None` would both be written `null`. So an
+`Option[Option[T]]` or an `Option[()]` anywhere in a plain route's response
 type, through records, sums, containers and generic arguments, is
-`bynk.json.nested_option_plain`. Model the inner absence as a sum type, or keep
-that route `tagged`.
-
-`Option[()]` is not covered by that rule: `()` is itself written `null`, so
-`Some(())` reads back as `None` in plain mode. Use a `Bool` or a sum instead.
+`bynk.json.nested_option_plain`, and the message names the payload. Model the
+distinction as a sum type, or keep that route `tagged`.
 
 ### What plain mode does not change
 

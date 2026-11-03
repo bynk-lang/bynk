@@ -411,7 +411,7 @@ There are **741** codes in total.
 | `bynk.invariant.duplicate_name` | An agent declares two invariants with the same name. |  | — |
 | `bynk.invariant.impure_predicate` | An invariant predicate uses an effectful or test-only construct. |  | — |
 | `bynk.invariant.not_bool` | An invariant predicate does not have type `Bool`. |  | — |
-| `bynk.json.nested_option_plain` | A plain-JSON route's response type contains `Option[Option[T]]`, whose `Some(None)` and `None` would both be written `null`. |  | — |
+| `bynk.json.nested_option_plain` | A plain-JSON route's response type contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`. |  | — |
 | `bynk.lambda.unannotated_param` | A lambda parameter has no type annotation in a position where no function type is expected to infer it from. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
 | `bynk.list.deprecated_function` | A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable). |  | Warning |
 | `bynk.locale.multiple_message_bundles` | A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against. |  | — |
