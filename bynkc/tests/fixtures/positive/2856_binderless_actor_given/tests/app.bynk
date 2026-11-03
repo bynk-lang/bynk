@@ -1,0 +1,16 @@
+suite app
+
+case "a binder-less Bearer route that takes a capability" {
+	let r <- api.GET("/ping") by User("ada")
+	expect r == Ok("pong")
+}
+
+case "a binding Bearer route that takes a capability" {
+	let r <- api.GET("/me") by User("ada")
+	expect r == Ok("ada")
+}
+
+case "a binder-less Bearer route without a capability" {
+	let r <- api.GET("/bare") by User("ada")
+	expect r == Ok("bare")
+}
