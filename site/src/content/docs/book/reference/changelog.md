@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.497.2** | A fixture refusal code without its own message now fails loudly (#2851) |
 | **v0.497.1** | A test case that checks `expect r is Ok(_)` and then matches `r` exhaustively no longer fails `tsc` with TS2678 |
 | **v0.497.0** | A `suite` can declare `fixture` files whose text is a `String` constant for its cases, read from `fixtures/` and never deployed |
 | **v0.496.0** | "`expect v matches snapshot \"name\"` compares a value's canonical JSON with a stored snapshot, and `bynk test --update-snapshots` records, refreshes and prunes the `snapshots/` files" |
