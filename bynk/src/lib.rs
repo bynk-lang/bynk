@@ -49,6 +49,7 @@ pub mod migrate;
 pub mod new;
 pub mod openapi;
 pub mod ready;
+pub mod token;
 
 // The shared detection probe (Wave 5 §5.4, findings #40/#72) moved down into
 // `bynk-driver` — `bynkc` needs it too (replacing its old `tool_exists`

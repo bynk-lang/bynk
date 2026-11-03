@@ -77,6 +77,39 @@ service api from http {
 
 The token is still verified fail-closed; no identity is minted.
 
+## Call a Bearer route by hand
+
+To try a `Bearer` route with `curl`, or smoke-test a deployment, mint a token for
+the actor with [`bynk token`](/docs/bynk-cli/#bynk-token). It signs with the
+secret the actor names, read from the environment, so you never write a signing
+script that could drift from the actor:
+
+```bash
+# Serve the project, giving the Worker the secret the actor declares.
+bynk dev -- --var AUTH_JWT_SECRET:dev-only-secret
+
+# In another terminal: the same secret, in the environment (never an argument).
+export AUTH_JWT_SECRET=dev-only-secret
+curl -H "Authorization: Bearer $(bynk token User --sub alice)" \
+  http://localhost:8787/me
+```
+
+`--sub` must be a value the actor's identity type admits (`UserId` refuses `""`),
+so the token is one the route accepts. To check that the route *refuses* what it
+should, mint the bad ones:
+
+```bash
+# 401: expired an hour ago.
+curl -i -H "Authorization: Bearer $(bynk token User --sub alice --expired)" \
+  http://localhost:8787/me
+# 401: not valid for another ten minutes.
+curl -i -H "Authorization: Bearer $(bynk token User --sub alice --not-before 10m)" \
+  http://localhost:8787/me
+```
+
+The default lifetime is one hour; `--lifetime 30m` sets another (at most 365
+days). Only `Bearer` actors are supported.
+
 ## Set a service-level default
 
 "Public unless stated otherwise" — or "authed unless stated otherwise" — is
