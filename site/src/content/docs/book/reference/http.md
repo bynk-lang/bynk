@@ -19,7 +19,7 @@ service <Name> from http {
 - **Route:** must start with `/`; a `:name` segment is a path parameter.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
   segment), the special `body` parameter, or the special
-  [`headers`](#request-headers) parameter. A path parameter's type must be
+  [`headers`](#request-headers) or [`query`](#query-strings) parameter. A path parameter's type must be
   constructible from a string (`bynk.http.path_param_not_stringy`); `GET` and
   `DELETE` may not take a `body` (`bynk.http.body_on_get_or_delete`).
 - **Return type:** must be `Effect[HttpResult[T]]`
@@ -70,6 +70,87 @@ plain function may take it to share a check between handlers
 (`bynk.types.headers_at_boundary`). A parameter named `headers` must have this
 type (`bynk.http.headers_wrong_type`). A test builds one with
 [`RequestHeaders.of`](/book/reference/testing/#request-headers).
+
+## Query strings
+
+A handler reads the request's query string through a `query` parameter, in one
+of two forms. It may sit anywhere among the parameters, and a handler has at most
+one. A `:query` path segment keeps its meaning as a path parameter.
+
+### A typed `query` {#typed-query}
+
+`query: T`, where `T` is a record, decodes the query string into `T` and
+validates it before the handler runs, as a [`body`](#handler-form) is:
+
+```bynk,fragment
+type Limit = Int where InRange(1, 500)
+type Day = String where Matches("^\\d{4}-\\d{2}-\\d{2}$")
+
+type ActivityFilter = {
+  repo:  Option[String],
+  since: Option[Day],
+  tag:   List[String] = [],
+  limit: Limit = 50,
+}
+```
+
+```bynk,fragment
+on GET("/activity") (query: ActivityFilter) -> Effect[HttpResult[List[Activity]]] by r: Reader { Ok([]) }
+```
+
+`GET /activity?repo=bynk-lang/bynk&tag=a&tag=b&limit=100` decodes to a filter;
+`?limit=0` or `?since=yesterday` is a `400` before the handler runs, with the same
+`RefinementViolation` or `StructuralMismatch` body a bad `body` gets (the `path`
+names the field, `query.limit`).
+
+A field of `T` is a value a query string can carry:
+
+- a `String`, `Int`, `Bool` or `Decimal`, a refined or opaque type over one of
+  those, or an enum (`?kind=Push`);
+- an `Option` of one, which is `None` when its key is absent;
+- a `List` of one, filled by a repeated key (`?tag=a&tag=b`). It is empty only
+  when the field has a default, as `tag` does above; with none, an absent key is a
+  `400` (give it a default of `[]` to make the key optional).
+
+Anything else is refused (`bynk.http.query_field_not_stringy`), and so is a
+`query` that is not a record (`bynk.http.query_wrong_type`). A field's default
+applies when its key is absent. Names and values are percent-decoded, and `+` is
+a space, as `bynk.url.decodeQuery` reads them.
+
+Two decisions keep the boundary strict where it matters and tolerant where it
+doesn't:
+
+- **Unknown keys are ignored**, as unknown fields of a `body` are: a cache-buster
+  or a tracking parameter (`?utm_source=…`) is not an error.
+- **A repeated key on a field that is not a `List` is a `400`** (`StructuralMismatch`),
+  rather than the first value silently winning: `?limit=1&limit=2` is ambiguous,
+  and the boundary says so.
+
+The query never affects *which* handler runs. Routes are still told apart by
+method and path alone.
+
+### The raw view — `query: RequestQuery` {#request-query}
+
+For a proxy, or keys only known at run time, a handler declares
+`query: RequestQuery`, a read-only view of the query string. It mirrors
+[`RequestHeaders`](#request-headers), and nothing is validated:
+
+| Method | Returns | Reads |
+|---|---|---|
+| `get(name)` | `Option[String]` | the first value of a key |
+| `all(name)` | `List[String]` | every value of a key, in order (`[]` when absent) |
+| `params()` | `Map[String, List[String]]` | every key with its values |
+
+```bynk,fragment
+on GET("/echo") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor {
+  Ok(query.get("q").getOrElse("-"))
+}
+```
+
+The view is read while the request is handled, never kept: `RequestQuery` can't be
+a field of a type or cross a boundary (`bynk.types.request_query_at_boundary`), and only an
+HTTP handler's `query` can have it (`bynk.http.query_not_http`). A test builds one
+with [`RequestQuery.of`](/book/reference/testing/#request-query).
 
 ## `HttpResult` variants
 
@@ -322,6 +403,14 @@ revalidation needs. Because it is a content hash, a `304` still runs the handler
 and serialises the body — it saves **bandwidth, not server work**. A cheaper
 validator that short-circuits before the handler (e.g. a `Last-Modified` from a
 store timestamp) is a planned follow-on.
+
+A query string is part of what a `GET` answers, so the `ETag` is a hash of the body
+that *that* query produced: `GET /activity?limit=10` and `GET /activity?limit=20`
+carry different validators, and an `If-None-Match` from one is never answered `304`
+for the other. The Workers cache that an [`EdgeCache`](/book/guides/effects-and-capabilities/cache-at-the-edge/)
+instance turns on keys a response by its full URL, query included, so
+`@cache`d answers for two queries on one path are stored apart. `EdgeCache.purge`
+takes a path prefix, so it clears every query variant under it.
 
 ### Supplying the validator (`RawTagged`)
 
@@ -853,7 +942,8 @@ flowchart TD
 *Validation happens once, at the edge; the handler only ever sees valid input.*
 
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
-on method **and** path. On a match, path parameters are bound; a `@raw` route's
+on method **and** path. On a match, path parameters are bound and a typed
+[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw` route's
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
 then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
 `400` at the boundary, before the handler runs. The handler then runs as an

@@ -1,0 +1,86 @@
+suite activity.api {
+	case "a typed query reaches the handler" {
+		let r <- api.GET("/activity", ActivityFilter { repo: Some("bynk-lang/bynk"), since: None, kind: None, tag: ["a", "b"], fresh: true, limit: 100 })
+		expect r is Ok("bynk-lang/bynk - 2 true 100")
+	}
+
+	case "a path parameter and a query together" {
+		let r <- api.GET("/activity/:owner", "octo", ActivityFilter { repo: None, since: None, kind: None, tag: [], fresh: false, limit: 7 })
+		expect r is Ok("octo 7")
+	}
+
+	case "a raw query view reads values" {
+		let r <- api.GET("/echo", RequestQuery.of(["q=one", "q=two", "z=3"]))
+		expect r is Ok("one 2 2")
+	}
+
+	case "an empty raw query" {
+		let r <- api.GET("/echo", RequestQuery.empty())
+		expect r is Ok("- 0 0")
+	}
+}
+
+suite activity.api as system {
+	case "a typed query round-trips through the router" {
+		let r <- api.GET("/activity", ActivityFilter { repo: Some("bynk-lang/bynk"), since: Some("2026-11-01"), kind: Some(Push), tag: ["a", "b"], fresh: true, limit: 100 })
+		expect r is Ok("bynk-lang/bynk 2026-11-01 2 true 100")
+	}
+
+	case "absent keys take None and their defaults" {
+		let r <- api.GET("/activity", Wire(""))
+		expect r is Handled(Ok("any - 0 false 50"))
+	}
+
+	case "unknown keys are ignored" {
+		let r <- api.GET("/activity", Wire("?utm_source=x&limit=5"))
+		expect r is Handled(Ok("any - 0 false 5"))
+	}
+
+	case "repeated keys fill a list" {
+		let r <- api.GET("/activity", Wire("?tag=a&tag=b&tag=c"))
+		expect r is Handled(Ok("any - 3 false 50"))
+	}
+
+	case "a limit out of range is refused before the handler" {
+		let r <- api.GET("/activity", Wire("?limit=0"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+
+	case "a malformed day is refused before the handler" {
+		let r <- api.GET("/activity", Wire("?since=yesterday"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+
+	case "a non-numeric limit is a structural mismatch" {
+		let r <- api.GET("/activity", Wire("?limit=many"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "a repeated key on a single-valued field is refused" {
+		let r <- api.GET("/activity", Wire("?limit=1&limit=2"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "an unknown enum variant is refused" {
+		let r <- api.GET("/activity", Wire("?kind=Nope"))
+		expect r is Rejected(_)
+	}
+
+	case "a path parameter meets the query" {
+		let r <- api.GET("/activity/:owner", "octo", Wire("?limit=9"))
+		expect r is Handled(Ok("octo 9"))
+	}
+
+	case "the raw view over the wire" {
+		let r <- api.GET("/echo", RequestQuery.of(["q=one", "q=two"]))
+		expect r is Ok("one 2 1")
+	}
+
+	// Decision E: the answer follows the query, not just the path.
+	case "a cached route answers each query on its path separately" {
+		let a <- api.GET("/cached", Wire("?limit=10"))
+		let b <- api.GET("/cached", Wire("?limit=20"))
+		expect a is Handled(Ok("limit 10"))
+		expect b is Handled(Ok("limit 20"))
+	}
+}

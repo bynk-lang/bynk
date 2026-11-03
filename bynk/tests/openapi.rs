@@ -467,3 +467,68 @@ service api from http {
     assert!(yaml.contains("\"No\":"), "{yaml}");
     assert!(yaml.contains("\n        x:"), "{yaml}");
 }
+
+const QUERY_SERVICE: &str = r#"context shop
+
+type Limit = Int where InRange(1, 500)
+type Kind = enum { Push, Issue }
+
+type Filter = {
+  ---
+  The owner to list.
+  ---
+  owner: Option[String],
+  kind: Option[Kind],
+  tag: List[String] = [],
+  limit: Limit = 50,
+  page: Int,
+}
+
+service api from http {
+  on GET("/activity") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("hi")
+  }
+
+  on GET("/echo") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("hi")
+  }
+}
+"#;
+
+/// #2854: a typed `query` is one `in: query` parameter per field, with the
+/// field's schema, required unless the field is an `Option` or has a default; a
+/// raw `RequestQuery` declares none.
+#[test]
+fn a_typed_query_is_described_as_query_parameters() {
+    let dir = scratch("query");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"shop\"\nversion = \"0.3.0\"\n",
+    );
+    write(&dir.join("src/shop.bynk"), QUERY_SERVICE);
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let params = d["paths"]["/activity"]["get"]["parameters"]
+        .as_array()
+        .expect("parameters");
+    let by_name = |n: &str| {
+        params
+            .iter()
+            .find(|p| p["name"] == n)
+            .unwrap_or_else(|| panic!("no `{n}` parameter in {params:?}"))
+    };
+    assert_eq!(params.len(), 5, "{params:?}");
+    assert!(params.iter().all(|p| p["in"] == "query"));
+    assert_eq!(by_name("owner")["required"], false);
+    assert_eq!(by_name("owner")["schema"]["type"], "string");
+    assert_eq!(by_name("kind")["required"], false);
+    assert_eq!(by_name("tag")["required"], false);
+    assert_eq!(by_name("tag")["schema"]["type"], "array");
+    assert_eq!(by_name("tag")["schema"]["items"]["type"], "string");
+    assert_eq!(by_name("limit")["required"], false);
+    assert_eq!(by_name("limit")["schema"]["minimum"], 1);
+    assert_eq!(by_name("limit")["schema"]["maximum"], 500);
+    assert_eq!(by_name("page")["required"], true);
+    assert_eq!(by_name("owner")["description"], "The owner to list.");
+    assert!(d["paths"]["/echo"]["get"].get("parameters").is_none());
+}

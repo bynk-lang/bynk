@@ -1,0 +1,1 @@
+bynk.types.request_query_at_boundary

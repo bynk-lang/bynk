@@ -522,6 +522,10 @@ fn operation(
                 "required": true,
                 "schema": r.parameter_schema(components, &p.type_ref),
             }));
+        } else if name == "query" {
+            // #2854: a typed `query` record is one `in: query` parameter per
+            // field; the raw `RequestQuery` view declares none.
+            parameters.extend(query_parameters(r, components, &p.type_ref));
         }
         // Any other param is a `headers` (the request's headers, read-only and
         // untyped here); the checker admits no other.
@@ -538,6 +542,48 @@ fn operation(
         responses_of(r, components, handler, model),
     );
     Value::Object(op)
+}
+
+/// #2854: the `in: query` parameters of a handler's typed `query` record, one per
+/// field. A field is required unless it is an `Option` or carries a default; a
+/// `List` field is an array whose items repeat the key (`?tag=a&tag=b`, OpenAPI's
+/// default `form` style with `explode`). Refinements reach the schema as they do
+/// for a path parameter. The raw `RequestQuery` view is not a record, so it
+/// declares none.
+fn query_parameters(r: &Renderer, components: &mut Components, ty: &TypeRef) -> Vec<Value> {
+    let TypeRef::Named(id) = ty else {
+        return Vec::new();
+    };
+    let Some(bynk_syntax::ast::TypeBody::Record(record)) = r.types.get(&id.name).map(|t| &t.body)
+    else {
+        return Vec::new();
+    };
+    record
+        .fields
+        .iter()
+        .map(|f| {
+            let (inner, list, optional) = match &f.type_ref {
+                TypeRef::List(inner, _) => (inner.as_ref(), true, false),
+                TypeRef::Option(inner, _) => (inner.as_ref(), false, true),
+                other => (other, false, false),
+            };
+            let item = r.parameter_schema(components, inner);
+            let schema = if list {
+                json!({ "type": "array", "items": item })
+            } else {
+                item
+            };
+            let mut param = Map::new();
+            param.insert("name".into(), json!(f.name.name));
+            param.insert("in".into(), json!("query"));
+            param.insert("required".into(), json!(!optional && f.init.is_none()));
+            if let Some(d) = &f.documentation {
+                param.insert("description".into(), json!(d.text.trim()));
+            }
+            param.insert("schema".into(), schema);
+            Value::Object(param)
+        })
+        .collect()
 }
 
 /// `api` + `GET` + `/check/:client` → `api_get_check_client`.

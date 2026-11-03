@@ -867,6 +867,18 @@ pub(crate) fn emit_worker_compose(
             crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.request_query() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::REQUEST_QUERY_RUNTIME_IMPORTS,
+        );
+    }
+    if runtime_use.query_string() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::QUERY_STRING_RUNTIME_IMPORTS,
+        );
+    }
     if runtime_use.eq() {
         append_missing_bindings(&mut runtime_imports, crate::emitter::EQ_RUNTIME_IMPORTS);
     }
@@ -2461,6 +2473,7 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
         // #1883, slice 1a: structural (`asset_ts_type`), no runtime import.
         TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_) => {}
         TypeRef::JsonError(_) => {

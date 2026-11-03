@@ -1160,8 +1160,17 @@ fn emit_integration_module(
     if runtime_use.request_headers() {
         append_missing_bindings(&mut runtime_names, emitter::REQUEST_HEADERS_RUNTIME_IMPORTS);
     }
+    if runtime_use.request_query() {
+        append_missing_bindings(&mut runtime_names, emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
+    }
+    if runtime_use.query_string() {
+        append_missing_bindings(&mut runtime_names, emitter::QUERY_STRING_RUNTIME_IMPORTS);
+    }
     if runtime_use.request_header_pairs() {
         append_missing_bindings(&mut runtime_names, ", __requestHeaderPairs");
+    }
+    if runtime_use.request_query_search() {
+        append_missing_bindings(&mut runtime_names, ", __requestQuerySearch");
     }
     if runtime_use.token_claims() {
         append_missing_bindings(&mut runtime_names, ", __tokenClaims");
@@ -1624,11 +1633,61 @@ fn emit_system_http_support(
             } else {
                 ""
             };
+            // #2854: a `query` param (unless a `:query` path segment binds the
+            // name) is neither: the drivers append it to the request's URL, as
+            // the raw `RequestQuery` view or as a typed record's query string.
+            let is_query = |p: &&bynk_syntax::ast::Param| {
+                p.name.name == "query" && !path_params.contains(&"query")
+            };
             let (_path_ps, body_ps): (Vec<_>, Vec<_>) = h
                 .params
                 .iter()
-                .filter(|p| !is_headers(p))
+                .filter(|p| !is_headers(p) && !is_query(p))
                 .partition(|p| path_params.contains(&p.name.name.as_str()));
+            // The query string the typed drivers append to the URL, and the one
+            // the raw drivers append (a `Wire("?…")` text, or a `RequestQuery`).
+            let (typed_query, raw_query) = match h.params.iter().find(|p| is_query(p)) {
+                Some(p) => {
+                    let var = crate::emitter::ts_ident(&p.name.name);
+                    match &p.type_ref {
+                        bynk_syntax::ast::TypeRef::RequestQuery(_) => {
+                            runtime_use.note_request_query_search();
+                            let s = format!("${{__requestQuerySearch({var})}}");
+                            (s.clone(), s)
+                        }
+                        record => {
+                            runtime_use.note_query_string();
+                            let ser = bynk_ts::print_expr(
+                                &crate::emitter::serialisation::serialise_expr_via(
+                                    record,
+                                    &var,
+                                    &type_ns,
+                                    runtime_use,
+                                ),
+                            );
+                            (format!("${{__queryString({ser})}}"), format!("${{{var}}}"))
+                        }
+                    }
+                }
+                None => (String::new(), String::new()),
+            };
+            if let Some(qp) = h.params.iter().find(|p| is_query(p))
+                && matches!(qp.type_ref, bynk_syntax::ast::TypeRef::Named(_))
+            {
+                let idx = h
+                    .params
+                    .iter()
+                    .position(|p| p.name.name == qp.name.name)
+                    .expect("query param is drawn from h.params");
+                route_body.insert(
+                    (
+                        sname.clone(),
+                        method.as_str().to_string(),
+                        format!("{path}{}", emitter::QUERY_ROUTE_SUFFIX),
+                    ),
+                    (idx, qp.type_ref.clone()),
+                );
+            }
             // #708: record the body param's position (within the call's
             // positional args, matching `h.params` declaration order) and
             // declared type, so a mixed typed+`Wire` call can serialise a
@@ -1841,11 +1900,15 @@ fn emit_system_http_support(
                 .iter()
                 .map(|p| TsParam {
                     name: crate::emitter::ts_ident(&p.name.name),
-                    ty: Some(TsType::named(if is_headers(&p) {
-                        driver_param_ty(&p.type_ref, &ns)
-                    } else {
-                        "string".to_string()
-                    })),
+                    ty: Some(TsType::named(
+                        if is_headers(&p)
+                            || matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestQuery(_))
+                        {
+                            driver_param_ty(&p.type_ref, &ns)
+                        } else {
+                            "string".to_string()
+                        },
+                    )),
                     optional: false,
                 })
                 .collect();
@@ -1854,7 +1917,8 @@ fn emit_system_http_support(
                 (true, None) => "\"content-type\": \"application/json\", ".to_string(),
                 (false, _) => String::new(),
             };
-            let url = template(format!("https://test{concrete_path}"));
+            let url = template(format!("https://test{concrete_path}{typed_query}"));
+            let raw_url = template(format!("https://test{concrete_path}{raw_query}"));
             // Decision A (#1407): the request-init options object (`{ method,
             // headers: {...}, body, }`) keeps its own hand-formatted text —
             // every branch below bakes in an unconditional trailing `, ` before
@@ -1937,7 +2001,7 @@ fn emit_system_http_support(
                     &key,
                     raw_params.clone(),
                     None,
-                    url.clone(),
+                    raw_url.clone(),
                     raw_options,
                     &binding,
                     "__responseToHttpOutcome",
@@ -2001,7 +2065,7 @@ fn emit_system_http_support(
                     &key,
                     raw_params.clone(),
                     None,
-                    url.clone(),
+                    raw_url.clone(),
                     rawnoauth_options,
                     &binding,
                     "__responseToUnauthOutcome",
@@ -2057,7 +2121,7 @@ fn emit_system_http_support(
                             &key,
                             raw_params.clone(),
                             None,
-                            url.clone(),
+                            raw_url.clone(),
                             options,
                             &binding,
                             "__responseToUnauthOutcome",
@@ -4057,8 +4121,17 @@ fn emit_test_module(
     if runtime_use.request_headers() {
         append_missing_bindings(&mut runtime_names, emitter::REQUEST_HEADERS_RUNTIME_IMPORTS);
     }
+    if runtime_use.request_query() {
+        append_missing_bindings(&mut runtime_names, emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
+    }
+    if runtime_use.query_string() {
+        append_missing_bindings(&mut runtime_names, emitter::QUERY_STRING_RUNTIME_IMPORTS);
+    }
     if runtime_use.request_header_pairs() {
         append_missing_bindings(&mut runtime_names, ", __requestHeaderPairs");
+    }
+    if runtime_use.request_query_search() {
+        append_missing_bindings(&mut runtime_names, ", __requestQuerySearch");
     }
     if runtime_use.token_claims() {
         append_missing_bindings(&mut runtime_names, ", __tokenClaims");

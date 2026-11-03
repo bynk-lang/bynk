@@ -1,0 +1,10 @@
+context api
+
+// The query view is read in a handler, never stored or sent.
+type Seen = { query: RequestQuery }
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor {
+    NoContent
+  }
+}
