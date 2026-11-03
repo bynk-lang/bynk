@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A `suite` can declare `fixture` files whose text is a `String` constant for its cases, read from `fixtures/` and never deployed
-probes: emit_diagnostics, diagnostic_coverage, ts_writes
----
+# 0720 — A suite declares test-only fixture files, read from fixtures/
 
-## ADR: suite-fixture-declarations
-title: A suite declares test-only fixture files, read from fixtures/
-summary: A new `fixture` declaration gives a suite's cases a project file's text as a String; test-only, 4 MiB a file, private to the suite
+- **Status:** Accepted (v0.497)
 
 **Context.** A test that needs a realistic input had to write it as an escaped string literal in the case. The one file-reading declaration, `embed` (#2387), is production-only: a suite cannot declare one, its file must live in `embeds/` (the folder that ships in the Worker), and it is capped at 256 KiB. The workarounds, an `embed` in the target or a payload pasted into a production commons, leak test data into the deployable (#2841). Different contracts are different declarations (ADR 0608 F).
 

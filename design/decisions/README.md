@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0720](0720-suite-fixture-declarations.md) | **A suite declares test-only fixture files, read from fixtures/** (v0.497) — A new `fixture` declaration gives a suite's cases a project file's text as a String; test-only, 4 MiB a file, private to the suite | Accepted (v0.497) |
 | [0719](0719-snapshot-testing.md) | **A case compares a value with a stored snapshot, and only the driver writes it** (v0.496) — expect v matches snapshot "n", per-suite-file snapshots/ files inlined at compile time, recorded by bynk test --update-snapshots | Accepted (v0.496) |
 | [0718](0718-suite-local-fn-helpers.md) | **A suite declares pure, private, test-only helper functions** (v0.495) — Suite bodies admit `fn`; helpers are pure, per-suite, test-only and may not shadow a name in scope | Accepted (v0.495) |
 | [0717](0717-let-else-staircase-hint.md) | **A nested match staircase is offered `let … else` as a hint, under a new hint severity** (v0.494) — Detection shape, the hint severity, and the five Option/Result methods | Accepted (v0.494) |
