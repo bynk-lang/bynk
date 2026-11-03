@@ -2362,6 +2362,14 @@ fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
     for s in &suite.stubs {
         stub(g, s);
     }
+    // #2834: a suite helper may no more name a hidden type than a case may.
+    for f in &suite.fns {
+        for p in &f.params {
+            g.type_ref(&p.type_ref);
+        }
+        g.type_ref(&f.return_type);
+        g.block(&f.body);
+    }
     for case in &suite.cases {
         for s in &case.stubs {
             stub(g, s);

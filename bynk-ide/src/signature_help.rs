@@ -199,11 +199,16 @@ pub fn resolve_label(
         if found.is_some() {
             return;
         }
+        // #2834: a suite's helper `fn`s are callable from its own cases.
+        let suite_fns: Vec<CommonsItem> = match unit {
+            SourceUnit::Suite(s) => s.fns.iter().cloned().map(CommonsItem::Fn).collect(),
+            _ => Vec::new(),
+        };
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
             SourceUnit::Context(c) => &c.items,
             SourceUnit::Adapter(a) => &a.items,
-            _ => return,
+            SourceUnit::Suite(_) => &suite_fns,
         };
         for item in items {
             if let CommonsItem::Fn(f) = item

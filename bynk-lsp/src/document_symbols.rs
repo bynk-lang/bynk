@@ -60,6 +60,9 @@ fn test_symbol(pm: &PositionMap, t: &SuiteDecl) -> DocumentSymbol {
             Vec::new(),
         ));
     }
+    for f in &t.fns {
+        children.push(fn_symbol(pm, f));
+    }
     for c in &t.cases {
         children.push(make_symbol(
             c.name.clone(),

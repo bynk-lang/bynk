@@ -107,3 +107,57 @@ fn a_suite_that_does_not_parse_still_fails_compile() {
     assert!(!ok, "a malformed file fails the build: {text}");
     assert!(text.contains("bynk.parse."), "{text}");
 }
+
+/// Every file under `dir`, relative path to bytes, for a tree comparison.
+fn tree(dir: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    fn walk(root: &Path, dir: &Path, out: &mut std::collections::BTreeMap<PathBuf, Vec<u8>>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(root, &path, out);
+            } else {
+                out.insert(
+                    path.strip_prefix(root).unwrap().to_path_buf(),
+                    std::fs::read(&path).unwrap(),
+                );
+            }
+        }
+    }
+    let mut out = std::collections::BTreeMap::new();
+    walk(dir, dir, &mut out);
+    out
+}
+
+/// #2834: a suite's helper `fn`s are test-only. The deployable output is
+/// byte-for-byte the same whether or not a suite declares one.
+#[test]
+fn a_suite_helper_leaves_the_deployable_unchanged() {
+    let without = project(
+        "helper-without",
+        "suite shop.maths {\n  case \"doubles\" { expect double(3) == 6 }\n}\n",
+    );
+    let with = project(
+        "helper-with",
+        "suite shop.maths {\n  fn six() -> Int { double(3) }\n\n  case \"doubles\" { expect six() == 6 }\n}\n",
+    );
+    for target in ["bundle", "workers"] {
+        let out = format!("out-{target}");
+        for root in [&without, &with] {
+            let (ok, text) = bynkc(root, &["compile", "--target", target, "-o", &out, "."]);
+            assert!(ok, "{target}: {text}");
+        }
+        let (a, b) = (tree(&without.join(&out)), tree(&with.join(&out)));
+        assert!(!a.is_empty(), "{target}: nothing was emitted");
+        let differing: Vec<_> = a
+            .keys()
+            .chain(b.keys())
+            // A source map names the project's own path, which differs here.
+            .filter(|k| k.extension().is_none_or(|e| e != "map"))
+            .filter(|k| a.get(*k) != b.get(*k))
+            .collect();
+        assert!(
+            differing.is_empty(),
+            "{target}: a suite helper changed the deployable: {differing:?}"
+        );
+    }
+}

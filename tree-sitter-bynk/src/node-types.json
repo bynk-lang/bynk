@@ -11882,6 +11882,10 @@
           "named": true
         },
         {
+          "type": "fn_decl",
+          "named": true
+        },
+        {
           "type": "property_decl",
           "named": true
         },

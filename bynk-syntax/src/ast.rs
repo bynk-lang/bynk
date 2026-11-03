@@ -412,6 +412,9 @@ pub struct SuiteDecl {
     pub cases: Vec<Case>,
     /// v0.114: generative `property` blocks (testing track slice 2).
     pub properties: Vec<PropertyDecl>,
+    /// #2834: suite-local helper `fn`s — pure, private to this suite, called
+    /// from its `case` and `property` bodies and emitted only into test output.
+    pub fns: Vec<FnDecl>,
     /// v0.118: the suite-level tier default (`suite … as integration`). `None`
     /// means the `unit` default; a `case`'s own tier overrides it. A `property`
     /// ignores a suite tier (tiers are a `case`-only affordance).

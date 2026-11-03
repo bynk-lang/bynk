@@ -704,6 +704,22 @@
     {
       "code": "bynk.resolve.reserved_host_name",
       "summary": "A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals."
+    },
+    {
+      "code": "bynk.suite.duplicate_fn",
+      "summary": "A suite declares two helper `fn`s of the same name."
+    },
+    {
+      "code": "bynk.suite.fn_effectful",
+      "summary": "A suite helper `fn` returns an `Effect`; suite helpers are pure."
+    },
+    {
+      "code": "bynk.suite.fn_method",
+      "summary": "A suite helper `fn` is a method (`fn Type.name`); suite helpers are free functions."
+    },
+    {
+      "code": "bynk.suite.fn_name_clash",
+      "summary": "A suite helper `fn` has the name of a declaration already in scope in the suite's cases."
     }
   ],
   "for_all": [

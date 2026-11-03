@@ -1,0 +1,37 @@
+================================================================================
+Suite-local helper fns (#2834)
+================================================================================
+
+suite shop.orders {
+  fn double(n: Int) -> Int { n * 2 }
+
+  case "uses the helper" {
+    expect double(2) == 4
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (base_type)
+      (block
+        (binary_expr
+          (identifier)
+          (number_literal))))
+    (case
+      (string_literal)
+      (expect_expr
+        (binary_expr
+          (call
+            (identifier)
+            (number_literal))
+          (number_literal))))))

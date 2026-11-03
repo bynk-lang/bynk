@@ -35,6 +35,67 @@ pub(crate) fn check_fn(
     requirements: &mut RequirementSink,
     tys: &Types,
 ) {
+    check_fn_in(
+        f,
+        false,
+        input,
+        expr_types,
+        callees,
+        errors,
+        refs,
+        hints,
+        locals,
+        requirements,
+        tys,
+    );
+}
+
+/// #2834: check a suite-local helper `fn` against `input` (the suite's view,
+/// with its sibling helpers), admitting test-only values.
+#[allow(clippy::too_many_arguments)]
+pub fn check_suite_fn(
+    f: &FnDecl,
+    input: &ResolvedCommons,
+    expr_types: &mut HashMap<ExprId, TypedExpr>,
+    callees: &mut HashMap<ExprId, Callee>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+    requirements: &mut RequirementSink,
+    tys: &Types,
+) {
+    check_fn_in(
+        f,
+        true,
+        input,
+        expr_types,
+        callees,
+        errors,
+        refs,
+        hints,
+        locals,
+        requirements,
+        tys,
+    );
+}
+
+/// [`check_fn`], for a body that may use test-only values when `test_values`
+/// (a suite-local helper, #2834).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_fn_in(
+    f: &FnDecl,
+    test_values: bool,
+    input: &ResolvedCommons,
+    expr_types: &mut HashMap<ExprId, TypedExpr>,
+    callees: &mut HashMap<ExprId, Callee>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+    requirements: &mut RequirementSink,
+    tys: &Types,
+) {
     // v0.20a: the fn's type parameters are *rigid* type variables while
     // checking its own body. A type param shadowing a declared type is
     // confusing — diagnose the collision.
@@ -196,6 +257,7 @@ pub(crate) fn check_fn(
         in_agent_handler: false,
         in_service_handler: false,
         in_fn_body: true,
+        test_values,
     };
     let Some(body_ty) = type_of_block(&f.body, Some(return_ty), &mut ctx) else {
         return;
@@ -349,6 +411,7 @@ fn type_static_initialiser(
             in_agent_handler: false,
             in_service_handler: false,
             in_fn_body: false,
+            test_values: false,
         };
         type_of(init, Some(field_ty), &mut ctx)
     };

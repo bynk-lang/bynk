@@ -2655,6 +2655,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["env_clause"],
     ),
     dg(
+        "bynk.suite.duplicate_fn",
+        "A suite declares two helper `fn`s of the same name.",
+        &["fn_decl"],
+    ),
+    dg(
         "bynk.suite.env_binding_clash",
         "A `system`-tier suite's or case's `env` names a binding a participant's Worker already declares (a Service Binding, KV namespace, or Durable Object namespace), or a key the test harness sets on it (a call-edge key, a `Foreign` caller's secret), so the entry would clash with it on the Worker's `env`.",
         &["env_clause"],
@@ -2663,6 +2668,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.suite.env_not_literal",
         "An `env { … }` entry's value is not a `String` literal; a Worker's variables and secrets are strings, given verbatim.",
         &["env_clause"],
+    ),
+    dg(
+        "bynk.suite.fn_effectful",
+        "A suite helper `fn` returns an `Effect`; suite helpers are pure.",
+        &["fn_decl"],
+    ),
+    dg(
+        "bynk.suite.fn_method",
+        "A suite helper `fn` is a method (`fn Type.name`); suite helpers are free functions.",
+        &["fn_decl"],
+    ),
+    dg(
+        "bynk.suite.fn_name_clash",
+        "A suite helper `fn` has the name of a declaration already in scope in the suite's cases.",
+        &["fn_decl"],
     ),
     dg(
         "bynk.suite.unknown_target",

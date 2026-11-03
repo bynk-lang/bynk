@@ -1,0 +1,8 @@
+suite demo.desk
+
+// Shadows the target's `double`: an error, not silent shadowing.
+fn double(n: Int) -> Int { n * 3 }
+
+case "a clash" {
+  expect double(2) == 4
+}

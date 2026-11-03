@@ -1,0 +1,9 @@
+suite demo.desk
+
+fn twice(n: Int) -> Int { n * 2 }
+fn twice(n: Int) -> Int { n + n }
+fn Count.bump(self) -> Int { 1 }
+
+case "uses one" {
+  expect twice(2) == 4
+}
