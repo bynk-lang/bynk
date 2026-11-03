@@ -36,6 +36,7 @@ pub mod parse_cache;
 pub mod paths;
 pub mod roots;
 pub mod schema_registry;
+pub mod snapshots;
 pub mod workspace;
 
 mod diagnostics;

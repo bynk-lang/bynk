@@ -1,0 +1,1 @@
+bynk.test.snapshot_duplicate_name case `"twice"` already has a snapshot named `"same"`

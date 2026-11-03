@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **712** codes in total.
+There are **717** codes in total.
 
 ## Agents
 
@@ -498,6 +498,11 @@ There are **712** codes in total.
 | `bynk.test.service_no_call_handler` | A test body invokes `svc.call(...)` on a service with no `on call` handler (a `from http`/`cron`/`queue` service). | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.service_unknown_route` | A test body addresses an http route / cron schedule / queue message the service does not declare. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.smoke_undeclared_status` | A smoke case (`bynk test --smoke`) gets a non-5xx answer whose status is not among those its route's handler declares; the case still passes (warning). | [`case`](/book/reference/grammar/#rule-case) | Warning |
+| `bynk.test.snapshot_duplicate_name` | A case takes two snapshots (`expect v matches snapshot "name"`) under one name; a snapshot is keyed by its case and name. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
+| `bynk.test.snapshot_in_property` | A `property` takes a snapshot; its body runs once per generated input, so the snapshot belongs in a `case` over a fixed value. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
+| `bynk.test.snapshot_name_not_literal` | `matches snapshot` is not followed by a string literal; a snapshot is named by a literal so the compiler knows every snapshot a suite takes. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
+| `bynk.test.snapshot_needs_unit_suite` | A snapshot is taken in a `system`-tier case or in an integration or system suite; snapshots are stored per unit suite file and compared in the unit harness. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
+| `bynk.test.snapshot_not_codable` | The value of an `expect … matches snapshot` is not `Codable`: a snapshot stores the value's `Json.encode` text, so it must be in the domain `Json.encode` accepts. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
 | `bynk.test.stale_needs_timestamp` | A case drives `by Stale` at a `Signature` route whose actor declares no `timestamp` header and `tolerance`, so there is no replay window for the seam to refuse a stale signature by. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.unknown_actor` | A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.wire_needs_system` | A `Wire(...)` raw argument is used outside a `system`-tier service address; `Wire` hands pre-validation input to the boundary and is meaningless at `unit` or in any other position. | [`case`](/book/reference/grammar/#rule-case) | — |

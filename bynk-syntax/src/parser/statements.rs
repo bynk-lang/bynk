@@ -609,6 +609,40 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    /// #2842: the optional `matches snapshot "<name>"` tail of an `expect`. Both
+    /// words are contextual — an expression is never followed by a bare
+    /// identifier, so `matches` here is unambiguous (as `faults` is).
+    fn parse_snapshot_clause(&mut self) -> Result<Option<SnapshotClause>, CompileError> {
+        if self.peek_kind() != Some(TokenKind::Ident) || self.nth_text(0) != "matches" {
+            return Ok(None);
+        }
+        let matches_tok = self.bump().unwrap();
+        if self.peek_kind() != Some(TokenKind::Ident) || self.nth_text(0) != "snapshot" {
+            return Err(CompileError::new(
+                "bynk.parse.expected_token",
+                self.peek().map_or(self.eof_span(), |t| t.span),
+                "expected `snapshot` after `matches` in an `expect`",
+            )
+            .with_note("the form is `expect <value> matches snapshot \"<name>\"`"));
+        }
+        self.bump();
+        let Some(lit) = self.peek().filter(|t| t.kind == TokenKind::StrLit) else {
+            return Err(CompileError::new(
+                "bynk.test.snapshot_name_not_literal",
+                self.peek().map_or(self.eof_span(), |t| t.span),
+                "a snapshot is named by a string literal",
+            )
+            .with_note("write `expect <value> matches snapshot \"<name>\"`"));
+        };
+        self.bump();
+        let name = super::parse_string_literal(self.slice(lit.span), lit.span)?;
+        Ok(Some(SnapshotClause {
+            name,
+            span: matches_tok.span.merge(lit.span),
+            name_span: lit.span,
+        }))
+    }
+
     pub(crate) fn assign_ahead(&self) -> bool {
         self.peek_kind() == Some(TokenKind::Ident)
             && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::ColonEq)
@@ -682,9 +716,13 @@ impl<'a> Parser<'a> {
         if self.peek_kind() == Some(TokenKind::Expect) {
             let kw = self.expect(TokenKind::Expect, "to start an expect statement")?;
             let value = self.parse_expect_body()?;
-            let span = kw.span.merge(value.span);
+            let snapshot = self.parse_snapshot_clause()?;
+            let span = kw
+                .span
+                .merge(snapshot.as_ref().map_or(value.span, |c| c.span));
             return Ok(Statement::Expect(ExpectStmt {
                 value,
+                snapshot,
                 span,
                 trivia: Trivia::default(),
             }));

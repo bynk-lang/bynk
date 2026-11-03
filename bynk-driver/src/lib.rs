@@ -26,6 +26,7 @@ pub mod probe;
 pub mod remote;
 pub mod schema_lock;
 pub mod smoke;
+pub mod snapshots;
 pub mod source_overlay;
 pub mod test_filter;
 pub mod test_json;

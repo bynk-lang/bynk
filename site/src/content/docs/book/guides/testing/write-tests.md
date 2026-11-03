@@ -51,6 +51,37 @@ A `Matches`-refined string cannot be fabricated blindly — a bare `Val` of one 
 rejected ([`bynk.val.needs_pin`](/book/troubleshooting/val-errors/)); pin it
 instead. `Val[T]` is test-only.
 
+## Snapshot a decoded value
+
+A decoder's result is often a record with many fields; asserting each one by hand
+is long to read and goes stale as the shape grows. Snapshot the whole value instead:
+
+```bynk,fragment
+suite github.events {
+  case "an issues delivery reads" {
+    let r = read("{\"id\":\"d-1\",\"action\":{\"kind\":\"Opened\"}}")
+    expect r matches snapshot "issues opened"
+  }
+}
+```
+
+The first run fails, because nothing is stored yet. Record the snapshot, then read
+it in the diff before you commit it:
+
+```sh
+bynk test --update-snapshots
+git diff snapshots/
+bynk test
+```
+
+The value is stored as JSON in `snapshots/<suite file>.snap.json`, with keys sorted,
+so the file is a reviewable record of what the decoder produces. When the decoder
+changes, the case fails with a line diff of the stored value against the new one;
+run `bynk test --update-snapshots` when the change is intended, and the diff of
+the snapshot file is the review. A snapshot whose case you delete is reported as
+obsolete and removed by the same command. Stub `Clock` and `Random` so the value
+is stable. See [Snapshots](/book/reference/testing/#snapshots).
+
 ## Constrain a function with `requires` / `ensures`
 
 A **contract** states what a pure function guarantees, right on its signature —

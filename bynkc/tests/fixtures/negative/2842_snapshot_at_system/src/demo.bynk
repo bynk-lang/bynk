@@ -1,0 +1,7 @@
+context demo
+
+service api from http {
+  on GET("/a") () -> Effect[HttpResult[Int]] by Visitor {
+    Ok(1)
+  }
+}

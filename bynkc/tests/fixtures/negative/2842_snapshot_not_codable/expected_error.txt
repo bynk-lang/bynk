@@ -1,0 +1,1 @@
+bynk.test.snapshot_not_codable a snapshot stores the value as JSON, but

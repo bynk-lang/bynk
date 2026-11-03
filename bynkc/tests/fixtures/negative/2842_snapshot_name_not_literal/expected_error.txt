@@ -1,0 +1,1 @@
+bynk.test.snapshot_name_not_literal

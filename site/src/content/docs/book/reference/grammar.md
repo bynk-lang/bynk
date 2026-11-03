@@ -2135,6 +2135,16 @@ words are contextual keywords.
 
 **See also.** [Observation](/book/reference/testing/#observation).
 
+### snapshot_expr {#rule-snapshot_expr}
+
+{{#grammar snapshot_expr}}
+
+A snapshot claim, inside a `case`: `expect <value> matches snapshot "<name>"`
+compares the value's canonical JSON with the snapshot stored for the case and name
+(#2842). `matches` and `snapshot` are contextual: ordinary identifiers elsewhere.
+
+**See also.** [Snapshots](/book/reference/testing/#snapshots).
+
 ### faults_expr {#rule-faults_expr}
 
 {{#grammar faults_expr}}

@@ -2723,6 +2723,12 @@ impl<'a> Formatter<'a> {
             Statement::Expect(a) => {
                 self.push("expect ");
                 self.format_expr(&a.value);
+                if let Some(snapshot) = &a.snapshot {
+                    self.push(&format!(
+                        " matches snapshot \"{}\"",
+                        escape_string(&snapshot.name)
+                    ));
+                }
             }
             Statement::Send(s) => {
                 self.push("~> ");
@@ -4202,7 +4208,14 @@ fn stmt_to_string(s: &Statement) -> String {
             }
             out
         }
-        Statement::Expect(a) => format!("expect {}", expr_with_prec(&a.value, 0)),
+        Statement::Expect(a) => format!(
+            "expect {}{}",
+            expr_with_prec(&a.value, 0),
+            a.snapshot.as_ref().map_or(String::new(), |c| format!(
+                " matches snapshot \"{}\"",
+                escape_string(&c.name)
+            ))
+        ),
         Statement::Send(s) => format!("~> {}", expr_with_prec(&s.value, 0)),
         Statement::Do(d) => format!("do {}", expr_with_prec(&d.value, 0)),
         Statement::Assign(a) => format!("{} := {}", a.target.name, expr_with_prec(&a.value, 0)),
@@ -5147,5 +5160,25 @@ mod tests {
             assert!(out.contains(want), "{want}: {out}");
         }
         assert_eq!(out, fmt(&out), "not idempotent: {out}");
+    }
+}
+
+#[cfg(test)]
+mod snapshot_clause_tests {
+    use super::*;
+
+    /// #2842: the `matches snapshot "<name>"` clause survives formatting — it is
+    /// part of the statement, not a trailing remark — with its name re-escaped.
+    #[test]
+    fn a_snapshot_clause_is_kept() {
+        let src = "suite demo\n\ncase \"c\" {\n\texpect   read(1)   matches   snapshot   \"a \\\"q\\\" name\"\n\tlet matches = 1\n\texpect matches == 1\n}\n";
+        let once = format_source(src, &FormatOptions::default()).expect("formats");
+        assert!(
+            once.contains("\texpect read(1) matches snapshot \"a \\\"q\\\" name\"\n"),
+            "{once}"
+        );
+        assert!(once.contains("let matches = 1"), "{once}");
+        let twice = format_source(&once, &FormatOptions::default()).expect("formats again");
+        assert_eq!(once, twice);
     }
 }

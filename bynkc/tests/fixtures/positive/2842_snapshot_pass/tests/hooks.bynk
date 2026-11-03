@@ -1,0 +1,19 @@
+suite hooks
+
+// #2842: `expect v matches snapshot "name"` compares the value's canonical JSON
+// with the stored `snapshots/tests/hooks.snap.json`.
+
+case "an opened issue decodes whole" {
+	let r = read("{\"id\":\"d-1\",\"action\":{\"kind\":\"Opened\"},\"repo\":{\"owner\":\"bynk-lang\",\"name\":\"bynk\"},\"labels\":[\"bug\",\"proposal\"],\"assignee\":{\"kind\":\"Some\",\"value\":\"mhgibbons\"}}")
+	expect r matches snapshot "issues opened"
+}
+
+case "an unassigned delivery keeps its None" {
+	let r = read("{\"id\":\"d-2\",\"action\":{\"kind\":\"Closed\"},\"repo\":{\"owner\":\"bynk-lang\",\"name\":\"bynk\"},\"labels\":[],\"assignee\":{\"kind\":\"None\"}}")
+	expect r matches snapshot "unassigned"
+	expect "d-2" matches snapshot "the id"
+}
+
+case "a malformed delivery is a snapshot of its error" {
+	expect read("{\"id\":1}") matches snapshot "malformed"
+}
