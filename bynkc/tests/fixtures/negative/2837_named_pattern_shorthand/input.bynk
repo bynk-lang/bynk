@@ -1,0 +1,9 @@
+commons demo
+
+type S = | K(type: String)
+
+fn f(s: S) -> String {
+  match s {
+    K(type) => "x"
+  }
+}

@@ -1201,6 +1201,111 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// True when the cursor is on a reserved keyword followed by `:`: a
+    /// keyword used as a label (#2837). The `:` is what separates a label from
+    /// a binding, so `type: t` is a field name while `type` alone stays refused.
+    fn at_keyword_label(&self) -> bool {
+        matches!(self.peek(), Some(t) if is_reserved_keyword(t.kind))
+            && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::Colon)
+    }
+
+    /// Like [`Parser::expect_ident`], but admits any reserved keyword that is
+    /// followed by `:` (#2837): a field declaration, a construction
+    /// initialiser, a record or named pattern field and a variant payload
+    /// field are labels, never bindings. A keyword without the `:` keeps the
+    /// `reserved_keyword` refusal, which is how shorthand stays an error.
+    pub(crate) fn expect_label(&mut self, ctx: &str) -> Result<Ident, CompileError> {
+        if self.at_keyword_label() {
+            let t = self.bump().expect("peeked a keyword");
+            return Ok(Ident {
+                name: self.slice(t.span).to_string(),
+                span: t.span,
+            });
+        }
+        self.expect_ident(ctx)
+    }
+
+    /// The targeted refusal for a keyword written as field shorthand (#2837):
+    /// `Account { type, .. }` as a pattern would bind a variable named `type`,
+    /// and `Account { type }` as a construction would read one. `None` when the
+    /// cursor is not on such a shorthand, so the caller falls back to
+    /// [`Parser::expect_ident`]'s plain `reserved_keyword`.
+    ///
+    /// A pattern gets the fix `type: type_`. The parser cannot see scope, so the
+    /// fresh name is the first `type_`, `type_2`, … that no identifier in the
+    /// file spells: over-cautious, never colliding, and `MaybeIncorrect` all the
+    /// same. A construction gets a note and no fix: no variable called `type`
+    /// can exist, so there is no value to suggest.
+    pub(crate) fn keyword_shorthand_error(&self, pattern: bool) -> Option<CompileError> {
+        let t = self.peek()?;
+        if !is_reserved_keyword(t.kind) {
+            return None;
+        }
+        let next = self.tokens.get(self.pos + 1).map(|t| t.kind);
+        let shorthand = match next {
+            Some(TokenKind::Comma | TokenKind::RBrace) => true,
+            Some(TokenKind::DotDot) => pattern,
+            _ => false,
+        };
+        if !shorthand {
+            return None;
+        }
+        let word = self.slice(t.span);
+        let mut err = CompileError::new(
+            "bynk.parse.keyword_field_shorthand",
+            t.span,
+            format!("`{word}` is a reserved keyword, so it cannot be a field shorthand"),
+        );
+        if pattern {
+            let taken = |name: &str| {
+                self.tokens
+                    .iter()
+                    .any(|k| k.kind == TokenKind::Ident && self.slice(k.span) == name)
+            };
+            let mut binding = format!("{word}_");
+            let mut n = 2;
+            while taken(&binding) {
+                binding = format!("{word}_{n}");
+                n += 1;
+            }
+            err = err
+                .with_note(format!(
+                    "the shorthand binds a variable named `{word}`; name the binding instead"
+                ))
+                .with_suggestion(
+                    format!("bind the `{word}` field as `{binding}`"),
+                    vec![(t.span, format!("{word}: {binding}"))],
+                    crate::error::Applicability::MaybeIncorrect,
+                );
+        } else {
+            err = err.with_note(format!(
+                "write `{word}: <value>`; a keyword names the field but cannot name a variable"
+            ));
+        }
+        Some(err)
+    }
+
+    /// Like [`Parser::expect_ident`], but admits any reserved keyword on the
+    /// same line as the `.` before it (#2837, #2778): a field access, a method
+    /// call or a method declaration. The same-line rule keeps a half-typed
+    /// `foo.` above a line starting `let` from parsing as `foo.let`.
+    pub(crate) fn expect_member_name(
+        &mut self,
+        ctx: &str,
+        dot: Span,
+    ) -> Result<Ident, CompileError> {
+        if matches!(self.peek(), Some(t) if is_reserved_keyword(t.kind))
+            && !self.next_token_on_new_line(dot)
+        {
+            let t = self.bump().expect("peeked a keyword");
+            return Ok(Ident {
+                name: self.slice(t.span).to_string(),
+                span: t.span,
+            });
+        }
+        self.expect_ident(ctx)
+    }
+
     // -- top level --
 
     /// Consume an optional doc at the current position, in either form,
@@ -1587,7 +1692,7 @@ fn parse_string_literal(lexeme: &str, span: Span) -> Result<String, CompileError
     crate::lexer::decode_string_literal(lexeme, span)
 }
 
-fn is_reserved_keyword(kind: TokenKind) -> bool {
+pub fn is_reserved_keyword(kind: TokenKind) -> bool {
     use TokenKind::*;
     matches!(
         kind,
@@ -2657,6 +2762,63 @@ mod tests {
         // `suite` too, as a field name.
         parse_str("commons demo {\n  type R = { suite: Int }\n}")
             .expect("`suite` is a valid field name");
+    }
+
+    /// #2837: a keyword is a name where the name is a label (followed by `:`)
+    /// or a member on the `.`'s line, and nowhere it would bind a variable.
+    #[test]
+    fn keywords_are_labels_and_members_not_bindings() {
+        for src in [
+            "commons demo {\n  type A = { type: String, from: Int, self: Bool }\n}",
+            "commons demo {\n  type S = | P(from: String, type: String)\n}",
+            "commons demo {\n  type A = { type: String }\n  fn f(a: A) -> String { a.type }\n}",
+            "commons demo {\n  type A = { type: String }\n  fn f() -> A { A { type: \"x\" } }\n}",
+            "commons demo {\n  type A = { type: String }\n  fn f(a: A) -> String { match a { A { type: t, .. } => t } }\n}",
+            "commons demo {\n  type S = | P(from: String)\n  fn f(s: S) -> String { match s { P(from: x) => x } }\n}",
+            "commons demo {\n  type S = { n: Int }\n  fn S.from(n: Int) -> S { S { n: n } }\n  fn g() -> S { S.from(1) }\n}",
+        ] {
+            parse_str(src).unwrap_or_else(|e| panic!("should parse: {src}\n{e:?}"));
+        }
+        for src in [
+            "commons demo {\n  fn f(type: Int) -> Int { 1 }\n}",
+            "commons demo {\n  fn f() -> Int { let from = 1\n from }\n}",
+            "commons demo {\n  type A = { type String }\n}",
+            // The same-line rule: `a.` then a statement on the next line.
+            "commons demo {\n  fn f(a: Int) -> Int {\n    a.\n    let x = 1\n    x\n  }\n}",
+        ] {
+            let errs = parse_str(src).expect_err(src);
+            assert_eq!(errs[0].category, "bynk.parse.reserved_keyword", "{src}");
+        }
+    }
+
+    /// #2837: keyword shorthand is a targeted error. A pattern gets the fix
+    /// `type: type_` (`MaybeIncorrect`), fresh when `type_` is already spelled;
+    /// a construction gets a note and no fix.
+    #[test]
+    fn keyword_shorthand_is_a_targeted_error() {
+        let pat = |extra: &str| {
+            format!(
+                "commons demo {{\n  type A = {{ type: String }}\n  fn f(a: A) -> String {{ {extra} match a {{ A {{ type, .. }} => \"x\" }} }}\n}}"
+            )
+        };
+        let errs = parse_str(&pat("")).expect_err("pattern shorthand");
+        assert_eq!(errs[0].category, "bynk.parse.keyword_field_shorthand");
+        let fix = &errs[0].suggestions[0];
+        assert_eq!(fix.edits[0].1, "type: type_");
+        assert!(matches!(
+            fix.applicability,
+            crate::error::Applicability::MaybeIncorrect
+        ));
+
+        let errs = parse_str(&pat("let type_ = 1")).expect_err("pattern shorthand");
+        assert_eq!(errs[0].suggestions[0].edits[0].1, "type: type_2");
+
+        let errs = parse_str(
+            "commons demo {\n  type A = { type: String }\n  fn f() -> A { A { type } }\n}",
+        )
+        .expect_err("construction shorthand");
+        assert_eq!(errs[0].category, "bynk.parse.keyword_field_shorthand");
+        assert!(errs[0].suggestions.is_empty());
     }
 
     /// Drift guard: every alphabetic keyword the lexer declares must be

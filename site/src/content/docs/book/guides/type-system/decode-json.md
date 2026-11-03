@@ -57,6 +57,33 @@ A bare value is still checked as the inner type, so `"description": 7` is an
 error, and so is that extra-key object.
 See [the JSON codec](/book/reference/types/#the-json-codec) for the full rule.
 
+## Decode a third-party payload with reserved-word keys
+
+A payload from outside picks its own keys, and some are Bynk keywords. GitHub's
+webhooks carry `type` on every account and `from` on a rename. A reserved word
+can name a record field when it is written as a label, so the field is the key
+and the record decodes as it stands:
+
+```bynk
+commons hooks {
+  type Account = { login: String, type: String }
+
+  type Installation = { action: String, account: Account }
+
+  fn isOrganisation(raw: String) -> Bool {
+    match Json.decode[Installation](raw) {
+      Ok(i) => i.account.type == "Organization"
+      Err(_) => false
+    }
+  }
+}
+```
+
+A match pattern names the field the same way, `Account { type: t, .. }`. The
+shorthand `Account { type, .. }` would bind a variable called `type`, which a
+keyword cannot be, so it is an error with a fix to `type: type_`. See
+[reserved words as field names](/book/reference/types/#keyword-field-names).
+
 ## Decode straight into a refined type
 
 Point `decode` at a type whose fields are refined, and the predicates are

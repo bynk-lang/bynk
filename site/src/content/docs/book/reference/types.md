@@ -616,6 +616,41 @@ type Order = {
 Records emit a TypeScript `interface` with `readonly` fields. A record field may
 not directly be of the record's own type (`bynk.resolve.recursive_record_field`).
 
+### Reserved words as field names {#keyword-field-names}
+
+A field is a key in the JSON a record decodes from and encodes to, and a
+third-party payload picks its own keys: GitHub's use `type`, `from` and `self`.
+A reserved word can therefore name a field wherever the name is a *label* and
+not a binding:
+
+```bynk
+type Account = { login: String, type: String }
+
+fn isOrg(a: Account) -> Bool { a.type == "Organization" }
+
+fn build() -> Account { Account { login: "bynk-lang", type: "Organization" } }
+
+fn kind(a: Account) -> String {
+  match a { Account { type: t, .. } => t }
+}
+```
+
+- A field declaration, a construction initialiser, a record or named pattern
+  field and a variant payload field take a reserved word when it is followed by
+  `:`. A variant payload field still cannot be named `kind`, the wire tag
+  (`bynk.resolve.reserved_payload_field`).
+- A member after `.`, a field access, a method call or a method declaration
+  (`fn Sorted.from(…)`, `Sorted.from(xs)`), takes a reserved word when it is on
+  the same line as the `.`. A half-typed `a.` above a line that starts `let` is
+  still an error at the `let`.
+- A parameter, a `let` or lambda binding and a bare reference still refuse a
+  reserved word, so the shorthand forms are refused too: `Account { type, .. }`
+  as a pattern and `Account { type }` as a construction are
+  `bynk.parse.keyword_field_shorthand`. The fix for a pattern is `type: type_`;
+  for a construction, write `type: <value>`.
+
+The emitted TypeScript keeps the field name: `a.type`, `{ type: "Organization" }`.
+
 ### Field defaults {#field-defaults}
 
 A field may declare a default, `field: T = expr`. A literal may leave that field

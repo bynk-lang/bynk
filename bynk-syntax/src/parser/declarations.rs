@@ -3077,7 +3077,7 @@ impl<'a> Parser<'a> {
             ) {
                 break;
             }
-            let name = self.expect_ident("as an events subscription pattern field name")?;
+            let name = self.expect_label("as an events subscription pattern field name")?;
             self.expect(
                 TokenKind::Colon,
                 "expected `:` after an events subscription pattern field name",

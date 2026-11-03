@@ -1,0 +1,116 @@
+==========================
+#2837 — reserved words as record and payload field names
+==========================
+
+commons d {
+	type Event = { type: String, from: Int, self: Bool }
+	type Change = | Push(from: String) | Close(type: String)
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (type_decl
+      (identifier)
+      (record_type
+        (record_field
+          (identifier)
+          (base_type))
+        (record_field
+          (identifier)
+          (base_type))
+        (record_field
+          (identifier)
+          (base_type))))
+    (type_decl
+      (identifier)
+      (sum_type
+        (sum_variant
+          (constant_name)
+          (variant_payload_field
+            (identifier)
+            (base_type)))
+        (sum_variant
+          (constant_name)
+          (variant_payload_field
+            (identifier)
+            (base_type)))))))
+
+==========================
+#2837 — reserved words as members, initialisers and pattern fields
+==========================
+
+commons d {
+	fn Sorted.from(xs: List[String]) -> Sorted { Sorted { items: xs } }
+	fn f(e: Event) -> String {
+		match Event { type: e.type, from: e.from } {
+			Event { type: t, from: f, .. } => t.concat(Sorted.from(f).type)
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (method_name
+        (identifier)
+        (identifier))
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (base_type)))
+      (identifier)
+      (block
+        (record_construction
+          (identifier)
+          (field_init
+            (identifier)
+            (identifier)))))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (block
+        (match_expr
+          (record_construction
+            (identifier)
+            (field_init
+              (identifier)
+              (field_access
+                (identifier)
+                (identifier)))
+            (field_init
+              (identifier)
+              (field_access
+                (identifier)
+                (identifier))))
+          (match_arm
+            (record_pattern
+              (identifier)
+              (record_pattern_field
+                (identifier)
+                (variant_pattern
+                  (identifier)))
+              (record_pattern_field
+                (identifier)
+                (variant_pattern
+                  (identifier))))
+            (method_call
+              (identifier)
+              (identifier)
+              (field_access
+                (method_call
+                  (identifier)
+                  (identifier)
+                  (identifier))
+                (identifier)))))))))
