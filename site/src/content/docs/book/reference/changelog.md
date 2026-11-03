@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.497.4** | A suite's `fixture` can be named in its `stub` clauses (#2850) |
 | **v0.497.3** | A test case no longer passes `identity` to a binder-less Bearer/Oidc handler, so one that takes `given` capabilities passes tsc (#2856) |
 | **v0.497.2** | A fixture refusal code without its own message now fails loudly (#2851) |
 | **v0.497.1** | A test case that checks `expect r is Ok(_)` and then matches `r` exhaustively no longer fails `tsc` with TS2678 |
