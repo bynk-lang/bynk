@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.498**.
+written against **v0.499**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.499.0** | An HTTP service or route can write response `Option`s as plain JSON (`v` / `null`) with `json { options: plain }` and `@json` |
 | **v0.498.2** | "`JsonError`'s `kind`, `path` and `message` are documented, offered by completion and hover, and named in the `interpolation_non_scalar` note (#2863)" |
 | **v0.498.1** | "`?` on a `Result` inside a test `case` fails the case, naming the `Err` and the `?`'s location, instead of emitting a `return` that failed `tsc` (#2857)" |
 | **v0.498.0** | An `on http` handler reads the query string through a typed `query` parameter, decoded and validated at the boundary, or a raw `RequestQuery` view (#2854) |

@@ -1,12 +1,6 @@
----
-level: minor
-changelog: An HTTP service or route can write response `Option`s as plain JSON (`v` / `null`) with `json { options: plain }` and `@json`
-probes: diagnostic_coverage, emit_diagnostics
----
+# 0723 — HTTP response bodies can opt into plain JSON for `Option`
 
-## ADR: plain-json-http-options
-title: HTTP response bodies can opt into plain JSON for `Option`
-summary: A `json { options: plain }` section and `@json` annotation write `Some(v)` as `v` and `None` as `null` in response bodies only
+- **Status:** Accepted (v0.499)
 
 **Context.** Bynk writes an `Option[U]` as `{"kind": "Some", "value": v}` or `{"kind": "None"}` ([ADR 0450](0450-lenient-option-decode.md) made the decoder lenient but kept the encoder tagged so `decode(encode(x)) == x` and contract hashes hold). That is right for Bynk talking to Bynk, but every non-Bynk consumer of an HTTP API (`curl | jq`, a dashboard) must special-case it. Proposed in #2858.
 

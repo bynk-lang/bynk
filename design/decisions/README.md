@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0723](0723-plain-json-http-options.md) | **HTTP response bodies can opt into plain JSON for `Option`** (v0.499) — A `json { options: plain }` section and `@json` annotation write `Some(v)` as `v` and `None` as `null` in response bodies only | Accepted (v0.499) |
 | [0722](0722-question-fails-the-case.md) | **`?` in a test case fails the case** (v0.498.1) — An Err reached by `?` in a case body fails the case rather than propagating | Accepted (v0.498.1) |
 | [0721](0721-http-query-parameter.md) | **An HTTP handler reads the query string through a typed `query` parameter** (v0.498) — `query: T` decodes and validates at the boundary; `query: RequestQuery` is the raw view | Accepted (v0.498) |
 | [0720](0720-suite-fixture-declarations.md) | **A suite declares test-only fixture files, read from fixtures/** (v0.497) — A new `fixture` declaration gives a suite's cases a project file's text as a String; test-only, 4 MiB a file, private to the suite | Accepted (v0.497) |
