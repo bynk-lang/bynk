@@ -1,0 +1,3 @@
+commons demo
+
+type S = | K(kind: String)

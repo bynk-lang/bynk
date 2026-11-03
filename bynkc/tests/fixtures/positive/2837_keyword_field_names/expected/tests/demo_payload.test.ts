@@ -80,7 +80,7 @@ async function test_encodes_the_keys_back() {
     type Change = __ns_demo_payload.Change;
     type Event = __ns_demo_payload.Event;
     type Sorted = __ns_demo_payload.Sorted;
-    if (!(save(rewrite(build("push", 1))) === "{\"type\":\"pull_request\",\"from\":2,\"self\":true,\"do\":null,\"account\":{\"login\":\"bynk-lang\",\"type\":\"Organization\"}}")) { throw __bynkExpectFailure("tests/demo/payload.bynk:19:12", 659, 824, "expect save(rewrite(build(\"push\", 1))) == \"{\\\"type\\\":\\\"pull_request\\\",\\\"from\\\":2,\\\"self\\\":true,\\\"do\\\":null,\\\"account\\\":{\\\"login\\\":\\\"bynk-lang\\\",\\\"type\\\":\\\"Organization\\\"}}\"\n  expected: save(rewrite(build(\"push\", 1))) == \"{\\\"type\\\":\\\"pull_request\\\",\\\"from\\\":2,\\\"self\\\":true,\\\"do\\\":null,\\\"account\\\":{\\\"login\\\":\\\"bynk-lang\\\",\\\"type\\\":\\\"Organization\\\"}}\"\n  actual:   " + __bynkShow((save(rewrite(build("push", 1))))) + " == " + __bynkShow(("{\"type\":\"pull_request\",\"from\":2,\"self\":true,\"do\":null,\"account\":{\"login\":\"bynk-lang\",\"type\":\"Organization\"}}"))); }
+    if (!(save(rewrite(build("push", 1))) === "{\"type\":\"pull_request\",\"from\":2,\"self\":true,\"do\":{\"kind\":\"None\"},\"account\":{\"login\":\"bynk-lang\",\"type\":\"Organization\"}}")) { throw __bynkExpectFailure("tests/demo/payload.bynk:19:12", 659, 839, "expect save(rewrite(build(\"push\", 1))) == \"{\\\"type\\\":\\\"pull_request\\\",\\\"from\\\":2,\\\"self\\\":true,\\\"do\\\":{\\\"kind\\\":\\\"None\\\"},\\\"account\\\":{\\\"login\\\":\\\"bynk-lang\\\",\\\"type\\\":\\\"Organization\\\"}}\"\n  expected: save(rewrite(build(\"push\", 1))) == \"{\\\"type\\\":\\\"pull_request\\\",\\\"from\\\":2,\\\"self\\\":true,\\\"do\\\":{\\\"kind\\\":\\\"None\\\"},\\\"account\\\":{\\\"login\\\":\\\"bynk-lang\\\",\\\"type\\\":\\\"Organization\\\"}}\"\n  actual:   " + __bynkShow((save(rewrite(build("push", 1))))) + " == " + __bynkShow(("{\"type\":\"pull_request\",\"from\":2,\"self\":true,\"do\":{\"kind\":\"None\"},\"account\":{\"login\":\"bynk-lang\",\"type\":\"Organization\"}}"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -99,9 +99,9 @@ async function test_a_payload_field_and_a_method_are_named_by_keywords() {
     type Change = __ns_demo_payload.Change;
     type Event = __ns_demo_payload.Event;
     type Sorted = __ns_demo_payload.Sorted;
-    if (!(changed(Change.Push("a", "b")) === "ab")) { throw __bynkExpectFailure("tests/demo/payload.bynk:23:12", 903, 934, "expect changed(Push(\"a\", \"b\")) == \"ab\"\n  expected: changed(Push(\"a\", \"b\")) == \"ab\"\n  actual:   " + __bynkShow((changed(Change.Push("a", "b")))) + " == " + __bynkShow(("ab"))); }
-    if (!(changed(Change.Close("done")) === "done")) { throw __bynkExpectFailure("tests/demo/payload.bynk:24:12", 946, 978, "expect changed(Close(\"done\")) == \"done\"\n  expected: changed(Close(\"done\")) == \"done\"\n  actual:   " + __bynkShow((changed(Change.Close("done")))) + " == " + __bynkShow(("done"))); }
-    if (!(count(["x", "y"]) === 2)) { throw __bynkExpectFailure("tests/demo/payload.bynk:25:12", 990, 1012, "expect count([\"x\", \"y\"]) == 2\n  expected: count([\"x\", \"y\"]) == 2\n  actual:   " + __bynkShow((count(["x", "y"]))) + " == " + __bynkShow((2))); }
+    if (!(changed(Change.Push("a", "b")) === "ab")) { throw __bynkExpectFailure("tests/demo/payload.bynk:23:12", 918, 949, "expect changed(Push(\"a\", \"b\")) == \"ab\"\n  expected: changed(Push(\"a\", \"b\")) == \"ab\"\n  actual:   " + __bynkShow((changed(Change.Push("a", "b")))) + " == " + __bynkShow(("ab"))); }
+    if (!(changed(Change.Close("done")) === "done")) { throw __bynkExpectFailure("tests/demo/payload.bynk:24:12", 961, 993, "expect changed(Close(\"done\")) == \"done\"\n  expected: changed(Close(\"done\")) == \"done\"\n  actual:   " + __bynkShow((changed(Change.Close("done")))) + " == " + __bynkShow(("done"))); }
+    if (!(count(["x", "y"]) === 2)) { throw __bynkExpectFailure("tests/demo/payload.bynk:25:12", 1005, 1027, "expect count([\"x\", \"y\"]) == 2\n  expected: count([\"x\", \"y\"]) == 2\n  actual:   " + __bynkShow((count(["x", "y"]))) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

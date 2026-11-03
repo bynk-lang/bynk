@@ -1,0 +1,9 @@
+commons demo
+
+type A = { type: String }
+
+fn f(a: A) -> String {
+  match a {
+    A { type, .. } => "x"
+  }
+}

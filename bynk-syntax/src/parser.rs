@@ -2764,6 +2764,61 @@ mod tests {
             .expect("`suite` is a valid field name");
     }
 
+    /// #2837: a keyword is a name where the name is a label (followed by `:`)
+    /// or a member on the `.`'s line, and nowhere it would bind a variable.
+    #[test]
+    fn keywords_are_labels_and_members_not_bindings() {
+        for src in [
+            "commons demo {\n  type A = { type: String, from: Int, self: Bool }\n}",
+            "commons demo {\n  type S = | P(from: String, type: String)\n}",
+            "commons demo {\n  type A = { type: String }\n  fn f(a: A) -> String { a.type }\n}",
+            "commons demo {\n  type A = { type: String }\n  fn f() -> A { A { type: \"x\" } }\n}",
+            "commons demo {\n  type A = { type: String }\n  fn f(a: A) -> String { match a { A { type: t, .. } => t } }\n}",
+            "commons demo {\n  type S = | P(from: String)\n  fn f(s: S) -> String { match s { P(from: x) => x } }\n}",
+            "commons demo {\n  type S = { n: Int }\n  fn S.from(n: Int) -> S { S { n: n } }\n  fn g() -> S { S.from(1) }\n}",
+        ] {
+            parse_str(src).unwrap_or_else(|e| panic!("should parse: {src}\n{e:?}"));
+        }
+        for src in [
+            "commons demo {\n  fn f(type: Int) -> Int { 1 }\n}",
+            "commons demo {\n  fn f() -> Int { let from = 1\n from }\n}",
+            "commons demo {\n  type A = { type String }\n}",
+            // The same-line rule: `a.` then a statement on the next line.
+            "commons demo {\n  fn f(a: Int) -> Int {\n    a.\n    let x = 1\n    x\n  }\n}",
+        ] {
+            let errs = parse_str(src).expect_err(src);
+            assert_eq!(errs[0].code, "bynk.parse.reserved_keyword", "{src}");
+        }
+    }
+
+    /// #2837: keyword shorthand is a targeted error. A pattern gets the fix
+    /// `type: type_` (`MaybeIncorrect`), fresh when `type_` is already spelled;
+    /// a construction gets a note and no fix.
+    #[test]
+    fn keyword_shorthand_is_a_targeted_error() {
+        let pat = |extra: &str| {
+            format!(
+                "commons demo {{\n  type A = {{ type: String }}\n  fn f(a: A) -> String {{ {extra} match a {{ A {{ type, .. }} => \"x\" }} }}\n}}"
+            )
+        };
+        let errs = parse_str(&pat("")).expect_err("pattern shorthand");
+        assert_eq!(errs[0].code, "bynk.parse.keyword_field_shorthand");
+        let fix = &errs[0].suggestions[0];
+        assert_eq!(fix.edits[0].1, "type: type_");
+        assert!(matches!(
+            fix.applicability,
+            crate::error::Applicability::MaybeIncorrect
+        ));
+
+        let errs = parse_str(&pat("let type_ = 1")).expect_err("pattern shorthand");
+        assert_eq!(errs[0].suggestions[0].edits[0].1, "type: type_2");
+
+        let errs = parse_str("commons demo {\n  type A = { type: String }\n  fn f() -> A { A { type } }\n}")
+            .expect_err("construction shorthand");
+        assert_eq!(errs[0].code, "bynk.parse.keyword_field_shorthand");
+        assert!(errs[0].suggestions.is_empty());
+    }
+
     /// Drift guard: every alphabetic keyword the lexer declares must be
     /// classified by `is_reserved_keyword`, or be one of the *contextual*
     /// keywords `expect_ident` deliberately admits as identifiers
