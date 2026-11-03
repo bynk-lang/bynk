@@ -3140,9 +3140,10 @@ fn lower_method_call(
                 if !is_raw || matches!(&a.kind, ExprKind::Wire(_)) {
                     return lowered;
                 }
-                // A `headers: RequestHeaders` argument is no wire slot: the raw
-                // driver takes it as the request's headers, typed as the typed
-                // driver takes it, so it passes through unconverted.
+                // A `headers: RequestHeaders` argument is no wire slot: it
+                // reaches the raw driver typed, just as the typed driver takes
+                // it, and becomes the request's headers, so it passes through
+                // unconverted.
                 if matches!(
                     cx.commons().expr_ty(a.id).as_deref(),
                     Some(Ty::RequestHeaders)
