@@ -200,6 +200,25 @@ fn f(a: Option[Int], b: Option[Int]) -> Int {
 }
 
 #[test]
+fn a_guarded_arm_gets_no_hint() {
+    // `Some(y) if y > 0 => …, _ => …` has no `let … else` equivalent, so the
+    // staircase must not be offered one.
+    let src = commons(
+        "\
+fn f(a: Option[Int], b: Option[Int]) -> Int {
+  match a {
+    None => 0,
+    Some(x) => match b {
+      Some(y) if y > 0 => x + y,
+      _ => 1,
+    },
+  }
+}",
+    );
+    assert!(hints(&src).is_empty());
+}
+
+#[test]
 fn a_two_arm_match_gets_no_hint() {
     let src = commons(
         "fn f(a: Option[Int]) -> Int {\n  match a {\n    None => 0,\n    Some(x) => x,\n  }\n}",
