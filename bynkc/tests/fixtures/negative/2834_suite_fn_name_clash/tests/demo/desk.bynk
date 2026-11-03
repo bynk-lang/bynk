@@ -3,6 +3,9 @@ suite demo.desk
 // Shadows the target's `double`: an error, not silent shadowing.
 fn double(n: Int) -> Int { n * 3 }
 
+// And the test runner's own `deps`.
+fn deps() -> Int { 1 }
+
 case "a clash" {
   expect double(2) == 4
 }

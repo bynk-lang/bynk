@@ -1127,6 +1127,8 @@ fn bound_value_names(resolved: &ResolvedCommons, target: Option<&UnitTable>) -> 
     names.extend(resolved.consts.keys().cloned());
     names.extend(resolved.embeds.keys().cloned());
     names.extend(resolved.assets.keys().cloned());
+    // The runner declares these itself, ahead of the helpers.
+    names.insert("deps".to_string());
     if let Some(t) = target {
         names.extend(t.services.keys().cloned());
         names.extend(t.agents.keys().cloned());
@@ -1185,7 +1187,7 @@ pub fn check_suite_fns(
             ));
             continue;
         }
-        if taken.contains(&name.name) {
+        if taken.contains(&name.name) || name.name.starts_with("__") {
             errors.push(
                 CompileError::new(
                     "bynk.suite.fn_name_clash",
