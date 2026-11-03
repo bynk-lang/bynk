@@ -55,7 +55,10 @@ fn question_on_an_err_fails_the_case() {
         String::from_utf8_lossy(&out.stderr)
     );
     // Ran to completion (no `tsc` error), failing exactly the two `Err` cases.
-    assert!(!all.contains("TS2345") && !all.contains("tsc reported"), "{all}");
+    assert!(
+        !all.contains("TS2345") && !all.contains("tsc reported"),
+        "{all}"
+    );
     assert!(all.contains("✓ ? on an Ok unwraps the value"), "{all}");
     assert!(all.contains("✗ ? on an Err fails the case"), "{all}");
     assert!(all.contains("✗ ? in a match arm fails the case"), "{all}");

@@ -240,6 +240,8 @@ mod property_behaviour;
 mod provider_agent_cross_context_target;
 #[path = "query_kernel_registry.rs"]
 mod query_kernel_registry;
+#[path = "question_in_case_behaviour.rs"]
+mod question_in_case_behaviour;
 #[path = "readme_layering.rs"]
 mod readme_layering;
 #[path = "recovery_never_emits.rs"]
