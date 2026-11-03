@@ -4985,6 +4985,7 @@ fn emit_stub_class(
                         e,
                         &param.type_ref,
                         &[],
+                        &rp.clause_fixtures[idx],
                         target_name,
                         unit_tables,
                         unit_uses,
@@ -5020,6 +5021,7 @@ fn emit_stub_class(
                 clause,
                 idx,
                 op,
+                &rp.clause_fixtures[idx],
                 target_name,
                 unit_tables,
                 unit_uses,
@@ -5090,6 +5092,7 @@ fn emit_stub_rhs(
     clause: &StubClause,
     clause_idx: usize,
     op: &CapabilityOp,
+    fixtures: &[bynk_syntax::ast::FixtureDecl],
     target_name: &str,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
@@ -5104,6 +5107,7 @@ fn emit_stub_rhs(
             e,
             &op.return_type,
             &op.params,
+            fixtures,
             target_name,
             unit_tables,
             unit_uses,
@@ -5123,6 +5127,7 @@ fn emit_stub_rhs(
                     after,
                     &TypeRef::Base(BaseType::Duration, after.span),
                     &[],
+                    fixtures,
                     target_name,
                     unit_tables,
                     unit_uses,
@@ -5204,6 +5209,7 @@ fn lower_stub_value_block(
     e: &Expr,
     ret_type: &TypeRef,
     params: &[Param],
+    fixtures: &[bynk_syntax::ast::FixtureDecl],
     target_name: &str,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
@@ -5213,6 +5219,14 @@ fn lower_stub_value_block(
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
 ) -> String {
+    // #2850: the declaring suite's fixtures are names for module-level
+    // constants. An operation parameter of the same name shadows one, as in the
+    // checker.
+    let fixtures: Vec<bynk_syntax::ast::FixtureDecl> = fixtures
+        .iter()
+        .filter(|f| !params.iter().any(|p| p.name.name == f.name.name))
+        .cloned()
+        .collect();
     let owning_unit = target_name.to_string();
     let mut typed = synthetic_typed_commons_for_target(
         &owning_unit,
@@ -5230,6 +5244,14 @@ fn lower_stub_value_block(
         unit_consumes,
         unit_consumes_aliases,
     ) {
+        let mut resolved = resolved;
+        test_suites::add_suite_fns(
+            &mut resolved,
+            test_suites::SuiteItems {
+                fns: &[],
+                fixtures: &fixtures,
+            },
+        );
         let mut errs: Vec<CompileError> = Vec::new();
         // Build-mode re-check for the lowering's expr types; the analyse exit has
         // already passed, so nothing records (fresh sink).
@@ -5251,7 +5273,19 @@ fn lower_stub_value_block(
     let cross = bynk_check::resolver::CrossContextInfo::default();
     // v0.70: `stub` value scaffolding is not user test logic, so its source
     // map is discarded — it stays unmapped (a deliberate scope cut).
-    emitter::lower_block_to_async_body(&block, ret_type, &mut typed, &cross, runtime_use).0
+    let body =
+        emitter::lower_block_to_async_body(&block, ret_type, &mut typed, &cross, runtime_use).0;
+    let aliases: String = fixtures
+        .iter()
+        .map(|f| {
+            format!(
+                "const {}: string = {};\n",
+                f.name.name,
+                fixture_ident(&f.path)
+            )
+        })
+        .collect();
+    format!("{aliases}{body}")
 }
 
 fn synthetic_typed_commons_for_target(
