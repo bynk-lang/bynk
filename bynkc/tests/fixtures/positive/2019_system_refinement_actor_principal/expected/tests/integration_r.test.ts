@@ -83,6 +83,18 @@ async function __sysdrive_noauth_api_http_GET_admin(__sub: string) {
   const __res = await __h.env.R.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_expired_api_http_GET_admin(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/admin`, { method: "GET", headers: { "authorization": __token, }, });
+  const __res = await __h.env.R.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_admin(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/admin`, { method: "GET", headers: { "authorization": __token, }, });
+  const __res = await __h.env.R.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_api_http_GET_ops(__sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/ops`, { method: "GET", headers: { "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`, }, });
@@ -92,6 +104,18 @@ async function __sysdrive_api_http_GET_ops(__sub: string, __claims: globalThis.R
 async function __sysdrive_noauth_api_http_GET_ops(__sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/ops`, { method: "GET", headers: { }, });
+  const __res = await __h.env.R.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_expired_api_http_GET_ops(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/ops`, { method: "GET", headers: { "authorization": __token, }, });
+  const __res = await __h.env.R.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_ops(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/ops`, { method: "GET", headers: { "authorization": __token, }, });
   const __res = await __h.env.R.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -107,6 +131,18 @@ async function __sysdrive_noauth_api_http_GET_staff(__sub: string) {
   const __res = await __h.env.R.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_expired_api_http_GET_staff(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/staff`, { method: "GET", headers: { "authorization": __token, }, });
+  const __res = await __h.env.R.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_staff(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/staff`, { method: "GET", headers: { "authorization": __token, }, });
+  const __res = await __h.env.R.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_api_http_GET_gate(__sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/gate`, { method: "GET", headers: { "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`, }, });
@@ -116,6 +152,18 @@ async function __sysdrive_api_http_GET_gate(__sub: string, __claims: globalThis.
 async function __sysdrive_noauth_api_http_GET_gate(__sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/gate`, { method: "GET", headers: { }, });
+  const __res = await __h.env.R.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_expired_api_http_GET_gate(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/gate`, { method: "GET", headers: { "authorization": __token, }, });
+  const __res = await __h.env.R.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_gate(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/gate`, { method: "GET", headers: { "authorization": __token, }, });
   const __res = await __h.env.R.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }

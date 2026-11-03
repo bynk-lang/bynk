@@ -5035,6 +5035,33 @@ service api from http {
     }
 
     #[test]
+    fn an_expired_call_is_refused_off_a_bearer_route() {
+        sums_case(
+            "    let r <- api.POST(\"/mixed\", \"x\") by Expired\n    expect r is Rejected(Unauthorized)",
+        )
+        .assert_clean();
+        for route in ["/untimed", "/open"] {
+            sums_case(&format!(
+                "    let r <- api.POST(\"{route}\", \"x\") by Expired\n    expect r is Rejected(Unauthorized)"
+            ))
+            .assert_reports("bynk.test.expired_needs_bearer_route");
+        }
+        hooks_case(" as system", "    let r <- webhooks.POST(\"/hook\", \"x\") by Expired\n    expect r is Rejected(Unauthorized)")
+            .assert_reports("bynk.test.expired_needs_bearer_route");
+        hooks_case(" as system", "    let r <- jobs.call(1) by Expired\n    expect r == 1")
+            .assert_reports("bynk.test.expired_needs_bearer_route");
+    }
+
+    #[test]
+    fn an_expired_call_at_unit_needs_system() {
+        hooks_case(
+            "",
+            "    let r <- webhooks.POST(\"/hook\", \"x\") by Expired\n    expect r is Rejected(Unauthorized)",
+        )
+        .assert_reports("bynk.test.forged_needs_system");
+    }
+
+    #[test]
     fn a_forged_fault_claim_below_system_is_refused() {
         hooks_case(
             "",

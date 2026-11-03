@@ -91,6 +91,18 @@ async function __sysdrive_noauth_api_http_GET_me(__sub: string) {
   const __res = await __h.env.SHOP_PAY.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_expired_api_http_GET_me(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { "authorization": __token, }, });
+  const __res = await __h.env.SHOP_PAY.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_me(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { "authorization": __token, }, });
+  const __res = await __h.env.SHOP_PAY.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_wrongmethod_api(method: string, path: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test${path}`, { method });

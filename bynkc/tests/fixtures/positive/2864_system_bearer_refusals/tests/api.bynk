@@ -1,0 +1,50 @@
+suite pay.api as system {
+	// #2864: the driver mints Bearer tokens, so the real seam refuses a token
+	// signed with a derived wrong secret (`Forged`) and one whose `exp` is an
+	// hour in the past (`Expired`), each otherwise valid. The mutation test in
+	// `bynkc/tests/behaviour_fixtures.rs` turns each check off in the emitted
+	// verifier and expects exactly the matching cases to fail.
+	env { API_TOKEN_SECRET = "test-api-secret" }
+
+	case "a correctly signed token is admitted" {
+		let r <- api.GET("/activity") by Reader("ada")
+		expect r is Ok("activity for ada")
+	}
+
+	case "a missing token is refused" {
+		let r <- api.GET("/activity") by Nobody
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a forged token is refused" {
+		let r <- api.GET("/activity") by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired token is refused" {
+		let r <- api.GET("/activity") by Expired
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a forged raw request is refused" {
+		let r <- api.POST("/notes", Wire("\"hi\"")) by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired raw request is refused" {
+		let r <- api.POST("/notes", Wire("\"hi\"")) by Expired
+		expect r is Rejected(Unauthorized)
+	}
+
+	// The expectation is inverted: the seam refused, so `Handled(_)` fails.
+	// It shows the outcome is observed from the real response.
+	case "a forged token is not handled" {
+		let r <- api.GET("/activity") by Forged
+		expect r is Handled(_)
+	}
+
+	case "an expired token is not handled" {
+		let r <- api.GET("/activity") by Expired
+		expect r is Handled(_)
+	}
+}

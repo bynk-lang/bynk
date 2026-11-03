@@ -30,6 +30,11 @@ suite hk.hooks as system {
 		expect stale is Rejected(Unauthorized)
 	}
 
+	case "an expired token to the sum route is refused" {
+		let r <- api.POST("/notify", "hi") by Expired
+		expect r is Rejected(Unauthorized)
+	}
+
 	case "a forged raw notice to the sum route is refused" {
 		let r <- api.POST("/notify", Wire("hi")) by Forged
 		expect r is Rejected(Unauthorized)
