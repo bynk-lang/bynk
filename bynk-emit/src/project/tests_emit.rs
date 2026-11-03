@@ -1015,7 +1015,7 @@ fn emit_integration_module(
             tys,
         );
         // #2834: the suite's helpers, declared ahead of the body.
-        case_out.push_str(&suite_fn_decls(
+        let helper_src = suite_fn_decls(
             input.suite_fns,
             test_suites::integration_resolved(view, cross_context, &[]),
             None,
@@ -1023,7 +1023,8 @@ fn emit_integration_module(
             &runtime_use,
             &mut harness_bound,
             tys,
-        ));
+        );
+        case_out.push_str(&helper_src);
         // #1875 review: the check pass accepted this body from the same
         // inputs, so an error here means the two have drifted, and the
         // lowering would silently fall back to untyped output.
@@ -1054,7 +1055,8 @@ fn emit_integration_module(
         for (p, names) in &participant_types {
             let named: Vec<String> = names
                 .iter()
-                .filter(|n| names_ident(&body_src, n))
+                // A helper may name a participant's type though no case does.
+                .filter(|n| names_ident(&body_src, n) || names_ident(&helper_src, n))
                 .cloned()
                 .collect();
             if named.is_empty() {

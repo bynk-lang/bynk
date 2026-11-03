@@ -168,8 +168,13 @@ async function test_a_helper_built_request_reaches_the_handler_over_the_wire() {
     function push(): globalThis.Uint8Array {
       return new globalThis.TextEncoder().encode("{\"ref\":\"main\"}");
     }
+    function noRetries(): Retries {
+      return (0 as any);
+    }
+    const { Retries } = __ns_hooks_github;
+    type Retries = __ns_hooks_github.Retries;
     const r = await __sysdrive_github_http_POST_github(gh("push"), push(), "");
-    if (!(r.tag === "Ok" && r.value === "push eyJyZWYiOiJtYWluIn0=")) { throw __bynkExpectFailure("tests/system.bynk:14:10", 362, 398, "expect r is Ok(\"push eyJyZWYiOiJtYWluIn0=\")"); }
+    if (!(r.tag === "Ok" && r.value === "push eyJyZWYiOiJtYWluIn0=")) { throw __bynkExpectFailure("tests/system.bynk:19:10", 480, 516, "expect r is Ok(\"push eyJyZWYiOiJtYWluIn0=\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -191,8 +196,40 @@ async function test_a_forged_request_is_refused() {
     function push(): globalThis.Uint8Array {
       return new globalThis.TextEncoder().encode("{\"ref\":\"main\"}");
     }
+    function noRetries(): Retries {
+      return (0 as any);
+    }
+    const { Retries } = __ns_hooks_github;
+    type Retries = __ns_hooks_github.Retries;
     const r = await __sysdrive_forged_github_http_POST_github(gh("push"), push(), "");
-    if (!(r.tag === "Rejected" && r.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/system.bynk:19:10", 514, 541, "expect r is Rejected(Unauthorized)"); }
+    if (!(r.tag === "Rejected" && r.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/system.bynk:24:10", 632, 659, "expect r is Rejected(Unauthorized)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_helper_names_a_participant_type() {
+  try {
+    __bynkEnv = { GITHUB_SECRET: "test-github" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    function gh(event: string): { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } {
+      return __requestHeaders([`X-GitHub-Event: ${String(event)}`]);
+    }
+    function push(): globalThis.Uint8Array {
+      return new globalThis.TextEncoder().encode("{\"ref\":\"main\"}");
+    }
+    function noRetries(): Retries {
+      return (0 as any);
+    }
+    const { Retries } = __ns_hooks_github;
+    type Retries = __ns_hooks_github.Retries;
+    if (!(noRetries() === 0)) { throw __bynkExpectFailure("tests/system.bynk:28:10", 717, 733, "expect noRetries() == 0\n  expected: noRetries() == 0\n  actual:   " + __bynkShow((noRetries())) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -216,7 +253,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a helper-built request reaches the handler over the wire", "a forged request is refused"];
+export const __bynkCases: readonly string[] = ["a helper-built request reaches the handler over the wire", "a forged request is refused", "a helper names a participant type"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -230,6 +267,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a forged request is refused")) {
     const started = __bynkCaseNow();
     const r = { name: "a forged request is refused", ...(await test_a_forged_request_is_refused()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a helper names a participant type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a helper names a participant type", ...(await test_a_helper_names_a_participant_type()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

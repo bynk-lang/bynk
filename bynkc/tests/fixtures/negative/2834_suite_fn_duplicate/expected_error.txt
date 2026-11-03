@@ -1,2 +1,1 @@
 bynk.suite.duplicate_fn
-bynk.suite.fn_method

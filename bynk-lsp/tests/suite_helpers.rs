@@ -12,9 +12,13 @@ use bynk_ide::ProjectDiagnostics;
 use bynk_lsp::hover;
 use tower_lsp::lsp_types::Url;
 
+fn analysed() -> (ProjectDiagnostics, PathBuf, String, PathBuf) {
+    analysed_file("tests/unit.bynk")
+}
+
 const FIXTURE: &str = "../bynkc/tests/fixtures/positive/2834_suite_fn_helpers";
 
-fn analysed() -> (ProjectDiagnostics, PathBuf, String, PathBuf) {
+fn analysed_file(file: &str) -> (ProjectDiagnostics, PathBuf, String, PathBuf) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURE);
     let sources =
         bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
@@ -22,8 +26,8 @@ fn analysed() -> (ProjectDiagnostics, PathBuf, String, PathBuf) {
     let f = r
         .files
         .iter()
-        .find(|f| f.source_path.ends_with("tests/unit.bynk"))
-        .expect("tests/unit.bynk analysed");
+        .find(|f| f.source_path.ends_with(file))
+        .expect("the file is analysed");
     let (path, text) = (f.source_path.clone(), f.text.clone());
     let rel = r
         .index
@@ -31,7 +35,7 @@ fn analysed() -> (ProjectDiagnostics, PathBuf, String, PathBuf) {
         .values()
         .filter_map(|e| e.def.as_ref())
         .map(|d| d.path.clone())
-        .find(|p| p.ends_with("tests/unit.bynk"))
+        .find(|p| p.ends_with(file))
         .unwrap_or(path);
     (r, rel, text, root)
 }
@@ -136,4 +140,16 @@ fn a_helper_call_gets_parameter_help() {
     let (_, _, text, _) = analysed();
     let label = bynk_ide::signature_help::resolve_label("gh", &text, None).expect("a label");
     assert_eq!(label, "gh(event: String) -> RequestHeaders");
+}
+
+/// The same at `system`, whose helpers record under the harness namespace.
+#[test]
+fn a_system_helper_hovers_as_its_declaration() {
+    let (r, rel, text, root) = analysed_file("tests/system.bynk");
+    let call = text.find("gh(\"push\")").unwrap();
+    let at_call = hover_at(&r, &rel, &text, &root, call);
+    assert!(
+        at_call.contains("fn gh(event: String) -> RequestHeaders"),
+        "{at_call}"
+    );
 }
