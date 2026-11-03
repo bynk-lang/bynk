@@ -2897,6 +2897,24 @@ pub fn value_member_candidates(
             Some("String — the URL the platform serves the asset at".to_string()),
         ));
     }
+    // `JsonError`'s three `String` fields (#2863). Compiler-known, so there is
+    // no declaration to resolve them from.
+    if matches!(&*tys.get(ty), Ty::JsonError) {
+        for (name, doc) in [
+            (
+                "kind",
+                "String — `Malformed`, `StructuralMismatch` or `RefinementViolation`",
+            ),
+            ("path", "String — where the decode failed, e.g. `$.qty`"),
+            ("message", "String — a description of the failure"),
+        ] {
+            out.push(Completion::item(
+                name,
+                CompletionKind::Field,
+                Some(doc.to_string()),
+            ));
+        }
+    }
     // Record fields — resolve the receiver's named type to its declaration.
     if let Ty::Named { name, .. } = &*tys.get(ty) {
         let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -3874,6 +3892,15 @@ fn Box.size(self) -> Int { 1 }
             items = items.iter().map(|c| &c.label).collect::<Vec<_>>()
         );
         assert!(find(&items, "total", CompletionKind::Field).is_some());
+    }
+
+    #[test]
+    fn value_member_candidates_lists_json_error_fields() {
+        let err = TYS.intern(Ty::JsonError);
+        let items = value_member_candidates(err, &TYS, "commons m {\n}\n", None);
+        for f in ["kind", "path", "message"] {
+            assert!(find(&items, f, CompletionKind::Field).is_some(), "{f}");
+        }
     }
 
     #[test]

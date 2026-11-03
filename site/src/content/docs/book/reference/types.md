@@ -526,6 +526,21 @@ program only as a fully-checked value. `JsonError` is the error it returns
 (malformed JSON, or a structural/refinement mismatch). See the guide
 [Decode untrusted JSON into a typed value](/book/guides/type-system/decode-json/).
 
+`JsonError` is a record of three `String` fields, so a failed decode can be
+explained in Bynk:
+
+| Field | Meaning |
+|---|---|
+| `kind` | what went wrong: `Malformed` (the text is not JSON), `StructuralMismatch` (the JSON has the wrong shape or a wrong-typed value), or `RefinementViolation` (a value broke a refined type's predicate) |
+| `path` | where, as a path from the root `$`: `$` for the whole document, `$.qty` for a field, `$.items[2].id` for a list element's field |
+| `message` | a human-readable description, such as `expected number, got string` |
+
+A `JsonError` has no string form, so `"\(e)"` is refused
+(`bynk.types.interpolation_non_scalar`); interpolate its fields instead:
+`"\(e.kind) at \(e.path): \(e.message)"` reads `StructuralMismatch at $.a:
+expected number, got string`. `kind` is a `String`, not a sum type, so compare it
+as text.
+
 `Json.encode` writes an `Option[U]` in Bynk's tagged form:
 `{"kind": "Some", "value": …}` or `{"kind": "None"}`. `Json.decode` accepts
 that form and also the forms other JSON producers use for an optional value:
