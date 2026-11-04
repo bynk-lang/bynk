@@ -41,7 +41,12 @@ pub struct Request<'a> {
     pub lifetime: Option<&'a str>,
     pub expired: bool,
     pub not_before: Option<&'a str>,
+    /// `--claim name[=value]`, as written.
+    pub claims: &'a [String],
 }
+
+/// Claims `bynk token` owns: the identity and the time claims.
+const RESERVED_CLAIMS: &[&str] = &["sub", "iat", "exp", "nbf", "iss", "aud"];
 
 /// `bynk token`: list the project's Bearer actors, or mint one's token.
 pub fn run(root: &Path, req: &Request) -> ExitCode {
@@ -67,6 +72,7 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
         .not_before
         .map(|s| parse_duration(s, "--not-before"))
         .transpose()?;
+    let extra = parse_claims(req.claims)?;
 
     let analysis = crate::openapi::analyse(root);
     let errors = crate::openapi::errors_of(&analysis);
@@ -84,11 +90,18 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
         return Ok(list(&actors));
     };
     let found = resolve(&actors, name)?;
-    let env_var = bearer_env_var(found)?;
+    // A refinement signs with its base actor's secret and identity.
+    let signer = match &found.base {
+        Some(base) => base,
+        None => found,
+    };
+    let env_var = bearer_env_var(found, signer)?;
     let sub = req
         .sub
         .ok_or_else(|| format!("`--sub <ID>` is required to mint a token for `{name}`"))?;
-    validate_sub(found, sub)?;
+    validate_sub(signer, sub)?;
+
+    let mut claims = refinement_claims(found)?;
 
     let secret = match std::env::var(&env_var) {
         Ok(v) if !v.is_empty() => v,
@@ -107,7 +120,83 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
         let nbf = not_before.map(|d| now + d);
         (nbf, nbf.unwrap_or(now) + lifetime)
     };
-    Ok(mint(&secret, sub, nbf, exp))
+    // The refinement's witness claims, then `--claim`s, which win: a hand-given
+    // claim can withhold or change one to test the seam's 403.
+    for (name, value) in extra {
+        claims.retain(|(n, _)| *n != name);
+        claims.push((name, value));
+    }
+    Ok(mint_with(&secret, sub, nbf, exp, &claims))
+}
+
+/// `name` (the claim `true`, as the `system` harness signs a present claim) or
+/// `name=value` (a string).
+fn parse_claims(raw: &[String]) -> Result<Vec<(String, serde_json::Value)>, String> {
+    let mut out: Vec<(String, serde_json::Value)> = Vec::new();
+    for r in raw {
+        let (name, value) = match r.split_once('=') {
+            Some((n, v)) => (n, serde_json::Value::String(v.to_string())),
+            None => (r.as_str(), serde_json::Value::Bool(true)),
+        };
+        if name.is_empty() {
+            return Err(format!(
+                "`--claim {r}` names no claim: write `--claim name` or `--claim name=value`"
+            ));
+        }
+        if RESERVED_CLAIMS.contains(&name) {
+            return Err(format!(
+                "`--claim {name}` is reserved: `bynk token` signs `sub`, `iat`, `exp`, `nbf`, \
+                 `iss` and `aud` itself (use `--sub`, `--lifetime`, `--expired` or \
+                 `--not-before`)"
+            ));
+        }
+        if out.iter().any(|(n, _)| n == name) {
+            return Err(format!("`--claim {name}` is given more than once"));
+        }
+        out.push((name.to_string(), value));
+    }
+    Ok(out)
+}
+
+/// The claims a refinement actor's predicate needs, as the `system` test
+/// harness signs them (`bynk_check::actors::claim_witness`); none for a plain
+/// actor.
+fn refinement_claims(f: &Found) -> Result<Vec<(String, serde_json::Value)>, String> {
+    use bynk_check::actors::WitnessValue;
+    let Some(r) = &f.decl.refinement else {
+        return Ok(Vec::new());
+    };
+    let name = &f.decl.name.name;
+    let pred = bynk_check::actors::parse_claim_predicate(&r.predicate).map_err(|_| {
+        format!(
+            "`{name}`'s predicate uses more than `hasClaim`, `claimEquals`, `&&`, `||` and `!`, \
+             so `bynk token` cannot tell which claims satisfy it; mint with the base actor `{}` \
+             and pass the claims with `--claim`",
+            r.base.name
+        )
+    })?;
+    let witness = bynk_check::actors::claim_witness(&pred).ok_or_else(|| {
+        format!("no set of claims satisfies `{name}`'s predicate, so no token can pass its seam")
+    })?;
+    if let Some((n, _)) = witness
+        .iter()
+        .find(|(n, _)| RESERVED_CLAIMS.contains(&n.as_str()))
+    {
+        return Err(format!(
+            "`{name}`'s predicate needs the claim `{n}`, which `bynk token` signs itself (from \
+             `--sub` and the time flags), so it cannot carry the value the predicate asks for"
+        ));
+    }
+    Ok(witness
+        .into_iter()
+        .map(|(n, v)| {
+            let v = match v {
+                WitnessValue::True => serde_json::Value::Bool(true),
+                WitnessValue::Str(s) => serde_json::Value::String(s),
+            };
+            (n, v)
+        })
+        .collect())
 }
 
 // ---------------------------------------------------------------------
@@ -247,15 +336,15 @@ fn resolve<'a>(actors: &'a [Found], name: &str) -> Result<&'a Found, String> {
     }
 }
 
-/// The env var a mintable actor's secret is read from, or why it is not mintable.
-fn bearer_env_var(f: &Found) -> Result<String, String> {
+/// The env var the secret of `f` (the actor itself, or a refinement's base) is
+/// read from, or why `requested` is not mintable.
+fn bearer_env_var(requested: &Found, f: &Found) -> Result<String, String> {
     let name = &f.decl.name.name;
-    if let Some(base) = &f.base {
+    if f.decl.refinement.is_some() {
         return Err(format!(
-            "`{name}` is a refinement of `{}`: its seam also checks claims the token must carry, \
-             and `bynk token` signs only `sub` and the time claims. Mint with the base actor \
-             `{}` to test authentication, not the refinement's authorisation",
-            base.decl.name.name, base.decl.name.name
+            "`{}` refines `{name}`, itself a refinement: `bynk token` follows one level only. \
+             Mint with the base actor and pass the claims with `--claim`",
+            requested.decl.name.name
         ));
     }
     match scheme_of(&f.decl) {
@@ -365,12 +454,28 @@ fn unix_now() -> Result<u64, String> {
 /// `jwt_signer.ts`'s `JSON.stringify` output, so a token is byte-comparable
 /// with the test runtime's.
 pub fn mint(secret: &str, sub: &str, nbf: Option<u64>, exp: u64) -> String {
+    mint_with(secret, sub, nbf, exp, &[])
+}
+
+/// [`mint`] with extra claims, appended after `exp`/`nbf` in the order given.
+pub fn mint_with(
+    secret: &str,
+    sub: &str,
+    nbf: Option<u64>,
+    exp: u64,
+    claims: &[(String, serde_json::Value)],
+) -> String {
     let header = r#"{"alg":"HS256","typ":"JWT"}"#;
     let sub_json = serde_json::to_string(sub).expect("a string serialises");
-    let payload = match nbf {
-        Some(nbf) => format!(r#"{{"sub":{sub_json},"exp":{exp},"nbf":{nbf}}}"#),
-        None => format!(r#"{{"sub":{sub_json},"exp":{exp}}}"#),
-    };
+    let mut payload = format!(r#"{{"sub":{sub_json},"exp":{exp}"#);
+    if let Some(nbf) = nbf {
+        payload.push_str(&format!(r#","nbf":{nbf}"#));
+    }
+    for (name, value) in claims {
+        let name = serde_json::to_string(name).expect("a string serialises");
+        payload.push_str(&format!(",{name}:{value}"));
+    }
+    payload.push('}');
     let signing_input = format!(
         "{}.{}",
         b64url(header.as_bytes()),

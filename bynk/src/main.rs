@@ -185,6 +185,7 @@ fn run() -> ExitCode {
             lifetime,
             expired,
             not_before,
+            claims,
             input,
             lock,
         } => {
@@ -206,6 +207,7 @@ fn run() -> ExitCode {
                     lifetime: lifetime.as_deref(),
                     expired,
                     not_before: not_before.as_deref(),
+                    claims: &claims,
                 },
             )
         }

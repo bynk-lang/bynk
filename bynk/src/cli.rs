@@ -420,6 +420,13 @@ pub enum Command {
     /// and an `Oidc` actor's tokens come from the identity provider. With no
     /// actor, lists the project's Bearer actors and the secret each reads.
     ///
+    /// A refinement actor (`actor Moderator = Reader where hasClaim("mod")`)
+    /// signs with its base's secret and carries the claims its predicate needs,
+    /// as the `system` test harness does for `by Moderator("x")`. A predicate
+    /// that no claims satisfy is refused. `--claim name[=value]` (repeatable)
+    /// adds claims to any actor's token, and replaces a claim the predicate
+    /// would have set, so the seam's `403` can be tested.
+    ///
     /// The default lifetime is 1 hour; `--lifetime` (up to 365d) sets another.
     /// `--expired` and `--not-before` mint tokens the seam must refuse, for
     /// testing the refusals.
@@ -442,6 +449,11 @@ pub enum Command {
         /// that the seam refuses a token not yet valid.
         #[arg(long, conflicts_with = "expired")]
         not_before: Option<String>,
+        /// Add a claim to the token: `name` signs `true`, `name=value` signs
+        /// the string. Repeatable. Not `sub`, `iat`, `exp`, `nbf`, `iss` or
+        /// `aud`, which `bynk token` signs itself.
+        #[arg(long = "claim", value_name = "NAME[=VALUE]")]
+        claims: Vec<String>,
         /// Project directory (or any path inside it). Defaults to the current
         /// directory.
         #[arg(long, default_value = ".")]
