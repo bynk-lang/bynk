@@ -3721,7 +3721,7 @@ fn emit_test_module(
             .is_some_and(|t| t.cases.iter().any(|c| block_uses_observation(&c.body)))
     });
     if uses_observation {
-        let record_types = observation_call_record_types(target_name, unit_tables);
+        let record_types = observation_call_record_types(target_name, unit_tables, unit_uses);
         // Review of #1486, finding 2: pre-conversion, this whole section was
         // `out.push_str(observation_runtime_helpers()); out.push('\n');
         // extend_printed_at(&mut out, record_types); out.push('\n');` — the
@@ -7456,6 +7456,7 @@ fn emit_test_case_function(
 fn observation_call_record_types(
     target_name: &str,
     unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
 ) -> Vec<TsStmt> {
     let Some(table) = unit_tables.get(target_name) else {
         return Vec::new();
@@ -7469,6 +7470,15 @@ fn observation_call_record_types(
         .keys()
         .map(|n| (n.clone(), scope_ns.clone()))
         .collect();
+    // #2886: a type reached through a `uses` commons is qualified by that
+    // commons' namespace, as the stub signatures do.
+    for u in unit_uses.get(target_name).into_iter().flatten() {
+        if let Some(t) = unit_tables.get(u) {
+            for n in public_types(t) {
+                type_ns.entry(n.clone()).or_insert_with(|| test_ns(u));
+            }
+        }
+    }
     // #291: a consumed adapter's capabilities are seams too, their parameter
     // types qualified by the adapter's namespace (`bynk.Request`).
     let mut caps: std::collections::BTreeMap<&String, &bynk_syntax::ast::CapabilityDecl> =

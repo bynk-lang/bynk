@@ -68,6 +68,8 @@ mod cli_rooting;
 mod comment_syntax_fixes;
 #[path = "compatibility_flags_cli.rs"]
 mod compatibility_flags_cli;
+#[path = "commons_type_in_capability_behaviour.rs"]
+mod commons_type_in_capability_behaviour;
 #[path = "compile_esm.rs"]
 mod compile_esm;
 #[path = "compile_sources_stdin.rs"]
