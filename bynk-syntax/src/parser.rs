@@ -40,6 +40,10 @@ struct TriviaTable {
     /// because a single `--` consumes the rest of the line. A doc block or an
     /// opening `{` never has one: see [`split_trivia`].
     trailing: Vec<Option<String>>,
+    /// `blank_before[i]` is whether a blank line separates content token `i`
+    /// from the previous token, with a comment on its own line between them
+    /// (#2893): the blank line that sets the comment apart from what is above.
+    blank_before: Vec<bool>,
     /// Any pending leading comments at end-of-file (no content token
     /// followed), shaped as a `leading` entry. Used to preserve file-trailing
     /// comments.
@@ -58,6 +62,10 @@ impl TriviaTable {
             Some(v) => std::mem::take(v),
             None => Vec::new(),
         }
+    }
+
+    fn blank_before(&self, index: usize) -> bool {
+        self.blank_before.get(index).copied().unwrap_or(false)
     }
 
     fn take_trailing(&mut self, index: usize) -> Option<String> {
@@ -124,6 +132,8 @@ fn split_trivia(tokens: &[Token], source: &str) -> (Vec<Token>, TriviaTable) {
     // has no blank line of its own: the one below it was between the `{` and
     // the first item.
     let mut last_leading_end: Option<usize> = None;
+    // Whether the first own-line comment now pending follows a blank line.
+    let mut pending_blank_before = false;
     for tok in tokens {
         if !pending_leading.is_empty()
             && let Some(end) = last_leading_end
@@ -175,6 +185,11 @@ fn split_trivia(tokens: &[Token], source: &str) -> (Vec<Token>, TriviaTable) {
                     .last()
                     .is_none_or(|t| matches!(t.kind, TokenKind::DocBlock | TokenKind::DocLine))
                 || last_content_end.is_some_and(|end| source[end..tok.span.start].contains('\n'));
+            if pending_leading.is_empty() {
+                pending_blank_before = own_line
+                    && last_content_end
+                        .is_some_and(|end| source[end..tok.span.start].matches('\n').count() >= 2);
+            }
             pending_leading.push(Comment::Line(body));
             last_leading_end = own_line.then_some(tok.span.end);
             continue;
@@ -182,6 +197,9 @@ fn split_trivia(tokens: &[Token], source: &str) -> (Vec<Token>, TriviaTable) {
         filtered.push(*tok);
         table.leading.push(std::mem::take(&mut pending_leading));
         table.trailing.push(None);
+        table
+            .blank_before
+            .push(std::mem::take(&mut pending_blank_before));
         last_content_end = Some(tok.span.end);
         last_leading_end = None;
     }

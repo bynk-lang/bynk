@@ -477,6 +477,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_uses_decl(&mut self) -> Result<UsesDecl, CompileError> {
+        let blank_before = self.trivia.blank_before(self.pos);
         let kw = self.expect(TokenKind::Uses, "to start a `uses` declaration")?;
         let target = self.parse_qualified_name()?;
         let span = kw.span.merge(target.span);
@@ -484,10 +485,12 @@ impl<'a> Parser<'a> {
             target,
             span,
             trivia: Trivia::default(),
+            blank_before,
         })
     }
 
     fn parse_consumes_decl(&mut self) -> Result<ConsumesDecl, CompileError> {
+        let blank_before = self.trivia.blank_before(self.pos);
         let kw = self.expect(TokenKind::Consumes, "to start a `consumes` declaration")?;
         let target = self.parse_qualified_name()?;
         let mut span = kw.span.merge(target.span);
@@ -531,10 +534,12 @@ impl<'a> Parser<'a> {
             selected,
             span,
             trivia: Trivia::default(),
+            blank_before,
         })
     }
 
     fn parse_exports_decl(&mut self) -> Result<ExportsDecl, CompileError> {
+        let blank_before = self.trivia.blank_before(self.pos);
         let kw = self.expect(TokenKind::Exports, "to start an `exports` declaration")?;
         let kind = match self.peek_kind() {
             Some(TokenKind::Opaque) => {
@@ -602,6 +607,7 @@ impl<'a> Parser<'a> {
             names,
             span,
             trivia: Trivia::default(),
+            blank_before,
             trailing_comments,
         })
     }
