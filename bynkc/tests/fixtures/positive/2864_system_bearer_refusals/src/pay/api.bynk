@@ -1,0 +1,15 @@
+context pay.api
+
+type UserId = String where NonEmpty
+
+actor Reader { auth = Bearer(secret = "API_TOKEN_SECRET"), identity = UserId }
+
+service api from http {
+	on GET("/activity") () -> Effect[HttpResult[String]] by r: Reader {
+		Ok("activity for \(r.identity)")
+	}
+
+	on POST("/notes") (body: String) -> Effect[HttpResult[String]] by Reader {
+		Ok("noted \(body)")
+	}
+}

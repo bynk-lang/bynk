@@ -333,7 +333,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     if let Some(content) = crate::symbols::describe_run_id_at(text, span.start) {
         return Some(content);
     }
-    // 5c. #2135: a reserved call-site principal (`by Nobody`/`Forged`/`Stale`)
+    // 5c. #2135: a reserved call-site principal (`by Nobody`/`Forged`/`Stale`/`Expired`)
     //    — no declaration, so nothing below would answer it.
     if let Some(content) = crate::symbols::describe_reserved_principal_at(text, span.start) {
         return Some(content);

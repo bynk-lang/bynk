@@ -57,6 +57,34 @@ satisfy `UserId`'s refinement. Your body sees only a verified user.
 - `u.identity` is read-only. You cannot construct a `User`, pass it around, or
   reach any field other than `.identity`.
 
+## Test a Bearer route's refusals
+
+A `Bearer` actor's main claims are that a token signed with another secret is
+refused and that an expired token is refused. A `system` suite checks both
+against the real seam, with no script to mint tokens:
+
+```bynk,fragment
+suite api.activity as system {
+  env { AUTH_JWT_SECRET = "test-secret" }
+
+  case "tokens the seam must refuse are refused" {
+    let none    <- api.GET("/me") by Nobody    // no token
+    let forged  <- api.GET("/me") by Forged    // signed with a wrong secret
+    let expired <- api.GET("/me") by Expired   // correctly signed, `exp` an hour ago
+    expect none is Rejected(Unauthorized)
+    expect forged is Rejected(Unauthorized)
+    expect expired is Rejected(Unauthorized)
+  }
+}
+```
+
+`by Forged` and `by Expired` send an otherwise valid token (a good `sub`), so
+only the signature or the `exp` is wrong. If the seam ever admitted one, the
+call would read as `Handled(_)` and the case would fail. They are `system`-tier
+only: below it the seam is skipped. See
+[the failure principals](/book/reference/testing/#failure-principals) for the
+full table.
+
 ## Verify a token without capturing the identity
 
 Drop the binder when you only need to *gate* a route, not read who it was:

@@ -62,7 +62,7 @@ function __makeHarness() {
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
-function __b64url(s: string): string { return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function __b64url(s: string): string { return __bytesB64url(new TextEncoder().encode(s)); }
 function __bytesB64url(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 async function __bynkSignHs256(payload: Record<string, unknown>, secret: string): Promise<string> {
   const h = __b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
@@ -233,6 +233,19 @@ async function __sysdrive_rawstale_uploads_http_POST_either(body: string, __sub:
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_expired_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string) {
+  const __body = body;
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "authorization": __token, }, body: __body as BufferSource, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawexpired_uploads_http_POST_either(body: string, __sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "authorization": __token, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
