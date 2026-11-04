@@ -1,7 +1,7 @@
 // #2926: a `Wire` in an arity mismatch reports the rejection and the arity.
 suite a.tick as system {
   case "wire with too many arguments" {
-    let r <- packer.message(Wire("{}"), 1)
+    let r <- packer.message(Wire(undefinedName), 1)
     expect r == r
   }
 }
