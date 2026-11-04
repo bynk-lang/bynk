@@ -6403,6 +6403,40 @@ mod tests {
     }
 
     #[test]
+    fn mixed_deferred_result_elements_that_disagree_still_report() {
+        for list in [
+            "[Ok(1), Err(\"x\"), Err(2)]",
+            "[Err(\"x\"), Ok(1), Ok(\"a\")]",
+        ] {
+            let a = commons(&format!(
+                "fn size[T, E](xs: List[Result[T, E]]) -> Int {{ 0 }}\n\n\
+                 fn bad() -> Int {{ size({list}) }}\n"
+            ));
+            // Once a sibling has refined the element type, a later one is
+            // checked against it (`Err(2)` against `Result[Int, String]`).
+            assert!(
+                a.categories().iter().any(|c| matches!(
+                    *c,
+                    "bynk.types.list_element_mismatch"
+                        | "bynk.types.err_value_mismatch"
+                        | "bynk.types.ok_value_mismatch"
+                )),
+                "{list} should report, got {:?}",
+                a.categories()
+            );
+        }
+    }
+
+    #[test]
+    fn mixed_deferred_elements_solve_the_type_arguments_they_supply() {
+        let a = commons(
+            "fn first_err[T, E](xs: List[Result[T, E]]) -> Option[E] { None }\n\n\
+             fn s() -> Option[String] { first_err([Ok(1), Err(\"x\")]) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
     fn a_concrete_some_mismatch_still_reports() {
         let a = commons("fn f() -> Int { let x: Option[Int] = Some(\"a\")\n 0 }\n");
         a.assert_reports("bynk.types.some_value_mismatch");
