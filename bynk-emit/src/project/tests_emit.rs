@@ -1647,7 +1647,7 @@ fn emit_system_http_support(
             let headers_spread = if declares_headers {
                 "...__requestHeaderPairs(headers), "
             } else {
-                "...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "
+                "...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "
             };
             // A required slot ahead of `sub`: the call lowers `undefined` there
             // when the case sends none.

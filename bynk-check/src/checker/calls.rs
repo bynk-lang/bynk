@@ -4291,39 +4291,47 @@ fn check_test_service_address(
         // #2910: a route that declares no `headers:` parameter may still be
         // sent request headers: a trailing `RequestHeaders` argument. A route
         // that declares one fills it with the argument already, so a further
-        // one is an ordinary arity error (with a note saying why).
+        // one is an ordinary arity error (with a note saying why). The
+        // trailing argument is typed once, here, and not again below.
         let declares_headers = params.iter().any(|p| {
             p.name.name == "headers"
                 && matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestHeaders(_))
         });
-        if !declares_headers
-            && positional.len() == params.len() + 1
+        let trailing = if positional.len() == params.len() + 1
             && let Some((last, rest)) = positional.split_last()
-            && let Some(t) = type_of(last, None, ctx)
-            && matches!(&*ctx.tys.get(t), Ty::RequestHeaders)
+            && !matches!(last.kind, EK::Wire(_))
         {
-            positional = rest;
-            check_extra_headers_authorization(last, ctx);
-            ctx.callees.insert(
-                expr_id,
-                Callee::TestService {
-                    service: id.name.clone(),
-                    address: format!("{} {path}", method.name),
-                    extra_headers: true,
-                },
-            );
-        }
-        if declares_headers
-            && positional.len() == params.len() + 1
-            && positional
-                .last()
-                .and_then(|a| type_of(a, None, ctx))
-                .is_some_and(|t| matches!(&*ctx.tys.get(t), Ty::RequestHeaders))
-        {
-            // The trailing `RequestHeaders` of a route that declares
-            // `headers:`: report the arity once, with the reason.
-            ctx.errors.push(
-                CompileError::new(
+            let is_headers = type_of(last, None, ctx)
+                .is_some_and(|t| matches!(&*ctx.tys.get(t), Ty::RequestHeaders));
+            Some((last, rest, is_headers))
+        } else {
+            None
+        };
+        match trailing {
+            Some((last, rest, true)) if !declares_headers => {
+                positional = rest;
+                check_extra_headers_authorization(last, ctx);
+                ctx.callees.insert(
+                    expr_id,
+                    Callee::TestService {
+                        service: id.name.clone(),
+                        address: format!("{} {path}", method.name),
+                        extra_headers: true,
+                    },
+                );
+                check_address_args(
+                    &id.name,
+                    &method.name,
+                    &params,
+                    positional,
+                    method.span,
+                    ctx,
+                );
+            }
+            Some((_, rest, is_headers)) => {
+                // The extra argument is no `RequestHeaders` this route can
+                // take: report the arity once, and still check the others.
+                let mut err = CompileError::new(
                     "bynk.test.service_call_arity",
                     method.span,
                     format!(
@@ -4333,18 +4341,25 @@ fn check_test_service_address(
                         params.len(),
                         positional.len()
                     ),
-                )
-                .with_note("the route already declares `headers: RequestHeaders`, so that argument is its request headers; a second `RequestHeaders` cannot be sent"),
-            );
-        } else {
-            check_address_args(
+                );
+                err = if is_headers {
+                    err.with_note("the route already declares `headers: RequestHeaders`, so that argument is its request headers; a second `RequestHeaders` cannot be sent")
+                } else {
+                    err.with_note("handler declared here")
+                };
+                ctx.errors.push(err);
+                for a in rest {
+                    let _ = type_of(a, None, ctx);
+                }
+            }
+            None => check_address_args(
                 &id.name,
                 &method.name,
                 &params,
                 positional,
                 method.span,
                 ctx,
-            );
+            ),
         }
         // A `Wire(…)` argument reaches the router unvalidated, so the call
         // observes the boundary as well as the handler: the raw driver decodes

@@ -1,0 +1,6 @@
+suite shop.api as system {
+  case "an extra argument that is no RequestHeaders" {
+    let r <- api.GET("/hello", nosuch) by Visitor
+    expect r is Ok("hi")
+  }
+}
