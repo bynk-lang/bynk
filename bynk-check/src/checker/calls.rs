@@ -774,8 +774,19 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
 /// The capabilities the callee needs count as used by the caller.
 pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx) {
     // #2881: a refused declaration (`given_fn_refusal`) is reported once, at
-    // the declaration; its callers cannot act on a missing `given`.
-    if callee.given.is_empty() || given_fn_refusal(callee, ctx.input.is_context).is_some() {
+    // the declaration; its callers cannot act on a missing `given`. A function
+    // this unit does not declare came in through `uses`, which only brings in a
+    // commons, so a `given` on it is always refused there.
+    if callee.given.is_empty() {
+        return;
+    }
+    let declared_here = ctx
+        .input
+        .commons
+        .items
+        .iter()
+        .any(|i| matches!(i, CommonsItem::Fn(f) if f.name.display() == callee.name.display()));
+    if !declared_here || given_fn_refusal(callee, ctx.input.is_context).is_some() {
         return;
     }
     let mut missing: Vec<String> = Vec::new();

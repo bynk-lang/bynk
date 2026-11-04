@@ -1805,7 +1805,7 @@ fn check_fn_refs(
 /// #2881: whether `receiver` spells `Prefix.Cap` for a consumed-context
 /// capability in `given`: the prefix segments, then the capability, nothing
 /// else. A bare `Prefix` (or a different chain) is not admitted.
-fn given_cap_chain(receiver: &Expr, given: &[CapRef]) -> bool {
+fn given_cap_chain(receiver: &Expr, given: &[CapRef], shadowed: &dyn Fn(&str) -> bool) -> bool {
     let mut parts: Vec<&str> = Vec::new();
     let mut e = receiver;
     loop {
@@ -1822,6 +1822,10 @@ fn given_cap_chain(receiver: &Expr, given: &[CapRef]) -> bool {
         }
     }
     parts.reverse();
+    // A parameter or `let` of the head's name is a value, not the prefix.
+    if shadowed(parts[0]) {
+        return false;
+    }
     given.iter().any(|g| {
         g.context.as_ref().is_some_and(|q| {
             parts.len() == q.parts.len() + 1
@@ -3708,7 +3712,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         } => {
             // #2881: `B.Cap.op(…)` on a consumed context's capability that this
             // function's `given` lists; the checker resolves the chain.
-            if given_cap_chain(receiver, cx.given) {
+            if given_cap_chain(receiver, cx.given, &|n| {
+                name_in_scope(n, cx.params, &cx.scopes)
+            }) {
                 for a in args {
                     check_expr_references(a, cx);
                 }
