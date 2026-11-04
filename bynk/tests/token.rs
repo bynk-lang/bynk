@@ -390,10 +390,23 @@ fn reserved_and_malformed_claims_are_refused() {
 
 #[test]
 fn an_unsatisfiable_predicate_is_refused() {
-    let out = token(&["Never", "--sub", "ann"], &[("READER_SECRET", SECRET)]);
+    // Refused before the secret is read.
+    let out = token(&["Never", "--sub", "ann"], &[]);
     assert!(!out.ok);
     assert!(
         out.stderr.contains("`Never`") && out.stderr.contains("predicate"),
+        "{}",
+        out.stderr
+    );
+    assert_eq!(out.stdout, "");
+}
+
+#[test]
+fn a_predicate_on_a_reserved_claim_is_refused() {
+    let out = token(&["Rooted", "--sub", "ann"], &[]);
+    assert!(!out.ok);
+    assert!(
+        out.stderr.contains("`Rooted`") && out.stderr.contains("`sub`"),
         "{}",
         out.stderr
     );

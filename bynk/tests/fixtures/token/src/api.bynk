@@ -8,6 +8,7 @@ actor Admin { auth = Bearer(secret = "ADMIN_SECRET"), identity = AdminId }
 actor Moderator = Reader where hasClaim("mod")
 actor Ops = Reader where claimEquals("role", "ops") && hasClaim("mod")
 actor Never = Reader where hasClaim("a") && !hasClaim("a")
+actor Rooted = Reader where claimEquals("sub", "root")
 actor Hook { auth = Signature(secret = "HOOK_SECRET", header = "X-Signature") }
 actor Sso { auth = Oidc(issuer = "https://issuer.example", audience = "my-api", jwks = "https://issuer.example/jwks"), identity = AdminId }
 

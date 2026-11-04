@@ -101,6 +101,8 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
         .ok_or_else(|| format!("`--sub <ID>` is required to mint a token for `{name}`"))?;
     validate_sub(signer, sub)?;
 
+    let mut claims = refinement_claims(found)?;
+
     let secret = match std::env::var(&env_var) {
         Ok(v) if !v.is_empty() => v,
         _ => {
@@ -120,7 +122,6 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
     };
     // The refinement's witness claims, then `--claim`s, which win: a hand-given
     // claim can withhold or change one to test the seam's 403.
-    let mut claims = refinement_claims(found)?;
     for (name, value) in extra {
         claims.retain(|(n, _)| *n != name);
         claims.push((name, value));
@@ -177,6 +178,15 @@ fn refinement_claims(f: &Found) -> Result<Vec<(String, serde_json::Value)>, Stri
     let witness = bynk_check::actors::claim_witness(&pred).ok_or_else(|| {
         format!("no set of claims satisfies `{name}`'s predicate, so no token can pass its seam")
     })?;
+    if let Some((n, _)) = witness
+        .iter()
+        .find(|(n, _)| RESERVED_CLAIMS.contains(&n.as_str()))
+    {
+        return Err(format!(
+            "`{name}`'s predicate needs the claim `{n}`, which `bynk token` signs itself (from \
+             `--sub` and the time flags), so it cannot carry the value the predicate asks for"
+        ));
+    }
     Ok(witness
         .into_iter()
         .map(|(n, v)| {
