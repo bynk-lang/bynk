@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.501**.
+written against **v0.502**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.502.0** | "`ValidationError` exposes `field` and `message` (both `String`) to Bynk code; `value` stays unreachable (#2866)" |
+| **v0.501.1** | The Rust token signer is byte-compared with the test runtime's signer for non-ASCII subjects |
 | **v0.501.0** | A context function may declare `given`; its callers must declare the same capabilities (#2868, builds on #2719 and #2010) |
 | **v0.500.0** | "`by Forged` and the new `by Expired` drive a `Bearer` route's seam at `system` with a wrong-secret or an expired token, each read as `Rejected(Unauthorized)` ([#2864](https://github.com/bynk-lang/bynk/issues/2864))" |
 | **v0.499.1** | `bynk token <Actor>` mints a credential for the project's own `Bearer` actor, to call a guarded route by hand |
