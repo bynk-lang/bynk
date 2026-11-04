@@ -34,8 +34,8 @@ fn commons_types_in_capability_ops_typecheck() {
         eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
         return;
     }
-    let fixture =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/commons_type_in_capability");
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/behaviour/commons_type_in_capability");
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("commons-type-in-capability")
         .join("out");
@@ -51,7 +51,10 @@ fn commons_types_in_capability_ops_typecheck() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(!all.contains("TS2304") && !all.contains("tsc reported"), "{all}");
+    assert!(
+        !all.contains("TS2304") && !all.contains("tsc reported"),
+        "{all}"
+    );
     assert!(all.contains("3 passed, 0 failed."), "{all}");
     assert!(out.status.success(), "{all}");
 }
