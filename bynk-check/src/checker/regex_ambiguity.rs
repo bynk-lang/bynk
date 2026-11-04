@@ -7,7 +7,8 @@
 //! governed by how many ways the pattern can match the same text: when one
 //! input has exponentially many accepting-or-failing paths, a near-miss input
 //! of a few dozen characters stalls the Worker. The checker's cheap first pass
-//! (`has_nested_unbounded_quantifier`) catches nested quantifiers (`(a+)+`).
+//! (`has_nested_unbounded_quantifier`) flags nested quantifiers (`(a+)+`); it
+//! rejects them unless this analysis proves the pattern linear (#2895).
 //! This module catches the rest of that class, and the polynomial class, by
 //! deciding ambiguity on the pattern's automaton. It follows Weideman, van der
 //! Merwe, Berglund & Watson, *Analyzing matching time behavior of backtracking

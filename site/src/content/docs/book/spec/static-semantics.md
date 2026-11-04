@@ -517,8 +517,8 @@ an empty match advancing by one code unit); `s.replaceRegex(p, with) -> String`
 groups it would splice in).
 - The pattern MUST be a string literal (`bynk.types.regex_not_literal`), so it is
   checked at compile time exactly as a `Matches` pattern is: ECMAScript syntax
-  (`bynk.types.invalid_regex`), no nested unbounded quantifier and no ambiguity
-  the analysis finds (`bynk.types.catastrophic_regex`,
+  (`bynk.types.invalid_regex`), no nested unbounded quantifier the analysis
+  cannot prove unambiguous, and no ambiguity it finds (`bynk.types.catastrophic_regex`,
   `bynk.types.polynomial_regex`; no length bound can excuse a polynomial one
   here).
 - Semantics are JS `RegExp` with `Matches`' flag set: no `u`, so `.` and
@@ -812,7 +812,11 @@ automaton:
   alternatives (`(a|a)+`, `(\d|\d\d)+`, `(a|aa)*`), a bounded repeat inside a
   loop (`(a{1,2})+`, `(a{2,3})+`), and a bounded repeat of an ambiguous body
   (`(?:a|a){0,24}`), which is exponential in its count. Alternatives that overlap but are uniquely
-  decodable are linear and accepted: `(foo|foobar)+`.
+  decodable are linear and accepted: `(foo|foobar)+`. Nested repetition with
+  an unambiguous separator is likewise accepted: in `[a-z]+(-[a-z]+)*` each
+  repetition of the group must begin with a `-` that the preceding `[a-z]+`
+  cannot match, so a text splits between repetitions in only one way. An
+  optional separator, `[a-z]+(-?[a-z]+)*`, is exponential and rejected.
 - **Polynomial ambiguity is rejected** (`bynk.types.polynomial_regex`): two
   repetitions that can divide the same text between them (`\d*\d*`), so matching
   time grows with the input's length to a power, the **degree** (the longest

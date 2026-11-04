@@ -1,0 +1,5 @@
+commons dates {
+  // #2895: `IsoDate` admits only ten characters, so it caps the polynomial
+  // `Matches` below (a warning rather than an error).
+  type Stamp = String where IsoDate && Matches("\\d*\\d*-.*")
+}
