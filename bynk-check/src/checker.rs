@@ -74,6 +74,7 @@ use expressions::*;
 use kernels::*;
 use refinements::*;
 
+pub(crate) use calls::extra_headers_authorization_errors;
 pub use calls::{
     BYNK_LIST_DEPRECATED, FnCaps, check_const_decl, check_context_fn, check_event_field_default,
     check_state_initialiser, check_suite_fn,

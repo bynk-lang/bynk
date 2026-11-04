@@ -5239,9 +5239,18 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
 /// #2910: `bynk.test.extra_headers_authorization` — request headers sent
 /// beside a route's declared parameters may not carry `Authorization`: the
 /// case's `by <Actor>` owns the credential. Checked on the literal form
-/// `RequestHeaders.of(["…", …])`; a value built elsewhere is not inspected.
+/// `RequestHeaders.of(["…", …])`, written in the call or bound by a local `let`
+/// (see `check_extra_headers_let`); a value built elsewhere is not inspected.
 fn check_extra_headers_authorization(arg: &Expr, ctx: &mut Ctx) {
+    ctx.errors.extend(extra_headers_authorization_errors(arg));
+}
+
+/// The `bynk.test.extra_headers_authorization` errors for one headers value.
+/// `pub(crate)` so the suite pass can run it on the `RequestHeaders.of([…])`
+/// a local `let` bound before the call passed by name.
+pub(crate) fn extra_headers_authorization_errors(arg: &Expr) -> Vec<CompileError> {
     use bynk_syntax::ast::ExprKind as EK;
+    let mut errors = Vec::new();
     let EK::MethodCall {
         receiver,
         method,
@@ -5249,17 +5258,17 @@ fn check_extra_headers_authorization(arg: &Expr, ctx: &mut Ctx) {
         ..
     } = &arg.kind
     else {
-        return;
+        return errors;
     };
     let (EK::Ident(r), "of", Some(EK::ListLit(lines))) = (
         &receiver.kind,
         method.name.as_str(),
         args.first().map(|a| &a.kind),
     ) else {
-        return;
+        return errors;
     };
     if r.name != REQUEST_HEADERS {
-        return;
+        return errors;
     }
     for line in lines {
         if let EK::StrLit(text) = &line.kind
@@ -5267,7 +5276,7 @@ fn check_extra_headers_authorization(arg: &Expr, ctx: &mut Ctx) {
                 .split_once(':')
                 .is_some_and(|(n, _)| n.trim().eq_ignore_ascii_case("authorization"))
         {
-            ctx.errors.push(
+            errors.push(
                 CompileError::new(
                     "bynk.test.extra_headers_authorization",
                     line.span,
@@ -5277,6 +5286,7 @@ fn check_extra_headers_authorization(arg: &Expr, ctx: &mut Ctx) {
             );
         }
     }
+    errors
 }
 
 /// #2904: `Wire(…)` drives an http body or path segment (the book documents it

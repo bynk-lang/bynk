@@ -1,0 +1,11 @@
+context shop.api
+
+service api from http {
+  on GET("/hello") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("hi")
+  }
+
+  on GET("/echo") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(headers.get("x-trace").getOrElse("-"))
+  }
+}
