@@ -1,0 +1,10 @@
+commons test {
+  type Age = Int where NonNegative
+
+  fn bad(n: Int) -> String {
+    match Age.of(n) {
+      Ok(_) => "ok",
+      Err(e) => e.value,
+    }
+  }
+}

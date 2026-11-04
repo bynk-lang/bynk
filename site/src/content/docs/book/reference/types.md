@@ -246,6 +246,19 @@ bundle`.)
 
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
+A `ValidationError` has two `String` fields:
+
+| Field | Meaning |
+|---|---|
+| `field` | the name of the field or value that failed validation |
+| `message` | a human-readable description of the failure |
+
+It has no string form, so `"\(e)"` is refused
+(`bynk.types.interpolation_non_scalar`); interpolate its fields instead:
+`"\(e.field): \(e.message)"`. The offending value is also carried at runtime
+but is not reachable from Bynk yet, so `e.value` is refused
+(`bynk.types.unknown_field`).
+
 ## Stream
 
 `Stream[T]` (v0.100) is a **lazy, pull-shaped sequence of values produced over

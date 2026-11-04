@@ -48,7 +48,7 @@ pub const KEYWORDS: &[KeywordInfo] = &[
     k("String", "The string base type."),
     k(
         "ValidationError",
-        "The error type returned by a refined type's `.of`.",
+        "The error type returned by a refined type's `.of`. Its fields are `field` and `message`, both `String`: write `\"\\(e.field): \\(e.message)\"`.",
     ),
     k(
         "actor",

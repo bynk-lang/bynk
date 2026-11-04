@@ -1,0 +1,25 @@
+commons ages
+
+type Age = Int where InRange(0, 150)
+
+// #2866: a `ValidationError`'s `field` and `message` are `String`s.
+fn explain(raw: Int) -> String {
+  match Age.of(raw) {
+    Ok(_) => "ok",
+    Err(e) => "\(e.field): \(e.message)",
+  }
+}
+
+fn fieldOf(raw: Int) -> String {
+  match Age.of(raw) {
+    Ok(_) => "",
+    Err(e) => e.field,
+  }
+}
+
+fn messageOf(raw: Int) -> String {
+  match Age.of(raw) {
+    Ok(_) => "",
+    Err(e) => e.message,
+  }
+}

@@ -65,6 +65,29 @@ fn label(raw: Int) -> String {
 }
 ```
 
+A `ValidationError` carries two `String` fields, `field` and `message`, so a
+failure can be explained in a log line or a response:
+
+```bynk,fragment
+fn explain(raw: Int) -> String {
+  match Age.of(raw) {
+    Ok(a) => "valid age"
+    Err(e) => "invalid age — \(e.field): \(e.message)"
+  }
+}
+```
+
+The error itself has no string form, so interpolating it whole is refused, and
+the rejected value is not reachable from Bynk yet:
+
+```bynk,fail
+{{#include ../../../diagnostics/interpolate_validation_error.bynk}}
+```
+
+```text
+{{#include ../../../diagnostics/interpolate_validation_error.txt}}
+```
+
 ## Related
 
 - To admit a value you *do* know at compile time, see
