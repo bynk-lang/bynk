@@ -419,10 +419,9 @@ fn check_static_initialiser(
         // #2908: a variant of a `uses`-sourced commons sum is refused by
         // design; report that refusal rather than "an invalid expression".
         // Other typing diagnostics stay folded into the field-default code.
-        if result.is_none()
-            && local_errors
-                .iter()
-                .any(|e| e.category == "bynk.context.rebrand_construction")
+        if local_errors
+            .iter()
+            .any(|e| e.category == "bynk.context.rebrand_construction")
         {
             errors.extend(
                 local_errors
@@ -445,9 +444,9 @@ fn check_static_initialiser(
             )
             .with_note(
                 "an initialiser is a compile-time value — a literal (including one admitted to a \
-                 refined type), a sum variant of a type this context may construct, `Some`/`None`/`Ok`/`Err`, a record, or — for an \
-                 opaque type — `T.unsafe(lit)` — with no reference to `self`, parameters, or \
-                 capabilities",
+                 refined type), a sum variant of a type this context may construct, \
+                 `Some`/`None`/`Ok`/`Err`, a record, or — for an opaque type — `T.unsafe(lit)` — \
+                 with no reference to `self`, parameters, or capabilities",
             ),
         );
     }
