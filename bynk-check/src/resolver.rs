@@ -461,10 +461,9 @@ impl ResolvedCommons {
         }
     }
 
-    /// #1883, slice 1a: the assets visible in this unit. A builder rather
-    /// than a [`ResolvedCommons::new`] parameter, so the constructions that
-    /// can never see an asset (a synthetic test scaffold) need not mention
-    /// them.
+    /// #2881: record which of this unit's functions came in through `uses`
+    /// (those in `fns` that `local_fns`, the unit's own table across all its
+    /// files, lacks). A builder, so constructions with no `uses` need not call it.
     pub fn with_local_fns<V>(mut self, local_fns: &HashMap<String, V>) -> Self {
         self.imported_fn_names = self
             .fns
@@ -475,6 +474,10 @@ impl ResolvedCommons {
         self
     }
 
+    /// #1883, slice 1a: the assets visible in this unit. A builder rather
+    /// than a [`ResolvedCommons::new`] parameter, so the constructions that
+    /// can never see an asset (a synthetic test scaffold) need not mention
+    /// them.
     pub fn with_assets(mut self, assets: HashMap<String, AssetDecl>) -> Self {
         self.assets = assets;
         self

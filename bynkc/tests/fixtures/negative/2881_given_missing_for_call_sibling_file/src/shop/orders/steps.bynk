@@ -1,0 +1,13 @@
+context shop.orders
+
+capability Logger {
+	fn error(message: String) -> Effect[()]
+}
+
+provides Logger = NullLogger {
+	fn error(message: String) -> Effect[()] {}
+}
+
+fn warn(what: String) -> Effect[()] given Logger {
+	Logger.error(what)
+}

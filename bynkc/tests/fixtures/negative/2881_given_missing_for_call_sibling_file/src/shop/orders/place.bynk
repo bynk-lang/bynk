@@ -1,0 +1,7 @@
+context shop.orders
+
+service place {
+	on call(sku: String) -> Effect[()] {
+		warn(sku)
+	}
+}
