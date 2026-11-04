@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0728](0728-d1-typed-select.md) | **D1 typed reads write the column list from the row type** (v0.504) — select[T]/firstAs[T] on a D1 instance, lowered over all/first and the decodeSql codec | Accepted (v0.504) |
 | [0727](0727-isodate-refinement.md) | **IsoDate, a calendar-date refinement predicate for String** (v0.503) — A built-in String predicate whose one calendar rule is shared by the checker, the runtime and Instant.fromIso | Accepted (v0.503) |
 | [0726](0726-given-on-context-functions.md) | **A context function may declare `given`** (v0.501) — Where `given` is allowed on a function, the call-site rule, the hidden `deps` parameter, and how tests call such a function | Accepted (v0.501) |
 | [0725](0725-bearer-forged-expired-principals.md) | **by Forged and by Expired drive a Bearer route's seam** (v0.500) — Reserved failure principals for Bearer routes at system, reusing Forged and adding Expired | Accepted (v0.500) |

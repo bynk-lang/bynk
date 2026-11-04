@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`D1` gains a typed `select[T]` and `firstAs[T]`: the compiler writes the `SELECT` column list from the row type, and failures are a `SqlReadError`"
----
+# 0728 — D1 typed reads write the column list from the row type
 
-## ADR: d1-typed-select
-title: D1 typed reads write the column list from the row type
-summary: select[T]/firstAs[T] on a D1 instance, lowered over all/first and the decodeSql codec
+- **Status:** Accepted (v0.504)
 
 **Context.** A `D1` query returning a record spells the record's fields twice, in the literal `SELECT` list and in the type `Json.decodeSql[T]` decodes into. A helper that shares the column list is impossible by design, because the SQL must be a literal (`bynk.types.sql_not_literal`), so the duplication drifts silently into run-time decode failures (#2865).
 
