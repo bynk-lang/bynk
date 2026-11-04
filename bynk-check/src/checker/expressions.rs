@@ -3438,6 +3438,24 @@ pub(crate) fn check_field_access(
             }
         };
     }
+    // #2866: `ValidationError` is compiler-known too — a refined type's `.of`
+    // failure exposes `field` and `message`. Its runtime `value` is `unknown`
+    // and stays unreachable until it has a Bynk type.
+    if recv_ty == tys.intern(Ty::ValidationError) {
+        return match field.name.as_str() {
+            "field" | "message" => Some(tys.intern(Ty::Base(BaseType::String))),
+            other => {
+                ctx.errors.push(CompileError::new(
+                    "bynk.types.unknown_field",
+                    field.span,
+                    format!(
+                        "`ValidationError` has no field `{other}` — its fields are `field`, `message`"
+                    ),
+                ));
+                None
+            }
+        };
+    }
     // v0.158 (ADR 0184): `MapEntry[K, V]` is a compiler-known generic record
     // (the element of a map's `.entries` query) with exactly `.key`/`.value` —
     // it has no user `TypeDecl`, so its fields resolve here (like `JsonError`),

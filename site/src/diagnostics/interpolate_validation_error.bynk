@@ -1,0 +1,11 @@
+commons ages
+
+type Age = Int where NonNegative
+
+fn explain(raw: Int) -> String {
+  match Age.of(raw) {
+    Ok(_) => "ok",
+    // The error itself has no string form; its fields do.
+    Err(e) => "invalid age: \(e)",
+  }
+}

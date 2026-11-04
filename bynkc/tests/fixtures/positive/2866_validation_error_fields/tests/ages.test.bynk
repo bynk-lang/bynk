@@ -1,0 +1,11 @@
+// #2866: both fields are read at runtime after a refinement failure.
+suite ages {
+  case "valid value has no error" {
+    expect explain(30) == "ok"
+  }
+  case "failure exposes field and message" {
+    expect fieldOf(200) == "Age"
+    expect messageOf(200) == "must be in range [0, 150]"
+    expect explain(200) == "\(fieldOf(200)): \(messageOf(200))"
+  }
+}

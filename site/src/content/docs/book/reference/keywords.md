@@ -36,7 +36,7 @@ Reserved everywhere — these **61** words can never be used as an identifier.
 | `Result` | The success-or-error type, `Result[T, E]`. |
 | `Some` | The present variant of `Option`. |
 | `String` | The string base type. |
-| `ValidationError` | The error type returned by a refined type's `.of`. |
+| `ValidationError` | The error type returned by a refined type's `.of`. Its fields are `field` and `message`, both `String`: write `"\(e.field): \(e.message)"`. |
 | `actor` | Declare an actor — a boundary contract a handler consumes via `by`. |
 | `adapter` | Declare an adapter — the host boundary (capability contract + binding). |
 | `agent` | Declare a stateful, keyed agent inside a context. |

@@ -900,6 +900,15 @@ mod tests {
         );
     }
 
+    /// #2866: the built-in `ValidationError` hovers with its fields, not `value`.
+    #[test]
+    fn validation_error_hovers_with_its_fields() {
+        let src = "commons demo.m\n\ntype Age = Int where self >= 0\n\nfn f(n: Int) -> Result[Age, ValidationError] { Age.of(n) }\n";
+        let h = hover_at(src, "ValidationError", 0).expect("`ValidationError` hovers");
+        assert!(h.contains("`field`") && h.contains("`message`"), "{h}");
+        assert!(!h.contains("`value`"), "{h}");
+    }
+
     /// Constrained generics slice 1: `derives` and the constraint names it and
     /// a bound carry each hover; an `Ord` lookalike elsewhere does not.
     #[test]

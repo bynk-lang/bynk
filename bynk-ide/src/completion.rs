@@ -3070,6 +3070,22 @@ pub fn value_member_candidates(
             ));
         }
     }
+    // `ValidationError`'s two `String` fields (#2866); `value` is not exposed.
+    if matches!(&*tys.get(ty), Ty::ValidationError) {
+        for (name, doc) in [
+            (
+                "field",
+                "String — the name of the refined type or field that failed validation",
+            ),
+            ("message", "String — a description of the failure"),
+        ] {
+            out.push(Completion::item(
+                name,
+                CompletionKind::Field,
+                Some(doc.to_string()),
+            ));
+        }
+    }
     // Record fields — resolve the receiver's named type to its declaration.
     if let Ty::Named { name, .. } = &*tys.get(ty) {
         let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -4071,6 +4087,16 @@ fn Box.size(self) -> Int { 1 }
         for f in ["kind", "path", "message"] {
             assert!(find(&items, f, CompletionKind::Field).is_some(), "{f}");
         }
+    }
+
+    #[test]
+    fn value_member_candidates_lists_validation_error_fields() {
+        let err = TYS.intern(Ty::ValidationError);
+        let items = value_member_candidates(err, &TYS, "commons m {\n}\n", None);
+        for f in ["field", "message"] {
+            assert!(find(&items, f, CompletionKind::Field).is_some(), "{f}");
+        }
+        assert!(find(&items, "value", CompletionKind::Field).is_none());
     }
 
     #[test]

@@ -1,0 +1,9 @@
+[bynk.types.interpolation_non_scalar] Error: type `ValidationError` has no string form here
+   ╭─[ interpolate_validation_error.bynk:9:31 ]
+   │
+ 9 │     Err(e) => "invalid age: \(e)",
+   │                               ┬  
+   │                               ╰── type `ValidationError` has no string form here
+   │ 
+   │ Note: a `ValidationError` has no string form; interpolate its fields, e.g. `"\(e.field): \(e.message)"`
+───╯

@@ -3138,6 +3138,9 @@ fn interpolation_non_scalar_note(ty: TyId, tys: &Types) -> &'static str {
         Ty::JsonError => {
             "a `JsonError` has no string form; interpolate its fields, e.g. `\"\\(e.kind) at \\(e.path): \\(e.message)\"`"
         }
+        Ty::ValidationError => {
+            "a `ValidationError` has no string form; interpolate its fields, e.g. `\"\\(e.field): \\(e.message)\"`"
+        }
         _ => {
             "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`, `Duration` via `toString()`, `Instant` via `toIso()`/`toString()`"
         }
