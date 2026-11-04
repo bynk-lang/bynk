@@ -4688,7 +4688,12 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     };
                     match &elem_ty {
                         Some(et) => {
-                            if !compatible(t, *et, tys) {
+                            // A sibling still mentioning a flexible variable
+                            // (`Result[Int, E]`) cannot be compared by name;
+                            // the call unifies it.
+                            let open = contains_flexible_var(t, &ctx.type_vars, tys)
+                                || contains_flexible_var(*et, &ctx.type_vars, tys);
+                            if !open && !compatible(t, *et, tys) {
                                 ctx.errors.push(CompileError::new(
                                     "bynk.types.list_element_mismatch",
                                     e.span,

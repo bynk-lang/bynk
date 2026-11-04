@@ -6393,6 +6393,16 @@ mod tests {
     }
 
     #[test]
+    fn mixed_deferred_ok_and_err_elements_infer_both_type_arguments() {
+        let a = commons(
+            "fn size[T, E](xs: List[Result[T, E]]) -> Int { 0 }\n\n\
+             fn s() -> Int { size([Ok(1), Err(\"x\")]) }\n\n\
+             fn t() -> Int { size([Err(\"x\"), Ok(1)]) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
     fn a_concrete_some_mismatch_still_reports() {
         let a = commons("fn f() -> Int { let x: Option[Int] = Some(\"a\")\n 0 }\n");
         a.assert_reports("bynk.types.some_value_mismatch");

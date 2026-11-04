@@ -2172,11 +2172,6 @@ pub(crate) fn check_if(
     }
 }
 
-/// #1659: an expression whose type comes only from its context: a bare
-/// `None`, an `Ok(…)`/`Err(…)` (the other type parameter is unknown), an
-/// empty list literal, or a `Some(…)`/list whose payload/first element is one
-/// of these. `Some(1)` and `[1]` type themselves (review of #1696), so
-/// `None == Some(1)` and `[] == [1]` take their type from that side.
 /// Whether a `Some`/`Ok`/`Err` payload is still handed an expected type that
 /// mentions a flexible variable: one that can only be typed from context, or a
 /// lambda, whose parameters read their types off the expected `Fn` type
@@ -2189,6 +2184,11 @@ fn keeps_flexible_context(e: &Expr) -> bool {
     }
 }
 
+/// #1659: an expression whose type comes only from its context: a bare
+/// `None`, an `Ok(…)`/`Err(…)` (the other type parameter is unknown), an
+/// empty list literal, or a `Some(…)`/list whose payload/first element is one
+/// of these. `Some(1)` and `[1]` type themselves (review of #1696), so
+/// `None == Some(1)` and `[] == [1]` take their type from that side.
 pub(crate) fn needs_expected_type(e: &Expr) -> bool {
     match &e.kind {
         ExprKind::None | ExprKind::Ok(_) | ExprKind::Err(_) => true,
