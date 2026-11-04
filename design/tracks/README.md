@@ -82,9 +82,9 @@ each track's spine issue; this table is deliberately just the map.
 |---|---|---|---|
 | [`concurrent-effects.md`](concurrent-effects.md) | [#2615](https://github.com/bynk-lang/bynk/issues/2615) | Settled (#2635); slicing next — slice 0 first | Concurrent effect composition: a block that issues several independent effects and waits for them all, settle-all fault and source-order error semantics, joins in agent handlers and tests, and a general timeout; cancellation a non-goal |
 | [`constrained-generics.md`](constrained-generics.md) | [#2614](https://github.com/bynk-lang/bynk/issues/2614) | Complete — slices 0–4 shipped, slice 5 (`Show`) not adopted (#2785); deferrals listed in the doc, retire next | Constrained generics: declared bounds on type parameters — a closed constraint set (`Eq`, `Ord`, `Key`, `Codable`), how types satisfy it, witness passing under erasure, and what must land before the 1.0 freeze |
+| [`crate-hygiene.md`](crate-hygiene.md) | [#2775](https://github.com/bynk-lang/bynk/issues/2775) | Settled (#2776); slicing next — A1–A3, C1–C2, C4a, B1 and E4a can start at once | Crate hygiene: dependency edges that carry real use, crate boundaries that match their consumers, `bynk-ir` grown into `bynk-model` (the declaration-level model every tool reads) or folded into `bynk-emit`, a published set limited to what installs, and `bynk` (plus optionally `bynk-lsp`) as the only installables. Supersedes #1533 |
 | [`first-party-registry.md`](first-party-registry.md) | [#2308](https://github.com/bynk-lang/bynk/issues/2308) | Settled (#2309); slicing next — R0, L1, L2 and R5b can start at once | The first-party registry (packaging slice 4b): a hosted Bynk service written in Bynk, in this repo until go-live; its `bynk-std` prerequisites, accounts and organisations, key custody, conformance, and setting `FIRST_PARTY` |
 | [`packaging.md`](packaging.md) | [#843](https://github.com/bynk-lang/bynk/issues/843) | Settled (#2199); slice 1 (manifest & workspace surface, #2207) shipped, slice 2 (resolution) next | Packaging & distribution: the package unit, `org/package` identity without renaming units, single-version resolution and `bynk.lock`, and a registry *protocol* run first-party and privately, with only the `bynk` driver touching the network |
-| [`post-trajectory-crate-hygiene.md`](post-trajectory-crate-hygiene.md) | [#1533](https://github.com/accuser/bynk/issues/1533) | Settling | READMEs, crate-local unit tests, comment rewrite, and module decomposition left open after the compiler-trajectory's eight phases closed — internal-architecture theme, not language surface, continuing the posture `compiler-architecture.md`/`crate-decomposition.md`/`content-ownership.md` took |
 | [`standard-library.md`](standard-library.md) | [#1936](https://github.com/accuser/bynk/issues/1936) | Slicing (S0 shipped, #1940) | The standard library: its four layers (kernel, commons, the `bynk` surface, `bynk.cloudflare`), its placement in a `bynk-std` crate and its 1.0 promise, derived capabilities for context-owned platform resources (`capability Sessions = Kv`), and the order in which the Workers surface is admitted |
 
 (`documentation.md` (now retired) pre-dates the GitHub-native flow, so its doc was
@@ -257,6 +257,9 @@ decisions, the named follow-ons — is kept for the record in
   streams results with durations (ADRs 0578, 0583), reruns on save, and names the invariant or
   transition that refused a case or a history step (ADR 0594). Seven slices shipped (v0.383.1
   onward). Retired 24 October 2026.
+- **`post-trajectory-crate-hygiene.md`** — spine [#1533](https://github.com/bynk-lang/bynk/issues/1533):
+  READMEs, unit tests, a comment rewrite and module splits after the compiler trajectory. Withdrawn
+  before it settled and superseded by `crate-hygiene.md`. Withdrawn 2 November 2026.
 - **`state-migrations.md`** — spine [#2188](https://github.com/bynk-lang/bynk/issues/2188): 1.0
   Gate 3, a deployed agent's stored state surviving an upgrade. `bynk.schema.lock` records each
   class's stored shape (ADR 0537), every record carries its schema version (ADRs 0538, 0545),

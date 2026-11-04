@@ -2233,3 +2233,33 @@ imposed; entries keep the order they were retired in.
   delivered, is satisfied by §3.6 and ADR 0287. This track's doc, `design/tracks/events.md`, is
   removed. Code comments that cited its sections now cite this entry or its ADRs. Retired
   2 November 2026.
+
+- **`post-trajectory-crate-hygiene.md`** — spine [#1533](https://github.com/bynk-lang/bynk/issues/1533):
+  READMEs, crate-local unit tests, a comment rewrite, and module decomposition, proposed after the
+  compiler trajectory closed (30 August 2026). **Withdrawn before it settled**: no slice was cut and
+  no ADR landed. It is superseded by [`crate-hygiene.md`](../tracks/crate-hygiene.md) (spine [#2775](https://github.com/bynk-lang/bynk/issues/2775)), which takes
+  the crate graph itself as its theme. That doc's §1.1 records what became of each workstream:
+  - **READMEs** are done. Every workspace crate has one.
+  - **Unit tests** were not carried. The one structural finding, that `bynk-ir` depends on
+    `bynk-check` only through `block_uses_emit`, moved to the successor's system-model question
+    (its §6 Q1).
+  - **Comment rewrite** was not carried. It is independent of crate shape.
+  - **Module decomposition** was not carried as a workstream, because its numbers went stale.
+    Files over 2,000 lines went from 20 to 42 by 2 November 2026. Its split tests remain the rule
+    for any split the successor makes:
+    - **T1, named family.** The extracted set has a domain noun phrase, never "part 2".
+    - **T2, import cut.** The child's `use` list is a strict subset of the parent's, and at least
+      one parent import becomes unused.
+    - **T3, test travel.** Every `#[test]` naming an extracted item moves with it, into exactly one
+      child.
+    - **Veto.** No seam may need a new `&mut Ctx` parameter.
+    - **Floor.** No child below ~600 production lines, except a pure, independently testable
+      family.
+
+  It also recorded the gated-probe traps every module move must check, now carried in the
+  successor's §3:
+  - `test_mod_ranges` sees only the two-line `#[cfg(test)]` / `mod … {` form.
+  - `emit_diagnostics` has no test-range exclusion.
+  - `ast_importers` misses named `use super::{…}` imports.
+
+  The doc is removed. Withdrawn 2 November 2026.
