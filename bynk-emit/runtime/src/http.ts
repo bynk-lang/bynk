@@ -641,12 +641,14 @@ const REQUEST_HEADER_PAIRS = Symbol("bynk.requestHeaderPairs");
 
 /** #2341 (L4): a `RequestHeaders`' own headers as a plain record — what a
  *  system-tier driver spreads into the request it sends. */
-export function requestHeaderPairs(view: RequestHeaders): Record<string, string> {
+export function requestHeaderPairs(view: RequestHeaders, dropAuthorization = false): Record<string, string> {
   const headers = (view as unknown as Record<symbol, Headers | undefined>)[REQUEST_HEADER_PAIRS];
   const out: Record<string, string> = {};
   headers?.forEach((v, k) => {
     out[k] = v;
   });
+  // #2910: a case's extra headers never carry the credential; `by <Actor>` owns it.
+  if (dropAuthorization) delete out["authorization"];
   return out;
 }
 
