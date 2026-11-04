@@ -5523,7 +5523,10 @@ pub(crate) fn rebrand_table(
         if bare == key || caller_types.contains_key(key) {
             continue;
         }
-        if let Some(own) = caller_types.get(bare).filter(|c| c.span == decl.span) {
+        if let Some(own) = caller_types
+            .get(bare)
+            .filter(|c| Arc::ptr_eq(c, decl) || c.span == decl.span)
+        {
             out.insert(key.clone(), own.clone());
         }
     }

@@ -1693,12 +1693,14 @@ pub fn build_cross_context_info(
                         .map(|p| {
                             let mut tr = p.type_ref.clone();
                             rename_type_ref(&mut tr, &renames);
+                            rename_type_ref(&mut tr, &key_of);
                             (p.name.name.clone(), tr)
                         })
                         .collect(),
                     return_type: {
                         let mut tr = op.return_type.clone();
                         rename_type_ref(&mut tr, &renames);
+                        rename_type_ref(&mut tr, &key_of);
                         tr
                     },
                     codable_params: crate::checker::codable::codable_op_params(op),
