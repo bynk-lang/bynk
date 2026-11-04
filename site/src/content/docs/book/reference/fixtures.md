@@ -36,12 +36,13 @@ value with `Bytes.fromUtf8` or `Json.decode[T]`.
   of its suite (`bynk.fixture.duplicate`), nor take a name already in scope
   there (`bynk.resolve.name_conflict`): a function, type, constant, embed, asset,
   service or agent of the target or of a commons it `uses`, or `deps`.
-- **Scope:** the declaring suite only. Its `case`s, `property` bodies and
-  [helper `fn`s](/book/reference/testing/#helpers) see it, at `unit`,
+- **Scope:** the declaring suite only. Its `case`s, `property` bodies,
+  [helper `fn`s](/book/reference/testing/#helpers) and `stub` clauses (their
+  argument patterns, `returns` values and `after`) see it, at `unit`,
   `integration` and `system`. Another suite, even one of the same target,
   cannot name it, and may declare a fixture of the same name.
 - **Unused:** a fixture nothing in its suite mentions is `bynk.fixture.unused`,
-  a warning.
+  a warning. Naming it only in a `stub` clause counts as use.
 
 ## What the text is
 

@@ -1,0 +1,10 @@
+context api
+
+service api from http {
+  json { options: plain }
+  json { options: tagged }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

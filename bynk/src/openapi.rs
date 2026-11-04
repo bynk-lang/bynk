@@ -39,8 +39,8 @@ use bynk_ide::wire_contract::{
 };
 use bynk_ide::{AnalysisRoots, ContextBoundaryInfo, ProjectDiagnostics, SchemaLock};
 use bynk_syntax::ast::{
-    BaseType, Handler, HttpMethod, HttpVariantPayload, PredKind, ServiceDecl, ServiceProtocol,
-    TypeDecl, TypeRef, http_variant,
+    BaseType, Handler, HttpMethod, HttpVariantPayload, JsonOptions, PredKind, ServiceDecl,
+    ServiceProtocol, TypeDecl, TypeRef, effective_json_options, http_variant,
 };
 use bynk_syntax::error::Severity;
 use serde_json::{Map, Value, json};
@@ -349,6 +349,7 @@ pub fn document(
             types: &sel.info.types,
             model: &model.boundary,
             names: &names,
+            plain: effective_json_options(sel.service.json.as_ref(), handler) == JsonOptions::Plain,
         };
         let op = operation(&r, &mut components, sel, handler, model, *method, path);
         // OpenAPI treats templated paths that differ only in parameter names
@@ -511,6 +512,12 @@ fn operation(
         .collect();
     let mut parameters = Vec::new();
     let mut request_body = None;
+    // #2858: plain JSON is a property of the response body only. A request is
+    // decoded by the lenient decoder whichever mode the route answers in, so its
+    // schemas stay the tagged ones.
+    let request = Renderer { plain: false, ..*r };
+    let r_resp = r;
+    let r = &request;
     for p in &handler.params {
         let name = p.name.name.as_str();
         if name == "body" {
@@ -522,6 +529,10 @@ fn operation(
                 "required": true,
                 "schema": r.parameter_schema(components, &p.type_ref),
             }));
+        } else if name == "query" {
+            // #2854: a typed `query` record is one `in: query` parameter per
+            // field; the raw `RequestQuery` view declares none.
+            parameters.extend(query_parameters(r, components, &p.type_ref));
         }
         // Any other param is a `headers` (the request's headers, read-only and
         // untyped here); the checker admits no other.
@@ -535,9 +546,51 @@ fn operation(
 
     op.insert(
         "responses".into(),
-        responses_of(r, components, handler, model),
+        responses_of(r_resp, components, handler, model),
     );
     Value::Object(op)
+}
+
+/// #2854: the `in: query` parameters of a handler's typed `query` record, one per
+/// field. A field is required unless it is an `Option` or carries a default; a
+/// `List` field is an array whose items repeat the key (`?tag=a&tag=b`, OpenAPI's
+/// default `form` style with `explode`). Refinements reach the schema as they do
+/// for a path parameter. The raw `RequestQuery` view is not a record, so it
+/// declares none.
+fn query_parameters(r: &Renderer, components: &mut Components, ty: &TypeRef) -> Vec<Value> {
+    let TypeRef::Named(id) = ty else {
+        return Vec::new();
+    };
+    let Some(bynk_syntax::ast::TypeBody::Record(record)) = r.types.get(&id.name).map(|t| &t.body)
+    else {
+        return Vec::new();
+    };
+    record
+        .fields
+        .iter()
+        .map(|f| {
+            let (inner, list, optional) = match &f.type_ref {
+                TypeRef::List(inner, _) => (inner.as_ref(), true, false),
+                TypeRef::Option(inner, _) => (inner.as_ref(), false, true),
+                other => (other, false, false),
+            };
+            let item = r.parameter_schema(components, inner);
+            let schema = if list {
+                json!({ "type": "array", "items": item })
+            } else {
+                item
+            };
+            let mut param = Map::new();
+            param.insert("name".into(), json!(f.name.name));
+            param.insert("in".into(), json!("query"));
+            param.insert("required".into(), json!(!optional && f.init.is_none()));
+            if let Some(d) = &f.documentation {
+                param.insert("description".into(), json!(d.text.trim()));
+            }
+            param.insert("schema".into(), schema);
+            Value::Object(param)
+        })
+        .collect()
 }
 
 /// `api` + `GET` + `/check/:client` → `api_get_check_client`.
@@ -786,6 +839,10 @@ impl Components {
 /// qualified by their unit (`orders.Money`, `billing.Money`).
 struct SchemaNames {
     colliding: BTreeSet<String>,
+    /// #2858: names rendered by both a tagged and a plain-JSON route. A plain
+    /// route's copy writes its `Option`s as nullable, so it is a distinct
+    /// component, suffixed `.plain`; the tagged copy keeps the bare name.
+    both_modes: BTreeSet<String>,
 }
 
 impl SchemaNames {
@@ -794,7 +851,24 @@ impl SchemaNames {
         // instantiation's name is its codec key (`Page_Item`), and its identity
         // is the generic's declaration plus each argument's.
         let mut seen: HashMap<String, BTreeSet<String>> = HashMap::new();
-        for (sel, _, model) in models {
+        let mut modes: HashMap<String, BTreeSet<bool>> = HashMap::new();
+        for (sel, h, model) in models {
+            let plain = effective_json_options(sel.service.json.as_ref(), h) == JsonOptions::Plain;
+            for n in model
+                .boundary
+                .types
+                .iter()
+                .map(|t| t.name.clone())
+                .chain(model.boundary.instantiations.iter().map(|i| i.ts_name()))
+            {
+                let m = modes.entry(n).or_default();
+                m.insert(plain);
+                // A plain route's request body is rendered tagged, so a type it
+                // shares between request and response needs both renderings.
+                if plain && h.params.iter().any(|p| p.name.name == "body") {
+                    m.insert(false);
+                }
+            }
             let decl_id = |name: &str| {
                 sel.info
                     .types
@@ -828,29 +902,42 @@ impl SchemaNames {
                 .filter(|(_, decls)| decls.len() > 1)
                 .map(|(n, _)| n)
                 .collect(),
+            both_modes: modes
+                .into_iter()
+                .filter(|(_, m)| m.len() > 1)
+                .map(|(n, _)| n)
+                .collect(),
         }
     }
 
-    fn of(&self, unit: &str, name: &str) -> String {
-        if self.colliding.contains(name) {
+    fn of(&self, unit: &str, name: &str, plain: bool) -> String {
+        let base = if self.colliding.contains(name) {
             format!("{unit}.{name}")
         } else {
             name.to_string()
+        };
+        if plain && self.both_modes.contains(name) {
+            format!("{base}.plain")
+        } else {
+            base
         }
     }
 }
 
 /// Renders one handler's boundary types as JSON Schema.
+#[derive(Clone, Copy)]
 struct Renderer<'a> {
     unit: &'a str,
     types: &'a HashMap<String, std::sync::Arc<TypeDecl>>,
     model: &'a WireModel,
     names: &'a SchemaNames,
+    /// #2858: the route renders its `Option`s as plain JSON (`U` or `null`).
+    plain: bool,
 }
 
 impl Renderer<'_> {
     fn component_ref(&self, name: &str) -> Value {
-        json!({ "$ref": format!("#/components/schemas/{}", self.names.of(self.unit, name)) })
+        json!({ "$ref": format!("#/components/schemas/{}", self.names.of(self.unit, name, self.plain)) })
     }
 
     /// A path parameter's schema. A refined scalar is inlined so the
@@ -877,7 +964,7 @@ impl Renderer<'_> {
             WireRef::Decimal => Value::Object(base_schema(BaseType::Decimal)),
             WireRef::Named { name } => {
                 if let Some(t) = self.model.types.iter().find(|t| &t.name == name) {
-                    let n = self.names.of(self.unit, name);
+                    let n = self.names.of(self.unit, name, self.plain);
                     // Reserve before rendering so a self-referential type ends.
                     if !components.schemas.contains_key(&n) {
                         components.schemas.insert(n.clone(), Value::Null);
@@ -998,6 +1085,10 @@ impl Renderer<'_> {
             }),
             WireInst::OptionInst { inner } => {
                 let v = self.ref_schema(components, &shape(inner));
+                // #2858: a plain route writes `Some(u)` as `u` and `None` as `null`.
+                if self.plain {
+                    return json!({ "anyOf": [v, { "type": "null" }] });
+                }
                 json!({ "oneOf": [
                     variant_schema(wire::WIRE_DISCRIMINANT, "Some", vec![("value".into(), v, true)]),
                     variant_schema(wire::WIRE_DISCRIMINANT, "None", vec![]),
@@ -1012,7 +1103,7 @@ impl Renderer<'_> {
                 ]})
             }
             WireInst::RecordInst { name, args } => {
-                let n = self.names.of(self.unit, key);
+                let n = self.names.of(self.unit, key, self.plain);
                 if let Some(fields) = wire::record_inst_fields(name, args, self.types) {
                     // #2607 (Decision I): a defaulted field of a generic record
                     // is optional at every instantiation, as in a plain one.
@@ -1042,7 +1133,7 @@ impl Renderer<'_> {
                 json!({ "$ref": format!("#/components/schemas/{n}") })
             }
             WireInst::SumInst { name, args } => {
-                let n = self.names.of(self.unit, key);
+                let n = self.names.of(self.unit, key, self.plain);
                 if let Some(variants) = wire::sum_inst_variants(name, args, self.types) {
                     let vs: Vec<Value> = variants
                         .iter()

@@ -406,6 +406,14 @@ pub const REQUEST_HEADERS_METHODS: &[KernelMethod] = &[
     m("clientIp", "clientIp() -> Option[String]"),
 ];
 
+/// `RequestQuery` (#2854): an HTTP handler's read-only view of the request's
+/// query string.
+pub const REQUEST_QUERY_METHODS: &[KernelMethod] = &[
+    m("get", "get(name: String) -> Option[String]"),
+    m("all", "all(name: String) -> List[String]"),
+    m("params", "params() -> Map[String, List[String]]"),
+];
+
 /// `TokenClaims` (#2380, L5): an `Oidc` actor's verified token claims.
 pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = &[
     m("get", "get(name: String) -> Option[String]"),
@@ -432,6 +440,7 @@ pub const ALL_METHODS: &[(&str, &[KernelMethod])] = &[
     ("Effect", EFFECT_METHODS),
     ("Effect[Result[T, E]]", EFFECT_RESULT_METHODS),
     ("RequestHeaders", REQUEST_HEADERS_METHODS),
+    ("RequestQuery", REQUEST_QUERY_METHODS),
     ("TokenClaims", TOKEN_CLAIMS_METHODS),
 ];
 
@@ -448,6 +457,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::Base(BaseType::Decimal) => DECIMAL_METHODS,
         Ty::Base(BaseType::String) => STRING_METHODS,
         Ty::RequestHeaders => REQUEST_HEADERS_METHODS,
+        Ty::RequestQuery => REQUEST_QUERY_METHODS,
         Ty::TokenClaims => TOKEN_CLAIMS_METHODS,
         Ty::List(_) => LIST_METHODS,
         Ty::Map(_, _) => MAP_METHODS,

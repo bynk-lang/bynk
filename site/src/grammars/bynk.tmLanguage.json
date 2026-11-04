@@ -231,6 +231,11 @@
           "match": "\\blimits\\b(?=\\s*\\{)"
         },
         {
+          "comment": "#2858: `json` is a CONTEXTUAL keyword introducing a `from http` service's response-JSON policy — highlighted only in `json {` position, so it stays an ordinary identifier elsewhere.",
+          "name": "keyword.declaration.bynk",
+          "match": "\\bjson\\b(?=\\s*\\{)"
+        },
+        {
           "comment": "v0.154: `embeds` is a CONTEXTUAL keyword introducing a sum type's declared error embeddings (`embeds E as V`) — highlighted only before a type name (uppercase), so it stays an ordinary identifier elsewhere.",
           "name": "keyword.declaration.bynk",
           "match": "\\bembeds\\b(?=\\s+[A-Z])"

@@ -15,7 +15,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use bynk_syntax::ast::{
-    Block, ExprKind, FixtureDecl, SourceUnit, SuiteDecl, expr_children, statement_exprs,
+    ArgPattern, Block, ExprKind, FixtureDecl, SeqOutcome, SourceUnit, StubRhs, SuiteDecl,
+    expr_children, statement_exprs,
 };
 use bynk_syntax::error::CompileError;
 
@@ -266,6 +267,32 @@ pub fn check_suite_fixtures(
     }
     for f in &suite.fns {
         collect_idents(&f.body, &mut mentioned);
+    }
+    // #2850: a stub's argument patterns, values and `after` may name one too.
+    let stubs = suite
+        .stubs
+        .iter()
+        .chain(suite.cases.iter().flat_map(|c| c.stubs.iter()));
+    for st in stubs {
+        for a in &st.args {
+            if let ArgPattern::Value(e) = a {
+                collect_expr_idents(e, &mut mentioned);
+            }
+        }
+        match &st.rhs {
+            StubRhs::Returns(e) => collect_expr_idents(e, &mut mentioned),
+            StubRhs::ReturnsEach(outcomes, _) => {
+                for o in outcomes {
+                    if let SeqOutcome::Value(e) = o {
+                        collect_expr_idents(e, &mut mentioned);
+                    }
+                }
+            }
+            StubRhs::Fails(_) | StubRhs::Never(_) => {}
+        }
+        if let Some(a) = &st.after {
+            collect_expr_idents(a, &mut mentioned);
+        }
     }
     for f in &suite.fixtures {
         if !mentioned.contains(f.name.name.as_str()) {

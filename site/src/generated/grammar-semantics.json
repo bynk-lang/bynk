@@ -855,7 +855,7 @@
     },
     {
       "code": "bynk.http.extra_param",
-      "summary": "A handler parameter is not a path parameter, `body` or `headers`."
+      "summary": "A handler parameter is not a path parameter, `body`, `headers` or `query`."
     },
     {
       "code": "bynk.http.headers_wrong_type",
@@ -868,6 +868,18 @@
     {
       "code": "bynk.http.path_param_not_stringy",
       "summary": "A path parameter's type is not constructible from a string."
+    },
+    {
+      "code": "bynk.http.query_field_not_stringy",
+      "summary": "A field of an HTTP handler's `query` record has a type a query string cannot carry."
+    },
+    {
+      "code": "bynk.http.query_not_http",
+      "summary": "A `RequestQuery` appears on a handler that is not an HTTP route."
+    },
+    {
+      "code": "bynk.http.query_wrong_type",
+      "summary": "An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`."
     },
     {
       "code": "bynk.http.reserved_prefix",
@@ -1434,6 +1446,10 @@
       "summary": "A service declares more than one `cors { }` policy."
     },
     {
+      "code": "bynk.parse.duplicate_json",
+      "summary": "A service declares more than one `json { }` policy."
+    },
+    {
       "code": "bynk.parse.duplicate_limits",
       "summary": "A service declares more than one `limits { }` policy."
     },
@@ -1447,7 +1463,7 @@
     },
     {
       "code": "bynk.parse.policy_order",
-      "summary": "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`."
+      "summary": "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`, `json`."
     },
     {
       "code": "bynk.resolve.duplicate_service",

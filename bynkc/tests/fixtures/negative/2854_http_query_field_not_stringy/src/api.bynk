@@ -1,0 +1,10 @@
+context api
+
+type Item = { sku: String }
+type Filter = { items: List[Item] }
+
+service api from http {
+  on GET("/x") (query: Filter) -> Effect[HttpResult[()]] by v: Visitor {
+    NoContent
+  }
+}

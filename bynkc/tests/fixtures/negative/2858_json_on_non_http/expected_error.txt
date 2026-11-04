@@ -1,0 +1,1 @@
+bynk.http.json_on_non_http

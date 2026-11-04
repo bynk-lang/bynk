@@ -2183,18 +2183,28 @@ impl<'a> Formatter<'a> {
             // `limits` — with a blank line between each section.
             if let Some(cors) = &s.cors {
                 f.format_cors_policy(cors);
-                if s.security.is_some() || s.limits.is_some() || !s.handlers.is_empty() {
+                if s.security.is_some()
+                    || s.limits.is_some()
+                    || s.json.is_some()
+                    || !s.handlers.is_empty()
+                {
                     f.newline();
                 }
             }
             if let Some(security) = &s.security {
                 f.format_security_policy(security);
-                if s.limits.is_some() || !s.handlers.is_empty() {
+                if s.limits.is_some() || s.json.is_some() || !s.handlers.is_empty() {
                     f.newline();
                 }
             }
             if let Some(limits) = &s.limits {
                 f.format_limits_policy(limits);
+                if s.json.is_some() || !s.handlers.is_empty() {
+                    f.newline();
+                }
+            }
+            if let Some(json) = &s.json {
+                f.format_json_policy(json);
                 if !s.handlers.is_empty() {
                     f.newline();
                 }
@@ -2211,6 +2221,7 @@ impl<'a> Formatter<'a> {
                     || s.cors.is_some()
                     || s.security.is_some()
                     || s.limits.is_some()
+                    || s.json.is_some()
                 {
                     f.newline();
                 }
@@ -2257,6 +2268,16 @@ impl<'a> Formatter<'a> {
             .map(|f| (&f.name, &f.value, &f.trivia))
             .collect();
         self.format_policy("limits", &limits.trivia, &fields, &limits.trailing_comments);
+    }
+
+    /// Format a `json { }` policy section (#2858), as `format_cors_policy`.
+    fn format_json_policy(&mut self, json: &JsonPolicy) {
+        let fields: Vec<_> = json
+            .fields
+            .iter()
+            .map(|f| (&f.name, &f.value, &f.trivia))
+            .collect();
+        self.format_policy("json", &json.trivia, &fields, &json.trailing_comments);
     }
 
     /// A `cors`/`security`/`limits` policy: `keyword {`, one `name: value,` field
@@ -3544,6 +3565,7 @@ fn type_ref_to_string(t: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", type_ref_to_string(t)),

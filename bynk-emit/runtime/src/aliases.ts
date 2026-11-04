@@ -9,7 +9,7 @@ import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySign
 import { boundaryError, callService, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, noStore, notModifiedIfMatch, renderRejection, requestHeaderPairs, requestHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter } from "./storage.ts";
 
@@ -39,6 +39,7 @@ export {
   formatIcuDate as __formatIcuDate,
   formatIcuNumber as __formatIcuNumber,
   headResponse as __headResponse,
+  withPlainJson as __withPlainJson,
   httpResultToResponse as __httpResultToResponse,
   invariantViolation as __invariantViolation,
   makeAgent as __makeAgent,
@@ -53,6 +54,10 @@ export {
   matchPath as __matchPath,
   mediaTypeMatches as __mediaTypeMatches,
   requestHeaders as __requestHeaders,
+  queryObject as __queryObject,
+  queryString as __queryString,
+  requestQuery as __requestQuery,
+  requestQuerySearch as __requestQuerySearch,
   renderRejection as __renderRejection,
   requestHeaderPairs as __requestHeaderPairs,
   migrationFailed as __migrationFailed,

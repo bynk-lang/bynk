@@ -3006,6 +3006,22 @@ pub(crate) fn check_method_call(
         );
         return check_request_headers_static(method, args, span, ctx);
     }
+    // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` — how a test
+    // builds the raw query view an HTTP handler reads.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && id.name == REQUEST_QUERY
+        && ctx.lookup(REQUEST_QUERY).is_none()
+        && !ctx.input.types.contains_key(REQUEST_QUERY)
+    {
+        ctx.callees.insert(
+            expr_id,
+            Callee::Intrinsic {
+                ns: REQUEST_QUERY,
+                op: method.name.clone(),
+            },
+        );
+        return check_request_query_static(method, args, span, ctx);
+    }
     // v0.22b: the typed JSON codec statics (ADR 0045).
     if let ExprKind::Ident(id) = &receiver.kind
         && id.name == JSON
@@ -3176,6 +3192,17 @@ pub(crate) fn check_method_call(
                 },
             );
             return check_request_headers_method(method, args, span, ctx);
+        }
+        // #2854 (decision B): an HTTP handler's `query` — `get`, `all`, `params`.
+        Ty::RequestQuery => {
+            ctx.callees.insert(
+                expr_id,
+                Callee::Kernel {
+                    recv: recv_ty,
+                    op: method.name.clone(),
+                },
+            );
+            return check_request_query_method(method, args, span, ctx);
         }
         // #2380 (L5): an `Oidc` binder's claims — `get`, `has`.
         Ty::TokenClaims => {

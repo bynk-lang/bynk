@@ -1,0 +1,9 @@
+[bynk.types.interpolation_non_scalar] Error: type `JsonError` has no string form here
+   ╭─[ interpolate_json_error.bynk:9:40 ]
+   │
+ 9 │     Err(e) => "order did not decode: \(e)",
+   │                                        ┬  
+   │                                        ╰── type `JsonError` has no string form here
+   │ 
+   │ Note: a `JsonError` has no string form; interpolate its fields, e.g. `"\(e.kind) at \(e.path): \(e.message)"`
+───╯

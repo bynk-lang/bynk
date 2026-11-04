@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.497**.
+written against **v0.499**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,11 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.499.0** | An HTTP service or route can write response `Option`s as plain JSON (`v` / `null`) with `json { options: plain }` and `@json` |
+| **v0.498.2** | "`JsonError`'s `kind`, `path` and `message` are documented, offered by completion and hover, and named in the `interpolation_non_scalar` note (#2863)" |
+| **v0.498.1** | "`?` on a `Result` inside a test `case` fails the case, naming the `Err` and the `?`'s location, instead of emitting a `return` that failed `tsc` (#2857)" |
+| **v0.498.0** | An `on http` handler reads the query string through a typed `query` parameter, decoded and validated at the boundary, or a raw `RequestQuery` view (#2854) |
+| **v0.497.4** | A suite's `fixture` can be named in its `stub` clauses (#2850) |
 | **v0.497.3** | A test case no longer passes `identity` to a binder-less Bearer/Oidc handler, so one that takes `given` capabilities passes tsc (#2856) |
 | **v0.497.2** | A fixture refusal code without its own message now fails loudly (#2851) |
 | **v0.497.1** | A test case that checks `expect r is Ok(_)` and then matches `r` exhaustively no longer fails `tsc` with TS2678 |

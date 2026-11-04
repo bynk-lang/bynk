@@ -114,6 +114,12 @@ pub(crate) struct RuntimeUse {
     /// #2341 (L4): a system-tier driver sends a test's headers
     /// (`__requestHeaderPairs`).
     request_header_pairs: Cell<bool>,
+    /// #2854: the module builds a `RequestQuery` (`__requestQuery`).
+    request_query: Cell<bool>,
+    /// #2854: a typed query becomes a query string (`__queryString`).
+    query_string: Cell<bool>,
+    /// #2854: a system-tier driver sends a test's query (`__requestQuerySearch`).
+    request_query_search: Cell<bool>,
     /// #2380 (L5): the module builds a `TokenClaims` (`__tokenClaims`).
     token_claims: Cell<bool>,
     /// #1652: the module references `__bynkEq` (structural `==`).
@@ -126,6 +132,10 @@ pub(crate) struct RuntimeUse {
     /// ordering kernels reference.
     cmp: RefCell<std::collections::BTreeSet<&'static str>>,
     icu: Cell<bool>,
+    /// #2858: the project has a plain-JSON route, so the generated `Option`
+    /// encoders carry the plain branch `withPlainJson` switches on. Absent, they
+    /// are emitted byte-for-byte as before.
+    plain_json: Cell<bool>,
     boundary_codec: Cell<bool>,
     json_codec: Cell<bool>,
     /// #1934: the module constructs an `HttpResult` variant. A source module
@@ -159,6 +169,16 @@ pub(crate) struct RuntimeUse {
 }
 
 impl RuntimeUse {
+    /// Record that the project has a plain-JSON route (#2858).
+    pub fn set_plain_json(&self, on: bool) {
+        self.plain_json.set(on);
+    }
+
+    /// Whether the `Option` encoders carry the plain-JSON branch (#2858).
+    pub fn plain_json(&self) -> bool {
+        self.plain_json.get()
+    }
+
     /// Record that the module references the `Bytes` runtime helpers.
     pub fn note_bytes(&self) {
         self.bytes.set(true);
@@ -222,6 +242,36 @@ impl RuntimeUse {
     /// Whether `__requestHeaderPairs` must be imported (#2341).
     pub fn request_header_pairs(&self) -> bool {
         self.request_header_pairs.get()
+    }
+
+    /// Record that the module builds a `RequestQuery` value (#2854).
+    pub fn note_request_query(&self) {
+        self.request_query.set(true);
+    }
+
+    /// Whether `__requestQuery` must be imported (#2854).
+    pub fn request_query(&self) -> bool {
+        self.request_query.get()
+    }
+
+    /// Record that a typed query becomes a query string (#2854).
+    pub fn note_query_string(&self) {
+        self.query_string.set(true);
+    }
+
+    /// Whether `__queryString` must be imported (#2854).
+    pub fn query_string(&self) -> bool {
+        self.query_string.get()
+    }
+
+    /// Record that a system-tier driver sends a test's query (#2854).
+    pub fn note_request_query_search(&self) {
+        self.request_query_search.set(true);
+    }
+
+    /// Whether `__requestQuerySearch` must be imported (#2854).
+    pub fn request_query_search(&self) -> bool {
+        self.request_query_search.get()
     }
 
     /// Record that the module builds a `TokenClaims` value (#2380).

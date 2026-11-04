@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "body": "64cb79b61bc24ea6"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "body": "Svc(\"body\",P(\"url\",B(\"String\")),Ret(B(\"String\")))"
+  }
+}
