@@ -146,11 +146,21 @@ pub fn select_columns(row: &str, types: &HashMap<String, Arc<TypeDecl>>) -> Stri
     }
 }
 
+/// Whether a literal tail fails to start at `FROM` (case-insensitive, after
+/// whitespace): the compiler writes `SELECT` and the column list ahead of it.
+fn begins_without_from(tail: &str) -> bool {
+    let t = tail.trim_start();
+    !t.get(..4).is_some_and(|p| p.eq_ignore_ascii_case("from"))
+        || t[4..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+}
+
 /// Whether a literal tail itself begins with the `SELECT` keyword.
 fn begins_with_select(tail: &str) -> bool {
     let t = tail.trim_start();
-    t.len() >= 6
-        && t[..6].eq_ignore_ascii_case("select")
+    t.get(..6).is_some_and(|p| p.eq_ignore_ascii_case("select"))
         && !t[6..]
             .chars()
             .next()
@@ -261,6 +271,20 @@ pub(crate) fn check_typed_read(
                     .with_note(
                         "the compiler writes `SELECT` and the column list from the row type; \
                          use `all` and `Json.decodeSql` to spell the columns yourself",
+                    ),
+                );
+                ok = false;
+            } else if begins_without_from(tail) {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.types.select_tail_has_select",
+                        args[0].span,
+                        format!("the SQL of `{name}` must start at `FROM`"),
+                    )
+                    .with_note(
+                        "the compiler writes `SELECT` and the column list from the row type, \
+                         so the literal continues from `FROM`; use `all` and `Json.decodeSql` \
+                         for a `WITH` or parenthesised query",
                     ),
                 );
                 ok = false;
@@ -400,5 +424,29 @@ pub fn row_bool_fields(row: &str, types: &HashMap<String, Arc<TypeDecl>>) -> Vec
             .map(|f| f.name.name.clone())
             .collect(),
         _ => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tail_tests {
+    use super::*;
+
+    #[test]
+    fn select_prefix_is_boundary_safe() {
+        assert!(begins_with_select("select * from t"));
+        assert!(begins_with_select("  SELECT x"));
+        assert!(!begins_with_select("selected_x from t"));
+        assert!(!begins_with_select("éé"));
+        assert!(!begins_with_select("sélect"));
+    }
+
+    #[test]
+    fn tail_must_start_at_from() {
+        assert!(!begins_without_from("FROM t"));
+        assert!(!begins_without_from("  from t"));
+        assert!(begins_without_from("WITH x AS (SELECT 1) SELECT * FROM x"));
+        assert!(begins_without_from("(SELECT 1)"));
+        assert!(begins_without_from("fromage"));
+        assert!(begins_without_from("éé"));
     }
 }

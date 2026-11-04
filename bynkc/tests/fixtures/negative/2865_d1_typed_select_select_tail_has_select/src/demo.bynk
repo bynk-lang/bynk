@@ -11,7 +11,7 @@ service probe {
   on call() -> Effect[Bool] given Orders {
     let a <- Orders.select[Order]("SELECT id, qty FROM orders", [])
     let b <- Orders.select[Order]("  select * FROM orders", [])
-    let c <- Orders.firstAs[Order]("selection FROM orders", [])
+    let c <- Orders.firstAs[Order]("FROM orders", [])
     a is Ok(_) && b is Ok(_) && c is Ok(_)
   }
 }

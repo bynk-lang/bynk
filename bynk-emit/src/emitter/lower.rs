@@ -2891,7 +2891,9 @@ fn lower_method_call(
         } else {
             tys.intern(Ty::List(row))
         };
-        if let Some(decoder) = json_decoder_fn(target, true, cx) {
+        let decoder = json_decoder_fn(target, true, cx)
+            .expect("a checked D1 select row type has a JSON decoder");
+        {
             let params = pre.lower(params, cx);
             let deps = if cx.in_test_case() {
                 "deps".to_string()
