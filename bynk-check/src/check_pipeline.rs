@@ -363,6 +363,8 @@ pub fn check_file_core(
     let local_table = unit_info.get(name).map(|i| &i.table);
     let local_types = local_table.map(|t| &t.types).unwrap_or(&empty_types);
     let local_events = local_table.map(|t| &t.events).unwrap_or(&empty_events);
+    let empty_fns = HashMap::new();
+    let local_fns = local_table.map(|t| &t.fns).unwrap_or(&empty_fns);
 
     let resolved = ResolvedCommons::new(
         synthetic_commons,
@@ -378,6 +380,7 @@ pub fn check_file_core(
         kind == UnitKind::Context,
         ctx.uses_commons_type_names.clone(),
     )
+    .with_local_fns(local_fns)
     // #1883, slice 1a: this unit's assets plus its `uses`d commons' ([DECISION G]).
     .with_assets(crate::assets::compose_unit_assets(name, unit_info))
     // #2387, slice 1: likewise this unit's embeds and its `uses`d commons'.

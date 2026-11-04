@@ -668,6 +668,7 @@ pub fn check_context_declarations(
         is_context,
         uses_commons_type_names.clone(),
     )
+    .with_local_fns(&table.fns)
     // #1883, slice 1a: a handler body sees the unit's assets too.
     .with_assets(typed.assets.clone())
     .with_embeds(typed.embeds.clone())
@@ -3920,6 +3921,7 @@ fn check_agent_decls(
             is_context,
             uses_commons_type_names.clone(),
         )
+        .with_local_fns(&table.fns)
         // #1883, slice 1a: a handler body sees the unit's assets too.
         .with_assets(typed.assets.clone())
         .with_embeds(typed.embeds.clone())
@@ -4026,6 +4028,7 @@ fn check_agent_decls(
             is_context,
             uses_commons_type_names.clone(),
         )
+        .with_local_fns(&table.fns)
         // #1883, slice 1a: a handler body sees the unit's assets too.
         .with_assets(typed.assets.clone())
         .with_embeds(typed.embeds.clone())

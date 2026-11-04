@@ -780,13 +780,9 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
     if callee.given.is_empty() {
         return;
     }
-    let declared_here = ctx
-        .input
-        .commons
-        .items
-        .iter()
-        .any(|i| matches!(i, CommonsItem::Fn(f) if f.name.display() == callee.name.display()));
-    if !declared_here || given_fn_refusal(callee, ctx.input.is_context).is_some() {
+    if ctx.input.imported_fn_names.contains(&callee.name.display())
+        || given_fn_refusal(callee, ctx.input.is_context).is_some()
+    {
         return;
     }
     let mut missing: Vec<String> = Vec::new();

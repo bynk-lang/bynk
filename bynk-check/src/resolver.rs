@@ -191,6 +191,11 @@ pub struct ResolvedCommons {
     /// only this narrower set may be. Private for the same reason as
     /// `local_type_names`; read via [`ResolvedCommons::is_uses_commons_type`].
     pub(crate) uses_commons_type_names: std::collections::HashSet<String>,
+    /// #2881: the functions this unit sees through `uses` rather than declares
+    /// (in any of its files). `uses` brings in a commons only, so a `given` on
+    /// one of these is always refused. Empty unless [`ResolvedCommons::with_local_fns`]
+    /// was called.
+    pub(crate) imported_fn_names: std::collections::HashSet<String>,
     /// Events track, slice 0 (spine #936): names of `event` declarations in
     /// *this* commons specifically — as opposed to `local_type_names`, which
     /// answers "declared here" for any type, event-derived or not. Backs the
@@ -446,6 +451,7 @@ impl ResolvedCommons {
             imported_from,
             is_context,
             uses_commons_type_names,
+            imported_fn_names: HashSet::new(),
             assets: HashMap::new(),
             embeds: HashMap::new(),
             consts: HashMap::new(),
@@ -459,6 +465,16 @@ impl ResolvedCommons {
     /// than a [`ResolvedCommons::new`] parameter, so the constructions that
     /// can never see an asset (a synthetic test scaffold) need not mention
     /// them.
+    pub fn with_local_fns<V>(mut self, local_fns: &HashMap<String, V>) -> Self {
+        self.imported_fn_names = self
+            .fns
+            .keys()
+            .filter(|n| !local_fns.contains_key(*n))
+            .cloned()
+            .collect();
+        self
+    }
+
     pub fn with_assets(mut self, assets: HashMap<String, AssetDecl>) -> Self {
         self.assets = assets;
         self
@@ -880,6 +896,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             // gates is unreachable here.
             is_context: false,
             uses_commons_type_names: HashSet::new(),
+            imported_fn_names: HashSet::new(),
             event_type_names,
             assets: local_assets,
             embeds: local_embeds,
