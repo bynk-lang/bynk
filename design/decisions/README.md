@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0725](0725-bearer-forged-expired-principals.md) | **by Forged and by Expired drive a Bearer route's seam** (v0.500) — Reserved failure principals for Bearer routes at system, reusing Forged and adding Expired | Accepted (v0.500) |
 | [0724](0724-bynk-token-mints-bearer-credentials.md) | **`bynk token` mints a Bearer actor's credential in the driver** (v0.499.1) — A top-level `bynk token <Actor>`, signed in Rust from the environment secret, Bearer only | Accepted (v0.499.1) |
 | [0723](0723-plain-json-http-options.md) | **HTTP response bodies can opt into plain JSON for `Option`** (v0.499) — A `json { options: plain }` section and `@json` annotation write `Some(v)` as `v` and `None` as `null` in response bodies only | Accepted (v0.499) |
 | [0722](0722-question-fails-the-case.md) | **`?` in a test case fails the case** (v0.498.1) — An Err reached by `?` in a case body fails the case rather than propagating | Accepted (v0.498.1) |

@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`by Forged` and the new `by Expired` drive a `Bearer` route's seam at `system` with a wrong-secret or an expired token, each read as `Rejected(Unauthorized)` ([#2864](https://github.com/bynk-lang/bynk/issues/2864))"
----
+# 0725 — by Forged and by Expired drive a Bearer route's seam
 
-## ADR: bearer-forged-expired-principals
-title: by Forged and by Expired drive a Bearer route's seam
-summary: Reserved failure principals for Bearer routes at system, reusing Forged and adding Expired
+- **Status:** Accepted (v0.500)
 
 **Context.** A `Bearer` actor's main claims are that a token signed with another secret is refused and that an expired token is refused (`exp`/`nbf`, ADR 0085). Neither could be tested in Bynk: `by Forged` and `by Stale` were gated to `Signature` routes (#2135, ADR 0525), and `by Forged` on a Bearer route was `bynk.test.forged_needs_signature_route`. The system driver already mints Bearer tokens for `by User("ada")` (ADR 0207 D3), so the signer was there.
 
