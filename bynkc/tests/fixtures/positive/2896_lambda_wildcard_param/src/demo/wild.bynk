@@ -1,0 +1,25 @@
+commons demo.wild {
+  fn recover(r: Result[Int, String]) -> Result[Int, Int] {
+    r.mapErr((_) => 0)
+  }
+
+  fn second(xs: List[Int]) -> Int {
+    xs.fold(0, (a, _) => a + 1)
+  }
+
+  fn constant(r: Result[Int, String]) -> Result[Int, Int] {
+    r.mapErr((_: String) => 7)
+  }
+
+  fn pick(xs: List[Int]) -> Int {
+    xs.fold(0, (_, x) => x)
+  }
+
+  fn applyTwo(f: (Int, Int) -> Int) -> Int {
+    f(1, 2)
+  }
+
+  fn one() -> Int {
+    applyTwo((_, _) => 1)
+  }
+}

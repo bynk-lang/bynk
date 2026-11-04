@@ -103,6 +103,14 @@ passed. A pattern that can fail (`status: Paid`) is
 instead. Function and handler parameters stay plain names; start the body with a
 `let` pattern to destructure one.
 
+## Ignore a lambda parameter
+
+When a callback is handed a value you do not need, write `_` for it:
+`result.mapErr((_) => 0)`, or `(a, _) => a` to keep only the first of two. `_`
+binds nothing, may appear more than once (`(_, _) => 1`), and takes an
+annotation like a name (`(_: Int) => 1`). Referring to `_` in the body is an
+error, as it is anywhere else.
+
 **See also:** [Match on a record's fields](/book/guides/type-system/match-on-a-records-fields/),
 [Work with `Result` and optional values](/book/guides/type-system/result-and-optionals/#let-else),
 [Reference — Record patterns](/book/reference/types/#record-patterns).

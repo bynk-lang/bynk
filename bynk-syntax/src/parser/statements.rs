@@ -976,8 +976,18 @@ impl<'a> Parser<'a> {
             _ => false,
         };
         if !is_pattern {
-            let name = self.expect_ident("as a lambda parameter name")?;
-            let mut p_span = name.span;
+            let (name, mut p_span) = if at(0) == Some(TokenKind::Underscore) {
+                let span = self.bump().unwrap().span;
+                let name = Ident {
+                    name: format!("{LAMBDA_WILDCARD_PREFIX}{}", span.start),
+                    span: Span::new_in(span.file, span.start, span.start),
+                };
+                (name, span)
+            } else {
+                let name = self.expect_ident("as a lambda parameter name")?;
+                let span = name.span;
+                (name, span)
+            };
             let type_ref = if self.eat(TokenKind::Colon).is_some() {
                 let t = self.parse_type_ref("as the lambda parameter type")?;
                 p_span = p_span.merge(t.span());

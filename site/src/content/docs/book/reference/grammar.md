@@ -1721,6 +1721,12 @@ One lambda parameter: a name with an optional type annotation, or (#2712) an
 irrefutable [`record_pattern`](#rule-record_pattern) in the name's place,
 `(Item { qty, .. }) => qty`. A pattern parameter takes no annotation.
 
+The name may also be `_` (#2896): a parameter that binds nothing, as in a
+pattern: `r.mapErr((_) => 0)`, `(a, _) => a`, `(_: Int) => 1`. It takes its
+type from the expected function type like a named parameter, `_` may repeat in
+one list, and the body cannot refer to it (`_` is not an expression). `_reason`
+is still an ordinary identifier lexed after `_`, so it is not a parameter name.
+
 **Static semantics.**
 {{#grammar-semantics lambda_param}}
 

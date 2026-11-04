@@ -2013,7 +2013,10 @@ module.exports = grammar({
     lambda_param: ($) =>
       choice(
         seq(
-          field("name", choice($.identifier, $._contextual_identifier)),
+          field(
+            "name",
+            choice($.identifier, $._contextual_identifier, alias("_", $.wildcard)),
+          ),
           optional(seq(":", field("type", $._type_ref))),
         ),
         field("pattern", alias($._lambda_record_pattern, $.record_pattern)),
