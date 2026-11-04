@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`consumes U { T as Alias }` renames a type `U` exports for the consuming context, so `consumes bynk.crypto { Crypto, Digest as CryptoDigest }` no longer clashes with your own `Digest`; the `name_conflict` note names the way out (#2887)"
----
+# 0730 — `consumes U { T as Alias }` renames an exported type for the consuming context
 
-## ADR: consumes-type-alias
-title: `consumes U { T as Alias }` renames an exported type for the consuming context
-summary: How a consumed type that clashes with a local one is kept apart
+- **Status:** Accepted (v0.505)
 
 **Context.** `consumes U { Cap }` brings *every* type `U` exports into scope, not
 only the capabilities named in the braces, because the capabilities' signatures

@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0730](0730-consumes-type-alias.md) | **`consumes U { T as Alias }` renames an exported type for the consuming context** (v0.505) — How a consumed type that clashes with a local one is kept apart | Accepted (v0.505) |
 | [0729](0729-call-record-commons-qualification.md) | **Call-record types qualify `uses` commons types** (v0.504.3) — The observation call records resolve a commons type through its namespace import | Accepted (v0.504.3) |
 | [0728](0728-d1-typed-select.md) | **D1 typed reads write the column list from the row type** (v0.504) — select[T]/firstAs[T] on a D1 instance, lowered over all/first and the decodeSql codec | Accepted (v0.504) |
 | [0727](0727-isodate-refinement.md) | **IsoDate, a calendar-date refinement predicate for String** (v0.503) — A built-in String predicate whose one calendar rule is shared by the checker, the runtime and Instant.fromIso | Accepted (v0.503) |

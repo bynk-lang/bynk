@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.504**.
+written against **v0.505**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.505.0** | "`consumes U { T as Alias }` renames a type `U` exports for the consuming context, so `consumes bynk.crypto { Crypto, Digest as CryptoDigest }` no longer clashes with your own `Digest`; the `name_conflict` note names the way out (#2887)" |
 | **v0.504.3** | "A test module's capability call-record types qualify a `uses` commons type, so a context capability taking a commons type passes `tsc` under `bynk test` (#2886)" |
 | **v0.504.2** | Diagnostics on a context function's `given` no longer point at advice it cannot follow, and a refused `given` function's callers and body add no follow-on errors (#2881, #2882) |
 | **v0.504.1** | Fixture pins a `given` fn called from a provider op, a WebSocket handler and a service-header-inherited handler (#2883) |
