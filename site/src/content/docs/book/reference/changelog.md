@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.506.2** | A reserved word naming an agent `on call` operation, a name on a service's `on call`, and a `stub`/`env` clause after a case statement now get targeted parse diagnostics |
 | **v0.506.1** | A typed `query` field of a refined type or enum declared in a `uses` commons now reads as its real wire kind on Workers (so `?n=2` is no longer a 400), and a context whose only capability use is a `fn … given Fetch` now imports the `bynk` namespace its `deps` name |
 | **v0.506.0** | A lambda parameter may be `_`, which binds nothing — `r.mapErr((_) => 0)`, `(a, _) => a` |
 | **v0.505.4** | Matches patterns with an unambiguous separator between repetitions, such as the slug `[a-z]+(-[a-z]+)*`, are no longer refused as catastrophic; IsoDate bounds the input at 10 characters |
