@@ -1,0 +1,2 @@
+bynk.types.duplicate_literal_arm
+literal `1000` is matched more than once

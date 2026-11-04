@@ -2451,7 +2451,14 @@ pub struct EventPatternField {
 #[derive(Debug, Clone)]
 pub enum EventPatternValue {
     /// An `Int`/`String`/`Bool` literal — matches the field by value equality.
-    Literal { value: LiteralValue, span: Span },
+    Literal {
+        value: LiteralValue,
+        /// The literal as written (`-1_000`), digit separators kept; `None`
+        /// for a pattern built without source. Only the formatter reads it,
+        /// and it sits outside `value` so the duplicate-arm check ignores it.
+        text: Option<String>,
+        span: Span,
+    },
     /// A nullary sum-type variant, optionally qualified: `Region.Domestic` or
     /// bare `Domestic` — both resolve against the field's declared sum type.
     /// A variant that carries a payload is rejected (`bynk.event.
@@ -4068,7 +4075,14 @@ pub enum Pattern {
     /// admitted set mirrors ADR 0001's closed literal set (integers — including
     /// a leading unary minus — strings, and booleans); `Float`/`()` are not
     /// admitted as patterns.
-    Literal { value: LiteralValue, span: Span },
+    Literal {
+        value: LiteralValue,
+        /// The literal as written (`-1_000`), digit separators kept; `None`
+        /// for a pattern built without source. Only the formatter reads it,
+        /// and it sits outside `value` so the duplicate-arm check ignores it.
+        text: Option<String>,
+        span: Span,
+    },
     /// `lo..hi`, `lo..` or `..hi` — an inclusive integer range (patterns track,
     /// slice 5, #2699). Matches an `Int` scrutinee by comparison. Binds nothing.
     /// The one production `via schema(...)` shares ([`SchemaVersionPattern::Range`]).

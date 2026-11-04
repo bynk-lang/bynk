@@ -2023,7 +2023,12 @@ impl<'a> Parser<'a> {
     /// of these forms.
     fn parse_literal_pattern(&mut self) -> Result<Pattern, CompileError> {
         let (value, span) = self.parse_literal_value()?;
-        Ok(Pattern::Literal { value, span })
+        let text = self.slice(span).split_whitespace().collect::<String>();
+        Ok(Pattern::Literal {
+            value,
+            text: Some(text),
+            span,
+        })
     }
 
     /// Parse a bare literal value: `31`, `-1`, `"english"`, `true`/`false`.

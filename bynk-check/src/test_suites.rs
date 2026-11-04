@@ -5444,6 +5444,7 @@ mod history_pattern_tests {
     fn int(n: i64) -> Pattern {
         Pattern::Literal {
             value: LiteralValue::Int(n),
+            text: None,
             span: Span::default(),
         }
     }

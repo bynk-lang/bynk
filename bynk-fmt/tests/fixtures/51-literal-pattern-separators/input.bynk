@@ -1,0 +1,36 @@
+context commerce.order
+
+consumes bynk { Events }
+exports transparent { Charged }
+
+event Charged = {
+	orderId: String,
+	cents: Int,
+}
+
+service markCharged {
+	on call(orderId: String) -> Effect[()] given Events {
+		Events.emit[Charged](Charged { orderId: orderId, cents: 1_000 })
+	}
+}
+
+service OnBigCharge from Events(Charged { cents: 1_000, .. }) {
+	on event(e: Charged) -> Effect[()] {
+		Effect.pure(())
+	}
+}
+
+service OnRefund from Events(Charged { cents: -1_0_0, .. }) {
+	on event(e: Charged) -> Effect[()] {
+		Effect.pure(())
+	}
+}
+
+fn f(n: Int) -> Int {
+	match n {
+		1_000 => 1,
+		-2_0_0 => 2,
+		3 => 3,
+		_ => 0,
+	}
+}
