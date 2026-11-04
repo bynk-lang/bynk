@@ -1,0 +1,2 @@
+{ name: "n", kind: "int", list: false, option: false }
+{ name: "s", kind: "enum", list: false, option: false }

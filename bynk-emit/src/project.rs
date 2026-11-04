@@ -3810,6 +3810,7 @@ fn build_output(
                     consumed_types,
                     &migratable,
                     ctx_uses_exec,
+                    &bynk_check::symbols::combined_types_for(ctx_name, &unit_tables, &unit_uses),
                 );
                 // P6.x cutover slice 2 (#1191): collected here, not inside
                 // `emit_wrangler_toml` itself, so that function's own file

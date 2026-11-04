@@ -1,0 +1,11 @@
+context demo.web
+
+consumes bynk { Fetch }
+
+fn probe(url: String) -> Effect[Int] given Fetch {
+	let r <- Fetch.send(Request { method: Method.Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })
+	match r {
+		Ok(resp) => Effect.pure(resp.status),
+		Err(_) => Effect.pure(0),
+	}
+}

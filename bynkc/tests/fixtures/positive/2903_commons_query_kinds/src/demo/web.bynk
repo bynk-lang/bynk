@@ -1,0 +1,11 @@
+context demo.web
+
+uses demo.types
+
+type Q = { n: Count, s: Speed }
+
+service api from http {
+	on GET("/n") (query: Q) -> Effect[HttpResult[String]] by Visitor {
+		Ok("\(query.n)")
+	}
+}

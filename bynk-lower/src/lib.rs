@@ -995,6 +995,13 @@ pub fn lower_handler_given_ir(h: &Handler) -> Vec<CapRefIr> {
     h.given.iter().map(lower_cap_ref_ir).collect()
 }
 
+/// #2912: a context-level function's own `given` clause, resolved standalone —
+/// the sibling of [`lower_handler_given_ir`] for the `fn … given C` form
+/// (#2868), so a capability a function alone names is still imported.
+pub fn lower_fn_given_ir(f: &FnDecl) -> Vec<CapRefIr> {
+    f.given.iter().map(lower_cap_ref_ir).collect()
+}
+
 /// #1187's slice 3: a handler's resolved actor-verification seam — the same
 /// "narrow, standalone reader of already-resolved data" precedent
 /// [`body_writes_state`]/[`lower_service_handler_signature_ir`] established,
