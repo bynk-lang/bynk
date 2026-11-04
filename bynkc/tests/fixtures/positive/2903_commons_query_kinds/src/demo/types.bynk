@@ -1,0 +1,4 @@
+commons demo.types
+
+type Count = Int where InRange(0, 999)
+type Speed = enum { Slow, Fast }

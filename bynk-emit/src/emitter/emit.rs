@@ -3623,6 +3623,8 @@ pub(crate) fn cross_context_cap_namespaces(
                 .iter()
                 .for_each(|h| collect(bynk_lower::lower_handler_given_ir(h))),
             CommonsItem::Provider(p) => collect(bynk_lower::lower_provider_given_ir(p)),
+            // #2912: a function's `given` names its capability in `deps` too.
+            CommonsItem::Fn(f) => collect(bynk_lower::lower_fn_given_ir(f)),
             _ => {}
         }
     }
