@@ -1,0 +1,8 @@
+suite demo {
+  case "x" {
+    let k = 1
+    env { API = "x" }
+    let t <- probe()
+    expect t == 0
+  }
+}

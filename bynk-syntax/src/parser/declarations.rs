@@ -1108,7 +1108,7 @@ impl<'a> Parser<'a> {
                 envs.push(e);
             }
         }
-        let body = self.parse_block_rest(open.span)?;
+        let body = self.parse_block_rest_in(open.span, true)?;
         let span = kw.span.merge(body.span);
         Ok(Case {
             name,
@@ -4218,7 +4218,10 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
-        if !is_agent && self.peek_kind() == Some(TokenKind::Ident) {
+        if !is_agent
+            && matches!(kind, HandlerKind::Call)
+            && self.peek_kind() == Some(TokenKind::Ident)
+        {
             // #2909: a service's `on call` takes no name.
             let t = self.peek().unwrap();
             return Err(CompileError::new(

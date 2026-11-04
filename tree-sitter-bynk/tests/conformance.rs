@@ -1069,6 +1069,12 @@ const EXCLUDED_PARSE_TIME_FIXTURES: &[(&str, &str)] = &[
          `Account { type, .. }` as a shorthand binding named by an `identifier` \
          (#2837)",
     ),
+    (
+        "1662_parse_service_call_named",
+        "declined: the grammar shares one `call_handler` rule between agents and \
+         services, so a named service `on call` parses there; only the compiler \
+         enforces that a name is an agent's (#2909)",
+    ),
 ];
 
 #[test]
