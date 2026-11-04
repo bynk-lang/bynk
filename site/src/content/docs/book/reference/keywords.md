@@ -29,7 +29,7 @@ Reserved everywhere — these **61** words can never be used as an identifier.
 | `Float` | The floating-point base type. |
 | `Instant` | The absolute-time base type, in epoch milliseconds (`Clock.now()`). |
 | `Int` | The integer base type. |
-| `JsonError` | The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`. |
+| `JsonError` | The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `"\(e.kind) at \(e.path): \(e.message)"`. |
 | `None` | The empty variant of `Option`. |
 | `Ok` | The success variant of `Result`. |
 | `Option` | The optional-value type, `Option[T]`. |

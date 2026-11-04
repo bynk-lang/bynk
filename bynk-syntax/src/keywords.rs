@@ -38,7 +38,7 @@ pub const KEYWORDS: &[KeywordInfo] = &[
     k("Int", "The integer base type."),
     k(
         "JsonError",
-        "The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`.",
+        "The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `\"\\(e.kind) at \\(e.path): \\(e.message)\"`.",
     ),
     k("None", "The empty variant of `Option`."),
     k("Ok", "The success variant of `Result`."),

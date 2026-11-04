@@ -559,15 +559,15 @@ A `service` groups the handlers that respond to calls and external triggers.
 `service`, a name, an optional `from <protocol>` header clause, and a
 brace-delimited list of handlers. One protocol per service. Well-formedness: §5.
 
-### §4.4.1a HTTP service policies (v0.131, v0.141, v0.142)
+### §4.4.1a HTTP service policies (v0.131, v0.141, v0.142, #2858)
 
-A `from http` service may open with up to three policy sections, in header
+A `from http` service may open with up to four policy sections, in header
 position before its handlers and in this order: `cors { }`, then `security { }`,
-then `limits { }`, each optional (the order is `service_decl`'s). A policy
+then `limits { }`, then `json { }`, each optional (the order is `service_decl`'s). A policy
 out of that order, or after a handler, is a parse error
 (`bynk.parse.policy_order`). Each is a
 brace-delimited list of `name: value` fields. `cors`, `security` and
-`limits` are contextual keywords, ordinary identifiers elsewhere. The grammar
+`limits` and `json` are contextual keywords, ordinary identifiers elsewhere. The grammar
 admits any field name and any value expression; the closed field sets, their
 value types, and the `from http`-only placement are well-formedness:
 [§5.7.1](/book/spec/static-semantics/#cors),
@@ -609,6 +609,18 @@ The request-limits policy (v0.142).
 {{#grammar limits_field}}
 
 One `name: value` field of a `limits` policy.
+
+#### json_policy {#441a7-json_policy}
+
+{{#grammar json_policy}}
+
+The response-JSON policy (#2858).
+
+#### json_field {#441a8-json_field}
+
+{{#grammar json_field}}
+
+One `name: value` field of a `json` policy.
 
 ### §4.4.2 service_protocol
 

@@ -2614,6 +2614,7 @@ impl<'a> Parser<'a> {
         let mut cors: Option<CorsPolicy> = None;
         let mut security: Option<SecurityPolicy> = None;
         let mut limits: Option<LimitsPolicy> = None;
+        let mut json: Option<JsonPolicy> = None;
         // #1756: comments (and an orphaned doc block) before the closing `}`.
         let trailing_comments: Vec<Comment>;
         loop {
@@ -2655,6 +2656,7 @@ impl<'a> Parser<'a> {
                         &[
                             ("security", security.is_some()),
                             ("limits", limits.is_some()),
+                            ("json", json.is_some()),
                         ],
                         !handlers.is_empty(),
                     )?;
@@ -2681,7 +2683,7 @@ impl<'a> Parser<'a> {
                     self.check_policy_order(
                         "security",
                         policy.span,
-                        &[("limits", limits.is_some())],
+                        &[("limits", limits.is_some()), ("json", json.is_some())],
                         !handlers.is_empty(),
                     )?;
                     security = Some(policy);
@@ -2704,8 +2706,32 @@ impl<'a> Parser<'a> {
                             "a service declares at most one `limits { }` policy",
                         ));
                     }
-                    self.check_policy_order("limits", policy.span, &[], !handlers.is_empty())?;
+                    self.check_policy_order(
+                        "limits",
+                        policy.span,
+                        &[("json", json.is_some())],
+                        !handlers.is_empty(),
+                    )?;
                     limits = Some(policy);
+                }
+                // `json { … }` is a contextual keyword like `limits` (#2858): the
+                // identifier `json` in service-body item position introduces the
+                // response-JSON policy. At most one per service.
+                Some(TokenKind::Ident) if self.peek_is_json_kw() => {
+                    if let Some(doc) = item_doc {
+                        self.warn_orphan_before_policy(doc.span);
+                        keep_orphan(&mut leading, doc);
+                    }
+                    let policy = self.parse_json_policy(leading)?;
+                    if json.is_some() {
+                        return Err(CompileError::new(
+                            "bynk.parse.duplicate_json",
+                            policy.span,
+                            "a service declares at most one `json { }` policy",
+                        ));
+                    }
+                    self.check_policy_order("json", policy.span, &[], !handlers.is_empty())?;
+                    json = Some(policy);
                 }
                 // A leading `@name(args)` introduces a handler-position annotation
                 // (v0.140): consume the annotation run, then the `on` handler it
@@ -2767,6 +2793,7 @@ impl<'a> Parser<'a> {
             cors,
             security,
             limits,
+            json,
             handlers,
             documentation: None,
             span: kw.span.merge(close.span),
@@ -2794,6 +2821,12 @@ impl<'a> Parser<'a> {
         matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "limits")
     }
 
+    /// True when the next token is the contextual keyword `json` (#2858),
+    /// introducing the response-JSON policy section.
+    fn peek_is_json_kw(&self) -> bool {
+        matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "json")
+    }
+
     /// #1756: a doc block before an adapter's `binding`/`uses`/`consumes`/
     /// `exports` clause documents nothing, so it is an orphan: warn, and keep it
     /// in `leading`. It used to be dropped with no warning at all.
@@ -2816,7 +2849,7 @@ impl<'a> Parser<'a> {
     }
 
     /// #1784: a service's policies come before its handlers, in the order
-    /// `cors`, `security`, `limits`, each optional: the order `service_decl` has
+    /// `cors`, `security`, `limits`, `json`, each optional: the order `service_decl` has
     /// in the tree-sitter grammar and the spec (§4.4.1a), and the one `fmt`
     /// writes. This parser used to accept them anywhere in the body. `later`
     /// names the policies that must follow `keyword`, with whether each has
@@ -2835,7 +2868,7 @@ impl<'a> Parser<'a> {
                 format!("`{keyword} {{ }}` must come before the service's handlers"),
             )
             .with_note(
-                "a service's policies open its body, before any handler, in the order `cors`, `security`, `limits`",
+                "a service's policies open its body, before any handler, in the order `cors`, `security`, `limits`, `json`",
             ));
         }
         if let Some((after, _)) = later.iter().find(|(_, seen)| *seen) {
@@ -2844,7 +2877,9 @@ impl<'a> Parser<'a> {
                 span,
                 format!("`{keyword} {{ }}` must come before `{after} {{ }}`"),
             )
-            .with_note("a service's policies come in the order `cors`, `security`, `limits`"));
+            .with_note(
+                "a service's policies come in the order `cors`, `security`, `limits`, `json`",
+            ));
         }
         Ok(())
     }
@@ -2926,6 +2961,32 @@ impl<'a> Parser<'a> {
                 .fields
                 .into_iter()
                 .map(|f| LimitsField {
+                    name: f.name,
+                    value: f.value,
+                    span: f.span,
+                    trivia: f.trivia,
+                })
+                .collect(),
+            span: kw.span.merge(body.close),
+            trailing_comments: body.trailing_comments,
+            trivia: Trivia {
+                leading,
+                trailing: self.take_trailing_trivia(),
+            },
+        })
+    }
+
+    /// Parse a `json { name: value, … }` policy (#2858), as
+    /// [`Self::parse_limits_policy`]; the checker validates the closed field set
+    /// `options` and its `tagged`/`plain` value.
+    fn parse_json_policy(&mut self, leading: Vec<Comment>) -> Result<JsonPolicy, CompileError> {
+        let kw = self.expect_ident("to start a `json` policy")?;
+        let body = self.parse_policy_body("json")?;
+        Ok(JsonPolicy {
+            fields: body
+                .fields
+                .into_iter()
+                .map(|f| JsonField {
                     name: f.name,
                     value: f.value,
                     span: f.span,

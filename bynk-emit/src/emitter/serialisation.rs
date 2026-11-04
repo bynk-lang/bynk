@@ -4148,24 +4148,50 @@ pub(crate) fn emit_generic_helpers_qualified(
                 let inner_ty = TsType::named(inner_ty);
                 let option_ty = TsType::named_with_args("Option", vec![inner_ty.clone()]);
 
+                // #2858: in a project with a plain-JSON route the one `Option`
+                // encoder also carries the plain branch: while `withPlainJson` has
+                // `__bynkPlainJson` set, `Some(v)` is `v` and `None` is `null`.
+                // Otherwise (and in every project without such a route) it is the
+                // tagged encoder alone.
+                let some_value = serialise_field_expr(inner, "value.value", depth, ru);
+                let tagged_some = TsExpr::object(vec![
+                    ("kind".to_string(), str_lit("Some")),
+                    ("value".to_string(), some_value.clone()),
+                ]);
+                let tagged_none = TsExpr::object(vec![("kind".to_string(), str_lit("None"))]);
+                let body = if ru.plain_json() {
+                    let plain = || {
+                        ident(
+                            "(globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true",
+                        )
+                    };
+                    let pick = |plain_branch: TsExpr, tagged_branch: TsExpr| TsExpr::Conditional {
+                        test: Box::new(plain()),
+                        consequent: Box::new(plain_branch),
+                        alternate: Box::new(tagged_branch),
+                    };
+                    vec![
+                        if_(
+                            strict_eq(member(ident("value"), "tag"), str_lit("Some")),
+                            return_(pick(some_value, tagged_some)),
+                        ),
+                        return_(pick(ident("null"), tagged_none)),
+                    ]
+                } else {
+                    vec![
+                        if_(
+                            strict_eq(member(ident("value"), "tag"), str_lit("Some")),
+                            return_(tagged_some),
+                        ),
+                        return_(tagged_none),
+                    ]
+                };
                 let serialise = TsDecl::Export(Box::new(TsDecl::Function {
                     name: format!("__serialise_Option_{inner_ts}"),
                     generics: Vec::new(),
                     params: serialise_params(option_ty.clone(), depth),
                     return_type: Some(TsType::named("__JsonValue")),
-                    body: vec![
-                        if_(
-                            strict_eq(member(ident("value"), "tag"), str_lit("Some")),
-                            return_(TsExpr::object(vec![
-                                ("kind".to_string(), str_lit("Some")),
-                                (
-                                    "value".to_string(),
-                                    serialise_field_expr(inner, "value.value", depth, ru),
-                                ),
-                            ])),
-                        ),
-                        return_(TsExpr::object(vec![("kind".to_string(), str_lit("None"))])),
-                    ],
+                    body,
                     is_async: false,
                     inline: false,
                 }));

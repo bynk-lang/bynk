@@ -6014,6 +6014,171 @@
     }
   },
   {
+    "type": "json_field",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "value": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "binary_expr",
+            "named": true
+          },
+          {
+            "type": "block",
+            "named": true
+          },
+          {
+            "type": "boolean_literal",
+            "named": true
+          },
+          {
+            "type": "call",
+            "named": true
+          },
+          {
+            "type": "decimal_literal",
+            "named": true
+          },
+          {
+            "type": "effect_pure_expr",
+            "named": true
+          },
+          {
+            "type": "err_expr",
+            "named": true
+          },
+          {
+            "type": "expect_expr",
+            "named": true
+          },
+          {
+            "type": "field_access",
+            "named": true
+          },
+          {
+            "type": "float_literal",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "if_expr",
+            "named": true
+          },
+          {
+            "type": "is_expr",
+            "named": true
+          },
+          {
+            "type": "lambda_expr",
+            "named": true
+          },
+          {
+            "type": "list_literal",
+            "named": true
+          },
+          {
+            "type": "match_expr",
+            "named": true
+          },
+          {
+            "type": "method_call",
+            "named": true
+          },
+          {
+            "type": "none_expr",
+            "named": true
+          },
+          {
+            "type": "number_literal",
+            "named": true
+          },
+          {
+            "type": "ok_expr",
+            "named": true
+          },
+          {
+            "type": "paren_expr",
+            "named": true
+          },
+          {
+            "type": "question_expr",
+            "named": true
+          },
+          {
+            "type": "record_construction",
+            "named": true
+          },
+          {
+            "type": "record_spread",
+            "named": true
+          },
+          {
+            "type": "self_expr",
+            "named": true
+          },
+          {
+            "type": "some_expr",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "trace_expr",
+            "named": true
+          },
+          {
+            "type": "unary_expr",
+            "named": true
+          },
+          {
+            "type": "unit_literal",
+            "named": true
+          },
+          {
+            "type": "val_expr",
+            "named": true
+          },
+          {
+            "type": "wire_expr",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "json_policy",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "json_field",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "key_decl",
     "named": true,
     "fields": {
@@ -10290,6 +10455,16 @@
           }
         ]
       },
+      "json": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "json_policy",
+            "named": true
+          }
+        ]
+      },
       "limits": {
         "multiple": false,
         "required": false,
@@ -13795,6 +13970,10 @@
   },
   {
     "type": "is",
+    "named": false
+  },
+  {
+    "type": "json",
     "named": false
   },
   {

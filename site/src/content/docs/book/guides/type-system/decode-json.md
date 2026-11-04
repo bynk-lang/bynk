@@ -125,6 +125,37 @@ commons orders {
 }
 ```
 
+## Report why a decode failed
+
+A `JsonError` carries three `String` fields: `kind` (`Malformed`,
+`StructuralMismatch` or `RefinementViolation`), `path` (where in the document,
+such as `$.qty`) and `message`. The error itself has no string form, so
+interpolate the fields:
+
+```bynk
+commons orders {
+  type Order = { id: String, qty: Int }
+
+  fn describe(raw: String) -> String {
+    match Json.decode[Order](raw) {
+      Ok(order) => "decoded \(order.id)",
+      Err(e) => "order did not decode: \(e.kind) at \(e.path): \(e.message)",
+    }
+  }
+}
+```
+
+Writing `"\(e)"` instead is refused, and the compiler's note points back at the
+fields:
+
+```bynk,fail
+{{#include ../../../diagnostics/interpolate_json_error.bynk}}
+```
+
+```text
+{{#include ../../../diagnostics/interpolate_json_error.txt}}
+```
+
 ## Encode the other way
 
 `Json.encode(v)` serialises a checked value to a JSON `String`:

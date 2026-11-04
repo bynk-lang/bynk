@@ -808,6 +808,8 @@ pub(crate) fn emit_worker_entry(
                     // `Content-Length` guard before the body is read.
                     max_body: effective_max_body(service.limits.as_ref(), h),
                     raw: h.raw_content_type().map(str::to_string),
+                    json_plain: bynk_syntax::ast::effective_json_options(service.json.as_ref(), h)
+                        == bynk_syntax::ast::JsonOptions::Plain,
                     rejected: rejected_surface(service, sname),
                     query_fields,
                 });
@@ -962,6 +964,9 @@ pub(crate) fn emit_worker_entry(
     if has_http {
         imports.push("__matchPath".to_string());
         imports.push("__httpResultToResponse".to_string());
+        if http_routes.iter().any(|r| r.json_plain) {
+            imports.push("__withPlainJson".to_string());
+        }
     }
     if has_event_services {
         imports.push("__deserialiseEventEnvelope".to_string());
@@ -2470,6 +2475,9 @@ struct HttpRoute {
     /// other `Content-Type` (`"*/*"` accepts all). A raw route always has a cap
     /// (`bynk.http.raw_body_unbounded`), so it always takes the counted read.
     raw: Option<String>,
+    /// #2858: the route writes `Option` as plain JSON (`v` / `null`) in its
+    /// response body — its `@json(options:)`, else the service's `json { }`.
+    json_plain: bool,
     /// #2341 (decision C): the compose-surface method of the service's
     /// `on rejected` (`rejected_<service>`), when it declares one. The route's
     /// synthesised rejections are rendered through it.
@@ -2543,6 +2551,17 @@ fn query_field_specs(
             })
             .collect(),
     )
+}
+
+/// #2858: whether any `from http` route in `table` writes plain JSON, so the
+/// generated `Option` encoders carry the plain branch.
+pub(crate) fn table_has_plain_json(table: &UnitTable) -> bool {
+    table.services.values().any(|svc| {
+        svc.handlers.iter().any(|h| {
+            bynk_syntax::ast::effective_json_options(svc.json.as_ref(), h)
+                == bynk_syntax::ast::JsonOptions::Plain
+        })
+    })
 }
 
 /// v0.142 (ADR 0165): resolve a route's effective request-body ceiling in bytes.
@@ -3124,6 +3143,13 @@ fn emit_http_route_dispatch(
     ));
     let inner_ty = http_result_inner(&h.return_type);
     let ser_fn = crate::emitter::serialisation::serialise_ref_via(&inner_ty, "handlers.", ru);
+    // #2858: a plain-JSON route's body serialiser runs with the `Option` encoders
+    // switched to `v` / `null`; every other route passes `ser_fn` untouched.
+    let ser_fn = if route.json_plain {
+        call(ident("__withPlainJson"), vec![ser_fn])
+    } else {
+        ser_fn
+    };
     // v0.140 (ADR 0163): a `GET` response carries a weak `ETag` (an `Ok` body gets
     // the validator via `weakEtag`), an optional `@cache` `Cache-Control`
     // (`applyCache`), and is answered `304` when the request revalidates

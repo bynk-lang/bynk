@@ -1,0 +1,5 @@
+commons day
+
+type Day = String where NonEmpty
+
+fn len(d: Day) -> Int { d.length() }

@@ -1,0 +1,9 @@
+context api
+
+service api from http {
+  json { options: plain }
+
+  on GET("/flag") () -> Effect[HttpResult[Option[()]]] by v: Visitor {
+    Ok(None)
+  }
+}

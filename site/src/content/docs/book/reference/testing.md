@@ -528,6 +528,18 @@ Ok(_)`. When the predicate is a top-level comparison (`==`, `!=`, `<`, `<=`, `>`
 `>=`), a failure reports the predicate and its **expected-vs-actual** operands, not
 just a location.
 
+### `?` in a case {#question-in-case}
+
+A `case` body returns no `Result`, so `?` has nowhere to propagate to. Instead,
+`?` on a `Result` whose error is a `ValidationError` (what a refined type's `.of`
+returns) **fails the case** when the operand is `Err`: the failure reports the
+`?` expression, the error value and the `?`'s `file:line:col`, as a failed
+`expect` does. On `Ok` it yields the value. This holds anywhere in the case,
+including inside `if` and `match` arms; a `?` inside a lambda keeps its normal
+meaning (it returns from the lambda). Any other error type is
+`bynk.types.question_error_mismatch`, and an `Option` operand is refused as it is
+outside a handler.
+
 ### Claiming a fault — `expect <call> faults` {#faults}
 
 A **fault** is not a value. A capability that fails (a [`stub … fails`](#stub), or a

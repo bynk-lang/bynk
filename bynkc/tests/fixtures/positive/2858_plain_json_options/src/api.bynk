@@ -1,0 +1,63 @@
+context api
+
+// #2858: a service (or route) opts its HTTP response bodies into plain JSON:
+// `Some(v)` is written `v` and `None` `null`, at any depth. The default stays
+// Bynk's tagged form. Drives the `http_plain_json_behaviour` end-to-end test.
+type Detail = { note: Option[String], count: Int }
+
+type Event =
+  | Opened(actor: Option[String])
+  | Closed
+
+type Activity = {
+  id: String,
+  action: Option[String],
+  size: Option[Int],
+  tags: List[Option[String]],
+  scores: Map[String, Option[Int]],
+  detail: Option[Detail],
+  event: Event,
+}
+
+type Filter = { limit: Option[Int] }
+
+service plain from http {
+  json { options: plain }
+
+  on GET("/plain") () -> Effect[HttpResult[Activity]] by v: Visitor {
+    Ok(Activity {
+      id: "a1",
+      action: Some("opened"),
+      size: None,
+      tags: [Some("x"), None],
+      scores: Map.empty().insert("k", Some(1)).insert("z", None),
+      detail: Some(Detail { note: None, count: 2 }),
+      event: Opened(Some("bob")),
+    })
+  }
+
+  // A typed `query` composes with plain responses.
+  on GET("/filtered") (query: Filter) -> Effect[HttpResult[Option[Int]]] by v: Visitor {
+    Ok(query.limit)
+  }
+
+  on GET("/top") () -> Effect[HttpResult[Option[String]]] by v: Visitor {
+    Ok(None)
+  }
+
+  @json(options: tagged)
+  on GET("/tagged") () -> Effect[HttpResult[Option[String]]] by v: Visitor {
+    Ok(Some("t"))
+  }
+}
+
+service legacy from http {
+  on GET("/legacy") () -> Effect[HttpResult[Option[String]]] by v: Visitor {
+    Ok(Some("t"))
+  }
+
+  @json(options: plain)
+  on GET("/legacy/plain") () -> Effect[HttpResult[Option[String]]] by v: Visitor {
+    Ok(Some("p"))
+  }
+}

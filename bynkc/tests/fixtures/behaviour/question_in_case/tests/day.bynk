@@ -1,0 +1,20 @@
+suite day
+
+case "? on an Ok unwraps the value" {
+	let d = Day.of("2026-11-01")?
+	expect len(d) == 10
+}
+
+case "? on an Err fails the case" {
+	let d = Day.of("")?
+	expect len(d) == 0
+}
+
+case "? in a match arm fails the case" {
+	let flag = 1
+	match flag {
+		1 => { let d = Day.of("")?
+		       expect len(d) == 0 }
+		_ => { expect false }
+	}
+}

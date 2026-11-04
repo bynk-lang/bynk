@@ -3735,6 +3735,7 @@ impl LanguageServer for Backend {
         // v0.142 (ADR 0165): inside a `limits { }` block, offer the policy field
         // names; at a service-body item start, offer the `limits` section keyword.
         items.extend(limits_completions(&text, offset, &line_prefix));
+        items.extend(json_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
         // names; at a service-body item start, offer the `@limit` snippet.
         items.extend(limit_completions(&text, offset, &line_prefix));
@@ -5348,6 +5349,62 @@ fn limits_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIt
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
         }];
+    }
+    Vec::new()
+}
+
+/// #2858: the response-JSON completion cells. Inside `json { }` or `@json( )` at a
+/// name position, the closed field set (`options`); at the value of `options:`,
+/// `tagged` / `plain`; at a service-body item start, the `json` section keyword
+/// and the `@json` annotation snippet. Lexical (offset-based), as
+/// `limits_completions`.
+fn json_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if completion::in_json_options_value_position(text, offset) {
+        return completion::JSON_OPTIONS_VALUES
+            .iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                detail: Some((*doc).to_string()),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_json_field_position(text, offset)
+        || completion::in_json_arg_position(text, offset)
+    {
+        return completion::JSON_FIELDS
+            .iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some((*doc).to_string()),
+                insert_text: Some(format!("{name}: ")),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![
+            CompletionItem {
+                label: "json".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("response JSON encoding for this HTTP service".to_string()),
+                insert_text: Some("json {\n\toptions: ${1:plain},\n}".to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "@json".to_string(),
+                kind: Some(CompletionItemKind::SNIPPET),
+                detail: Some(
+                    "write this route's response `Option`s as `tagged` or `plain` JSON".to_string(),
+                ),
+                insert_text: Some("@json(options: ${1:plain})".to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+        ];
     }
     Vec::new()
 }

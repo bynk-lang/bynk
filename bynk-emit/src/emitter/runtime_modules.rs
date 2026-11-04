@@ -266,6 +266,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__verifySignatureHmacSha256", "auth"),
     ("__wakeForMigration", "agent"),
     ("__webSocketUpgradeResponse", "connection"),
+    ("__withPlainJson", "http"),
     ("acceptHibernatableConnection", "connection"),
     ("applyCache", "http"),
     ("applyCors", "http"),
@@ -343,4 +344,5 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("wakeForMigration", "agent"),
     ("weakETag", "http"),
     ("webSocketUpgradeResponse", "connection"),
+    ("withPlainJson", "http"),
 ];

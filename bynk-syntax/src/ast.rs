@@ -1023,6 +1023,12 @@ pub struct ServiceDecl {
     /// `None` when absent (no cap — byte-for-byte unchanged output, the opt-in
     /// CORS posture, not the `security` default-on posture).
     pub limits: Option<LimitsPolicy>,
+    /// The optional response-JSON policy (#2858) — a `json { options: plain }`
+    /// section in the service body, only meaningful on a `from http` service.
+    /// `None` (or `options: tagged`) keeps Bynk's tagged `Option` encoding in
+    /// response bodies, byte-for-byte unchanged; a route's `@json(options:)`
+    /// overrides it.
+    pub json: Option<JsonPolicy>,
     pub handlers: Vec<Handler>,
     pub documentation: Option<Doc>,
     pub span: Span,
@@ -1255,6 +1261,75 @@ impl LimitsPolicy {
             _ => None,
         }
     }
+}
+
+/// How an `Option` is written in an HTTP response body (#2858).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum JsonOptions {
+    /// Bynk's tagged form: `{"kind": "Some", "value": v}` / `{"kind": "None"}`.
+    #[default]
+    Tagged,
+    /// Plain JSON: `Some(v)` is `v` and `None` is `null`.
+    Plain,
+}
+
+impl JsonOptions {
+    /// Read a bare `tagged` / `plain` identifier, the value of `options:`.
+    pub fn from_expr(e: &Expr) -> Option<JsonOptions> {
+        match &e.kind {
+            ExprKind::Ident(n) if n.name == "tagged" => Some(JsonOptions::Tagged),
+            ExprKind::Ident(n) if n.name == "plain" => Some(JsonOptions::Plain),
+            _ => None,
+        }
+    }
+}
+
+/// A response-JSON policy on a `from http` service (#2858): the
+/// `json { }` section in the service body. Parsed leniently as a list of
+/// `name: value` fields (as `limits { }`); the closed set is `options`, whose
+/// value is the bare identifier `tagged` or `plain`.
+#[derive(Debug, Clone)]
+pub struct JsonPolicy {
+    pub fields: Vec<JsonField>,
+    pub span: Span,
+    pub trailing_comments: Vec<Comment>,
+    pub trivia: Trivia,
+}
+
+/// One `name: value` field inside a `json { }` policy.
+#[derive(Debug, Clone)]
+pub struct JsonField {
+    pub name: Ident,
+    pub value: Expr,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+impl JsonPolicy {
+    pub fn field(&self, name: &str) -> Option<&Expr> {
+        self.fields
+            .iter()
+            .rev()
+            .find(|f| f.name.name == name)
+            .map(|f| &f.value)
+    }
+
+    /// The service-wide `options:` mode; a malformed value (already reported by
+    /// the checker) reads as the default, tagged.
+    pub fn options(&self) -> JsonOptions {
+        self.field("options")
+            .and_then(JsonOptions::from_expr)
+            .unwrap_or_default()
+    }
+}
+
+/// The mode a route's response body is written in: its own `@json(options:)`
+/// wins over the service's `json { options: }`, which wins over the tagged
+/// default.
+pub fn effective_json_options(service: Option<&JsonPolicy>, h: &Handler) -> JsonOptions {
+    h.json_options()
+        .or_else(|| service.map(JsonPolicy::options))
+        .unwrap_or_default()
 }
 
 /// The protocol a service conforms to — declared on the header via
@@ -1696,6 +1771,17 @@ impl Handler {
                 }
                 _ => None,
             })
+    }
+
+    /// The handler's own `@json(options:)` mode, if it carries a well-formed one
+    /// (#2858). The checker rejects a malformed `@json`, so a bad value reads as
+    /// no override here.
+    pub fn json_options(&self) -> Option<JsonOptions> {
+        let ann = self.annotations.iter().find(|a| a.name.name == "json")?;
+        ann.args.iter().find_map(|arg| match &arg.label {
+            Some(l) if l.name == "options" => JsonOptions::from_expr(&arg.value),
+            _ => None,
+        })
     }
 
     /// The media type a `@raw(contentType:)` handler declares: `Some` marks the

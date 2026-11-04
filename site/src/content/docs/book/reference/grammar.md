@@ -1198,6 +1198,38 @@ The checker validates the closed field set and requires the section be on a
 
 One `name: value` field inside a `limits { }` policy.
 
+### json_policy {#rule-json_policy}
+
+{{#grammar json_policy}}
+
+The optional response-JSON policy of a `from http` service (#2858), in header
+position after `limits`. `json` is a contextual keyword, so it stays an ordinary
+identifier elsewhere.
+
+**Example.**
+```bynk
+context api
+
+service api from http {
+  json {
+    options: plain,
+  }
+
+  on GET("/ping") () -> Effect[HttpResult[Option[String]]] by v: Visitor {
+    Ok(None)
+  }
+}
+```
+
+The checker validates the closed field set (`options`: `tagged` or `plain`) and
+requires the section be on a `from http` service.
+
+### json_field {#rule-json_field}
+
+{{#grammar json_field}}
+
+One `name: value` field inside a `json { }` policy.
+
 ### handler {#rule-handler}
 
 {{#grammar handler}}
