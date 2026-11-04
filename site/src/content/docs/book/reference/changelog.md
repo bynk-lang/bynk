@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.507**.
+written against **v0.508**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.508.1** | "A `Wire(...)` argument rejected on an event, queue or other test address is still type-checked, so an unknown name inside it is reported alongside `bynk.test.wire_http_only`" |
+| **v0.508.0** | A `system` case can send request headers to an http route that declares no `headers:` parameter, by a trailing `RequestHeaders` argument on the address |
 | **v0.507.2** | "`Some(...)`, `Ok(...)`, `Err(...)` and context-typed list elements (`[None, Some(1)]`) in a generic call argument now infer the type argument instead of being checked against the unsolved type variable" |
 | **v0.507.1** | fmt keeps digit separators in integer literal patterns and events-subscription literal patterns |
 | **v0.507.0** | "`bynk token` now mints for refinement actors (signing the claims the predicate needs, as the `system` harness does) and takes `--claim name[=value]` to add claims by hand" |

@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: A `system` case can send request headers to an http route that declares no `headers:` parameter, by a trailing `RequestHeaders` argument on the address
----
+# 0733 — A system case sends extra request headers by a trailing RequestHeaders argument
 
-## ADR: system-extra-request-headers
-title: A system case sends extra request headers by a trailing RequestHeaders argument
-summary: Request headers reach a route with no `headers:` parameter only at system tier, as a trailing address argument
+- **Status:** Accepted (v0.508)
 
 **Context.** A `system` case drives a real request, but a `RequestHeaders` value was accepted only in the position of a route's declared `headers: RequestHeaders` parameter. A route that negotiates `Locale.current()` against `Accept-Language` and never reads headers itself could not be tested without adding an unused parameter (#2910).
 
