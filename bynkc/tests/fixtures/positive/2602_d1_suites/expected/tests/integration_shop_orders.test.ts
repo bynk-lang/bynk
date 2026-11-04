@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __makeIntegrationD1 } from "../__bynk_runtime/storage.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_shop_orders from "../workers/shop-orders/handlers.js";
 import worker___ns_shop_orders from "../workers/shop-orders/index.js";
 
@@ -69,15 +69,15 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_POST_orders_Param_id(id: string, __sub: string) {
+async function __sysdrive_api_http_POST_orders_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/orders/${id}`, { method: "POST", headers: { }, });
+  const __req = new globalThis.Request(`https://test/orders/${id}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.SHOP_ORDERS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_POST_orders_Param_id(id: string, __sub: string) {
+async function __sysdrive_raw_api_http_POST_orders_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/orders/${id}`, { method: "POST", headers: { }, });
+  const __req = new globalThis.Request(`https://test/orders/${id}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.SHOP_ORDERS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -93,9 +93,9 @@ async function test_a_duplicate_order_over_the_wire_is_a_409() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_orders_Param_id("x", "");
+    const r = await __sysdrive_api_http_POST_orders_Param_id("x", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "x"))) { throw __bynkExpectFailure("tests/shop/system.bynk:6:10", 233, 250, "expect r is Created(\"x\")"); }
-    const again = await __sysdrive_api_http_POST_orders_Param_id("x", "");
+    const again = await __sysdrive_api_http_POST_orders_Param_id("x", undefined, "");
     if (!(((__c: boolean) => __c)(again.tag === "Conflict"))) { throw __bynkExpectFailure("tests/shop/system.bynk:8:10", 315, 335, "expect again is Conflict(_)"); }
     return { pass: true };
   } catch (e) {

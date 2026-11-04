@@ -2905,6 +2905,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.extra_headers_authorization",
+        "A `system` case sends `Authorization` as an extra request header to a route that declares no `headers:` parameter; the case's `by <Actor>` owns the credential the driver sends.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.faults_needs_in_process",
         "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale` or `by Expired`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`.",
         &["case"],

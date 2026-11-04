@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_reg_api from "../workers/reg-api/handlers.js";
 import worker___ns_reg_api from "../workers/reg-api/index.js";
 
@@ -67,29 +67,29 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_PUT_packages_Param_name(name: string, body: string, __sub: string) {
+async function __sysdrive_api_http_PUT_packages_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: __body, });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_PUT_packages_Param_name(name: string, body: string, __sub: string) {
+async function __sysdrive_raw_api_http_PUT_packages_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: body, });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_POST_notes(body: string, __sub: string) {
+async function __sysdrive_api_http_POST_notes(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/notes`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/notes`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: __body, });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_raw_api_http_POST_notes(body: string, __sub: string) {
+async function __sysdrive_raw_api_http_POST_notes(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/notes`, { method: "POST", headers: { "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/notes`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: body, });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
@@ -105,7 +105,7 @@ async function test_a_RawCreated_answers_201__read_back_as_Created() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_PUT_packages_Param_name("widgets", "1.0.0", "");
+    const r = await __sysdrive_api_http_PUT_packages_Param_name("widgets", "1.0.0", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "widgets@1.0.0"))) { throw __bynkExpectFailure("tests/api.bynk:26:10", 931, 960, "expect r is Created(\"widgets@1.0.0\")"); }
     return { pass: true };
   } catch (e) {
@@ -121,7 +121,7 @@ async function test_a_plain_text_RawCreated_still_reads_as_Created() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_notes("hi", "");
+    const r = await __sysdrive_api_http_POST_notes("hi", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Created"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1078, 1093, "expect r is Created(_)"); }
     return { pass: true };
   } catch (e) {
@@ -137,7 +137,7 @@ async function test_a_retry_answers_200() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_PUT_packages_Param_name("widgets", "same", "");
+    const r = await __sysdrive_api_http_PUT_packages_Param_name("widgets", "same", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "widgets unchanged"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1205, 1233, "expect r is Ok(\"widgets unchanged\")"); }
     return { pass: true };
   } catch (e) {

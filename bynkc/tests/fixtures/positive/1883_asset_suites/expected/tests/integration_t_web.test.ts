@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { HttpResult } from "../__bynk_runtime/httpresult.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_t_web from "../workers/t-web/handlers.js";
 import worker___ns_t_web from "../workers/t-web/index.js";
 import * as __ns_t_page from "./../t/page.js";
@@ -82,15 +82,15 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_GET(__sub: string) {
+async function __sysdrive_api_http_GET(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.T_WEB.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_GET_refuse(__sub: string) {
+async function __sysdrive_api_http_GET_refuse(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/refuse`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/refuse`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.T_WEB.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -108,7 +108,7 @@ async function test_the_page_links_a_served_stylesheet() {
     const deps = __makeHarness();
     const { style } = __ns_t_page;
     const { favicon } = __ns_t_web;
-    const page = await __sysdrive_api_http_GET("");
+    const page = await __sysdrive_api_http_GET(undefined, "");
     if (!(((__c: boolean) => __c)(page.tag === "Ok"))) { throw __bynkExpectFailure("tests/t/web_system.bynk:5:12", 187, 200, "expect page is Ok(_)"); }
     const css = await __bynkAssetGet((style).url);
     if (!(((__c: boolean) => __c)(css.tag === "Raw"))) { throw __bynkExpectFailure("tests/t/web_system.bynk:7:12", 242, 258, "expect css is Raw(_, _)"); }

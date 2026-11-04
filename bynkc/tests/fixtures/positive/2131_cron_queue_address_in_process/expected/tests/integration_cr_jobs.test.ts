@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import { __makeIntegrationDoNamespace, type __DurableObjectNamespace } from "../__bynk_runtime/agent.js";
 import * as __ns_cr_jobs from "../workers/cr-jobs/handlers.js";
 import worker___ns_cr_jobs from "../workers/cr-jobs/index.js";
@@ -70,9 +70,9 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_GET_count(__sub: string) {
+async function __sysdrive_api_http_GET_count(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/count`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/count`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.CR_JOBS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j));
 }
@@ -158,7 +158,7 @@ async function test_the_count_is_read_over_the_wire() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const c = await __sysdrive_api_http_GET_count("");
+    const c = await __sysdrive_api_http_GET_count(undefined, "");
     if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs_system.bynk:4:10", 117, 127, "expect c is Ok(0)"); }
     return { pass: true };
   } catch (e) {

@@ -912,6 +912,12 @@ pub fn phase_integration_bodies(
                     &case_callees,
                     &mut body_errs,
                 );
+                check_extra_headers_tier(
+                    case,
+                    case_effective_tier(case, d),
+                    &case_callees,
+                    &mut body_errs,
+                );
                 if case_effective_tier(case, d) == bynk_syntax::ast::TestTier::System {
                     check_unsigned_route_at_system(
                         case,
@@ -1595,7 +1601,7 @@ fn check_test_bodies(
             );
         }
         for case in &test_decl.cases {
-            check_test_case_body(
+            let case_callees = check_test_case_body(
                 target_name,
                 target_kind,
                 SuiteItems::of(test_decl),
@@ -1610,6 +1616,7 @@ fn check_test_bodies(
                 tys,
             );
             let tier = case_effective_tier(case, test_decl);
+            check_extra_headers_tier(case, tier, &case_callees, &mut errors);
             check_faults_tier(case, tier, &mut errors);
             check_snapshot_placement(
                 case,
@@ -2327,9 +2334,9 @@ fn check_event_address_tier(
     let mut services: Vec<&str> = callees
         .values()
         .filter_map(|c| match c {
-            checker::Callee::TestService { service, address } if address == "event" => {
-                Some(service.as_str())
-            }
+            checker::Callee::TestService {
+                service, address, ..
+            } if address == "event" => Some(service.as_str()),
             _ => None,
         })
         .collect();
@@ -2347,6 +2354,50 @@ fn check_event_address_tier(
             )
             .with_note(
                 "at `system` an event reaches a subscriber only through its publisher's fan-out; drive the handler that emits it, or deliver the event at `unit` or `integration`",
+            ),
+        );
+    }
+}
+
+/// #2910: a trailing `RequestHeaders` sent to a route that declares no
+/// `headers:` parameter reaches the route only over a real request, so it is a
+/// `system`-tier form. Below `system` it stays the arity error it always was,
+/// with a note saying why.
+fn check_extra_headers_tier(
+    case: &Case,
+    tier: bynk_syntax::ast::TestTier,
+    callees: &HashMap<ExprId, checker::Callee>,
+    errors: &mut Vec<CompileError>,
+) {
+    if tier == bynk_syntax::ast::TestTier::System {
+        return;
+    }
+    let mut routes: Vec<&str> = callees
+        .values()
+        .filter_map(|c| match c {
+            checker::Callee::TestService {
+                address,
+                extra_headers: true,
+                ..
+            } => Some(address.as_str()),
+            _ => None,
+        })
+        .collect();
+    routes.sort_unstable();
+    routes.dedup();
+    for route in routes {
+        errors.push(
+            CompileError::new(
+                "bynk.test.service_call_arity",
+                case.name_span,
+                format!(
+                    "case `\"{}\"` sends extra request headers to `{route}`, which declares no `headers:` parameter, but is a `{}`-tier case",
+                    case.name,
+                    tier.as_str()
+                ),
+            )
+            .with_note(
+                "extra request headers can only be sent in a `system` case; at lower tiers the route sees only its declared parameters",
             ),
         );
     }
@@ -2370,9 +2421,9 @@ fn check_call_address_tier(
     let mut services: Vec<&str> = callees
         .values()
         .filter_map(|c| match c {
-            checker::Callee::TestService { service, address } if address == "call" => {
-                Some(service.as_str())
-            }
+            checker::Callee::TestService {
+                service, address, ..
+            } if address == "call" => Some(service.as_str()),
             _ => None,
         })
         .collect();
@@ -2444,7 +2495,9 @@ pub fn remote_unsupported(
     };
     if let Some(svc) = named(&|c| match c {
         Callee::Cross { unit, service } => Some(format!("{unit}.{service}")),
-        Callee::TestService { service, address } if address == "call" => Some(service.clone()),
+        Callee::TestService {
+            service, address, ..
+        } if address == "call" => Some(service.clone()),
         _ => None,
     }) {
         return refusal(
@@ -2476,6 +2529,7 @@ pub fn remote_unsupported(
             Callee::TestService {
                 service,
                 address: a,
+                ..
             } if a == address || a.starts_with(&format!("{address} ")) => Some(service.clone()),
             _ => None,
         }) {
@@ -2807,7 +2861,10 @@ fn check_unsigned_route_at_system(
     };
     let mut found: Vec<(String, String, String, &'static str)> = Vec::new();
     for (id, callee) in callees {
-        let checker::Callee::TestService { service, address } = callee else {
+        let checker::Callee::TestService {
+            service, address, ..
+        } = callee
+        else {
             continue;
         };
         let Some((verb, path)) = address.split_once(' ') else {
@@ -3371,7 +3428,7 @@ fn check_test_case_body(
     refs: &mut RefSink,
     locals: &mut LocalsSink,
     tys: &Arc<Types>,
-) {
+) -> HashMap<ExprId, checker::Callee> {
     let Some((mut resolved, _)) = build_privileged_resolved(
         target_name,
         unit_tables,
@@ -3379,12 +3436,12 @@ fn check_test_case_body(
         unit_consumes,
         unit_consumes_aliases,
     ) else {
-        return;
+        return HashMap::new();
     };
     register_call_record_types(&mut resolved, target_name, unit_tables);
     add_suite_fns(&mut resolved, suite_fns);
     let _ = target_kind;
-    let _ = typecheck_case_body_recording(
+    let (_, case_callees) = typecheck_case_body_recording(
         target_name,
         &case.body,
         case.span,
@@ -3407,6 +3464,7 @@ fn check_test_case_body(
     // guard and the runner attack already check it. Conservative: under-flagging
     // is acceptable, over-flagging is not.
     check_restated_contract(&case.body, &resolved, errors);
+    case_callees
 }
 
 /// v0.115: within a test body, flag an `expect` that re-states a contract's

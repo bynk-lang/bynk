@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_files_store from "../workers/files-store/handlers.js";
 import worker___ns_files_store from "../workers/files-store/index.js";
 
@@ -67,27 +67,27 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_GET_files_Param_key(key: string, __sub: string) {
+async function __sysdrive_api_http_GET_files_Param_key(key: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/files/${key}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/files/${key}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.FILES_STORE.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_raw_api_http_GET_files_Param_key(key: string, __sub: string) {
+async function __sysdrive_raw_api_http_GET_files_Param_key(key: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/files/${key}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/files/${key}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.FILES_STORE.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_api_http_GET_shelves_Param_name(name: string, __sub: string) {
+async function __sysdrive_api_http_GET_shelves_Param_name(name: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/shelves/${name}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/shelves/${name}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.FILES_STORE.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_raw_api_http_GET_shelves_Param_name(name: string, __sub: string) {
+async function __sysdrive_raw_api_http_GET_shelves_Param_name(name: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/shelves/${name}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/shelves/${name}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.FILES_STORE.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
@@ -103,7 +103,7 @@ async function test_a_RawStreamed_body_arrives_over_HTTP__read_back_as_Ok() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_files_Param_key("wire", "");
+    const r = await __sysdrive_api_http_GET_files_Param_key("wire", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/store.bynk:41:10", 1103, 1113, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
@@ -119,7 +119,7 @@ async function test_a_nested_stream_carrying_record_streams_too() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_shelves_Param_name("kept", "");
+    const r = await __sysdrive_api_http_GET_shelves_Param_name("kept", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/store.bynk:46:10", 1237, 1247, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {

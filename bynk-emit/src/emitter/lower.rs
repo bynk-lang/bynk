@@ -3336,6 +3336,28 @@ fn lower_method_call(
             })
             .collect();
         let mut all = rest;
+        // #2910: a route that declares no `headers:` takes the case's extra
+        // request headers (the call's trailing `RequestHeaders`, when the
+        // checker accepted one) in a slot ahead of `sub`.
+        if cx.has_system_http_route(&(
+            id.name.clone(),
+            verb.as_str().to_string(),
+            format!("{path}{}", crate::emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
+        )) {
+            let sends_extra = matches!(
+                cx.commons().callees.get(&e.id),
+                Some(Callee::TestService {
+                    extra_headers: true,
+                    ..
+                })
+            );
+            let slot = if sends_extra {
+                all.pop().unwrap_or_else(|| "undefined".to_string())
+            } else {
+                "undefined".to_string()
+            };
+            all.push(slot);
+        }
         all.push(sub);
         // #2019: a refinement-guarded route's signing drivers take the claims
         // the acting actor presents; the no-auth drivers sign nothing.

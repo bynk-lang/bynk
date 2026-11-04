@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __makeIntegrationR2 } from "../__bynk_runtime/storage.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_media_store from "../workers/media-store/handlers.js";
 import worker___ns_media_store from "../workers/media-store/index.js";
 
@@ -69,27 +69,27 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_GET_videos_Param_key(key: string, __sub: string) {
+async function __sysdrive_api_http_GET_videos_Param_key(key: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/videos/${key}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/videos/${key}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.MEDIA_STORE.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_raw_api_http_GET_videos_Param_key(key: string, __sub: string) {
+async function __sysdrive_raw_api_http_GET_videos_Param_key(key: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/videos/${key}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/videos/${key}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.MEDIA_STORE.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_api_http_GET_echo_Param_text(text: string, __sub: string) {
+async function __sysdrive_api_http_GET_echo_Param_text(text: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/echo/${text}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/echo/${text}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.MEDIA_STORE.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_raw_api_http_GET_echo_Param_text(text: string, __sub: string) {
+async function __sysdrive_raw_api_http_GET_echo_Param_text(text: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/echo/${text}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/echo/${text}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.MEDIA_STORE.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
@@ -105,7 +105,7 @@ async function test_a_streamed_object_arrives_over_HTTP__read_back_as_Ok() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_echo_Param_text("frames", "");
+    const r = await __sysdrive_api_http_GET_echo_Param_text("frames", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/store.bynk:94:10", 2871, 2881, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
@@ -121,7 +121,7 @@ async function test_a_missing_object_is_NotFound_over_HTTP() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_videos_Param_key("absent", "");
+    const r = await __sysdrive_api_http_GET_videos_Param_key("absent", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "NotFound"))) { throw __bynkExpectFailure("tests/store.bynk:99:10", 3000, 3013, "expect r is NotFound"); }
     return { pass: true };
   } catch (e) {

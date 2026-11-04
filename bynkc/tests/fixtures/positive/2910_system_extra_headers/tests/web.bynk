@@ -1,0 +1,11 @@
+suite greeter.web as system {
+	case "a route without a headers parameter is sent Accept-Language" {
+		let r <- api.GET("/hello", RequestHeaders.of(["Accept-Language: fr"])) by Visitor
+		expect r is Ok("Bonjour, Ada !")
+	}
+
+	case "without the header the reference locale answers" {
+		let r <- api.GET("/hello") by Visitor
+		expect r is Ok("Hello, Ada!")
+	}
+}

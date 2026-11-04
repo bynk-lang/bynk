@@ -4379,6 +4379,9 @@ pub(crate) const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";
 /// #2854: the key suffix under which a route's typed `query` (position and
 /// declared type) sits in the same per-route map as its body param.
 pub(crate) const QUERY_ROUTE_SUFFIX: &str = "?query";
+/// #2910: marks a route whose system drivers take a case's extra request
+/// headers in a `__extraHeaders` slot (a route that declares no `headers:`).
+pub(crate) const EXTRA_HEADERS_ROUTE_SUFFIX: &str = "?extra-headers";
 
 /// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
 /// appended only when the body calls one.

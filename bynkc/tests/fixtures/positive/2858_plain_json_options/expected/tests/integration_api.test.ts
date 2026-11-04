@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __queryString } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __queryString, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_api from "../workers/api/handlers.js";
 import worker___ns_api from "../workers/api/index.js";
 
@@ -67,15 +67,15 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_legacy_http_GET_legacy(__sub: string) {
+async function __sysdrive_legacy_http_GET_legacy(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/legacy`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/legacy`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpResult(__res, __ns_api.__deserialise_Option_String);
 }
-async function __sysdrive_legacy_http_GET_legacy_plain(__sub: string) {
+async function __sysdrive_legacy_http_GET_legacy_plain(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/legacy/plain`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/legacy/plain`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpResult(__res, __ns_api.__deserialise_Option_String);
 }
@@ -85,33 +85,33 @@ async function __sysdrive_wrongmethod_legacy(method: string, path: string) {
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
-async function __sysdrive_plain_http_GET_plain(__sub: string) {
+async function __sysdrive_plain_http_GET_plain(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/plain`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/plain`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpResult(__res, __ns_api.__deserialise_Activity);
 }
-async function __sysdrive_plain_http_GET_filtered(query: any, __sub: string) {
+async function __sysdrive_plain_http_GET_filtered(query: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/filtered${__queryString(__ns_api.__serialise_Filter(query))}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/filtered${__queryString(__ns_api.__serialise_Filter(query))}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpResult(__res, __ns_api.__deserialise_Option_Int);
 }
-async function __sysdrive_raw_plain_http_GET_filtered(query: string, __sub: string) {
+async function __sysdrive_raw_plain_http_GET_filtered(query: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/filtered${query}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/filtered${query}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpOutcome(__res, __ns_api.__deserialise_Option_Int);
 }
-async function __sysdrive_plain_http_GET_top(__sub: string) {
+async function __sysdrive_plain_http_GET_top(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/top`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/top`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpResult(__res, __ns_api.__deserialise_Option_String);
 }
-async function __sysdrive_plain_http_GET_tagged(__sub: string) {
+async function __sysdrive_plain_http_GET_tagged(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/tagged`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/tagged`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), }, });
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpResult(__res, __ns_api.__deserialise_Option_String);
 }
@@ -127,7 +127,7 @@ async function test_a_plain_route_round_trips_through_the_lenient_decoder() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_plain_http_GET_plain("");
+    const r = await __sysdrive_plain_http_GET_plain(undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("api.test.bynk:6:12", 287, 297, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
@@ -143,7 +143,7 @@ async function test_a_plain_top_level_None_round_trips() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_plain_http_GET_top("");
+    const r = await __sysdrive_plain_http_GET_top(undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value.tag === "None"))) { throw __bynkExpectFailure("api.test.bynk:10:12", 390, 403, "expect r is Ok(None)"); }
     return { pass: true };
   } catch (e) {
@@ -159,7 +159,7 @@ async function test_a_tagged_route_still_round_trips() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_plain_http_GET_tagged("");
+    const r = await __sysdrive_plain_http_GET_tagged(undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value.tag === "Some" && r.value.value === "t"))) { throw __bynkExpectFailure("api.test.bynk:14:12", 497, 515, "expect r is Ok(Some(\"t\"))"); }
     return { pass: true };
   } catch (e) {
@@ -175,7 +175,7 @@ async function test_a_route_override_on_an_unmarked_service_round_trips() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_legacy_http_GET_legacy_plain("");
+    const r = await __sysdrive_legacy_http_GET_legacy_plain(undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value.tag === "Some" && r.value.value === "p"))) { throw __bynkExpectFailure("api.test.bynk:18:12", 635, 653, "expect r is Ok(Some(\"p\"))"); }
     return { pass: true };
   } catch (e) {

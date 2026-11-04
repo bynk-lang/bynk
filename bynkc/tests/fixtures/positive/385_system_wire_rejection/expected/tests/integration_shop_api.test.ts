@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import { __makeIntegrationDoNamespace, type __DurableObjectNamespace } from "../__bynk_runtime/agent.js";
 import * as __ns_shop_api from "../workers/shop-api/handlers.js";
 import worker___ns_shop_api from "../workers/shop-api/index.js";
@@ -72,159 +72,159 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
 }
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["AUTH_SECRET"] = "__bynk_test_secret";
-async function __sysdrive_api_http_POST_cart(body: any, __sub: string) {
+async function __sysdrive_api_http_POST_cart(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_raw_api_http_POST_cart(body: string, __sub: string) {
+async function __sysdrive_raw_api_http_POST_cart(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: body, });
+  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_noauth_api_http_POST_cart(body: any, __sub: string) {
+async function __sysdrive_noauth_api_http_POST_cart(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_rawnoauth_api_http_POST_cart(body: string, __sub: string) {
+async function __sysdrive_rawnoauth_api_http_POST_cart(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_expired_api_http_POST_cart(body: any, __sub: string) {
+async function __sysdrive_expired_api_http_POST_cart(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_rawexpired_api_http_POST_cart(body: string, __sub: string) {
+async function __sysdrive_rawexpired_api_http_POST_cart(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: body, });
+  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_forged_api_http_POST_cart(body: any, __sub: string) {
+async function __sysdrive_forged_api_http_POST_cart(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_rawforged_api_http_POST_cart(body: string, __sub: string) {
+async function __sysdrive_rawforged_api_http_POST_cart(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: body, });
+  const __req = new globalThis.Request(`https://test/cart`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_api_http_POST_reject(body: any, __sub: string) {
+async function __sysdrive_api_http_POST_reject(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_raw_api_http_POST_reject(body: string, __sub: string) {
+async function __sysdrive_raw_api_http_POST_reject(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: body, });
+  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_noauth_api_http_POST_reject(body: any, __sub: string) {
+async function __sysdrive_noauth_api_http_POST_reject(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_rawnoauth_api_http_POST_reject(body: string, __sub: string) {
+async function __sysdrive_rawnoauth_api_http_POST_reject(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_expired_api_http_POST_reject(body: any, __sub: string) {
+async function __sysdrive_expired_api_http_POST_reject(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_rawexpired_api_http_POST_reject(body: string, __sub: string) {
+async function __sysdrive_rawexpired_api_http_POST_reject(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: body, });
+  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_forged_api_http_POST_reject(body: any, __sub: string) {
+async function __sysdrive_forged_api_http_POST_reject(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_rawforged_api_http_POST_reject(body: string, __sub: string) {
+async function __sysdrive_rawforged_api_http_POST_reject(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: body, });
+  const __req = new globalThis.Request(`https://test/reject`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_api_http_PUT_cart_Param_sku(sku: any, body: any, __sub: string) {
+async function __sysdrive_api_http_PUT_cart_Param_sku(sku: any, body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_raw_api_http_PUT_cart_Param_sku(sku: string, body: string, __sub: string) {
+async function __sysdrive_raw_api_http_PUT_cart_Param_sku(sku: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: body, });
+  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`, }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_noauth_api_http_PUT_cart_Param_sku(sku: any, body: any, __sub: string) {
+async function __sysdrive_noauth_api_http_PUT_cart_Param_sku(sku: any, body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_rawnoauth_api_http_PUT_cart_Param_sku(sku: string, body: string, __sub: string) {
+async function __sysdrive_rawnoauth_api_http_PUT_cart_Param_sku(sku: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_expired_api_http_PUT_cart_Param_sku(sku: any, body: any, __sub: string) {
+async function __sysdrive_expired_api_http_PUT_cart_Param_sku(sku: any, body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { "content-type": "application/json", "authorization": __token, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_rawexpired_api_http_PUT_cart_Param_sku(sku: string, body: string, __sub: string) {
+async function __sysdrive_rawexpired_api_http_PUT_cart_Param_sku(sku: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { "content-type": "application/json", "authorization": __token, }, body: body, });
+  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_forged_api_http_PUT_cart_Param_sku(sku: any, body: any, __sub: string) {
+async function __sysdrive_forged_api_http_PUT_cart_Param_sku(sku: any, body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(body));
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { "content-type": "application/json", "authorization": __token, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: __body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
-async function __sysdrive_rawforged_api_http_PUT_cart_Param_sku(sku: string, body: string, __sub: string) {
+async function __sysdrive_rawforged_api_http_PUT_cart_Param_sku(sku: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { "content-type": "application/json", "authorization": __token, }, body: body, });
+  const __req = new globalThis.Request(`https://test/cart/${sku}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders) : {}), "content-type": "application/json", "authorization": __token, }, body: body, });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, __ns_shop_api.__deserialise_Item);
 }
@@ -240,7 +240,7 @@ async function test_a_typed_create_returns_Created_over_the_real_wire() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const item = await __sysdrive_api_http_POST_cart({ sku: ("widget" as any) }, ("alice" as any));
+    const item = await __sysdrive_api_http_POST_cart({ sku: ("widget" as any) }, undefined, ("alice" as any));
     if (!(((__c: boolean) => __c)(item.tag === "Created"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:4:12", 174, 192, "expect item is Created(_)"); }
     return { pass: true };
   } catch (e) {
@@ -256,7 +256,7 @@ async function test_an_empty_sku_is_rejected_at_the_boundary_before_the_handler(
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"\"}", ("alice" as any));
+    const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"\"}", undefined, ("alice" as any));
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:8:12", 352, 389, "expect r is Rejected(RefinementViolation(_))"); }
     return { pass: true };
   } catch (e) {
@@ -272,7 +272,7 @@ async function test_malformed_json_is_rejected_at_the_boundary() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_cart("{not json", ("alice" as any));
+    const r = await __sysdrive_raw_api_http_POST_cart("{not json", undefined, ("alice" as any));
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "MalformedJson"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:12:12", 526, 557, "expect r is Rejected(MalformedJson(_))"); }
     return { pass: true };
   } catch (e) {
@@ -288,7 +288,7 @@ async function test_valid_raw_input_passes_the_boundary_to_the_handler() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"raw-ok\"}", ("alice" as any));
+    const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"raw-ok\"}", undefined, ("alice" as any));
     if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:16:12", 714, 729, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
@@ -304,7 +304,7 @@ async function test_no_credential_is_rejected_at_the_seam() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_noauth_api_http_POST_cart({ sku: ("widget" as any) }, "");
+    const r = await __sysdrive_noauth_api_http_POST_cart({ sku: ("widget" as any) }, undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:20:12", 859, 886, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
@@ -320,7 +320,7 @@ async function test_no_credential_combined_with_a_raw_body_is_rejected_at_the_se
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_rawnoauth_api_http_POST_cart("{\"sku\": \"widget\"}", "");
+    const r = await __sysdrive_rawnoauth_api_http_POST_cart("{\"sku\": \"widget\"}", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:24:12", 1048, 1075, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
@@ -336,7 +336,7 @@ async function test_no_credential_combined_with_a_raw_path_and_a_typed_body_is_r
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_rawnoauth_api_http_PUT_cart_Param_sku("widget", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), "");
+    const r = await __sysdrive_rawnoauth_api_http_PUT_cart_Param_sku("widget", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:28:12", 1267, 1294, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
@@ -368,7 +368,7 @@ async function test_a_handler_returned_400_is_Handled__not_a_boundary_rejection(
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_reject("{\"sku\": \"ok\"}", ("alice" as any));
+    const r = await __sysdrive_raw_api_http_POST_reject("{\"sku\": \"ok\"}", undefined, ("alice" as any));
     if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:36:12", 1588, 1603, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
@@ -384,7 +384,7 @@ async function test_a_raw_path_segment_with_a_typed_body_passes_both_through_the
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("widget", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), ("alice" as any));
+    const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("widget", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), undefined, ("alice" as any));
     if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:40:12", 1792, 1807, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
@@ -400,7 +400,7 @@ async function test_a_raw_path_segment_failing_refinement_is_rejected_even_with_
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("far-too-long-sku", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), ("alice" as any));
+    const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("far-too-long-sku", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), undefined, ("alice" as any));
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:49:12", 2360, 2397, "expect r is Rejected(RefinementViolation(_))"); }
     return { pass: true };
   } catch (e) {
@@ -416,7 +416,7 @@ async function test_an_empty_raw_path_segment_does_not_route_and_falls_through()
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), ("alice" as any));
+    const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), undefined, ("alice" as any));
     if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:58:12", 2952, 2967, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
@@ -432,7 +432,7 @@ async function test_a_typed_path_segment_with_a_raw_body_passes_both_through_the
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku(String(("widget" as any)), "{\"sku\": \"widget\"}", ("alice" as any));
+    const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku(String(("widget" as any)), "{\"sku\": \"widget\"}", undefined, ("alice" as any));
     if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:62:12", 3157, 3172, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
@@ -448,7 +448,7 @@ async function test_a_refinement_rejection_carries_the_router_s_detail() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"\"}", ("alice" as any));
+    const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"\"}", undefined, ("alice" as any));
     void (((__d) => {
         if (__d.tag === "Rejected" && __d.value.tag === "RefinementViolation") {
           const d = __d.value.detail;
@@ -470,7 +470,7 @@ async function test_a_malformed_body_s_rejection_carries_the_parser_s_detail() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_cart("{not json", ("alice" as any));
+    const r = await __sysdrive_raw_api_http_POST_cart("{not json", undefined, ("alice" as any));
     void (((__d) => {
         if (__d.tag === "Rejected" && __d.value.tag === "MalformedJson") {
           const d = __d.value.detail;
@@ -492,7 +492,7 @@ async function test_a_handled_raw_body_carries_the_handler_s_typed_result() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"raw-ok\"}", ("alice" as any));
+    const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"raw-ok\"}", undefined, ("alice" as any));
     void (((__d) => {
         if (__d.tag === "Handled" && __d.value.tag === "Created") {
           const item = __d.value.value;
