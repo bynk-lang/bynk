@@ -1,0 +1,5 @@
+commons demo {
+  // #2895: the separator is optional, so `[a-z]+` can split a run of letters
+  // between repetitions in exponentially many ways.
+  type Slug = String where Matches("[a-z]+(-?[a-z]+)*")
+}
