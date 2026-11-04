@@ -6382,6 +6382,17 @@ mod tests {
     }
 
     #[test]
+    fn a_lambda_payload_inside_some_and_ok_keeps_its_parameter_types() {
+        let a = commons(
+            "fn ap[T](f: Option[(Int) -> T]) -> Int { 0 }\n\n\
+             fn bp[T](f: Result[(Int) -> T, String]) -> Int { 0 }\n\n\
+             fn s() -> Int { ap(Some((x) => x + 1)) }\n\n\
+             fn t() -> Int { bp(Ok((x) => x + 1)) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
     fn a_concrete_some_mismatch_still_reports() {
         let a = commons("fn f() -> Int { let x: Option[Int] = Some(\"a\")\n 0 }\n");
         a.assert_reports("bynk.types.some_value_mismatch");

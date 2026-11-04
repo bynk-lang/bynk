@@ -2177,6 +2177,18 @@ pub(crate) fn check_if(
 /// empty list literal, or a `Some(…)`/list whose payload/first element is one
 /// of these. `Some(1)` and `[1]` type themselves (review of #1696), so
 /// `None == Some(1)` and `[] == [1]` take their type from that side.
+/// Whether a `Some`/`Ok`/`Err` payload is still handed an expected type that
+/// mentions a flexible variable: one that can only be typed from context, or a
+/// lambda, whose parameters read their types off the expected `Fn` type
+/// (`Some(x => x + 1)` against `Option[(Int) -> T]`).
+fn keeps_flexible_context(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Lambda { .. } => true,
+        ExprKind::Paren(inner) => keeps_flexible_context(inner),
+        _ => needs_expected_type(e),
+    }
+}
+
 pub(crate) fn needs_expected_type(e: &Expr) -> bool {
     match &e.kind {
         ExprKind::None | ExprKind::Ok(_) | ExprKind::Err(_) => true,
@@ -2215,7 +2227,7 @@ pub(crate) fn check_ok(
     match (in_result, in_http) {
         (None, Some(t_ty)) => {
             let flexible = contains_flexible_var(t_ty, &ctx.type_vars, tys);
-            let given = (!flexible || needs_expected_type(inner)).then_some(t_ty);
+            let given = (!flexible || keeps_flexible_context(inner)).then_some(t_ty);
             let inner_ty = type_of(inner, given, ctx)?;
             if flexible {
                 return Some(tys.intern(Ty::HttpResult(inner_ty)));
@@ -2238,7 +2250,7 @@ pub(crate) fn check_ok(
             // As in `check_some`: a flexible expected value type is left for
             // the enclosing call to unify.
             let flexible = contains_flexible_var(t_ty, &ctx.type_vars, tys);
-            let given = (!flexible || needs_expected_type(inner)).then_some(t_ty);
+            let given = (!flexible || keeps_flexible_context(inner)).then_some(t_ty);
             let inner_ty = type_of(inner, given, ctx)?;
             if flexible {
                 return Some(tys.intern(Ty::Result(inner_ty, e_ty)));
@@ -2702,7 +2714,7 @@ pub(crate) fn check_err(
     let surrounding = surrounding_result(expected, ctx.return_ty, tys);
     let expected_e = surrounding.as_ref().map(|(_, e)| *e);
     let flexible_e = expected_e.is_some_and(|e| contains_flexible_var(e, &ctx.type_vars, tys));
-    let given = expected_e.filter(|_| !flexible_e || needs_expected_type(inner));
+    let given = expected_e.filter(|_| !flexible_e || keeps_flexible_context(inner));
     let inner_ty = type_of(inner, given, ctx)?;
     match surrounding {
         Some((t_ty, _)) if flexible_e => Some(tys.intern(Ty::Result(t_ty, inner_ty))),
@@ -2758,7 +2770,7 @@ pub(crate) fn check_some(
     // A payload that only takes its type from context (`Some(None)`) still
     // gets the flexible expected type; it is just not compared afterwards.
     let flexible = expected_inner.is_some_and(|t| contains_flexible_var(t, &ctx.type_vars, tys));
-    let given = expected_inner.filter(|_| !flexible || needs_expected_type(inner));
+    let given = expected_inner.filter(|_| !flexible || keeps_flexible_context(inner));
     let inner_ty = type_of(inner, given, ctx)?;
     if let Some(exp) = &expected_inner
         && !flexible
