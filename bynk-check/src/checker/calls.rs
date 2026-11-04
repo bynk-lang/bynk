@@ -5153,9 +5153,13 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
 /// nowhere else). A queue message, cron tick, `on call` or event address has no
 /// raw text form to deliver, so it would be handed to a typed codec as a
 /// string and fail at run time with a misleading error.
+fn is_wire(e: &Expr) -> bool {
+    matches!(e.kind, bynk_syntax::ast::ExprKind::Wire(_))
+}
+
 fn reject_wire_args(svc: &str, addr: &str, args: &[Expr], ctx: &mut Ctx) {
     for a in args {
-        if matches!(a.kind, bynk_syntax::ast::ExprKind::Wire(_)) {
+        if is_wire(a) {
             ctx.errors.push(
                 CompileError::new(
                     "bynk.test.wire_http_only",
@@ -5266,7 +5270,7 @@ fn check_event_address(
             )
             .with_note("deliver an event with `svc.event(e)`, or `svc.event(e, env)` to choose its envelope"),
         );
-        for a in args {
+        for a in args.iter().filter(|a| !is_wire(a)) {
             let _ = type_of(a, None, ctx);
         }
         return;
@@ -5298,6 +5302,9 @@ fn check_event_address(
         );
     }
     let payload = &args[0];
+    if is_wire(payload) {
+        return;
+    }
     let expected = handler
         .params
         .first()
@@ -5337,6 +5344,9 @@ fn check_event_address(
     let Some(envelope) = args.get(1) else {
         return;
     };
+    if is_wire(envelope) {
+        return;
+    }
     let envelope_ref = TypeRef::Named(Ident {
         name: "EventEnvelope".to_string(),
         span: envelope.span,
