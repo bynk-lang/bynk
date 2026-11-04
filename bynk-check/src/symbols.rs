@@ -2190,7 +2190,7 @@ fn rename_decl_refs(decl: &TypeDecl, subst: &HashMap<String, String>) -> TypeDec
 }
 
 /// #2073: rename every user type `r` names, in place. Exhaustive over
-/// `TypeRef`, like [`crate::project_model::type_ref_names`].
+/// `TypeRef`, like `crate::project_model::type_ref_names`.
 pub fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
     match r {
         TypeRef::Named(id) => {
