@@ -1,0 +1,16 @@
+adapter tokens {
+	binding "./tokens.binding.ts"
+	uses commerce.money
+
+	// secrets and the clock
+	consumes bynk { Secrets, Clock }
+
+	// the exported capability
+	exports capability { Jwt }
+
+	capability Jwt {
+		fn sign(sub: String) -> Effect[String]
+	}
+
+	provides Jwt = JoseJwt given Secrets
+}

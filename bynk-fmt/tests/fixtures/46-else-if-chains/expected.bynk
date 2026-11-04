@@ -1,0 +1,35 @@
+commons r.a
+
+fn classify(someVeryLongParameterName: Int, anotherVeryLongParameterName: Int) -> Int {
+	if someVeryLongParameterName < 0 {
+		someVeryLongParameterName + anotherVeryLongParameterName
+	} else if someVeryLongParameterName > 100 {
+		anotherVeryLongParameterName * someVeryLongParameterName
+	} else if someVeryLongParameterName == 50 { 50 } else { 0 }
+}
+
+fn stmt(x: Int) -> Int {
+	let y = if x < 0 { 0 } else if x > 9 { 9 } else { x }
+	y
+}
+
+fn nested(x: Int) -> Int {
+	if x < 0 {
+		0
+	} else {
+		let z = x
+		if z > 9 { 9 } else if z > 5 { 5 } else { z }
+	}
+}
+
+fn explicit(x: Int) -> Int {
+	if x < 0 { 0 } else { if x > 9 { 9 } else { x } }
+}
+
+fn flat(x: Int) -> Int {
+	if x < 0 { 0 } else if x > 9 { 9 } else if x > 5 { 5 } else { x }
+}
+
+fn noElse(x: Int) -> Int {
+	if x < 0 { 0 } else if x > 9 { 9 } else { x }
+}

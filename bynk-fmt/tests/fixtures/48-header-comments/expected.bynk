@@ -1,0 +1,16 @@
+context r.a
+
+uses r.b
+// flush against uses
+uses r.c
+
+// a comment before consumes
+consumes bynk { Logger }
+// another consumes
+consumes bynk { Clock }
+
+// a comment before exports
+exports capability { Logger }
+
+// a comment before the first decl
+type Id = opaque String

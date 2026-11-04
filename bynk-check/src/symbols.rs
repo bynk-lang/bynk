@@ -2493,6 +2493,7 @@ mod detect_context_message_bundle_tests {
                         target: qualified(t),
                         span: Span::default(),
                         trivia: Trivia::default(),
+                        blank_before: false,
                     })
                     .collect(),
                 consumes: Vec::new(),

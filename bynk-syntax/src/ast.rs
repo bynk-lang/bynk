@@ -160,6 +160,10 @@ pub struct UsesDecl {
     pub target: QualifiedName,
     pub span: Span,
     pub trivia: Trivia,
+    /// A blank line separated this header line's leading comment from the
+    /// line above (#2893). The formatter keeps it, so the comment still reads
+    /// as belonging to this line. Never set without a leading comment.
+    pub blank_before: bool,
 }
 
 /// A whole parsed context source file (v0.4 §3.1).
@@ -219,6 +223,10 @@ pub struct ConsumesDecl {
     pub selected: Option<Vec<ConsumesItem>>,
     pub span: Span,
     pub trivia: Trivia,
+    /// A blank line separated this header line's leading comment from the
+    /// line above (#2893). The formatter keeps it, so the comment still reads
+    /// as belonging to this line. Never set without a leading comment.
+    pub blank_before: bool,
 }
 
 /// One name in a braced `consumes U { … }` list: a capability or exported type,
@@ -239,6 +247,10 @@ pub struct ExportsDecl {
     pub names: Vec<ExportName>,
     pub span: Span,
     pub trivia: Trivia,
+    /// A blank line separated this header line's leading comment from the
+    /// line above (#2893). The formatter keeps it, so the comment still reads
+    /// as belonging to this line. Never set without a leading comment.
+    pub blank_before: bool,
     /// #1797: comments before the closing `}`.
     pub trailing_comments: Vec<Comment>,
 }
@@ -4129,10 +4141,32 @@ pub enum Pattern {
 pub struct IntRange {
     pub lo: Option<i64>,
     pub hi: Option<i64>,
+    /// The low bound as written (`-1_000`), digit separators kept; `None` when
+    /// `lo` is. Only the formatter reads it; a range built without source
+    /// (a suggested fix) leaves it `None` and prints from the value.
+    pub lo_text: Option<String>,
+    /// The high bound as written; see `lo_text`.
+    pub hi_text: Option<String>,
     pub span: Span,
 }
 
 impl IntRange {
+    /// As [`IntRange::describe`], but each bound keeps its source spelling
+    /// (`1_000..2_000`), so formatting does not drop digit separators.
+    pub fn describe_source(&self) -> String {
+        let lo = match (&self.lo_text, self.lo) {
+            (Some(t), _) => t.clone(),
+            (None, Some(n)) => n.to_string(),
+            (None, None) => String::new(),
+        };
+        let hi = match (&self.hi_text, self.hi) {
+            (Some(t), _) => t.clone(),
+            (None, Some(n)) => n.to_string(),
+            (None, None) => String::new(),
+        };
+        format!("{lo}..{hi}")
+    }
+
     /// The range as written, `0..9`, `18..` or `..-1`; the form the formatter
     /// prints and diagnostics quote.
     pub fn describe(&self) -> String {

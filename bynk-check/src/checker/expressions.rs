@@ -4758,6 +4758,8 @@ pub(crate) fn empty_range_error(r: &IntRange, what: &str) -> Option<CompileError
     let swapped = IntRange {
         lo: Some(hi),
         hi: Some(lo),
+        lo_text: None,
+        hi_text: None,
         span: r.span,
     };
     Some(

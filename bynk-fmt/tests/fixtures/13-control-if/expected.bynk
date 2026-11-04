@@ -4,7 +4,7 @@ commons control {
 	}
 
 	fn chain(n: Int) -> String {
-		if n < 10 { "small" } else { if n < 100 { "medium" } else { "large" } }
+		if n < 10 { "small" } else if n < 100 { "medium" } else { "large" }
 	}
 
 	fn inline(n: Int) -> Int {

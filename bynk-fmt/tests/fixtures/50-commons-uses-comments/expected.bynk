@@ -1,0 +1,14 @@
+commons r.c
+
+uses r.a
+// flush
+
+uses r.b
+
+// the third use
+uses r.d
+
+// a comment before fn
+fn f() -> Int {
+	1
+}
