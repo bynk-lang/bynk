@@ -468,7 +468,8 @@ mod tests {
         // #2842 (snapshot claims) added: snapshot_expr. Net +1.
         // #2858 (plain-JSON responses) added: json_policy, json_field (the
         // response-JSON service policy). Net +2.
-        assert_eq!(rules.len(), 191);
+        // #2890 (the `consumes_item` wrapper) added: consumes_item. Net +1.
+        assert_eq!(rules.len(), 192);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.
