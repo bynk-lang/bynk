@@ -6620,6 +6620,30 @@ mod tests {
     }
 
     #[test]
+    fn deferred_siblings_merge_through_fn_and_effect_types_in_either_order() {
+        for list in [
+            "[Err(\"x\"), Ok((x) => x + 1)]",
+            "[Ok((x) => x + 1), Err(\"x\")]",
+        ] {
+            let a = commons(&format!(
+                "fn size[T, E](xs: List[Result[(Int) -> T, E]]) -> Int {{ 0 }}\n\n\
+                 fn s() -> Int {{ size({list}) }}\n"
+            ));
+            a.assert_clean();
+        }
+    }
+
+    #[test]
+    fn deferred_siblings_merge_through_nested_effect_types() {
+        let a = commons(
+            "fn size[T](xs: List[Option[Effect[T]]]) -> Int { 0 }\n\n\
+             fn s(e: Effect[Int]) -> Int { size([None, Some(e)]) }\n\n\
+             fn t(e: Effect[Int]) -> Int { size([Some(e), None]) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
     fn a_concrete_some_mismatch_still_reports() {
         let a = commons("fn f() -> Int { let x: Option[Int] = Some(\"a\")\n 0 }\n");
         a.assert_reports("bynk.types.some_value_mismatch");
