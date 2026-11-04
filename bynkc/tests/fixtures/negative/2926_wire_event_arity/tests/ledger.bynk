@@ -1,0 +1,6 @@
+// #2926: a `Wire` in an arity mismatch reports the rejection and the arity.
+suite shop.ledger {
+  case "wire with too many arguments" {
+    let _ <- OnPlaced.event(Wire("{}"), 1, 2)
+  }
+}

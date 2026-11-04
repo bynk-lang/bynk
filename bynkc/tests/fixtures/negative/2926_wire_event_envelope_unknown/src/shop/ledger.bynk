@@ -1,0 +1,16 @@
+// #2052: a subscriber, and a service that subscribes to nothing.
+context shop.ledger
+
+consumes shop.order
+
+service OnPlaced from Events(Placed) {
+  on event(e: Placed) -> Effect[()] {
+    ()
+  }
+}
+
+service audit {
+  on call(id: String) -> Effect[()] {
+    ()
+  }
+}
