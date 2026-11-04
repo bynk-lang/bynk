@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: Aliased types in a service signature resolve for a callee's own callers (the contract now hashes the renamed type's shape); `consumes_item` node in tree-sitter; aliased services run under `workerd`
----
+# 0731 — A context's service signature that names a renamed type is read by its callers under the alias
 
-## ADR: consumes-alias-transitive-callers
-title: A context's service signature that names a renamed type is read by its callers under the alias
-summary: The callee's own alias keys its contract view, so a third context calls it and the hashes agree
+- **Status:** Accepted (v0.505.1)
 
 **Context.** #2889 let a context rename an exported type (`consumes lib { Code as
 LibCode }`). A third context that consumed that context and called a service
