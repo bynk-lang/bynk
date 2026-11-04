@@ -5316,44 +5316,43 @@ fn check_event_address(
         );
     }
     let payload = &args[0];
-    if is_wire(payload) {
-        return;
-    }
-    let expected = handler
-        .params
-        .first()
-        .and_then(|p| resolve_type_ref(&p.type_ref, &ctx.input.types, tys));
-    let arg_ty = type_of(payload, expected, ctx);
-    if let (Some(a), Some(p)) = (arg_ty, expected)
-        && !compatible(a, p, tys)
-    {
-        let other_event = match &*tys.get(a) {
-            Ty::Named { name, .. } if sig.known_events.contains(name) => Some(name.clone()),
-            _ => None,
-        };
-        let err = match other_event {
-            Some(other) => CompileError::new(
-                "bynk.test.event_not_subscribed",
-                payload.span,
-                format!(
-                    "`{svc}` subscribes to `{}`, not `{other}`",
-                    p.display(tys)
+    if !is_wire(payload) {
+        let expected = handler
+            .params
+            .first()
+            .and_then(|p| resolve_type_ref(&p.type_ref, &ctx.input.types, tys));
+        let arg_ty = type_of(payload, expected, ctx);
+        if let (Some(a), Some(p)) = (arg_ty, expected)
+            && !compatible(a, p, tys)
+        {
+            let other_event = match &*tys.get(a) {
+                Ty::Named { name, .. } if sig.known_events.contains(name) => Some(name.clone()),
+                _ => None,
+            };
+            let err = match other_event {
+                Some(other) => CompileError::new(
+                    "bynk.test.event_not_subscribed",
+                    payload.span,
+                    format!(
+                        "`{svc}` subscribes to `{}`, not `{other}`",
+                        p.display(tys)
+                    ),
+                )
+                .with_note(
+                    "an event address delivers only the event the service's `from Events(E)` header names",
                 ),
-            )
-            .with_note(
-                "an event address delivers only the event the service's `from Events(E)` header names",
-            ),
-            None => CompileError::new(
-                "bynk.types.argument_mismatch",
-                payload.span,
-                format!(
-                    "argument 1 has type `{}`, but `{svc}.event` expects the event it subscribes to, `{}`",
-                    a.display(tys),
-                    p.display(tys)
+                None => CompileError::new(
+                    "bynk.types.argument_mismatch",
+                    payload.span,
+                    format!(
+                        "argument 1 has type `{}`, but `{svc}.event` expects the event it subscribes to, `{}`",
+                        a.display(tys),
+                        p.display(tys)
+                    ),
                 ),
-            ),
-        };
-        ctx.errors.push(err);
+            };
+            ctx.errors.push(err);
+        }
     }
     let Some(envelope) = args.get(1) else {
         return;
