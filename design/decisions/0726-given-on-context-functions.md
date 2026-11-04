@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: A context function may declare `given`; its callers must declare the same capabilities (#2868, builds on #2719 and #2010)
----
+# 0726 — A context function may declare `given`
 
-## ADR: given-on-context-functions
-title: A context function may declare `given`
-summary: Where `given` is allowed on a function, the call-site rule, the hidden `deps` parameter, and how tests call such a function
+- **Status:** Accepted (v0.501)
 
 **Context.** A function reached a capability only through function values its caller passed in (ADR on #2719). Handler steps that log, query and decode were therefore repeated in every handler, or factored into a function that took `log: (String) -> Effect[()]` and a lambda per call: correct, but ceremonious enough that authors chose repetition. #2010 noted the same gap (`bynk.parse.expected_token` on a `given` after a `fn`).
 
