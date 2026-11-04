@@ -32,9 +32,9 @@ export default {
           case "echo": {
             __route = "call echo";
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "2f7b190a61e56a47") {
-              globalThis.console.error("ContractMismatch app call echo", { service: "echo", expected: "2f7b190a61e56a47", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "echo", expected: "2f7b190a61e56a47", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "079bebf1abc5532f") {
+              globalThis.console.error("ContractMismatch app call echo", { service: "echo", expected: "079bebf1abc5532f", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "echo", expected: "079bebf1abc5532f", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {

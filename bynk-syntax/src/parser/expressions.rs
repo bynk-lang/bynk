@@ -1986,28 +1986,34 @@ impl<'a> Parser<'a> {
                 || (p.peek_kind() == Some(TokenKind::Minus)
                     && p.tokens.get(p.pos + 1).map(|t| t.kind) == Some(TokenKind::IntLit))
         };
-        let int_bound = |p: &mut Self| -> Result<(i64, Span), CompileError> {
+        let int_bound = |p: &mut Self| -> Result<(i64, Span, String), CompileError> {
             match p.parse_literal_value()? {
-                (LiteralValue::Int(n), span) => Ok((n, span)),
+                (LiteralValue::Int(n), span) => {
+                    let text = p.slice(span).split_whitespace().collect::<String>();
+                    Ok((n, span, text))
+                }
                 _ => unreachable!("an `IntLit` bound parses to an `Int`"),
             }
         };
         let start = self.peek().expect("a range has a first token").span;
-        let lo = if bound_ahead(self) {
-            Some(int_bound(self)?.0)
+        let (lo, lo_text) = if bound_ahead(self) {
+            let (n, _, text) = int_bound(self)?;
+            (Some(n), Some(text))
         } else {
-            None
+            (None, None)
         };
         let dots = self.expect(TokenKind::DotDot, "in an integer range")?.span;
-        let (hi, end) = if bound_ahead(self) {
-            let (n, span) = int_bound(self)?;
-            (Some(n), span)
+        let (hi, hi_text, end) = if bound_ahead(self) {
+            let (n, span, text) = int_bound(self)?;
+            (Some(n), Some(text), span)
         } else {
-            (None, dots)
+            (None, None, dots)
         };
         Ok(IntRange {
             lo,
             hi,
+            lo_text,
+            hi_text,
             span: start.merge(end),
         })
     }

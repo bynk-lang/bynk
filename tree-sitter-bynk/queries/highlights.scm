@@ -251,6 +251,8 @@
 (qualified_name (identifier) @module)
 (uses_decl target: (qualified_name) @module)
 (consumes_decl target: (qualified_name) @module)
+; #2890: the name a `consumes U { T as Alias }` item introduces is a type.
+(consumes_item alias: (identifier) @type)
 (suite_decl target: (qualified_name) @module)
 
 ; -- Operators & punctuation --

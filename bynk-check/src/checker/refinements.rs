@@ -467,7 +467,7 @@ pub(crate) fn check_refinement(
                         )
                         .with_note(format!("regex parse error (JS `RegExp` semantics): {e}")),
                     );
-                } else if has_nested_unbounded_quantifier(pat) {
+                } else if has_nested_unbounded_quantifier(pat) && !proved_linear(pat, "") {
                     // The emitted boundary check runs this pattern under JS
                     // `RegExp`, a backtracking engine. A repeated group that
                     // itself contains an unbounded quantifier (`(a+)+`) makes
@@ -506,6 +506,8 @@ pub(crate) fn check_refinement(
                             .iter()
                             .filter_map(|p| match p.kind {
                                 PredKind::MaxLength(n) | PredKind::Length(n) => Some(n),
+                                // `IsoDate` admits only `YYYY-MM-DD`.
+                                PredKind::IsoDate => Some(10),
                                 _ => None,
                             })
                             .min(),
@@ -955,6 +957,20 @@ fn regex_matches_empty(pattern: &str) -> bool {
     }
 }
 
+/// #2895: the nested-quantifier first pass is a structural over-approximation:
+/// it flags any repeated group holding an unbounded quantifier, including
+/// unambiguous ones such as the slug `[a-z]+(-[a-z]+)*`, where each repetition
+/// must open with a literal `-` that neither `[a-z]+` can match. A flagged
+/// pattern is refused unless the automaton analysis (`regex_ambiguity`) proves
+/// it linear: it decides on the pattern's character sets (what can end one
+/// repetition against what must start the next), covers the nested shapes
+/// (`(a+)+`, `([a-z]+)*`, `(\w+\s?)*`, an optional separator `(-?[a-z]+)*`)
+/// as exponential, and treats anything it cannot analyse as unsafe.
+fn proved_linear(pat: &str, flags: &str) -> bool {
+    use super::regex_ambiguity::{Verdict, analyse_with_flags};
+    analyse_with_flags(pat, flags) == Verdict::Linear
+}
+
 /// #1651: the diagnostic for a `Matches` pattern the automaton ambiguity
 /// analysis (`regex_ambiguity`) does not prove linear, or `None` when it does.
 ///
@@ -1096,7 +1112,7 @@ pub(crate) fn check_regex_literal(
         )
         .with_note(format!("regex parse error (JS `RegExp` semantics): {e}")));
     }
-    if has_nested_unbounded_quantifier(&pat) {
+    if has_nested_unbounded_quantifier(&pat) && !proved_linear(&pat, &flags) {
         return Err(CompileError::new(
             "bynk.types.catastrophic_regex",
             span,
@@ -1382,6 +1398,36 @@ mod redos_tests {
         assert!(redos("([a-z]+)*")); // class inside the repeated group
         assert!(redos("((a+)?)+")); // inner unbounded propagates through `?`
         assert!(redos("(a+|b)+")); // alternation does not launder the nesting
+    }
+
+    #[test]
+    fn nested_quantifiers_are_refused_unless_proved_linear() {
+        // #2895: the first pass flags every pattern below; `proved_linear`
+        // separates the unambiguous separator shapes from the dangerous ones.
+        for pat in [
+            "[a-z]+(-[a-z]+)*",
+            "[a-z0-9]+(\\.[a-z0-9]+)*",
+            "[a-z]+(?:_[a-z]+)*",
+            "[A-Z]+(-[A-Z]+)+",
+        ] {
+            assert!(redos(pat), "first pass should flag `{pat}`");
+            assert!(super::proved_linear(pat, ""), "`{pat}` is unambiguous");
+        }
+        // Bounded inner repeat: not flagged by the first pass, but linear.
+        assert!(!redos("\\d+(,\\d{3})*") && super::proved_linear("\\d+(,\\d{3})*", ""));
+        for pat in [
+            "(a+)+",
+            "(a|a)*",
+            "([a-z]+)*",
+            "[a-z]+(-?[a-z]+)*",
+            "[a-z]+([-a-z]+)*",
+            "(\\w+\\s?)*",
+            "[a-z]+(-?[a-z])*",
+            "[a-z]*(-[a-z]+)*[a-z]*",
+            "[a-z]+(-[a-z]+|[a-z])*",
+        ] {
+            assert!(!super::proved_linear(pat, ""), "`{pat}` must stay refused");
+        }
     }
 
     #[test]

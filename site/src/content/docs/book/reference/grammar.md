@@ -378,6 +378,12 @@ scope only under the alias, so it no longer clashes with a local or `uses` type
 of the same name. Only a type can be aliased, not a capability, and a type takes one alias. In a context split across files an alias applies to the whole
 context.
 
+A suite is not a consuming context, so an alias is not in scope in a suite's
+cases: a case that writes the alias is `unknown name`. A suite names a consumed
+type by the name its unit declares (`Digest`, not `CryptoDigest`). The one place a
+suite may read the alias is a `stub` pattern, which resolves in the context under
+test.
+
 A context's `consumes` clauses apply to all its files. In a context split across
 files, each file may state what it consumes, repeating an aliased clause or a
 `{ Cap }` selection another file states; the same clause twice in one file is
@@ -410,6 +416,13 @@ ranges only.
 
 One `"package": "range"` entry in a binding's `requires { … }` map; folded into
 the generated `package.json`.
+
+### consumes_item {#rule-consumes_item}
+
+{{#grammar consumes_item}}
+
+One name in a braced `consumes` list: a capability or exported type, optionally
+renamed with `as` (types only).
 
 ### exports_decl {#rule-exports_decl}
 

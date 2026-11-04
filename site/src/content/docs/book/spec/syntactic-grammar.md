@@ -207,6 +207,13 @@ the consumer's local capability namespace under their bare names. The target may
 be a context or an adapter; which forms each consumer kind admits, and the
 flattening and clash rules, are well-formedness: §5.
 
+### §4.1.17a consumes_item {#4117a-consumes_item}
+
+{{#grammar consumes_item}}
+
+One name in a braced `consumes` list, optionally renamed with `as`. Which names
+may be renamed (exported types, not capabilities) is well-formedness: §5.
+
 ### §4.1.18 exports_decl
 
 {{#grammar exports_decl}}

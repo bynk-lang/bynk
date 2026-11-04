@@ -727,6 +727,17 @@ impl<'a> Formatter<'a> {
 
     /// End the current line if it is open, then leave a blank line unless the
     /// output already ends with one.
+    /// #2893: a comment on a header line (`uses`, `consumes`, `exports`) that
+    /// follows another header line keeps the blank line that set it apart in
+    /// the source, so it still reads as belonging to the line below. Plain
+    /// header lines, and comments written flush against the line above, stay
+    /// tight.
+    fn header_comment_gap(&mut self, any_before: bool, blank_before: bool, leading: &[Comment]) {
+        if any_before && blank_before && !leading.is_empty() {
+            self.blank_line();
+        }
+    }
+
     fn blank_line(&mut self) {
         if !self.out.ends_with('\n') {
             self.out.push('\n');
@@ -970,16 +981,18 @@ impl<'a> Formatter<'a> {
             any_header = true;
         }
         for u in &a.uses {
+            self.header_comment_gap(any_header, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
             self.push(&format!("uses {}", u.target.joined()));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             any_header = true;
         }
         for c in &a.consumes {
-            self.format_consumes(c);
+            self.format_consumes(c, any_header);
             any_header = true;
         }
         for e in &a.exports {
+            self.header_comment_gap(any_header, e.blank_before, &e.trivia.leading);
             self.emit_leading_comments(&e.trivia.leading);
             self.format_exports(e);
             if e.trivia.trailing.is_some() {
@@ -1276,6 +1289,7 @@ impl<'a> Formatter<'a> {
     ) {
         let mut any_uses = false;
         for u in uses {
+            self.header_comment_gap(any_uses, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
             self.push(&format!("uses {}", u.target.joined()));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
@@ -1345,7 +1359,8 @@ impl<'a> Formatter<'a> {
     /// Print one `consumes` clause in any of its three forms: whole-unit,
     /// aliased, or braced capability selection (v0.17 §3.3 — previously the
     /// braced form was silently dropped, a semantic-changing format).
-    fn format_consumes(&mut self, c: &ConsumesDecl) {
+    fn format_consumes(&mut self, c: &ConsumesDecl, any_before: bool) {
+        self.header_comment_gap(any_before, c.blank_before, &c.trivia.leading);
         self.emit_leading_comments(&c.trivia.leading);
         match (&c.alias, &c.selected) {
             (Some(alias), _) => {
@@ -1384,16 +1399,18 @@ impl<'a> Formatter<'a> {
     ) {
         let mut any_header = false;
         for u in uses {
+            self.header_comment_gap(any_header, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
             self.push(&format!("uses {}", u.target.joined()));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             any_header = true;
         }
         for c in consumes {
-            self.format_consumes(c);
+            self.format_consumes(c, any_header);
             any_header = true;
         }
         for e in exports {
+            self.header_comment_gap(any_header, e.blank_before, &e.trivia.leading);
             self.emit_leading_comments(&e.trivia.leading);
             self.format_exports(e);
             // exports may emit multi-line — the trailing comment goes on
@@ -3004,7 +3021,11 @@ impl<'a> Formatter<'a> {
                 self.format_block_multiline(then_block);
                 // v0.146 (ADR 0170): an `if` with no `else` carries a
                 // synthesised unit else-branch — omit it, as the flat form does.
-                if !else_block.is_synth_unit() {
+                if let Some(chained) = else_if_tail(else_block) {
+                    // #2891: an `else if` chain stays flat.
+                    self.push(" else ");
+                    self.format_expr_at(chained, 0, 0);
+                } else if !else_block.is_synth_unit() {
                     self.push(" else ");
                     self.format_block_multiline(else_block);
                 }
@@ -3442,7 +3463,7 @@ fn event_pattern_value_src(v: &EventPatternValue) -> String {
 fn schema_dispatch_src(d: &SchemaDispatch) -> String {
     match &d.pattern {
         SchemaVersionPattern::Literal(n) => format!("via schema({n})"),
-        SchemaVersionPattern::Range(r) => format!("via schema({})", r.describe()),
+        SchemaVersionPattern::Range(r) => format!("via schema({})", r.describe_source()),
         SchemaVersionPattern::Wildcard => "via schema(_)".to_string(),
     }
 }
@@ -3825,6 +3846,13 @@ fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
                     expr_with_prec(cond, 0),
                     format_block_oneline(then_block),
                 )
+            } else if let Some(chained) = else_if_tail(else_block) {
+                format!(
+                    "if {} {} else {}",
+                    expr_with_prec(cond, 0),
+                    format_block_oneline(then_block),
+                    expr_with_prec(chained, 0),
+                )
             } else {
                 format!(
                     "if {} {} else {}",
@@ -3984,6 +4012,18 @@ fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
     }
 }
 
+/// #2891: the `if` an `else if` desugars to. The parser wraps it in a
+/// brace-less block with the same span as the `if` itself, which tells it apart
+/// from an explicit `else { if … }` (whose block spans its braces).
+fn else_if_tail(b: &Block) -> Option<&Expr> {
+    (b.statements.is_empty()
+        && b.tail_leading_comments.is_empty()
+        && !b.implicit_tail
+        && matches!(b.tail.kind, ExprKind::If { .. })
+        && b.span == b.tail.span)
+        .then_some(&*b.tail)
+}
+
 fn pattern_to_string(p: &Pattern) -> String {
     match p {
         Pattern::Wildcard(_) => "_".to_string(),
@@ -3996,7 +4036,7 @@ fn pattern_to_string(p: &Pattern) -> String {
             LiteralValue::Bool(b) => b.to_string(),
         },
         // #2699: `lo..hi`, `lo..`, `..hi`, with no spaces.
-        Pattern::Range(r) => r.describe(),
+        Pattern::Range(r) => r.describe_source(),
         // #472: `p where predicate` — the inner pattern, then the predicate
         // list rendered the same way a `type X = Base where P` refinement is.
         Pattern::Refined {

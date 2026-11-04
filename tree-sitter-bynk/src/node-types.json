@@ -2520,17 +2520,7 @@
     "named": true,
     "fields": {
       "alias": {
-        "multiple": true,
-        "required": false,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      },
-      "capability": {
-        "multiple": true,
+        "multiple": false,
         "required": false,
         "types": [
           {
@@ -2545,6 +2535,42 @@
         "types": [
           {
             "type": "qualified_name",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "consumes_item",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "consumes_item",
+    "named": true,
+    "fields": {
+      "alias": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
             "named": true
           }
         ]

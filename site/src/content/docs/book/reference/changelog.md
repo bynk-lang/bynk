@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.505.2** | fmt keeps `else if` chains flat, keeps digit separators in range-pattern bounds, and keeps the blank line above a comment on a header line |
+| **v0.505.1** | Aliased types in a service signature resolve for a callee's own callers (the contract now hashes the renamed type's shape); `consumes_item` node in tree-sitter; aliased services run under `workerd` |
 | **v0.505.0** | "`consumes U { T as Alias }` renames a type `U` exports for the consuming context, so `consumes bynk.crypto { Crypto, Digest as CryptoDigest }` no longer clashes with your own `Digest`; the `name_conflict` note names the way out (#2887)" |
 | **v0.504.3** | "A test module's capability call-record types qualify a `uses` commons type, so a context capability taking a commons type passes `tsc` under `bynk test` (#2886)" |
 | **v0.504.2** | Diagnostics on a context function's `given` no longer point at advice it cannot follow, and a refused `given` function's callers and body add no follow-on errors (#2881, #2882) |

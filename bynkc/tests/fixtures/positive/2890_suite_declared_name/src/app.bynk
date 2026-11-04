@@ -1,0 +1,17 @@
+context app
+
+consumes lib { Code as LibCode }
+consumes bynk.crypto { Crypto, Digest as CryptoDigest }
+
+service echo {
+	on call(c: LibCode) -> Effect[LibCode] {
+		Effect.pure(c)
+	}
+}
+
+service hashing {
+	on call(token: String) -> Effect[String] given Crypto {
+		let h <- Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(token))
+		Effect.pure(h.toHex())
+	}
+}

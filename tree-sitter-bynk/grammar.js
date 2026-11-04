@@ -292,19 +292,21 @@ module.exports = grammar({
             seq(
               "{",
               optional(
-                sep1(
-                  seq(
-                    field("capability", $.identifier),
-                    optional(seq("as", field("alias", $.identifier))),
-                  ),
-                  ",",
-                ),
+                sep1($.consumes_item, ","),
               ),
               optional(","),
               "}",
             ),
           ),
         ),
+      ),
+
+    // #2890: one braced item of a selective `consumes`: a name, optionally
+    // renamed with `as`.
+    consumes_item: ($) =>
+      seq(
+        field("name", $.identifier),
+        optional(seq("as", field("alias", $.identifier))),
       ),
 
     // v0.17: an adapter's binding module + optional npm dependency map.

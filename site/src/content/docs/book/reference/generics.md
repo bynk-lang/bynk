@@ -254,7 +254,7 @@ type, and `size` accepts it; `b.has(f)` on one is rejected at the call. A
 A method with no `self` is a **static**. On a generic type it is generic over the
 type's parameters, then its own, so a bounded type can offer the only way in:
 
-```bynk,fragment
+```bynk
 commons demo.constructors
 
 uses bynk.list
@@ -267,7 +267,7 @@ fn Box.empty() -> Box[Option[T]] { Box { value: None } }
 
 type Sorted[T: Ord] = { items: List[T] }
 
-fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: sort(xs) } }
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: xs.sortBy((x) => x) } }
 
 fn demo() -> Int {
   let a = Box.of(5)

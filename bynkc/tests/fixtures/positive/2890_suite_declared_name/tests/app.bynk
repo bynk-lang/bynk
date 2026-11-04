@@ -1,0 +1,14 @@
+suite app
+
+// #2890: a suite is not a consuming context, so a case names a consumed type
+// by the name its unit declares, not by `app`'s alias.
+case "a case names the context type by its declared name" {
+  let r <- echo.call(Code.Alpha)
+  expect r == Code.Alpha
+}
+
+case "a case names the adapter type by its declared name" {
+  stub Crypto.digest(Digest.Sha256, _) returns Bytes.fromUtf8("sha")
+  let h <- hashing.call("abc")
+  expect h == "736861"
+}

@@ -6274,6 +6274,43 @@ mod tests {
     }
 
     #[test]
+    fn a_list_literal_argument_infers_the_type_argument() {
+        let a = commons(
+            "fn size[T](xs: List[T]) -> Int { 0 }\n\n\
+             fn s() -> Int { size([1, 2]) }\n\n\
+             fn n() -> Int { size([[1], [2, 3]]) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
+    fn a_list_literal_argument_grounds_a_later_lambda() {
+        let a = commons(
+            "fn count_by[T](xs: List[T], f: (T) -> Int) -> Int { 0 }\n\n\
+             fn s() -> Int { count_by([\"ant\", \"bee\"], (w) => w.length()) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
+    fn list_literals_binding_one_type_argument_two_ways_still_conflict() {
+        let a = commons(
+            "fn size2[T](a: List[T], b: List[T]) -> Int { 0 }\n\n\
+             fn bad() -> Int { size2([1], [\"x\"]) }\n",
+        );
+        a.assert_reports("bynk.types.list_element_mismatch");
+    }
+
+    #[test]
+    fn a_list_literal_with_mixed_elements_is_still_a_mismatch_in_a_generic_call() {
+        let a = commons(
+            "fn size[T](xs: List[T]) -> Int { 0 }\n\n\
+             fn bad() -> Int { size([1, \"x\"]) }\n",
+        );
+        a.assert_reports("bynk.types.list_element_mismatch");
+    }
+
+    #[test]
     fn a_generic_call_binding_one_type_argument_two_ways_is_a_conflict() {
         let a =
             commons("fn both[A](x: A, y: A) -> A { x }\n\nfn bad() -> Int { both(1, \"two\") }\n");

@@ -119,6 +119,15 @@ fn bound_names_get_hints_and_the_hidden_binders_none() {
     };
     assert_eq!(at("sku, qty").as_deref(), Some(": String"));
     assert_eq!(at("n, note").as_deref(), Some(": Int"));
+    // #2896: a `_` parameter gets no hint (it has no name to annotate), while its
+    // named neighbour does.
+    let line = offset_of("items.fold(0, (acc, _)", 0);
+    let on_line: Vec<usize> = hints
+        .iter()
+        .map(|h| h.span.start)
+        .filter(|s| (line..line + 22).contains(s))
+        .collect();
+    assert_eq!(on_line, vec![line + "items.fold(0, (".len()], "{hints:?}");
     assert!(
         hints.iter().all(|h| h.span.start < h.span.end),
         "no hint may sit on a hidden binder's empty span: {hints:?}"
