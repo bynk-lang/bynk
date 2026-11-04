@@ -3384,6 +3384,28 @@ fn merge_open(a: TyId, b: TyId, rigid: &HashSet<String>, tys: &Types) -> Option<
         (Ty::List(x), Ty::List(y)) => Ty::List(merge_open(x, y, rigid, tys)?),
         (Ty::Set(x), Ty::Set(y)) => Ty::Set(merge_open(x, y, rigid, tys)?),
         (Ty::HttpResult(x), Ty::HttpResult(y)) => Ty::HttpResult(merge_open(x, y, rigid, tys)?),
+        (Ty::Effect(x), Ty::Effect(y)) => Ty::Effect(merge_open(x, y, rigid, tys)?),
+        (Ty::Stream(x), Ty::Stream(y)) => Ty::Stream(merge_open(x, y, rigid, tys)?),
+        (Ty::Query(x), Ty::Query(y)) => Ty::Query(merge_open(x, y, rigid, tys)?),
+        (Ty::Connection(x), Ty::Connection(y)) => Ty::Connection(merge_open(x, y, rigid, tys)?),
+        (Ty::HttpOutcome(x), Ty::HttpOutcome(y)) => Ty::HttpOutcome(merge_open(x, y, rigid, tys)?),
+        (
+            Ty::Fn {
+                params: p1,
+                ret: r1,
+            },
+            Ty::Fn {
+                params: p2,
+                ret: r2,
+            },
+        ) if p1.len() == p2.len() => Ty::Fn {
+            params: p1
+                .iter()
+                .zip(&p2)
+                .map(|(x, y)| merge_open(*x, *y, rigid, tys))
+                .collect::<Option<Vec<_>>>()?,
+            ret: merge_open(r1, r2, rigid, tys)?,
+        },
         (Ty::Result(x1, e1), Ty::Result(x2, e2)) => Ty::Result(
             merge_open(x1, x2, rigid, tys)?,
             merge_open(e1, e2, rigid, tys)?,
@@ -3399,9 +3421,11 @@ fn merge_open(a: TyId, b: TyId, rigid: &HashSet<String>, tys: &Types) -> Option<
                 args: a1,
             },
             Ty::Named {
-                name: n2, args: a2, ..
+                name: n2,
+                kind: k2,
+                args: a2,
             },
-        ) if n1 == n2 && a1.len() == a2.len() => Ty::Named {
+        ) if n1 == n2 && kind == k2 && a1.len() == a2.len() => Ty::Named {
             name: n1,
             kind,
             args: a1
