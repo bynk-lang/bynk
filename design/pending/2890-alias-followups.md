@@ -1,5 +1,6 @@
 ---
 level: patch
+probes: ts_writes
 changelog: Aliased types in a service signature resolve for a callee's own callers (the contract now hashes the renamed type's shape); `consumes_item` node in tree-sitter; aliased services run under `workerd`
 ---
 
