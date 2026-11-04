@@ -1,0 +1,70 @@
+context shop
+
+// #2868: a context-level `fn` may declare `given`. It uses those capabilities,
+// and every caller must have them in its own `given`.
+
+capability Logger {
+	fn error(message: String) -> Effect[()]
+}
+
+capability Orders {
+	fn count(sku: String) -> Effect[Int]
+}
+
+provides Logger = NullLogger {
+	fn error(message: String) -> Effect[()] {}
+}
+
+provides Orders = FixedOrders {
+	fn count(sku: String) -> Effect[Int] {
+		3
+	}
+}
+
+// One capability.
+fn warn(what: String) -> Effect[()] given Logger {
+	Logger.error("warning: \(what)")
+}
+
+// Generic, two capabilities, calling another `given` function: it declares
+// everything `warn` needs.
+fn countOr[T](sku: String, fallback: T, pick: Int -> T) -> Effect[T] given Logger, Orders {
+	let n <- Orders.count(sku)
+	let _ <- warn("counted \(sku)")
+	Effect.pure(pick(n))
+}
+
+// A lambda inside the function reaches a capability through the function's own.
+fn warnAll(items: List[String]) -> Effect[()] given Logger {
+	let _ <- items.forEach((i) => Logger.error(i))
+	Effect.pure(())
+}
+
+// Recursion and mutual recursion need no fixed point: each call is checked
+// against the caller's own `given`.
+fn countdown(n: Int) -> Effect[Int] given Logger {
+	if n <= 0 {
+		Effect.pure(0)
+	} else {
+		let _ <- warn("tick")
+		countdown(n - 1)
+	}
+}
+
+fn ping(n: Int) -> Effect[Int] given Logger {
+	if n <= 0 { Effect.pure(0) } else { pong(n - 1) }
+}
+
+fn pong(n: Int) -> Effect[Int] given Logger {
+	if n <= 0 { Effect.pure(1) } else { ping(n - 1) }
+}
+
+service api {
+	on call(sku: String) -> Effect[Int] given Logger, Orders {
+		let n <- countOr[Int](sku, 0, (c) => c * 2)
+		let _ <- warnAll(["a", "b"])
+		let _ <- countdown(2)
+		let p <- ping(3)
+		Effect.pure(n + p)
+	}
+}

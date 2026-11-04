@@ -1,0 +1,34 @@
+context r
+
+capability Logger {
+	fn error(message: String) -> Effect[()]
+}
+
+capability Orders {
+	fn count(sku: String) -> Effect[Int]
+}
+
+provides Logger = NullLogger {
+	fn error(message: String) -> Effect[()] {}
+}
+
+provides Orders = FixedOrders {
+	fn count(sku: String) -> Effect[Int] {
+		3
+	}
+}
+
+fn warn(what: String) -> Effect[()] given Logger {
+	Logger.error(what)
+}
+
+// `middle` calls `warn`, so it must declare `Logger` too.
+fn middle(what: String) -> Effect[()] {
+	warn(what)
+}
+
+service api {
+	on call(sku: String) -> Effect[()] given Logger {
+		middle(sku)
+	}
+}

@@ -1761,12 +1761,14 @@ fn cap_op_param_names(cx: &LowerCtx, cap: &str, op: &str) -> Vec<String> {
 /// hoists is placed inside the `try`, not in the enclosing statement's
 /// prelude: a fault raised while evaluating the call's arguments is the call
 /// faulting too, and must not escape the claim.
-/// #2135: the driver name a reserved bad-signature principal drives: `by
-/// Forged` (a wrong secret) or `by Stale` (a timestamp past the tolerance).
+/// #2135, #2864: the driver name a reserved bad-credential principal drives:
+/// `by Forged` (a wrong secret), `by Stale` (a timestamp past the tolerance)
+/// or `by Expired` (a Bearer token whose `exp` has passed).
 fn bad_signature_driver(actor: &str) -> Option<&'static str> {
     match actor {
         "Forged" => Some("forged"),
         "Stale" => Some("stale"),
+        "Expired" => Some("expired"),
         _ => None,
     }
 }
@@ -6627,7 +6629,9 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     // bounds used as a value is instantiated at the reference, as a closure that
     // captures the comparator witnesses.
     if let Some(Callee::FnValue(decl, witnesses)) = cx.commons().callee(e.id)
-        && (!witnesses.is_empty() || cx.commons().exec_plan.fn_needs(decl))
+        && (!witnesses.is_empty()
+            || !decl.given.is_empty()
+            || cx.commons().exec_plan.fn_needs(decl))
     {
         let tys = cx.commons().tys();
         let params: Vec<String> = match cx
@@ -6648,6 +6652,11 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
         let mut args = names.clone();
         args.extend(cx.witness_args(decl, witnesses));
+        // #2868: a `given` function closes over the `deps` in scope where it is
+        // named.
+        if !decl.given.is_empty() {
+            args.push(cx.cap_deps_expr().to_string());
+        }
         // #2719: a function in the needs-context set closes over the context in
         // scope where it is named.
         if cx.commons().exec_plan.fn_needs(decl) {
@@ -6946,6 +6955,11 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
     let mut needs_exec = false;
     if let Some(Callee::Fn(decl, witnesses)) = cx.commons().callee(e.id) {
         args_lowered.extend(cx.witness_args(decl, witnesses));
+        // #2868: a function that declares `given` takes the caller's `deps`,
+        // which the checker has made carry its capabilities.
+        if !decl.given.is_empty() {
+            args_lowered.push(cx.cap_deps_expr().to_string());
+        }
         // #2719: a function in the needs-context set takes the context last.
         if cx.commons().exec_plan.fn_needs(decl) {
             args_lowered.push(cx.exec_expr());

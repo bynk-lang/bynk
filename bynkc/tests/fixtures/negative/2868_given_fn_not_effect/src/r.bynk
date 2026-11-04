@@ -1,0 +1,23 @@
+context r
+
+capability Logger {
+	fn error(message: String) -> Effect[()]
+}
+
+capability Orders {
+	fn count(sku: String) -> Effect[Int]
+}
+
+provides Logger = NullLogger {
+	fn error(message: String) -> Effect[()] {}
+}
+
+provides Orders = FixedOrders {
+	fn count(sku: String) -> Effect[Int] {
+		3
+	}
+}
+
+fn size(sku: String) -> Int given Logger {
+	3
+}

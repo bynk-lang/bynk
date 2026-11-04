@@ -57,7 +57,7 @@ function __makeHarness() {
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
-function __b64url(s: string): string { return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function __b64url(s: string): string { return __bytesB64url(new TextEncoder().encode(s)); }
 function __bytesB64url(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 async function __bynkSignHs256(payload: Record<string, unknown>, secret: string): Promise<string> {
   const h = __b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));

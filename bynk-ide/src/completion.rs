@@ -1836,7 +1836,7 @@ fn predicate_name_candidates() -> Vec<Completion> {
 fn actor_candidates(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> Vec<Completion> {
     let mut out: Vec<Completion> = Vec::new();
     // #2135: in a suite, a call-site `by` may also name a reserved principal
-    // (`Nobody`, `Forged`, `Stale`), which drives the seam to a `401`.
+    // (`Nobody`, `Forged`, `Stale`, `Expired`), which drives the seam to a `401`.
     // A lexical test, so it holds mid-edit, when the suite does not parse.
     let in_suite = lexer::tokenize(doc_text).ok().is_some_and(|toks| {
         toks.iter()
@@ -2386,9 +2386,10 @@ pub fn free_fn_signature(name: &str, f: &bynk_syntax::ast::FnDecl) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "{name}{}({params}) -> {}{}",
+        "{name}{}({params}) -> {}{}{}",
         crate::symbols::fn_type_params_str(f),
         type_ref_str(&f.return_type),
+        crate::symbols::fn_given_str(f),
         crate::symbols::fn_where_str(f)
     )
 }
@@ -3338,6 +3339,21 @@ mod tests {
         assert!(got.contains(&"Clock".to_string()), "{got:?}");
         assert!(got.contains(&"Random".to_string()), "{got:?}");
         assert!(got.contains(&"Logger".to_string()), "{got:?}");
+    }
+
+    /// #2868: a context function's `given` completes capability names, as a
+    /// handler's does.
+    #[test]
+    fn a_fn_given_suggests_capabilities() {
+        let doc = "context a.b\n\
+                   consumes bynk { Clock }\n\
+                   capability Local { fn f() -> Effect[Int] }\n\
+                   fn step() -> Effect[Int] given Clock {\n\
+                   Clock.now()\n\
+                   }\n";
+        let got = labels("fn step() -> Effect[Int] given ", doc);
+        assert!(got.contains(&"Clock".to_string()), "flattened: {got:?}");
+        assert!(got.contains(&"Local".to_string()), "local: {got:?}");
     }
 
     #[test]
@@ -4412,14 +4428,15 @@ fn Box.size(self) -> Int { 1 }
 
     #[test]
     fn by_in_a_suite_offers_the_reserved_principals() {
-        // #2135: `Nobody`, `Forged` and `Stale` after `by` in a suite only.
+        // #2135, #2864: `Nobody`, `Forged`, `Stale` and `Expired` after `by` in a
+        // suite only.
         let suite = "suite pay.hooks as system {\n  case \"c\" {\n    let r <- webhooks.POST(\"/h\", \"x\") by ";
         let labels: Vec<String> =
             complete("    let r <- webhooks.POST(\"/h\", \"x\") by ", suite, None)
                 .into_iter()
                 .map(|c| c.label)
                 .collect();
-        for name in ["Nobody", "Forged", "Stale"] {
+        for name in ["Nobody", "Forged", "Stale", "Expired"] {
             assert!(labels.iter().any(|l| l == name), "{name}: {labels:?}");
         }
         let context = "context pay.hooks\n\nservice api from http {\n  on GET(\"/a\") () -> Effect[HttpResult[String]] by ";

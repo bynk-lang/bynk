@@ -58,6 +58,9 @@ pub(crate) fn check_ident_at(
     if let Some(witnesses) = ctx.last_witness.take()
         && let Some(decl) = ctx.input.fns.get(&id.name)
     {
+        let decl = Arc::clone(decl);
+        require_callee_given(id, &decl, ctx);
+        let decl = &decl;
         ctx.callees
             .insert(expr_id, Callee::FnValue(Arc::clone(decl), witnesses));
     } else if ty.is_some()
@@ -67,6 +70,10 @@ pub(crate) fn check_ident_at(
         && !ctx.input.consts.contains_key(&id.name)
         && let Some(decl) = ctx.input.fns.get(&id.name)
     {
+        // #2868: naming a `given` function carries its capabilities along.
+        let decl = Arc::clone(decl);
+        require_callee_given(id, &decl, ctx);
+        let decl = &decl;
         // #2719: every function named as a value is recorded (with no
         // witnesses when it has no `Ord` bound), so the needs-context analysis
         // sees an edge from the naming body to the function.

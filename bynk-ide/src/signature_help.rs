@@ -221,10 +221,11 @@ pub fn resolve_label(
                     .map(|p| format!("{}: {}", p.name.name, type_ref_str(&p.type_ref)))
                     .collect();
                 found = Some(format!(
-                    "{callee}{}({}) -> {}{}",
+                    "{callee}{}({}) -> {}{}{}",
                     crate::symbols::fn_type_params_str(f),
                     params.join(", "),
                     type_ref_str(&f.return_type),
+                    crate::symbols::fn_given_str(f),
                     crate::symbols::fn_where_str(f)
                 ));
                 return;
@@ -427,6 +428,19 @@ mod tests {
         let label = resolve_label("same", doc, None).unwrap();
         let ranges = param_ranges(&label);
         assert_eq!(&label[ranges[0].0..ranges[0].1], "a: T");
+    }
+
+    /// #2868: the label shows a context function's `given`, ahead of any `where`;
+    /// the hidden `deps` parameter is not in the AST, so it is never offered.
+    #[test]
+    fn free_fn_label_shows_given() {
+        let doc = "context m\n\nfn warn(what: String) -> Effect[()] given Logger, B.Orders {\n  Logger.error(what)\n}\n";
+        let label = resolve_label("warn", doc, None).expect("warn resolves");
+        assert_eq!(
+            label,
+            "warn(what: String) -> Effect[()] given Logger, B.Orders"
+        );
+        assert_eq!(param_ranges(&label).len(), 1);
     }
 
     /// Constrained generics slice 1: the label shows `Ord` bounds. The hidden

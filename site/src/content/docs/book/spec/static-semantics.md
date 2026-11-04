@@ -1313,7 +1313,16 @@ capability (`bynk.provider.unknown_capability`). A handler or provider MUST
 declare every capability it uses with `given`, and `given` MUST name a real
 capability; a call to an undeclared capability is rejected and an unused one
 warned (`bynk.given.unknown_capability`, `bynk.given.undeclared_capability`,
-`bynk.given.unused_capability`). A provider whose body calls an agent handler
+`bynk.given.unused_capability`). A **free function in a
+context** MAY declare `given` (#2868), and then uses those capabilities as a handler
+does; a `given` on a method, on a function that does not return `Effect[T]`, or
+naming `Events` is rejected (`bynk.given.fn_unsupported`), as is any `given` on a
+function in a commons or a suite (`bynk.given.fn_outside_context`). A call to, or a
+reference to, a function that declares `given` MUST occur in a body whose own
+`given` includes every one of the callee's (`bynk.given.missing_for_call`); the
+rule is checked at each call, so it holds along every path of calls, and the
+callee's capabilities count as used by the caller. A test `case` calling such a
+function is supplied the target's capabilities as it is for a handler. A provider whose body calls an agent handler
 MUST also list in its `given` every capability that handler is `given`, and,
 transitively, every capability `given` to the agent handlers it calls
 (`bynk.provider.agent_call_undeclared_capability`). A service or agent handler
@@ -2260,17 +2269,23 @@ acting actor's credential: a signed token for a Bearer actor, a signature for a
 `Signature` actor (#2135), and on an actor sum the credential of the member the
 principal names (#2155).
 
-`Nobody`, `Forged` and `Stale` are reserved call-site principals, not
+`Nobody`, `Forged`, `Stale` and `Expired` are reserved call-site principals, not
 declarations, and take no identity (`bynk.test.actor_no_identity`). `by Nobody`
 MUST address a route with a Bearer or `Signature` actor, alone or as a sum
-member (`bynk.test.nobody_needs_secured_route`). `by Forged` and `by Stale` MUST
-address a route with a `Signature` actor, alone or as a sum member
-(`bynk.test.forged_needs_signature_route`); on a sum they sign as its first
-`Signature` member. On an actor sum with an open member (`Visitor`, or an
-actor with no auth scheme), none of the three is admitted: the seam resolves a
-missing or bad credential as that member and never answers `401`. `by Stale` needs that actor to declare `timestamp` and
-`tolerance` (`bynk.test.stale_needs_timestamp`). All
-three MUST occur in a `system`-tier case (`bynk.test.credential_needs_system`,
+member (`bynk.test.nobody_needs_secured_route`). `by Forged` MUST address a
+route with a `Signature` or Bearer actor, and `by Stale` one with a `Signature`
+actor, alone or as a sum member (`bynk.test.forged_needs_signature_route`); on a
+sum they sign as its first `Signature` member (`by Forged` as its first Bearer
+member when it has no `Signature` member). `by Expired` MUST address a route
+with a Bearer actor, alone or as a sum member (`bynk.test.expired_needs_bearer_route`).
+It sends a correctly signed token with a valid `sub` and an `exp` one hour
+before the test clock; `by Forged` on a Bearer route sends a token with a valid
+`sub` and a future `exp`, signed with a secret derived from the real one. On an
+actor sum with an open member (`Visitor`, or an actor with no auth scheme),
+none of the four is admitted: the seam resolves a missing or bad credential as
+that member and never answers `401`. `by Stale` needs that actor to declare
+`timestamp` and `tolerance` (`bynk.test.stale_needs_timestamp`). All four MUST
+occur in a `system`-tier case (`bynk.test.credential_needs_system`,
 `bynk.test.forged_needs_system`), and each address yields an `HttpOutcome`.
 
 A service address in a `case` (`svc.call(…)`, `svc.<VERB>("/path", …)`,

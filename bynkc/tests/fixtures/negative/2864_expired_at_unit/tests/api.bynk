@@ -1,0 +1,11 @@
+suite pay.api {
+	case "an expired token at unit" {
+		let r <- api.GET("/me") by Expired
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a forged token in process" as integration {
+		let r <- api.GET("/me") by Forged
+		expect r is Rejected(Unauthorized)
+	}
+}

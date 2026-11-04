@@ -261,7 +261,7 @@ pub fn describe_agent_state_at(source: &str, offset: usize) -> Option<String> {
     None
 }
 
-/// #706, #2135: the reserved call-site principals of a test case — each with
+/// #706, #2135, #2864: the reserved call-site principals of a test case — each with
 /// what the `system` driver sends for it. Not declarations: `by <name>` names
 /// one of these, never an actor.
 pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
@@ -271,15 +271,20 @@ pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
     ),
     (
         "Forged",
-        "Signs a `Signature` route's request with a secret the seam does not hold, so the real seam refuses it (`Rejected(Unauthorized)`). `system` tier only.",
+        "Signs a `Signature` route's request, or a Bearer route's token (a valid `sub`, a future `exp`), with a secret the seam does not hold, so the real seam refuses it (`Rejected(Unauthorized)`). `system` tier only.",
     ),
     (
         "Stale",
         "Signs a `Signature` route's request correctly, timestamped `tolerance + 60` seconds in the past, so the real seam refuses it as a replay (`Rejected(Unauthorized)`). Needs an actor with `timestamp` and `tolerance`. `system` tier only.",
     ),
+    (
+        "Expired",
+        "Sends a Bearer route's token correctly signed, with a valid `sub` and an `exp` one hour in the past, so the real seam refuses it (`Rejected(Unauthorized)`). Needs a `Bearer` actor. `system` tier only.",
+    ),
 ];
 
-/// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`) in a
+/// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`,
+/// `Expired`) in a
 /// call-site `by` clause: what the driver sends. `None` when the cursor is not
 /// on one of those names right after `by`.
 pub fn describe_reserved_principal_at(source: &str, offset: usize) -> Option<String> {
@@ -2504,6 +2509,16 @@ pub(crate) fn fn_type_params_str(f: &FnDecl) -> String {
     format!("[{}]", ps.join(", "))
 }
 
+/// #2868: ` given Logger, Orders`, or empty for a function with no `given`. It
+/// follows the return type, ahead of any `where`, as in the source.
+pub(crate) fn fn_given_str(f: &FnDecl) -> String {
+    if f.given.is_empty() {
+        return String::new();
+    }
+    let names: Vec<String> = f.given.iter().map(|g| g.display_name()).collect();
+    format!(" given {}", names.join(", "))
+}
+
 /// ` where A: Eq`, or empty without a `where` clause.
 pub(crate) fn fn_where_str(f: &FnDecl) -> String {
     if f.where_bounds.is_empty() {
@@ -2546,6 +2561,7 @@ pub(crate) fn describe_fn(f: &FnDecl) -> String {
     out.push_str(&parts.join(", "));
     out.push_str(") -> ");
     out.push_str(&type_ref_str(&f.return_type));
+    out.push_str(&fn_given_str(f));
     out.push_str(&fn_where_str(f));
     // v0.123 (slice 2): the contract clauses (v0.115), beneath the signature —
     // rendered through the formatter's own predicate renderer.
@@ -3306,6 +3322,12 @@ mod tests {
             "{forged}"
         );
         assert!(describe_reserved_principal_at(src, src.find("Stale").unwrap()).is_none());
+        let src = "suite pay.api as system {\n\tcase \"c\" {\n\t\tlet r <- api.GET(\"/a\") by Expired\n\t\texpect r is Rejected(Unauthorized)\n\t}\n}\n";
+        let expired = describe_reserved_principal_at(src, src.find("Expired").unwrap()).unwrap();
+        assert!(
+            expired.contains("by Expired") && expired.contains("`exp` one hour in the past"),
+            "{expired}"
+        );
     }
 
     /// #2134: hover on an `env` clause's word and entry names says where the

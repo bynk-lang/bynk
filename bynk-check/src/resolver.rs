@@ -832,6 +832,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
                     &local_consts,
                     // A single file has no `uses` imports to shadow.
                     &HashMap::new(),
+                    &HashSet::new(),
                     &mut sinks,
                 );
             }
@@ -1119,6 +1120,18 @@ pub fn resolve_file_record(
         errs: &mut errors,
         refs,
     };
+    // #2868: the capabilities this file declares or consumes, so a function
+    // that uses one it does not list is told how to reach it.
+    let declared_caps: HashSet<String> = resolved
+        .commons
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Capability(c) => Some(c.name.name.clone()),
+            _ => None,
+        })
+        .chain(resolved.cross_context.flattened_caps.keys().cloned())
+        .collect();
     for item in &resolved.commons.items {
         check_reserved_host_name(item, &mut sinks);
         match item {
@@ -1141,6 +1154,7 @@ pub fn resolve_file_record(
                     &resolved.embeds,
                     &resolved.consts,
                     &resolved.shadowed_imports,
+                    &declared_caps,
                     &mut sinks,
                 );
             }
@@ -1658,8 +1672,25 @@ fn check_fn_refs(
     embeds: &HashMap<String, EmbedDecl>,
     consts: &HashMap<String, ConstDecl>,
     shadowed: &HashMap<String, ShadowedImport>,
+    declared_caps: &HashSet<String>,
     errors: &mut Sinks,
 ) {
+    // #2868: a `given` function reaches the capabilities it names.
+    // A consumed context's capability is reached as `B.Cap.op(…)`, so the
+    // leading segment of its prefix is a name in scope too; the checker
+    // resolves the whole chain.
+    let caps: HashSet<String> = f
+        .given
+        .iter()
+        .flat_map(|g| {
+            let lead = g
+                .context
+                .as_ref()
+                .and_then(|q| q.parts.first())
+                .map(|p| p.name.clone());
+            std::iter::once(g.key().to_string()).chain(lead)
+        })
+        .collect();
     // Parameter types resolve.
     // v0.20a: the fn's type parameters are legal named references in its
     // own signature and body annotations.
@@ -1762,6 +1793,8 @@ fn check_fn_refs(
         embeds,
         consts,
         shadowed,
+        caps: &caps,
+        declared_caps,
         scopes: Vec::new(),
         errors,
     };
@@ -1795,6 +1828,8 @@ fn check_const_refs(
         embeds: &embeds,
         consts,
         shadowed: &shadowed,
+        caps: &HashSet::new(),
+        declared_caps: &HashSet::new(),
         scopes: Vec::new(),
         errors,
     };
@@ -3015,6 +3050,12 @@ struct RefCheckCtx<'a, 'b> {
     consts: &'a HashMap<String, ConstDecl>,
     /// #1925: imports a local declaration of another kind hides.
     shadowed: &'a HashMap<String, ShadowedImport>,
+    /// #2868: the capabilities a `given` function names: an identifier that is
+    /// one is a capability receiver (`Logger.error(…)`), typed by the checker.
+    caps: &'a HashSet<String>,
+    /// #2868: every capability the context declares or consumes, for the note
+    /// on a use the function's `given` does not cover.
+    declared_caps: &'a HashSet<String>,
     scopes: Vec<HashMap<String, ()>>,
     errors: &'a mut Sinks<'b>,
 }
@@ -3217,6 +3258,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             }
             if name_in_scope(&id.name, cx.params, &cx.scopes) {
                 // OK.
+            } else if cx.caps.contains(&id.name) {
+                // #2868: a capability the function's `given` names; the
+                // checker dispatches `Cap.op(…)`.
             } else if cx.consts.contains_key(&id.name)
                 && cx
                     .shadowed
@@ -3300,6 +3344,21 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                             id.name, id.name
                         ),
                     ),
+                );
+            } else if cx.declared_caps.contains(&id.name) {
+                cx.errors.push(
+                    CompileError::new(
+                        "bynk.given.undeclared_capability",
+                        id.span,
+                        format!(
+                            "capability `{}` is used but not listed in the function's `given` clause",
+                            id.name
+                        ),
+                    )
+                    .with_note(format!(
+                        "a context function reaches a capability through `given`: add `given {}` after its return type, and then every handler or function that calls it must declare it too",
+                        id.name
+                    )),
                 );
             } else {
                 cx.errors.push(

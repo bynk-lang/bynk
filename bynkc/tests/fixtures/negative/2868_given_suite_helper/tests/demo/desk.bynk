@@ -1,0 +1,10 @@
+suite demo.desk
+
+fn loud(n: Int) -> Int given Logger {
+	n
+}
+
+case "a helper cannot declare given" {
+	let n <- local.call(1)
+	expect n == 2
+}

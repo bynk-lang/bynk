@@ -38,6 +38,48 @@ pub(crate) fn check_fn(
     check_fn_in(
         f,
         false,
+        None,
+        input,
+        expr_types,
+        callees,
+        errors,
+        refs,
+        hints,
+        locals,
+        requirements,
+        tys,
+    );
+}
+
+/// #2868: the capability scope of a context function that declares `given`.
+pub struct FnCaps {
+    /// The function's own `given`, resolved, by deps key.
+    pub capabilities: HashMap<String, CapabilityInfo>,
+    /// Every capability the context declares, so a use outside `given` is
+    /// reported as undeclared rather than unknown.
+    pub declared_capabilities: HashMap<String, CapabilityInfo>,
+}
+
+/// #2868: check a context function that declares `given`, with its capabilities
+/// in scope.
+#[allow(clippy::too_many_arguments)]
+pub fn check_context_fn(
+    f: &FnDecl,
+    caps: FnCaps,
+    input: &ResolvedCommons,
+    expr_types: &mut HashMap<ExprId, TypedExpr>,
+    callees: &mut HashMap<ExprId, Callee>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+    requirements: &mut RequirementSink,
+    tys: &Types,
+) {
+    check_fn_in(
+        f,
+        false,
+        Some(caps),
         input,
         expr_types,
         callees,
@@ -65,9 +107,16 @@ pub fn check_suite_fn(
     requirements: &mut RequirementSink,
     tys: &Types,
 ) {
+    // #2868: a suite helper is no context function, so it cannot declare
+    // `given`; its cases get the target's capabilities instead.
+    if !f.given.is_empty() {
+        errors.extend(given_fn_refusal(f, false));
+        return;
+    }
     check_fn_in(
         f,
         true,
+        None,
         input,
         expr_types,
         callees,
@@ -86,6 +135,9 @@ pub fn check_suite_fn(
 pub(crate) fn check_fn_in(
     f: &FnDecl,
     test_values: bool,
+    // #2868: for a context function with `given`, the capabilities in scope
+    // (the declared ones, resolved) and every capability the context declares.
+    fn_caps: Option<FnCaps>,
     input: &ResolvedCommons,
     expr_types: &mut HashMap<ExprId, TypedExpr>,
     callees: &mut HashMap<ExprId, Callee>,
@@ -245,7 +297,33 @@ pub(crate) fn check_fn_in(
         effectful,
         agent_state_ty: None,
         commit_seen: false,
-        caps: CapabilityCtx::default(),
+        caps: match fn_caps {
+            Some(c) => {
+                let given_entries: Vec<(String, Span)> = f
+                    .given
+                    .iter()
+                    .map(|g| (g.key().to_string(), g.span))
+                    .collect();
+                CapabilityCtx {
+                    capabilities: c.capabilities,
+                    declared_capabilities: c.declared_capabilities,
+                    given_remaining: given_entries.iter().map(|(k, _)| k.clone()).collect(),
+                    given_used: HashSet::new(),
+                    given_entries,
+                    given_anchor: Some(f.return_type.span()),
+                }
+            }
+            // #2868: a plain effectful function in a context has no `given`, but
+            // a call to one that does is fixed by adding it, after the return type.
+            None => CapabilityCtx {
+                given_anchor: (input.is_context
+                    && !test_values
+                    && matches!(f.name, FnName::Free(_))
+                    && effectful)
+                    .then(|| f.return_type.span()),
+                ..CapabilityCtx::default()
+            },
+        },
         in_test_body: false,
         oidc_binder: None,
         test_services: HashMap::new(),
@@ -291,6 +369,10 @@ pub(crate) fn check_fn_in(
         )
         .with_label(f.return_type.span(), "declared return type");
         ctx.errors.push(with_of_hint(err, body_ty, return_ty, &ctx));
+    }
+    if !f.given.is_empty() {
+        let entries = ctx.caps.given_entries.clone();
+        report_unused_given(&mut ctx, &entries, f.return_type.span());
     }
 }
 
@@ -684,6 +766,77 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
     ctx.errors.push(err);
 }
 
+/// #2868: a call to (or reference to) a function that declares `given` is legal
+/// only where the caller has those capabilities itself. Checked at each call, so
+/// the rule is transitive without a graph walk: `f` calls `g`, so `f` declares
+/// `g`'s; a handler calls `f`, so it declares `f`'s. Recursion needs no special
+/// case. A test case supplies the capabilities its target's handlers would get.
+/// The capabilities the callee needs count as used by the caller.
+pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx) {
+    if callee.given.is_empty() {
+        return;
+    }
+    let mut missing: Vec<String> = Vec::new();
+    for c in &callee.given {
+        let key = c.key().to_string();
+        // `given_remaining` holds every declared key, including a consumed
+        // context's (`given B.Cap`), which has no `capabilities` entry.
+        if ctx.caps.given_remaining.contains(&key) {
+            ctx.caps.given_used.insert(key);
+        } else if !missing.contains(&c.display_name()) {
+            missing.push(c.display_name());
+        }
+    }
+    if missing.is_empty() || ctx.in_test_body {
+        return;
+    }
+    let list = missing.join(", ");
+    let mut err = CompileError::new(
+        "bynk.given.missing_for_call",
+        name.span,
+        format!(
+            "`{}` needs `given {list}`, which the enclosing body does not declare",
+            name.name
+        ),
+    )
+    .with_label(
+        callee.name.ident().span,
+        format!(
+            "`{}` declares `given {}`",
+            name.name,
+            callee
+                .given
+                .iter()
+                .map(|c| c.display_name())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    )
+    .with_note(if ctx.test_values {
+        // A suite helper is not a context function, so it cannot declare
+        // `given` to pass the capabilities on.
+        "a suite helper has no capabilities of its own to pass on: call it from a `case`, which gets the target's capabilities as its handlers do, or take the operation as a function parameter".to_string()
+    } else if ctx.caps.given_anchor.is_none() && ctx.caps.given_entries.is_empty() {
+        // A method, a pure function or a lambda in one cannot declare `given`.
+        "this body cannot declare `given`: take the operation as a function parameter, or call it from a handler or a context function that declares `given`".to_string()
+    } else {
+        format!(
+            "a capability never appears in a body without appearing in the signature of every handler and function on the path to it: add `{list}` to the caller's `given` clause"
+        )
+    });
+    if !ctx.test_values
+        && let Some((span, insert)) =
+            given_insertion_edit(&ctx.caps.given_entries, ctx.caps.given_anchor, &list)
+    {
+        err = err.with_suggestion(
+            format!("add `{list}` to the `given` clause"),
+            vec![(span, insert)],
+            Applicability::MachineApplicable,
+        );
+    }
+    ctx.errors.push(err);
+}
+
 pub(crate) fn check_call(
     name: &Ident,
     type_args: &[TypeRef],
@@ -705,6 +858,7 @@ pub(crate) fn check_call(
             .insert(expr_id, Callee::Fn(Arc::clone(&fn_decl), Vec::new()));
         warn_bynk_list_deprecation(name, args, span, ctx);
         refuse_experimental_import(name, ctx);
+        require_callee_given(name, &fn_decl, ctx);
         let ret = check_call_against_fn(name, &fn_decl, type_args, args, expected, ctx);
         // Slice 1: the comparator witnesses the generic-call path resolved.
         if let Some(witnesses) = ctx.last_witness.take() {
@@ -4313,10 +4467,11 @@ fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> Co
     }
 }
 
-/// #2135: whether `name` is a reserved bad-signature principal — `Forged`
-/// (a wrong secret) or `Stale` (a timestamp past the tolerance).
+/// #2135, #2864: whether `name` is a reserved bad-credential principal —
+/// `Forged` (a wrong secret), `Stale` (a timestamp past the tolerance) or
+/// `Expired` (a Bearer token whose `exp` has passed).
 pub(crate) fn is_bad_signature_principal(name: &str) -> bool {
-    matches!(name, "Forged" | "Stale")
+    matches!(name, "Forged" | "Stale" | "Expired")
 }
 
 pub(crate) fn nobody_outcome(value: &Expr, ty: TyId, ctx: &Ctx) -> TyId {
@@ -4607,36 +4762,52 @@ pub(crate) fn check_effect_let_principal(
         return;
     }
 
-    // #2135: `by Forged` / `by Stale` are reserved principals, like `Nobody`:
-    // the `system` driver signs a `Signature` route with a wrong secret, or
-    // `tolerance + 60` seconds in the past, so the real seam refuses it. They
-    // name no actor and take no identity. The `system`-only tier rule is
-    // enforced with the case's tier (`bynk.test.forged_needs_system`).
+    // #2135, #2864: `by Forged` / `by Stale` / `by Expired` are reserved
+    // principals, like `Nobody`: the `system` driver signs a `Signature` route
+    // with a wrong secret, or `tolerance + 60` seconds in the past, and a
+    // Bearer route with a token signed by a wrong secret, or one whose `exp`
+    // is an hour past, so the real seam refuses it. They name no actor and
+    // take no identity. The `system`-only tier rule is enforced with the
+    // case's tier (`bynk.test.forged_needs_system`).
     if let Some(p) = principal
         && is_bad_signature_principal(&p.actor.name)
     {
         let name = p.actor.name.as_str();
-        match handler
-            .by_clause
-            .as_ref()
-            .and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors))
-        {
-            None => {
+        let by = handler.by_clause.as_ref();
+        let sig_seam =
+            by.and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors));
+        let bearer =
+            by.is_some_and(|by| crate::actors::route_has_bearer_seam(by, &ctx.test_actors));
+        match (name, sig_seam) {
+            ("Expired", _) if !bearer => {
                 let err = CompileError::new(
-                    "bynk.test.forged_needs_signature_route",
+                    "bynk.test.expired_needs_bearer_route",
                     p.span,
-                    format!(
-                        "`by {name}` sends a bad signature to a `Signature` seam, but this handler's route has no `Signature` seam that refuses one"
-                    ),
+                    "`by Expired` sends an expired token to a `Bearer` seam, but this handler's route has no `Bearer` seam that refuses one",
                 )
                 .with_note(
-                    "use `by Forged` and `by Stale` on a route guarded by a `Signature` actor; on a Bearer route, `by Nobody` drives the seam to a `401`",
+                    "use `by Expired` on a route guarded by a `Bearer` actor; on a `Signature` route, `by Stale` sends a stale signature",
                 );
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
-            Some(seam)
-                if name == "Stale"
-                    && (seam.timestamp_header.is_none() || seam.tolerance_secs.is_none()) =>
+            ("Expired", _) => {}
+            ("Forged" | "Stale", None) if !(name == "Forged" && bearer) => {
+                let err = CompileError::new(
+                    "bynk.test.forged_needs_signature_route",
+                    p.span,
+                    if name == "Forged" {
+                        "`by Forged` sends a bad credential to a `Signature` or `Bearer` seam, but this handler's route has neither seam to refuse one".to_string()
+                    } else {
+                        "`by Stale` sends a stale signature to a `Signature` seam, but this handler's route has no `Signature` seam that refuses one".to_string()
+                    },
+                )
+                .with_note(
+                    "use `by Forged` on a route guarded by a `Signature` or `Bearer` actor, and `by Stale` on a `Signature` one; `by Nobody` drives either seam to a `401`",
+                );
+                ctx.errors.push(with_open_sum_note(err, &handler, ctx));
+            }
+            ("Stale", Some(seam))
+                if seam.timestamp_header.is_none() || seam.tolerance_secs.is_none() =>
             {
                 ctx.errors.push(
                     CompileError::new(
@@ -4649,13 +4820,13 @@ pub(crate) fn check_effect_let_principal(
                     ),
                 );
             }
-            Some(_) => {}
+            _ => {}
         }
         if let Some(idv) = &p.identity {
             ctx.errors.push(CompileError::new(
                 "bynk.test.actor_no_identity",
                 p.span,
-                format!("`{name}` presents a signature, not an identity, so it takes none — write `by {name}`"),
+                format!("`{name}` presents a bad credential, not an identity, so it takes none — write `by {name}`"),
             ));
             let _ = type_of(idv, None, ctx);
         }
@@ -4891,18 +5062,26 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
                 let _ = type_of(id, None, ctx);
             }
         }
-        // #2135: a reserved bad-signature principal reaching no http route
-        // (a `call`, an event, a cron or queue address) has no `Signature`
-        // seam to refuse it.
+        // #2135, #2864: a reserved bad-credential principal reaching no http
+        // route (a `call`, an event, a cron or queue address) has no
+        // `Signature` or `Bearer` seam to refuse it.
         ActorIdentity::Unknown if is_bad_signature_principal(name) => {
-            ctx.errors.push(
+            let err = if name == "Expired" {
+                CompileError::new(
+                    "bynk.test.expired_needs_bearer_route",
+                    p.span,
+                    "`by Expired` sends an expired token to a `Bearer` seam, but this address reaches no `Bearer`-secured http route",
+                )
+                .with_note("use `by Expired` on an http route guarded by a `Bearer` actor")
+            } else {
                 CompileError::new(
                     "bynk.test.forged_needs_signature_route",
                     p.span,
-                    format!("`by {name}` sends a bad signature to a `Signature` seam, but this address reaches no `Signature`-secured http route"),
+                    format!("`by {name}` sends a bad credential to a `Signature` or `Bearer` seam, but this address reaches no `Signature`- or `Bearer`-secured http route"),
                 )
-                .with_note("use `by Forged` and `by Stale` on an http route guarded by one `Signature` actor"),
-            );
+                .with_note("use `by Forged` on an http route guarded by a `Signature` or `Bearer` actor, and `by Stale` on a `Signature` one")
+            };
+            ctx.errors.push(err);
             if let Some(id) = &p.identity {
                 let _ = type_of(id, None, ctx);
             }

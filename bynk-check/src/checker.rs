@@ -52,6 +52,19 @@ mod par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::split_regex_flags;
+
+/// #2869: the first predicate of a refined or opaque `String` type that `value`
+/// fails, in the order the emitted boundary checks them (`None` when it holds
+/// every one, or when the type carries no refinement). `bynk token` validates a
+/// `--sub` against a Bearer actor's identity type with it, so the token it signs
+/// is one the seam's own refinement check accepts.
+pub fn string_refinement_violation<'a>(
+    decl: &'a bynk_syntax::ast::TypeDecl,
+    value: &str,
+) -> Option<&'a bynk_syntax::ast::PredKind> {
+    let refinement = refinements::type_decl_refinement(decl)?;
+    refinements::first_failed_predicate(refinement, &ConstLit::Str(value.to_string()))
+}
 mod regex_ambiguity;
 mod usefulness;
 
@@ -61,8 +74,8 @@ use kernels::*;
 use refinements::*;
 
 pub use calls::{
-    BYNK_LIST_DEPRECATED, check_const_decl, check_event_field_default, check_state_initialiser,
-    check_suite_fn,
+    BYNK_LIST_DEPRECATED, FnCaps, check_const_decl, check_context_fn, check_event_field_default,
+    check_state_initialiser, check_suite_fn,
 };
 pub use d1::row_bool_fields;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
@@ -1229,6 +1242,15 @@ pub fn check_record_in(
     // 2. Type-check each function and method body.
     for item in &input.commons.items {
         if let CommonsItem::Fn(f) = item {
+            // #2868: `given` on a function. A refused declaration is reported
+            // and its body is not checked; a context function's is checked with
+            // the context's declarations (`check_given_fns`).
+            if !f.given.is_empty() {
+                if let Some(err) = given_fn_refusal(f, input.is_context) {
+                    errors.push(err);
+                }
+                continue;
+            }
             refs.set_owner(f.name.display());
             check_fn(
                 f,
@@ -1325,6 +1347,75 @@ pub fn check_record_in(
             ty_intern,
         }
     }
+}
+
+/// #2868: why a `given` clause on this function is refused, if it is. Only a
+/// free, effectful function in a context may declare `given`: a context knows
+/// which capabilities it consumes, where a commons is shared by contexts that
+/// may consume different ones (so its functions keep the function-value style,
+/// `(m) => Logger.error(m)` passed in), and a method call has no place to carry
+/// the capabilities.
+pub(crate) fn given_fn_refusal(f: &FnDecl, is_context: bool) -> Option<CompileError> {
+    let span = f.given.first().map(|g| g.span)?;
+    let span = span.merge(f.given.last().map_or(span, |g| g.span));
+    if !is_context {
+        return Some(
+            CompileError::new(
+                "bynk.given.fn_outside_context",
+                span,
+                format!(
+                    "function `{}` cannot declare `given`: only a function in a context can",
+                    f.name.display()
+                ),
+            )
+            .with_note(
+                "a commons is shared by every context that uses it, and those contexts may consume different capabilities, so a commons function reaches a capability only through a function value its caller passes in",
+            )
+            .with_note(
+                "take the operation as a parameter instead, `log: (String) -> Effect[()]`, and pass `(m) => Logger.error(m)` from the handler; or move the function into the context that consumes the capability",
+            ),
+        );
+    }
+    if matches!(f.name, FnName::Method { .. }) {
+        return Some(
+            CompileError::new(
+                "bynk.given.fn_unsupported",
+                span,
+                format!(
+                    "method `{}` cannot declare `given`",
+                    f.name.display()
+                ),
+            )
+            .with_note("only a free function in a context can declare `given`; take the operation as a function-value parameter, or make this a free function"),
+        );
+    }
+    if !matches!(f.return_type, TypeRef::Effect(..)) {
+        return Some(
+            CompileError::new(
+                "bynk.given.fn_unsupported",
+                span,
+                format!(
+                    "function `{}` declares `given` but does not return `Effect[T]`",
+                    f.name.display()
+                ),
+            )
+            .with_note("a capability operation is an effect, so a function that uses one returns `Effect[T]`"),
+        );
+    }
+    if let Some(ev) = f.given.iter().find(|g| g.key() == "Events") {
+        return Some(
+            CompileError::new(
+                "bynk.given.fn_unsupported",
+                ev.span,
+                format!(
+                    "function `{}` cannot declare `given Events`",
+                    f.name.display()
+                ),
+            )
+            .with_note("`Events.emit` buffers until its handler commits, so it belongs in the handler: emit there, or pass the event back to the caller"),
+        );
+    }
+    None
 }
 
 /// Finding #28 (debug-only), T3.4: the block-level half of the `expr_types`
@@ -1634,6 +1725,20 @@ pub fn check_handler_body(
         ctx.errors
             .push(calls::with_of_hint(err, body_ty, return_ty, &ctx));
     }
+    if report_unused {
+        report_unused_given(&mut ctx, &given_entries, return_ty_span);
+    }
+}
+
+/// Bidirectional `given` check, second half: every declared capability is used.
+/// Entries are walked in declaration order (deduplicated by key) so diagnostics
+/// and their fixes are stable. Shared by handlers and (#2868) `given` functions,
+/// whose clause follows the return type just as a handler's does.
+pub(crate) fn report_unused_given(
+    ctx: &mut Ctx,
+    given_entries: &[(String, Span)],
+    return_ty_span: Span,
+) {
     // Bidirectional `given` check.
     // 1) Every used capability is declared. (Handled in capability-call site.)
     // 2) Every declared capability is used — anything left in given_remaining
@@ -1642,9 +1747,6 @@ pub fn check_handler_body(
     //    (deduplicated by key) so diagnostics and their fixes are stable.
     let mut reported: HashSet<&str> = HashSet::new();
     for (i, (c, _)) in given_entries.iter().enumerate() {
-        if !report_unused {
-            break;
-        }
         if ctx.caps.given_used.contains(c) || !reported.insert(c) {
             continue;
         }
@@ -1657,14 +1759,14 @@ pub fn check_handler_body(
             // Finding #49: the CLI now renders `.with_suggestion` below, so
             // this note carries only the alternative fix the suggestion
             // doesn't (removing the capability from `given`).
-            .with_note("alternatively, use the capability in the handler body")
+            .with_note("alternatively, use the capability in the body")
             // v0.26 (ADR 0054): the removal is list-aware — only `report_unused`
             // sites are handlers, where the clause follows the return type, so
             // `return_ty_span` anchors the only-entry case.
             .with_suggestion(
                 format!("remove `{c}` from the `given` clause"),
                 vec![(
-                    given_removal_span(&given_entries, i, return_ty_span),
+                    given_removal_span(given_entries, i, return_ty_span),
                     String::new(),
                 )],
                 Applicability::MachineApplicable,

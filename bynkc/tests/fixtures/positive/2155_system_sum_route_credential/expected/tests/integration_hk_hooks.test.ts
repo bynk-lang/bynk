@@ -57,7 +57,7 @@ function __makeHarness() {
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
-function __b64url(s: string): string { return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function __b64url(s: string): string { return __bytesB64url(new TextEncoder().encode(s)); }
 function __bytesB64url(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 async function __bynkSignHs256(payload: Record<string, unknown>, secret: string): Promise<string> {
   const h = __b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
@@ -205,6 +205,19 @@ async function __sysdrive_rawstale_api_http_POST_notify(body: string, __sub: str
   const __res = await __h.env.HK_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_expired_api_http_POST_notify(body: string, __sub: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notify`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: __body, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawexpired_api_http_POST_notify(body: string, __sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notify`, { method: "POST", headers: { "content-type": "application/json", "authorization": __token, }, body: body, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_api_http_GET_greet(__sub: string, __as: string) {
 const __auth: globalThis.Record<string, string> = {};if (__as === "User") { __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`; }  const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/greet`, { method: "GET", headers: { ...__auth, }, });
@@ -214,6 +227,18 @@ const __auth: globalThis.Record<string, string> = {};if (__as === "User") { __au
 async function __sysdrive_noauth_api_http_GET_greet(__sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/greet`, { method: "GET", headers: { }, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_expired_api_http_GET_greet(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/greet`, { method: "GET", headers: { "authorization": __token, }, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_greet(__sub: string) {
+const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/greet`, { method: "GET", headers: { "authorization": __token, }, });
   const __res = await __h.env.HK_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -308,13 +333,29 @@ async function test_unsigned__forged_and_stale_notices_to_the_sum_route_are_refu
   }
 }
 
+async function test_an_expired_token_to_the_sum_route_is_refused() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_expired_api_http_POST_notify("hi", "");
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:35:10", 1162, 1189, "expect r is Rejected(Unauthorized)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 async function test_a_forged_raw_notice_to_the_sum_route_is_refused() {
   try {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_rawforged_api_http_POST_notify("hi", "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:35:10", 1170, 1197, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:40:10", 1314, 1341, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -330,7 +371,7 @@ async function test_a_Bearer_primary_s_public_member_is_reached_with_no_token() 
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_greet("", "Visitor");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello stranger"))) { throw __bynkExpectFailure("tests/hooks.bynk:40:10", 1319, 1344, "expect r is Ok(\"hello stranger\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello stranger"))) { throw __bynkExpectFailure("tests/hooks.bynk:45:10", 1463, 1488, "expect r is Ok(\"hello stranger\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -346,7 +387,7 @@ async function test_a_Bearer_primary_s_member_is_reached_as_itself() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_greet(("ann" as any), "User");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello ann"))) { throw __bynkExpectFailure("tests/hooks.bynk:45:10", 1459, 1479, "expect r is Ok(\"hello ann\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello ann"))) { throw __bynkExpectFailure("tests/hooks.bynk:50:10", 1603, 1623, "expect r is Ok(\"hello ann\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -370,7 +411,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a lone signed notice is accepted", "a lone notice as the processor is accepted", "a notice to the sum route as the processor is signed", "a notice to the sum route as a user carries a token", "unsigned, forged and stale notices to the sum route are refused", "a forged raw notice to the sum route is refused", "a Bearer primary's public member is reached with no token", "a Bearer primary's member is reached as itself"];
+export const __bynkCases: readonly string[] = ["a lone signed notice is accepted", "a lone notice as the processor is accepted", "a notice to the sum route as the processor is signed", "a notice to the sum route as a user carries a token", "unsigned, forged and stale notices to the sum route are refused", "an expired token to the sum route is refused", "a forged raw notice to the sum route is refused", "a Bearer primary's public member is reached with no token", "a Bearer primary's member is reached as itself"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -402,6 +443,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("unsigned, forged and stale notices to the sum route are refused")) {
     const started = __bynkCaseNow();
     const r = { name: "unsigned, forged and stale notices to the sum route are refused", ...(await test_unsigned__forged_and_stale_notices_to_the_sum_route_are_refused()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an expired token to the sum route is refused")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an expired token to the sum route is refused", ...(await test_an_expired_token_to_the_sum_route_is_refused()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

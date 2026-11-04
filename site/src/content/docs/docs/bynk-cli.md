@@ -29,6 +29,7 @@ bynk <command> [options]
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
 | [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
 | [`bynk openapi`](#bynk-openapi) | Write an OpenAPI 3.1 document for the project's `from http` services. |
+| [`bynk token`](#bynk-token) | Mint a credential for the project's own `Bearer` actor, to call a guarded route by hand. |
 | [`bynk fmt`](#bynk-fmt) | Format `.bynk` source files in place. |
 | [`bynk test`](#bynk-test) | Discover and run a project's tests. |
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
@@ -539,6 +540,60 @@ The project must check clean; otherwise the command lists the errors and writes
 nothing. It exits non-zero when the project has no `from http` service, when
 `--service` names none, and when two selected services answer the same method and
 path.
+
+---
+
+## `bynk token`
+
+Mint a credential for a `Bearer` actor your project declares, to call a guarded
+route by hand — `curl` under [`bynk dev`](#bynk-dev), or a smoke test against a
+deployment. The actor declares everything a minter needs (HS256, the secret's
+name, `sub` as the identity), so you never write a signing script of your own and
+the token cannot disagree with the actor's seam.
+
+```text
+bynk token [ACTOR] [--sub ID] [--lifetime DURATION] [--expired] [--not-before DURATION] [--input PATH] [--locked] [--offline]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `ACTOR` | — | The actor to mint for, as `Name` or `unit.Name`. Omit it to list the project's `Bearer` actors and the secret each reads. |
+| `--sub` | required | The identity the token names (its `sub` claim). It is checked against the actor's identity type, refinements included, before anything is signed. |
+| `--lifetime` | `1h` | How long the token is valid: a whole number and a unit (`s`, `m`, `h`, `d`), at most `365d`. |
+| `--expired` | off | Mint a token that expired an hour ago, to test that the seam refuses it. Not with `--lifetime` or `--not-before`. |
+| `--not-before` | — | Make the token valid only from this far in the future (`10m`), to test that the seam refuses it as not yet valid. The lifetime counts from that moment. |
+| `--input` | `.` | A project directory, or any path inside one. |
+
+```console
+$ API_TOKEN_SECRET=… bynk token Reader --sub me
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…
+$ curl -H "Authorization: Bearer $(bynk token Reader --sub me)" http://localhost:8787/me
+```
+
+Only the token goes to stdout, on one line, so it composes in `$(…)`. Errors go
+to stderr and the exit status is non-zero.
+
+**Not `bynk org token mint`.** That mints a registry *publish* token for
+[`bynk publish`](#bynk-publish), from your account. `bynk token` mints a JWT for
+an `actor` *this project* declares, and talks to no registry.
+
+**The secret** comes from the environment, under the name the actor declares —
+`auth = Bearer(secret = "API_TOKEN_SECRET")` reads `$API_TOKEN_SECRET`. There is
+no flag for it: an argument would show in a process listing and in shell
+history. A variable that is unset or empty is an error that names it. The secret
+is never printed.
+
+**Which actors.** `Bearer` only. A `Signature` actor authenticates a request by
+an HMAC over that request's body, so there is no standalone credential to mint;
+an `Oidc` actor's tokens are minted by the identity provider, which holds the
+private key. Both are refused with that explanation. A refinement actor
+(`actor Admin = User where hasClaim(…)`) is refused too: its seam also checks
+claims the token must carry, which `bynk token` does not set. Mint with the base
+actor to test authentication.
+
+**The token** is an HS256 JWT with the claims `sub`, `exp` and, under
+`--not-before`, `nbf` — the same header, claims and unpadded base64url the
+emitted verifier reads. The project must check clean.
 
 ---
 

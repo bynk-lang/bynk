@@ -1298,6 +1298,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["given_clause"],
     ),
     dg(
+        "bynk.given.fn_outside_context",
+        "A function in a commons (or a suite) declares `given`; only a context function can.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.fn_unsupported",
+        "A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.missing_for_call",
+        "A call to a function that declares `given` from a body that does not declare those capabilities.",
+        &["given_clause"],
+    ),
+    dg(
         "bynk.given.undeclared_capability",
         "A handler uses a capability it did not declare with `given`.",
         &["given_clause"],
@@ -2865,18 +2880,23 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.expired_needs_bearer_route",
+        "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum); it sends a correctly signed token whose `exp` has passed, so only a `Bearer` seam can refuse it.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.faults_needs_in_process",
-        "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged` or `by Stale`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`.",
+        "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale` or `by Expired`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`.",
         &["case"],
     ),
     dg(
         "bynk.test.forged_needs_signature_route",
-        "A case drives `by Forged` or `by Stale` at an address that is not an http route with a `Signature` actor (alone, or as a member of an actor sum); they send a bad signature, so only a `Signature` seam can refuse them.",
+        "A case drives `by Forged` at an address that is not an http route with a `Signature` or `Bearer` actor, or `by Stale` at one with no `Signature` actor (alone, or as a member of an actor sum); they send a bad credential, so only a `Signature` or `Bearer` seam can refuse them.",
         &["case"],
     ),
     dg(
         "bynk.test.forged_needs_system",
-        "A case drives `by Forged` or `by Stale` outside a `system`-tier case; only the `system` driver signs a request, so only there does the real `Signature` seam see the bad signature.",
+        "A case drives `by Forged`, `by Stale` or `by Expired` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature` or `Bearer` seam see the bad credential.",
         &["case"],
     ),
     dg(
