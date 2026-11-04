@@ -1,7 +1,7 @@
 {
   "version": 1,
   "provides": {
-    "echo": "2f7b190a61e56a47",
+    "echo": "079bebf1abc5532f",
     "level": "1a48d7416e32c8d8",
     "run": "c6a2fb2a40cce571"
   },
@@ -12,7 +12,7 @@
     }
   },
   "provides_shapes": {
-    "echo": "Svc(\"echo\",P(\"c\",N(\"LibCode\")),Ret(N(\"LibCode\")))",
+    "echo": "Svc(\"echo\",P(\"c\",Sum(\"LibCode\",V(\"Alpha\"),V(\"Beta\"))),Ret(Sum(\"LibCode\",V(\"Alpha\"),V(\"Beta\"))))",
     "level": "Svc(\"level\",Ret(B(\"Int\")))",
     "run": "Svc(\"run\",Ret(B(\"Int\")))"
   },

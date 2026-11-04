@@ -1,0 +1,22 @@
+context app
+
+consumes lib { Code as LibCode, Tagged }
+
+// #2890: `Tagged` is not renamed, but its `code` field names the type `lib`
+// calls `Code`, which this context renames, so the field is a `LibCode` here.
+
+fn codeOf(t: Tagged) -> LibCode { t.code }
+
+fn isAlpha(c: LibCode) -> Bool {
+	match c {
+		Alpha => true
+		Beta => false
+	}
+}
+
+service check {
+	on call() -> Effect[Bool] {
+		let t = Tagged { code: LibCode.Alpha, label: "a" }
+		Effect.pure(isAlpha(codeOf(t)))
+	}
+}

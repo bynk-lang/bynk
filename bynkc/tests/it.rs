@@ -30,6 +30,8 @@ mod adapter_flattened_capability_stub_behaviour;
 mod agent_state_corpus;
 #[path = "agent_state_schema_lock.rs"]
 mod agent_state_schema_lock;
+#[path = "alias_service_workerd.rs"]
+mod alias_service_workerd;
 #[path = "asset_check_behaviour.rs"]
 mod asset_check_behaviour;
 #[path = "bearer_auth.rs"]

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "provides": {
+    "probe": "bda0be7a6aa30fb4"
+  },
+  "expects": {
+    "app": {
+      "echo": "079bebf1abc5532f"
+    }
+  },
+  "provides_shapes": {
+    "probe": "Svc(\"probe\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "app": {
+      "echo": "Svc(\"echo\",P(\"c\",Sum(\"LibCode\",V(\"Alpha\"),V(\"Beta\"))),Ret(Sum(\"LibCode\",V(\"Alpha\"),V(\"Beta\"))))"
+    }
+  }
+}

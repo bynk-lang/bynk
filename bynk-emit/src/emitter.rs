@@ -2026,6 +2026,12 @@ fn emit_consumed_context_helpers(
             let ts_name = owner
                 .and_then(|owner| original.strip_prefix(&format!("{}__", qualified_to_ns(owner))))
                 .unwrap_or(original.as_str());
+            // #2890: a type `c` renamed itself is named by the name it declares.
+            let ts_name = info
+                .callee_type_aliases
+                .get(c)
+                .and_then(|a| a.get(ts_name))
+                .map_or(ts_name, String::as_str);
             qual.insert(renamed.clone(), format!("{owner_ns}{ts_name}"));
         }
         // #2887: a type this context renames from `c` is named in TS by the

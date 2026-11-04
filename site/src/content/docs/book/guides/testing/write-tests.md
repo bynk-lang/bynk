@@ -264,6 +264,14 @@ stub Net.fetch(_) returns each [fails, fails, ok(resp)]  // fails twice, then su
 (precedence: case > suite > the tier default). See the
 [`stub` reference](/book/reference/testing/#stub).
 
+## Aliased types in a suite
+
+A context may rename a consumed type (`consumes bynk.crypto { Digest as
+CryptoDigest }`), but a suite is not a consuming context and does not see the
+alias. Inside a case, name the type by the name its unit declares; the alias is
+`unknown name` there. A `stub` pattern is the exception: it resolves in the
+context under test, so it may use the alias.
+
 ## Promote a case across tiers
 
 A test declares *how much of the real world runs* with an `as <tier>` clause on its
