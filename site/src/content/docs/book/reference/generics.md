@@ -267,7 +267,7 @@ fn Box.empty() -> Box[Option[T]] { Box { value: None } }
 
 type Sorted[T: Ord] = { items: List[T] }
 
-fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: sort(xs) } }
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: xs.sortBy((x) => x) } }
 
 fn demo() -> Int {
   let a = Box.of(5)
