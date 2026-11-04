@@ -1425,7 +1425,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.http.extra_param",
-        "A handler parameter is not a path parameter, `body` or `headers`.",
+        "A handler parameter is not a path parameter, `body`, `headers` or `query`.",
         &["http_handler"],
     ),
     dg(
@@ -1437,6 +1437,34 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.invalid_path",
         "An HTTP route path is malformed.",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.json_duplicate",
+        "A handler carries more than one `@json` annotation.",
+    ),
+    d(
+        "bynk.http.json_invalid_arg",
+        "A `@json` annotation's `options` argument is missing or is not `tagged` or `plain`.",
+    ),
+    d(
+        "bynk.http.json_invalid_field",
+        "A `json { }` policy's `options` is not `tagged` or `plain`.",
+    ),
+    d(
+        "bynk.http.json_not_http",
+        "A `json { }` policy appears on a service that is not `from http`.",
+    ),
+    d(
+        "bynk.http.json_on_non_http",
+        "A `@json` annotation is placed on a handler that is not `on http`.",
+    ),
+    d(
+        "bynk.http.json_unknown_arg",
+        "A `@json` annotation has an argument outside the closed set (`options`).",
+    ),
+    d(
+        "bynk.http.json_unknown_field",
+        "A `json { }` policy declares a field outside the closed set (`options`).",
     ),
     d(
         "bynk.http.limit_bad_max_body",
@@ -1469,6 +1497,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.http.path_param_not_stringy",
         "A path parameter's type is not constructible from a string.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.query_field_not_stringy",
+        "A field of an HTTP handler's `query` record has a type a query string cannot carry.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.query_not_http",
+        "A `RequestQuery` appears on a handler that is not an HTTP route.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.query_wrong_type",
+        "An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`.",
         &["http_handler"],
     ),
     d(
@@ -1570,6 +1613,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.invariant.not_bool",
         "An invariant predicate does not have type `Bool`.",
+    ),
+    d(
+        "bynk.json.nested_option_plain",
+        "A plain-JSON route's response type contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`.",
     ),
     dg(
         "bynk.lambda.unannotated_param",
@@ -1832,6 +1879,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["service_decl"],
     ),
     dg(
+        "bynk.parse.duplicate_json",
+        "A service declares more than one `json { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
         "bynk.parse.duplicate_limits",
         "A service declares more than one `limits { }` policy.",
         &["service_decl"],
@@ -2024,7 +2076,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     dg(
         "bynk.parse.policy_order",
-        "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`.",
+        "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`, `json`.",
         &["service_decl"],
     ),
     dg(
@@ -3405,6 +3457,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.rejection_at_boundary",
         "`BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
+    ),
+    d(
+        "bynk.types.request_query_at_boundary",
+        "`RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     d(
         "bynk.types.return_mismatch",

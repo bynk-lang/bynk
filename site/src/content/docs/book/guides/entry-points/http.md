@@ -60,6 +60,32 @@ a `Day`; add `+ 1.days` for the next day:
 let start = Instant.fromIso("\(day)T00:00:00Z")
 ```
 
+## Filter and paginate a `GET` with a typed query
+
+A `query` parameter whose type is a record reads the query string. The router
+decodes it, applies the defaults and checks the refinements before the handler
+runs, so the handler only ever sees a valid filter:
+
+```bynk,fragment
+type Limit = Int where InRange(1, 500)
+
+type Filter = {
+  owner: Option[String],
+  limit: Limit = 50,
+}
+
+service api from http {
+  on GET("/notes") (query: Filter) -> Effect[HttpResult[String]] by Visitor {
+    Ok("up to \(query.limit)")
+  }
+}
+```
+
+`GET /notes?owner=ada&limit=100` reaches the handler; `GET /notes?limit=0` is a
+`400` before it. Keys the record doesn't declare are ignored. For keys you can't
+name ahead of time, take a raw [`query: RequestQuery`](/book/reference/http/#request-query)
+instead. See [Query strings](/book/reference/http/#query-strings).
+
 ## Accept a request body
 
 A `body` parameter is parsed and validated from the request's JSON before the
@@ -334,6 +360,37 @@ unchanged, so this is opt-in.
 
 See [HTTP → Request body limits](/book/reference/http/#request-body-limits) for the
 precedence rule, how the bytes read are counted, and the field tables.
+
+## Serve JSON to non-Bynk clients
+
+Bynk writes an `Option` in a response body as `{"kind": "Some", "value": …}`, which
+every non-Bynk consumer then has to special-case. Opt the service into plain JSON,
+so `Some(v)` is `v` and `None` is `null`:
+
+```bynk
+context activity
+
+type Activity = { id: String, action: Option[String], deleted: Option[Bool] }
+
+service api from http {
+  json { options: plain }
+
+  on GET("/activity/:id") (id: String) -> Effect[HttpResult[Activity]] by r: Visitor {
+    Ok(Activity { id: id, action: Some("opened"), deleted: None })
+  }
+
+  @json(options: tagged)       // this one route keeps Bynk's tagged form
+  on GET("/activity/:id/raw") (id: String) -> Effect[HttpResult[Option[String]]] by r: Visitor {
+    Ok(Some("x"))
+  }
+}
+```
+
+`GET /activity/1` answers `{"id":"1","action":"opened","deleted":null}`. A Bynk
+client still reads it. Plain mode refuses an `Option[Option[T]]` or `Option[()]` in a response
+type (`Some(None)` and `None` would both be `null`).
+
+See [HTTP → JSON for non-Bynk clients](/book/reference/http/#json-for-non-bynk-clients).
 
 ## Build and run
 

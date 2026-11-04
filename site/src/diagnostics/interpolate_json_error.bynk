@@ -1,0 +1,11 @@
+commons orders
+
+type Order = { id: String, qty: Int }
+
+fn explain(raw: String) -> String {
+  match Json.decode[Order](raw) {
+    Ok(order) => order.id,
+    // The error itself has no string form; its fields do.
+    Err(e) => "order did not decode: \(e)",
+  }
+}

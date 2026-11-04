@@ -1657,7 +1657,16 @@ unique, MUST NOT use the reserved `/_bynk/` prefix
 and each `:name` segment MUST bind to a string-constructible parameter
 (`bynk.http.unbound_path_param`, `bynk.http.path_param_not_stringy`,
 `bynk.http.extra_param`); `GET` and `DELETE` MUST NOT take a `body`
-(`bynk.http.body_on_get_or_delete`). Constructing a `Raw` variant (v0.111) MUST
+(`bynk.http.body_on_get_or_delete`). A parameter named `query` that no `:query`
+segment binds (#2854) MUST be `RequestQuery` or a record type, at most one per
+handler, whose fields are each a `String`, `Int`, `Bool` or `Decimal`, a refined or
+opaque type over one, or an enum, or an `Option` or `List` of one
+(`bynk.http.query_wrong_type`, `bynk.http.query_field_not_stringy`); the router
+MUST decode a record `query` from the request's query string and validate it, with
+a `400` on a violation, before the handler runs, ignoring keys the record does not
+declare and refusing a repeated key on a field that is not a `List`. A
+`RequestQuery` MUST NOT appear outside an HTTP handler's `query` parameter
+(`bynk.http.query_not_http`, `bynk.types.request_query_at_boundary`). Constructing a `Raw` variant (v0.111) MUST
 supply exactly two arguments — a `Bytes` body then a `String` content-type
 (`bynk.types.variant_arity`, `bynk.types.argument_mismatch`) — and yields
 `HttpResult[()]`, the JSON body parameter `T` being unused, as for `Streaming`
@@ -1828,6 +1837,37 @@ cap, and passes the octets to the handler undecoded. A `Signature` actor verifie
 over those octets. A `Bytes` body without `@raw` keeps its base64-in-JSON form. See
 [§7.4.3](/book/spec/runtime-library/#743-httpresult) for the runtime lowering and
 its position in the dispatch order.
+
+### §5.7.5 Response JSON encoding (#2858) {#response-json}
+
+A `from http` service MAY declare a single **`json { }`** section in header
+position after `limits { }`, and an `on http` handler MAY carry a single
+**`@json`** annotation that overrides it. Both choose how an `Option` is written
+in the handler's response body.
+
+The **`json { }`** section is legal only on a `from http` service
+(`bynk.http.json_not_http`) and at most once per service
+(`bynk.parse.duplicate_json`). Its only field is **`options`**, whose value is the
+bare identifier `tagged` or `plain` (`bynk.http.json_invalid_field`); any other
+field is `bynk.http.json_unknown_field`. **`@json(options: tagged | plain)`** is
+legal only on an `on http` handler (`bynk.http.json_on_non_http`), at most once
+(`bynk.http.json_duplicate`), takes only `options` (`bynk.http.json_unknown_arg`)
+and requires it (`bynk.http.json_invalid_arg`).
+
+The **effective mode** of a route is its `@json`, else its service's `json { }`,
+else `tagged`. In `tagged` mode an `Option[U]` is written `{"kind": "Some",
+"value": u}` or `{"kind": "None"}`. In `plain` mode `Some(u)` is written as `u`
+and `None` as `null`, the key always present, at any depth. The mode applies to
+the `Ok`, `Created` and `Accepted` bodies only; request decoding, cross-context
+calls, queues, agent state, `Json.encode`, SSE events and contract hashes keep the
+tagged form and are unchanged.
+
+**Injectivity.** Plain mode would write `Some(u)` and `None` of an
+`Option[U]` identically when `U` can itself encode as `null` (`Option[T]` or `()`), so such an `Option` reachable from the
+response type of a `plain` route (through record and sum fields, `List`, `Set`,
+`Map`, `Result`, and generic arguments after substitution) is
+`bynk.json.nested_option_plain`. A service or route with neither declaration is
+unchanged.
 
 A **`from websocket(in: I, out: O)`** service (v0.103) binds the inbound frame
 type `I` and the server-sent frame type `O` on its header, and declares the

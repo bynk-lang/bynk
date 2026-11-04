@@ -1562,7 +1562,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             // v0.154 (ADR 0178): a `Result` operand whose error type differs from
             // the enclosing return's is converted by a declared embedding
             // (`embeds E as V`) — the same rule the checker accepted it under.
-            let embed = if is_option {
+            let embed = if is_option || cx.question_fails_case() {
                 None
             } else {
                 embed_conversion(operand_ty, cx)
@@ -1570,7 +1570,21 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             let inner_expr = pre.lower(inner, cx);
             let tmp = cx.fresh();
             pre.push(format!("const {tmp} = {inner_expr};"));
-            if is_option {
+            if cx.question_fails_case() {
+                // #2857: a case returns a `CaseResult`, not the operand's
+                // `Result` — so the `?` fails the case, reporting the `Err`
+                // value at the `?`'s location. (The checker rejects an `Option`
+                // operand outside an `HttpResult` handler.)
+                let (start, end) = (e.span.start, e.span.end);
+                let location = expect_location(cx, start);
+                let src = expect_source_text(cx, e.span);
+                let test = format!("{tmp}.tag === \"Err\"");
+                let detail =
+                    format!("\"{src}\\n  the operand was Err: \" + __bynkShow({tmp}.error)");
+                pre.push(format!(
+                    "if ({test}) {{ throw __bynkExpectFailure(\"{location}\", {start}, {end}, {detail}); }}"
+                ));
+            } else if is_option {
                 pre.push(format!(
                     "if ({tmp}.tag === \"None\") return HttpResult.NotFound;"
                 ));
@@ -2857,6 +2871,24 @@ fn lower_method_call(
             _ => {}
         }
     }
+    // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
+    // runtime's query view from `"name=value"` pairs.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_QUERY)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_query();
+                return pre.finish(format!("__requestQuery({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_query();
+                return pre.finish("__requestQuery([])".to_string());
+            }
+            _ => {}
+        }
+    }
     // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
     // lowers to a host async iterable; `of` wraps a list as an async generator.
     // Emitted inline (no runtime import), like the collection kernels.
@@ -3166,6 +3198,16 @@ fn lower_method_call(
         } else {
             None
         };
+        let query_info = if is_raw {
+            cx.system_http_route_body(&(
+                id.name.clone(),
+                verb.as_str().to_string(),
+                format!("{path}{}", crate::emitter::QUERY_ROUTE_SUFFIX),
+            ))
+            .cloned()
+        } else {
+            None
+        };
         let rest: Vec<String> = args[1..]
             .iter()
             .enumerate()
@@ -3180,9 +3222,25 @@ fn lower_method_call(
                 // unconverted.
                 if matches!(
                     cx.commons().expr_ty(a.id).as_deref(),
-                    Some(Ty::RequestHeaders)
+                    Some(Ty::RequestHeaders | Ty::RequestQuery)
                 ) {
                     return lowered;
+                }
+                // #2854: a typed `query` record becomes the query string the
+                // raw driver appends to the URL.
+                if let Some((query_idx, ty)) = &query_info
+                    && *query_idx == i
+                {
+                    cx.note_query_string();
+                    return format!(
+                        "__queryString({})",
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                            ty,
+                            &format!("({lowered} as any)"),
+                            cx.system_http_type_ns(),
+                            cx.runtime_use()
+                        ))
+                    );
                 }
                 match &body_info {
                     // A named type's typed literal is unbranded in test-scaffold
@@ -3613,7 +3671,7 @@ fn lower_method_call(
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
-            Ty::RequestHeaders | Ty::TokenClaims => {
+            Ty::RequestHeaders | Ty::RequestQuery | Ty::TokenClaims => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
                 return pre.finish(format!("({recv}).{}({})", method.name, args.join(", ")));
@@ -7303,6 +7361,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
@@ -7716,6 +7775,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
     // outer `let` rename, popped once the body is lowered so the
     // registration doesn't leak past the lambda.
     cx.shadow_scopes.push(HashMap::new());
+    cx.lambda_depth += 1;
     for p in &lambda.params {
         cx.declare_binder(&p.name.name);
     }
@@ -7777,6 +7837,7 @@ fn lower_lambda(e: &Expr, lambda: &LambdaExpr, cx: &mut LowerCtx) -> String {
     cx.is_temp_hoist = saved_hoist;
     cx.tail_slot = saved_slot;
     cx.return_ty = saved;
+    cx.lambda_depth -= 1;
     cx.shadow_scopes.pop();
     result
 }

@@ -613,6 +613,9 @@ impl Route<'_> {
                 if p.name.name == "headers" {
                     return "RequestHeaders.of([])".to_string();
                 }
+                if matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestQuery(_)) {
+                    return "RequestQuery.empty()".to_string();
+                }
                 if p.name.name == "body"
                     && let Some(body) = body
                 {

@@ -158,6 +158,7 @@ fn canon_type_in(
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         // The confined family is rejected at every boundary, so it cannot appear

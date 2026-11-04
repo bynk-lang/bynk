@@ -1,0 +1,11 @@
+context api
+
+// The nested `Option` appears only once `Page[T]` is instantiated.
+type Page[T] = { items: List[Option[T]] }
+
+service api from http {
+  @json(options: plain)
+  on GET("/page") () -> Effect[HttpResult[Page[Option[Int]]]] by v: Visitor {
+    Ok(Page { items: [] })
+  }
+}

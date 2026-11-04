@@ -1812,6 +1812,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", ts_type_ref_display(t)),
@@ -2730,6 +2731,45 @@ fn check_service_decls(
     for service in table.services.values() {
         if let Some(policy) = &service.limits {
             validate_limits_policy(service, policy, errors);
+        }
+    }
+
+    // #2858: validate each service's `json { }` policy, then refuse the one
+    // ambiguous shape (`Option[Option[T]]`) in any plain-mode route's response.
+    for service in table.services.values() {
+        if let Some(policy) = &service.json {
+            validate_json_policy(service, policy, errors);
+        }
+        if !matches!(service.protocol, ServiceProtocol::Http) {
+            continue;
+        }
+        for handler in &service.handlers {
+            if !matches!(handler.kind, HandlerKind::Http { .. })
+                || effective_json_options(service.json.as_ref(), handler) != JsonOptions::Plain
+            {
+                continue;
+            }
+            let TypeRef::Effect(inner, _) = &handler.return_type else {
+                continue;
+            };
+            let TypeRef::HttpResult(body, _) = inner.as_ref() else {
+                continue;
+            };
+            if let Some(payload) = null_payload_option(body, &resolved.types, &mut HashSet::new()) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.json.nested_option_plain",
+                        body.span(),
+                        format!(
+                            "`Option[{payload}]`: `Some({some})` and `None` would both write `null` in plain JSON",
+                            some = if payload == "()" { "()" } else { "…" },
+                        ),
+                    )
+                    .with_note(
+                        "an `Option` payload that can itself be `null` (`Option[T]` or `()`) is ambiguous; model it as a sum type, or keep this route tagged with `@json(options: tagged)`",
+                    ),
+                );
+            }
         }
     }
 
@@ -4372,6 +4412,157 @@ fn validate_limits_policy(
     }
 }
 
+/// #2858: validate a service's `json { }` policy. The response encoding is a
+/// property of the HTTP surface, so the section is only legal on a `from http`
+/// service; the closed field set is `options`, whose value is the bare
+/// identifier `tagged` or `plain`.
+fn validate_json_policy(
+    service: &ServiceDecl,
+    policy: &JsonPolicy,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::Http) {
+        errors.push(
+            CompileError::new(
+                "bynk.http.json_not_http",
+                policy.span,
+                "a `json { }` policy is only valid on a `from http` service",
+            )
+            .with_note("the response JSON encoding governs the HTTP surface, which only a `from http` service has"),
+        );
+        return;
+    }
+    for field in &policy.fields {
+        if field.name.name != "options" {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.json_unknown_field",
+                    field.name.span,
+                    format!("unknown `json` field `{}`", field.name.name),
+                )
+                .with_note("the only field is `options`"),
+            );
+        }
+    }
+    if let Some(expr) = policy.field("options")
+        && JsonOptions::from_expr(expr).is_none()
+    {
+        errors.push(CompileError::new(
+            "bynk.http.json_invalid_field",
+            expr.span,
+            "`json` `options` must be `tagged` or `plain`",
+        ));
+    }
+}
+
+/// #2858: validate `@json(options: tagged | plain)` on an HTTP handler.
+fn validate_json_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
+    let mut options: Option<&AnnotationArg> = None;
+    for arg in &ann.args {
+        match arg.label.as_ref().map(|l| l.name.as_str()) {
+            Some("options") => options = Some(arg),
+            _ => errors.push(
+                CompileError::new(
+                    "bynk.http.json_unknown_arg",
+                    arg.span,
+                    "`@json` accepts only the `options:` argument",
+                )
+                .with_note("write `@json(options: plain)`"),
+            ),
+        }
+    }
+    match options {
+        None => errors.push(
+            CompileError::new(
+                "bynk.http.json_invalid_arg",
+                ann.span,
+                "`@json` needs an `options:` argument",
+            )
+            .with_note("write `@json(options: plain)`"),
+        ),
+        Some(arg) if JsonOptions::from_expr(&arg.value).is_none() => {
+            errors.push(CompileError::new(
+                "bynk.http.json_invalid_arg",
+                arg.span,
+                "`@json` `options` must be `tagged` or `plain`",
+            ));
+        }
+        Some(_) => {}
+    }
+}
+
+/// #2858: the first `Option[U]` met writing `t` as plain JSON whose payload `U`
+/// can itself encode as `null` (`Option[T]` or `()`), as `U` displayed. Plain
+/// encoding would write `Some(null-payload)` and `None` identically. The walk
+/// goes through containers, named records and sums, and generic instantiations
+/// (with their type arguments substituted); `seen` guards a recursive type.
+fn null_payload_option(
+    t: &TypeRef,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    seen: &mut HashSet<String>,
+) -> Option<String> {
+    match t {
+        TypeRef::Option(inner, _) => {
+            if matches!(inner.as_ref(), TypeRef::Option(..) | TypeRef::Unit(_)) {
+                return Some(ts_type_ref_display(inner));
+            }
+            null_payload_option(inner, types, seen)
+        }
+        TypeRef::List(a, _)
+        | TypeRef::Set(a, _)
+        | TypeRef::Effect(a, _)
+        | TypeRef::HttpResult(a, _) => null_payload_option(a, types, seen),
+        TypeRef::Map(k, v, _) | TypeRef::Result(k, v, _) => {
+            null_payload_option(k, types, seen).or_else(|| null_payload_option(v, types, seen))
+        }
+        TypeRef::Named(id) => {
+            if !seen.insert(id.name.clone()) {
+                return None;
+            }
+            match types.get(&id.name).map(|d| &d.body) {
+                Some(TypeBody::Record(r)) => r
+                    .fields
+                    .iter()
+                    .find_map(|f| null_payload_option(&f.type_ref, types, seen)),
+                Some(TypeBody::Sum(s)) => s
+                    .variants
+                    .iter()
+                    .flat_map(|v| &v.payload)
+                    .find_map(|f| null_payload_option(&f.type_ref, types, seen)),
+                _ => None,
+            }
+        }
+        TypeRef::App { name, args, .. } => {
+            if !seen.insert(bynk_check_wire_key(&name.name, args)) {
+                return None;
+            }
+            let fields = crate::wire::record_inst_fields(&name.name, args, types)
+                .map(|fs| fs.into_iter().map(|(_, t)| t).collect::<Vec<_>>())
+                .or_else(|| {
+                    crate::wire::sum_inst_variants(&name.name, args, types).map(|vs| {
+                        vs.into_iter()
+                            .flat_map(|(_, fs)| fs.into_iter().map(|(_, t)| t))
+                            .collect()
+                    })
+                })
+                .unwrap_or_default();
+            args.iter()
+                .find_map(|a| null_payload_option(a, types, seen))
+                .or_else(|| {
+                    fields
+                        .iter()
+                        .find_map(|f| null_payload_option(f, types, seen))
+                })
+        }
+        _ => None,
+    }
+}
+
+/// The `seen` key of a generic instantiation.
+fn bynk_check_wire_key(name: &str, args: &[TypeRef]) -> String {
+    crate::wire::inst_codec_suffix(name, args)
+}
+
 /// #2341 (decision C): `on rejected(why: BoundaryRejection) -> HttpResult[()]`
 /// (or `Effect[HttpResult[()]]`) renders the router's own rejections. At most
 /// one per service, one `BoundaryRejection` parameter, no `by` (it runs before
@@ -4445,7 +4636,8 @@ fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
 ///
 /// - Path must start with `/`, must not be `/_bynk/...` (reserved).
 /// - Every `:name` segment binds to a handler parameter of the same name.
-/// - Every parameter is either a path parameter or named `body`.
+/// - Every parameter is either a path parameter or named `body`, `headers` or
+///   `query`.
 /// - Path parameter types are constructible from `String` (`String`, refined
 ///   `String`, or opaque `String`).
 /// - GET / DELETE handlers may not have a `body` parameter.
@@ -4533,18 +4725,24 @@ fn validate_http_handler(
                 .with_note("`headers: RequestHeaders` gives the handler the request's headers"),
             );
         }
-        if !is_path && !is_body && !is_headers {
+        // #2854: `query` is the request's query string, a record `T` the router
+        // decodes and validates, or the raw `RequestQuery` view.
+        let is_query = !is_path && p.name.name == "query";
+        if is_query {
+            validate_query_param(p, types, errors);
+        }
+        if !is_path && !is_body && !is_headers && !is_query {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",
                     p.span,
                     format!(
-                        "handler parameter `{}` is not a path parameter and is not named `body` or `headers`",
+                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers` or `query`",
                         p.name.name
                     ),
                 )
                 .with_note(
-                    "HTTP handler parameters must match a `:name` path segment, or be named `body` or `headers`",
+                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers` or `query`",
                 ),
             );
         }
@@ -4596,6 +4794,91 @@ fn validate_http_handler(
     }
 }
 
+/// #2854: whether `r` reads off a query string as one value: a `String`, `Int`,
+/// `Bool` or `Decimal`, a refined or opaque type over one of those, or an enum
+/// (a sum none of whose variants carries a payload).
+fn is_query_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    let stringy_base = |b: &BaseType| {
+        matches!(
+            b,
+            BaseType::String | BaseType::Int | BaseType::Bool | BaseType::Decimal
+        )
+    };
+    match r {
+        TypeRef::Base(b, _) => stringy_base(b),
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Refined { base, .. }) | Some(TypeBody::Opaque { base, .. }) => {
+                stringy_base(base)
+            }
+            Some(TypeBody::Sum(s)) => s.variants.iter().all(|v| v.payload.is_empty()),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// #2854: whether `r` is a legal field type of a typed `query` record: a leaf,
+/// an `Option` of one, or a `List` of one (a key repeated).
+fn is_query_field_type(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    match r {
+        TypeRef::Option(inner, _) | TypeRef::List(inner, _) => is_query_leaf(inner, types),
+        other => is_query_leaf(other, types),
+    }
+}
+
+/// #2854: a HTTP handler's `query` parameter is `RequestQuery`, or a record
+/// whose fields are each a query leaf, an `Option` of one or a `List` of one.
+fn validate_query_param(
+    p: &Param,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    if matches!(p.type_ref, TypeRef::RequestQuery(_)) {
+        return;
+    }
+    let record = match &p.type_ref {
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Record(r)) => Some(r),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(record) = record else {
+        errors.push(
+            CompileError::new(
+                "bynk.http.query_wrong_type",
+                p.type_ref.span(),
+                format!(
+                    "an HTTP handler's `query` parameter must be a record type or `RequestQuery` (got `{}`)",
+                    ts_type_ref_display(&p.type_ref),
+                ),
+            )
+            .with_note(
+                "`query: Filter` decodes the query string into the record `Filter` and answers `400` when it does not fit; `query: RequestQuery` reads it raw",
+            ),
+        );
+        return;
+    };
+    for f in &record.fields {
+        if !is_query_field_type(&f.type_ref, types) {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.query_field_not_stringy",
+                    f.type_ref.span(),
+                    format!(
+                        "field `{}` of the `query` record has type `{}`, which a query string cannot carry",
+                        f.name.name,
+                        ts_type_ref_display(&f.type_ref),
+                    ),
+                )
+                .with_note(
+                    "a query field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key)",
+                ),
+            );
+        }
+    }
+}
+
 /// Validate a handler's handler-position annotations (v0.140, ADR 0163). The one
 /// handler annotation is `@cache(maxAge: <Duration>, scope: public|private)`,
 /// legal solely on an `on http GET` handler. This runs for *every* handler —
@@ -4629,6 +4912,7 @@ fn validate_handler_annotations(
     let mut seen_cache = false;
     let mut seen_limit = false;
     let mut seen_raw = false;
+    let mut seen_json = false;
     for ann in &handler.annotations {
         match ann.name.name.as_str() {
             "cache" => {
@@ -4733,13 +5017,36 @@ fn validate_handler_annotations(
                     );
                 }
             }
+            "json" => {
+                if seen_json {
+                    errors.push(CompileError::new(
+                        "bynk.http.json_duplicate",
+                        ann.span,
+                        "a handler carries at most one `@json` annotation",
+                    ));
+                    continue;
+                }
+                seen_json = true;
+                if !matches!(handler.kind, HandlerKind::Http { .. }) {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.json_on_non_http",
+                            ann.span,
+                            "`@json` is only valid on an `on http` handler",
+                        )
+                        .with_note("it chooses how an HTTP response body writes `Option`"),
+                    );
+                    continue;
+                }
+                validate_json_args(ann, errors);
+            }
             other => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit` and `@raw`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw` and `@json`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),
@@ -5241,6 +5548,22 @@ pub fn reject_fn_types(
                 )
                 .with_note(
                     "read the header you need (`headers.get(\"…\")`) and store or send that value instead",
+                ),
+            );
+        }
+        // #2854 (decision B): `RequestQuery`, the same way — read in the
+        // handler's `query` parameter, never stored or sent.
+        TypeRef::RequestQuery(span) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.request_query_at_boundary",
+                    *span,
+                    format!(
+                        "a `RequestQuery` type cannot appear in {what} — it is the request's query string, read in the handler that receives it, never persisted or sent"
+                    ),
+                )
+                .with_note(
+                    "read the value you need (`query.get(\"…\")`) and store or send that value instead",
                 ),
             );
         }

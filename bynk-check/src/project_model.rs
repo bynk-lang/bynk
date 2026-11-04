@@ -1804,8 +1804,11 @@ pub fn check_function_type_boundary_items(
                         // #2341 (decision A): an HTTP handler's `headers` is
                         // the one place `RequestHeaders` may appear.
                         let http_headers = matches!(h.kind, HandlerKind::Http { .. })
-                            && p.name.name == "headers"
-                            && matches!(p.type_ref, TypeRef::RequestHeaders(_));
+                            && ((p.name.name == "headers"
+                                && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
+                                // #2854: and `query` is the one place `RequestQuery` may.
+                                || (p.name.name == "query"
+                                    && matches!(p.type_ref, TypeRef::RequestQuery(_))));
                         // #2341 (decision C): and `on rejected`'s parameter is
                         // the one place `BoundaryRejection` may appear.
                         let http_headers = http_headers
@@ -1815,6 +1818,21 @@ pub fn check_function_type_boundary_items(
                         // value as a handler parameter (the `on open`
                         // connection), so a `Connection[F]` parameter is
                         // admitted.
+                        // #2854: `RequestQuery` off an HTTP route has no request
+                        // whose query string it could be.
+                        if matches!(p.type_ref, TypeRef::RequestQuery(_))
+                            && !matches!(h.kind, HandlerKind::Http { .. })
+                        {
+                            errors.push(
+                                CompileError::new(
+                                    "bynk.http.query_not_http",
+                                    p.type_ref.span(),
+                                    "`RequestQuery` is the query string of an HTTP request, so only an `on http` handler's `query` parameter can have it",
+                                )
+                                .with_note("a handler that is not an HTTP route has no query string to read"),
+                            );
+                            continue;
+                        }
                         if !type_ref_is_held(&p.type_ref) && !http_headers {
                             reject_fn_types(
                                 &p.type_ref,
@@ -5462,6 +5480,7 @@ pub(crate) fn type_ref_names(r: &TypeRef, vars: &HashSet<&str>, out: &mut Vec<St
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)

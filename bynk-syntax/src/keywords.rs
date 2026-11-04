@@ -38,7 +38,7 @@ pub const KEYWORDS: &[KeywordInfo] = &[
     k("Int", "The integer base type."),
     k(
         "JsonError",
-        "The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`.",
+        "The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `\"\\(e.kind) at \\(e.path): \\(e.message)\"`.",
     ),
     k("None", "The empty variant of `Option`."),
     k("Ok", "The success variant of `Result`."),
@@ -341,6 +341,10 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
     k(
         "RequestHeaders",
         "An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`).",
+    ),
+    k(
+        "RequestQuery",
+        "An HTTP handler's read-only view of the request's query string (`query: RequestQuery`).",
     ),
     k("Set", "The immutable set type, `Set[T]`."),
     k("Stream", "The value-over-time primitive, `Stream[T]`."),

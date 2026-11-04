@@ -1047,6 +1047,10 @@ impl<'a> Parser<'a> {
                     if name == "RequestHeaders" {
                         return Ok(TypeRef::RequestHeaders(t.span));
                     }
+                    // #2854 (decision B): the raw view of a handler's `query`.
+                    if name == "RequestQuery" {
+                        return Ok(TypeRef::RequestQuery(t.span));
+                    }
                     // #2380 (L5): an `Oidc` binder's verified claims.
                     if name == "TokenClaims" {
                         return Ok(TypeRef::TokenClaims(t.span));

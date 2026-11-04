@@ -150,6 +150,28 @@ export function byteStreamBody(stream: AsyncIterable<Uint8Array>): ReadableStrea
   return pullBody(stream, (chunk) => (chunk.byteLength === 0 ? [] : [chunk]));
 }
 
+// #2858: a plain-JSON route's body serialiser. The generated `Option` encoder
+// reads `__bynkPlainJson` and writes `Some(v)` as `v` and `None` as `null`
+// instead of the tagged object; this sets it for the one synchronous
+// serialisation and restores it, so a tagged route in the same Worker (and
+// every cross-context, queue and agent-state codec) is unaffected. The flag
+// lives on `globalThis`, so serialisation MUST stay synchronous: an `await`
+// between set and restore would leak it into a concurrent request. Generic
+// `Codable` witnesses (`codec.ts`) always write the tagged form and are out of
+// scope: a route body is serialised by its monomorphic generated encoder.
+export function withPlainJson<T>(serialise: (v: T) => JsonValue): (v: T) => JsonValue {
+  return (v) => {
+    const g = globalThis as { __bynkPlainJson?: boolean };
+    const prev = g.__bynkPlainJson;
+    g.__bynkPlainJson = true;
+    try {
+      return serialise(v);
+    } finally {
+      g.__bynkPlainJson = prev;
+    }
+  };
+}
+
 export function httpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
@@ -626,6 +648,141 @@ export function requestHeaderPairs(view: RequestHeaders): Record<string, string>
     out[k] = v;
   });
   return out;
+}
+
+// #2854 (decision B): an HTTP handler's `query: RequestQuery` — a read-only view
+// of the request's query string. `get` is the first value of a key, `all` every
+// value in order, `params` every key with its values. Names and values are
+// percent-decoded, and `+` is a space, as `bynk.url.decodeQuery` does.
+export interface RequestQuery {
+  get(name: string): Option<string>;
+  all(name: string): readonly string[];
+  params(): ReadonlyMap<string, readonly string[]>;
+}
+
+const REQUEST_QUERY_SEARCH = Symbol("bynk.requestQuerySearch");
+
+/** #2854: the request's query string, or — in a test — `"name=value"` pairs
+ *  (`RequestQuery.of`). */
+export function requestQuery(source: Request | readonly string[]): RequestQuery {
+  const search =
+    source instanceof Request
+      ? new URL(source.url).searchParams
+      : new URLSearchParams(source.join("&"));
+  const view: RequestQuery = {
+    get: (name: string) => {
+      const v = search.get(name);
+      return v === null ? { tag: "None" } : { tag: "Some", value: v };
+    },
+    all: (name: string) => search.getAll(name),
+    params: () => {
+      const out = new Map<string, readonly string[]>();
+      search.forEach((_value, k) => {
+        if (!out.has(k)) out.set(k, search.getAll(k));
+      });
+      return out;
+    },
+  };
+  // The system-tier driver sends a test's query on its real request.
+  Object.defineProperty(view, REQUEST_QUERY_SEARCH, { value: search, enumerable: false });
+  return view;
+}
+
+/** #2854: a `RequestQuery`'s own query string (`?a=1&b=2`, or `""`) — what a
+ *  system-tier driver appends to the path it requests. */
+export function requestQuerySearch(view: RequestQuery): string {
+  const search = (view as unknown as Record<symbol, URLSearchParams | undefined>)[
+    REQUEST_QUERY_SEARCH
+  ];
+  const text = search?.toString() ?? "";
+  return text === "" ? "" : `?${text}`;
+}
+
+/** #2854: a typed `query` record's wire form (what the record's `serialise_*`
+ *  makes) as the query string a request for it carries: `?a=1&b=x&b=y`, or `""`
+ *  when every field is absent. A list repeats its key, an `Option` is its value
+ *  or nothing, and an enum is its variant's name. Test drivers use it. */
+export function queryString(wire: JsonValue): string {
+  const params = new URLSearchParams();
+  const leaf = (v: JsonValue): string | undefined => {
+    if (v === null) return undefined;
+    if (typeof v === "object" && !Array.isArray(v)) {
+      if (v.kind === "None") return undefined;
+      if (v.kind === "Some") return leaf(v.value ?? null);
+      return typeof v.kind === "string" ? v.kind : undefined;
+    }
+    return String(v);
+  };
+  if (typeof wire === "object" && wire !== null && !Array.isArray(wire)) {
+    for (const [name, value] of Object.entries(wire)) {
+      const items = Array.isArray(value) ? value : [value];
+      for (const item of items) {
+        const text = leaf(item);
+        if (text !== undefined) params.append(name, text);
+      }
+    }
+  }
+  const text = params.toString();
+  return text === "" ? "" : `?${text}`;
+}
+
+/** #2854: how one field of a handler's typed `query` record reads off the wire. */
+export interface QueryField {
+  readonly name: string;
+  /** The field's leaf wire form: `Int` and `Bool` are parsed, an `enum` is a
+   *  unit variant named by the value, everything else is the text itself. */
+  readonly kind: "string" | "int" | "bool" | "enum";
+  readonly list: boolean;
+  /** An `Option` field: a present value is wrapped in `Some`, so a value that
+   *  reads like the envelope (`?kind=None`) is still the leaf's, not `None`. */
+  readonly option: boolean;
+}
+
+/** #2854 (decision A): decode the request's query string into the JSON object a
+ *  record's codec reads, field by field. Keys the record does not declare are
+ *  ignored. A key repeated on a field that is not a `List` is refused; a value
+ *  that does not read as its field's type is passed on as text, so the record's
+ *  codec reports it as a `StructuralMismatch` at `query.<field>`. The codec then
+ *  checks refinements and fills defaults, as for a `body`. */
+export function queryObject(
+  request: Request,
+  fields: readonly QueryField[],
+): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
+  const search = new URL(request.url).searchParams;
+  const out: Record<string, JsonValue> = {};
+  const leaf = (kind: QueryField["kind"], raw: string): JsonValue => {
+    switch (kind) {
+      case "int":
+        return /^-?\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : raw;
+      case "bool":
+        return raw === "true" ? true : raw === "false" ? false : raw;
+      case "enum":
+        return { kind: raw };
+      default:
+        return raw;
+    }
+  };
+  for (const f of fields) {
+    const values = search.getAll(f.name);
+    if (values.length === 0) continue;
+    if (f.list) {
+      out[f.name] = values.map((v) => leaf(f.kind, v));
+    } else if (values.length > 1) {
+      return {
+        ok: false,
+        error: {
+          kind: "StructuralMismatch",
+          path: `query.${f.name}`,
+          expected: "a single value",
+          actual: `${values.length} values`,
+        },
+      };
+    } else {
+      const v = leaf(f.kind, values[0]);
+      out[f.name] = f.option ? { kind: "Some", value: v } : v;
+    }
+  }
+  return { ok: true, value: out };
 }
 
 export async function responseToHttpOutcome<T>(
