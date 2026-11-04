@@ -5149,6 +5149,27 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
     }
 }
 
+/// #2904: `Wire(…)` drives an http body or path segment (the book documents it
+/// nowhere else). A queue message, cron tick, `on call` or event address has no
+/// raw text form to deliver, so it would be handed to a typed codec as a
+/// string and fail at run time with a misleading error.
+fn reject_wire_args(svc: &str, addr: &str, args: &[Expr], ctx: &mut Ctx) {
+    for a in args {
+        if matches!(a.kind, bynk_syntax::ast::ExprKind::Wire(_)) {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.wire_http_only",
+                    a.span,
+                    format!("`Wire(...)` cannot be passed to `{svc}.{addr}`"),
+                )
+                .with_note(
+                    "`Wire` drives an http body or path segment; pass a queue message, cron tick or event as a typed value",
+                ),
+            );
+        }
+    }
+}
+
 /// Shared arity + argument-type check for a resolved test-body service address.
 /// `positional` are the arguments that map to the handler's declared params (for
 /// http/cron the leading pattern string has already been split off).
@@ -5161,6 +5182,9 @@ fn check_address_args(
     ctx: &mut Ctx,
 ) {
     let tys = ctx.tys;
+    if addr == "call" || addr == "schedule" || addr == "message" {
+        reject_wire_args(svc, addr, positional, ctx);
+    }
     if params.len() != positional.len() {
         ctx.errors.push(
             CompileError::new(
@@ -5229,6 +5253,7 @@ fn check_event_address(
 ) {
     let tys = ctx.tys;
     let svc = &id.name;
+    reject_wire_args(svc, "event", args, ctx);
     if args.is_empty() || args.len() > 2 {
         ctx.errors.push(
             CompileError::new(

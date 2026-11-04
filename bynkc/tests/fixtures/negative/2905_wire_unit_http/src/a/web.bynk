@@ -1,0 +1,9 @@
+context a.web
+
+type N = Int where InRange(1, 9)
+
+service api from http {
+  on POST("/n") (body: N) -> Effect[HttpResult[Int]] by Visitor {
+    Ok(body)
+  }
+}

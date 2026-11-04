@@ -1,0 +1,7 @@
+context a.jobs
+
+service packer from queue("packing") {
+  on message(job: String) -> Effect[QueueResult] {
+    Ack
+  }
+}
