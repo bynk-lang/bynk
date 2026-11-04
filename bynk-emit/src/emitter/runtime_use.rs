@@ -418,11 +418,12 @@ impl RuntimeUse {
         self.bytes_ops.get()
     }
 
-    /// Whether the `Instant` ISO-8601 helpers must be imported (#2592).
+    /// Whether `__bynkIsIsoDate` must be imported (#2867).
     pub fn iso_date(&self) -> bool {
         self.iso_date.get()
     }
 
+    /// Whether the `Instant` ISO-8601 helpers must be imported (#2592).
     pub fn time_ops(&self) -> bool {
         self.time_ops.get()
     }

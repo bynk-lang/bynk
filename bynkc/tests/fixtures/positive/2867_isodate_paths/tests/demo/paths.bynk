@@ -1,0 +1,19 @@
+---
+#2867: the inline-field, `is` and pattern paths enforce the calendar rule.
+---
+suite demo.paths
+
+case "an inline field is checked on decode" {
+  expect decodeEvent("{\"on\": \"2028-02-29\"}").isOk()
+  expect !decodeEvent("{\"on\": \"2026-02-29\"}").isOk()
+}
+
+case "is narrows to a real date" {
+  expect isDay("2000-02-29")
+  expect !isDay("1900-02-29")
+}
+
+case "a where pattern matches a real date" {
+  expect classify("2026-11-03") == 1
+  expect classify("2026-02-30") == 0
+}

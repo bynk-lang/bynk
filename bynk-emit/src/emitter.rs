@@ -5750,11 +5750,12 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_bytes_ops();
     }
 
-    /// Record that this lowering emitted an `Instant` ISO-8601 helper (#2592).
+    /// #2867: record a refinement check that calls a runtime helper.
     fn note_predicate(&self, pred: &PredKind) {
         self.runtime_use().note_predicate(pred);
     }
 
+    /// Record that this lowering emitted an `Instant` ISO-8601 helper (#2592).
     fn note_time_ops(&self) {
         self.runtime_use().note_time_ops();
     }
