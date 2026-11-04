@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.508.3** | "A `let` bound to a literal `RequestHeaders.of([...])` and sent as extra request headers is checked for `Authorization` (`bynk.test.extra_headers_authorization`), and the below-`system` extra-headers error points at the offending call" |
 | **v0.508.2** | Deferred list elements in a generic call argument now merge through function, effect, stream, query, connection and http-outcome types, so inference no longer depends on element order |
 | **v0.508.1** | "A `Wire(...)` argument rejected on an event, queue or other test address is still type-checked, so an unknown name inside it is reported alongside `bynk.test.wire_http_only`" |
 | **v0.508.0** | A `system` case can send request headers to an http route that declares no `headers:` parameter, by a trailing `RequestHeaders` argument on the address |
