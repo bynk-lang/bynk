@@ -8,4 +8,9 @@ suite greeter.web as system {
 		let r <- api.GET("/hello") by Visitor
 		expect r is Ok("Hello, Ada!")
 	}
+
+	case "a raw Wire body is sent with extra headers" {
+		let r <- api.POST("/greet", Wire("\"Ada\""), RequestHeaders.of(["Accept-Language: fr"])) by Visitor
+		expect r is Handled(Ok("Bonjour, Ada !"))
+	}
 }

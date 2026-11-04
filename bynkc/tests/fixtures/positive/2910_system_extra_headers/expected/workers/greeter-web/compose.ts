@@ -16,5 +16,8 @@ export function compose(env: Env, request?: globalThis.Request) {
     async http_GET_hello() {
       return handlers.api.http_GET_hello(deps);
     },
+    async http_POST_greet(body: string) {
+      return handlers.api.http_POST_greet(body, deps);
+    },
   };
 }

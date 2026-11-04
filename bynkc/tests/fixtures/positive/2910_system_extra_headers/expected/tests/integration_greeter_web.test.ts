@@ -73,6 +73,19 @@ async function __sysdrive_api_http_GET_hello(__extraHeaders: { get(name: string)
   const __res = await __h.env.GREETER_WEB.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_api_http_POST_greet(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/greet`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: __body, });
+  const __res = await __h.env.GREETER_WEB.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_POST_greet(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/greet`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: body, });
+  const __res = await __h.env.GREETER_WEB.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_wrongmethod_api(method: string, path: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test${path}`, { method });
@@ -112,6 +125,22 @@ async function test_without_the_header_the_reference_locale_answers() {
   }
 }
 
+async function test_a_raw_Wire_body_is_sent_with_extra_headers() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_POST_greet("\"Ada\"", __requestHeaders(["Accept-Language: fr"]), "");
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "Bonjour, Ada !"))) { throw __bynkExpectFailure("tests/web.bynk:14:10", 521, 555, "expect r is Handled(Ok(\"Bonjour, Ada !\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -126,7 +155,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a route without a headers parameter is sent Accept-Language", "without the header the reference locale answers"];
+export const __bynkCases: readonly string[] = ["a route without a headers parameter is sent Accept-Language", "without the header the reference locale answers", "a raw Wire body is sent with extra headers"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -140,6 +169,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("without the header the reference locale answers")) {
     const started = __bynkCaseNow();
     const r = { name: "without the header the reference locale answers", ...(await test_without_the_header_the_reference_locale_answers()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a raw Wire body is sent with extra headers")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a raw Wire body is sent with extra headers", ...(await test_a_raw_Wire_body_is_sent_with_extra_headers()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

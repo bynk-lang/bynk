@@ -12,4 +12,9 @@ service api from http {
     let tag <- Locale.current()
     Ok(greet(tag, "Ada"))
   }
+
+  on POST("/greet") (body: String) -> Effect[HttpResult[String]] by v: Visitor given Locale {
+    let tag <- Locale.current()
+    Ok(greet(tag, body))
+  }
 }

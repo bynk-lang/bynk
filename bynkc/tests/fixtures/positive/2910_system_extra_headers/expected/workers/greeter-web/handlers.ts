@@ -15,4 +15,8 @@ export const api = {
     const tag = await deps.Locale.current();
     return HttpResult.Ok(greet(tag, "Ada"));
   },
+  async http_POST_greet(body: string, deps: { Locale: bynk.Locale }): globalThis.Promise<HttpResult<string>> {
+    const tag = await deps.Locale.current();
+    return HttpResult.Ok(greet(tag, body));
+  },
 };
