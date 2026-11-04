@@ -6644,6 +6644,24 @@ mod tests {
     }
 
     #[test]
+    fn deferred_fn_siblings_that_disagree_still_report() {
+        let a = commons(
+            "fn size[T, E](xs: List[Result[(Int) -> T, E]]) -> Int { 0 }\n\n\
+             fn bad() -> Int { size([Ok((x) => x + 1), Ok((x) => \"s\")]) }\n",
+        );
+        a.assert_reports("bynk.types.lambda_mismatch");
+    }
+
+    #[test]
+    fn deferred_effect_siblings_that_disagree_still_report() {
+        let a = commons(
+            "fn size[T](xs: List[Option[Effect[T]]]) -> Int { 0 }\n\n\
+             fn bad(a: Effect[Int], b: Effect[String]) -> Int { size([None, Some(a), Some(b)]) }\n",
+        );
+        a.assert_reports("bynk.types.some_value_mismatch");
+    }
+
+    #[test]
     fn a_concrete_some_mismatch_still_reports() {
         let a = commons("fn f() -> Int { let x: Option[Int] = Some(\"a\")\n 0 }\n");
         a.assert_reports("bynk.types.some_value_mismatch");
