@@ -669,7 +669,10 @@ type Box = {{
 #[test]
 fn method_and_pure_fn_notes_point_at_the_function_value_spelling() {
     let method = note_for_fn("fn Box.show(self) -> Effect[Int] {\n  Alpha.ping()\n}");
-    assert!(method.contains("a method cannot declare `given`"), "{method}");
+    assert!(
+        method.contains("a method cannot declare `given`"),
+        "{method}"
+    );
     assert!(method.contains("function-value parameter"), "{method}");
     let pure = note_for_fn("fn shout() -> Int {\n  let r = Alpha.ping()\n  1\n}");
     assert!(pure.contains("does not return `Effect[T]`"), "{pure}");
