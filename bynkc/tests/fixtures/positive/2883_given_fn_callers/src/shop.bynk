@@ -1,0 +1,67 @@
+context shop
+
+// #2883: the remaining callers of a `given` fn. Each passes its own `deps` on
+// (`cap_deps_expr()`): a provider op, a WebSocket handler, and an HTTP handler
+// that inherits `given` from its service header.
+
+type Frame = { text: String }
+type RoomId = String
+type UserId = String
+
+actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+capability Logger {
+	fn error(message: String) -> Effect[()]
+}
+
+capability Audit {
+	fn note(what: String) -> Effect[Int]
+}
+
+provides Logger = NullLogger {
+	fn error(message: String) -> Effect[()] {}
+}
+
+fn warn(what: String) -> Effect[()] given Logger {
+	Logger.error("warning: \(what)")
+}
+
+// A provider op calls a `given` fn: the provider's `given` supplies it.
+provides Audit = LoggedAudit given Logger {
+	fn note(what: String) -> Effect[Int] {
+		let _ <- warn("audit \(what)")
+		Effect.pure(1)
+	}
+}
+
+// A WebSocket handler calls it with its own `given`.
+service chat from websocket(in: Frame, out: Frame) {
+	on open (roomId: RoomId) -> Effect[()] by user: Participant {
+		let _ <- Room(roomId).join(user.identity, connection)
+		()
+	}
+
+	on message (roomId: RoomId, frame: Frame) -> Effect[()] by user: Participant given Logger {
+		let _ <- warn(frame.text)
+		()
+	}
+}
+
+// Handlers declaring no `given` inherit the service's, which satisfies `warn`.
+service api given Logger, Audit {
+	on call(what: String) -> Effect[Int] {
+		let _ <- warn(what)
+		let n <- Audit.note(what)
+		Effect.pure(n)
+	}
+}
+
+agent Room {
+	key id: RoomId
+	store conns: Map[UserId, Connection[Frame]]
+
+	on call join(u: UserId, conn: Connection[Frame]) -> Effect[()] {
+		let _ <- conns.put(u, conn)
+		()
+	}
+}

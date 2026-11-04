@@ -1,0 +1,7 @@
+suite shop {
+	case "a handler inheriting the service's given calls a given fn, and a provider op calls one too" {
+		let r <- api.call("x")
+		expect r == 1
+		expect Logger.error called 2 times
+	}
+}
