@@ -6367,6 +6367,21 @@ mod tests {
     }
 
     #[test]
+    fn a_context_typed_payload_inside_some_ok_and_err_keeps_its_context() {
+        let a = commons(
+            "fn one[T](x: Option[Option[T]]) -> Int { 0 }\n\n\
+             fn two[T](x: Option[List[T]]) -> Int { 0 }\n\n\
+             fn three[T](x: Result[Option[T], String]) -> Int { 0 }\n\n\
+             fn four[T](x: Result[Int, Option[T]]) -> Int { 0 }\n\n\
+             fn s() -> Int { one(Some(None)) }\n\n\
+             fn t() -> Int { two(Some([])) }\n\n\
+             fn u() -> Int { three(Ok(None)) }\n\n\
+             fn v() -> Int { four(Err(None)) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
     fn a_concrete_some_mismatch_still_reports() {
         let a = commons("fn f() -> Int { let x: Option[Int] = Some(\"a\")\n 0 }\n");
         a.assert_reports("bynk.types.some_value_mismatch");
