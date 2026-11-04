@@ -1,0 +1,2 @@
+# exact
+bynk.given.undeclared_capability capability `Logger` is used but not listed

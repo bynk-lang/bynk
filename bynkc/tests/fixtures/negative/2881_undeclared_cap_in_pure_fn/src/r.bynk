@@ -1,0 +1,14 @@
+context r
+
+capability Logger {
+  fn error(message: String) -> Effect[()]
+}
+
+provides Logger = NullLogger {
+  fn error(message: String) -> Effect[()] {}
+}
+
+fn shout(what: String) -> Int {
+  let r = Logger.error(what)
+  1
+}

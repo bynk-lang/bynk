@@ -1,0 +1,9 @@
+commons r
+
+fn warn(what: String) -> Effect[()] given Logger {
+  Effect.pure(())
+}
+
+fn run() -> Effect[()] {
+  warn("x")
+}
