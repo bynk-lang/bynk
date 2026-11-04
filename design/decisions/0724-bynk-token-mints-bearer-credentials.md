@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk token <Actor>` mints a credential for the project's own `Bearer` actor, to call a guarded route by hand
----
+# 0724 — `bynk token` mints a Bearer actor's credential in the driver
 
-## ADR: bynk-token-mints-bearer-credentials
-title: `bynk token` mints a Bearer actor's credential in the driver
-summary: A top-level `bynk token <Actor>`, signed in Rust from the environment secret, Bearer only
+- **Status:** Accepted (v0.499.1)
 
 **Context.** Calling a `Bearer`-guarded route by hand — `curl` under `bynk dev`, or a smoke test against a deployment — needs a token signed the way the actor declares. Every project wrote its own script (`github-hooks`' `token.sh` needed three review fixes: keep the secret out of `openssl`'s arguments, validate the lifetime, add a way to backdate). The actor already declares everything a minter needs, and the test runtime already signs these tokens for `system` cases (ADR 0207 D3).
 
