@@ -6355,7 +6355,6 @@ mod tests {
         // unsolved, exactly as the empty `size([])` already does.
         a.assert_clean();
         b.assert_clean();
-        a.assert_reports("bynk.generics.uninferable_type_arg");
     }
 
     #[test]
