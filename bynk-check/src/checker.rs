@@ -4643,7 +4643,12 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     }
                 }
             } else {
-                let mut elem_ty: Option<TyId> = expected_elem;
+                // An expected element type still mentioning a flexible
+                // variable of an enclosing generic call (`size([1, 2])` against
+                // `List[T]`) carries nothing yet: type the elements bottom-up
+                // and let the call unify `T` from the result.
+                let mut elem_ty: Option<TyId> =
+                    expected_elem.filter(|t| !contains_flexible_var(*t, &ctx.type_vars, tys));
                 for e in elems {
                     let Some(t) = type_of(e, elem_ty, ctx) else {
                         continue;
