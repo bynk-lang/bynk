@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **756** codes in total.
+There are **757** codes in total.
 
 ## Agents
 
@@ -504,6 +504,7 @@ There are **756** codes in total.
 | `bynk.test.event_not_subscribed` | A test body's `svc.event(e)` delivers an event the `from Events(E)` service does not subscribe to. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.event_publisher_ambiguous` | A test body's `svc.event(e)` omits the envelope, but the event's publisher, which the default envelope names, is not one context the target declares or consumes. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.expired_needs_bearer_route` | A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum); it sends a correctly signed token whose `exp` has passed, so only a `Bearer` seam can refuse it. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.extra_headers_authorization` | A `system` case sends `Authorization` as an extra request header to a route that declares no `headers:` parameter; the case's `by <Actor>` owns the credential the driver sends. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.faults_needs_in_process` | A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale` or `by Expired`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.forged_needs_signature_route` | A case drives `by Forged` at an address that is not an http route with a `Signature` or `Bearer` actor, or `by Stale` at one with no `Signature` actor (alone, or as a member of an actor sum); they send a bad credential, so only a `Signature` or `Bearer` seam can refuse them. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.forged_needs_system` | A case drives `by Forged`, `by Stale` or `by Expired` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature` or `Bearer` seam see the bad credential. | [`case`](/book/reference/grammar/#rule-case) | — |

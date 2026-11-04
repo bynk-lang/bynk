@@ -25,7 +25,7 @@ the declared handler and checked for arity and argument types:
 | service | address |
 |---|---|
 | `on call` | `svc.call(args)` |
-| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, then body) |
+| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:` |
 | `from cron` | `svc.schedule("<expr>")` — matched to the handler with that schedule |
 | `from queue` | `svc.message(msg)` |
 | `from Events(E)` | `svc.event(e)`, `svc.event(e, env)` — [one delivered event](#event-address) |
@@ -188,6 +188,28 @@ A line with no colon is ignored, and names are case-insensitive, as on the wire.
 At the `unit` and `integration` tiers the value reaches the handler directly; at
 `system` the driver sends the lines as the request's headers, beside the ones it
 sets itself (`content-type`, and the credential of an actor's `by`), which win.
+
+A route that declares no `headers:` parameter can still be sent headers in a
+`system` case, by a trailing `RequestHeaders` argument after the route's own
+arguments. A route that negotiates `Locale.current()` against `Accept-Language`
+is tested this way:
+
+```bynk,fragment
+suite greeter.web as system {
+  case "the locale is negotiated from Accept-Language" {
+    let r <- api.GET("/hello", RequestHeaders.of(["Accept-Language: fr"])) by Visitor
+    expect r is Ok("Bonjour, Ada !")
+  }
+}
+```
+
+The extra argument is accepted only at `system`; at `unit` and `integration` the
+route sees only its declared parameters, so it stays an arity error
+(`bynk.test.service_call_arity`). A route that declares `headers:` takes the
+argument in that parameter, and a second `RequestHeaders` is an arity error. A
+literal `Authorization` line is refused
+(`bynk.test.extra_headers_authorization`): the case's `by <Actor>` owns the
+credential the driver sends.
 
 ### Sending a query — a typed `query` and `RequestQuery.of` {#request-query}
 

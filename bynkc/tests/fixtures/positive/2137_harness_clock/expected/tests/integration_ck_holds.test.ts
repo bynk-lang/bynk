@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import { __makeIntegrationDoNamespace, type __DurableObjectNamespace } from "../__bynk_runtime/agent.js";
 import * as __ns_ck_holds from "../workers/ck-holds/handlers.js";
 import worker___ns_ck_holds from "../workers/ck-holds/index.js";
@@ -70,27 +70,27 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_POST_holds_Param_id(id: string, __sub: string) {
+async function __sysdrive_api_http_POST_holds_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/holds/${id}`, { method: "POST", headers: { }, });
+  const __req = new globalThis.Request(`https://test/holds/${id}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.CK_HOLDS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_POST_holds_Param_id(id: string, __sub: string) {
+async function __sysdrive_raw_api_http_POST_holds_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/holds/${id}`, { method: "POST", headers: { }, });
+  const __req = new globalThis.Request(`https://test/holds/${id}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.CK_HOLDS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_GET_holds_Param_id(id: string, __sub: string) {
+async function __sysdrive_api_http_GET_holds_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/holds/${id}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/holds/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.CK_HOLDS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_GET_holds_Param_id(id: string, __sub: string) {
+async function __sysdrive_raw_api_http_GET_holds_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/holds/${id}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/holds/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.CK_HOLDS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -106,10 +106,10 @@ async function test_a_hold_expires_sixteen_minutes_on__over_the_wire() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_holds_Param_id("h1", "");
+    const r = await __sysdrive_api_http_POST_holds_Param_id("h1", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === true))) { throw __bynkExpectFailure("tests/system.bynk:6:10", 282, 295, "expect r is Ok(true)"); }
     __bynkAdvanceClock(960000);
-    const e = await __sysdrive_api_http_GET_holds_Param_id("h1", "");
+    const e = await __sysdrive_api_http_GET_holds_Param_id("h1", undefined, "");
     if (!(((__c: boolean) => __c)(e.tag === "Ok" && e.value === true))) { throw __bynkExpectFailure("tests/system.bynk:9:10", 385, 398, "expect e is Ok(true)"); }
     return { pass: true };
   } catch (e) {
@@ -125,10 +125,10 @@ async function test_fourteen_minutes_is_not_enough__over_the_wire() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_holds_Param_id("h1", "");
+    const r = await __sysdrive_api_http_POST_holds_Param_id("h1", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === true))) { throw __bynkExpectFailure("tests/system.bynk:14:10", 519, 532, "expect r is Ok(true)"); }
     __bynkAdvanceClock(840000);
-    const e = await __sysdrive_api_http_GET_holds_Param_id("h1", "");
+    const e = await __sysdrive_api_http_GET_holds_Param_id("h1", undefined, "");
     if (!(((__c: boolean) => __c)(e.tag === "Ok" && e.value === false))) { throw __bynkExpectFailure("tests/system.bynk:17:10", 622, 636, "expect e is Ok(false)"); }
     return { pass: true };
   } catch (e) {
@@ -144,9 +144,9 @@ async function test_the_clock_starts_at_the_epoch__over_the_wire() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_holds_Param_id("h1", "");
+    const r = await __sysdrive_api_http_POST_holds_Param_id("h1", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === true))) { throw __bynkExpectFailure("tests/system.bynk:22:10", 756, 769, "expect r is Ok(true)"); }
-    const e = await __sysdrive_api_http_GET_holds_Param_id("h1", "");
+    const e = await __sysdrive_api_http_GET_holds_Param_id("h1", undefined, "");
     if (!(((__c: boolean) => __c)(e.tag === "Ok" && e.value === false))) { throw __bynkExpectFailure("tests/system.bynk:24:10", 829, 843, "expect e is Ok(false)"); }
     return { pass: true };
   } catch (e) {

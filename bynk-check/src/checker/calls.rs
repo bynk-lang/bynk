@@ -4104,6 +4104,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: "call".to_string(),
+                extra_headers: false,
             },
         );
         let Some(handler) = sig.call_handler() else {
@@ -4140,6 +4141,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: method.name.clone(),
+                extra_headers: false,
             },
         );
         // #1883, slice 3 ([DECISION F]): `svc.GET(style)` — an `Asset` as the
@@ -4235,6 +4237,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: format!("{} {path}", method.name),
+                extra_headers: false,
             },
         );
         let matched = sig.handlers.iter().find(|h| {
@@ -4298,14 +4301,80 @@ fn check_test_service_address(
         let params = handler.params.clone();
         // Type the route-pattern string as an ordinary string; check the rest.
         let _ = type_of(&args[0], None, ctx);
-        check_address_args(
-            &id.name,
-            &method.name,
-            &params,
-            &args[1..],
-            method.span,
-            ctx,
-        );
+        let mut positional = &args[1..];
+        // #2910: a route that declares no `headers:` parameter may still be
+        // sent request headers: a trailing `RequestHeaders` argument. A route
+        // that declares one fills it with the argument already, so a further
+        // one is an ordinary arity error (with a note saying why). The
+        // trailing argument is typed once, here, and not again below.
+        let declares_headers = params.iter().any(|p| {
+            p.name.name == "headers"
+                && matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestHeaders(_))
+        });
+        let trailing = if positional.len() == params.len() + 1
+            && let Some((last, rest)) = positional.split_last()
+            && !matches!(last.kind, EK::Wire(_))
+        {
+            let is_headers = type_of(last, None, ctx)
+                .is_some_and(|t| matches!(&*ctx.tys.get(t), Ty::RequestHeaders));
+            Some((last, rest, is_headers))
+        } else {
+            None
+        };
+        match trailing {
+            Some((last, rest, true)) if !declares_headers => {
+                positional = rest;
+                check_extra_headers_authorization(last, ctx);
+                ctx.callees.insert(
+                    expr_id,
+                    Callee::TestService {
+                        service: id.name.clone(),
+                        address: format!("{} {path}", method.name),
+                        extra_headers: true,
+                    },
+                );
+                check_address_args(
+                    &id.name,
+                    &method.name,
+                    &params,
+                    positional,
+                    method.span,
+                    ctx,
+                );
+            }
+            Some((_, rest, is_headers)) => {
+                // The extra argument is no `RequestHeaders` this route can
+                // take: report the arity once, and still check the others.
+                let mut err = CompileError::new(
+                    "bynk.test.service_call_arity",
+                    method.span,
+                    format!(
+                        "`{}.{}` expects {} argument(s), but {} were given",
+                        id.name,
+                        method.name,
+                        params.len(),
+                        positional.len()
+                    ),
+                );
+                err = if is_headers {
+                    err.with_note("the route already declares `headers: RequestHeaders`, so that argument is its request headers; a second `RequestHeaders` cannot be sent")
+                } else {
+                    err.with_note("handler declared here")
+                };
+                ctx.errors.push(err);
+                for a in rest {
+                    let _ = type_of(a, None, ctx);
+                }
+            }
+            None => check_address_args(
+                &id.name,
+                &method.name,
+                &params,
+                positional,
+                method.span,
+                ctx,
+            ),
+        }
         // A `Wire(…)` argument reaches the router unvalidated, so the call
         // observes the boundary as well as the handler: the raw driver decodes
         // an `HttpOutcome`. The emitter picks that driver on the same test.
@@ -4323,6 +4392,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: "schedule".to_string(),
+                extra_headers: false,
             },
         );
         let Some(EK::StrLit(expr)) = args.first().map(|a| &a.kind) else {
@@ -4346,6 +4416,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: format!("schedule {expr}"),
+                extra_headers: false,
             },
         );
         let matched = sig
@@ -4379,6 +4450,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: "message".to_string(),
+                extra_headers: false,
             },
         );
         let matched = sig
@@ -4414,6 +4486,7 @@ fn check_test_service_address(
             Callee::TestService {
                 service: id.name.clone(),
                 address: "event".to_string(),
+                extra_headers: false,
             },
         );
         let handler = handler.clone();
@@ -5159,6 +5232,49 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
                     format!("actor `{name}` has no identity, so write `by {name}` with no argument"),
                 ));
             }
+        }
+    }
+}
+
+/// #2910: `bynk.test.extra_headers_authorization` — request headers sent
+/// beside a route's declared parameters may not carry `Authorization`: the
+/// case's `by <Actor>` owns the credential. Checked on the literal form
+/// `RequestHeaders.of(["…", …])`; a value built elsewhere is not inspected.
+fn check_extra_headers_authorization(arg: &Expr, ctx: &mut Ctx) {
+    use bynk_syntax::ast::ExprKind as EK;
+    let EK::MethodCall {
+        receiver,
+        method,
+        args,
+        ..
+    } = &arg.kind
+    else {
+        return;
+    };
+    let (EK::Ident(r), "of", Some(EK::ListLit(lines))) = (
+        &receiver.kind,
+        method.name.as_str(),
+        args.first().map(|a| &a.kind),
+    ) else {
+        return;
+    };
+    if r.name != REQUEST_HEADERS {
+        return;
+    }
+    for line in lines {
+        if let EK::StrLit(text) = &line.kind
+            && text
+                .split_once(':')
+                .is_some_and(|(n, _)| n.trim().eq_ignore_ascii_case("authorization"))
+        {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.extra_headers_authorization",
+                    line.span,
+                    "`Authorization` cannot be sent as an extra request header",
+                )
+                .with_note("the case's `by <Actor>` owns the credential the driver sends; choose the actor instead"),
+            );
         }
     }
 }

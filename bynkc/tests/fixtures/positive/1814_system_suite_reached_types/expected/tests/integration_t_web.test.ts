@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_t_web from "../workers/t-web/handlers.js";
 import worker___ns_t_web from "../workers/t-web/index.js";
 import * as __ns_t_core from "./../t/core.js";
@@ -69,9 +69,9 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_GET_first(__sub: string) {
+async function __sysdrive_api_http_GET_first(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/first`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/first`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.T_WEB.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -91,7 +91,7 @@ async function test_a_system_suite_reads_a_reached_refined_field() {
     type Tag = __ns_t_model.Tag;
     const { Repo } = __ns_t_core;
     type Repo = __ns_t_core.Repo;
-    const r = await __sysdrive_api_http_GET_first("");
+    const r = await __sysdrive_api_http_GET_first(undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/t/web_system.bynk:12:12", 423, 433, "expect r is Ok(_)"); }
     const t = { repo: ("s" as any) };
     const s: string = t.repo;

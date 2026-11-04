@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkDecimalParseWire } from "../__bynk_runtime/decimal.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_shop from "../workers/shop/handlers.js";
 import worker___ns_shop from "../workers/shop/index.js";
 
@@ -68,28 +68,28 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_POST_quote(body: any, __sub: string) {
+async function __sysdrive_api_http_POST_quote(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_shop.__serialise_Quote(body));
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/quote`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/quote`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: __body, });
   const __res = await __h.env.SHOP.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_POST_quote(body: string, __sub: string) {
+async function __sysdrive_raw_api_http_POST_quote(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/quote`, { method: "POST", headers: { "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/quote`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: body, });
   const __res = await __h.env.SHOP.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_GET_price_Param_amount(amount: string, __sub: string) {
+async function __sysdrive_api_http_GET_price_Param_amount(amount: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/price/${amount}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/price/${amount}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.SHOP.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_GET_price_Param_amount(amount: string, __sub: string) {
+async function __sysdrive_raw_api_http_GET_price_Param_amount(amount: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/price/${amount}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/price/${amount}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.SHOP.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "decimal string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -105,7 +105,7 @@ async function test_a_good_quote_is_accepted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"2.50\", \"total\": \"1\"}", "");
+    const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"2.50\", \"total\": \"1\"}", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:6:10", 318, 333, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
@@ -121,7 +121,7 @@ async function test_a_non_positive_unit_is_refused_at_its_path() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"-1.00\", \"total\": \"1\"}", "");
+    const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"-1.00\", \"total\": \"1\"}", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:11:10", 506, 543, "expect r is Rejected(RefinementViolation(_))"); }
     return { pass: true };
   } catch (e) {
@@ -137,7 +137,7 @@ async function test_a_negative_total_is_refused_by_its_inline_refinement() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"1.00\", \"total\": \"-3\"}", "");
+    const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"1.00\", \"total\": \"-3\"}", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:16:10", 726, 763, "expect r is Rejected(RefinementViolation(_))"); }
     return { pass: true };
   } catch (e) {
@@ -153,7 +153,7 @@ async function test_a_leading_zero_is_a_structural_mismatch() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"007\", \"total\": \"1\"}", "");
+    const r = await __sysdrive_raw_api_http_POST_quote("{\"sku\": \"a\", \"unit\": \"007\", \"total\": \"1\"}", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:21:10", 931, 967, "expect r is Rejected(StructuralMismatch(_))"); }
     return { pass: true };
   } catch (e) {

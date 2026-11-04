@@ -1,0 +1,20 @@
+context greeter.web
+
+// #2910: a route that negotiates its locale from `Accept-Language` and declares
+// no `headers:` parameter of its own.
+
+uses bynk.locale.types
+uses greeter.messages
+consumes bynk { Locale }
+
+service api from http {
+  on GET("/hello") () -> Effect[HttpResult[String]] by v: Visitor given Locale {
+    let tag <- Locale.current()
+    Ok(greet(tag, "Ada"))
+  }
+
+  on POST("/greet") (body: String) -> Effect[HttpResult[String]] by v: Visitor given Locale {
+    let tag <- Locale.current()
+    Ok(greet(tag, body))
+  }
+}

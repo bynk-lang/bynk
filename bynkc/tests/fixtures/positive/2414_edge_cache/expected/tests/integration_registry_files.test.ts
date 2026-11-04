@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_registry_files from "../workers/registry-files/handlers.js";
 import worker___ns_registry_files from "../workers/registry-files/index.js";
 
@@ -96,39 +96,39 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_files_http_GET_dl_sha256_Param_hex(hex: string, __sub: string) {
+async function __sysdrive_files_http_GET_dl_sha256_Param_hex(hex: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/dl/sha256/${hex}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/dl/sha256/${hex}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.REGISTRY_FILES.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_raw_files_http_GET_dl_sha256_Param_hex(hex: string, __sub: string) {
+async function __sysdrive_raw_files_http_GET_dl_sha256_Param_hex(hex: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/dl/sha256/${hex}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/dl/sha256/${hex}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.REGISTRY_FILES.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_files_http_GET_bad_tag(__sub: string) {
+async function __sysdrive_files_http_GET_bad_tag(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/bad-tag`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/bad-tag`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.REGISTRY_FILES.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_files_http_GET_status(__sub: string) {
+async function __sysdrive_files_http_GET_status(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/status`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/status`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.REGISTRY_FILES.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_files_http_POST_takedown_Param_hex(hex: string, __sub: string) {
+async function __sysdrive_files_http_POST_takedown_Param_hex(hex: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/takedown/${hex}`, { method: "POST", headers: { }, });
+  const __req = new globalThis.Request(`https://test/takedown/${hex}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.REGISTRY_FILES.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_files_http_POST_takedown_Param_hex(hex: string, __sub: string) {
+async function __sysdrive_raw_files_http_POST_takedown_Param_hex(hex: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/takedown/${hex}`, { method: "POST", headers: { }, });
+  const __req = new globalThis.Request(`https://test/takedown/${hex}`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.REGISTRY_FILES.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -144,9 +144,9 @@ async function test_a_takedown_over_the_wire_purges() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_files_http_POST_takedown_Param_hex("abc", "");
+    const r = await __sysdrive_files_http_POST_takedown_Param_hex("abc", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === true))) { throw __bynkExpectFailure("tests/system.bynk:6:10", 273, 286, "expect r is Ok(true)"); }
-    const s = await __sysdrive_files_http_GET_status("");
+    const s = await __sysdrive_files_http_GET_status(undefined, "");
     if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "up"))) { throw __bynkExpectFailure("tests/system.bynk:8:10", 339, 352, "expect s is Ok(\"up\")"); }
     return { pass: true };
   } catch (e) {

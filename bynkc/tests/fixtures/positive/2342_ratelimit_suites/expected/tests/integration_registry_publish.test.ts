@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __makeIntegrationRateLimit } from "../__bynk_runtime/storage.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_registry_publish from "../workers/registry-publish/handlers.js";
 import worker___ns_registry_publish from "../workers/registry-publish/index.js";
 
@@ -70,15 +70,15 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_GET_read_Param_key(key: string, __sub: string) {
+async function __sysdrive_api_http_GET_read_Param_key(key: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/read/${key}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/read/${key}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.REGISTRY_PUBLISH.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_GET_read_Param_key(key: string, __sub: string) {
+async function __sysdrive_raw_api_http_GET_read_Param_key(key: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/read/${key}`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/read/${key}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.REGISTRY_PUBLISH.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -94,12 +94,12 @@ async function test_a_limiter_refuses_past_its_limit_and_recovers__over_the_wire
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const first = await __sysdrive_api_http_GET_read_Param_key("k", "");
-    const second = await __sysdrive_api_http_GET_read_Param_key("k", "");
+    const first = await __sysdrive_api_http_GET_read_Param_key("k", undefined, "");
+    const second = await __sysdrive_api_http_GET_read_Param_key("k", undefined, "");
     if (!(((__c: boolean) => __c)(first.tag === "Ok" && first.value === true))) { throw __bynkExpectFailure("tests/registry/system.bynk:7:10", 344, 361, "expect first is Ok(true)"); }
     if (!(((__c: boolean) => __c)(second.tag === "Ok" && second.value === false))) { throw __bynkExpectFailure("tests/registry/system.bynk:8:10", 371, 390, "expect second is Ok(false)"); }
     __bynkAdvanceClock(10000);
-    const again = await __sysdrive_api_http_GET_read_Param_key("k", "");
+    const again = await __sysdrive_api_http_GET_read_Param_key("k", undefined, "");
     if (!(((__c: boolean) => __c)(again.tag === "Ok" && again.value === true))) { throw __bynkExpectFailure("tests/registry/system.bynk:11:10", 483, 500, "expect again is Ok(true)"); }
     return { pass: true };
   } catch (e) {

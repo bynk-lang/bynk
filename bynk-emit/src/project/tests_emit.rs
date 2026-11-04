@@ -1641,12 +1641,35 @@ fn emit_system_http_support(
                 p.name.name == "headers"
                     && matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestHeaders(_))
             };
-            let headers_spread = if h.params.iter().any(|p| is_headers(&p)) {
-                runtime_use.note_request_header_pairs();
+            // #2910: a route with no `headers:` param still takes the case's
+            // request headers, as an optional trailing driver parameter. They
+            // are spread first, so a header the driver sets itself wins.
+            let declares_headers = h.params.iter().any(|p| is_headers(&p));
+            runtime_use.note_request_header_pairs();
+            let headers_spread = if declares_headers {
                 "...__requestHeaderPairs(headers), "
             } else {
-                ""
+                "...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "
             };
+            // A required slot ahead of `sub`: the call lowers `undefined` there
+            // when the case sends none.
+            let extra_headers_param = (!declares_headers).then(|| {
+                declared.insert((
+                    sname.clone(),
+                    method.as_str().to_string(),
+                    format!("{path}{}", emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
+                ));
+                TsParam {
+                    name: "__extraHeaders".to_string(),
+                    ty: Some(TsType::named(format!(
+                        "{} | undefined",
+                        crate::emitter::ts_type_ref(&bynk_syntax::ast::TypeRef::RequestHeaders(
+                            Default::default()
+                        ))
+                    ))),
+                    optional: false,
+                }
+            });
             // #2854: a `query` param (unless a `:query` path segment binds the
             // name) is neither: the drivers append it to the request's URL, as
             // the raw `RequestQuery` view or as a typed record's query string.
@@ -1918,6 +1941,7 @@ fn emit_system_http_support(
                     ty: Some(TsType::named(driver_param_ty(&p.type_ref, &ns))),
                     optional: false,
                 })
+                .chain(extra_headers_param.clone())
                 .collect();
             let raw_params: Vec<TsParam> = h
                 .params
@@ -1935,6 +1959,7 @@ fn emit_system_http_support(
                     )),
                     optional: false,
                 })
+                .chain(extra_headers_param)
                 .collect();
             let content_type = match (body_arg.is_some(), raw_type) {
                 (true, Some(ct)) => format!("\"content-type\": {ct:?}, "),

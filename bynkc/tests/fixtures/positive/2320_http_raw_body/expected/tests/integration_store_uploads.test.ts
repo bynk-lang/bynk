@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_store_uploads from "../workers/store-uploads/handlers.js";
 import worker___ns_store_uploads from "../workers/store-uploads/index.js";
 
@@ -96,169 +96,169 @@ async function __bynkSignHmacSha256(body: string | Uint8Array, secret: string, t
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["AUTH_JWT_SECRET"] = "__bynk_test_secret";
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["SENDER_SECRET"] = "__bynk_test_secret";
-async function __sysdrive_uploads_http_PUT_api_Param_org_Param_package(org: string, __id_package: string, body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_uploads_http_PUT_api_Param_org_Param_package(org: string, __id_package: string, body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/api/${org}/${__id_package}`, { method: "PUT", headers: { "content-type": "application/vnd.bynk.tree-v1", }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/api/${org}/${__id_package}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/vnd.bynk.tree-v1", }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_uploads_http_PUT_api_Param_org_Param_package(org: string, __id_package: string, body: string, __sub: string) {
+async function __sysdrive_raw_uploads_http_PUT_api_Param_org_Param_package(org: string, __id_package: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/api/${org}/${__id_package}`, { method: "PUT", headers: { "content-type": "text/plain; charset=utf-8", }, body: body, });
+  const __req = new globalThis.Request(`https://test/api/${org}/${__id_package}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8", }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_uploads_http_POST_blob(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_uploads_http_POST_blob(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/blob`, { method: "POST", headers: { "content-type": "application/octet-stream", }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/blob`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_uploads_http_POST_blob(body: string, __sub: string) {
+async function __sysdrive_raw_uploads_http_POST_blob(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/blob`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", }, body: body, });
+  const __req = new globalThis.Request(`https://test/blob`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8", }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_uploads_http_POST_signed(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_uploads_http_POST_signed(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_uploads_http_POST_signed(body: string, __sub: string) {
+async function __sysdrive_raw_uploads_http_POST_signed(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_noauth_uploads_http_POST_signed(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_noauth_uploads_http_POST_signed(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/octet-stream", }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawnoauth_uploads_http_POST_signed(body: string, __sub: string) {
+async function __sysdrive_rawnoauth_uploads_http_POST_signed(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/octet-stream", }, body: body, });
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_forged_uploads_http_POST_signed(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_forged_uploads_http_POST_signed(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawforged_uploads_http_POST_signed(body: string, __sub: string) {
+async function __sysdrive_rawforged_uploads_http_POST_signed(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_stale_uploads_http_POST_signed(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_stale_uploads_http_POST_signed(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawstale_uploads_http_POST_signed(body: string, __sub: string) {
+async function __sysdrive_rawstale_uploads_http_POST_signed(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string, __as: string) {
+async function __sysdrive_uploads_http_POST_either(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
   const __body = body;
 const __auth: globalThis.Record<string, string> = {};if (__as === "Sender") { const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 0); __auth["X-Sig"] = __sig.signature; __auth["X-Ts"] = __sig.timestamp; }if (__as === "User") { __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`; }  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", ...__auth, }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", ...__auth, }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_uploads_http_POST_either(body: string, __sub: string, __as: string) {
+async function __sysdrive_raw_uploads_http_POST_either(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
 const __auth: globalThis.Record<string, string> = {};if (__as === "Sender") { const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 0); __auth["X-Sig"] = __sig.signature; __auth["X-Ts"] = __sig.timestamp; }if (__as === "User") { __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`; }  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...__auth, }, body: body, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8", ...__auth, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_noauth_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_noauth_uploads_http_POST_either(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawnoauth_uploads_http_POST_either(body: string, __sub: string) {
+async function __sysdrive_rawnoauth_uploads_http_POST_either(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", }, body: body, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_forged_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_forged_uploads_http_POST_either(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawforged_uploads_http_POST_either(body: string, __sub: string) {
+async function __sysdrive_rawforged_uploads_http_POST_either(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_stale_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_stale_uploads_http_POST_either(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawstale_uploads_http_POST_either(body: string, __sub: string) {
+async function __sysdrive_rawstale_uploads_http_POST_either(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_expired_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_expired_uploads_http_POST_either(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "authorization": __token, }, body: __body as BufferSource, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "authorization": __token, }, body: __body as BufferSource, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawexpired_uploads_http_POST_either(body: string, __sub: string) {
+async function __sysdrive_rawexpired_uploads_http_POST_either(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
 const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;  const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "authorization": __token, }, body: body, });
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", "authorization": __token, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_uploads_http_POST_json(body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_uploads_http_POST_json(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__bynkBytesToBase64(body) as __JsonValue);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/json`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/json`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: __body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_uploads_http_POST_json(body: string, __sub: string) {
+async function __sysdrive_raw_uploads_http_POST_json(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/json`, { method: "POST", headers: { "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/json`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -279,7 +279,7 @@ async function test_a_raw_body_arrives_byte_for_byte__including_bytes_that_are_n
         switch (__d.tag) {
           case "Some": {
             const tree = __d.value;
-            const r = await __sysdrive_uploads_http_PUT_api_Param_org_Param_package("acme", "widgets", tree, "");
+            const r = await __sysdrive_uploads_http_PUT_api_Param_org_Param_package("acme", "widgets", tree, undefined, "");
             if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "acme/widgets gP8AAf7/AIA="))) { throw __bynkExpectFailure("tests/uploads.bynk:8:12", 296, 332, "expect r is Ok(\"acme/widgets gP8AAf7/AIA=\")"); }
             return undefined;
           }
@@ -305,7 +305,7 @@ async function test_a_body_over_the_service_cap_is_refused_on_the_bytes_read() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_uploads_http_POST_json("\"this body is a good deal longer than sixty-four bytes, which is the service cap\"", "");
+    const r = await __sysdrive_raw_uploads_http_POST_json("\"this body is a good deal longer than sixty-four bytes, which is the service cap\"", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "PayloadTooLarge"))) { throw __bynkExpectFailure("tests/uploads.bynk:18:10", 583, 616, "expect r is Rejected(PayloadTooLarge(_))"); }
     return { pass: true };
   } catch (e) {
@@ -322,7 +322,7 @@ async function test_a_raw_route_refuses_another_content_type() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_uploads_http_PUT_api_Param_org_Param_package(String("acme"), String("widgets"), "not a tree", "");
+    const r = await __sysdrive_raw_uploads_http_PUT_api_Param_org_Param_package(String("acme"), String("widgets"), "not a tree", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType"))) { throw __bynkExpectFailure("tests/uploads.bynk:23:10", 765, 803, "expect r is Rejected(UnsupportedMediaType(_))"); }
     return { pass: true };
   } catch (e) {
@@ -339,8 +339,8 @@ async function test_a_route_s_own_cap_wins_over_the_service_cap() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const ok = await __sysdrive_raw_uploads_http_POST_blob("12345678", "");
-    const big = await __sysdrive_raw_uploads_http_POST_blob("123456789", "");
+    const ok = await __sysdrive_raw_uploads_http_POST_blob("12345678", undefined, "");
+    const big = await __sysdrive_raw_uploads_http_POST_blob("123456789", undefined, "");
     if (!(((__c: boolean) => __c)(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "MTIzNDU2Nzg="))) { throw __bynkExpectFailure("tests/uploads.bynk:29:10", 977, 1010, "expect ok is Handled(Ok(\"MTIzNDU2Nzg=\"))"); }
     if (!(((__c: boolean) => __c)(big.tag === "Rejected" && big.value.tag === "PayloadTooLarge"))) { throw __bynkExpectFailure("tests/uploads.bynk:30:10", 1020, 1055, "expect big is Rejected(PayloadTooLarge(_))"); }
     return { pass: true };
@@ -362,8 +362,8 @@ async function test_a_raw_body_is_signed_as_sent__and_a_forged_one_refused() {
         switch (__d.tag) {
           case "Some": {
             const payload = __d.value;
-            const ok = await __sysdrive_uploads_http_POST_signed(payload, "");
-            const forged = await __sysdrive_forged_uploads_http_POST_signed(payload, "");
+            const ok = await __sysdrive_uploads_http_POST_signed(payload, undefined, "");
+            const forged = await __sysdrive_forged_uploads_http_POST_signed(payload, undefined, "");
             if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "gP8AAQ=="))) { throw __bynkExpectFailure("tests/uploads.bynk:38:12", 1305, 1325, "expect ok is Ok(\"gP8AAQ==\")"); }
             if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:39:12", 1337, 1369, "expect forged is Rejected(Unauthorized)"); }
             return undefined;
@@ -394,9 +394,9 @@ async function test_a_multi_actor_raw_route_verifies_a_signer_over_the_octets__o
         switch (__d.tag) {
           case "Some": {
             const payload = __d.value;
-            const a = await __sysdrive_uploads_http_POST_either(payload, "", "Sender");
-            const b = await __sysdrive_uploads_http_POST_either(payload, ("bob" as any), "User");
-            const forged = await __sysdrive_forged_uploads_http_POST_either(payload, "");
+            const a = await __sysdrive_uploads_http_POST_either(payload, undefined, "", "Sender");
+            const b = await __sysdrive_uploads_http_POST_either(payload, undefined, ("bob" as any), "User");
+            const forged = await __sysdrive_forged_uploads_http_POST_either(payload, undefined, "");
             if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "sender gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:53:12", 1747, 1773, "expect a is Ok(\"sender gP8AAf7/\")"); }
             if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "bob gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:54:12", 1785, 1808, "expect b is Ok(\"bob gP8AAf7/\")"); }
             if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:55:12", 1820, 1852, "expect forged is Rejected(Unauthorized)"); }
@@ -424,8 +424,8 @@ async function test_a_multi_actor_raw_route_counts_the_bytes_read() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const ok = await __sysdrive_raw_uploads_http_POST_either("short", "", "Sender");
-    const big = await __sysdrive_raw_uploads_http_POST_either("this body is a good deal longer than sixty-four bytes, which is the service cap", "", "Sender");
+    const ok = await __sysdrive_raw_uploads_http_POST_either("short", undefined, "", "Sender");
+    const big = await __sysdrive_raw_uploads_http_POST_either("this body is a good deal longer than sixty-four bytes, which is the service cap", undefined, "", "Sender");
     if (!(((__c: boolean) => __c)(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "sender c2hvcnQ="))) { throw __bynkExpectFailure("tests/uploads.bynk:66:10", 2163, 2199, "expect ok is Handled(Ok(\"sender c2hvcnQ=\"))"); }
     if (!(((__c: boolean) => __c)(big.tag === "Handled" && big.value.tag === "PayloadTooLarge"))) { throw __bynkExpectFailure("tests/uploads.bynk:67:10", 2209, 2243, "expect big is Handled(PayloadTooLarge(_))"); }
     return { pass: true };
@@ -447,7 +447,7 @@ async function test_a_Bytes_body_without__raw_is_still_base64_in_JSON() {
         switch (__d.tag) {
           case "Some": {
             const b = __d.value;
-            const r = await __sysdrive_uploads_http_POST_json(b, "");
+            const r = await __sysdrive_uploads_http_POST_json(b, undefined, "");
             if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "aGk="))) { throw __bynkExpectFailure("tests/uploads.bynk:74:12", 2408, 2423, "expect r is Ok(\"aGk=\")"); }
             return undefined;
           }

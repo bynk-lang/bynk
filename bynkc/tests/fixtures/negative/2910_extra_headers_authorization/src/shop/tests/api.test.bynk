@@ -1,0 +1,6 @@
+suite shop.api as system {
+  case "Authorization is the actor's" {
+    let r <- api.GET("/hello", RequestHeaders.of(["Authorization: Bearer x"])) by Visitor
+    expect r is Ok("hi")
+  }
+}

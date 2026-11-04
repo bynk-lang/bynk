@@ -272,6 +272,10 @@
       "summary": "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum); it sends a correctly signed token whose `exp` has passed, so only a `Bearer` seam can refuse it."
     },
     {
+      "code": "bynk.test.extra_headers_authorization",
+      "summary": "A `system` case sends `Authorization` as an extra request header to a route that declares no `headers:` parameter; the case's `by <Actor>` owns the credential the driver sends."
+    },
+    {
       "code": "bynk.test.faults_needs_in_process",
       "summary": "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale` or `by Expired`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`."
     },

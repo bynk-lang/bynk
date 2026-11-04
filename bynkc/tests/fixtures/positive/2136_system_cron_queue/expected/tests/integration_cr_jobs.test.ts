@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import { __makeIntegrationDoNamespace, type __DurableObjectNamespace } from "../__bynk_runtime/agent.js";
 import * as __ns_cr_jobs from "../workers/cr-jobs/handlers.js";
 import worker___ns_cr_jobs from "../workers/cr-jobs/index.js";
@@ -71,9 +71,9 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
-async function __sysdrive_api_http_GET_count(__sub: string) {
+async function __sysdrive_api_http_GET_count(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/count`, { method: "GET", headers: { }, });
+  const __req = new globalThis.Request(`https://test/count`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, });
   const __res = await __h.env.CR_JOBS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j));
 }
@@ -165,7 +165,7 @@ async function test_the_sweeper_runs__then_the_count_is_read_over_the_wire() {
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_0(960000);
     if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:7:10", 356, 366, "expect r is Ok(_)"); }
-    const c = await __sysdrive_api_http_GET_count("");
+    const c = await __sysdrive_api_http_GET_count(undefined, "");
     if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 1))) { throw __bynkExpectFailure("tests/jobs.bynk:9:10", 416, 426, "expect c is Ok(1)"); }
     return { pass: true };
   } catch (e) {
@@ -183,7 +183,7 @@ async function test_the_sweeper_s_own_Err_is_what_the_address_yields() {
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_0(-1);
     if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error === "the scheduled time is before the epoch"))) { throw __bynkExpectFailure("tests/jobs.bynk:14:10", 546, 596, "expect r is Err(\"the scheduled time is before the epoch\")"); }
-    const c = await __sysdrive_api_http_GET_count("");
+    const c = await __sysdrive_api_http_GET_count(undefined, "");
     if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs.bynk:16:10", 646, 656, "expect c is Ok(0)"); }
     return { pass: true };
   } catch (e) {
@@ -204,7 +204,7 @@ async function test_a_delivery_is_counted_once__however_often_it_is_delivered() 
     const b = await __sysdrive_message_deliveries(d);
     if (!(((__c: boolean) => __c)(a.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:23:10", 844, 852, "expect a is Ack"); }
     if (!(((__c: boolean) => __c)(b.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:24:10", 862, 870, "expect b is Ack"); }
-    const c = await __sysdrive_api_http_GET_count("");
+    const c = await __sysdrive_api_http_GET_count(undefined, "");
     if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 6))) { throw __bynkExpectFailure("tests/jobs.bynk:26:10", 920, 930, "expect c is Ok(6)"); }
     return { pass: true };
   } catch (e) {
@@ -238,7 +238,7 @@ async function test_a_consumer_that_faults_is_retried() {
     const deps = __makeHarness();
     const r = await __sysdrive_message_deliveries({ id: "d3", qty: 0 });
     if (!(((__c: boolean) => __c)(r.tag === "Retry"))) { throw __bynkExpectFailure("tests/jobs.bynk:36:10", 1216, 1229, "expect r is Retry(_)"); }
-    const c = await __sysdrive_api_http_GET_count("");
+    const c = await __sysdrive_api_http_GET_count(undefined, "");
     if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs.bynk:38:10", 1279, 1289, "expect c is Ok(0)"); }
     return { pass: true };
   } catch (e) {
@@ -254,7 +254,7 @@ async function test_each_case_starts_from_clean_state() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const c = await __sysdrive_api_http_GET_count("");
+    const c = await __sysdrive_api_http_GET_count(undefined, "");
     if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs.bynk:43:10", 1387, 1397, "expect c is Ok(0)"); }
     return { pass: true };
   } catch (e) {

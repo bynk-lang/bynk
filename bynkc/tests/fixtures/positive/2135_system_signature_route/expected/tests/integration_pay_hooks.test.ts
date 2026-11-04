@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_pay_hooks from "../workers/pay-hooks/handlers.js";
 import worker___ns_pay_hooks from "../workers/pay-hooks/index.js";
 
@@ -95,104 +95,104 @@ async function __bynkSignHmacSha256(body: string | Uint8Array, secret: string, t
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["HOOK_SECRET"] = "__bynk_test_secret";
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["LEGACY_SECRET"] = "__bynk_test_secret";
-async function __sysdrive_webhooks_http_POST_webhooks_processor(body: any, __sub: string) {
+async function __sysdrive_webhooks_http_POST_webhooks_processor(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_pay_hooks.__serialise_Notice(body));
   const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_webhooks_http_POST_webhooks_processor(body: string, __sub: string) {
+async function __sysdrive_raw_webhooks_http_POST_webhooks_processor(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_noauth_webhooks_http_POST_webhooks_processor(body: any, __sub: string) {
+async function __sysdrive_noauth_webhooks_http_POST_webhooks_processor(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_pay_hooks.__serialise_Notice(body));
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: __body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawnoauth_webhooks_http_POST_webhooks_processor(body: string, __sub: string) {
+async function __sysdrive_rawnoauth_webhooks_http_POST_webhooks_processor(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_forged_webhooks_http_POST_webhooks_processor(body: any, __sub: string) {
+async function __sysdrive_forged_webhooks_http_POST_webhooks_processor(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_pay_hooks.__serialise_Notice(body));
   const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? "") + "!"), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawforged_webhooks_http_POST_webhooks_processor(body: string, __sub: string) {
+async function __sysdrive_rawforged_webhooks_http_POST_webhooks_processor(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? "") + "!"), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_stale_webhooks_http_POST_webhooks_processor(body: any, __sub: string) {
+async function __sysdrive_stale_webhooks_http_POST_webhooks_processor(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_pay_hooks.__serialise_Notice(body));
   const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 360);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawstale_webhooks_http_POST_webhooks_processor(body: string, __sub: string) {
+async function __sysdrive_rawstale_webhooks_http_POST_webhooks_processor(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 360);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_webhooks_http_POST_webhooks_legacy(body: string, __sub: string) {
+async function __sysdrive_webhooks_http_POST_webhooks_legacy(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["LEGACY_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["LEGACY_SECRET"] ?? ""), false, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: __body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_webhooks_http_POST_webhooks_legacy(body: string, __sub: string) {
+async function __sysdrive_raw_webhooks_http_POST_webhooks_legacy(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["LEGACY_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["LEGACY_SECRET"] ?? ""), false, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: body, });
+  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_noauth_webhooks_http_POST_webhooks_legacy(body: string, __sub: string) {
+async function __sysdrive_noauth_webhooks_http_POST_webhooks_legacy(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: __body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawnoauth_webhooks_http_POST_webhooks_legacy(body: string, __sub: string) {
+async function __sysdrive_rawnoauth_webhooks_http_POST_webhooks_legacy(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { "content-type": "application/json", }, body: body, });
+  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", }, body: body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_forged_webhooks_http_POST_webhooks_legacy(body: string, __sub: string) {
+async function __sysdrive_forged_webhooks_http_POST_webhooks_legacy(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["LEGACY_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["LEGACY_SECRET"] ?? "") + "!"), false, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: __body, });
+  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: __body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawforged_webhooks_http_POST_webhooks_legacy(body: string, __sub: string) {
+async function __sysdrive_rawforged_webhooks_http_POST_webhooks_legacy(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["LEGACY_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["LEGACY_SECRET"] ?? "") + "!"), false, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: body, });
+  const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -210,8 +210,8 @@ async function test_a_signed_notice_is_accepted__and_a_replay_too() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const n = { id: "evt_1", event: "payment.captured" };
-    const a = await __sysdrive_webhooks_http_POST_webhooks_processor(n, "");
-    const b = await __sysdrive_webhooks_http_POST_webhooks_processor(n, "");
+    const a = await __sysdrive_webhooks_http_POST_webhooks_processor(n, undefined, "");
+    const b = await __sysdrive_webhooks_http_POST_webhooks_processor(n, undefined, "");
     if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "payment.captured evt_1"))) { throw __bynkExpectFailure("tests/hooks.bynk:8:10", 413, 446, "expect a is Ok(\"payment.captured evt_1\")"); }
     if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "payment.captured evt_1"))) { throw __bynkExpectFailure("tests/hooks.bynk:9:10", 456, 489, "expect b is Ok(\"payment.captured evt_1\")"); }
     return { pass: true };
@@ -229,7 +229,7 @@ async function test_a_raw_body_is_signed_as_sent() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_webhooks_http_POST_webhooks_processor("{\"id\": \"evt_2\", \"event\": \"payment.failed\"}", "");
+    const r = await __sysdrive_raw_webhooks_http_POST_webhooks_processor("{\"id\": \"evt_2\", \"event\": \"payment.failed\"}", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/hooks.bynk:14:10", 650, 665, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
@@ -246,7 +246,7 @@ async function test_a_signature_over_a_malformed_body_passes_the_seam_and_fails_
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_webhooks_http_POST_webhooks_processor("{not json", "");
+    const r = await __sysdrive_raw_webhooks_http_POST_webhooks_processor("{not json", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "MalformedJson"))) { throw __bynkExpectFailure("tests/hooks.bynk:19:10", 829, 860, "expect r is Rejected(MalformedJson(_))"); }
     return { pass: true };
   } catch (e) {
@@ -264,9 +264,9 @@ async function test_unsigned__forged_and_stale_notices_are_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const n = { id: "evt_1", event: "payment.captured" };
-    const none = await __sysdrive_noauth_webhooks_http_POST_webhooks_processor(n, "");
-    const forged = await __sysdrive_forged_webhooks_http_POST_webhooks_processor(n, "");
-    const stale = await __sysdrive_stale_webhooks_http_POST_webhooks_processor(n, "");
+    const none = await __sysdrive_noauth_webhooks_http_POST_webhooks_processor(n, undefined, "");
+    const forged = await __sysdrive_forged_webhooks_http_POST_webhooks_processor(n, undefined, "");
+    const stale = await __sysdrive_stale_webhooks_http_POST_webhooks_processor(n, undefined, "");
     if (!(((__c: boolean) => __c)(none.tag === "Rejected" && none.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:27:10", 1185, 1215, "expect none is Rejected(Unauthorized)"); }
     if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:28:10", 1225, 1257, "expect forged is Rejected(Unauthorized)"); }
     if (!(((__c: boolean) => __c)(stale.tag === "Rejected" && stale.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:29:10", 1267, 1298, "expect stale is Rejected(Unauthorized)"); }
@@ -285,7 +285,7 @@ async function test_a_forged_raw_notice_is_refused_before_the_body_is_read() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_rawforged_webhooks_http_POST_webhooks_processor("{not json", "");
+    const r = await __sysdrive_rawforged_webhooks_http_POST_webhooks_processor("{not json", undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:34:10", 1454, 1481, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
@@ -302,8 +302,8 @@ async function test_a_body_only_signature_is_accepted__and_a_forged_one_refused(
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const ok = await __sysdrive_webhooks_http_POST_webhooks_legacy("hi", "");
-    const forged = await __sysdrive_forged_webhooks_http_POST_webhooks_legacy("hi", "");
+    const ok = await __sysdrive_webhooks_http_POST_webhooks_legacy("hi", undefined, "");
+    const forged = await __sysdrive_forged_webhooks_http_POST_webhooks_legacy("hi", undefined, "");
     if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "legacy hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:40:10", 1683, 1704, "expect ok is Ok(\"legacy hi\")"); }
     if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:41:10", 1714, 1746, "expect forged is Rejected(Unauthorized)"); }
     return { pass: true };
@@ -321,7 +321,7 @@ async function test_a_notice_signed_with_the_env_secret_is_accepted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_webhooks_http_POST_webhooks_processor({ id: "evt_3", event: "payment.captured" }, "");
+    const r = await __sysdrive_webhooks_http_POST_webhooks_processor({ id: "evt_3", event: "payment.captured" }, undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "payment.captured evt_3"))) { throw __bynkExpectFailure("tests/hooks_env.bynk:8:10", 367, 400, "expect r is Ok(\"payment.captured evt_3\")"); }
     return { pass: true };
   } catch (e) {
@@ -338,7 +338,7 @@ async function test_a_forged_notice_is_refused_under_an_env_secret_too() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_forged_webhooks_http_POST_webhooks_processor({ id: "evt_3", event: "payment.captured" }, "");
+    const r = await __sysdrive_forged_webhooks_http_POST_webhooks_processor({ id: "evt_3", event: "payment.captured" }, undefined, "");
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks_env.bynk:13:10", 584, 611, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {

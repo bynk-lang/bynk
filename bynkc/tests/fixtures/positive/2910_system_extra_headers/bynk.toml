@@ -1,0 +1,6 @@
+[project]
+name = "2910-system-extra-headers"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
