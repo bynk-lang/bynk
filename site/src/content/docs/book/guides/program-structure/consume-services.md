@@ -96,8 +96,7 @@ An alias that appears in one of this context's own service signatures is part of
 that service's contract: renaming the alias changes the contract hash of every
 service whose parameters or result name it, so the callers of those services
 must be rebuilt and redeployed with it (a stale caller is refused with
-`ContractMismatch`, as for any other signature change). A caller that reaches
-such a service sees the type under the alias.
+`ContractMismatch`, as for any other signature change).
 
 ## Undo earlier steps when a later one fails
 

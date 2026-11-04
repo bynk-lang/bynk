@@ -24,5 +24,7 @@ declares: `CrossContextInfo.callee_type_aliases` carries the callee's aliases.
 
 **Consequences.** Contract hashes of services whose signature names an aliased type
 change once (the shape is now part of it). Renaming such an alias changes the
-service's contract hash for its callers. A caller that does not alias the type can
-pass and discard such a value but cannot name it (its type is the callee's alias).
+service's contract hash for its callers. A caller that does not itself alias the type
+reaches it under the callee's alias, so it can pass such a value on but not match
+on it or return it as its own `Code` (a known gap, to be closed by resolving the
+callee's alias to the declaring type for the caller).
