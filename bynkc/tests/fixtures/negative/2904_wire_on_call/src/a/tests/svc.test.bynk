@@ -1,0 +1,6 @@
+suite a.svc as system {
+  case "wire to an on call" {
+    let n <- save.call(Wire("abc"))
+    expect n == n
+  }
+}

@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.506.5** | "`Wire(...)` in a unit-tier case is now `bynk.test.wire_needs_system`, and `Wire(...)` passed to a queue, cron, `on call` or event address is the new `bynk.test.wire_http_only` instead of failing at run time or in `tsc`" |
 | **v0.506.4** | A record field default naming a variant of a `uses`-sourced commons sum now reports `bynk.context.rebrand_construction` instead of "an invalid expression", and the `bad_field_default` note no longer lists such variants as admitted |
 | **v0.506.3** | A suite mixing `as system` with lower-tier cases reports only `bynk.tier.mixed_system_suite`, not a false `bynk.observe.not_a_seam`; suite helpers are callable in `stub … returns` values, and an unresolved name there is reported as unresolved, not `bynk.stub.rhs_type` |
 | **v0.506.2** | A reserved word naming an agent `on call` operation, a name on a service's `on call`, and a `stub`/`env` clause after a case statement now get targeted parse diagnostics |

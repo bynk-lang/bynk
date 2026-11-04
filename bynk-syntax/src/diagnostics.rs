@@ -3058,6 +3058,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.wire_http_only",
+        "A `Wire(...)` raw argument is passed to a queue, cron, `on call` or event address; `Wire` drives an http body or path segment only, so a queue message, cron tick or event is passed as a typed value.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.wire_needs_system",
         "A `Wire(...)` raw argument is used outside a `system`-tier service address; `Wire` hands pre-validation input to the boundary and is meaningless at `unit` or in any other position.",
         &["case"],

@@ -2243,7 +2243,9 @@ A `Wire(...)` raw argument
 ([§4.6.24](/book/spec/syntactic-grammar/#4624-wire_expr)) MUST occur only as an
 argument of a service address in a `system`-tier `case`
 (`bynk.test.wire_needs_system`): it hands unvalidated input to the boundary,
-which only a `system` case runs.
+which only a `system` case runs. It MUST NOT be passed to a queue, cron,
+`on call` or event address (`bynk.test.wire_http_only`): `Wire` drives an http
+body or path segment only.
 
 An `advance Clock by <amount>` statement
 ([`advance_stmt`](/book/reference/grammar/#rule-advance_stmt)) MUST occur only in

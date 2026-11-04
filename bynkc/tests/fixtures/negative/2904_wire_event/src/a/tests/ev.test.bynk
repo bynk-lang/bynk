@@ -1,0 +1,6 @@
+suite a.ev as system {
+  case "wire to an event" {
+    let r <- onPaid.event(Wire("{}"))
+    expect r == r
+  }
+}

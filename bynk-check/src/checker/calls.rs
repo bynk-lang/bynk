@@ -5279,6 +5279,31 @@ fn check_extra_headers_authorization(arg: &Expr, ctx: &mut Ctx) {
     }
 }
 
+/// #2904: `Wire(…)` drives an http body or path segment (the book documents it
+/// nowhere else). A queue message, cron tick, `on call` or event address has no
+/// raw text form to deliver, so it would be handed to a typed codec as a
+/// string and fail at run time with a misleading error.
+fn is_wire(e: &Expr) -> bool {
+    matches!(e.kind, bynk_syntax::ast::ExprKind::Wire(_))
+}
+
+fn reject_wire_args(svc: &str, addr: &str, args: &[Expr], ctx: &mut Ctx) {
+    for a in args {
+        if is_wire(a) {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.wire_http_only",
+                    a.span,
+                    format!("`Wire(...)` cannot be passed to `{svc}.{addr}`"),
+                )
+                .with_note(
+                    "`Wire` drives an http body or path segment; pass a queue message, cron tick or event as a typed value",
+                ),
+            );
+        }
+    }
+}
+
 /// Shared arity + argument-type check for a resolved test-body service address.
 /// `positional` are the arguments that map to the handler's declared params (for
 /// http/cron the leading pattern string has already been split off).
@@ -5291,6 +5316,9 @@ fn check_address_args(
     ctx: &mut Ctx,
 ) {
     let tys = ctx.tys;
+    if addr == "call" || addr == "schedule" || addr == "message" {
+        reject_wire_args(svc, addr, positional, ctx);
+    }
     if params.len() != positional.len() {
         ctx.errors.push(
             CompileError::new(
@@ -5306,7 +5334,7 @@ fn check_address_args(
             // test file and the unit it tests are normally different files.
             .with_note("handler declared here"),
         );
-        for a in positional {
+        for a in positional.iter().filter(|a| !is_wire(a)) {
             let _ = type_of(a, None, ctx);
         }
         return;
@@ -5359,6 +5387,7 @@ fn check_event_address(
 ) {
     let tys = ctx.tys;
     let svc = &id.name;
+    reject_wire_args(svc, "event", args, ctx);
     if args.is_empty() || args.len() > 2 {
         ctx.errors.push(
             CompileError::new(
@@ -5371,7 +5400,7 @@ fn check_event_address(
             )
             .with_note("deliver an event with `svc.event(e)`, or `svc.event(e, env)` to choose its envelope"),
         );
-        for a in args {
+        for a in args.iter().filter(|a| !is_wire(a)) {
             let _ = type_of(a, None, ctx);
         }
         return;
@@ -5403,45 +5432,50 @@ fn check_event_address(
         );
     }
     let payload = &args[0];
-    let expected = handler
-        .params
-        .first()
-        .and_then(|p| resolve_type_ref(&p.type_ref, &ctx.input.types, tys));
-    let arg_ty = type_of(payload, expected, ctx);
-    if let (Some(a), Some(p)) = (arg_ty, expected)
-        && !compatible(a, p, tys)
-    {
-        let other_event = match &*tys.get(a) {
-            Ty::Named { name, .. } if sig.known_events.contains(name) => Some(name.clone()),
-            _ => None,
-        };
-        let err = match other_event {
-            Some(other) => CompileError::new(
-                "bynk.test.event_not_subscribed",
-                payload.span,
-                format!(
-                    "`{svc}` subscribes to `{}`, not `{other}`",
-                    p.display(tys)
+    if !is_wire(payload) {
+        let expected = handler
+            .params
+            .first()
+            .and_then(|p| resolve_type_ref(&p.type_ref, &ctx.input.types, tys));
+        let arg_ty = type_of(payload, expected, ctx);
+        if let (Some(a), Some(p)) = (arg_ty, expected)
+            && !compatible(a, p, tys)
+        {
+            let other_event = match &*tys.get(a) {
+                Ty::Named { name, .. } if sig.known_events.contains(name) => Some(name.clone()),
+                _ => None,
+            };
+            let err = match other_event {
+                Some(other) => CompileError::new(
+                    "bynk.test.event_not_subscribed",
+                    payload.span,
+                    format!(
+                        "`{svc}` subscribes to `{}`, not `{other}`",
+                        p.display(tys)
+                    ),
+                )
+                .with_note(
+                    "an event address delivers only the event the service's `from Events(E)` header names",
                 ),
-            )
-            .with_note(
-                "an event address delivers only the event the service's `from Events(E)` header names",
-            ),
-            None => CompileError::new(
-                "bynk.types.argument_mismatch",
-                payload.span,
-                format!(
-                    "argument 1 has type `{}`, but `{svc}.event` expects the event it subscribes to, `{}`",
-                    a.display(tys),
-                    p.display(tys)
+                None => CompileError::new(
+                    "bynk.types.argument_mismatch",
+                    payload.span,
+                    format!(
+                        "argument 1 has type `{}`, but `{svc}.event` expects the event it subscribes to, `{}`",
+                        a.display(tys),
+                        p.display(tys)
+                    ),
                 ),
-            ),
-        };
-        ctx.errors.push(err);
+            };
+            ctx.errors.push(err);
+        }
     }
     let Some(envelope) = args.get(1) else {
         return;
     };
+    if is_wire(envelope) {
+        return;
+    }
     let envelope_ref = TypeRef::Named(Ident {
         name: "EventEnvelope".to_string(),
         span: envelope.span,

@@ -453,7 +453,9 @@ status: a rendered `413` reads as `Handled(PayloadTooLarge(message))`, its
 still reads as `Rejected(MethodNotAllowed)`, and a rendering the router refused
 (another status) reads as the default rejection. `Wire` is legal **only** as a
 service-address argument in a `system`-tier case. At `unit` there is no wire to
-be raw about (`bynk.test.wire_needs_system`). No refined value is ever built
+be raw about (`bynk.test.wire_needs_system`). It drives an http body or path
+segment only: on a queue, cron, `on call` or event address it is
+`bynk.test.wire_http_only`, and a queue message is passed as a typed value. No refined value is ever built
 from it: the router validates the raw string, which is the whole point.
 
 ### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale` and `by Expired` {#failure-principals}
