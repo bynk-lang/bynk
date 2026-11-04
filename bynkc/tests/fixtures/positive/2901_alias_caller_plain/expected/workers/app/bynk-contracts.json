@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "echo": "079bebf1abc5532f"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "echo": "Svc(\"echo\",P(\"c\",Sum(\"LibCode\",V(\"Alpha\"),V(\"Beta\"))),Ret(Sum(\"LibCode\",V(\"Alpha\"),V(\"Beta\"))))"
+  }
+}

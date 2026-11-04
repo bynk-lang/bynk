@@ -1,0 +1,9 @@
+context app
+
+consumes lib { Code as LibCode }
+
+service echo {
+	on call(c: LibCode) -> Effect[LibCode] {
+		Effect.pure(c)
+	}
+}

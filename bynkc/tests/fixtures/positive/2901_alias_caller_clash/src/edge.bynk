@@ -1,0 +1,21 @@
+context edge
+
+consumes app
+consumes lib { Code }
+
+service probe {
+	on call() -> Effect[Int] {
+		let echoed <- app.echo(Code.Alpha)
+		match echoed {
+			Alpha => Effect.pure(1)
+			Beta => Effect.pure(0)
+		}
+	}
+}
+
+service forward {
+	on call() -> Effect[Code] {
+		let echoed <- app.echo(Code.Beta)
+		Effect.pure(echoed)
+	}
+}

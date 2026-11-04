@@ -1,0 +1,22 @@
+context lib
+
+exports transparent { Code, Level }
+
+type Code = enum { Alpha, Beta }
+
+type Level = Int where NonNegative
+
+service flip {
+	on call(c: Code) -> Effect[Code] {
+		match c {
+			Alpha => Effect.pure(Beta)
+			Beta => Effect.pure(Alpha)
+		}
+	}
+}
+
+service ping {
+	on call(l: Level) -> Effect[Level] {
+		Effect.pure(l)
+	}
+}

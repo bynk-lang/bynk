@@ -4542,6 +4542,21 @@ pub(crate) fn lower_workers_cross_context_call(
     // two hashes agree by construction on a single build and differ only when
     // the deployed sources genuinely differ. Canonicalising here in the caller's
     // namespace would rebrand the same types and 409 every call.
+    // #2901: the signature names a type the callee renamed by the key this
+    // context holds it under; the callee hashes its own alias.
+    let realiased;
+    let svc = match info.callee_alias_keys.get(consumed) {
+        Some(keys) => {
+            let mut s = svc.clone();
+            for (_, tr) in s.params.iter_mut() {
+                bynk_check::symbols::rename_type_ref(tr, keys);
+            }
+            bynk_check::symbols::rename_type_ref(&mut s.return_type, keys);
+            realiased = s;
+            &realiased
+        }
+        None => svc,
+    };
     let contract = match info.consumed_types.get(consumed) {
         Some(types) => match info.consumed_type_aliases.get(consumed) {
             // #2887: the callee canonicalises its own names; undo this
@@ -4771,7 +4786,12 @@ fn unalias_type_ref(
     if let Some(aliases) = info.consumed_type_aliases.get(consumed) {
         bynk_check::symbols::rename_type_ref(&mut tr, aliases);
     }
-    // #2890: and the names `consumed` renamed itself.
+    // #2890: and the names `consumed` renamed itself. #2901: its signature
+    // names them by the key this context holds them under, which is the alias
+    // again first.
+    if let Some(keys) = info.callee_alias_keys.get(consumed) {
+        bynk_check::symbols::rename_type_ref(&mut tr, keys);
+    }
     if let Some(aliases) = info.callee_type_aliases.get(consumed) {
         bynk_check::symbols::rename_type_ref(&mut tr, aliases);
     }

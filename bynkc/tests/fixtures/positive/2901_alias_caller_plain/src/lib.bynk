@@ -1,0 +1,5 @@
+context lib
+
+exports transparent { Code }
+
+type Code = enum { Alpha, Beta }
