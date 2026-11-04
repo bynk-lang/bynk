@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.504.2** | Diagnostics on a context function's `given` no longer point at advice it cannot follow, and a refused `given` function's callers and body add no follow-on errors (#2881, #2882) |
 | **v0.504.1** | Fixture pins a `given` fn called from a provider op, a WebSocket handler and a service-header-inherited handler (#2883) |
 | **v0.504.0** | "`D1` gains a typed `select[T]` and `firstAs[T]`: the compiler writes the `SELECT` column list from the row type, and failures are a `SqlReadError`" |
 | **v0.503.0** | "`String where IsoDate` refines a string to a calendar date, exactly `YYYY-MM-DD`; an impossible date such as `2026-02-30` is refused in a literal, `.of`, `Json.decode` and at the HTTP boundary" |
