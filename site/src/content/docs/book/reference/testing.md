@@ -434,7 +434,7 @@ service-address argument in a `system`-tier case. At `unit` there is no wire to
 be raw about (`bynk.test.wire_needs_system`). No refined value is ever built
 from it: the router validates the raw string, which is the whole point.
 
-### Testing the auth seam with `by Nobody`, `by Forged` and `by Stale` {#failure-principals}
+### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale` and `by Expired` {#failure-principals}
 
 `by User("bob")` presents a valid, framework-signed credential the real seam
 verifies. To test the *rejection* — an unauthenticated request — a `system`-tier
@@ -456,21 +456,29 @@ the bytes it sends (the serialised JSON of a typed call, the raw string of a
 [`env`](#env) entry for the actor's `secret`, else a fixed test secret. Below
 `system` nothing changes: the handler runs in process and the seam is skipped.
 
-Three reserved principals drive the failures. Each yields the same
+Four reserved principals drive the failures. Each yields the same
 [`HttpOutcome[T]`](#httpoutcome) as a `Wire` call, with the seam's `401` as
 `Rejected(Unauthorized)`:
 
 | Principal | What the `system` driver sends | Legal on |
 |---|---|---|
 | `by Nobody` | no credential: no `Authorization` header, or no signature headers | a route with a Bearer or `Signature` actor |
-| `by Forged` | a signature made with a secret the seam does not hold | a route with a `Signature` actor |
+| `by Forged` | on a `Signature` route, a signature made with a secret the seam does not hold; on a Bearer route, a well-formed token (a valid `sub`, a future `exp`) signed with a secret the seam does not hold | a route with a `Signature` or Bearer actor |
 | `by Stale` | a correct signature, timestamped `tolerance + 60` seconds in the past | a route with a `Signature` actor that declares `timestamp` and `tolerance` |
+| `by Expired` | a Bearer token with a valid `sub`, correctly signed, whose `exp` is one hour before the test clock | a route with a Bearer actor |
 
 On an [actor sum](/book/guides/actors/multiple-callers/) the actor may be one
-member: `by Forged` and `by Stale` sign as the sum's first `Signature` member.
-A sum that admits `Visitor` (`by who: Processor | Visitor`) never answers
-`401`: a request with a missing or bad credential resolves as `Visitor`. So
-none of the three is legal there.
+member: `by Forged` and `by Stale` sign as the sum's first `Signature` member,
+and a sum with no `Signature` member, `by Forged` and `by Expired` mint the token
+for its first Bearer member. A sum that admits `Visitor` (`by who: Processor |
+Visitor`) never answers `401`: a request with a missing or bad credential
+resolves as `Visitor`. So none of the four is legal there.
+
+All four are `system`-tier only: below it the seam is skipped and the identity
+is given, so there is no credential to forge (`bynk.test.forged_needs_system`).
+`by Expired` on any other route is `bynk.test.expired_needs_bearer_route`. An
+`Oidc` route has no forged or expired token to send yet, since the driver holds
+no test key pair for its JWKS.
 
 ```bynk,fragment
 case "unsigned, forged and stale notices are refused" as system {

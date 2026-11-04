@@ -1,0 +1,6 @@
+[project]
+name = "2864-system-bearer-refusals"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

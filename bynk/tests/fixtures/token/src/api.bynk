@@ -1,0 +1,25 @@
+context api
+
+type ReaderId = String where NonEmpty && MaxLength(8) && Matches("[a-z]+")
+type AdminId = String where NonEmpty
+
+actor Reader { auth = Bearer(secret = "READER_SECRET"), identity = ReaderId }
+actor Admin { auth = Bearer(secret = "ADMIN_SECRET"), identity = AdminId }
+actor Moderator = Reader where hasClaim("mod")
+actor Hook { auth = Signature(secret = "HOOK_SECRET", header = "X-Signature") }
+actor Sso { auth = Oidc(issuer = "https://issuer.example", audience = "my-api", jwks = "https://issuer.example/jwks"), identity = AdminId }
+
+service api from http {
+  on GET("/me") () -> Effect[HttpResult[String]] by r: Reader {
+    Ok("me")
+  }
+  on GET("/admin") () -> Effect[HttpResult[String]] by a: Admin {
+    Ok("admin")
+  }
+  on POST("/hook") (body: String) -> Effect[HttpResult[String]] by Hook {
+    Ok("hook")
+  }
+  on GET("/sso") () -> Effect[HttpResult[String]] by s: Sso {
+    Ok("sso")
+  }
+}

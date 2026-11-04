@@ -25,7 +25,7 @@ pub struct Cli {
 pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     (
         "Project",
-        &["new", "check", "fmt", "test", "compile", "openapi"],
+        &["new", "check", "fmt", "test", "compile", "openapi", "token"],
     ),
     ("Run and deploy", &["dev", "deploy", "tail", "migrate"]),
     (
@@ -399,6 +399,53 @@ pub enum Command {
         /// `.yml`, otherwise `json`.
         #[arg(long, value_enum)]
         format: Option<OpenapiFormatArg>,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Mint a credential for the project's own Bearer actor.
+    ///
+    /// For calling a `Bearer`-guarded route by hand — `curl` under `bynk dev`,
+    /// or a smoke test against a deployment. Prints the token alone on stdout,
+    /// so `$(bynk token Reader --sub me)` works.
+    ///
+    /// This is not `bynk org token mint`, which mints a registry **publish**
+    /// token for `bynk publish`. `bynk token` signs an HS256 JWT for an `actor`
+    /// *this project* declares, exactly as that actor's emitted seam verifies it.
+    ///
+    /// The secret is read from the environment under the name the actor declares
+    /// (`auth = Bearer(secret = "API_TOKEN_SECRET")` → `$API_TOKEN_SECRET`),
+    /// never from an argument, and is never printed. `--sub` is checked against
+    /// the actor's identity type, refinements included, before signing. Only
+    /// `Bearer` actors are supported: a `Signature` actor signs a request body,
+    /// and an `Oidc` actor's tokens come from the identity provider. With no
+    /// actor, lists the project's Bearer actors and the secret each reads.
+    ///
+    /// The default lifetime is 1 hour; `--lifetime` (up to 365d) sets another.
+    /// `--expired` and `--not-before` mint tokens the seam must refuse, for
+    /// testing the refusals.
+    Token {
+        /// The actor to mint for (`Name` or `unit.Name`). Omit to list the
+        /// project's Bearer actors.
+        actor: Option<String>,
+        /// The identity the token names — its `sub` claim.
+        #[arg(long)]
+        sub: Option<String>,
+        /// How long the token is valid, like `15m`, `1h` or `30d` (default
+        /// `1h`, at most `365d`). Counted from `--not-before` when that is set.
+        #[arg(long, conflicts_with = "expired")]
+        lifetime: Option<String>,
+        /// Mint a token that expired an hour ago, to test that the seam
+        /// refuses it.
+        #[arg(long)]
+        expired: bool,
+        /// Start the token's validity this long from now, like `10m`, to test
+        /// that the seam refuses a token not yet valid.
+        #[arg(long, conflicts_with = "expired")]
+        not_before: Option<String>,
+        /// Project directory (or any path inside it). Defaults to the current
+        /// directory.
+        #[arg(long, default_value = ".")]
+        input: PathBuf,
         #[command(flatten)]
         lock: LockArgs,
     },

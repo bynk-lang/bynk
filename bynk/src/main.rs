@@ -179,6 +179,36 @@ fn run() -> ExitCode {
             };
             bynk::openapi::run(&root, service.as_deref(), out.as_deref(), format)
         }
+        Command::Token {
+            actor,
+            sub,
+            lifetime,
+            expired,
+            not_before,
+            input,
+            lock,
+        } => {
+            if !prepare(&input, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            let Some(root) = find_project_root(&input) else {
+                eprintln!(
+                    "bynk: no `bynk.toml` found in `{}` or above; run from a project",
+                    input.display()
+                );
+                return ExitCode::FAILURE;
+            };
+            bynk::token::run(
+                &root,
+                &bynk::token::Request {
+                    actor: actor.as_deref(),
+                    sub: sub.as_deref(),
+                    lifetime: lifetime.as_deref(),
+                    expired,
+                    not_before: not_before.as_deref(),
+                },
+            )
+        }
         Command::Compile {
             input,
             output,

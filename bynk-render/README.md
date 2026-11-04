@@ -61,7 +61,7 @@ depending on it directly.
 
 ```toml
 [dependencies]
-bynk-render = "0.499"
+bynk-render = "0.500"
 ```
 
 ```rust
