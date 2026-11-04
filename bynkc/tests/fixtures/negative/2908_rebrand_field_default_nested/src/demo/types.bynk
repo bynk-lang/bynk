@@ -1,0 +1,5 @@
+commons demo.types
+
+type Speed = enum { Standard, Express }
+
+type Inner = { speed: Speed = Speed.Standard }
