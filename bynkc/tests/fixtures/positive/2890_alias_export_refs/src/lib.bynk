@@ -1,0 +1,13 @@
+context lib
+
+exports transparent { Code, Tagged }
+
+type Code = enum { Alpha, Beta }
+
+type Tagged = { code: Code, label: String }
+
+service ping {
+	on call() -> Effect[Int] {
+		Effect.pure(1)
+	}
+}

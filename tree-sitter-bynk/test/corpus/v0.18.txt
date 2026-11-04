@@ -26,8 +26,10 @@ adapter tokens {
     (consumes_decl
       (qualified_name
         (identifier))
-      (identifier)
-      (identifier))
+      (consumes_item
+        (identifier))
+      (consumes_item
+        (identifier)))
     (exports_decl
       (identifier))
     (capability_decl

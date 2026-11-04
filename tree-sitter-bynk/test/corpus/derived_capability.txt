@@ -21,7 +21,8 @@ capability PriceCache = Kv @ttl(60)
       target: (qualified_name
         (identifier)
         (identifier))
-      capability: (identifier))
+      (consumes_item
+        name: (identifier)))
     (capability_decl
       name: (identifier)
       base: (identifier))

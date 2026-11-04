@@ -74,9 +74,10 @@ class __Stub_Crypto {
   }
   async digest(algorithm: __ns_bynk_crypto.Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array> {
     const { algorithmName, empty } = __ns_app;
-    const { CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
+    type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;

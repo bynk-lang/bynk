@@ -294,6 +294,11 @@ pub struct CrossContextInfo {
     /// works in the alias; anything the callee also reads (the contract hash,
     /// the TS names its module exports) is spelled in the declared name.
     pub consumed_type_aliases: HashMap<String, HashMap<String, String>>,
+    /// #2890: for each consumed context, the types it renames from a context of
+    /// its own (alias → declared name). Its services' signatures name them by
+    /// the alias, and a caller that does not alias them reaches the type
+    /// through the module that declares it, under the declared name.
+    pub callee_type_aliases: HashMap<String, HashMap<String, String>>,
 }
 
 /// Snapshot of one exported capability in a consumed context, as needed for

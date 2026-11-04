@@ -1559,7 +1559,20 @@ pub fn build_cross_context_info(
         HashMap::new();
     let mut consumed_type_owners: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut consumed_type_aliases: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut callee_type_aliases: HashMap<String, HashMap<String, String>> = HashMap::new();
     for t in &consumed_contexts {
+        if let Some(own) = unit_tables
+            .get(t)
+            .map(|table| &table.consumed_type_aliases)
+            .filter(|own| !own.is_empty())
+        {
+            callee_type_aliases.insert(
+                t.clone(),
+                own.iter()
+                    .map(|(alias, a)| (alias.clone(), a.original.clone()))
+                    .collect(),
+            );
+        }
         let (mut other_types_combined, owners) =
             contract_types_for(t, unit_tables, unit_uses, unit_consumes);
         // #2887: the exports of `t` this unit renames (`consumes t { T as U }`):
@@ -1690,6 +1703,7 @@ pub fn build_cross_context_info(
         consumed_event_names,
         consumed_type_owners,
         consumed_type_aliases,
+        callee_type_aliases,
     }
 }
 
@@ -2089,6 +2103,35 @@ fn contract_types_inner(
             out.insert(n.clone(), unit_tables[*u].types[n].clone());
             owners.insert(n.clone(), (*u).clone());
             queue.push((n.clone(), (*u).clone()));
+        }
+    }
+    // #2890: a service signature of this unit may name an export it renamed
+    // (`consumes lib { Code as LibCode }`), and a caller of the unit reads the
+    // service's types through this view, so the alias is a key of it as well.
+    // The contract states the type by the alias (it is the unit's own spelling).
+    if let Some(table) = unit_tables.get(unit) {
+        for (alias, a) in &table.consumed_type_aliases {
+            let Some((view, view_owners)) = views.get(&a.target) else {
+                continue;
+            };
+            let Some(decl) = view.get(&a.original) else {
+                continue;
+            };
+            let renames: HashMap<String, String> = table
+                .consumed_type_aliases
+                .iter()
+                .filter(|(_, o)| o.target == a.target)
+                .map(|(alias, o)| (o.original.clone(), alias.clone()))
+                .collect();
+            out.insert(alias.clone(), rename_consumed_decl(decl, alias, &renames));
+            owners.insert(
+                alias.clone(),
+                view_owners
+                    .get(&a.original)
+                    .cloned()
+                    .unwrap_or_else(|| a.target.clone()),
+            );
+            queue.push((alias.clone(), a.target.clone()));
         }
     }
     queue.sort();

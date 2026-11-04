@@ -5176,9 +5176,14 @@ fn emit_stub_class(
             }
             names.sort();
             let types = aliased_types(&unit_tables[*u], |n| names.contains(n));
+            let declared: HashSet<String> = renames
+                .keys()
+                .filter(|o| names.contains(*o) && taken.insert((*o).clone()))
+                .cloned()
+                .collect();
             crate::emitter::extend_printed_at(
                 &mut body_text,
-                emit_ns_destructure_renamed(&test_ns(u), &names, &types, &renames),
+                emit_ns_destructure_renamed(&test_ns(u), &names, &types, &renames, &declared),
                 2,
             );
         }
@@ -6635,25 +6640,35 @@ fn emit_ns_destructure(
     value_names: &[String],
     type_names: &[(String, Vec<String>)],
 ) -> Vec<TsStmt> {
-    emit_ns_destructure_renamed(ns, value_names, type_names, &HashMap::new())
+    emit_ns_destructure_renamed(
+        ns,
+        value_names,
+        type_names,
+        &HashMap::new(),
+        &HashSet::new(),
+    )
 }
 
 /// [`emit_ns_destructure`] where `renames` (original → alias, #2887) binds a
 /// consumed type the unit renames with `consumes U { T as Alias }` under its
 /// alias: `const { T: Alias } = ns;` and `type Alias = ns.T`.
+/// `declared` holds the renamed names also bound under their declared name
+/// (#2890): a suite is not a consuming context, so a case names the type by it.
 fn emit_ns_destructure_renamed(
     ns: &str,
     value_names: &[String],
     type_names: &[(String, Vec<String>)],
     renames: &HashMap<String, String>,
+    declared: &HashSet<String>,
 ) -> Vec<TsStmt> {
     let mut stmts = Vec::new();
     if !value_names.is_empty() {
         let pattern = value_names
             .iter()
-            .map(|n| match renames.get(n) {
-                Some(alias) => format!("{n}: {alias}"),
-                None => n.clone(),
+            .flat_map(|n| match renames.get(n) {
+                Some(alias) if declared.contains(n) => vec![format!("{n}: {alias}"), n.clone()],
+                Some(alias) => vec![format!("{n}: {alias}")],
+                None => vec![n.clone()],
             })
             .collect();
         stmts.push(TsStmt::const_stmt(
@@ -6665,20 +6680,25 @@ fn emit_ns_destructure_renamed(
     }
     for (t, params) in type_names {
         let target = format!("{ns}.{t}");
-        let t = renames.get(t).unwrap_or(t);
         let ty = if params.is_empty() {
             TsType::named(target)
         } else {
             TsType::named_with_args(target, params.iter().map(TsType::named).collect())
         };
-        stmts.push(TsStmt::decl(
-            TsDecl::TypeAlias {
-                name: t.clone(),
-                type_params: params.clone(),
-                ty,
-            },
-            None,
-        ));
+        let mut names = vec![renames.get(t).unwrap_or(t).clone()];
+        if declared.contains(t) {
+            names.push(t.clone());
+        }
+        for name in names {
+            stmts.push(TsStmt::decl(
+                TsDecl::TypeAlias {
+                    name,
+                    type_params: params.clone(),
+                    ty: ty.clone(),
+                },
+                None,
+            ));
+        }
     }
     stmts
 }
@@ -7086,9 +7106,15 @@ fn emit_test_scope_setup(
                     .map(|(alias, a)| (a.original.clone(), alias.clone()))
                     .collect();
                 bound.extend(names.iter().map(|n| renames.get(n).unwrap_or(n).clone()));
+                let declared: HashSet<String> = renames
+                    .keys()
+                    .filter(|o| names.contains(*o) && !bound.contains(*o))
+                    .cloned()
+                    .collect();
+                bound.extend(declared.iter().cloned());
                 crate::emitter::extend_printed_at(
                     out,
-                    emit_ns_destructure_renamed(&ns, &names, &types, &renames),
+                    emit_ns_destructure_renamed(&ns, &names, &types, &renames, &declared),
                     2,
                 );
                 // #1883 (review of #1923): a consumed context's content-hashed

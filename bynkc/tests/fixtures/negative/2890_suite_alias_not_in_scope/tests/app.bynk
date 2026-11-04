@@ -1,0 +1,8 @@
+suite app
+
+// #2890: a suite is not a consuming context. It does not see `app`'s alias, so
+// a case that names the consumed type by it is `unknown name`.
+case "a case cannot use the alias" {
+  let r <- echo.call(LibCode.Alpha)
+  expect r == r
+}

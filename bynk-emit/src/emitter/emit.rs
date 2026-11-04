@@ -4685,6 +4685,8 @@ pub(crate) fn param_cast(
     let Some((_, ptype_ref)) = service.params.get(idx) else {
         return arg;
     };
+    // #2890: the owner table is keyed by the names as `consumed` spells them.
+    let spelled = type_ref_named_root(ptype_ref).map(str::to_string);
     let ptype_ref = &unalias_type_ref(info, consumed, ptype_ref);
     if let Some(name) = type_ref_named_root(ptype_ref) {
         // #2073: a type the consumed context itself consumes is named through
@@ -4695,7 +4697,10 @@ pub(crate) fn param_cast(
         let owner = info
             .consumed_type_owners
             .get(consumed)
-            .and_then(|o| o.get(name))
+            .and_then(|o| {
+                o.get(name)
+                    .or_else(|| spelled.as_ref().and_then(|s| o.get(s)))
+            })
             .map(String::as_str)
             .unwrap_or(consumed);
         let ns = if in_test_scaffold {
@@ -4764,6 +4769,10 @@ fn unalias_type_ref(
     if let Some(aliases) = info.consumed_type_aliases.get(consumed) {
         bynk_check::symbols::rename_type_ref(&mut tr, aliases);
     }
+    // #2890: and the names `consumed` renamed itself.
+    if let Some(aliases) = info.callee_type_aliases.get(consumed) {
+        bynk_check::symbols::rename_type_ref(&mut tr, aliases);
+    }
     tr
 }
 
@@ -4779,6 +4788,7 @@ fn consumed_type_ns_unaliased(
         .consumed_type_aliases
         .get(consumed)
         .into_iter()
+        .chain(info.callee_type_aliases.get(consumed))
         .flatten()
     {
         if let Some(ns) = consumed_type_ns.get(alias) {

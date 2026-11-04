@@ -72,8 +72,10 @@ service login {
     (consumes_decl
       target: (qualified_name
         (identifier))
-      capability: (identifier)
-      capability: (identifier))
+      (consumes_item
+        name: (identifier))
+      (consumes_item
+        name: (identifier)))
     (service_decl
       name: (identifier)
       (handler
@@ -105,9 +107,11 @@ consumes bynk.crypto { Crypto, Digest as CryptoDigest }
       target: (qualified_name
         (identifier)
         (identifier))
-      capability: (identifier)
-      capability: (identifier)
-      alias: (identifier))))
+      (consumes_item
+        name: (identifier))
+      (consumes_item
+        name: (identifier)
+        alias: (identifier)))))
 
 ================================================================================
 adapter in fragment form
