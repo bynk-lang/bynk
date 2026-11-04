@@ -1890,6 +1890,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning).",
         &["par_stmt"],
     )),
+    d(
+        "bynk.parse.clause_after_statement",
+        "A `stub` or `env` clause came after a statement in a test case; they lead the case body.",
+    ),
     dg(
         "bynk.parse.const_missing_type",
         "A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`).",

@@ -1262,8 +1262,8 @@ A handler: a call, HTTP, cron, queue, WebSocket (`on open`/`on close`, with
 
 {{#grammar call_handler}}
 
-`on call` — an in-process entry point, optionally named, callable across
-contexts.
+`on call` — an in-process entry point, callable across contexts. The
+operation name applies to agents only; a service's `on call` takes no name.
 
 ### http_handler {#rule-http_handler}
 

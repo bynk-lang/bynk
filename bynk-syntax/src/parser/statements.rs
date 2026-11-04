@@ -190,6 +190,35 @@ impl<'a> Parser<'a> {
                 attach_trivia(&mut stmt, leading, trailing);
                 statements.push(stmt);
             } else {
+                // #2913: `stub`/`env` clauses lead a case body; one after a
+                // statement would otherwise fall to "expected an expression".
+                let first = match (statements.first(), let_elses.first()) {
+                    (Some(s), Some((_, l))) if l.span.start < s.span().start => Some(l.span),
+                    (Some(s), _) => Some(s.span()),
+                    (None, Some((_, l))) => Some(l.span),
+                    (None, None) => None,
+                };
+                if let Some(first) = first {
+                    let word = if self.peek_kind() == Some(TokenKind::Stub) {
+                        Some("stub")
+                    } else if self.at_env_clause() {
+                        Some("env")
+                    } else {
+                        None
+                    };
+                    if let Some(word) = word {
+                        let at = self.peek().unwrap().span;
+                        return Err(CompileError::new(
+                            "bynk.parse.clause_after_statement",
+                            at,
+                            format!("`{word}` clauses must come before a case's statements"),
+                        )
+                        .with_label(first, "the first statement")
+                        .with_note(format!(
+                            "move the `{word}` clause above the first statement of the case body"
+                        )));
+                    }
+                }
                 tail_leading = leading;
                 break;
             }

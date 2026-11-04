@@ -966,7 +966,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn at_env_clause(&self) -> bool {
+    pub(super) fn at_env_clause(&self) -> bool {
         self.peek_kind() == Some(TokenKind::Ident)
             && self.nth_text(0) == "env"
             && self.nth_kind(1) == Some(TokenKind::LBrace)
@@ -4199,9 +4199,38 @@ impl<'a> Parser<'a> {
         //   on call(amount: Money) -> ...
         let method_name = if is_agent && self.peek_kind() == Some(TokenKind::Ident) {
             Some(self.expect_ident("as the agent handler operation name")?)
+        } else if is_agent
+            && self
+                .peek()
+                .is_some_and(|t| crate::parser::is_reserved_keyword(t.kind))
+        {
+            // #2909: a reserved word in the operation-name slot.
+            let t = self.peek().unwrap();
+            return Err(CompileError::new(
+                "bynk.parse.reserved_keyword",
+                t.span,
+                format!(
+                    "`{}` is a reserved keyword and can't name an agent operation",
+                    self.slice(t.span)
+                ),
+            )
+            .with_note("rename the operation to something that is not a keyword"));
         } else {
             None
         };
+        if !is_agent && self.peek_kind() == Some(TokenKind::Ident) {
+            // #2909: a service's `on call` takes no name.
+            let t = self.peek().unwrap();
+            return Err(CompileError::new(
+                "bynk.parse.expected_token",
+                t.span,
+                format!(
+                    "expected `(` before the handler parameter list, found identifier `{}`",
+                    self.slice(t.span)
+                ),
+            )
+            .with_note("a service's `on call` takes no name; named operations belong to agents"));
+        }
         self.expect(TokenKind::LParen, "before the handler parameter list")?;
         let mut params = Vec::new();
         if self.peek_kind() != Some(TokenKind::RParen) {
