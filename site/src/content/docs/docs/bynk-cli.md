@@ -552,7 +552,7 @@ name, `sub` as the identity), so you never write a signing script of your own an
 the token cannot disagree with the actor's seam.
 
 ```text
-bynk token [ACTOR] [--sub ID] [--lifetime DURATION] [--expired] [--not-before DURATION] [--input PATH] [--locked] [--offline]
+bynk token [ACTOR] [--sub ID] [--lifetime DURATION] [--expired] [--not-before DURATION] [--claim NAME[=VALUE]]... [--input PATH] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -562,6 +562,7 @@ bynk token [ACTOR] [--sub ID] [--lifetime DURATION] [--expired] [--not-before DU
 | `--lifetime` | `1h` | How long the token is valid: a whole number and a unit (`s`, `m`, `h`, `d`), at most `365d`. |
 | `--expired` | off | Mint a token that expired an hour ago, to test that the seam refuses it. Not with `--lifetime` or `--not-before`. |
 | `--not-before` | — | Make the token valid only from this far in the future (`10m`), to test that the seam refuses it as not yet valid. The lifetime counts from that moment. |
+| `--claim` | — | Add a claim: `name` signs `true`, `name=value` signs the string. Repeatable; works for any actor. Not `sub`, `iat`, `exp`, `nbf`, `iss` or `aud`, which `bynk token` signs itself. On a refinement actor it replaces the claim the predicate would have set. |
 | `--input` | `.` | A project directory, or any path inside one. |
 
 ```console
@@ -586,13 +587,19 @@ is never printed.
 **Which actors.** `Bearer` only. A `Signature` actor authenticates a request by
 an HMAC over that request's body, so there is no standalone credential to mint;
 an `Oidc` actor's tokens are minted by the identity provider, which holds the
-private key. Both are refused with that explanation. A refinement actor
-(`actor Admin = User where hasClaim(…)`) is refused too: its seam also checks
-claims the token must carry, which `bynk token` does not set. Mint with the base
-actor to test authentication.
+private key. Both are refused with that explanation.
 
-**The token** is an HS256 JWT with the claims `sub`, `exp` and, under
-`--not-before`, `nbf` — the same header, claims and unpadded base64url the
+**Refinement actors.** `bynk token Moderator --sub ann`, for
+`actor Moderator = Reader where hasClaim("mod")`, signs with the base actor's
+secret and carries the claims the predicate needs — the same ones the
+[`system` test harness](/book/reference/testing/) signs for
+`by Moderator("ann")`. A predicate no claims can satisfy
+(`hasClaim("a") && !hasClaim("a")`) is refused. To see the seam answer `403`,
+mint with the base actor, or override the claim:
+`bynk token Moderator --sub ann --claim mod=`.
+
+**The token** is an HS256 JWT with the claims `sub`, `exp`, under
+`--not-before` `nbf`, and any `--claim`s — the same header, claims and unpadded base64url the
 emitted verifier reads. The project must check clean.
 
 ---

@@ -890,16 +890,14 @@ fn claim_witnesses(pred: &ClaimPredicate, want: bool) -> Vec<ClaimSet> {
 /// `None` means no claim set satisfies the predicate
 /// (`hasClaim("a") && !hasClaim("a")`).
 pub fn claim_witness_js(pred: &ClaimPredicate) -> Option<String> {
-    let set = claim_witnesses(pred, true).into_iter().next()?;
-    let entries = set
-        .iter()
-        .filter_map(|(name, need)| {
-            let value = match need {
-                ClaimNeed::Truthy(_) => "true".to_string(),
-                ClaimNeed::Equals(v) => format!("\"{}\"", js_str_escape(v)),
-                ClaimNeed::Falsy(_) | ClaimNeed::NotEquals(_) => return None,
+    let entries = claim_witness(pred)?
+        .into_iter()
+        .map(|(name, value)| {
+            let value = match value {
+                WitnessValue::True => "true".to_string(),
+                WitnessValue::Str(v) => format!("\"{}\"", js_str_escape(&v)),
             };
-            Some(format!("\"{}\": {value}", js_str_escape(name)))
+            format!("\"{}\": {value}", js_str_escape(&name))
         })
         .collect::<Vec<_>>();
     Some(if entries.is_empty() {
@@ -907,6 +905,35 @@ pub fn claim_witness_js(pred: &ClaimPredicate) -> Option<String> {
     } else {
         format!("{{ {} }}", entries.join(", "))
     })
+}
+
+/// The value a witness claim is signed with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WitnessValue {
+    /// The JSON boolean `true` (`hasClaim`).
+    True,
+    /// A JSON string (`claimEquals`).
+    Str(String),
+}
+
+/// The claims, by name, that satisfy `pred` — the data behind
+/// [`claim_witness_js`], shared with `bynk token` so a hand-minted token
+/// carries exactly the claims the `system` harness signs. `None` when no
+/// claim set satisfies the predicate.
+pub fn claim_witness(pred: &ClaimPredicate) -> Option<Vec<(String, WitnessValue)>> {
+    let set = claim_witnesses(pred, true).into_iter().next()?;
+    Some(
+        set.into_iter()
+            .filter_map(|(name, need)| {
+                let value = match need {
+                    ClaimNeed::Truthy(_) => WitnessValue::True,
+                    ClaimNeed::Equals(v) => WitnessValue::Str(v),
+                    ClaimNeed::Falsy(_) | ClaimNeed::NotEquals(_) => return None,
+                };
+                Some((name, value))
+            })
+            .collect(),
+    )
 }
 
 #[cfg(test)]

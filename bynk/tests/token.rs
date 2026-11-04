@@ -282,13 +282,6 @@ fn only_bearer_actors_are_supported_and_each_refusal_says_why() {
         "{}",
         oidc.stderr
     );
-    let refined = token(&["Moderator", "--sub", "x"], &[("READER_SECRET", SECRET)]);
-    assert!(!refined.ok);
-    assert!(
-        refined.stderr.contains("refinement") && refined.stderr.contains("`Reader`"),
-        "{}",
-        refined.stderr
-    );
     let unknown = token(&["Nobody", "--sub", "x"], &[]);
     assert!(!unknown.ok);
     assert!(
@@ -296,6 +289,115 @@ fn only_bearer_actors_are_supported_and_each_refusal_says_why() {
         "{}",
         unknown.stderr
     );
+}
+
+/// The claims object of a minted token, decoded.
+fn claims_of(token: &str) -> serde_json::Value {
+    let payload = token.split('.').nth(1).expect("a JWT payload");
+    let (mut bytes, mut acc, mut bits) = (Vec::new(), 0u32, 0);
+    for c in payload.chars() {
+        let v = match c {
+            'A'..='Z' => c as u32 - 'A' as u32,
+            'a'..='z' => c as u32 - 'a' as u32 + 26,
+            '0'..='9' => c as u32 - '0' as u32 + 52,
+            '-' => 62,
+            _ => 63,
+        };
+        acc = (acc << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            bytes.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+#[test]
+fn a_refinement_actor_signs_the_claims_its_predicate_needs() {
+    let env = [("READER_SECRET", SECRET)];
+    let out = token(&["Moderator", "--sub", "ann"], &env);
+    assert!(out.ok, "{}", out.stderr);
+    let claims = claims_of(out.stdout.trim());
+    assert_eq!(claims["sub"], "ann");
+    assert_eq!(claims["mod"], true);
+    // A conjunction signs every claim it needs, strings as strings.
+    let out = token(&["Ops", "--sub", "ann"], &env);
+    assert!(out.ok, "{}", out.stderr);
+    let claims = claims_of(out.stdout.trim());
+    assert_eq!(claims["role"], "ops");
+    assert_eq!(claims["mod"], true);
+    // `--sub` is checked against the base actor's identity type.
+    let out = token(&["Moderator", "--sub", "UPPER"], &env);
+    assert!(!out.ok && out.stderr.contains("ReaderId"), "{}", out.stderr);
+}
+
+#[test]
+fn claim_flags_add_claims_with_and_without_a_value() {
+    let env = [("READER_SECRET", SECRET)];
+    let out = token(
+        &[
+            "Reader", "--sub", "ann", "--claim", "beta", "--claim", "role=ops", "--claim", "n=",
+        ],
+        &env,
+    );
+    assert!(out.ok, "{}", out.stderr);
+    let claims = claims_of(out.stdout.trim());
+    assert_eq!(claims["beta"], true);
+    assert_eq!(claims["role"], "ops");
+    assert_eq!(claims["n"], "");
+    // On a refinement a `--claim` replaces the witness claim, to test the 403.
+    let out = token(&["Moderator", "--sub", "ann", "--claim", "mod="], &env);
+    assert!(out.ok, "{}", out.stderr);
+    assert_eq!(claims_of(out.stdout.trim())["mod"], "");
+}
+
+#[test]
+fn reserved_and_malformed_claims_are_refused() {
+    let env = [("READER_SECRET", SECRET)];
+    for name in ["sub", "iat", "exp", "nbf", "iss", "aud"] {
+        let out = token(
+            &["Reader", "--sub", "ann", "--claim", &format!("{name}=x")],
+            &env,
+        );
+        assert!(!out.ok, "{name}");
+        assert!(
+            out.stderr.contains("reserved") && out.stderr.contains(name),
+            "{}",
+            out.stderr
+        );
+        assert_eq!(out.stdout, "");
+    }
+    for bad in ["", "=x"] {
+        let out = token(&["Reader", "--sub", "ann", "--claim", bad], &env);
+        assert!(
+            !out.ok && out.stderr.contains("names no claim"),
+            "{}",
+            out.stderr
+        );
+    }
+    let out = token(
+        &["Reader", "--sub", "ann", "--claim", "a", "--claim", "a=1"],
+        &env,
+    );
+    assert!(
+        !out.ok && out.stderr.contains("more than once"),
+        "{}",
+        out.stderr
+    );
+}
+
+#[test]
+fn an_unsatisfiable_predicate_is_refused() {
+    let out = token(&["Never", "--sub", "ann"], &[("READER_SECRET", SECRET)]);
+    assert!(!out.ok);
+    assert!(
+        out.stderr.contains("`Never`") && out.stderr.contains("predicate"),
+        "{}",
+        out.stderr
+    );
+    assert_eq!(out.stdout, "");
 }
 
 #[test]
