@@ -1,0 +1,6 @@
+[project]
+name = "question_in_case"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

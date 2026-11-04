@@ -876,6 +876,26 @@ pub const LIMITS_FIELDS: &[(&str, &str)] = &[(
     "the maximum request body size in bytes (a positive `Int`)",
 )];
 
+/// #2858: the response-JSON policy fields, offered at a field-name position
+/// inside a `json { }` block (and as `@json( … )` arguments). The closed set is
+/// this one.
+pub const JSON_FIELDS: &[(&str, &str)] = &[(
+    "options",
+    "how `Option` is written in response bodies: `tagged` (Bynk's `{\"kind\": …}` form) or `plain` (`v` / `null`)",
+)];
+
+/// #2858: the values of a `json` / `@json` `options`.
+pub const JSON_OPTIONS_VALUES: &[(&str, &str)] = &[
+    (
+        "tagged",
+        "Bynk's tagged form: `{\"kind\": \"Some\", \"value\": v}` / `{\"kind\": \"None\"}` (the default)",
+    ),
+    (
+        "plain",
+        "plain JSON for non-Bynk clients: `Some(v)` is `v`, `None` is `null`",
+    ),
+];
+
 /// v0.140 (ADR 0163): the `@cache` handler-annotation arguments, offered at an
 /// argument-name position inside `@cache( … )`. `maxAge` is required (the freshness
 /// window); `scope` is optional (`public`/`private`, default `private`), as is
@@ -912,6 +932,65 @@ pub const RAW_ARGS: &[(&str, &str)] = &[(
     "contentType",
     "the media type the route accepts, a string literal (`\"*/*\"` for any) — another `Content-Type` is a `415`",
 )];
+
+/// #2854: the special parameter names an `on http` handler may declare beside
+/// its `:name` path parameters, offered at a parameter-*name* position, with the
+/// type each takes.
+pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
+    (
+        "query",
+        "RequestQuery",
+        "the query string: a record `T` decoded and validated before the handler runs (`400` on a violation), or a raw `RequestQuery` view",
+    ),
+    (
+        "headers",
+        "RequestHeaders",
+        "the request's headers, read-only",
+    ),
+    (
+        "body",
+        "T",
+        "the request body, parsed and validated before the handler runs (not on `GET` or `DELETE`)",
+    ),
+];
+
+/// #2854: the cursor is at a parameter-*name* position in the parameter list of an
+/// `on <METHOD>("…") ( … )` HTTP handler header: the innermost open paren follows
+/// the route's closing `)`, itself opened by an HTTP method after `on`, and the
+/// current parameter (since the last `,`) has no `:` yet.
+pub fn in_http_param_name_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_paren(text, offset) else {
+        return false;
+    };
+    let head = text[..open].trim_end();
+    if !head.ends_with(')') {
+        return false;
+    }
+    let Some(route_open) = innermost_open_paren(head, head.len() - 1) else {
+        return false;
+    };
+    let before = text[..route_open].trim_end();
+    let Some(method_start) = before
+        .rfind(|c: char| !c.is_ascii_alphanumeric())
+        .map(|i| i + 1)
+    else {
+        return false;
+    };
+    if !matches!(
+        &before[method_start..],
+        "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+    ) {
+        return false;
+    }
+    if !before[..method_start].trim_end().ends_with("on") {
+        return false;
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
 
 /// The byte index of the innermost `{` still open at `offset` (a naive scan that,
 /// like [`record_construction_receiver`], does not skip braces inside strings or
@@ -1043,6 +1122,73 @@ pub fn in_limits_field_position(text: &str, offset: usize) -> bool {
     }
     // `offset` arrives on a char boundary from the position converter, but
     // slice defensively — a mid-codepoint offset must degrade, not panic.
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
+
+/// #2858: the cursor is at a field-*name* position inside a `json { … }` block.
+/// Mirrors [`in_limits_field_position`].
+pub fn in_json_field_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_brace(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "json" {
+        return false;
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
+
+/// #2858: the cursor is at the value of `options:` — inside `json { … }` or
+/// `@json( … )` — where `tagged` / `plain` are offered.
+pub fn in_json_options_value_position(text: &str, offset: usize) -> bool {
+    let Some(head) = text.get(..offset.min(text.len())) else {
+        return false;
+    };
+    let in_block = innermost_open_brace(text, offset)
+        .is_some_and(|open| word_before_brace(text, open) == "json");
+    let in_annotation = innermost_open_paren(text, offset).is_some_and(|open| {
+        word_before_brace(text, open) == "json"
+            && text[..open]
+                .trim_end()
+                .trim_end_matches("json")
+                .trim_end()
+                .ends_with('@')
+    });
+    if !in_block && !in_annotation {
+        return false;
+    }
+    let line = head.rsplit(['\n', ',', '(', '{']).next().unwrap_or("");
+    line.trim_start()
+        .strip_prefix("options")
+        .and_then(|rest| rest.trim_start().strip_prefix(':'))
+        .is_some_and(|value| {
+            value
+                .chars()
+                .all(|c| c.is_alphabetic() || c.is_whitespace())
+        })
+}
+
+/// #2858: the cursor is at an argument-*name* position inside a `@json( … )`
+/// annotation. Mirrors [`in_cache_arg_position`].
+pub fn in_json_arg_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_paren(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "json" {
+        return false;
+    }
+    let head = text[..open].trim_end();
+    let before = head[..head.len() - "json".len()].trim_end();
+    if !before.ends_with('@') {
+        return false;
+    }
     let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
         return false;
     };
@@ -1762,6 +1908,14 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("parse", "parse(s: String) -> Option[Decimal]"),
             ("fromInt", "fromInt(n: Int) -> Decimal"),
+        ],
+    ),
+    // #2854: the test-side constructors of a handler's raw `query`.
+    (
+        "RequestQuery",
+        &[
+            ("of", "of(pairs: List[String]) -> RequestQuery"),
+            ("empty", "empty() -> RequestQuery"),
         ],
     ),
     (
@@ -2897,6 +3051,24 @@ pub fn value_member_candidates(
             Some("String — the URL the platform serves the asset at".to_string()),
         ));
     }
+    // `JsonError`'s three `String` fields (#2863). Compiler-known, so there is
+    // no declaration to resolve them from.
+    if matches!(&*tys.get(ty), Ty::JsonError) {
+        for (name, doc) in [
+            (
+                "kind",
+                "String — `Malformed`, `StructuralMismatch` or `RefinementViolation`",
+            ),
+            ("path", "String — where the decode failed, e.g. `$.qty`"),
+            ("message", "String — a description of the failure"),
+        ] {
+            out.push(Completion::item(
+                name,
+                CompletionKind::Field,
+                Some(doc.to_string()),
+            ));
+        }
+    }
     // Record fields — resolve the receiver's named type to its declaration.
     if let Ty::Named { name, .. } = &*tys.get(ty) {
         let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -3877,6 +4049,15 @@ fn Box.size(self) -> Int { 1 }
     }
 
     #[test]
+    fn value_member_candidates_lists_json_error_fields() {
+        let err = TYS.intern(Ty::JsonError);
+        let items = value_member_candidates(err, &TYS, "commons m {\n}\n", None);
+        for f in ["kind", "path", "message"] {
+            assert!(find(&items, f, CompletionKind::Field).is_some(), "{f}");
+        }
+    }
+
+    #[test]
     fn store_field_member_candidates_offers_entry_ops_and_query_accessors() {
         // #596: a bare `store Map` field receiver offers its entry ops
         // (put/get/…) AND the `.entries`/`.keys`/`.values` accessors — the
@@ -4177,6 +4358,29 @@ fn Box.size(self) -> Int { 1 }
         let _ = in_cors_field_position(doc, mid);
         let _ = in_security_field_position(doc, mid);
         let _ = in_limits_field_position(doc, mid);
+        let _ = in_json_field_position(doc, mid);
+        let _ = in_json_options_value_position(doc, mid);
+    }
+
+    #[test]
+    fn json_positions_inside_the_section_and_the_annotation() {
+        // #2858: a field name in `json { }`, the `options:` value in either
+        // form, and an argument name in `@json( )`.
+        let name = "service api from http {\n  json {\n    ";
+        assert!(in_json_field_position(name, name.len()));
+        assert!(!in_json_options_value_position(name, name.len()));
+        let value = "service api from http {\n  json {\n    options: ";
+        assert!(!in_json_field_position(value, value.len()));
+        assert!(in_json_options_value_position(value, value.len()));
+        let ann = "service api from http {\n  @json(";
+        assert!(in_json_arg_position(ann, ann.len()));
+        let ann_value = "service api from http {\n  @json(options: pl";
+        assert!(in_json_options_value_position(ann_value, ann_value.len()));
+        // A `limits { }` block is not a `json` block, nor a bare `json(` call.
+        let limits = "service api from http {\n  limits {\n    options: ";
+        assert!(!in_json_options_value_position(limits, limits.len()));
+        let call = "fn f() { json(";
+        assert!(!in_json_arg_position(call, call.len()));
     }
 
     #[test]
@@ -4348,6 +4552,25 @@ fn Box.size(self) -> Int { 1 }
         // An ordinary handler param list is not a `@limit` position.
         let doc5 = "on GET(\"/x\") by v: Visitor (";
         assert!(!in_limit_arg_position(doc5, doc5.len()));
+    }
+
+    #[test]
+    fn http_param_name_position_in_a_handler_header() {
+        let doc = "service api from http {\n  on GET(\"/x\") (";
+        assert!(in_http_param_name_position(doc, doc.len()));
+        let doc2 = "service api from http {\n  on POST(\"/x/:id\") (id: String, ";
+        assert!(in_http_param_name_position(doc2, doc2.len()));
+        // After the `:` it is a type position.
+        let doc3 = "service api from http {\n  on GET(\"/x\") (query: ";
+        assert!(!in_http_param_name_position(doc3, doc3.len()));
+        // The route string's own parens, and a call, are not parameter lists.
+        let doc4 = "service api from http {\n  on GET(";
+        assert!(!in_http_param_name_position(doc4, doc4.len()));
+        let doc5 = "fn f(x: Int) -> Int {\n  g(";
+        assert!(!in_http_param_name_position(doc5, doc5.len()));
+        // A non-HTTP handler has no such parameters.
+        let doc6 = "service s from cron {\n  on schedule(\"* * * * *\") (";
+        assert!(!in_http_param_name_position(doc6, doc6.len()));
     }
 
     #[test]

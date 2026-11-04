@@ -467,3 +467,140 @@ service api from http {
     assert!(yaml.contains("\"No\":"), "{yaml}");
     assert!(yaml.contains("\n        x:"), "{yaml}");
 }
+
+/// #2858: a plain-JSON route's `Option` is nullable (`anyOf [U, null]`), not the
+/// tagged object. A type shared with a tagged route renders twice, the plain copy
+/// as `<Name>.plain`, so neither route's schema is wrong.
+#[test]
+fn plain_json_options_are_nullable() {
+    let dir = scratch("plain-json");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"plainjson\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir.join("src/api.bynk"),
+        "context api\n\n\
+         type Row = { id: String, note: Option[String] }\n\n\
+         service plain from http {\n  json { options: plain }\n\n  \
+           on GET(\"/plain\") () -> Effect[HttpResult[Row]] by v: Visitor {\n    Ok(Row { id: \"a\", note: None })\n  }\n}\n\n\
+         service tagged from http {\n  \
+           on GET(\"/tagged\") () -> Effect[HttpResult[Row]] by v: Visitor {\n    Ok(Row { id: \"a\", note: None })\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let s = &d["components"]["schemas"];
+    assert_eq!(
+        d["paths"]["/plain"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/Row.plain"
+    );
+    assert_eq!(
+        d["paths"]["/tagged"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/Row"
+    );
+    let plain_note = &s["Row.plain"]["properties"]["note"];
+    assert_eq!(plain_note["anyOf"][1]["type"], "null");
+    assert_eq!(plain_note["anyOf"][0]["type"], "string");
+    assert!(s["Row"]["properties"]["note"]["oneOf"].is_array());
+}
+
+/// #2858: a type shared by a plain route's request body and response renders the
+/// request tagged (`Row`) and the response nullable (`Row.plain`), whichever
+/// renders first.
+#[test]
+fn plain_route_request_and_response_share_a_type() {
+    let dir = scratch("plain-json-body");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"plainbody\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir.join("src/api.bynk"),
+        "context api\n\n\
+         type Row = { id: String, note: Option[String] }\n\n\
+         service api from http {\n  json { options: plain }\n\n  \
+           on POST(\"/rows\") (body: Row) -> Effect[HttpResult[Row]] by v: Visitor {\n    Ok(body)\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let op = &d["paths"]["/rows"]["post"];
+    assert_eq!(
+        op["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/Row"
+    );
+    assert_eq!(
+        op["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/Row.plain"
+    );
+    let s = &d["components"]["schemas"];
+    assert!(s["Row"]["properties"]["note"]["oneOf"].is_array());
+    assert_eq!(
+        s["Row.plain"]["properties"]["note"]["anyOf"][1]["type"],
+        "null"
+    );
+}
+
+const QUERY_SERVICE: &str = r#"context shop
+
+type Limit = Int where InRange(1, 500)
+type Kind = enum { Push, Issue }
+
+type Filter = {
+  ---
+  The owner to list.
+  ---
+  owner: Option[String],
+  kind: Option[Kind],
+  tag: List[String] = [],
+  limit: Limit = 50,
+  page: Int,
+}
+
+service api from http {
+  on GET("/activity") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("hi")
+  }
+
+  on GET("/echo") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("hi")
+  }
+}
+"#;
+
+/// #2854: a typed `query` is one `in: query` parameter per field, with the
+/// field's schema, required unless the field is an `Option` or has a default; a
+/// raw `RequestQuery` declares none.
+#[test]
+fn a_typed_query_is_described_as_query_parameters() {
+    let dir = scratch("query");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"shop\"\nversion = \"0.3.0\"\n",
+    );
+    write(&dir.join("src/shop.bynk"), QUERY_SERVICE);
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let params = d["paths"]["/activity"]["get"]["parameters"]
+        .as_array()
+        .expect("parameters");
+    let by_name = |n: &str| {
+        params
+            .iter()
+            .find(|p| p["name"] == n)
+            .unwrap_or_else(|| panic!("no `{n}` parameter in {params:?}"))
+    };
+    assert_eq!(params.len(), 5, "{params:?}");
+    assert!(params.iter().all(|p| p["in"] == "query"));
+    assert_eq!(by_name("owner")["required"], false);
+    assert_eq!(by_name("owner")["schema"]["type"], "string");
+    assert_eq!(by_name("kind")["required"], false);
+    assert_eq!(by_name("tag")["required"], false);
+    assert_eq!(by_name("tag")["schema"]["type"], "array");
+    assert_eq!(by_name("tag")["schema"]["items"]["type"], "string");
+    assert_eq!(by_name("limit")["required"], false);
+    assert_eq!(by_name("limit")["schema"]["minimum"], 1);
+    assert_eq!(by_name("limit")["schema"]["maximum"], 500);
+    assert_eq!(by_name("page")["required"], true);
+    assert_eq!(by_name("owner")["description"], "The owner to list.");
+    assert!(d["paths"]["/echo"]["get"].get("parameters").is_none());
+}

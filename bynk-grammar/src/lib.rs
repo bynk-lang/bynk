@@ -466,7 +466,9 @@ mod tests {
         // #2622 (`Decimal`) added: decimal_literal. Net +1.
         // #2841 (suite `fixture`) added: fixture_decl. Net +1.
         // #2842 (snapshot claims) added: snapshot_expr. Net +1.
-        assert_eq!(rules.len(), 189);
+        // #2858 (plain-JSON responses) added: json_policy, json_field (the
+        // response-JSON service policy). Net +2.
+        assert_eq!(rules.len(), 191);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

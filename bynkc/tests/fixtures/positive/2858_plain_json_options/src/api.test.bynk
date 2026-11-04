@@ -1,0 +1,20 @@
+suite api as system {
+  // #2858: the plain body is read back through Bynk's lenient `Option` decoder
+  // (ADR 0450); the raw bytes are asserted by `http_plain_json_behaviour`.
+  case "a plain route round-trips through the lenient decoder" {
+    let r <- plain.GET("/plain")
+    expect r is Ok(_)
+  }
+  case "a plain top-level None round-trips" {
+    let r <- plain.GET("/top")
+    expect r is Ok(None)
+  }
+  case "a tagged route still round-trips" {
+    let r <- plain.GET("/tagged")
+    expect r is Ok(Some("t"))
+  }
+  case "a route override on an unmarked service round-trips" {
+    let r <- legacy.GET("/legacy/plain")
+    expect r is Ok(Some("p"))
+  }
+}

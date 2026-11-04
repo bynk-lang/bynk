@@ -1,0 +1,11 @@
+context api
+
+uses shared
+
+service api from http {
+  json { options: plain }
+
+  on GET("/rows") () -> Effect[HttpResult[List[Row]]] by v: Visitor {
+    Ok([])
+  }
+}

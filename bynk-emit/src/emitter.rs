@@ -61,7 +61,7 @@ pub(crate) use events_fanout::emit_events_fanout_do;
 pub(crate) use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub(crate) use workers::emit_worker_compose;
-pub(crate) use workers_entry::emit_worker_entry;
+pub(crate) use workers_entry::{emit_worker_entry, table_has_plain_json};
 pub(crate) use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod cmp;
@@ -885,6 +885,7 @@ fn type_ref_mentions(t: &TypeRef, marker: TypeRefMarker) -> bool {
         | TypeRef::Named(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -1052,6 +1053,7 @@ pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::Fn { .. }
         | Ty::Var(_)
@@ -2869,6 +2871,7 @@ fn collect_refs_in_typeref(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -3266,6 +3269,7 @@ fn record_ty_refs(
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
@@ -4084,6 +4088,20 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.request_query() {
+            parts.extend(
+                REQUEST_QUERY_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
+        if ctx.runtime_use.query_string() {
+            parts.extend(
+                QUERY_STRING_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
         if ctx.runtime_use.eq() {
             parts.extend(EQ_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
@@ -4209,6 +4227,17 @@ fn write_header_single(
         } else {
             ""
         };
+        // #2854: the `RequestQuery` constructor, likewise.
+        let request_query_imports = if runtime_use.request_query() {
+            REQUEST_QUERY_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
+        let query_string_imports = if runtime_use.query_string() {
+            QUERY_STRING_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #1652: the structural-equality walker, imported only when a
         // non-primitive `==`/`!=` lowered to it.
         let eq_imports = if runtime_use.eq() {
@@ -4239,7 +4268,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4257,6 +4286,14 @@ pub(crate) const BYTES_RUNTIME_IMPORTS: &str =
 
 /// #2341 (L4): the `RequestHeaders` constructor a test builds headers with.
 pub(crate) const REQUEST_HEADERS_RUNTIME_IMPORTS: &str = ", __requestHeaders";
+/// #2854: the `RequestQuery` constructor a test builds a raw query view with.
+pub(crate) const REQUEST_QUERY_RUNTIME_IMPORTS: &str = ", __requestQuery";
+/// #2854: the typed-query serialiser a mixed typed+`Wire` system call and a typed
+/// query driver turn a record's wire form into a query string with.
+pub(crate) const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";
+/// #2854: the key suffix under which a route's typed `query` (position and
+/// declared type) sits in the same per-route map as its body param.
+pub(crate) const QUERY_ROUTE_SUFFIX: &str = "?query";
 
 /// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
 /// appended only when the body calls one.
@@ -4895,6 +4932,10 @@ pub(crate) struct LowerCtx<'a> {
     /// enclosing function — the residual gap `hoist_if_as_statement` (built for
     /// T2.1's `if`-hoisting) also closes here, once this flag says it's needed.
     pub(crate) emitted_early_return: bool,
+    /// #2857: how many lambdas enclose the expression being lowered. A `?`
+    /// at depth 0 of a test case body fails the case; inside a lambda it keeps
+    /// its meaning (a `return` from the arrow).
+    pub(crate) lambda_depth: usize,
     /// #1750: where a block's tail value goes. `None` (the default) is a
     /// `return`, the right sink for a function, lambda or arrow body. `Some` is
     /// set while a value-position `if`/`match`/block that contains a `?` is
@@ -4994,6 +5035,7 @@ impl<'a> LowerCtx<'a> {
             source_map: None,
             emitted_await: false,
             emitted_early_return: false,
+            lambda_depth: 0,
             tail_slot: None,
             cmp_scope: HashMap::new(),
             codec_scope: HashMap::new(),
@@ -5466,6 +5508,17 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// #2857: whether `?` here fails the case — a test or integration case
+    /// body, outside any lambda. A case's function returns a `CaseResult`, so
+    /// there is nowhere for an `Err` to propagate to.
+    pub(crate) fn question_fails_case(&self) -> bool {
+        self.lambda_depth == 0
+            && matches!(
+                &self.mode,
+                BodyMode::TestCase { .. } | BodyMode::IntegrationCase { .. }
+            )
+    }
+
     /// #1975: whether this is a test `case` body.
     pub(crate) fn in_test_case(&self) -> bool {
         matches!(&self.mode, BodyMode::TestCase { .. })
@@ -5716,6 +5769,16 @@ impl<'a> LowerCtx<'a> {
     /// the module imports `__requestHeaders`.
     fn note_request_headers(&self) {
         self.runtime_use().note_request_headers();
+    }
+
+    /// Record that this lowering built a `RequestQuery` value (#2854).
+    fn note_request_query(&self) {
+        self.runtime_use().note_request_query();
+    }
+
+    /// Record that this lowering turned a typed query into a query string (#2854).
+    fn note_query_string(&self) {
+        self.runtime_use().note_query_string();
     }
 
     /// Record that this lowering built a `TokenClaims` value (#2380).
@@ -6372,6 +6435,36 @@ pub(crate) fn request_headers_ts_type() -> TsType {
 
 /// #2380 (L5): `TokenClaims` as TypeScript — structural, like
 /// `RequestHeaders`: `get(name)` for a string claim, `has(name)` for any.
+/// #2854 (decision B): `RequestQuery` as TypeScript — structural, like
+/// `RequestHeaders`: `get`, `all` and `params`. The runtime's
+/// `requestQuery(request)` builds one.
+pub(crate) fn request_query_ts_type() -> TsType {
+    let name = || bynk_ts::TsParam {
+        name: "name".to_string(),
+        ty: Some(TsType::named("string")),
+        optional: false,
+    };
+    let opt = TsType::union(vec![
+        TsType::Object(vec![
+            bynk_ts::TsTypeMember::readonly_prop("tag", TsType::named("\"Some\"")),
+            bynk_ts::TsTypeMember::readonly_prop("value", TsType::named("string")),
+        ]),
+        TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+            "tag",
+            TsType::named("\"None\""),
+        )]),
+    ]);
+    TsType::Object(vec![
+        bynk_ts::TsTypeMember::method("get", vec![name()], opt),
+        bynk_ts::TsTypeMember::method("all", vec![name()], TsType::named("readonly string[]")),
+        bynk_ts::TsTypeMember::method(
+            "params",
+            vec![],
+            TsType::named("globalThis.ReadonlyMap<string, readonly string[]>"),
+        ),
+    ])
+}
+
 pub(crate) fn token_claims_ts_type() -> TsType {
     let opt = TsType::union(vec![
         TsType::Object(vec![
@@ -6487,6 +6580,7 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
         TypeRef::QueueResult(_) => TsType::named("QueueResult"),
         TypeRef::Asset(_) => asset_ts_type(),
         TypeRef::RequestHeaders(_) => request_headers_ts_type(),
+        TypeRef::RequestQuery(_) => request_query_ts_type(),
         TypeRef::TokenClaims(_) => token_claims_ts_type(),
         TypeRef::BoundaryRejection(_) => {
             TsType::named("{ readonly tag: string; readonly detail: string }")
@@ -6923,6 +7017,7 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         Ty::BoundaryRejection => TsType::named("{ readonly tag: string; readonly detail: string }"),
         Ty::Asset => asset_ts_type(),
         Ty::RequestHeaders => request_headers_ts_type(),
+        Ty::RequestQuery => request_query_ts_type(),
         Ty::TokenClaims => token_claims_ts_type(),
         Ty::ValidationError => TsType::named("ValidationError"),
         Ty::JsonError => TsType::named("JsonError"),

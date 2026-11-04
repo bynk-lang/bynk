@@ -46,6 +46,7 @@
   "cors"
   "security"
   "limits"
+  "json"
   "exports"
   "key"
   "suite"

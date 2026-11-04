@@ -29,7 +29,7 @@ Reserved everywhere — these **61** words can never be used as an identifier.
 | `Float` | The floating-point base type. |
 | `Instant` | The absolute-time base type, in epoch milliseconds (`Clock.now()`). |
 | `Int` | The integer base type. |
-| `JsonError` | The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`. |
+| `JsonError` | The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `"\(e.kind) at \(e.path): \(e.message)"`. |
 | `None` | The empty variant of `Option`. |
 | `Ok` | The success variant of `Result`. |
 | `Option` | The optional-value type, `Option[T]`. |
@@ -131,6 +131,7 @@ Compiler-known type constructors. They are not lexer keywords — you may use th
 | `Query` | The lazy storage-read type, `Query[T]`. |
 | `QueueResult` | The queue handler result type (non-generic). |
 | `RequestHeaders` | An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`). |
+| `RequestQuery` | An HTTP handler's read-only view of the request's query string (`query: RequestQuery`). |
 | `Set` | The immutable set type, `Set[T]`. |
 | `Stream` | The value-over-time primitive, `Stream[T]`. |
 | `TokenClaims` | An `Oidc` actor's verified token claims, read through its binder (`who.claims`). |

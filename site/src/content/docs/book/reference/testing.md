@@ -189,6 +189,42 @@ At the `unit` and `integration` tiers the value reaches the handler directly; at
 `system` the driver sends the lines as the request's headers, beside the ones it
 sets itself (`content-type`, and the credential of an actor's `by`), which win.
 
+### Sending a query — a typed `query` and `RequestQuery.of` {#request-query}
+
+A handler that declares a [`query`](/book/reference/http/#query-strings) takes it as
+an ordinary argument, in the parameter's position, as it takes `headers` and
+`body`. For a typed `query: T` a case passes a `T`:
+
+```bynk,fragment
+suite activity.api {
+  case "a filter reaches the handler" {
+    let r <- api.GET("/activity", ActivityFilter { repo: Some("bynk-lang/bynk"), since: None, tag: [], limit: 100 })
+    expect r is Ok(_)
+  }
+}
+```
+
+For a raw `query: RequestQuery` a case builds the view from `"name=value"` pairs
+(parsed as a query string, so `+` is a space and `&` starts another pair), or an empty one:
+`RequestQuery.of(["q=one", "q=two"])`, `RequestQuery.empty()`.
+
+At the `unit` and `integration` tiers the value reaches the handler directly,
+without the boundary. At `system` the driver sends it as the request's query
+string, so the router decodes and validates it. A `system` case drives a rejection
+by passing the query as raw text with [`Wire`](#driving-a-rejection-with-wire), in
+the query's slot:
+
+```bynk,fragment
+suite activity.api as system {
+  case "a limit out of range is refused before the handler" {
+    let r <- api.GET("/activity", Wire("?limit=0"))
+    expect r is Rejected(RefinementViolation(_))
+  }
+}
+```
+
+The text is appended to the path as given, so it starts with `?`.
+
 ### Acting as an actor — `by <Actor>(<identity>)` {#call-site-by}
 
 A handler guarded by an actor (`by u: User`) runs as a verified identity. A case
@@ -330,6 +366,9 @@ case "an empty sku is rejected at the boundary" as system {
   expect r is Rejected(_)
 }
 ```
+
+A `Wire` stands in any slot of the address. In a typed [`query`](#request-query)'s
+slot it is the raw query string, `?` and all: `api.GET("/activity", Wire("?limit=0"))`.
 
 A `Wire`-carrying call yields an `HttpOutcome[T]` instead of the handler's
 `HttpResult[T]`.
@@ -496,6 +535,18 @@ predicate surface, ADR 0144) — so it pairs naturally with `is`: `expect r is
 Ok(_)`. When the predicate is a top-level comparison (`==`, `!=`, `<`, `<=`, `>`,
 `>=`), a failure reports the predicate and its **expected-vs-actual** operands, not
 just a location.
+
+### `?` in a case {#question-in-case}
+
+A `case` body returns no `Result`, so `?` has nowhere to propagate to. Instead,
+`?` on a `Result` whose error is a `ValidationError` (what a refined type's `.of`
+returns) **fails the case** when the operand is `Err`: the failure reports the
+`?` expression, the error value and the `?`'s `file:line:col`, as a failed
+`expect` does. On `Ok` it yields the value. This holds anywhere in the case,
+including inside `if` and `match` arms; a `?` inside a lambda keeps its normal
+meaning (it returns from the lambda). Any other error type is
+`bynk.types.question_error_mismatch`, and an `Option` operand is refused as it is
+outside a handler.
 
 ### Claiming a fault — `expect <call> faults` {#faults}
 
@@ -837,7 +888,7 @@ case "an issue event is recorded" {
 - **Test-only.** A helper is checked in the suite's view and emitted into the
   test module alone. The deployable output is the same with or without it, and a
   helper adds nothing to the target's surface. So a helper may use what a test
-  body may, such as [`Val[T]`](#val), `RequestHeaders.of` and `TokenClaims.of`.
+  body may, such as [`Val[T]`](#val), `RequestHeaders.of`, `RequestQuery.of` and `TokenClaims.of`.
 - **Pure.** A helper returns a value. One that returns an `Effect` is
   `bynk.suite.fn_effectful`: build the value in the helper and run the effect in
   the `case`. A method (`fn Type.name`) is `bynk.suite.fn_method`.

@@ -81,6 +81,22 @@ case "a real issues delivery decodes" {
 The file is never part of the deployable. See
 [Test fixtures](/book/reference/fixtures/).
 
+## Unwrap a fixture with `?`
+
+A refined type's `.of` returns a `Result`. In a `case`, `?` unwraps it, and an
+`Err` **fails the case** rather than propagating — the failure names the error
+and the `?`'s location, like a failed `expect`:
+
+```bynk,fragment
+case "a day reads" {
+  let d = Day.of("2026-11-01")?
+  expect len(d) == 10
+}
+```
+
+The error must be a `ValidationError`, the error type of `.of`.
+See [`?` in a case](/book/reference/testing/#question-in-case).
+
 ## Fabricate values with `Val[T]`
 
 `Val[T]` produces a value of `T`. For a refined type it satisfies the

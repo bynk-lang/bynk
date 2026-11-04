@@ -1316,6 +1316,24 @@ fn render_handler_annotation_hover(
              - **`maxBody`** — the maximum request body size in bytes, a positive `Int`."
         );
     }
+    // #2858: `@json` picks how this route's response body writes `Option`.
+    if ann.name.name == "json" {
+        let mode = match handler.json_options() {
+            Some(JsonOptions::Plain) => "`plain` — `Some(v)` is written `v`, `None` is `null`",
+            Some(JsonOptions::Tagged) => {
+                "`tagged` — `{\"kind\": \"Some\", \"value\": v}` / `{\"kind\": \"None\"}`"
+            }
+            None => "not a valid mode (`bynk.http.json_invalid_arg`)",
+        };
+        return format!(
+            "```bynk\n{sig}\n```\n\n\
+             **`@json`** — choose how this route's response body writes `Option`, overriding the \
+             service's `json {{ }}` section. A Bynk client reads either form; plain JSON is what \
+             `curl | jq` and other non-Bynk clients expect. `Option[Option[T]]` is refused in a \
+             plain route (`bynk.json.nested_option_plain`).\n\n\
+             - **`options`** — `tagged` (the default) or `plain`. This route: {mode}."
+        );
+    }
     // `@raw` takes the request body as the octets sent, under a declared media type.
     if ann.name.name == "raw" {
         let cap = match handler.limit_max_body().or(service_cap) {
@@ -2928,8 +2946,22 @@ pub(crate) fn describe_service(s: &ServiceDecl) -> String {
     if let Some(limits) = &s.limits {
         out.push_str(&format!("\tlimits {{ {} }}\n", limits_summary(limits)));
     }
+    // #2858: the response-JSON policy, if declared, renders its mode.
+    if let Some(json) = &s.json {
+        let mode = match json.options() {
+            JsonOptions::Plain => "plain",
+            JsonOptions::Tagged => "tagged",
+        };
+        out.push_str(&format!("\tjson {{ options: {mode} }}\n"));
+    }
     for h in &s.handlers {
-        out.push_str(&format!("\t{}\n", handler_line(h)));
+        // #2858: a route whose response `Option`s are plain JSON says so.
+        let plain = if effective_json_options(s.json.as_ref(), h) == JsonOptions::Plain {
+            "  // plain JSON"
+        } else {
+            ""
+        };
+        out.push_str(&format!("\t{}{plain}\n", handler_line(h)));
     }
     out.push_str("}\n```\n");
     if let Some(doc) = &s.documentation {
@@ -3103,6 +3135,7 @@ pub fn type_ref_str(t: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         // v0.20b: the built-in collection types.

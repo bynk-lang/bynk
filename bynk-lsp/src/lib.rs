@@ -3735,12 +3735,16 @@ impl LanguageServer for Backend {
         // v0.142 (ADR 0165): inside a `limits { }` block, offer the policy field
         // names; at a service-body item start, offer the `limits` section keyword.
         items.extend(limits_completions(&text, offset, &line_prefix));
+        items.extend(json_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
         // names; at a service-body item start, offer the `@limit` snippet.
         items.extend(limit_completions(&text, offset, &line_prefix));
         // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
         // item start, offer the `@raw` snippet.
         items.extend(raw_completions(&text, offset, &line_prefix));
+        // #2854: in an `on http` handler's parameter list, offer the special
+        // parameter names (`query`, `headers`, `body`).
+        items.extend(http_param_completions(&text, offset));
         // #2640: at statement position in an effectful body, the `par` block.
         if completion::is_keyword_position(&line_prefix)
             && completion::in_effectful_body_position(&text, offset)
@@ -5349,6 +5353,62 @@ fn limits_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIt
     Vec::new()
 }
 
+/// #2858: the response-JSON completion cells. Inside `json { }` or `@json( )` at a
+/// name position, the closed field set (`options`); at the value of `options:`,
+/// `tagged` / `plain`; at a service-body item start, the `json` section keyword
+/// and the `@json` annotation snippet. Lexical (offset-based), as
+/// `limits_completions`.
+fn json_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if completion::in_json_options_value_position(text, offset) {
+        return completion::JSON_OPTIONS_VALUES
+            .iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                detail: Some((*doc).to_string()),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_json_field_position(text, offset)
+        || completion::in_json_arg_position(text, offset)
+    {
+        return completion::JSON_FIELDS
+            .iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some((*doc).to_string()),
+                insert_text: Some(format!("{name}: ")),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![
+            CompletionItem {
+                label: "json".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("response JSON encoding for this HTTP service".to_string()),
+                insert_text: Some("json {\n\toptions: ${1:plain},\n}".to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "@json".to_string(),
+                kind: Some(CompletionItemKind::SNIPPET),
+                detail: Some(
+                    "write this route's response `Option`s as `tagged` or `plain` JSON".to_string(),
+                ),
+                insert_text: Some("@json(options: ${1:plain})".to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+        ];
+    }
+    Vec::new()
+}
+
 /// v0.142 (ADR 0165): the `@limit` completion cells. Inside `@limit( … )` at an
 /// argument-name position, offer the closed argument set (`maxBody`); at a
 /// service-body item start, offer the `@limit` annotation snippet. Both are lexical
@@ -5380,6 +5440,25 @@ fn limit_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
         }];
     }
     Vec::new()
+}
+
+/// #2854: the special parameter names of an `on http` handler, at a
+/// parameter-name position in its header. Lexical, like the annotation cells.
+fn http_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
+    if !completion::in_http_param_name_position(text, offset) {
+        return Vec::new();
+    }
+    completion::HTTP_PARAMS
+        .iter()
+        .map(|(name, ty, doc)| CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::VARIABLE),
+            detail: Some((*doc).to_string()),
+            insert_text: Some(format!("{name}: ${{1:{ty}}}")),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        })
+        .collect()
 }
 
 /// The `@raw` completion cells, mirroring `limit_completions`: inside `@raw( … )` at

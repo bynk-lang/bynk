@@ -1,0 +1,49 @@
+================================================================================
+Json policy on a from-http service
+================================================================================
+
+context api
+
+service api from http {
+  limits {
+    maxBody: 1_048_576,
+  }
+
+  json {
+    options: plain,
+  }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] {
+    Ok("pong")
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (service_decl
+      (identifier)
+      (service_protocol)
+      (limits_policy
+        (limits_field
+          (identifier)
+          (number_literal)))
+      (json_policy
+        (json_field
+          (identifier)
+          (identifier)))
+      (handler
+        (http_handler
+          (http_method)
+          (string_literal)
+          (generic_type_ref
+            (builtin_type)
+            (generic_type_ref
+              (builtin_type)
+              (base_type)))
+          (block
+            (ok_expr
+              (string_literal))))))))

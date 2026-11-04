@@ -1,0 +1,11 @@
+context api
+
+// `Box[T]` holds an `Option[T]`; `T` is instantiated with `()`.
+type Box[T] = { v: Option[T] }
+
+service api from http {
+  @json(options: plain)
+  on GET("/box") () -> Effect[HttpResult[Box[()]]] by v: Visitor {
+    Ok(Box { v: None })
+  }
+}

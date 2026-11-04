@@ -1774,6 +1774,65 @@ pub(crate) fn check_request_headers_method(
     Some(tys.intern(Ty::Option(string)))
 }
 
+/// #2854 (decision B): type a method on an HTTP handler's `query`
+/// (`RequestQuery`). `get(name)` is the first value of a key, `all(name)` every
+/// value in order, `params()` every key with its values.
+pub(crate) fn check_request_query_method(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let string = tys.intern(Ty::Base(BaseType::String));
+    let strings = tys.intern(Ty::List(string));
+    let (params, ret): (Vec<TyId>, TyId) = match method.name.as_str() {
+        "get" => (vec![string], tys.intern(Ty::Option(string))),
+        "all" => (vec![string], strings),
+        "params" => (vec![], tys.intern(Ty::Map(string, strings))),
+        _ => {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.method_not_found",
+                method.span,
+                format!(
+                    "`RequestQuery` has no method `{}` — it has `get(name)`, `all(name)` and `params()`",
+                    method.name
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`RequestQuery.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(&params) {
+        check_arg(
+            a,
+            *p,
+            &format!("the `RequestQuery.{}` argument", method.name),
+            ctx,
+        );
+    }
+    Some(ret)
+}
+
 /// #2380 (L5): type a method on an `Oidc` binder's `claims` (`TokenClaims`).
 /// `get(name)` is the claim when it is a JSON string (`Option[String]`);
 /// `has(name)` is whether the claim is present, of any type.
@@ -3219,6 +3278,54 @@ pub(crate) fn check_request_headers_static(
         );
     }
     Some(tys.intern(Ty::RequestHeaders))
+}
+
+/// #2854: the `RequestQuery` static constructors, the test-side way to build
+/// the query a raw-view handler reads. `of(pairs)` takes `"name=value"` pairs
+/// (percent-encoded as on the wire); `empty()` has none.
+pub(crate) fn check_request_query_static(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let params: Vec<TyId> = match method.name.as_str() {
+        "of" => vec![tys.intern(Ty::List(tys.intern(Ty::Base(BaseType::String))))],
+        "empty" => vec![],
+        _ => {
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`RequestQuery.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(params.iter()) {
+        check_arg(
+            a,
+            *p,
+            &format!("the `RequestQuery.{}` argument", method.name),
+            ctx,
+        );
+    }
+    Some(tys.intern(Ty::RequestQuery))
 }
 
 /// #2380 (L5): `TokenClaims.of(lines)`, the test-side way to build the claims

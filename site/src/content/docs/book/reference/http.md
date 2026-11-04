@@ -19,7 +19,7 @@ service <Name> from http {
 - **Route:** must start with `/`; a `:name` segment is a path parameter.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
   segment), the special `body` parameter, or the special
-  [`headers`](#request-headers) parameter. A path parameter's type must be
+  [`headers`](#request-headers) or [`query`](#query-strings) parameter. A path parameter's type must be
   constructible from a string (`bynk.http.path_param_not_stringy`); `GET` and
   `DELETE` may not take a `body` (`bynk.http.body_on_get_or_delete`).
 - **Return type:** must be `Effect[HttpResult[T]]`
@@ -70,6 +70,87 @@ plain function may take it to share a check between handlers
 (`bynk.types.headers_at_boundary`). A parameter named `headers` must have this
 type (`bynk.http.headers_wrong_type`). A test builds one with
 [`RequestHeaders.of`](/book/reference/testing/#request-headers).
+
+## Query strings
+
+A handler reads the request's query string through a `query` parameter, in one
+of two forms. It may sit anywhere among the parameters, and a handler has at most
+one. A `:query` path segment keeps its meaning as a path parameter.
+
+### A typed `query` {#typed-query}
+
+`query: T`, where `T` is a record, decodes the query string into `T` and
+validates it before the handler runs, as a [`body`](#handler-form) is:
+
+```bynk,fragment
+type Limit = Int where InRange(1, 500)
+type Day = String where Matches("^\\d{4}-\\d{2}-\\d{2}$")
+
+type ActivityFilter = {
+  repo:  Option[String],
+  since: Option[Day],
+  tag:   List[String] = [],
+  limit: Limit = 50,
+}
+```
+
+```bynk,fragment
+on GET("/activity") (query: ActivityFilter) -> Effect[HttpResult[List[Activity]]] by r: Reader { Ok([]) }
+```
+
+`GET /activity?repo=bynk-lang/bynk&tag=a&tag=b&limit=100` decodes to a filter;
+`?limit=0` or `?since=yesterday` is a `400` before the handler runs, with the same
+`RefinementViolation` or `StructuralMismatch` body a bad `body` gets (the `path`
+names the field, `query.limit`).
+
+A field of `T` is a value a query string can carry:
+
+- a `String`, `Int`, `Bool` or `Decimal`, a refined or opaque type over one of
+  those, or an enum (`?kind=Push`);
+- an `Option` of one, which is `None` when its key is absent;
+- a `List` of one, filled by a repeated key (`?tag=a&tag=b`). It is empty only
+  when the field has a default, as `tag` does above; with none, an absent key is a
+  `400` (give it a default of `[]` to make the key optional).
+
+Anything else is refused (`bynk.http.query_field_not_stringy`), and so is a
+`query` that is not a record (`bynk.http.query_wrong_type`). A field's default
+applies when its key is absent. Names and values are percent-decoded, and `+` is
+a space, as `bynk.url.decodeQuery` reads them.
+
+Two decisions keep the boundary strict where it matters and tolerant where it
+doesn't:
+
+- **Unknown keys are ignored**, as unknown fields of a `body` are: a cache-buster
+  or a tracking parameter (`?utm_source=…`) is not an error.
+- **A repeated key on a field that is not a `List` is a `400`** (`StructuralMismatch`),
+  rather than the first value silently winning: `?limit=1&limit=2` is ambiguous,
+  and the boundary says so.
+
+The query never affects *which* handler runs. Routes are still told apart by
+method and path alone.
+
+### The raw view — `query: RequestQuery` {#request-query}
+
+For a proxy, or keys only known at run time, a handler declares
+`query: RequestQuery`, a read-only view of the query string. It mirrors
+[`RequestHeaders`](#request-headers), and nothing is validated:
+
+| Method | Returns | Reads |
+|---|---|---|
+| `get(name)` | `Option[String]` | the first value of a key |
+| `all(name)` | `List[String]` | every value of a key, in order (`[]` when absent) |
+| `params()` | `Map[String, List[String]]` | every key with its values |
+
+```bynk,fragment
+on GET("/echo") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor {
+  Ok(query.get("q").getOrElse("-"))
+}
+```
+
+The view is read while the request is handled, never kept: `RequestQuery` can't be
+a field of a type or cross a boundary (`bynk.types.request_query_at_boundary`), and only an
+HTTP handler's `query` can have it (`bynk.http.query_not_http`). A test builds one
+with [`RequestQuery.of`](/book/reference/testing/#request-query).
 
 ## `HttpResult` variants
 
@@ -322,6 +403,14 @@ revalidation needs. Because it is a content hash, a `304` still runs the handler
 and serialises the body — it saves **bandwidth, not server work**. A cheaper
 validator that short-circuits before the handler (e.g. a `Last-Modified` from a
 store timestamp) is a planned follow-on.
+
+A query string is part of what a `GET` answers, so the `ETag` is a hash of the body
+that *that* query produced: `GET /activity?limit=10` and `GET /activity?limit=20`
+carry different validators, and an `If-None-Match` from one is never answered `304`
+for the other. The Workers cache that an [`EdgeCache`](/book/guides/effects-and-capabilities/cache-at-the-edge/)
+instance turns on keys a response by its full URL, query included, so
+`@cache`d answers for two queries on one path are stored apart. `EdgeCache.purge`
+takes a path prefix, so it clears every query variant under it.
 
 ### Supplying the validator (`RawTagged`)
 
@@ -825,6 +914,68 @@ method) is `bynk.http.limit_on_bodyless`; a duplicate `@limit` on one handler is
 `bynk.http.limit_unknown_arg`; and a non-positive-`Int` `maxBody` is
 `bynk.http.limit_bad_max_body`.
 
+## JSON for non-Bynk clients
+
+An `Ok(value)` body is the value as JSON, with an `Option[U]` written in Bynk's
+**tagged** form, `{"kind": "Some", "value": v}` or `{"kind": "None"}`. A Bynk
+client reads that, but `curl | jq`, a dashboard and a script expect `"action":
+"opened"` and `"deleted": null`. A service (or one route) can opt its response
+bodies into **plain JSON**:
+
+```bynk
+context api
+
+type Activity = { id: String, action: Option[String], deleted: Option[Bool] }
+
+service api from http {
+  json { options: plain }
+
+  on GET("/activity") () -> Effect[HttpResult[List[Activity]]] by r: Visitor {
+    Ok([Activity { id: "a1", action: Some("opened"), deleted: None }])
+  }
+}
+```
+
+```json
+[{"id":"a1","action":"opened","deleted":null}]
+```
+
+In plain mode `Some(v)` is written `v` and `None` is written `null` (the key is
+never dropped), at any depth: in a record, a `List`, a `Map` value, a sum
+variant's field. Everything else about the encoding is unchanged. Bynk's own
+decoder reads the plain shape too ([ADR 0450](/book/reference/types/#the-json-codec)),
+so a Bynk client still reads the response.
+
+### The `json { }` section and `@json`
+
+| | Form | Notes |
+|---|---|---|
+| Service default | `json { options: plain }` | header position, after `cors`, `security` and `limits`; at most once (`bynk.parse.duplicate_json`); `from http` only (`bynk.http.json_not_http`) |
+| Per-route override | `@json(options: tagged)` or `@json(options: plain)` | on an `on http` handler; at most once (`bynk.http.json_duplicate`) |
+
+`options` is the only field, and its value is `tagged` (the default) or `plain`
+(`bynk.http.json_unknown_field`, `bynk.http.json_invalid_field`,
+`bynk.http.json_unknown_arg`, `bynk.http.json_invalid_arg`). The effective mode is
+**the route's `@json`, then the service's `json { }`, then `tagged`**. A service
+with neither is byte-for-byte unchanged.
+
+### An `Option` whose payload can be `null` is refused
+
+Plain mode must read back what it wrote. If an `Option[U]`'s payload `U` can
+itself be `null`, `Some(U)` and `None` would both be written `null`. So an
+`Option[Option[T]]` or an `Option[()]` anywhere in a plain route's response
+type, through records, sums, containers and generic arguments, is
+`bynk.json.nested_option_plain`, and the message names the payload. Model the
+distinction as a sum type, or keep that route `tagged`.
+
+### What plain mode does not change
+
+Only `Ok`, `Created` and `Accepted` **response bodies** of `from http` routes.
+Request bodies already decode plain JSON. Cross-context calls, queue messages,
+agent state, `Json.encode`, `Streaming` (SSE) events and the contract hashes keep
+the tagged form, so `decode(encode(x)) == x` still holds everywhere else.
+`bynk openapi` describes a plain route's `Option` as nullable.
+
 ## Request lifecycle
 
 ```mermaid
@@ -853,7 +1004,8 @@ flowchart TD
 *Validation happens once, at the edge; the handler only ever sees valid input.*
 
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
-on method **and** path. On a match, path parameters are bound; a `@raw` route's
+on method **and** path. On a match, path parameters are bound and a typed
+[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw` route's
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
 then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
 `400` at the boundary, before the handler runs. The handler then runs as an
