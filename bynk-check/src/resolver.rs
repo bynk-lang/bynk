@@ -191,6 +191,11 @@ pub struct ResolvedCommons {
     /// only this narrower set may be. Private for the same reason as
     /// `local_type_names`; read via [`ResolvedCommons::is_uses_commons_type`].
     pub(crate) uses_commons_type_names: std::collections::HashSet<String>,
+    /// #2881: the functions this unit sees through `uses` rather than declares
+    /// (in any of its files). `uses` brings in a commons only, so a `given` on
+    /// one of these is always refused. Empty unless [`ResolvedCommons::with_local_fns`]
+    /// was called.
+    pub(crate) imported_fn_names: std::collections::HashSet<String>,
     /// Events track, slice 0 (spine #936): names of `event` declarations in
     /// *this* commons specifically — as opposed to `local_type_names`, which
     /// answers "declared here" for any type, event-derived or not. Backs the
@@ -446,6 +451,7 @@ impl ResolvedCommons {
             imported_from,
             is_context,
             uses_commons_type_names,
+            imported_fn_names: HashSet::new(),
             assets: HashMap::new(),
             embeds: HashMap::new(),
             consts: HashMap::new(),
@@ -453,6 +459,19 @@ impl ResolvedCommons {
             extensible_enums: HashSet::new(),
             stability: Default::default(),
         }
+    }
+
+    /// #2881: record which of this unit's functions came in through `uses`
+    /// (those in `fns` that `local_fns`, the unit's own table across all its
+    /// files, lacks). A builder, so constructions with no `uses` need not call it.
+    pub fn with_local_fns<V>(mut self, local_fns: &HashMap<String, V>) -> Self {
+        self.imported_fn_names = self
+            .fns
+            .keys()
+            .filter(|n| !local_fns.contains_key(*n))
+            .cloned()
+            .collect();
+        self
     }
 
     /// #1883, slice 1a: the assets visible in this unit. A builder rather
@@ -880,6 +899,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             // gates is unreachable here.
             is_context: false,
             uses_commons_type_names: HashSet::new(),
+            imported_fn_names: HashSet::new(),
             event_type_names,
             assets: local_assets,
             embeds: local_embeds,
@@ -1675,22 +1695,21 @@ fn check_fn_refs(
     declared_caps: &HashSet<String>,
     errors: &mut Sinks,
 ) {
-    // #2868: a `given` function reaches the capabilities it names.
-    // A consumed context's capability is reached as `B.Cap.op(…)`, so the
-    // leading segment of its prefix is a name in scope too; the checker
-    // resolves the whole chain.
-    let caps: HashSet<String> = f
-        .given
-        .iter()
-        .flat_map(|g| {
-            let lead = g
-                .context
-                .as_ref()
-                .and_then(|q| q.parts.first())
-                .map(|p| p.name.clone());
-            std::iter::once(g.key().to_string()).chain(lead)
-        })
-        .collect();
+    // #2868: a `given` function reaches the capabilities it names. A consumed
+    // context's capability is reached as `B.Cap.op(…)`; that whole chain is
+    // admitted where it is a call receiver (`given_cap_chain`), so a bare `B`
+    // is not a name in scope.
+    let caps: HashSet<String> = f.given.iter().map(|g| g.key().to_string()).collect();
+    // #2881: what to tell a use of a capability the function does not list. A
+    // method or a function that is not `Effect[T]` cannot declare `given`
+    // (`given_fn_refusal`), so "add `given`" would only trade one error for another.
+    let cap_advice: String = if matches!(f.name, FnName::Method { .. }) {
+        "a method cannot declare `given`: take the operation as a function-value parameter, `log: (String) -> Effect[()]`, and pass `(m) => Cap.op(m)` from a handler or context function that declares `given`".to_string()
+    } else if !matches!(f.return_type, TypeRef::Effect(..)) {
+        "a function that does not return `Effect[T]` cannot declare `given`: take the operation as a function-value parameter, `log: (String) -> Effect[()]`, and pass `(m) => Cap.op(m)` from a handler or context function that declares `given`".to_string()
+    } else {
+        "a context function reaches a capability through `given`: add `given {cap}` after its return type, and then every handler or function that calls it must declare it too".to_string()
+    };
     // Parameter types resolve.
     // v0.20a: the fn's type parameters are legal named references in its
     // own signature and body annotations.
@@ -1794,11 +1813,46 @@ fn check_fn_refs(
         consts,
         shadowed,
         caps: &caps,
+        given: &f.given,
+        cap_advice: &cap_advice,
         declared_caps,
         scopes: Vec::new(),
         errors,
     };
     check_block_references(&f.body, &mut cx);
+}
+
+/// #2881: whether `receiver` spells `Prefix.Cap` for a consumed-context
+/// capability in `given`: the prefix segments, then the capability, nothing
+/// else. A bare `Prefix` (or a different chain) is not admitted.
+fn given_cap_chain(receiver: &Expr, given: &[CapRef], shadowed: &dyn Fn(&str) -> bool) -> bool {
+    let mut parts: Vec<&str> = Vec::new();
+    let mut e = receiver;
+    loop {
+        match &e.kind {
+            ExprKind::FieldAccess { receiver, field } => {
+                parts.push(&field.name);
+                e = receiver;
+            }
+            ExprKind::Ident(id) => {
+                parts.push(&id.name);
+                break;
+            }
+            _ => return false,
+        }
+    }
+    parts.reverse();
+    // A parameter or `let` of the head's name is a value, not the prefix.
+    if shadowed(parts[0]) {
+        return false;
+    }
+    given.iter().any(|g| {
+        g.context.as_ref().is_some_and(|q| {
+            parts.len() == q.parts.len() + 1
+                && q.parts.iter().zip(&parts).all(|(a, b)| a.name == *b)
+                && parts.last() == Some(&g.key())
+        })
+    })
 }
 
 /// #2617: a constant's annotation resolves, and its initialiser names only
@@ -1829,6 +1883,8 @@ fn check_const_refs(
         consts,
         shadowed: &shadowed,
         caps: &HashSet::new(),
+        given: &[],
+        cap_advice: "",
         declared_caps: &HashSet::new(),
         scopes: Vec::new(),
         errors,
@@ -3053,6 +3109,12 @@ struct RefCheckCtx<'a, 'b> {
     /// #2868: the capabilities a `given` function names: an identifier that is
     /// one is a capability receiver (`Logger.error(…)`), typed by the checker.
     caps: &'a HashSet<String>,
+    /// #2881: the function's `given` clause, for the `B.Cap.op(…)` chain of a
+    /// consumed context's capability.
+    given: &'a [CapRef],
+    /// #2881: the note on a use of a capability `given` does not list;
+    /// `{cap}` stands for the capability's name.
+    cap_advice: &'a str,
     /// #2868: every capability the context declares or consumes, for the note
     /// on a use the function's `given` does not cover.
     declared_caps: &'a HashSet<String>,
@@ -3355,10 +3417,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                             id.name
                         ),
                     )
-                    .with_note(format!(
-                        "a context function reaches a capability through `given`: add `given {}` after its return type, and then every handler or function that calls it must declare it too",
-                        id.name
-                    )),
+                    .with_note(cx.cap_advice.replace("{cap}", &id.name)),
                 );
             } else {
                 cx.errors.push(
@@ -3671,6 +3730,16 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             args,
             ..
         } => {
+            // #2881: `B.Cap.op(…)` on a consumed context's capability that this
+            // function's `given` lists; the checker resolves the chain.
+            if given_cap_chain(receiver, cx.given, &|n| {
+                name_in_scope(n, cx.params, &cx.scopes)
+            }) {
+                for a in args {
+                    check_expr_references(a, cx);
+                }
+                return;
+            }
             // v0.9: `HttpResult.Variant(args)` — qualified HttpResult constructor.
             if let ExprKind::Ident(id) = &receiver.kind
                 && !name_in_scope(&id.name, cx.params, &cx.scopes)

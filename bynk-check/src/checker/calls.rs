@@ -773,7 +773,16 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
 /// case. A test case supplies the capabilities its target's handlers would get.
 /// The capabilities the callee needs count as used by the caller.
 pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx) {
+    // #2881: a refused declaration (`given_fn_refusal`) is reported once, at
+    // the declaration; its callers cannot act on a missing `given`. A function
+    // this unit does not declare came in through `uses`, which only brings in a
+    // commons, so a `given` on it is always refused there.
     if callee.given.is_empty() {
+        return;
+    }
+    if ctx.input.imported_fn_names.contains(&callee.name.display())
+        || given_fn_refusal(callee, ctx.input.is_context).is_some()
+    {
         return;
     }
     let mut missing: Vec<String> = Vec::new();

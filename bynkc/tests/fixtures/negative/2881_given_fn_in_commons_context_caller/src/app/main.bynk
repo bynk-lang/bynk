@@ -1,0 +1,9 @@
+context app.main
+
+uses geo.r
+
+service probe {
+  on call() -> Effect[()] {
+    warn("x")
+  }
+}

@@ -1,0 +1,13 @@
+context platform.time
+
+exports capability { Clock }
+
+capability Clock {
+  fn now() -> Effect[Int]
+}
+
+provides Clock = SystemClock {
+  fn now() -> Effect[Int] {
+    0
+  }
+}

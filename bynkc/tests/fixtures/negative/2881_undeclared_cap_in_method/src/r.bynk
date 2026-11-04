@@ -1,0 +1,17 @@
+context r
+
+capability Logger {
+  fn error(message: String) -> Effect[()]
+}
+
+provides Logger = NullLogger {
+  fn error(message: String) -> Effect[()] {}
+}
+
+type Box = {
+  n: Int,
+}
+
+fn Box.show(self) -> Effect[()] {
+  Logger.error("box")
+}

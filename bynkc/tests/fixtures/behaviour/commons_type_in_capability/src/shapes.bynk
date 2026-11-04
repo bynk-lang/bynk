@@ -1,0 +1,9 @@
+commons shapes
+
+type Point = { x: Int, y: Int }
+
+type Label = String where NonEmpty
+
+type Color =
+	| Red
+	| Blue

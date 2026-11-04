@@ -115,14 +115,21 @@ pub fn check_handler_constraints(
             ),
             CommonsItem::Provider(p) => (p.ops.iter().map(|op| &op.body).collect(), Vec::new()),
             // #2868: a `given` function, typed with the context's declarations.
-            CommonsItem::Fn(f) if !f.given.is_empty() => (
-                vec![&f.body],
-                f.requires
-                    .iter()
-                    .chain(&f.ensures)
-                    .map(|c| &c.predicate)
-                    .collect(),
-            ),
+            // #2882: a function `given_fn_refusal` rejected was not typed
+            // (`check_given_fns`), so its body is not walked either. This pass
+            // runs on contexts only.
+            CommonsItem::Fn(f)
+                if !f.given.is_empty() && checker::given_fn_refusal(f, true).is_none() =>
+            {
+                (
+                    vec![&f.body],
+                    f.requires
+                        .iter()
+                        .chain(&f.ensures)
+                        .map(|c| &c.predicate)
+                        .collect(),
+                )
+            }
             _ => continue,
         };
         for body in bodies {
@@ -663,6 +670,7 @@ pub fn check_context_declarations(
         is_context,
         uses_commons_type_names.clone(),
     )
+    .with_local_fns(&table.fns)
     // #1883, slice 1a: a handler body sees the unit's assets too.
     .with_assets(typed.assets.clone())
     .with_embeds(typed.embeds.clone())
@@ -3915,6 +3923,7 @@ fn check_agent_decls(
             is_context,
             uses_commons_type_names.clone(),
         )
+        .with_local_fns(&table.fns)
         // #1883, slice 1a: a handler body sees the unit's assets too.
         .with_assets(typed.assets.clone())
         .with_embeds(typed.embeds.clone())
@@ -4021,6 +4030,7 @@ fn check_agent_decls(
             is_context,
             uses_commons_type_names.clone(),
         )
+        .with_local_fns(&table.fns)
         // #1883, slice 1a: a handler body sees the unit's assets too.
         .with_assets(typed.assets.clone())
         .with_embeds(typed.embeds.clone())
