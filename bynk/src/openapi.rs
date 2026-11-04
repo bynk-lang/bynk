@@ -209,7 +209,7 @@ pub fn declared_statuses(root: &Path) -> BTreeMap<String, Vec<u16>> {
 
 /// The project's analysis from the files on disk — the round `bynk check` and
 /// the language server run.
-fn analyse(root: &Path) -> ProjectDiagnostics {
+pub(crate) fn analyse(root: &Path) -> ProjectDiagnostics {
     let roots = AnalysisRoots::Project(root.to_path_buf());
     let mut content: HashMap<PathBuf, String> = HashMap::new();
     let manifest = root.join("bynk.toml");
@@ -423,7 +423,7 @@ fn sorted(v: Value) -> Value {
 }
 
 /// `path:line: message` for each error the analysis holds, cheapest first.
-fn errors_of(analysis: &ProjectDiagnostics) -> Vec<String> {
+pub(crate) fn errors_of(analysis: &ProjectDiagnostics) -> Vec<String> {
     let mut out = Vec::new();
     for f in &analysis.files {
         for d in &f.diagnostics {

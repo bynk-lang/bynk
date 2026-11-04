@@ -52,6 +52,19 @@ mod par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::split_regex_flags;
+
+/// #2869: the first predicate of a refined or opaque `String` type that `value`
+/// fails, in the order the emitted boundary checks them (`None` when it holds
+/// every one, or when the type carries no refinement). `bynk token` validates a
+/// `--sub` against a Bearer actor's identity type with it, so the token it signs
+/// is one the seam's own refinement check accepts.
+pub fn string_refinement_violation<'a>(
+    decl: &'a bynk_syntax::ast::TypeDecl,
+    value: &str,
+) -> Option<&'a bynk_syntax::ast::PredKind> {
+    let refinement = refinements::type_decl_refinement(decl)?;
+    refinements::first_failed_predicate(refinement, &ConstLit::Str(value.to_string()))
+}
 mod regex_ambiguity;
 mod usefulness;
 
