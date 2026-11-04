@@ -2244,20 +2244,6 @@ pub fn phase_resolve_consumes(
                                 );
                                 continue;
                             }
-                            if target_kind != UnitKind::Adapter {
-                                errors.push_for(
-                                    Some(&parsed[i].identity_path()),
-                                    refuse(
-                                        "bynk.consumes.type_alias_context",
-                                        alias.span,
-                                        format!(
-                                            "`{target}` is a context, and only a type exported by an adapter can be aliased"
-                                        ),
-                                        "a context's types cross its service boundary by name, in contracts and codecs, so they keep one name; rename your own type instead".to_string(),
-                                    ),
-                                );
-                                continue;
-                            }
                             if !type_selected.insert((i, target.clone(), cap.name.clone())) {
                                 errors.push_for(
                                     Some(&parsed[i].identity_path()),

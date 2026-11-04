@@ -375,8 +375,7 @@ capabilities flattened to bare names (`{ Cap, … }`). The braces may also name 
 type the unit exports, and rename it for this context with `T as Alias`
 (`consumes bynk.crypto { Crypto, Digest as CryptoDigest }`): the type is then in
 scope only under the alias, so it no longer clashes with a local or `uses` type
-of the same name. Only a type an adapter exports can be aliased (not a
-capability, and not a context's type), and a type takes one alias. In a context split across files an alias applies to the whole
+of the same name. Only a type can be aliased, not a capability, and a type takes one alias. In a context split across files an alias applies to the whole
 context.
 
 A context's `consumes` clauses apply to all its files. In a context split across

@@ -1824,13 +1824,19 @@ fn build_emit_unit_ctx(
         .consumes
         .iter()
         .map(|t| {
-            (
-                t.clone(),
-                unit_info
-                    .get(t)
-                    .map(|i| i.exports.clone())
-                    .unwrap_or_default(),
-            )
+            let mut exports = unit_info
+                .get(t)
+                .map(|i| i.exports.clone())
+                .unwrap_or_default();
+            // #2887: a renamed export is exported under its alias, here.
+            for (alias, a) in &info.table.consumed_type_aliases {
+                if a.target == *t
+                    && let Some(vis) = exports.get(&a.original).copied()
+                {
+                    exports.insert(alias.clone(), vis);
+                }
+            }
+            (t.clone(), exports)
         })
         .collect();
 

@@ -82,10 +82,10 @@ the original would, as a type, a constructor, a variant (`CryptoDigest.Sha256`),
 a pattern, or an argument to the capability's operations. The original name,
 `Digest` here, is not in scope from `bynk.crypto`, so it means your own type.
 
-Only a type exported by an adapter, such as `bynk.crypto`, can be aliased: a
-context's types cross its service boundary by name, so aliasing one is
-`bynk.consumes.type_alias_context`. A capability keeps its name
-(`bynk.consumes.type_alias_capability`); alias a name the unit does not export
+The same works for a type another context exports
+(`consumes lib { Code as LibCode }`): the alias is a name in this context only,
+and values cross the service boundary as `lib`'s own type. A capability keeps
+its name (`bynk.consumes.type_alias_capability`); alias a name the unit does not export
 (`bynk.consumes.type_alias_unknown_export`), alias the same type twice or both
 bare and aliased (`bynk.consumes.type_alias_repeated`), or pick an alias that is
 already taken (`bynk.consumes.type_alias_conflict`), and the compiler refuses.

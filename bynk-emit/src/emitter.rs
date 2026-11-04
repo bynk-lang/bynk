@@ -2028,6 +2028,13 @@ fn emit_consumed_context_helpers(
                 .unwrap_or(original.as_str());
             qual.insert(renamed.clone(), format!("{owner_ns}{ts_name}"));
         }
+        // #2887: a type this context renames from `c` is named in TS by the
+        // name `c` declares, whole.
+        for (alias, original) in info.consumed_type_aliases.get(c).into_iter().flatten() {
+            if names.contains(alias) {
+                qual.insert(alias.clone(), format!("{ns}{original}"));
+            }
+        }
         // #1736: a generic type the callee owns reaches the closure only as the
         // base of an instantiation (`Envelope[Int]`), never as a plain name, so
         // the loop above can't see it. Without this the instantiation's codec
@@ -4529,6 +4536,9 @@ pub(crate) struct ModuleCtx<'a> {
     /// this module (mirrors [`crate::emitter::emit::consumed_type_ns`]).
     /// Default-empty: a miss names the type bare, as before.
     consumed_type_ns: HashMap<String, String>,
+    /// #2887: a consumed type this module renames, alias → the name its
+    /// context declares and exports.
+    consumed_type_declared: HashMap<String, String>,
     /// #934: true when the unit being emitted is the reserved first-party
     /// `bynk` adapter itself. `bynk` is a reserved namespace, so a capability
     /// literally named `Idempotency` declared *in this unit* is unambiguously
@@ -4559,6 +4569,7 @@ impl<'a> ModuleCtx<'a> {
             agent_method_givens: HashMap::new(),
             event_schema_versions: HashMap::new(),
             consumed_type_ns: HashMap::new(),
+            consumed_type_declared: HashMap::new(),
             in_bynk_unit: false,
             agent_called_contexts: Vec::new(),
             consumed_context_types: HashSet::new(),
@@ -5777,7 +5788,14 @@ impl<'a> LowerCtx<'a> {
     /// under its context's namespace when a consumed context declares it.
     pub(crate) fn consumed_type_name(&self, name: &str) -> String {
         match self.module.consumed_type_ns.get(name) {
-            Some(ns) => [ns.as_str(), ".", name].concat(),
+            Some(ns) => {
+                let declared = self
+                    .module
+                    .consumed_type_declared
+                    .get(name)
+                    .map_or(name, String::as_str);
+                [ns.as_str(), ".", declared].concat()
+            }
             None => name.to_string(),
         }
     }

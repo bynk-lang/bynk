@@ -1,5 +1,0 @@
-context app
-
-consumes lib { Code as LibCode }
-
-fn one() -> Int { 1 }

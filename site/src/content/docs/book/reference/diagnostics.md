@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **755** codes in total.
+There are **754** codes in total.
 
 ## Agents
 
@@ -86,7 +86,6 @@ There are **755** codes in total.
 | `bynk.consumes.target_is_commons` | `consumes` targets a `commons` instead of a context. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.type_alias_capability` | A capability was aliased in `consumes U { Cap as Alias }`; only exported types can be aliased. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.type_alias_conflict` | A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.type_alias_context` | `consumes U { T as Alias }` aliased a type of a context; only a type exported by an adapter can be aliased. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.type_alias_repeated` | An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.type_alias_unknown_export` | `consumes U { T as Alias }` names a type `U` does not export. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.unknown_context` | `consumes` names a context that does not exist. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |

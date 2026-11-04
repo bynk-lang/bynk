@@ -1181,6 +1181,7 @@ pub(crate) fn emit_consts(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<b
         let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
         module.target = ctx.target;
         module.consumed_type_ns = consumed_type_ns(ctx);
+        module.consumed_type_declared = ctx.consumed_type_aliases.clone();
         module.consumed_context_types = ctx.consumed_context_types();
         let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
         let init = pre.lower(&c.init, &mut icx);
@@ -2836,6 +2837,7 @@ pub(crate) fn emit_provider(
         module.agent_called_contexts = ctx.agent_called_contexts.clone();
         module.event_schema_versions = ctx.event_schema_versions.clone();
         module.consumed_type_ns = consumed_type_ns(ctx);
+        module.consumed_type_declared = ctx.consumed_type_aliases.clone();
         module.consumed_context_types = ctx.consumed_context_types();
         module.target = ctx.target;
         module.in_bynk_unit = ctx.commons_name == "bynk";
@@ -3147,6 +3149,7 @@ pub(crate) fn emit_service(
         module.agent_called_contexts = ctx.agent_called_contexts.clone();
         module.event_schema_versions = ctx.event_schema_versions.clone();
         module.consumed_type_ns = consumed_type_ns(ctx);
+        module.consumed_type_declared = ctx.consumed_type_aliases.clone();
         module.consumed_context_types = ctx.consumed_context_types();
         module.target = ctx.target;
         let mut cx = LowerCtx::new(
@@ -4538,7 +4541,29 @@ pub(crate) fn lower_workers_cross_context_call(
     // the deployed sources genuinely differ. Canonicalising here in the caller's
     // namespace would rebrand the same types and 409 every call.
     let contract = match info.consumed_types.get(consumed) {
-        Some(types) => bynk_check::contract::service_contract_hash(svc, types),
+        Some(types) => match info.consumed_type_aliases.get(consumed) {
+            // #2887: the callee canonicalises its own names; undo this
+            // context's aliases so both hashes read the same declarations.
+            Some(aliases) => {
+                let mut svc = svc.clone();
+                for (_, tr) in svc.params.iter_mut() {
+                    bynk_check::symbols::rename_type_ref(tr, aliases);
+                }
+                bynk_check::symbols::rename_type_ref(&mut svc.return_type, aliases);
+                let types: HashMap<String, Arc<TypeDecl>> = types
+                    .iter()
+                    .map(|(k, d)| {
+                        let key = aliases.get(k).unwrap_or(k);
+                        (
+                            key.clone(),
+                            bynk_check::symbols::rename_consumed_decl(d, key, aliases),
+                        )
+                    })
+                    .collect();
+                bynk_check::contract::service_contract_hash(&svc, &types)
+            }
+            None => bynk_check::contract::service_contract_hash(svc, types),
+        },
         // Unreachable alongside the signature assertion above: the same resolver
         // pass populates both maps for a consumed context.
         None => unreachable!(
@@ -4660,6 +4685,7 @@ pub(crate) fn param_cast(
     let Some((_, ptype_ref)) = service.params.get(idx) else {
         return arg;
     };
+    let ptype_ref = &unalias_type_ref(info, consumed, ptype_ref);
     if let Some(name) = type_ref_named_root(ptype_ref) {
         // #2073: a type the consumed context itself consumes is named through
         // its declaring context's namespace. This relies on the checker
@@ -4727,6 +4753,41 @@ pub(crate) fn param_cast(
     arg
 }
 
+/// #2887: `tr` with the types this context renames from `consumed` spelled as
+/// `consumed` declares them: its module exports those names, not the aliases.
+fn unalias_type_ref(
+    info: &bynk_check::resolver::CrossContextInfo,
+    consumed: &str,
+    tr: &TypeRef,
+) -> TypeRef {
+    let mut tr = tr.clone();
+    if let Some(aliases) = info.consumed_type_aliases.get(consumed) {
+        bynk_check::symbols::rename_type_ref(&mut tr, aliases);
+    }
+    tr
+}
+
+/// #2887: `consumed_type_ns` with each type this context renames from
+/// `consumed` also keyed by its declared name.
+fn consumed_type_ns_unaliased(
+    info: &bynk_check::resolver::CrossContextInfo,
+    consumed: &str,
+    consumed_type_ns: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    let mut out = consumed_type_ns.clone();
+    for (alias, original) in info
+        .consumed_type_aliases
+        .get(consumed)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(ns) = consumed_type_ns.get(alias) {
+            out.insert(original.clone(), ns.clone());
+        }
+    }
+    out
+}
+
 /// #2825: cast the result of a bundle-mode cross-context call to the *caller's*
 /// view of the service's return type.
 ///
@@ -4770,8 +4831,10 @@ pub(crate) fn return_cast(
     else {
         return call;
     };
+    let return_type = unalias_type_ref(info, consumed, &service.return_type);
+    let consumed_type_ns = &consumed_type_ns_unaliased(info, consumed, consumed_type_ns);
     let mut names = HashSet::new();
-    type_ref_names(&service.return_type, &mut names);
+    type_ref_names(&return_type, &mut names);
     if !reaches_brand(&names, caller_types, consumed_type_ns) {
         return call;
     }
@@ -4798,7 +4861,7 @@ pub(crate) fn return_cast(
             (n.clone(), ns_of(owner))
         })
         .collect();
-    let ty = crate::emitter::ts_type_ref_qualified_multi_ts_type(&service.return_type, &type_ns);
+    let ty = crate::emitter::ts_type_ref_qualified_multi_ts_type(&return_type, &type_ns);
     bynk_ts::print_expr(&bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::As {
         expr: Box::new(bynk_ts::TsExpr::As {
             expr: Box::new(bynk_ts::TsExpr::Ident(call)),
@@ -5854,6 +5917,7 @@ pub(crate) fn emit_agent(
             module.agent_called_contexts = ctx.agent_called_contexts.clone();
             module.event_schema_versions = ctx.event_schema_versions.clone();
             module.consumed_type_ns = consumed_type_ns(ctx);
+            module.consumed_type_declared = ctx.consumed_type_aliases.clone();
             module.consumed_context_types = ctx.consumed_context_types();
             let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
             icx.local_agents = ctx.local_agents.clone();
@@ -7068,6 +7132,7 @@ pub(crate) fn emit_agent(
         module.agent_called_contexts = ctx.agent_called_contexts.clone();
         module.event_schema_versions = ctx.event_schema_versions.clone();
         module.consumed_type_ns = consumed_type_ns(ctx);
+        module.consumed_type_declared = ctx.consumed_type_aliases.clone();
         module.consumed_context_types = ctx.consumed_context_types();
         let mut cx = LowerCtx::new(
             module,
@@ -8157,6 +8222,7 @@ fn emit_ws_do_method(
     module.agent_called_contexts = ctx.agent_called_contexts.clone();
     module.event_schema_versions = ctx.event_schema_versions.clone();
     module.consumed_type_ns = consumed_type_ns(ctx);
+    module.consumed_type_declared = ctx.consumed_type_aliases.clone();
     module.consumed_context_types = ctx.consumed_context_types();
     module.target = ctx.target;
     let mut cx = LowerCtx::new(

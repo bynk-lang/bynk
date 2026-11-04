@@ -824,11 +824,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["consumes_decl"],
     ),
     dg(
-        "bynk.consumes.type_alias_context",
-        "`consumes U { T as Alias }` aliased a type of a context; only a type exported by an adapter can be aliased.",
-        &["consumes_decl"],
-    ),
-    dg(
         "bynk.consumes.type_alias_repeated",
         "An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`.",
         &["consumes_decl"],

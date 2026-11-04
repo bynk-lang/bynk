@@ -34,15 +34,16 @@ before (eagerly in scope, conflicts reported as before).
 - *Scope.* A context's `consumes` clauses apply to all its files, so an alias
   written in any file applies to the whole context; another file may repeat the
   same alias, and one that disagrees is refused.
-- *Adapters only.* Only a type exported by an adapter (`bynk.crypto`, a user
-  adapter) can be aliased; aliasing a context's type is refused
-  (`bynk.consumes.type_alias_context`). A context's types cross its service
-  boundary by name: the contract hash, the callee's codecs and the namespace the
-  caller reaches them through all spell the declared name, so a caller-side
-  alias would have to be translated in each of those. An adapter is linked
-  in-process and has no such boundary, so its types are plain imports. Extending
-  aliasing to contexts means threading the alias through those three; it is
-  deliberately left out.
+- *Contexts too.* The alias works for a context's type as well as an adapter's.
+  A context's types cross its service boundary by name, so every place the
+  callee also reads the name spells the *declared* name: the contract hash
+  canonicalises the callee's declarations (the caller undoes its aliases first,
+  so both hashes agree), the TS a caller names the module's type by is
+  `lib.Code` (casts, codecs and `import { type Code as LibCode }`), and the
+  codecs the caller generates are named for the alias but typed for the real
+  declaration. `CrossContextInfo.consumed_type_aliases` carries the mapping to
+  emit. A context's *own* contract for a service that names an aliased type
+  states it by the alias name, which is stable for that context's callers.
 - *Only types.* Aliasing a capability (`Crypto as C`) is refused
   (`bynk.consumes.type_alias_capability`): a flattened capability is keyed by its
   bare name through `given`, the composition root and the test doubles, so a
@@ -65,6 +66,7 @@ syntax adds an optional `as Alias` after a braced item (tree-sitter, the
 formatter and the IDE follow: hover and go-to-definition on the alias reach the
 declaration, and completion offers nothing at the alias position). The
 organise-imports action keeps a clause that aliases a name as written rather than
-pruning and re-sorting it. A `system`-tier suite's participant view still files a
-consumed type under its own name, so a `system` case naming an aliased type uses
-the module's name for it; that is a follow-up if it proves to matter.
+pruning and re-sorting it. A suite is not a consuming context, so it does not see the
+alias: a case names the module's type by its declared name. The aliased service
+paths are checked by `tsc` over the emitted bundle and Workers output and by the
+corpus-wide hash guard, not run under `workerd`.

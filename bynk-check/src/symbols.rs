@@ -1562,6 +1562,7 @@ pub fn build_cross_context_info(
     let mut consumed_event_names: HashMap<String, std::collections::HashSet<String>> =
         HashMap::new();
     let mut consumed_type_owners: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut consumed_type_aliases: HashMap<String, HashMap<String, String>> = HashMap::new();
     for t in &consumed_contexts {
         let (mut other_types_combined, owners) =
             contract_types_for(t, unit_tables, unit_uses, unit_consumes);
@@ -1589,6 +1590,15 @@ pub fn build_cross_context_info(
                     (key, decl)
                 })
                 .collect();
+        }
+        if !renames.is_empty() {
+            consumed_type_aliases.insert(
+                t.clone(),
+                renames
+                    .iter()
+                    .map(|(o, a)| (a.clone(), o.clone()))
+                    .collect(),
+            );
         }
         consumed_types.insert(t.clone(), other_types_combined);
         if !owners.is_empty() {
@@ -1683,6 +1693,7 @@ pub fn build_cross_context_info(
             .unwrap_or_default(),
         consumed_event_names,
         consumed_type_owners,
+        consumed_type_aliases,
     }
 }
 
@@ -2184,7 +2195,7 @@ fn rename_decl_refs(decl: &TypeDecl, subst: &HashMap<String, String>) -> TypeDec
 
 /// #2073: rename every user type `r` names, in place. Exhaustive over
 /// `TypeRef`, like [`crate::project_model::type_ref_names`].
-fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
+pub fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
     match r {
         TypeRef::Named(id) => {
             if let Some(to) = subst.get(&id.name) {

@@ -448,10 +448,6 @@
       "summary": "A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias."
     },
     {
-      "code": "bynk.consumes.type_alias_context",
-      "summary": "`consumes U { T as Alias }` aliased a type of a context; only a type exported by an adapter can be aliased."
-    },
-    {
       "code": "bynk.consumes.type_alias_repeated",
       "summary": "An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`."
     },
