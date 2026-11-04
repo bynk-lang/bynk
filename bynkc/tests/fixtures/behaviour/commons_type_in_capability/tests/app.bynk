@@ -1,0 +1,17 @@
+suite app
+
+case "a point is drawn" {
+	let _ <- Plot.draw(Point { x: 1, y: 2 })
+	expect Logger.info called once with msg == "1,2"
+	expect Plot.draw called once with p.x == 1
+}
+
+case "points are drawn together" {
+	let _ <- Plot.drawAll([Point { x: 1, y: 2 }], Some(Point { x: 3, y: 4 }))
+	expect Plot.drawAll called once
+}
+
+case "a refinement and an enum are painted" {
+	let _ <- Plot.paint(Label.of("a")?, Red)
+	expect Plot.paint called once
+}

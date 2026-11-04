@@ -1,0 +1,22 @@
+context app
+
+uses shapes
+consumes bynk { Logger }
+
+capability Plot {
+	fn draw(p: Point) -> Effect[()]
+	fn drawAll(ps: List[Point], first: Option[Point]) -> Effect[()]
+	fn paint(l: Label, c: Color) -> Effect[()]
+}
+
+provides Plot = LogPlot given Logger {
+	fn draw(p: Point) -> Effect[()] {
+		Logger.info("\(p.x),\(p.y)")
+	}
+	fn drawAll(ps: List[Point], first: Option[Point]) -> Effect[()] {
+		Logger.info("all")
+	}
+	fn paint(l: Label, c: Color) -> Effect[()] {
+		Logger.info("paint")
+	}
+}
