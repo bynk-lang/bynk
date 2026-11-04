@@ -5838,13 +5838,9 @@ fn check_cross_context_capability_call(
         .unwrap_or(tys.intern(Ty::Unit));
     let raw_ret = substitute(raw_ret, &subst, tys);
     let rebrand_types = rebrand_table(&ctx.input.types, &consumed_types);
-    if let Some(name) = rebrand_conflict(
-        raw_ret,
-        &consumed_types,
-        &rebrand_types,
-        &caller_types,
-        tys,
-    ) {
+    if let Some(name) =
+        rebrand_conflict(raw_ret, &consumed_types, &rebrand_types, &caller_types, tys)
+    {
         ctx.errors.push(rebranded_return_mismatch(
             &format!("{consumed}.{cap}.{}", method.name),
             &name,
@@ -6345,13 +6341,9 @@ fn check_cross_context_call(
     let raw_ret = resolve_type_ref(&service.return_type, &consumed_types, tys)
         .unwrap_or(tys.intern(Ty::Unit));
     let rebrand_types = rebrand_table(&ctx.input.types, &consumed_types);
-    if let Some(name) = rebrand_conflict(
-        raw_ret,
-        &consumed_types,
-        &rebrand_types,
-        &caller_types,
-        tys,
-    ) {
+    if let Some(name) =
+        rebrand_conflict(raw_ret, &consumed_types, &rebrand_types, &caller_types, tys)
+    {
         ctx.errors.push(rebranded_return_mismatch(
             &format!("{consumed}.{}", method.name),
             &name,
