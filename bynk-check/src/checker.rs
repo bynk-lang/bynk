@@ -4647,9 +4647,17 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 // variable of an enclosing generic call (`size([1, 2])` against
                 // `List[T]`) carries nothing yet: type the elements bottom-up
                 // and let the call unify `T` from the result.
-                let mut elem_ty: Option<TyId> =
-                    expected_elem.filter(|t| !contains_flexible_var(*t, &ctx.type_vars, tys));
+                let flexible =
+                    expected_elem.is_some_and(|t| contains_flexible_var(t, &ctx.type_vars, tys));
+                let mut elem_ty: Option<TyId> = expected_elem.filter(|_| !flexible);
+                // Elements that only take their type from context (`None`,
+                // `[]`, ...) wait for a sibling to supply it (`[None, Some(1)]`).
+                let mut deferred: Vec<&Expr> = Vec::new();
                 for e in elems {
+                    if flexible && elem_ty.is_none() && needs_expected_type(e) {
+                        deferred.push(e);
+                        continue;
+                    }
                     let Some(t) = type_of(e, elem_ty, ctx) else {
                         continue;
                     };
@@ -4668,6 +4676,24 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                             }
                         }
                         None => elem_ty = Some(t),
+                    }
+                }
+                for e in deferred {
+                    let Some(t) = type_of(e, elem_ty, ctx) else {
+                        continue;
+                    };
+                    if let Some(et) = elem_ty
+                        && !compatible(t, et, tys)
+                    {
+                        ctx.errors.push(CompileError::new(
+                            "bynk.types.list_element_mismatch",
+                            e.span,
+                            format!(
+                                "list element has type `{}`, but the list's element type is `{}`",
+                                t.display(tys),
+                                et.display(tys)
+                            ),
+                        ));
                     }
                 }
                 elem_ty.map(|t| tys.intern(Ty::List(t)))
