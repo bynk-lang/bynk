@@ -5287,6 +5287,15 @@ fn is_wire(e: &Expr) -> bool {
     matches!(e.kind, bynk_syntax::ast::ExprKind::Wire(_))
 }
 
+/// A rejected `Wire(inner)` argument still has its inner typed against
+/// `String`, as `check_address_args` does, so an unknown name inside it reports.
+fn type_wire_inner(e: &Expr, ctx: &mut Ctx) {
+    if let bynk_syntax::ast::ExprKind::Wire(inner) = &e.kind {
+        let string = ctx.tys.intern(Ty::Base(BaseType::String));
+        let _ = type_of(inner, Some(string), ctx);
+    }
+}
+
 fn reject_wire_args(svc: &str, addr: &str, args: &[Expr], ctx: &mut Ctx) {
     for a in args {
         if is_wire(a) {
@@ -5334,8 +5343,12 @@ fn check_address_args(
             // test file and the unit it tests are normally different files.
             .with_note("handler declared here"),
         );
-        for a in positional.iter().filter(|a| !is_wire(a)) {
-            let _ = type_of(a, None, ctx);
+        for a in positional {
+            if is_wire(a) {
+                type_wire_inner(a, ctx);
+            } else {
+                let _ = type_of(a, None, ctx);
+            }
         }
         return;
     }
@@ -5400,8 +5413,12 @@ fn check_event_address(
             )
             .with_note("deliver an event with `svc.event(e)`, or `svc.event(e, env)` to choose its envelope"),
         );
-        for a in args.iter().filter(|a| !is_wire(a)) {
-            let _ = type_of(a, None, ctx);
+        for a in args {
+            if is_wire(a) {
+                type_wire_inner(a, ctx);
+            } else {
+                let _ = type_of(a, None, ctx);
+            }
         }
         return;
     }
@@ -5432,6 +5449,7 @@ fn check_event_address(
         );
     }
     let payload = &args[0];
+    type_wire_inner(payload, ctx);
     if !is_wire(payload) {
         let expected = handler
             .params
@@ -5474,6 +5492,7 @@ fn check_event_address(
         return;
     };
     if is_wire(envelope) {
+        type_wire_inner(envelope, ctx);
         return;
     }
     let envelope_ref = TypeRef::Named(Ident {

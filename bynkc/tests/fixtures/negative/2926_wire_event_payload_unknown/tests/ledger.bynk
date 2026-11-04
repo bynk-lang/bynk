@@ -1,0 +1,6 @@
+// #2926: a `Wire` payload on an event address still types its inner.
+suite shop.ledger {
+  case "wire payload names an unknown binding" {
+    let _ <- OnPlaced.event(Wire(undefinedName))
+  }
+}

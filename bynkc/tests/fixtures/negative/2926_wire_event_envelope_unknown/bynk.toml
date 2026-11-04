@@ -1,0 +1,6 @@
+[project]
+name = "2052-test-event-unsubscribed"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

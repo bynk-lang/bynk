@@ -1,0 +1,13 @@
+context a.tick
+
+service sweep from cron {
+  on schedule("0 * * * *") (when: Int) -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}
+
+service packer from queue("packing") {
+  on message(job: String) -> Effect[QueueResult] {
+    Ack
+  }
+}
