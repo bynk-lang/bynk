@@ -53,9 +53,9 @@ function __bynkRecordDeps(deps: any, spec: Record<string, string[]>, obs: { log:
   return deps;
 }
 
-type __Crypto_digest_Call = { algorithm: __ns_bynk_crypto.Digest; data: globalThis.Uint8Array };
-type __Crypto_hmac_Call = { algorithm: __ns_bynk_crypto.Digest; key: globalThis.Uint8Array; data: globalThis.Uint8Array };
-type __Crypto_verifyHmac_Call = { algorithm: __ns_bynk_crypto.Digest; key: globalThis.Uint8Array; data: globalThis.Uint8Array; mac: globalThis.Uint8Array };
+type __Crypto_digest_Call = { algorithm: __ns_report.Digest; data: globalThis.Uint8Array };
+type __Crypto_hmac_Call = { algorithm: __ns_report.Digest; key: globalThis.Uint8Array; data: globalThis.Uint8Array };
+type __Crypto_verifyHmac_Call = { algorithm: __ns_report.Digest; key: globalThis.Uint8Array; data: globalThis.Uint8Array; mac: globalThis.Uint8Array };
 type __Crypto_equal_Call = { a: globalThis.Uint8Array; b: globalThis.Uint8Array };
 type __Crypto_importSigningKey_Call = { algorithm: __ns_bynk_crypto.Signature; pkcs8: globalThis.Uint8Array };
 type __Crypto_importVerifyKey_Call = { algorithm: __ns_bynk_crypto.Signature; key: globalThis.Uint8Array };
