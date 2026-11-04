@@ -4191,10 +4191,11 @@ fn block_body_lines(b: &Block, out: &mut String) {
 /// #2712: a lambda parameter as source — the author's record pattern when it
 /// has one (its hidden binder never prints), else the name and any annotation.
 fn lambda_param_src(p: &LambdaParam) -> String {
+    let name = if p.is_wildcard() { "_" } else { &p.name.name };
     match (&p.pattern, &p.type_ref) {
         (Some(pattern), _) => pattern_to_string(pattern),
-        (None, Some(tr)) => format!("{}: {}", p.name.name, type_ref_to_string(tr)),
-        (None, None) => p.name.name.clone(),
+        (None, Some(tr)) => format!("{name}: {}", type_ref_to_string(tr)),
+        (None, None) => name.to_string(),
     }
 }
 
@@ -4674,6 +4675,14 @@ mod tests {
 
     fn fmt(src: &str) -> String {
         format_source(src, &FormatOptions::default()).expect("format failed")
+    }
+
+    #[test]
+    fn wildcard_lambda_params_round_trip() {
+        let src = "commons x {\n\tfn f(r: Result[Int, String]) -> Result[Int, Int] {\n\t\tr.mapErr((_) => 0)\n\t}\n\n\tfn g(xs: List[Int]) -> Int {\n\t\txs.fold(0, (a, _) => a)\n\t}\n\n\tfn h(r: Result[Int, String]) -> Result[Int, Int] {\n\t\tr.mapErr((_: String) => 1)\n\t}\n\n\tfn k(f: (Int, Int) -> Int) -> Int {\n\t\tf(1, 2)\n\t}\n\n\tfn m() -> Int {\n\t\tk((_, _) => 1)\n\t}\n}\n";
+        let out = fmt(src);
+        assert_eq!(out, src);
+        assert_eq!(fmt(&out), out);
     }
 
     #[test]

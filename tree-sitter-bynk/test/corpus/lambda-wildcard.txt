@@ -1,0 +1,33 @@
+================================================================================
+wildcard lambda parameters (#2896)
+================================================================================
+
+commons c
+
+fn f() -> Int {
+  g((a, _) => a, (_: Int) => 1)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (base_type)
+      (block
+        (call
+          (identifier)
+          (lambda_expr
+            (lambda_param
+              (identifier))
+            (lambda_param
+              (wildcard))
+            (identifier))
+          (lambda_expr
+            (lambda_param
+              (wildcard)
+              (base_type))
+            (number_literal)))))))
