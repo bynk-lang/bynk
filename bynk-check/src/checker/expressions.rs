@@ -1480,7 +1480,7 @@ pub(crate) fn check_lambda(
                             p.span,
                             format!(
                                 "lambda parameter `{}` is annotated `{}`, but `{}` is expected here",
-                                p.name.name,
+                                if p.is_wildcard() { "_" } else { &p.name.name },
                                 annotated.display(tys),
                                 ep.display(tys)
                             ),
@@ -1491,7 +1491,7 @@ pub(crate) fn check_lambda(
                 None => {
                     // v0.27 (ADR 0056): a param typed from the expected fn
                     // type gets an inferred-type inlay hint at its name.
-                    if p.name.name != "_" && p.pattern.is_none() {
+                    if !p.is_wildcard() && p.pattern.is_none() {
                         ctx.hints
                             .record(p.name.span, format!(": {}", ep.display(tys)));
                     }
@@ -1546,7 +1546,7 @@ pub(crate) fn check_lambda(
                             p.span,
                             format!(
                                 "lambda parameter `{}` needs a type annotation — no function type is expected here to infer it from",
-                                p.name.name
+                                if p.is_wildcard() { "_" } else { &p.name.name }
                             ),
                         )
                         .with_note("annotate the parameter (e.g. `(x: Int) => …`), or pass the lambda where a function type is expected"),
@@ -1564,7 +1564,7 @@ pub(crate) fn check_lambda(
     for (p, ty) in lambda.params.iter().zip(&param_tys) {
         // #2712: a pattern parameter's hidden binder is not the author's name;
         // the names its pattern binds are recorded by the desugared `let`.
-        if p.name.name != "_" && p.pattern.is_none() {
+        if !p.is_wildcard() && p.pattern.is_none() {
             ctx.locals.record(
                 p.name.name.clone(),
                 p.name.span,

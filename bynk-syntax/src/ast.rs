@@ -2913,7 +2913,9 @@ pub const LAMBDA_ARG_BINDER_PREFIX: &str = "__lambdaArg";
 pub const LAMBDA_WILDCARD_PREFIX: &str = "__wild";
 
 impl LambdaParam {
-    /// #2896: whether this is a `_` parameter.
+    /// #2896: whether this is a `_` parameter. Keyed on the hidden prefix,
+    /// which no user identifier can start with (identifiers do not begin with
+    /// `_`); any new generated name must not reuse `__wild`.
     pub fn is_wildcard(&self) -> bool {
         self.pattern.is_none() && self.name.name.starts_with(LAMBDA_WILDCARD_PREFIX)
     }

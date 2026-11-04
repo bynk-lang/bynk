@@ -445,10 +445,10 @@ impl Lin<'_> {
                 let saved: Vec<(String, Option<Held>)> = lam
                     .params
                     .iter()
-                    .filter(|p| p.name.name != "_")
+                    .filter(|p| !p.is_wildcard())
                     .map(|p| (p.name.name.clone(), state.get(&p.name.name).copied()))
                     .collect();
-                if let Some(last) = lam.params.iter().rev().find(|p| p.name.name != "_") {
+                if let Some(last) = lam.params.iter().rev().find(|p| !p.is_wildcard()) {
                     state.insert(last.name.name.clone(), Held::Borrowed);
                 }
                 self.walk_expr(&lam.body, state);

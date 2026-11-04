@@ -32,6 +32,10 @@ fn total(items: List[Item]) -> Int {
 fn viaApply(items: List[Item]) -> List[Int] {
   apply(items, (Item { qty, .. }) => qty)
 }
+
+fn ignoring(items: List[Item]) -> Int {
+  items.fold(0, (acc, _) => acc)
+}
 ";
 
 const PATH: &str = "demo/items.bynk";
@@ -96,7 +100,7 @@ fn hover_at(r: &bynk_ide::ProjectDiagnostics, root: &Path, offset: usize) -> Opt
 }
 
 fn is_hidden(text: &str) -> bool {
-    text.contains("__lambdaArg") || text.contains("__letElse")
+    text.contains("__lambdaArg") || text.contains("__letElse") || text.contains("__wild")
 }
 
 #[test]
@@ -293,5 +297,25 @@ fn d() -> Int {
             "{}: empty primary span",
             e.category
         );
+    }
+}
+
+#[test]
+fn a_wildcard_parameter_is_no_local_and_no_offset_hovers_it() {
+    let (result, root) = analyse_in("wildcard");
+    let locals = result
+        .locals
+        .get(&PathBuf::from(PATH))
+        .expect("the file has locals");
+    assert!(
+        locals.iter().all(|l| !is_hidden(&l.name)),
+        "a wildcard parameter must not be a local: {locals:?}"
+    );
+    let start = offset_of("items.fold(0, (acc, _)", 0);
+    let end = start + SRC[start..].find('\n').unwrap();
+    for at in start..end {
+        if let Some(h) = hover_at(&result, &root, at) {
+            assert!(!is_hidden(&h), "hover at {at} names the wildcard: {h}");
+        }
     }
 }

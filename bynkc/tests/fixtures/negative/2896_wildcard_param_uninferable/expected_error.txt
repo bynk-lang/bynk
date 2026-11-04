@@ -1,0 +1,2 @@
+bynk.lambda.unannotated_param
+lambda parameter `_` needs a type annotation

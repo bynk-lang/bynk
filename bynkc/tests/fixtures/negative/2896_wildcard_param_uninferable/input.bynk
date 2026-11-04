@@ -1,0 +1,6 @@
+commons demo {
+  fn f() -> Int {
+    let g = (_) => 1
+    1
+  }
+}
