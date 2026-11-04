@@ -3358,6 +3358,57 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
     }
 }
 
+/// Merge two list element types that may still mention flexible variables of
+/// an enclosing generic call (`Result[Int, E]` and `Result[Int, String]` give
+/// `Result[Int, String]`). `None` when their concrete parts disagree.
+fn merge_open(a: TyId, b: TyId, rigid: &HashSet<String>, tys: &Types) -> Option<TyId> {
+    if a == b {
+        return Some(a);
+    }
+    let flex = |t: TyId| matches!(&*tys.get(t), Ty::Var(n) if !rigid.contains(n));
+    if flex(a) {
+        return Some(b);
+    }
+    if flex(b) {
+        return Some(a);
+    }
+    let (ta, tb) = ((*tys.get(a)).clone(), (*tys.get(b)).clone());
+    let merged = match (ta, tb) {
+        (Ty::Option(x), Ty::Option(y)) => Ty::Option(merge_open(x, y, rigid, tys)?),
+        (Ty::List(x), Ty::List(y)) => Ty::List(merge_open(x, y, rigid, tys)?),
+        (Ty::Set(x), Ty::Set(y)) => Ty::Set(merge_open(x, y, rigid, tys)?),
+        (Ty::HttpResult(x), Ty::HttpResult(y)) => Ty::HttpResult(merge_open(x, y, rigid, tys)?),
+        (Ty::Result(x1, e1), Ty::Result(x2, e2)) => Ty::Result(
+            merge_open(x1, x2, rigid, tys)?,
+            merge_open(e1, e2, rigid, tys)?,
+        ),
+        (Ty::Map(k1, v1), Ty::Map(k2, v2)) => Ty::Map(
+            merge_open(k1, k2, rigid, tys)?,
+            merge_open(v1, v2, rigid, tys)?,
+        ),
+        (
+            Ty::Named {
+                name: n1,
+                kind,
+                args: a1,
+            },
+            Ty::Named {
+                name: n2, args: a2, ..
+            },
+        ) if n1 == n2 && a1.len() == a2.len() => Ty::Named {
+            name: n1,
+            kind,
+            args: a1
+                .iter()
+                .zip(&a2)
+                .map(|(x, y)| merge_open(*x, *y, rigid, tys))
+                .collect::<Option<Vec<_>>>()?,
+        },
+        _ => return compatible(a, b, tys).then_some(a),
+    };
+    Some(tys.intern(merged))
+}
+
 /// v0.20b: does `t` contain a type variable that is NOT one of the enclosing
 /// function's rigid type parameters? Rigid vars are fully constrained inside
 /// the body; only flexible (call-site instantiation) vars mean "still being
@@ -4647,9 +4698,17 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 // variable of an enclosing generic call (`size([1, 2])` against
                 // `List[T]`) carries nothing yet: type the elements bottom-up
                 // and let the call unify `T` from the result.
-                let mut elem_ty: Option<TyId> =
-                    expected_elem.filter(|t| !contains_flexible_var(*t, &ctx.type_vars, tys));
+                let flexible =
+                    expected_elem.is_some_and(|t| contains_flexible_var(t, &ctx.type_vars, tys));
+                let mut elem_ty: Option<TyId> = expected_elem.filter(|_| !flexible);
+                // Elements that only take their type from context (`None`,
+                // `[]`, ...) wait for a sibling to supply it (`[None, Some(1)]`).
+                let mut deferred: Vec<&Expr> = Vec::new();
                 for e in elems {
+                    if flexible && elem_ty.is_none() && needs_expected_type(e) {
+                        deferred.push(e);
+                        continue;
+                    }
                     let Some(t) = type_of(e, elem_ty, ctx) else {
                         continue;
                     };
@@ -4665,6 +4724,35 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                         et.display(tys)
                                     ),
                                 ));
+                            }
+                        }
+                        None => elem_ty = Some(t),
+                    }
+                }
+                for e in deferred {
+                    // No sibling supplied a type: the first deferred element
+                    // falls back to the flexible expected one, which the call
+                    // then unifies (or reports as uninferable).
+                    let want = elem_ty.or(expected_elem);
+                    let Some(t) = type_of(e, want, ctx) else {
+                        continue;
+                    };
+                    match elem_ty {
+                        Some(et) => {
+                            // A sibling still mentioning a flexible variable
+                            // (`Result[Int, E]`) is merged rather than
+                            // compared by name; the call unifies the result.
+                            match merge_open(et, t, &ctx.type_vars, tys) {
+                                Some(m) => elem_ty = Some(m),
+                                None => ctx.errors.push(CompileError::new(
+                                    "bynk.types.list_element_mismatch",
+                                    e.span,
+                                    format!(
+                                        "list element has type `{}`, but the list's element type is `{}`",
+                                        t.display(tys),
+                                        et.display(tys)
+                                    ),
+                                )),
                             }
                         }
                         None => elem_ty = Some(t),

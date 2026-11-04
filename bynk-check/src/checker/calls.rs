@@ -6359,6 +6359,147 @@ mod tests {
     }
 
     #[test]
+    fn a_some_argument_infers_the_type_argument() {
+        let a = commons(
+            "fn size[T](xs: List[Option[T]]) -> Int { 0 }\n\n\
+             fn one[T](x: Option[T]) -> Int { 0 }\n\n\
+             fn s() -> Int { size([None, Some(1)]) }\n\n\
+             fn t() -> Int { one(Some(\"a\")) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
+    fn ok_and_err_arguments_infer_the_type_arguments() {
+        let a = commons(
+            "fn okay[T](x: Result[T, String]) -> Int { 0 }\n\n\
+             fn bad[E](x: Result[Int, E]) -> Int { 0 }\n\n\
+             fn s() -> Int { okay(Ok(1)) }\n\n\
+             fn t() -> Int { bad(Err(\"x\")) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
+    fn a_mixed_some_list_in_a_generic_call_still_reports() {
+        let a = commons(
+            "fn size[T](xs: List[Option[T]]) -> Int { 0 }\n\n\
+             fn bad() -> Int { size([None, Some(1), Some(\"a\")]) }\n",
+        );
+        a.assert_reports("bynk.types.some_value_mismatch");
+    }
+
+    #[test]
+    fn an_all_deferred_list_does_not_come_back_untyped() {
+        let a = commons(
+            "fn size[T](xs: List[Option[T]]) -> Int { 0 }\n\n\
+             fn s() -> Int { size([None]) }\n",
+        );
+        let b = commons(
+            "fn size[T](xs: List[Option[T]]) -> Int { 0 }\n\n\
+             fn s() -> Int { size([]) }\n",
+        );
+        // An all-deferred list types as `List[Option[T]]` and leaves `T`
+        // unsolved, exactly as the empty `size([])` already does.
+        a.assert_clean();
+        b.assert_clean();
+    }
+
+    #[test]
+    fn an_http_result_ok_argument_infers_the_type_argument() {
+        let a = commons(
+            "fn h[T](x: HttpResult[T]) -> Int { 0 }\n\n\
+             fn s() -> Int { h(Ok(1)) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
+    fn a_context_typed_payload_inside_some_ok_and_err_keeps_its_context() {
+        let a = commons(
+            "fn one[T](x: Option[Option[T]]) -> Int { 0 }\n\n\
+             fn two[T](x: Option[List[T]]) -> Int { 0 }\n\n\
+             fn three[T](x: Result[Option[T], String]) -> Int { 0 }\n\n\
+             fn four[T](x: Result[Int, Option[T]]) -> Int { 0 }\n\n\
+             fn s() -> Int { one(Some(None)) }\n\n\
+             fn t() -> Int { two(Some([])) }\n\n\
+             fn u() -> Int { three(Ok(None)) }\n\n\
+             fn v() -> Int { four(Err(None)) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
+    fn a_lambda_payload_inside_some_and_ok_keeps_its_parameter_types() {
+        let a = commons(
+            "fn ap[T](f: Option[(Int) -> T]) -> Int { 0 }\n\n\
+             fn bp[T](f: Result[(Int) -> T, String]) -> Int { 0 }\n\n\
+             fn s() -> Int { ap(Some((x) => x + 1)) }\n\n\
+             fn t() -> Int { bp(Ok((x) => x + 1)) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
+    fn mixed_deferred_ok_and_err_elements_infer_both_type_arguments() {
+        let a = commons(
+            "fn size[T, E](xs: List[Result[T, E]]) -> Int { 0 }\n\n\
+             fn s() -> Int { size([Ok(1), Err(\"x\")]) }\n\n\
+             fn t() -> Int { size([Err(\"x\"), Ok(1)]) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
+    fn mixed_deferred_result_elements_that_disagree_still_report() {
+        for list in [
+            "[Ok(1), Err(\"x\"), Err(2)]",
+            "[Err(\"x\"), Ok(1), Ok(\"a\")]",
+        ] {
+            let a = commons(&format!(
+                "fn size[T, E](xs: List[Result[T, E]]) -> Int {{ 0 }}\n\n\
+                 fn bad() -> Int {{ size({list}) }}\n"
+            ));
+            // Once a sibling has refined the element type, a later one is
+            // checked against it (`Err(2)` against `Result[Int, String]`).
+            assert!(
+                a.categories().iter().any(|c| matches!(
+                    *c,
+                    "bynk.types.list_element_mismatch"
+                        | "bynk.types.err_value_mismatch"
+                        | "bynk.types.ok_value_mismatch"
+                )),
+                "{list} should report, got {:?}",
+                a.categories()
+            );
+        }
+    }
+
+    #[test]
+    fn mixed_deferred_elements_solve_the_type_arguments_they_supply() {
+        let a = commons(
+            "fn first_err[T, E](xs: List[Result[T, E]]) -> Option[E] { None }\n\n\
+             fn s() -> Option[String] { first_err([Ok(1), Err(\"x\")]) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
+    fn a_concrete_some_mismatch_still_reports() {
+        let a = commons("fn f() -> Int { let x: Option[Int] = Some(\"a\")\n 0 }\n");
+        a.assert_reports("bynk.types.some_value_mismatch");
+    }
+
+    #[test]
+    fn a_some_argument_conflicting_with_a_bound_type_argument_still_reports() {
+        let a = commons(
+            "fn two[T](a: Option[T], b: Option[T]) -> Int { 0 }\n\n\
+             fn bad() -> Int { two(Some(1), Some(\"x\")) }\n",
+        );
+        a.assert_reports("bynk.types.some_value_mismatch");
+    }
+
+    #[test]
     fn a_generic_call_binding_one_type_argument_two_ways_is_a_conflict() {
         let a =
             commons("fn both[A](x: A, y: A) -> A { x }\n\nfn bad() -> Int { both(1, \"two\") }\n");
