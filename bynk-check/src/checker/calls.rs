@@ -779,7 +779,9 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
     let mut missing: Vec<String> = Vec::new();
     for c in &callee.given {
         let key = c.key().to_string();
-        if ctx.caps.capabilities.contains_key(&key) {
+        // `given_remaining` holds every declared key, including a consumed
+        // context's (`given B.Cap`), which has no `capabilities` entry.
+        if ctx.caps.given_remaining.contains(&key) {
             ctx.caps.given_used.insert(key);
         } else if !missing.contains(&c.display_name()) {
             missing.push(c.display_name());
@@ -814,6 +816,9 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
         // A suite helper is not a context function, so it cannot declare
         // `given` to pass the capabilities on.
         "a suite helper has no capabilities of its own to pass on: call it from a `case`, which gets the target's capabilities as its handlers do, or take the operation as a function parameter".to_string()
+    } else if ctx.caps.given_anchor.is_none() && ctx.caps.given_entries.is_empty() {
+        // A method, a pure function or a lambda in one cannot declare `given`.
+        "this body cannot declare `given`: take the operation as a function parameter, or call it from a handler or a context function that declares `given`".to_string()
     } else {
         format!(
             "a capability never appears in a body without appearing in the signature of every handler and function on the path to it: add `{list}` to the caller's `given` clause"

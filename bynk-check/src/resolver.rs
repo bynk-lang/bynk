@@ -1676,7 +1676,21 @@ fn check_fn_refs(
     errors: &mut Sinks,
 ) {
     // #2868: a `given` function reaches the capabilities it names.
-    let caps: HashSet<String> = f.given.iter().map(|g| g.key().to_string()).collect();
+    // A consumed context's capability is reached as `B.Cap.op(…)`, so the
+    // leading segment of its prefix is a name in scope too; the checker
+    // resolves the whole chain.
+    let caps: HashSet<String> = f
+        .given
+        .iter()
+        .flat_map(|g| {
+            let lead = g
+                .context
+                .as_ref()
+                .and_then(|q| q.parts.first())
+                .map(|p| p.name.clone());
+            std::iter::once(g.key().to_string()).chain(lead)
+        })
+        .collect();
     // Parameter types resolve.
     // v0.20a: the fn's type parameters are legal named references in its
     // own signature and body annotations.
