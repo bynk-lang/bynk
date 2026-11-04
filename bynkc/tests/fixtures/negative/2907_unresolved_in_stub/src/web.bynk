@@ -1,0 +1,13 @@
+context web
+
+consumes bynk { Fetch }
+
+service probe {
+	on call(url: String) -> Effect[Int] given Fetch {
+		let r <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })
+		match r {
+			Ok(resp) => Effect.pure(resp.status)
+			Err(_) => Effect.pure(0)
+		}
+	}
+}

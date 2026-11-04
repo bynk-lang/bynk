@@ -685,6 +685,10 @@ pub(crate) fn emit_worker_entry(
     // #2719: whether any of this context's service handlers hands work to the
     // execution context, from the checker's needs-context set.
     ctx_uses_send: bool,
+    // #2903: the context's own types plus those of the commons it `uses`, so a
+    // query field typed by an imported refined type or enum resolves to its real
+    // wire kind rather than falling through to `string`.
+    visible_types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
 ) -> TsProgram {
     let mut program = TsProgram::new();
     // Which conditional runtime helpers the entry's own inbound/outbound codecs
@@ -780,7 +784,7 @@ pub(crate) fn emit_worker_entry(
             if let bynk_ir::IrHandlerKind::Http { method, path } =
                 bynk_lower::lower_handler_kind_ir(&h.kind)
             {
-                let query_fields = query_field_specs(h, &path, &table.types);
+                let query_fields = query_field_specs(h, &path, visible_types);
                 http_routes.push(HttpRoute {
                     service: (*sname).clone(),
                     method,

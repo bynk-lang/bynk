@@ -9364,6 +9364,15 @@
                   {
                     "type": "SYMBOL",
                     "name": "_contextual_identifier"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "STRING",
+                      "value": "_"
+                    },
+                    "named": true,
+                    "value": "wildcard"
                   }
                 ]
               }

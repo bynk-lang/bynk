@@ -1,0 +1,7 @@
+context demo
+
+service api {
+  on call post(amount: Int) -> Effect[Int] {
+    Effect.pure(amount)
+  }
+}

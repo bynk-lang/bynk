@@ -2917,6 +2917,22 @@ pub struct LambdaParam {
 /// with a user identifier.
 pub const LAMBDA_ARG_BINDER_PREFIX: &str = "__lambdaArg";
 
+/// #2896: the prefix of the hidden name a wildcard lambda parameter (`_`) is
+/// given — `__wild<offset>`, with an empty span at the `_`. The parameter takes
+/// its type from the expected function type like a named one; the unique name
+/// keeps `(_, _) => …` from emitting duplicate TS identifiers, and no user
+/// identifier can spell it, so nothing in the body can refer to it.
+pub const LAMBDA_WILDCARD_PREFIX: &str = "__wild";
+
+impl LambdaParam {
+    /// #2896: whether this is a `_` parameter. Keyed on the hidden prefix,
+    /// which no user identifier can start with (identifiers do not begin with
+    /// `_`); any new generated name must not reuse `__wild`.
+    pub fn is_wildcard(&self) -> bool {
+        self.pattern.is_none() && self.name.name.starts_with(LAMBDA_WILDCARD_PREFIX)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FnDecl {
     /// v0.20a: `[A, B]` type parameters; empty for non-generic functions.

@@ -119,6 +119,9 @@ pub struct ResolvedStub {
     /// #2850: parallel to `clauses` — the `fixture`s of the suite declaring each
     /// clause, which its values and argument patterns may name.
     pub clause_fixtures: Vec<Vec<FixtureDecl>>,
+    /// #2907: parallel to `clauses` — the helper `fn`s of the suite declaring
+    /// each clause, which its values and argument patterns may call.
+    pub clause_fns: Vec<Vec<FnDecl>>,
     /// The test file declaring the first clause — the recording context for
     /// edges in its value expressions (v0.25).
     ///
@@ -317,7 +320,14 @@ fn resolve_stubs(
     // Collect clauses tagged with the declaring file and the cases each
     // applies to. Case-scoped first so they precede suite-scoped clauses in
     // each capability's match order.
-    let mut collected: Vec<(StubClause, StubScope, PathBuf, Vec<FixtureDecl>)> = Vec::new();
+    type Collected = (
+        StubClause,
+        StubScope,
+        PathBuf,
+        Vec<FixtureDecl>,
+        Vec<FnDecl>,
+    );
+    let mut collected: Vec<Collected> = Vec::new();
     for &i in indices {
         let Some(t) = parsed[i].test() else { continue };
         for case in &t.cases {
@@ -327,6 +337,7 @@ fn resolve_stubs(
                     StubScope::Case(case.name.clone()),
                     parsed[i].identity_path(),
                     t.fixtures.clone(),
+                    t.fns.clone(),
                 ));
             }
         }
@@ -350,6 +361,7 @@ fn resolve_stubs(
                 scope.clone(),
                 parsed[i].identity_path(),
                 t.fixtures.clone(),
+                t.fns.clone(),
             ));
         }
     }
@@ -370,7 +382,7 @@ fn resolve_stubs(
     };
 
     let mut out: HashMap<String, ResolvedStub> = HashMap::new();
-    for (pc, scope, identity_path, fixtures) in collected {
+    for (pc, scope, identity_path, fixtures, fns) in collected {
         let cap_name = pc.capability.name.clone();
         let Some(cap_decl) = resolve_cap(&cap_name) else {
             // Commons have no seams at all; contexts may still name a
@@ -443,11 +455,13 @@ fn resolve_stubs(
             clauses: Vec::new(),
             clause_scopes: Vec::new(),
             clause_fixtures: Vec::new(),
+            clause_fns: Vec::new(),
             identity_path: identity_path.clone(),
         });
         entry.clauses.push(pc);
         entry.clause_scopes.push(scope);
         entry.clause_fixtures.push(fixtures);
+        entry.clause_fns.push(fns);
     }
     out
 }
@@ -886,18 +900,36 @@ pub fn phase_integration_bodies(
                 &mut LocalsSink::new(),
                 tys,
             );
+            // #2906: a suite mixing `system` with lower tiers is already
+            // `bynk.tier.mixed_system_suite`. Its lower-tier cases have no
+            // harness to run in, so checking them against the harness view
+            // would only add false errors (a consumed capability read as
+            // "not a seam"); the tier error stands for them.
+            let suite_has_system = d.tier == Some(bynk_syntax::ast::TestTier::System)
+                || d.cases
+                    .iter()
+                    .any(|c| case_effective_tier(c, d) == bynk_syntax::ast::TestTier::System);
             for case in &d.cases {
-                let (_, case_callees) = typecheck_integration_case_body(
-                    &participants,
-                    &view,
-                    SuiteItems::of(d),
-                    case,
-                    &cross_context,
-                    unit_tables,
-                    &mut body_errs,
-                    refs,
-                    tys,
-                );
+                let unchecked = suite_has_system
+                    && case_effective_tier(case, d) != bynk_syntax::ast::TestTier::System;
+                // The tier gates below still run on such a case; only its
+                // body type-check, which has no harness to run in, is skipped.
+                let case_callees = if unchecked {
+                    Default::default()
+                } else {
+                    typecheck_integration_case_body(
+                        &participants,
+                        &view,
+                        SuiteItems::of(d),
+                        case,
+                        &cross_context,
+                        unit_tables,
+                        &mut body_errs,
+                        refs,
+                        tys,
+                    )
+                    .1
+                };
                 check_faults_tier(case, case_effective_tier(case, d), &mut body_errs);
                 check_snapshot_placement(case, true, &mut body_errs);
                 check_event_address_tier(
@@ -1389,9 +1421,11 @@ fn check_test_bodies(
                 else {
                     continue;
                 };
-                // #2850: the declaring suite's fixtures are in scope in its
-                // clauses' values.
-                let clause_view = if rp.clause_fixtures[clause_idx].is_empty() {
+                // #2850/#2907: the declaring suite's fixtures and helpers are
+                // in scope in its clauses' values.
+                let clause_view = if rp.clause_fixtures[clause_idx].is_empty()
+                    && rp.clause_fns[clause_idx].is_empty()
+                {
                     None
                 } else {
                     build_privileged_resolved(
@@ -1405,7 +1439,7 @@ fn check_test_bodies(
                         add_suite_fns(
                             &mut view,
                             SuiteItems {
-                                fns: &[],
+                                fns: &rp.clause_fns[clause_idx],
                                 fixtures: &rp.clause_fixtures[clause_idx],
                             },
                         );
@@ -1414,7 +1448,24 @@ fn check_test_bodies(
                 };
                 let resolved = clause_view.as_ref().unwrap_or(resolved);
                 let check_value = |e: &Expr, errors: &mut Vec<CompileError>| {
-                    if !stub_value_typechecks(e, op, resolved, tys) {
+                    let errs = stub_value_errors(e, op, resolved, tys);
+                    if errs.is_empty() {
+                        return;
+                    }
+                    // #2907: a name the value cannot resolve is that, not a
+                    // mismatch with the operation's return type.
+                    let unresolved: Vec<CompileError> = errs
+                        .into_iter()
+                        .filter(|e| {
+                            matches!(
+                                e.category,
+                                "bynk.resolve.unknown_name" | "bynk.resolve.unknown_function"
+                            )
+                        })
+                        .collect();
+                    if !unresolved.is_empty() {
+                        errors.extend(unresolved);
+                    } else {
                         errors.push(CompileError::new(
                             "bynk.stub.rhs_type",
                             e.span,
@@ -1800,30 +1851,30 @@ pub fn value_block(e: &Expr) -> Block {
 
 /// v0.118: whether a `stub` value expression type-checks against the
 /// overridden capability op's declared return type (best-effort — a throwaway
-/// check against the target's privileged view). A mismatch drives
-/// `bynk.stub.rhs_type`.
-fn stub_value_typechecks(
+/// check against the target's privileged view). Any error drives
+/// `bynk.stub.rhs_type`, but for an unresolved name (#2907).
+fn stub_value_errors(
     e: &Expr,
     op: &CapabilityOp,
     resolved: &ResolvedCommons,
     tys: &Arc<Types>,
-) -> bool {
-    value_typechecks(e, &op.return_type, &op.params, resolved, tys)
+) -> Vec<CompileError> {
+    value_errors(e, &op.return_type, &op.params, resolved, tys)
 }
 
 /// #2683: whether a `stub … after <d>` duration is a `Duration`.
 pub fn stub_after_typechecks(e: &Expr, resolved: &ResolvedCommons, tys: &Arc<Types>) -> bool {
     let duration = TypeRef::Effect(Box::new(TypeRef::Base(BaseType::Duration, e.span)), e.span);
-    value_typechecks(e, &duration, &[], resolved, tys)
+    value_errors(e, &duration, &[], resolved, tys).is_empty()
 }
 
-fn value_typechecks(
+fn value_errors(
     e: &Expr,
     return_type: &TypeRef,
     params: &[Param],
     resolved: &ResolvedCommons,
     tys: &Arc<Types>,
-) -> bool {
+) -> Vec<CompileError> {
     let block = value_block(e);
     let mut expr_types: HashMap<ExprId, checker::TypedExpr> = HashMap::new();
     let mut callees: HashMap<ExprId, checker::Callee> = HashMap::new();
@@ -1842,7 +1893,7 @@ fn value_typechecks(
             callees: &mut callees,
         },
     );
-    errs.is_empty()
+    errs
 }
 
 /// Slice C: whether a `case` body uses a `Wire(…)` raw argument anywhere. A

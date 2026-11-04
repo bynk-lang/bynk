@@ -1,0 +1,2 @@
+bynk.parse.reserved_keyword
+`record` is a reserved keyword and can't name an agent operation

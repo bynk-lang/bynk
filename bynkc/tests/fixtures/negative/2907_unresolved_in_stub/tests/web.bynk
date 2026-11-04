@@ -1,0 +1,7 @@
+suite web {
+	case "unresolved name" {
+		stub Fetch.send(_) returns Ok(nothing(200))
+		let s <- probe.call("https://x")
+		expect s == 200
+	}
+}

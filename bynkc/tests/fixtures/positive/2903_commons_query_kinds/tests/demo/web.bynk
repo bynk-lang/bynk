@@ -1,0 +1,6 @@
+suite demo.web {
+	case "a commons-typed query reaches the handler" {
+		let r <- api.GET("/n", Q { n: 2, s: Speed.Fast }) by Visitor
+		expect r is Ok("2")
+	}
+}
