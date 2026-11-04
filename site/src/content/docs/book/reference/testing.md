@@ -884,7 +884,8 @@ case "an issue event is recorded" {
 ```
 
 - **Every tier.** A helper is callable from a `case` or `property` at `unit`,
-  `integration` and `system`, and from the other helpers of its suite.
+  `integration` and `system`, from the other helpers of its suite, and in the
+  value of a `stub … returns`, such as `stub Fetch.send(_) returns reply(200)`.
 - **Test-only.** A helper is checked in the suite's view and emitted into the
   test module alone. The deployable output is the same with or without it, and a
   helper adds nothing to the target's surface. So a helper may use what a test
