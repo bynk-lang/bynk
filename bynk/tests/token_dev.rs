@@ -5,7 +5,8 @@
 //! guide documents (`bynk dev -- --var NAME:value`), mints tokens with the real
 //! `bynk token` from the same secret in the environment, and calls the
 //! `Reader` actor's `/me` route: a plain token is `200`, `--expired` and
-//! `--not-before 10m` are `401`, and a request with no token is `401`.
+//! `--not-before 10m` are `401`, as are a token signed with another secret and a
+//! request with no token.
 //!
 //! Skipped when `node`, or both `wrangler` and `npx`, are unavailable; a
 //! non-empty `BYNK_REQUIRE_WORKERD` turns the skip into a failure, as for the
@@ -109,12 +110,16 @@ fn get_within(port: u16, path: &str, bearer: Option<&str>) -> String {
 
 /// Mint with the real `bynk token`, signing with `SECRET` from the environment.
 fn mint(bynk: &Path, project: &Path, extra: &[&str]) -> String {
+    mint_with(bynk, project, SECRET, extra)
+}
+
+fn mint_with(bynk: &Path, project: &Path, secret: &str, extra: &[&str]) -> String {
     let out = Command::new(bynk)
         .args(["token", "Reader", "--sub", "me"])
         .args(extra)
         .arg("--input")
         .arg(project)
-        .env("READER_SECRET", SECRET)
+        .env("READER_SECRET", secret)
         .output()
         .expect("run bynk token");
     assert!(
@@ -193,8 +198,12 @@ fn a_minted_token_is_accepted_and_expired_or_not_yet_valid_ones_are_refused() {
     let reply = get_within(port, "/me", Some(&early));
     assert!(status(&reply).contains(" 401"), "--not-before 10m: {reply}");
 
-    // No token at all is refused: the 200 above is the Worker verifying the
-    // signature, not accepting any bearer.
+    // Signed with another secret: refused, so the 200 above is the Worker
+    // verifying the signature, not just checking `exp`/`nbf`.
+    let forged = mint_with(&bynk, &proj, "wrong-secret", &[]);
+    let reply = get_within(port, "/me", Some(&forged));
+    assert!(status(&reply).contains(" 401"), "wrong secret: {reply}");
+
     let reply = get_within(port, "/me", None);
     assert!(status(&reply).contains(" 401"), "no token: {reply}");
 
