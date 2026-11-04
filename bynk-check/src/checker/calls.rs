@@ -6333,6 +6333,41 @@ mod tests {
     }
 
     #[test]
+    fn a_mixed_some_list_in_a_generic_call_still_reports() {
+        let a = commons(
+            "fn size[T](xs: List[Option[T]]) -> Int { 0 }\n\n\
+             fn bad() -> Int { size([None, Some(1), Some(\"a\")]) }\n",
+        );
+        a.assert_reports("bynk.types.some_value_mismatch");
+    }
+
+    #[test]
+    fn an_all_deferred_list_does_not_come_back_untyped() {
+        let a = commons(
+            "fn size[T](xs: List[Option[T]]) -> Int { 0 }\n\n\
+             fn s() -> Int { size([None]) }\n",
+        );
+        let b = commons(
+            "fn size[T](xs: List[Option[T]]) -> Int { 0 }\n\n\
+             fn s() -> Int { size([]) }\n",
+        );
+        // An all-deferred list types as `List[Option[T]]` and leaves `T`
+        // unsolved, exactly as the empty `size([])` already does.
+        a.assert_clean();
+        b.assert_clean();
+        a.assert_reports("bynk.generics.uninferable_type_arg");
+    }
+
+    #[test]
+    fn an_http_result_ok_argument_infers_the_type_argument() {
+        let a = commons(
+            "fn h[T](x: HttpResult[T]) -> Int { 0 }\n\n\
+             fn s() -> Int { h(Ok(1)) }\n",
+        );
+        a.assert_clean();
+    }
+
+    #[test]
     fn a_concrete_some_mismatch_still_reports() {
         let a = commons("fn f() -> Int { let x: Option[Int] = Some(\"a\")\n 0 }\n");
         a.assert_reports("bynk.types.some_value_mismatch");

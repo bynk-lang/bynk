@@ -4679,21 +4679,28 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     }
                 }
                 for e in deferred {
-                    let Some(t) = type_of(e, elem_ty, ctx) else {
+                    // No sibling supplied a type: the first deferred element
+                    // falls back to the flexible expected one, which the call
+                    // then unifies (or reports as uninferable).
+                    let want = elem_ty.or(expected_elem);
+                    let Some(t) = type_of(e, want, ctx) else {
                         continue;
                     };
-                    if let Some(et) = elem_ty
-                        && !compatible(t, et, tys)
-                    {
-                        ctx.errors.push(CompileError::new(
-                            "bynk.types.list_element_mismatch",
-                            e.span,
-                            format!(
-                                "list element has type `{}`, but the list's element type is `{}`",
-                                t.display(tys),
-                                et.display(tys)
-                            ),
-                        ));
+                    match &elem_ty {
+                        Some(et) => {
+                            if !compatible(t, *et, tys) {
+                                ctx.errors.push(CompileError::new(
+                                    "bynk.types.list_element_mismatch",
+                                    e.span,
+                                    format!(
+                                        "list element has type `{}`, but the list's element type is `{}`",
+                                        t.display(tys),
+                                        et.display(tys)
+                                    ),
+                                ));
+                            }
+                        }
+                        None => elem_ty = Some(t),
                     }
                 }
                 elem_ty.map(|t| tys.intern(Ty::List(t)))
