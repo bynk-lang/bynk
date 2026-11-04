@@ -4299,7 +4299,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             ctx.pattern_binding_types.insert(id.span, ty);
             ctx.bind(id.name.clone(), ty);
         }
-        Pattern::Literal { value, span } => {
+        Pattern::Literal { value, span, .. } => {
             if let Some(base) = literal_base_of(ty, tys) {
                 let lit_base = literal_value_base(value);
                 if lit_base != base {

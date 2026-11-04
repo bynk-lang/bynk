@@ -730,3 +730,13 @@ fn a_comment_without_a_blank_line_or_in_a_body_stays_attached() {
         );
     }
 }
+
+/// #2914: a comment between a literal pattern's `-` and its digits must not
+/// leak into the printed literal.
+#[test]
+fn refuses_to_drop_a_comment_inside_a_negative_literal_pattern() {
+    expect_refusal(
+        "neg-literal-pattern",
+        "commons demo\n\nfn f(n: Int) -> Int {\n  match n {\n    -\n    // keep me\n    1_000 => 1,\n    _ => 0,\n  }\n}\n",
+    );
+}

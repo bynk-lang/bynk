@@ -3444,8 +3444,8 @@ fn event_pattern_src(p: &EventPattern) -> String {
 
 fn event_pattern_value_src(v: &EventPatternValue) -> String {
     match v {
-        EventPatternValue::Literal { value, .. } => match value {
-            LiteralValue::Int(n) => n.to_string(),
+        EventPatternValue::Literal { value, text, .. } => match value {
+            LiteralValue::Int(n) => text.clone().unwrap_or_else(|| n.to_string()),
             LiteralValue::Str(s) => format!("\"{}\"", escape_string(s)),
             LiteralValue::Bool(b) => b.to_string(),
         },
@@ -4030,8 +4030,8 @@ fn pattern_to_string(p: &Pattern) -> String {
         // ADR 0169: a bare name binding renders as its identifier.
         Pattern::Binding(id) => id.name.clone(),
         // v0.130: literal patterns render as their source literal.
-        Pattern::Literal { value, .. } => match value {
-            LiteralValue::Int(n) => n.to_string(),
+        Pattern::Literal { value, text, .. } => match value {
+            LiteralValue::Int(n) => text.clone().unwrap_or_else(|| n.to_string()),
             LiteralValue::Str(s) => format!("\"{}\"", escape_string(s)),
             LiteralValue::Bool(b) => b.to_string(),
         },

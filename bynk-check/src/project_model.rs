@@ -3528,7 +3528,9 @@ fn check_event_pattern_value(
     errors: &mut ErrorSink,
 ) {
     match value {
-        EventPatternValue::Literal { value: lit, span } => {
+        EventPatternValue::Literal {
+            value: lit, span, ..
+        } => {
             // A base type (`Int`/`String`/`Bool`/…) is its own `TypeRef`
             // variant, not `TypeRef::Named` — only a *user*-declared type
             // (including a refined/opaque type built on a base) goes through

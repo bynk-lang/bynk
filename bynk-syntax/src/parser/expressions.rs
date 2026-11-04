@@ -2022,8 +2022,8 @@ impl<'a> Parser<'a> {
     /// `true`/`false`. The caller has already confirmed the leading token is one
     /// of these forms.
     fn parse_literal_pattern(&mut self) -> Result<Pattern, CompileError> {
-        let (value, span) = self.parse_literal_value()?;
-        Ok(Pattern::Literal { value, span })
+        let (value, span, text) = self.parse_literal_value_text()?;
+        Ok(Pattern::Literal { value, text, span })
     }
 
     /// Parse a bare literal value: `31`, `-1`, `"english"`, `true`/`false`.
@@ -2034,6 +2034,16 @@ impl<'a> Parser<'a> {
     /// overflow diagnostic and digit-separator handling (ADR 0166) rather
     /// than duplicating them.
     pub(crate) fn parse_literal_value(&mut self) -> Result<(LiteralValue, Span), CompileError> {
+        self.parse_literal_value_text().map(|(v, s, _)| (v, s))
+    }
+
+    /// As [`Self::parse_literal_value`], also returning an integer literal's
+    /// source text (`-1_000`) built from its tokens, so a comment between the
+    /// `-` and the digits is not part of it. `None` for other literals.
+    pub(crate) fn parse_literal_value_text(
+        &mut self,
+    ) -> Result<(LiteralValue, Span, Option<String>), CompileError> {
+        let mut text = None;
         // Optional leading `-` on an integer literal (ADR 0001).
         let neg = self.eat(TokenKind::Minus);
         let t = self.bump().expect("literal-value lead token");
@@ -2053,6 +2063,7 @@ impl<'a> Parser<'a> {
                 if neg.is_some() {
                     n = -n;
                 }
+                text = Some(format!("{}{slice}", if neg.is_some() { "-" } else { "" }));
                 (LiteralValue::Int(n), t.span)
             }
             TokenKind::StrLit => {
@@ -2064,7 +2075,7 @@ impl<'a> Parser<'a> {
             _ => unreachable!("parse_literal_value called on a non-literal token"),
         };
         let span = neg.map(|m| m.span).unwrap_or(t.span).merge(end_span);
-        Ok((value, span))
+        Ok((value, span, text))
     }
 
     /// Parse a built-in variant pattern (Ok/Err/Some/None) — these are
