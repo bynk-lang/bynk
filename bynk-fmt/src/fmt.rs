@@ -1355,7 +1355,13 @@ impl<'a> Formatter<'a> {
                 self.push(&format!("consumes {} {{ }}", c.target.joined()));
             }
             (None, Some(selected)) => {
-                let names: Vec<&str> = selected.iter().map(|i| i.name.as_str()).collect();
+                let names: Vec<String> = selected
+                    .iter()
+                    .map(|i| match &i.alias {
+                        Some(a) => format!("{} as {}", i.name.name, a.name),
+                        None => i.name.name.clone(),
+                    })
+                    .collect();
                 self.push(&format!(
                     "consumes {} {{ {} }}",
                     c.target.joined(),

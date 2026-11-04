@@ -88,6 +88,28 @@ service login {
             tail: (number_literal)))))))
 
 ================================================================================
+selected consumes renaming an exported type with as
+================================================================================
+
+context app
+
+consumes bynk.crypto { Crypto, Digest as CryptoDigest }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    name: (qualified_name
+      (identifier))
+    (consumes_decl
+      target: (qualified_name
+        (identifier)
+        (identifier))
+      capability: (identifier)
+      capability: (identifier)
+      alias: (identifier))))
+
+================================================================================
 adapter in fragment form
 ================================================================================
 

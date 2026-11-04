@@ -26,6 +26,7 @@ pub fn assemble_index(
     parsed: &[ParsedFile],
     unit_uses: &HashMap<String, Vec<String>>,
     unit_consumes: &HashMap<String, Vec<String>>,
+    unit_type_aliases: &HashMap<String, HashMap<String, ConsumedTypeAlias>>,
     refs: RefSink,
 ) -> ProjectIndex {
     let mut builder = IndexBuilder::default();
@@ -33,6 +34,18 @@ pub fn assemble_index(
     uses.extend(refs.extra_uses);
     builder.set_uses(uses);
     builder.set_consumes(unit_consumes.clone());
+    // #2887: only the aliases `phase_resolve_consumes` accepted.
+    let type_aliases = unit_type_aliases
+        .iter()
+        .map(|(unit, aliases)| {
+            let aliases = aliases
+                .iter()
+                .map(|(alias, a)| (alias.clone(), (a.target.clone(), a.original.clone())))
+                .collect();
+            (unit.clone(), aliases)
+        })
+        .collect();
+    builder.set_type_aliases(type_aliases);
     for pf in parsed {
         // #2834: a suite's helper `fn`s are definitions in the suite's own
         // namespace (`test_suites::suite_helper_namespace`); its cases are
@@ -454,6 +467,9 @@ pub struct UnitTable {
     /// per-unit answer, recorded by [`record_flattened_caps`] so a test body's
     /// privileged view sees the target's platform seams.
     pub flattened_caps: HashMap<String, String>,
+    /// #2887: the exported types this unit renames with `consumes U { T as
+    /// Alias }`, keyed by the alias. Recorded by [`record_flattened_caps`].
+    pub consumed_type_aliases: HashMap<String, ConsumedTypeAlias>,
     /// S4a (#1966): the derived capabilities (`capability Sessions = Kv`)
     /// this context declares, by name, once resolved to their base by
     /// [`crate::project_model::phase_resolve_derived`]. Each is also in
@@ -666,15 +682,29 @@ impl DerivedInstance {
     }
 }
 
+/// #2887: one `T as Alias` in a `consumes U { … }` list: the type `original`
+/// that `target` exports, in scope in the consuming unit only under the alias.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConsumedTypeAlias {
+    pub target: String,
+    pub original: String,
+}
+
 /// #291: record each unit's flattened capabilities (`consumes U { Cap }`, from
 /// `phase_resolve_consumes`) on its table.
 pub fn record_flattened_caps(
     unit_tables: &mut HashMap<String, UnitTable>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
+    unit_type_aliases: &HashMap<String, HashMap<String, ConsumedTypeAlias>>,
 ) {
     for (name, flattened) in unit_flattened {
         if let Some(t) = unit_tables.get_mut(name) {
             t.flattened_caps = flattened.clone();
+        }
+    }
+    for (name, aliases) in unit_type_aliases {
+        if let Some(t) = unit_tables.get_mut(name) {
+            t.consumed_type_aliases = aliases.clone();
         }
     }
 }
@@ -1528,9 +1558,44 @@ pub fn build_cross_context_info(
     let mut consumed_event_names: HashMap<String, std::collections::HashSet<String>> =
         HashMap::new();
     let mut consumed_type_owners: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut consumed_type_aliases: HashMap<String, HashMap<String, String>> = HashMap::new();
     for t in &consumed_contexts {
-        let (other_types_combined, owners) =
+        let (mut other_types_combined, owners) =
             contract_types_for(t, unit_tables, unit_uses, unit_consumes);
+        // #2887: the exports of `t` this unit renames (`consumes t { T as U }`):
+        // the view files them under the alias, and every signature it lifts
+        // below names them by it, so a call's `T` is the type `U` here and not
+        // a same-named local one.
+        let renames: HashMap<String, String> = unit_tables
+            .get(name)
+            .map(|table| {
+                table
+                    .consumed_type_aliases
+                    .iter()
+                    .filter(|(_, a)| a.target == *t)
+                    .map(|(alias, a)| (a.original.clone(), alias.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !renames.is_empty() {
+            other_types_combined = other_types_combined
+                .into_iter()
+                .map(|(key, decl)| {
+                    let key = renames.get(&key).cloned().unwrap_or(key);
+                    let decl = rename_consumed_decl(&decl, &key, &renames);
+                    (key, decl)
+                })
+                .collect();
+        }
+        if !renames.is_empty() {
+            consumed_type_aliases.insert(
+                t.clone(),
+                renames
+                    .iter()
+                    .map(|(o, a)| (a.clone(), o.clone()))
+                    .collect(),
+            );
+        }
         consumed_types.insert(t.clone(), other_types_combined);
         if !owners.is_empty() {
             consumed_type_owners.insert(t.clone(), owners);
@@ -1542,6 +1607,10 @@ pub fn build_cross_context_info(
         let mut svcs: HashMap<String, resolver::CrossContextService> = HashMap::new();
         for (sname, sdecl) in &other_table.services {
             if let Some(mut svc) = resolver::cross_context_service_for(sname, sdecl) {
+                for (_, tr) in svc.params.iter_mut() {
+                    rename_type_ref(tr, &renames);
+                }
+                rename_type_ref(&mut svc.return_type, &renames);
                 svc.foreign_callers = sdecl
                     .handlers
                     .iter()
@@ -1572,9 +1641,17 @@ pub fn build_cross_context_info(
                     params: op
                         .params
                         .iter()
-                        .map(|p| (p.name.name.clone(), p.type_ref.clone()))
+                        .map(|p| {
+                            let mut tr = p.type_ref.clone();
+                            rename_type_ref(&mut tr, &renames);
+                            (p.name.name.clone(), tr)
+                        })
                         .collect(),
-                    return_type: op.return_type.clone(),
+                    return_type: {
+                        let mut tr = op.return_type.clone();
+                        rename_type_ref(&mut tr, &renames);
+                        tr
+                    },
                     codable_params: crate::checker::codable::codable_op_params(op),
                 })
                 .collect();
@@ -1612,6 +1689,7 @@ pub fn build_cross_context_info(
             .unwrap_or_default(),
         consumed_event_names,
         consumed_type_owners,
+        consumed_type_aliases,
     }
 }
 
@@ -2073,6 +2151,22 @@ fn contract_types_inner(
     (out, owners, cyclic)
 }
 
+/// #2887: a consumed export's declaration as the consuming unit sees it: filed
+/// under `key` (its alias, or its own name) with the references it makes to its
+/// unit's other aliased exports renamed to their aliases.
+pub fn rename_consumed_decl(
+    decl: &Arc<TypeDecl>,
+    key: &str,
+    renames: &HashMap<String, String>,
+) -> Arc<TypeDecl> {
+    if renames.is_empty() {
+        return decl.clone();
+    }
+    let mut out = rename_decl_refs(decl, renames);
+    out.name.name = key.to_string();
+    Arc::new(out)
+}
+
 /// #2073: `decl` with every type it names renamed by `subst` (its own name
 /// kept).
 fn rename_decl_refs(decl: &TypeDecl, subst: &HashMap<String, String>) -> TypeDecl {
@@ -2096,8 +2190,8 @@ fn rename_decl_refs(decl: &TypeDecl, subst: &HashMap<String, String>) -> TypeDec
 }
 
 /// #2073: rename every user type `r` names, in place. Exhaustive over
-/// `TypeRef`, like [`crate::project_model::type_ref_names`].
-fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
+/// `TypeRef`, like `crate::project_model::type_ref_names`.
+pub fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
     match r {
         TypeRef::Named(id) => {
             if let Some(to) = subst.get(&id.name) {

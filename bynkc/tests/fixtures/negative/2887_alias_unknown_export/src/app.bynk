@@ -1,0 +1,5 @@
+context app
+
+consumes bynk.crypto { Crypto, Nonesuch as Other }
+
+fn one() -> Int { 1 }

@@ -244,6 +244,7 @@ pub fn architecture_model(
                     .selected
                     .iter()
                     .flatten()
+                    .map(|item| &item.name)
                     .filter(|id| {
                         info.is_none_or(|i| {
                             i.cross_context

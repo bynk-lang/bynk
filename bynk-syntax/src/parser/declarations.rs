@@ -507,7 +507,13 @@ impl<'a> Parser<'a> {
                 let mut names = Vec::new();
                 while self.peek_kind() != Some(TokenKind::RBrace) {
                     let id = self.expect_ident("a capability name in `consumes U { … }`")?;
-                    names.push(id);
+                    // #2887: `Name as Alias` renames an exported type here.
+                    let alias = if self.eat(TokenKind::As).is_some() {
+                        Some(self.expect_ident("an alias after `as` in `consumes U { … }`")?)
+                    } else {
+                        None
+                    };
+                    names.push(ConsumesItem { name: id, alias });
                     if self.eat(TokenKind::Comma).is_none() {
                         break;
                     }

@@ -1,0 +1,6 @@
+[project]
+name = "2887-alias-repeated"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.crypto"]

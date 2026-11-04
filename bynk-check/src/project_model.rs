@@ -2042,8 +2042,12 @@ pub fn phase_resolve_consumes(
 ) -> (
     HashMap<String, Vec<String>>,
     HashMap<String, HashMap<String, String>>,
+    HashMap<String, HashMap<String, crate::symbols::ConsumedTypeAlias>>,
 ) {
     let mut unit_consumes: HashMap<String, Vec<String>> = HashMap::new();
+    // #2887: `consumes U { T as Alias }` — unit → alias → the type it renames.
+    let mut unit_type_aliases: HashMap<String, HashMap<String, crate::symbols::ConsumedTypeAlias>> =
+        HashMap::new();
     // v0.17: `consumes U { Cap, … }` flattens selected caps into the consumer's
     // local namespace. unit → bare-cap → consumed unit providing it.
     let mut unit_flattened: HashMap<String, HashMap<String, String>> = HashMap::new();
@@ -2068,6 +2072,14 @@ pub fn phase_resolve_consumes(
         // #1857: the file that first selected each flattened capability, so a
         // file of a split context may repeat another file's selection.
         let mut flattened_in: HashMap<String, usize> = HashMap::new();
+        // #2887: the aliases of this unit, the alias each `(target, type)` was
+        // given (and in which file), and the types selected bare. A context's
+        // `consumes` apply to all its files, so another file may repeat an
+        // alias; only a pair that disagrees is refused.
+        let mut type_aliases: HashMap<String, crate::symbols::ConsumedTypeAlias> = HashMap::new();
+        let mut alias_of: HashMap<(String, String), (String, usize)> = HashMap::new();
+        let mut bare_types: HashSet<(String, String)> = HashSet::new();
+        let mut alias_sites: HashMap<String, (usize, Span)> = HashMap::new();
         let local_caps: HashSet<String> = unit_tables
             .get(name)
             .map(|t| t.capabilities.keys().cloned().collect())
@@ -2085,8 +2097,8 @@ pub fn phase_resolve_consumes(
                     let caps = unit_tables.get(&target).map(|t| &t.exported_capabilities);
                     !names.is_empty()
                         && names.iter().all(|n| {
-                            !caps.is_some_and(|c| c.contains(&n.name))
-                                && exports_type(&target, &n.name)
+                            !caps.is_some_and(|c| c.contains(&n.name.name))
+                                && exports_type(&target, &n.name.name)
                         })
                 });
                 if kind == UnitKind::Adapter && (c.selected.is_none() || selects_only_types) {
@@ -2184,7 +2196,8 @@ pub fn phase_resolve_consumes(
                         .map(|t| &t.exported_capabilities)
                         .cloned()
                         .unwrap_or_default();
-                    for cap in names {
+                    for item in names {
+                        let cap = &item.name;
                         if !parsed[i].is_synthetic()
                             && let Some(err) =
                                 policy.check(&format!("{target}.{}", cap.name), cap.span)
@@ -2196,7 +2209,138 @@ pub fn phase_resolve_consumes(
                         // already in scope for any `consumes U`, so a type
                         // selection has nothing to flatten; it only states the
                         // dependency.
+                        if let Some(alias) = &item.alias {
+                            let key = (target.clone(), cap.name.clone());
+                            let refuse =
+                                |code: &'static str, span: Span, msg: String, note: String| {
+                                    CompileError::new(code, span, msg).with_note(note)
+                                };
+                            if exported.contains(&cap.name) {
+                                errors.push_for(
+                                    Some(&parsed[i].identity_path()),
+                                    refuse(
+                                        "bynk.consumes.type_alias_capability",
+                                        alias.span,
+                                        format!(
+                                            "`{}` is a capability of `{target}`; only exported types can be aliased",
+                                            cap.name
+                                        ),
+                                        "a capability keeps its own name: select it bare (`consumes U { Cap }`), or qualify it as `given U.Cap`".to_string(),
+                                    ),
+                                );
+                                continue;
+                            }
+                            if !exports_type(&target, &cap.name) {
+                                errors.push_for(
+                                    Some(&parsed[i].identity_path()),
+                                    refuse(
+                                        "bynk.consumes.type_alias_unknown_export",
+                                        cap.span,
+                                        format!(
+                                            "`{target}` does not export a type named `{}`, so there is nothing to alias",
+                                            cap.name
+                                        ),
+                                        "only an exported type can be aliased: `consumes U { Type as Alias }`".to_string(),
+                                    ),
+                                );
+                                continue;
+                            }
+                            if !type_selected.insert((i, target.clone(), cap.name.clone())) {
+                                errors.push_for(
+                                    Some(&parsed[i].identity_path()),
+                                    refuse(
+                                        "bynk.consumes.type_alias_repeated",
+                                        cap.span,
+                                        format!(
+                                            "`{}` is selected from `{target}` more than once in this file",
+                                            cap.name
+                                        ),
+                                        "a type is aliased once; remove the repeat".to_string(),
+                                    ),
+                                );
+                                continue;
+                            }
+                            if let Some((prev, prev_file)) = alias_of.get(&key)
+                                && (*prev != alias.name || *prev_file == i)
+                            {
+                                errors.push_for(
+                                    Some(&parsed[i].identity_path()),
+                                    refuse(
+                                        "bynk.consumes.type_alias_repeated",
+                                        alias.span,
+                                        format!(
+                                            "`{}` from `{target}` is already aliased as `{prev}`",
+                                            cap.name
+                                        ),
+                                        "a type is in scope under one alias; remove one of them"
+                                            .to_string(),
+                                    ),
+                                );
+                                continue;
+                            }
+                            if bare_types.contains(&key) {
+                                errors.push_for(
+                                    Some(&parsed[i].identity_path()),
+                                    refuse(
+                                        "bynk.consumes.type_alias_repeated",
+                                        alias.span,
+                                        format!(
+                                            "`{}` from `{target}` is selected both bare and aliased",
+                                            cap.name
+                                        ),
+                                        "the type is in scope as the alias only; drop the bare selection".to_string(),
+                                    ),
+                                );
+                                continue;
+                            }
+                            let this = crate::symbols::ConsumedTypeAlias {
+                                target: target.clone(),
+                                original: cap.name.clone(),
+                            };
+                            if let Some(other) = type_aliases.get(&alias.name)
+                                && *other != this
+                            {
+                                errors.push_for(
+                                    Some(&parsed[i].identity_path()),
+                                    refuse(
+                                        "bynk.consumes.type_alias_conflict",
+                                        alias.span,
+                                        format!(
+                                            "alias `{}` already names `{}` from `{}`",
+                                            alias.name, other.original, other.target
+                                        ),
+                                        "give each aliased type its own name".to_string(),
+                                    ),
+                                );
+                                continue;
+                            }
+                            alias_sites
+                                .entry(alias.name.clone())
+                                .or_insert((i, alias.span));
+                            alias_of.insert(key, (alias.name.clone(), i));
+                            type_aliases.insert(alias.name.clone(), this);
+                            // Both names lead to the real declaration.
+                            refs.record_in_unit(cap.span, SymbolKind::Type, &cap.name, &target);
+                            refs.record_in_unit(alias.span, SymbolKind::Type, &cap.name, &target);
+                            continue;
+                        }
                         if !exported.contains(&cap.name) && exports_type(&target, &cap.name) {
+                            if alias_of.contains_key(&(target.clone(), cap.name.clone())) {
+                                errors.push_for(
+                                    Some(&parsed[i].identity_path()),
+                                    CompileError::new(
+                                        "bynk.consumes.type_alias_repeated",
+                                        cap.span,
+                                        format!(
+                                            "`{}` from `{target}` is selected both bare and aliased",
+                                            cap.name
+                                        ),
+                                    )
+                                    .with_note("the type is in scope as the alias only; drop the bare selection"),
+                                );
+                                continue;
+                            }
+                            bare_types.insert((target.clone(), cap.name.clone()));
                             if !type_selected.insert((i, target.clone(), cap.name.clone())) {
                                 errors.push_for(
                                     Some(&parsed[i].identity_path()),
@@ -2274,9 +2418,32 @@ pub fn phase_resolve_consumes(
             }
         }
         unit_consumes.insert(name.clone(), consumes_targets);
+        // An alias is a type name; a capability of the same name (flattened
+        // from a `consumes`, or local) would bind it twice in the emitted
+        // module and in the unit's own scope.
+        let mut clashing: Vec<&String> = type_aliases
+            .keys()
+            .filter(|a| flattened.contains_key(*a) || local_caps.contains(*a))
+            .collect();
+        clashing.sort();
+        for alias in clashing {
+            let (file, span) = alias_sites[alias];
+            errors.push_for(
+                Some(&parsed[file].identity_path()),
+                CompileError::new(
+                    "bynk.consumes.type_alias_conflict",
+                    span,
+                    format!("alias `{alias}` is also the name of a capability in this context"),
+                )
+                .with_note("choose an alias that is not a capability's name"),
+            );
+        }
         unit_flattened.insert(name.clone(), flattened);
+        if !type_aliases.is_empty() {
+            unit_type_aliases.insert(name.clone(), type_aliases);
+        }
     }
-    (unit_consumes, unit_flattened)
+    (unit_consumes, unit_flattened, unit_type_aliases)
 }
 
 /// Phases 5b'/5b'': collect each context's `consumes` aliases (alias →
@@ -3078,7 +3245,12 @@ pub fn phase_locale_bundle_ambiguity(
                 if c.target.joined() != firstparty::BYNK_UNIT {
                     continue;
                 }
-                let Some(locale_ident) = c.selected.iter().flatten().find(|id| id.name == "Locale")
+                let Some(locale_ident) = c
+                    .selected
+                    .iter()
+                    .flatten()
+                    .map(|i| &i.name)
+                    .find(|id| id.name == "Locale")
                 else {
                     continue;
                 };
@@ -4750,6 +4922,19 @@ pub fn collect_unit_methods(
     local_methods_for_type
 }
 
+/// #2887: the alias the `name_conflict` note suggests for `target`'s export
+/// `type_name`: the target's last segment, capitalised, then the type
+/// (`bynk.crypto` + `Digest` → `CryptoDigest`).
+fn suggest_alias(target: &str, type_name: &str) -> String {
+    let last = target.rsplit('.').next().unwrap_or(target);
+    let mut chars = last.chars();
+    let head: String = chars
+        .next()
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_default();
+    format!("{head}{}{type_name}", chars.as_str())
+}
+
 /// Phase 8b: merge one context's `consumes` exports into the composed symbol
 /// space, recording visibility metadata in the returned `consumed_types`. The
 /// per-export `continue`s (missing decl, name conflict) stay internal to the
@@ -4779,10 +4964,26 @@ pub fn merge_consumed_exports(
     for t in unit_info.get(name).into_iter().flat_map(|i| &i.consumes) {
         let used = &unit_info.get(t).expect("consumed unit present").table;
         let used_exports = &unit_info[t].exports;
+        // #2887: the exports of `t` this unit renames (`consumes t { T as U }`),
+        // original → alias. An aliased export is in scope under the alias only,
+        // and its declaration (and the references to it in `t`'s other exports)
+        // take the alias as their name, so it is a type of its own here even
+        // when a local `T` exists.
+        let renames: HashMap<String, String> = unit_info[name]
+            .table
+            .consumed_type_aliases
+            .iter()
+            .filter(|(_, a)| a.target == *t)
+            .map(|(alias, a)| (a.original.clone(), alias.clone()))
+            .collect();
         for (type_name, vis) in used_exports {
             let Some(decl) = used.types.get(type_name) else {
                 continue;
             };
+            let original = type_name;
+            let aliased = renames.contains_key(original);
+            let type_name = renames.get(original).unwrap_or(original);
+            let decl = &crate::symbols::rename_consumed_decl(decl, type_name, &renames);
             // #1927: a local value of the export's name (a function, asset,
             // service, agent or provider) takes the emitted module's binding
             // as a type of that name would, so it conflicts the same way.
@@ -4798,6 +4999,33 @@ pub fn merge_consumed_exports(
                     Some(kind) => format!("this context declares a {kind} of the same name"),
                     None => "a type of the same name is already in scope".to_string(),
                 };
+                // An alias clashing with what is in scope, or a bare export
+                // clashing with one of this unit's aliases: the alias is the
+                // name to change either way.
+                let clashes_alias = !aliased
+                    && unit_info[name]
+                        .table
+                        .consumed_type_aliases
+                        .contains_key(type_name);
+                if aliased || clashes_alias {
+                    let what = if aliased {
+                        format!("aliases an export of `{t}` as `{type_name}`, but {in_scope}")
+                    } else {
+                        format!(
+                            "consumes `{t}` which exports type `{type_name}`, but an alias of the same name is in scope"
+                        )
+                    };
+                    errors.push_for(
+                        consumes_file.as_deref(),
+                        CompileError::new(
+                            "bynk.consumes.type_alias_conflict",
+                            consumes_span,
+                            format!("context `{name}` {what}"),
+                        )
+                        .with_note("choose an alias no other declaration in this context uses"),
+                    );
+                    continue;
+                }
                 errors.push_for(consumes_file.as_deref(),
                     CompileError::new(
                         "bynk.consumes.name_conflict",
@@ -4806,9 +5034,10 @@ pub fn merge_consumed_exports(
                             "context `{name}` consumes `{t}` which exports type `{type_name}`, but {in_scope}",
                         ),
                     )
-                    .with_note(
-                        "rename one of the conflicting declarations or restructure the import",
-                    ),
+                    .with_note(format!(
+                        "alias it so the two no longer share a name: `consumes {t} {{ …, {type_name} as {t_alias} }}`, then write `{t_alias}` for `{t}`'s type",
+                        t_alias = suggest_alias(t, type_name),
+                    )),
                 );
                 continue;
             }
@@ -4829,7 +5058,7 @@ pub fn merge_consumed_exports(
             // so the checker can resolve method calls; the checker
             // separately enforces that constructors (.of/unsafe) aren't
             // callable externally.
-            if let Some(mt) = used.methods.get(type_name) {
+            if let Some(mt) = used.methods.get(original) {
                 let entry = combined_methods.entry(type_name.clone()).or_default();
                 for (m, decl) in &mt.instance {
                     entry
@@ -5827,6 +6056,7 @@ mod native_platform_closure_tests {
             exported_capabilities: Default::default(),
             events: StdHashMap::new(),
             flattened_caps: StdHashMap::new(),
+            consumed_type_aliases: StdHashMap::new(),
             assets: StdHashMap::new(),
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),
@@ -6412,6 +6642,177 @@ mod shadowed_import_tests {
                 .any(|n| n.contains("consumes bynk { TimedOut }")),
             "{:?}",
             e.error.notes
+        );
+    }
+}
+
+/// #2887: `consumes U { T as Alias }` renames an exported type in the consuming
+/// context, so it no longer clashes with a local or `uses` type of that name.
+#[cfg(test)]
+mod consumes_alias_tests {
+    use crate::stability::StabilityPolicy;
+    use crate::testkit::{Analysed, analyse_with};
+
+    const REPORT: (&str, &str) = (
+        "report.bynk",
+        "commons report\n\ntype Digest = { total: Int }\n",
+    );
+
+    fn run(files: &[(&str, &str)]) -> Analysed {
+        analyse_with(files, Some(StabilityPolicy::permissive()))
+    }
+
+    fn app(consumes: &str, body: &str) -> String {
+        format!("context app\n\nuses report\n{consumes}\n\n{body}\n")
+    }
+
+    const USES_BOTH: &str = "fn empty() -> Digest { Digest { total: 0 } }\n\
+        fn name(d: CryptoDigest) -> String {\n  match d {\n    Sha256 => \"a\"\n    Sha384 => \"b\"\n    Sha512 => \"c\"\n  }\n}\n\
+        service hashing {\n  on call() -> Effect[Bytes] given Crypto {\n    Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(\"x\"))\n  }\n}";
+
+    #[test]
+    fn an_aliased_export_clears_the_clash_and_works_everywhere() {
+        let src = app(
+            "consumes bynk.crypto { Crypto, Digest as CryptoDigest }",
+            USES_BOTH,
+        );
+        let a = run(&[REPORT, ("app.bynk", &src)]);
+        a.assert_clean();
+        // The unaliased `Digest` is still the commons record.
+        assert_eq!(a.resolves_to("app.bynk", "Digest {").unit, "report");
+    }
+
+    #[test]
+    fn an_alias_names_the_real_declaration_for_the_ide() {
+        // A user adapter as the target, so its declarations are in the index
+        // (a first-party unit's references are tokens only).
+        let lib = (
+            "lib.bynk",
+            "adapter lib\n\nbinding \"./lib.binding.ts\"\n\nexports transparent { Digest }\n\ntype Digest = enum { Fast, Slow }\n",
+        );
+        let src = app(
+            "consumes lib { Digest as LibDigest }",
+            "fn pick() -> LibDigest { LibDigest.Fast }\nfn empty() -> Digest { Digest { total: 0 } }",
+        );
+        let a = run(&[
+            REPORT,
+            lib,
+            ("lib.binding.ts", "export {};\n"),
+            ("app.bynk", &src),
+        ]);
+        a.assert_clean();
+        for needle in ["Digest as", "LibDigest {", "LibDigest.Fast"] {
+            let key = a.resolves_to("app.bynk", needle);
+            assert_eq!(
+                (key.unit.as_str(), key.name.as_str()),
+                ("lib", "Digest"),
+                "{needle}"
+            );
+        }
+        assert_eq!(a.resolves_to("app.bynk", "Digest { total").unit, "report");
+    }
+
+    #[test]
+    fn the_unaliased_form_still_clashes_with_a_note_that_names_the_way_out() {
+        let src = app(
+            "consumes bynk.crypto { Crypto }",
+            "fn empty() -> Digest { Digest { total: 0 } }",
+        );
+        let a = run(&[REPORT, ("app.bynk", &src)]);
+        assert_eq!(a.error_categories(), vec!["bynk.consumes.name_conflict"]);
+        let e = &a.analysis.errors[0].error;
+        assert!(
+            e.notes.iter().any(|n| n.contains("Digest as CryptoDigest")),
+            "{:?}",
+            e.notes
+        );
+    }
+
+    #[test]
+    fn a_refused_alias_does_not_take_over_the_name_it_clashed_with() {
+        // `Report` is the local type; the clashing alias is refused and must not
+        // redirect hover or go-to-definition to the module's `Digest`.
+        let src = "context app\n\nconsumes bynk.crypto { Crypto, Digest as Report }\n\ntype Report = { total: Int }\n\nfn f(r: Report) -> Int { r.total }\n";
+        let a = run(&[("app.bynk", src)]);
+        assert_eq!(
+            a.error_categories(),
+            vec!["bynk.consumes.type_alias_conflict"]
+        );
+        // The unit does not check past the refusal, so the proof is that the
+        // index neither panics nor files the alias under the module's type:
+        // the local `Report` stays the one declaration of that name.
+        let reports: Vec<_> = a
+            .analysis
+            .index
+            .symbols
+            .keys()
+            .filter(|k| k.name == "Report" || k.name == "Digest")
+            .collect();
+        assert!(
+            reports
+                .iter()
+                .all(|k| k.unit == "app" && k.name == "Report"),
+            "{reports:?}"
+        );
+    }
+
+    #[test]
+    fn the_conflict_note_for_a_context_also_names_the_alias_form() {
+        // An alias works for a context's type as for an adapter's, so the note
+        // may recommend it there.
+        let lib = (
+            "lib.bynk",
+            "context lib\n\nexports transparent { Code }\n\ntype Code = enum { A, B }\n",
+        );
+        let codes = ("codes.bynk", "commons codes\n\ntype Code = { n: Int }\n");
+        let app = "context app\n\nuses codes\nconsumes lib\n\nfn one() -> Int { 1 }\n";
+        let a = run(&[lib, codes, ("app.bynk", app)]);
+        assert_eq!(a.error_categories(), vec!["bynk.consumes.name_conflict"]);
+        assert!(
+            a.analysis.errors[0]
+                .error
+                .notes
+                .iter()
+                .any(|n| n.contains("Code as LibCode")),
+            "{:?}",
+            a.analysis.errors[0].error.notes
+        );
+    }
+
+    #[test]
+    fn the_original_name_is_not_in_scope_once_aliased() {
+        let src = app(
+            "consumes bynk.crypto { Crypto, Digest as CryptoDigest }",
+            "fn f(d: Digest) -> Int { 1 }",
+        );
+        // `Digest` is the commons record here; handing it where the module's
+        // enum is expected is a type error, not a silent conflation.
+        let a = run(&[REPORT, ("app.bynk", &src)]);
+        a.assert_clean();
+        let bad = app(
+            "consumes bynk.crypto { Crypto, Digest as CryptoDigest }",
+            "service s {\n  on call() -> Effect[Bytes] given Crypto {\n    Crypto.digest(Digest { total: 1 }, Bytes.fromUtf8(\"x\"))\n  }\n}",
+        );
+        let a = run(&[REPORT, ("app.bynk", &bad)]);
+        assert!(
+            !a.error_categories().is_empty(),
+            "the local Digest is not the crypto Digest"
+        );
+    }
+
+    #[test]
+    fn an_alias_in_one_file_of_a_split_context_applies_to_the_unit() {
+        let one = "context app\n\nuses report\nconsumes bynk.crypto { Crypto, Digest as CryptoDigest }\n\nfn empty() -> Digest { Digest { total: 0 } }\n";
+        let two = "context app\n\nuses report\nconsumes bynk.crypto { Crypto, Digest as CryptoDigest }\n\nfn first() -> CryptoDigest { CryptoDigest.Sha256 }\n";
+        run(&[REPORT, ("app/one.bynk", one), ("app/two.bynk", two)]).assert_clean();
+        let disagree =
+            "context app\n\nuses report\nconsumes bynk.crypto { Crypto, Digest as Other }\n";
+        let a = run(&[REPORT, ("app/one.bynk", one), ("app/two.bynk", disagree)]);
+        assert!(
+            a.error_categories()
+                .contains(&"bynk.consumes.type_alias_repeated"),
+            "{:?}",
+            a.error_categories()
         );
     }
 }

@@ -814,6 +814,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["consumes_decl"],
     ),
     dg(
+        "bynk.consumes.type_alias_capability",
+        "A capability was aliased in `consumes U { Cap as Alias }`; only exported types can be aliased.",
+        &["consumes_decl"],
+    ),
+    dg(
+        "bynk.consumes.type_alias_conflict",
+        "A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias.",
+        &["consumes_decl"],
+    ),
+    dg(
+        "bynk.consumes.type_alias_repeated",
+        "An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`.",
+        &["consumes_decl"],
+    ),
+    dg(
+        "bynk.consumes.type_alias_unknown_export",
+        "`consumes U { T as Alias }` names a type `U` does not export.",
+        &["consumes_decl"],
+    ),
+    dg(
         "bynk.consumes.unknown_context",
         "`consumes` names a context that does not exist.",
         &["consumes_decl"],

@@ -317,6 +317,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         imported_from: HashMap::new(),
         imported_from_kind: HashMap::new(),
         imported_decl_paths: HashMap::new(),
+        consumed_type_aliases: HashMap::new(),
         unit_kind: UnitKind::Commons,
         owning_context: None,
         exports_for_consumed: HashMap::new(),
@@ -1459,6 +1460,13 @@ fn emit_boundary_helpers(
                 .iter()
                 .flat_map(|n| [format!("__serialise_{n}"), format!("__deserialise_{n}")])
                 .collect();
+            let import_parts: Vec<String> = names
+                .iter()
+                .flat_map(|n| {
+                    ["__serialise_", "__deserialise_"]
+                        .map(|prefix| codec_import_spec(ctx, prefix, n))
+                })
+                .collect();
             // v0.9.1: emit both a regular import (so the names are bound
             // locally for use inside this file's serialisation helpers) and a
             // re-export (so downstream consumers can still reach them
@@ -1480,7 +1488,7 @@ fn emit_boundary_helpers(
             let mut import_stmt = bynk_ts::TsStmt::decl(
                 bynk_ts::TsDecl::Import {
                     type_only: false,
-                    names: parts.clone(),
+                    names: import_parts,
                     from: import_spec,
                 },
                 None,
@@ -1756,7 +1764,10 @@ fn commons_codec_imports(
             );
             let parts = names
                 .iter()
-                .flat_map(|n| [format!("__serialise_{n}"), format!("__deserialise_{n}")])
+                .flat_map(|n| {
+                    ["__serialise_", "__deserialise_"]
+                        .map(|prefix| codec_import_spec(ctx, prefix, n))
+                })
                 .collect();
             imported.extend(names);
             bynk_ts::TsStmt::decl(
@@ -2016,6 +2027,13 @@ fn emit_consumed_context_helpers(
                 .and_then(|owner| original.strip_prefix(&format!("{}__", qualified_to_ns(owner))))
                 .unwrap_or(original.as_str());
             qual.insert(renamed.clone(), format!("{owner_ns}{ts_name}"));
+        }
+        // #2887: a type this context renames from `c` is named in TS by the
+        // name `c` declares, whole.
+        for (alias, original) in info.consumed_type_aliases.get(c).into_iter().flatten() {
+            if names.contains(alias) {
+                qual.insert(alias.clone(), format!("{ns}{original}"));
+            }
         }
         // #1736: a generic type the callee owns reaches the closure only as the
         // base of an instantiation (`Envelope[Int]`), never as a plain name, so
@@ -3662,9 +3680,9 @@ fn emit_project_imports(
                     // `uses`/`consumes` (e.g. `bynk`'s `Method`) is often
                     // used as a *value* too (`Method.Get`), which a blanket
                     // `import type` would wrongly break.
-                    parts.push(format!("type {}", ts_ident(n)));
+                    parts.push(format!("type {}", import_spec_of(ctx, n)));
                 } else {
-                    parts.push(ts_ident(n));
+                    parts.push(import_spec_of(ctx, n));
                 }
             }
             // Arc C, slice 30 (#1392): a real `TsDecl::Import` — `parts`'
@@ -3706,6 +3724,27 @@ fn emit_project_imports(
         stmt.no_blank_before = true;
     }
     stmts
+}
+
+/// #2887: `n` as an import specifier. A type this unit renames with `consumes
+/// U { T as Alias }` is imported under the name `U` declares and bound to the
+/// alias (`Digest as CryptoDigest`), so every use in the module reaches the
+/// module's real type, not a new one.
+fn import_spec_of(ctx: &EmitProjectCtx, n: &str) -> String {
+    match ctx.consumed_type_aliases.get(n) {
+        Some(original) => format!("{} as {}", ts_ident(original), ts_ident(n)),
+        None => ts_ident(n),
+    }
+}
+
+/// #2887: a codec helper of type `n` (`prefix` is `__serialise_` or
+/// `__deserialise_`) as an import specifier: for a type this unit renames, the
+/// helper the module exports for the real type, bound under the alias's name.
+fn codec_import_spec(ctx: &EmitProjectCtx, prefix: &str, n: &str) -> String {
+    match ctx.consumed_type_aliases.get(n) {
+        Some(original) => format!("{prefix}{original} as {prefix}{n}"),
+        None => format!("{prefix}{n}"),
+    }
 }
 
 /// Compute a relative import specifier from `from_source` (a `.bynk` path)
@@ -4497,6 +4536,9 @@ pub(crate) struct ModuleCtx<'a> {
     /// this module (mirrors [`crate::emitter::emit::consumed_type_ns`]).
     /// Default-empty: a miss names the type bare, as before.
     consumed_type_ns: HashMap<String, String>,
+    /// #2887: a consumed type this module renames, alias → the name its
+    /// context declares and exports.
+    consumed_type_declared: HashMap<String, String>,
     /// #934: true when the unit being emitted is the reserved first-party
     /// `bynk` adapter itself. `bynk` is a reserved namespace, so a capability
     /// literally named `Idempotency` declared *in this unit* is unambiguously
@@ -4527,6 +4569,7 @@ impl<'a> ModuleCtx<'a> {
             agent_method_givens: HashMap::new(),
             event_schema_versions: HashMap::new(),
             consumed_type_ns: HashMap::new(),
+            consumed_type_declared: HashMap::new(),
             in_bynk_unit: false,
             agent_called_contexts: Vec::new(),
             consumed_context_types: HashSet::new(),
@@ -5745,7 +5788,14 @@ impl<'a> LowerCtx<'a> {
     /// under its context's namespace when a consumed context declares it.
     pub(crate) fn consumed_type_name(&self, name: &str) -> String {
         match self.module.consumed_type_ns.get(name) {
-            Some(ns) => [ns.as_str(), ".", name].concat(),
+            Some(ns) => {
+                let declared = self
+                    .module
+                    .consumed_type_declared
+                    .get(name)
+                    .map_or(name, String::as_str);
+                [ns.as_str(), ".", declared].concat()
+            }
             None => name.to_string(),
         }
     }

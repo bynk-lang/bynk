@@ -467,6 +467,10 @@ pub struct IndexBuilder {
     /// unit's exported types (the consumer's merged table layers them after
     /// `uses` imports).
     consumes: HashMap<String, Vec<String>>,
+    /// #2887: unit → alias → the consumed unit and the exported type the alias
+    /// (`consumes U { T as Alias }`) names, so a reference to the alias reaches
+    /// the real declaration.
+    type_aliases: HashMap<String, HashMap<String, (String, String)>>,
     /// v0.129 (#259): refined/opaque-type → builtin-base edges, accumulated at
     /// the type-def walk (no ref-resolution needed). Assembled in [`build`].
     refinements: Vec<RefineEdge>,
@@ -569,6 +573,13 @@ impl IndexBuilder {
 
     pub fn set_consumes(&mut self, consumes: HashMap<String, Vec<String>>) {
         self.consumes = consumes;
+    }
+
+    pub fn set_type_aliases(
+        &mut self,
+        type_aliases: HashMap<String, HashMap<String, (String, String)>>,
+    ) {
+        self.type_aliases = type_aliases;
     }
 
     /// Qualify, attribute, dedupe, and assemble.
@@ -734,13 +745,34 @@ impl IndexBuilder {
         if has(&local) {
             return Some(local);
         }
-        for target in self
-            .uses
-            .get(ns)
-            .into_iter()
-            .flatten()
-            .chain(self.consumes.get(ns).into_iter().flatten())
+        for target in self.uses.get(ns).into_iter().flatten() {
+            let imported = SymbolKey {
+                unit: target.clone(),
+                kind: edge.kind,
+                name: edge.name.clone(),
+            };
+            if has(&imported) {
+                return Some(imported);
+            }
+        }
+        // #2887: a consumed type renamed in this unit is its alias here only.
+        // After the unit's own and `uses` names: an alias that collides with
+        // one is refused, and the name still means the declaration it clashed
+        // with.
+        if edge.kind == SymbolKind::Type
+            && let Some((target, original)) = self
+                .type_aliases
+                .get(ns)
+                .and_then(|aliases| aliases.get(&edge.name))
         {
+            let key = SymbolKey {
+                unit: target.clone(),
+                kind: edge.kind,
+                name: original.clone(),
+            };
+            return has(&key).then_some(key);
+        }
+        for target in self.consumes.get(ns).into_iter().flatten() {
             let imported = SymbolKey {
                 unit: target.clone(),
                 kind: edge.kind,

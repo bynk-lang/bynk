@@ -1,0 +1,7 @@
+context app
+
+consumes bynk.crypto { Crypto, Digest as Report }
+
+type Report = { total: Int }
+
+fn one() -> Int { 1 }

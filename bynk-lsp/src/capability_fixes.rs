@@ -254,12 +254,15 @@ impl<'a> Header<'a> {
             .find(|c| c.target.joined() == unit && c.selected.is_some())
         {
             let selected = dec.selected.as_ref().unwrap();
-            if selected.iter().any(|c| c.name == cap) {
+            if selected.iter().any(|c| c.name.name == cap) {
                 return None; // already listed
             }
             let (at, insert) = match selected.last() {
                 // Non-empty list: append `, cap` after the last selected name.
-                Some(last) => (Span::new(last.span.end, last.span.end), format!(", {cap}")),
+                Some(last) => {
+                    let end = last.alias.as_ref().unwrap_or(&last.name).span.end;
+                    (Span::new(end, end), format!(", {cap}"))
+                }
                 // `consumes unit { }` — the interior spacing is unknown, so
                 // **replace** the whole clause with a canonical one (its only
                 // content is the target and the new capability), rather than

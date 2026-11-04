@@ -1,0 +1,31 @@
+context app
+
+uses codes
+consumes lib { Code as LibCode, Level as LibLevel }
+
+fn local() -> Code { Code { n: 1 } }
+
+service run {
+	on call() -> Effect[Int] {
+		let flipped <- lib.flip(LibCode.Alpha)
+		match flipped {
+			Beta => Effect.pure(local().n)
+			Alpha => Effect.pure(0)
+		}
+	}
+}
+
+service echo {
+	on call(c: LibCode) -> Effect[LibCode] {
+		Effect.pure(c)
+	}
+}
+
+service level {
+	on call() -> Effect[Int] {
+		let l <- lib.ping(3)
+		Effect.pure(l + 0)
+	}
+}
+
+fn lift() -> LibLevel { 7 }

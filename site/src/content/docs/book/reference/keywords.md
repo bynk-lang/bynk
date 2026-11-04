@@ -40,7 +40,7 @@ Reserved everywhere — these **61** words can never be used as an identifier.
 | `actor` | Declare an actor — a boundary contract a handler consumes via `by`. |
 | `adapter` | Declare an adapter — the host boundary (capability contract + binding). |
 | `agent` | Declare a stateful, keyed agent inside a context. |
-| `as` | Alias a consumed context (`consumes X as Y`). |
+| `as` | Alias a consumed context (`consumes X as Y`) or a consumed type (`consumes U { T as Y }`). |
 | `binding` | Name an adapter's TypeScript binding module (`binding "<module>"`). |
 | `by` | Name the actor a handler consumes, after the return type — or a service-level default on the header (`… -> T by <name>: <Actor>`). |
 | `capability` | Declare a capability (a dependency interface) in a context, or a distinct instance of a platform resource (`capability Sessions = Kv`). |

@@ -2012,6 +2012,7 @@ mod tests {
                 .map(|(n, e)| (n.to_string(), e))
                 .collect(),
             flattened_caps: StdHashMap::new(),
+            consumed_type_aliases: StdHashMap::new(),
             assets: StdHashMap::new(),
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),

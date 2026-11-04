@@ -669,12 +669,42 @@
                           "type": "SEQ",
                           "members": [
                             {
-                              "type": "FIELD",
-                              "name": "capability",
-                              "content": {
-                                "type": "SYMBOL",
-                                "name": "identifier"
-                              }
+                              "type": "SEQ",
+                              "members": [
+                                {
+                                  "type": "FIELD",
+                                  "name": "capability",
+                                  "content": {
+                                    "type": "SYMBOL",
+                                    "name": "identifier"
+                                  }
+                                },
+                                {
+                                  "type": "CHOICE",
+                                  "members": [
+                                    {
+                                      "type": "SEQ",
+                                      "members": [
+                                        {
+                                          "type": "STRING",
+                                          "value": "as"
+                                        },
+                                        {
+                                          "type": "FIELD",
+                                          "name": "alias",
+                                          "content": {
+                                            "type": "SYMBOL",
+                                            "name": "identifier"
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "BLANK"
+                                    }
+                                  ]
+                                }
+                              ]
                             },
                             {
                               "type": "REPEAT",
@@ -686,12 +716,42 @@
                                     "value": ","
                                   },
                                   {
-                                    "type": "FIELD",
-                                    "name": "capability",
-                                    "content": {
-                                      "type": "SYMBOL",
-                                      "name": "identifier"
-                                    }
+                                    "type": "SEQ",
+                                    "members": [
+                                      {
+                                        "type": "FIELD",
+                                        "name": "capability",
+                                        "content": {
+                                          "type": "SYMBOL",
+                                          "name": "identifier"
+                                        }
+                                      },
+                                      {
+                                        "type": "CHOICE",
+                                        "members": [
+                                          {
+                                            "type": "SEQ",
+                                            "members": [
+                                              {
+                                                "type": "STRING",
+                                                "value": "as"
+                                              },
+                                              {
+                                                "type": "FIELD",
+                                                "name": "alias",
+                                                "content": {
+                                                  "type": "SYMBOL",
+                                                  "name": "identifier"
+                                                }
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "type": "BLANK"
+                                          }
+                                        ]
+                                      }
+                                    ]
                                   }
                                 ]
                               }

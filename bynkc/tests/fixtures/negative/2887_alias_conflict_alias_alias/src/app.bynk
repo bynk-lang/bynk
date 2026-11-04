@@ -1,0 +1,5 @@
+context app
+
+consumes bynk.crypto { Crypto, Digest as Same, Signature as Same }
+
+fn one() -> Int { 1 }

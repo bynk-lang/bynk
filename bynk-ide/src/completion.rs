@@ -175,6 +175,11 @@ pub fn complete_in(
     }
     // 1. Inside `consumes U { … <cursor>` — the capabilities U exports.
     if let Some(unit) = consumes_brace_unit(line_prefix) {
+        // #2887: after `T as` the next word is the alias, a name of the user's
+        // own: nothing to suggest.
+        if names_a_brace_alias(line_prefix) {
+            return Vec::new();
+        }
         return capabilities_of_unit(&unit, doc_text, &split())
             .into_iter()
             .map(|c| {
@@ -352,6 +357,18 @@ fn consumes_brace_unit(line: &str) -> Option<String> {
         return None;
     }
     Some(unit.to_string())
+}
+
+/// #2887: the open `consumes U { … T as <partial>` ends at the alias being
+/// written: its last whole word before the partial one is `as`.
+fn names_a_brace_alias(line: &str) -> bool {
+    let tail = line.rsplit(['{', ',']).next().unwrap_or("");
+    let mut words = tail.split_whitespace().collect::<Vec<_>>();
+    if !tail.ends_with(char::is_whitespace) {
+        // The alias is partly typed; the word before it decides.
+        words.pop();
+    }
+    words.last() == Some(&"as")
 }
 
 /// `consumes <partial>` with no brace or `as` yet → completing the target name.
@@ -2965,7 +2982,7 @@ fn in_scope_capabilities(doc_text: &str, split: &SplitFiles<'_>) -> Vec<Completi
         match &c.selected {
             Some(names) => {
                 for n in names {
-                    labels.insert(n.name.clone());
+                    labels.insert(n.name.name.clone());
                 }
             }
             None => {
@@ -3664,6 +3681,23 @@ mod tests {
         // A built-in static receiver works inside a hole too.
         let statics = complete("  \"n=\\(Int.", "context a.b\n", None);
         assert!(find(&statics, "parse", CompletionKind::Member).is_some());
+    }
+
+    #[test]
+    fn consumes_brace_alias_position_suggests_nothing() {
+        // #2887: the name after `as` is the user's own.
+        for prefix in [
+            "  consumes bynk.crypto { Crypto, Digest as ",
+            "  consumes bynk.crypto { Crypto, Digest as Cry",
+        ] {
+            let got = labels(prefix, "context a.b\n");
+            assert!(got.is_empty(), "{prefix}: {got:?}");
+        }
+        // The name before `as`, and after the comma, still complete.
+        assert!(
+            !labels("  consumes bynk { Clock, ", "context a.b\n").is_empty(),
+            "capabilities still complete after a comma"
+        );
     }
 
     #[test]

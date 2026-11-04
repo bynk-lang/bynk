@@ -289,6 +289,11 @@ pub struct CrossContextInfo {
     /// `shop.ledger`). A boundary cast or codec names such a type through its
     /// declaring context, not the consumed one.
     pub consumed_type_owners: HashMap<String, HashMap<String, String>>,
+    /// #2887: for each consumed context, the types this context renames with
+    /// `consumes U { T as Alias }`, alias → the name `U` declares. The checker
+    /// works in the alias; anything the callee also reads (the contract hash,
+    /// the TS names its module exports) is spelled in the declared name.
+    pub consumed_type_aliases: HashMap<String, HashMap<String, String>>,
 }
 
 /// Snapshot of one exported capability in a consumed context, as needed for
