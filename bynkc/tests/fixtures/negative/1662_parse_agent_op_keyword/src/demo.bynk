@@ -1,0 +1,11 @@
+context demo
+
+type LedgerId = String where NonEmpty
+
+agent Ledger {
+  key id: LedgerId
+
+  on call record(amount: Int) -> Effect[Int] {
+    Effect.pure(amount)
+  }
+}

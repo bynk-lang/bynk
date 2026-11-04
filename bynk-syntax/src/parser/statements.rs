@@ -137,11 +137,21 @@ impl<'a> Parser<'a> {
     /// `case` body opens the brace itself, peels its leading `provides` clauses,
     /// then calls this to parse the statements and tail.
     pub(crate) fn parse_block_rest(&mut self, open: Span) -> Result<Block, CompileError> {
+        self.parse_block_rest_in(open, false)
+    }
+
+    /// `in_case_body` is true only for a test case's own top-level body, where
+    /// a late `stub`/`env` clause gets its targeted diagnostic (#2913).
+    pub(crate) fn parse_block_rest_in(
+        &mut self,
+        open: Span,
+        in_case_body: bool,
+    ) -> Result<Block, CompileError> {
         // #2010: each `let … else` in the block counts one level against the
         // nesting budget, as the `match` it stands for would. They are counted
         // here and given back however the block ends, error included.
         let mut let_else_depth = 0usize;
-        let result = self.parse_block_rest_counted(open, &mut let_else_depth);
+        let result = self.parse_block_rest_counted(open, &mut let_else_depth, in_case_body);
         self.depth -= let_else_depth;
         result
     }
@@ -150,6 +160,7 @@ impl<'a> Parser<'a> {
         &mut self,
         open: Span,
         let_else_depth: &mut usize,
+        in_case_body: bool,
     ) -> Result<Block, CompileError> {
         let mut statements = Vec::new();
         // #2010: the `let <pattern> … else …` statements in this block, each
@@ -190,6 +201,35 @@ impl<'a> Parser<'a> {
                 attach_trivia(&mut stmt, leading, trailing);
                 statements.push(stmt);
             } else {
+                // #2913: `stub`/`env` clauses lead a case body; one after a
+                // statement would otherwise fall to "expected an expression".
+                let first = match (statements.first(), let_elses.first()) {
+                    (Some(s), Some((_, l))) if l.span.start < s.span().start => Some(l.span),
+                    (Some(s), _) => Some(s.span()),
+                    (None, Some((_, l))) => Some(l.span),
+                    (None, None) => None,
+                };
+                if let Some(first) = first.filter(|_| in_case_body) {
+                    let word = if self.peek_kind() == Some(TokenKind::Stub) {
+                        Some("stub")
+                    } else if self.at_env_clause() {
+                        Some("env")
+                    } else {
+                        None
+                    };
+                    if let Some(word) = word {
+                        let at = self.peek().unwrap().span;
+                        return Err(CompileError::new(
+                            "bynk.parse.clause_after_statement",
+                            at,
+                            format!("`{word}` clauses must come before a case's statements"),
+                        )
+                        .with_label(first, "the first statement")
+                        .with_note(format!(
+                            "move the `{word}` clause above the first statement of the case body"
+                        )));
+                    }
+                }
                 tail_leading = leading;
                 break;
             }

@@ -1,0 +1,2 @@
+bynk.parse.clause_after_statement
+`stub` clauses must come before a case's statements

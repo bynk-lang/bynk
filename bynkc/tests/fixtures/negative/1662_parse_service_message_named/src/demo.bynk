@@ -1,0 +1,9 @@
+context demo
+
+type Msg = { a: String }
+
+service jobs from queue("q") {
+  on message handle(message: Msg) -> Effect[QueueResult] {
+    Ack
+  }
+}
