@@ -59,7 +59,10 @@ pub const KEYWORDS: &[KeywordInfo] = &[
         "Declare an adapter — the host boundary (capability contract + binding).",
     ),
     k("agent", "Declare a stateful, keyed agent inside a context."),
-    k("as", "Alias a consumed context (`consumes X as Y`)."),
+    k(
+        "as",
+        "Alias a consumed context (`consumes X as Y`) or a consumed type (`consumes U { T as Y }`).",
+    ),
     k(
         "asset",
         "Declare a static file the platform serves, public by construction (`asset name = \"path\"`).",

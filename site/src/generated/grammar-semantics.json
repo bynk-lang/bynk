@@ -440,6 +440,26 @@
       "summary": "`consumes` targets a `commons` instead of a context."
     },
     {
+      "code": "bynk.consumes.type_alias_capability",
+      "summary": "A capability was aliased in `consumes U { Cap as Alias }`; only exported types can be aliased."
+    },
+    {
+      "code": "bynk.consumes.type_alias_conflict",
+      "summary": "A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias."
+    },
+    {
+      "code": "bynk.consumes.type_alias_context",
+      "summary": "`consumes U { T as Alias }` aliased a type of a context; only a type exported by an adapter can be aliased."
+    },
+    {
+      "code": "bynk.consumes.type_alias_repeated",
+      "summary": "An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`."
+    },
+    {
+      "code": "bynk.consumes.type_alias_unknown_export",
+      "summary": "`consumes U { T as Alias }` names a type `U` does not export."
+    },
+    {
       "code": "bynk.consumes.unknown_context",
       "summary": "`consumes` names a context that does not exist."
     },

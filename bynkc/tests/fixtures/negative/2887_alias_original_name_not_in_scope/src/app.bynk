@@ -1,0 +1,5 @@
+context app
+
+consumes bynk.crypto { Crypto, Digest as CryptoDigest }
+
+fn bad(d: Digest) -> Int { 1 }

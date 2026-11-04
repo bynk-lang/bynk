@@ -288,9 +288,18 @@ module.exports = grammar({
             // v0.6: `consumes a.b as Alias`.
             seq("as", field("alias", $.identifier)),
             // v0.17: `consumes a.b { Cap, … }` — selected capabilities.
+            // #2887: an exported type may be renamed, `T as Alias`.
             seq(
               "{",
-              optional(sep1(field("capability", $.identifier), ",")),
+              optional(
+                sep1(
+                  seq(
+                    field("capability", $.identifier),
+                    optional(seq("as", field("alias", $.identifier))),
+                  ),
+                  ",",
+                ),
+              ),
               optional(","),
               "}",
             ),

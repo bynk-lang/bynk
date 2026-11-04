@@ -216,9 +216,19 @@ pub struct ConsumesDecl {
     /// the consumer's local capability namespace under their bare names (§3.3).
     /// `None` for the whole-unit forms; `Some` (possibly empty) for the braced
     /// form. Mutually exclusive with `alias`.
-    pub selected: Option<Vec<Ident>>,
+    pub selected: Option<Vec<ConsumesItem>>,
     pub span: Span,
     pub trivia: Trivia,
+}
+
+/// One name in a braced `consumes U { … }` list: a capability or exported type,
+/// optionally renamed for this context with `Name as Alias` (#2887).
+#[derive(Debug, Clone)]
+pub struct ConsumesItem {
+    pub name: Ident,
+    /// `Digest as CryptoDigest`: the exported type is in scope here only as the
+    /// alias, which sidesteps a clash with a local or `uses` type of that name.
+    pub alias: Option<Ident>,
 }
 
 /// An `exports visibility { names }` clause (v0.4 §3.3) or, v0.15, an

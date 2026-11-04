@@ -1,0 +1,6 @@
+[project]
+name = "2887-bare-digest-still-conflicts"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.crypto"]

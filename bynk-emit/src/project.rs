@@ -1794,6 +1794,15 @@ fn build_emit_unit_ctx(
                     paths.insert(n.clone(), p.clone());
                 }
             }
+            // #2887: an aliased export is imported by its original name, from
+            // the file that declares it, but referred to by its alias.
+            for (alias, a) in &info.table.consumed_type_aliases {
+                if a.target == *t
+                    && let Some(p) = target_index.types.get(&a.original)
+                {
+                    paths.insert(alias.clone(), p.clone());
+                }
+            }
             imported_decl_paths.insert(t.clone(), paths);
         }
     }
@@ -1983,6 +1992,12 @@ fn emit_unit(
         imported_from: imported_from.clone(),
         imported_from_kind: imported_from_kind.clone(),
         imported_decl_paths: unit_ctx.imported_decl_paths_emit.clone(),
+        consumed_type_aliases: info
+            .table
+            .consumed_type_aliases
+            .iter()
+            .map(|(alias, a)| (alias.clone(), a.original.clone()))
+            .collect(),
         unit_kind: kind,
         owning_context: owning_context_for_emit.clone(),
         exports_for_consumed: unit_ctx.exports_for_consumed.clone(),
@@ -2708,7 +2723,7 @@ fn run_checks(
     );
 
     // -- 5b. Resolve `consumes` clauses (target must exist + be a context). --
-    let (unit_consumes, unit_flattened) = project_model::phase_resolve_consumes(
+    let (unit_consumes, unit_flattened, unit_type_aliases) = project_model::phase_resolve_consumes(
         &groups,
         &kinds,
         &parsed,
@@ -2718,7 +2733,11 @@ fn run_checks(
         &mut refs,
     );
     let mut unit_tables = unit_tables;
-    bynk_check::symbols::record_flattened_caps(&mut unit_tables, &unit_flattened);
+    bynk_check::symbols::record_flattened_caps(
+        &mut unit_tables,
+        &unit_flattened,
+        &unit_type_aliases,
+    );
     bynk_check::project_model::phase_resolve_derived(
         &groups,
         &kinds,
@@ -5474,6 +5493,9 @@ pub(crate) struct EmitProjectCtx {
     pub imported_from_kind: HashMap<String, UnitKind>,
     /// For each imported unit, the file path that declares each name.
     pub imported_decl_paths: HashMap<String, HashMap<String, PathBuf>>,
+    /// #2887: the types this unit renames with `consumes U { T as Alias }`,
+    /// alias → the name the consumed module declares it under.
+    pub consumed_type_aliases: HashMap<String, String>,
     /// What kind of unit this is.
     pub unit_kind: UnitKind,
     /// For contexts: this context's qualified name (used as the brand for

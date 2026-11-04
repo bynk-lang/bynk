@@ -5029,6 +5029,23 @@ fn emit_stub_class(
             type_ns.entry(n.clone()).or_insert_with(|| uns.clone());
         }
     }
+    // #2887: the stubbed capability's signature names its own unit's types by
+    // the names that unit declares, which this target may have renamed
+    // (`consumes U { T as Alias }`) to keep them off a type of its own: those
+    // names are `U`'s whatever else the target binds them to.
+    let mut sig_type_ns = type_ns.clone();
+    if let Some(owner) = unit_tables
+        .get(&owning_unit)
+        .and_then(|t| t.flattened_caps.get(&rp.cap))
+    {
+        for a in unit_tables[&owning_unit]
+            .consumed_type_aliases
+            .values()
+            .filter(|a| a.target == *owner)
+        {
+            sig_type_ns.insert(a.original.clone(), test_ns(owner));
+        }
+    }
     let scope_names: Vec<String> = if let Some(table) = unit_tables.get(&owning_unit) {
         let mut v: Vec<String> = table
             .types
@@ -5125,12 +5142,12 @@ fn emit_stub_class(
                 name: p.name.name.clone(),
                 ty: Some(emitter::ts_type_ref_qualified_multi_ts_type(
                     &p.type_ref,
-                    &type_ns,
+                    &sig_type_ns,
                 )),
                 optional: false,
             })
             .collect();
-        let return_ty = emitter::ts_type_ref_qualified_multi_ts_type(&op.return_type, &type_ns);
+        let return_ty = emitter::ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);
 
         let mut body_text = String::new();
         crate::emitter::extend_printed_at(
@@ -5138,12 +5155,20 @@ fn emit_stub_class(
             emit_ns_destructure(&scope_ns, &scope_names, &scope_type_names),
             2,
         );
-        let mut taken: HashSet<&String> = scope_names.iter().collect();
+        let mut taken: HashSet<String> = scope_names.iter().cloned().collect();
         for u in &adapters {
+            // #2887: a type this target renames from `u` binds as its alias.
+            let renames: HashMap<String, String> = unit_tables
+                .get(&owning_unit)
+                .into_iter()
+                .flat_map(|t| &t.consumed_type_aliases)
+                .filter(|(_, a)| a.target == **u)
+                .map(|(alias, a)| (a.original.clone(), alias.clone()))
+                .collect();
             let mut names: Vec<String> = unit_tables[*u]
                 .types
                 .keys()
-                .filter(|n| taken.insert(*n))
+                .filter(|n| taken.insert(renames.get(*n).unwrap_or(*n).clone()))
                 .cloned()
                 .collect();
             if names.is_empty() {
@@ -5153,7 +5178,7 @@ fn emit_stub_class(
             let types = aliased_types(&unit_tables[*u], |n| names.contains(n));
             crate::emitter::extend_printed_at(
                 &mut body_text,
-                emit_ns_destructure(&test_ns(u), &names, &types),
+                emit_ns_destructure_renamed(&test_ns(u), &names, &types, &renames),
                 2,
             );
         }
@@ -6610,10 +6635,29 @@ fn emit_ns_destructure(
     value_names: &[String],
     type_names: &[(String, Vec<String>)],
 ) -> Vec<TsStmt> {
+    emit_ns_destructure_renamed(ns, value_names, type_names, &HashMap::new())
+}
+
+/// [`emit_ns_destructure`] where `renames` (original → alias, #2887) binds a
+/// consumed type the unit renames with `consumes U { T as Alias }` under its
+/// alias: `const { T: Alias } = ns;` and `type Alias = ns.T`.
+fn emit_ns_destructure_renamed(
+    ns: &str,
+    value_names: &[String],
+    type_names: &[(String, Vec<String>)],
+    renames: &HashMap<String, String>,
+) -> Vec<TsStmt> {
     let mut stmts = Vec::new();
     if !value_names.is_empty() {
+        let pattern = value_names
+            .iter()
+            .map(|n| match renames.get(n) {
+                Some(alias) => format!("{n}: {alias}"),
+                None => n.clone(),
+            })
+            .collect();
         stmts.push(TsStmt::const_stmt(
-            TsBindingName::ObjectPattern(value_names.to_vec()),
+            TsBindingName::ObjectPattern(pattern),
             None,
             ident(ns),
             None,
@@ -6621,6 +6665,7 @@ fn emit_ns_destructure(
     }
     for (t, params) in type_names {
         let target = format!("{ns}.{t}");
+        let t = renames.get(t).unwrap_or(t);
         let ty = if params.is_empty() {
             TsType::named(target)
         } else {
@@ -7032,8 +7077,20 @@ fn emit_test_scope_setup(
                 // #2702: not a consumed context's `private` types.
                 let types = aliased_types(table, |n| is_public_type(table, n));
                 let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
-                bound.extend(names.iter().cloned());
-                crate::emitter::extend_printed_at(out, emit_ns_destructure(&ns, &names, &types), 2);
+                // #2887: the types this target renames from `q` bind as their aliases.
+                let renames: HashMap<String, String> = unit_tables
+                    .get(target_name)
+                    .into_iter()
+                    .flat_map(|t| &t.consumed_type_aliases)
+                    .filter(|(_, a)| a.target == *q)
+                    .map(|(alias, a)| (a.original.clone(), alias.clone()))
+                    .collect();
+                bound.extend(names.iter().map(|n| renames.get(n).unwrap_or(n).clone()));
+                crate::emitter::extend_printed_at(
+                    out,
+                    emit_ns_destructure_renamed(&ns, &names, &types, &renames),
+                    2,
+                );
                 // #1883 (review of #1923): a consumed context's content-hashed
                 // assets, which the target's Worker ships too (its fixed paths
                 // stay with its own Worker, and are not nameable).

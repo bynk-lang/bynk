@@ -377,3 +377,37 @@ fn a_use_in_a_suite_on_the_unit_keeps_the_clause() {
     );
     assert_eq!(run.organise("app/a.bynk", Mode::Full), None);
 }
+
+/// #2887: a braced clause that renames a type (`T as Alias`) is kept as
+/// written, never pruned or re-sorted into something that drops the alias.
+#[test]
+fn a_clause_that_aliases_a_type_is_kept_as_written() {
+    let types = canon(
+        "adapter svc.types\n\nbinding \"./types.binding.ts\"\n\nexports transparent { Widget }\n\ntype Widget = enum { Big, Small }\n",
+    );
+    let src = canon(
+        "context app.a\n\nuses shared.widget\nconsumes svc.types { Widget as Size }\n\nfn big() -> Size {\n  Size.Big\n}\n\nfn grow2(w: Widget) -> Int {\n  grow(w)\n}\n",
+    );
+    let (widget, clock, prov, other) = (widget(), clock(), prov(), other());
+    let run = Run::new(
+        "alias",
+        &[
+            ("shared/widget.bynk", widget.as_str()),
+            ("shared/other.bynk", other.as_str()),
+            ("svc/clock.bynk", clock.as_str()),
+            ("svc/prov.bynk", prov.as_str()),
+            ("svc/types.bynk", types.as_str()),
+            ("svc/types.binding.ts", "export {};\n"),
+            ("app/a.bynk", src.as_str()),
+        ],
+    );
+    let baseline: Vec<_> = run
+        .result
+        .files
+        .iter()
+        .flat_map(|f| f.diagnostics.iter().map(|d| d.error.category))
+        .collect();
+    assert!(baseline.is_empty(), "baseline: {baseline:?}");
+    assert_eq!(run.organise("app/a.bynk", Mode::Full), None);
+    assert_eq!(run.organise("app/a.bynk", Mode::SortOnly), None);
+}

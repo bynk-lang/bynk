@@ -90,7 +90,7 @@ pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
             cd.selected
                 .as_ref()?
                 .iter()
-                .any(|s| s.name == d.base.name)
+                .any(|s| s.name.name == d.base.name)
                 .then(|| cd.target.joined())
         });
         let base = base_unit

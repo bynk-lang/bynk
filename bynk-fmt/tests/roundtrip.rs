@@ -272,3 +272,21 @@ fn round_trip_preserves_braced_consumes() {
     let twice = format_source(&out, &opts).expect("second format must succeed");
     assert_eq!(out, twice, "formatter not idempotent");
 }
+
+/// #2887: `consumes U { T as Alias }` must survive formatting, alias and
+/// order intact, and the clause must be idempotent.
+#[test]
+fn round_trip_preserves_consumes_type_alias() {
+    let opts = FormatOptions::default();
+    let src = "context app {\n\
+        \x20 consumes   bynk.crypto { Crypto,Digest   as CryptoDigest , Signature }\n\n\
+        \x20 fn one() -> Int { 1 }\n\
+        }\n";
+    let out = format_source(src, &opts).expect("format must succeed");
+    assert!(
+        out.contains("consumes bynk.crypto { Crypto, Digest as CryptoDigest, Signature }"),
+        "formatter dropped or mangled the alias:\n{out}"
+    );
+    let twice = format_source(&out, &opts).expect("second format must succeed");
+    assert_eq!(out, twice, "formatter not idempotent");
+}

@@ -438,7 +438,7 @@ pub fn analyse_project_with_policy(
     );
 
     // -- 5b. `consumes` resolution. --
-    let (unit_consumes, unit_flattened) = project_model::phase_resolve_consumes(
+    let (unit_consumes, unit_flattened, unit_type_aliases) = project_model::phase_resolve_consumes(
         &groups,
         &kinds,
         &parsed,
@@ -448,7 +448,7 @@ pub fn analyse_project_with_policy(
         &mut refs,
     );
     let mut unit_tables = unit_tables;
-    crate::symbols::record_flattened_caps(&mut unit_tables, &unit_flattened);
+    crate::symbols::record_flattened_caps(&mut unit_tables, &unit_flattened, &unit_type_aliases);
     crate::project_model::phase_resolve_derived(
         &groups,
         &kinds,

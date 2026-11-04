@@ -1,0 +1,42 @@
+context app
+
+uses report
+consumes bynk.crypto { Crypto, Digest as CryptoDigest }
+
+// #2887: `Digest` is the commons record; the crypto module's `Digest` enum is
+// in scope only as `CryptoDigest`, so the two no longer clash.
+
+fn empty() -> Digest { Digest { total: 0 } }
+
+fn algorithmName(d: CryptoDigest) -> String {
+	match d {
+		Sha256 => "sha256"
+		Sha384 => "sha384"
+		Sha512 => "sha512"
+	}
+}
+
+service hashing {
+	on call(token: String) -> Effect[String] given Crypto {
+		let h <- Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(token))
+		Effect.pure(h.toHex())
+	}
+}
+
+service total {
+	on call() -> Effect[Int] {
+		Effect.pure(empty().total)
+	}
+}
+
+service name {
+	on call() -> Effect[String] {
+		Effect.pure(algorithmName(CryptoDigest.Sha384))
+	}
+}
+
+service describe {
+	on call(d: CryptoDigest) -> Effect[String] {
+		Effect.pure(algorithmName(d))
+	}
+}

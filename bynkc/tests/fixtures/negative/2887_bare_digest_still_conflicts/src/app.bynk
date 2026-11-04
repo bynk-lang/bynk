@@ -1,0 +1,6 @@
+context app
+
+uses report
+consumes bynk.crypto { Crypto }
+
+fn empty() -> Digest { Digest { total: 0 } }

@@ -1,0 +1,29 @@
+suite app
+
+case "the aliased enum is passed to the capability" {
+  let h <- hashing.call("abc")
+  expect h == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+}
+
+case "the commons Digest is untouched" {
+  let n <- total.call()
+  expect n == 0
+}
+
+case "the aliased enum matches and constructs" {
+  let n <- name.call()
+  expect n == "sha384"
+}
+
+case "a stubbed digest is observed" {
+  stub Crypto.digest(_, _) returns Bytes.fromUtf8("stubbed")
+  let h <- hashing.call("abc")
+  expect h == "73747562626564"
+  expect Crypto.digest called once
+}
+
+case "a stub can match on the aliased variant" {
+  stub Crypto.digest(CryptoDigest.Sha256, _) returns Bytes.fromUtf8("sha")
+  let h <- hashing.call("abc")
+  expect h == "736861"
+}

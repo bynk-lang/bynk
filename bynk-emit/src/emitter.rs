@@ -317,6 +317,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         imported_from: HashMap::new(),
         imported_from_kind: HashMap::new(),
         imported_decl_paths: HashMap::new(),
+        consumed_type_aliases: HashMap::new(),
         unit_kind: UnitKind::Commons,
         owning_context: None,
         exports_for_consumed: HashMap::new(),
@@ -1459,6 +1460,13 @@ fn emit_boundary_helpers(
                 .iter()
                 .flat_map(|n| [format!("__serialise_{n}"), format!("__deserialise_{n}")])
                 .collect();
+            let import_parts: Vec<String> = names
+                .iter()
+                .flat_map(|n| {
+                    ["__serialise_", "__deserialise_"]
+                        .map(|prefix| codec_import_spec(ctx, prefix, n))
+                })
+                .collect();
             // v0.9.1: emit both a regular import (so the names are bound
             // locally for use inside this file's serialisation helpers) and a
             // re-export (so downstream consumers can still reach them
@@ -1480,7 +1488,7 @@ fn emit_boundary_helpers(
             let mut import_stmt = bynk_ts::TsStmt::decl(
                 bynk_ts::TsDecl::Import {
                     type_only: false,
-                    names: parts.clone(),
+                    names: import_parts,
                     from: import_spec,
                 },
                 None,
@@ -1756,7 +1764,10 @@ fn commons_codec_imports(
             );
             let parts = names
                 .iter()
-                .flat_map(|n| [format!("__serialise_{n}"), format!("__deserialise_{n}")])
+                .flat_map(|n| {
+                    ["__serialise_", "__deserialise_"]
+                        .map(|prefix| codec_import_spec(ctx, prefix, n))
+                })
                 .collect();
             imported.extend(names);
             bynk_ts::TsStmt::decl(
@@ -3662,9 +3673,9 @@ fn emit_project_imports(
                     // `uses`/`consumes` (e.g. `bynk`'s `Method`) is often
                     // used as a *value* too (`Method.Get`), which a blanket
                     // `import type` would wrongly break.
-                    parts.push(format!("type {}", ts_ident(n)));
+                    parts.push(format!("type {}", import_spec_of(ctx, n)));
                 } else {
-                    parts.push(ts_ident(n));
+                    parts.push(import_spec_of(ctx, n));
                 }
             }
             // Arc C, slice 30 (#1392): a real `TsDecl::Import` — `parts`'
@@ -3706,6 +3717,27 @@ fn emit_project_imports(
         stmt.no_blank_before = true;
     }
     stmts
+}
+
+/// #2887: `n` as an import specifier. A type this unit renames with `consumes
+/// U { T as Alias }` is imported under the name `U` declares and bound to the
+/// alias (`Digest as CryptoDigest`), so every use in the module reaches the
+/// module's real type, not a new one.
+fn import_spec_of(ctx: &EmitProjectCtx, n: &str) -> String {
+    match ctx.consumed_type_aliases.get(n) {
+        Some(original) => format!("{} as {}", ts_ident(original), ts_ident(n)),
+        None => ts_ident(n),
+    }
+}
+
+/// #2887: a codec helper of type `n` (`prefix` is `__serialise_` or
+/// `__deserialise_`) as an import specifier: for a type this unit renames, the
+/// helper the module exports for the real type, bound under the alias's name.
+fn codec_import_spec(ctx: &EmitProjectCtx, prefix: &str, n: &str) -> String {
+    match ctx.consumed_type_aliases.get(n) {
+        Some(original) => format!("{prefix}{original} as {prefix}{n}"),
+        None => format!("{prefix}{n}"),
+    }
 }
 
 /// Compute a relative import specifier from `from_source` (a `.bynk` path)

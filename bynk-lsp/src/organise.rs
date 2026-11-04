@@ -373,15 +373,21 @@ impl<'a> Clause<'a> {
             Kind::Consumes(c) => {
                 let target = c.target.joined();
                 match (&c.alias, &c.selected) {
-                    (_, Some(selected)) if !selected.is_empty() && !clause.contains("//") => {
+                    // #2887: a clause that aliases a name (`T as U`) is kept as
+                    // written; pruning and sorting would have to carry the alias.
+                    (_, Some(selected))
+                        if !selected.is_empty()
+                            && !clause.contains("//")
+                            && selected.iter().all(|i| i.alias.is_none()) =>
+                    {
                         let mut names: Vec<&str> = selected
                             .iter()
-                            .map(|i| i.name.as_str())
+                            .map(|i| i.name.name.as_str())
                             .filter(|n| usage.is_none_or(|us| us.cap_used(&target, n)))
                             .collect();
                         if names.is_empty() && has_comment {
                             // Kept for its comment: prune nothing.
-                            names = selected.iter().map(|i| i.name.as_str()).collect();
+                            names = selected.iter().map(|i| i.name.name.as_str()).collect();
                         }
                         names.sort_unstable();
                         names.dedup();
@@ -389,7 +395,7 @@ impl<'a> Clause<'a> {
                             return None;
                         }
                         let original: Vec<&str> =
-                            selected.iter().map(|i| i.name.as_str()).collect();
+                            selected.iter().map(|i| i.name.name.as_str()).collect();
                         // Rewrite only a selection that changes, so an
                         // organised clause keeps its own spacing.
                         if names != original {

@@ -51,6 +51,47 @@ service placeOrder {
 }
 ```
 
+## Rename an exported type that clashes with one of yours
+
+`consumes U { … }` brings every type `U` exports into scope, whether or not the
+braces name it, because the capabilities' signatures use them. `bynk.crypto`
+exports `Digest`, `Signature`, `CryptoError`, `SigningKey` and `VerifyKey`, so a
+context that also has its own `Digest` (from a `uses` commons, or declared
+locally) is `bynk.consumes.name_conflict`.
+
+Rename the consumed type in the braces with `as`. It is then in scope only under
+the alias, and the clash goes away:
+
+```bynk,fragment
+context app
+
+uses report
+consumes bynk.crypto { Crypto, Digest as CryptoDigest }
+
+fn empty() -> Digest { Digest { total: 0 } }
+
+service hashing {
+  on call(token: String) -> Effect[Bytes] given Crypto {
+    Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(token))
+  }
+}
+```
+
+The alias is the same type under another name, not a new one: it works wherever
+the original would, as a type, a constructor, a variant (`CryptoDigest.Sha256`),
+a pattern, or an argument to the capability's operations. The original name,
+`Digest` here, is not in scope from `bynk.crypto`, so it means your own type.
+
+Only a type exported by an adapter, such as `bynk.crypto`, can be aliased: a
+context's types cross its service boundary by name, so aliasing one is
+`bynk.consumes.type_alias_context`. A capability keeps its name
+(`bynk.consumes.type_alias_capability`); alias a name the unit does not export
+(`bynk.consumes.type_alias_unknown_export`), alias the same type twice or both
+bare and aliased (`bynk.consumes.type_alias_repeated`), or pick an alias that is
+already taken (`bynk.consumes.type_alias_conflict`), and the compiler refuses.
+In a context split across files, an alias written in any file applies to all of
+them.
+
 ## Undo earlier steps when a later one fails
 
 Each context commits its own work. When a handler calls several, nothing rolls
