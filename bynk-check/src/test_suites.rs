@@ -2437,7 +2437,7 @@ fn check_extra_headers_tier(
     }
 }
 
-/// #2931: the headers value of an extra-headers call may be a local `let`
+/// #2931: the headers value of an extra-headers call may be a top-level `let`
 /// bound to the literal `RequestHeaders.of([…])`; run the `Authorization`
 /// check on that initialiser, so the common indirection gets the check-time
 /// diagnostic rather than the runtime drop.
