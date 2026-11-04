@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "A test module's capability call-record types qualify a `uses` commons type, so a context capability taking a commons type passes `tsc` under `bynk test` (#2886)"
----
+# 0729 — Call-record types qualify `uses` commons types
 
-## ADR: call-record-commons-qualification
-title: Call-record types qualify `uses` commons types
-summary: The observation call records resolve a commons type through its namespace import
+- **Status:** Accepted (v0.504.3)
 
 **Context.** `observation_call_record_types` qualified only the target's own types and consumed adapters', so `fn draw(p: Point)` with `Point` from a `uses` commons emitted an unqualified `Point` that `tsc` could not find.
 
