@@ -5204,7 +5204,7 @@ fn check_address_args(
             // test file and the unit it tests are normally different files.
             .with_note("handler declared here"),
         );
-        for a in positional {
+        for a in positional.iter().filter(|a| !is_wire(a)) {
             let _ = type_of(a, None, ctx);
         }
         return;
