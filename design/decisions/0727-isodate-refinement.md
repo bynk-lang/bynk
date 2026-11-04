@@ -1,12 +1,6 @@
----
-level: minor
-changelog: "`String where IsoDate` refines a string to a calendar date, exactly `YYYY-MM-DD`; an impossible date such as `2026-02-30` is refused in a literal, `.of`, `Json.decode` and at the HTTP boundary"
-probes: ast_importers, ts_writes
----
+# 0727 — IsoDate, a calendar-date refinement predicate for String
 
-## ADR: isodate-refinement
-title: IsoDate, a calendar-date refinement predicate for String
-summary: A built-in String predicate whose one calendar rule is shared by the checker, the runtime and Instant.fromIso
+- **Status:** Accepted (v0.503)
 
 **Context.** A date-only input (a path parameter, a body field) could not be
 fully validated at the boundary. `Matches` can bound months and days but cannot

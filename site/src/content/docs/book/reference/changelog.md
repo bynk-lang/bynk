@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.502**.
+written against **v0.503**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.503.0** | "`String where IsoDate` refines a string to a calendar date, exactly `YYYY-MM-DD`; an impossible date such as `2026-02-30` is refused in a literal, `.of`, `Json.decode` and at the HTTP boundary" |
 | **v0.502.1** | An integration test proves `bynk token` credentials against a Worker under `bynk dev` |
 | **v0.502.0** | "`ValidationError` exposes `field` and `message` (both `String`) to Bynk code; `value` stays unreachable (#2866)" |
 | **v0.501.1** | The Rust token signer is byte-compared with the test runtime's signer for non-ASCII subjects |
