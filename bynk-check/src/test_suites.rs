@@ -957,22 +957,7 @@ pub fn phase_integration_bodies(
                 // real wire); in a non-`system` case it has no wire to be raw
                 // about, so lowering it would silently pass raw text to a direct
                 // in-process handler call. Reject it at the tier where it is known.
-                if !matches!(
-                    case_effective_tier(case, d),
-                    bynk_syntax::ast::TestTier::System
-                ) && block_uses_wire(&case.body)
-                {
-                    body_errs.push(CompileError::new(
-                        "bynk.test.wire_needs_system",
-                        case.name_span,
-                        format!(
-                            "case `\"{}\"` uses `Wire(...)` but is not a `system`-tier case",
-                            case.name
-                        ),
-                    ).with_note(
-                        "`Wire` hands raw, pre-validation input to the real boundary; promote the case with `as system`, or pass a typed argument",
-                    ));
-                }
+                check_wire_tier(case, case_effective_tier(case, d), &mut body_errs);
                 // #706: `by Nobody` presents no credential to the real auth seam
                 // (the 401 path), which exists only at `system`; at a lower tier
                 // the handler just runs with no identity, silently not a 401.
@@ -1668,6 +1653,7 @@ fn check_test_bodies(
                 &mut errors,
             );
             check_bad_signature_tier(case, tier, &mut errors);
+            check_wire_tier(case, tier, &mut errors);
             if tier != bynk_syntax::ast::TestTier::System {
                 crossing.check_case(target_name, case, tier, &mut errors);
             }
@@ -2979,6 +2965,25 @@ fn check_faults_tier(
             ),
         );
     }
+}
+
+/// Slice C, #2905: `bynk.test.wire_needs_system` — a case below `system` that
+/// uses `Wire(…)`. Shared by the unit and integration paths: the unit path
+/// once skipped it, so an http `Wire` in a unit suite reached `tsc`.
+fn check_wire_tier(case: &Case, tier: bynk_syntax::ast::TestTier, errors: &mut Vec<CompileError>) {
+    if tier == bynk_syntax::ast::TestTier::System || !block_uses_wire(&case.body) {
+        return;
+    }
+    errors.push(CompileError::new(
+        "bynk.test.wire_needs_system",
+        case.name_span,
+        format!(
+            "case `\"{}\"` uses `Wire(...)` but is not a `system`-tier case",
+            case.name
+        ),
+    ).with_note(
+        "`Wire` hands raw, pre-validation input to the real boundary; promote the case with `as system`, or pass a typed argument",
+    ));
 }
 
 /// #706: whether a `case` body drives an effect-let `by Nobody` — the "no

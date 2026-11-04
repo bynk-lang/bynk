@@ -1,0 +1,6 @@
+suite a.tick as system {
+  case "wire to cron" {
+    let r <- sweep.schedule("0 * * * *", Wire("x"))
+    expect r == r
+  }
+}
