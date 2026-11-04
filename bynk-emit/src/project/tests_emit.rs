@@ -5487,7 +5487,7 @@ fn lower_stub_value_block(
             typed.callees.extend(callees);
             test_suites::add_suite_fns_to_typed(&mut typed, items.fns);
             for f in items.fns {
-                let stmts = emitter::emit_suite_fn(f, &mut typed, runtime_use);
+                let stmts = emitter::emit_suite_fn(f, &typed, runtime_use);
                 helpers.extend(stmts.iter().map(|st| bynk_ts::print_stmt(st, 0)));
             }
         }
