@@ -59,8 +59,13 @@ denial-of-service risk):
   bounded repeat inside a loop or of an ambiguous body (`(a{2,3})+`,
   `(?:a|a){0,24}`). It also covers a regex the
   compiler cannot analyse, such as a backreference inside an unbounded repeat.
+  Nesting alone is not the test: a repeated group that must open with a
+  character the preceding repetition cannot match is unambiguous and accepted,
+  as in the slug `[a-z]+(-[a-z]+)*`, `[a-z0-9]+(\.[a-z0-9]+)*` and
+  `\d+(,\d{3})*`. An optional separator (`[a-z]+(-?[a-z]+)*`) is ambiguous
+  and refused.
 - `bynk.types.polynomial_regex`: two repetitions that can split the same text
-  (`\d*\d*`). With a `MaxLength` or `Length` predicate in the same refinement
+  (`\d*\d*`). With a `MaxLength`, `Length` or `IsoDate` (ten characters) predicate in the same refinement
   small enough for the pattern's degree (at most 3,162 characters for two
   overlapping repetitions, 215 for three) it is only a warning,
   `bynk.types.polynomial_regex_capped`, because length predicates are always
