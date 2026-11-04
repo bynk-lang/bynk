@@ -377,6 +377,129 @@ fn marked_positive_fixtures_behave_as_expected() {
     );
 }
 
+/// Run a fixture with `needle` (a statement in the emitted verifier's compiled
+/// JavaScript) replaced by `void 0`, and return each case's name and whether it
+/// passed. A `tsc` shim on `PATH` runs the real `tsc`, then rewrites
+/// `out-js/**/auth.js` before `node` runs it, and fails loudly when `needle` is
+/// not there, so a refactor of the verifier cannot turn the mutation into a no-op.
+fn run_mutated(fixture: &Path, scratch: &Path, tag: &str, needle: &str) -> Vec<(String, bool)> {
+    let real_tsc = Command::new("which")
+        .arg("tsc")
+        .output()
+        .expect("which tsc");
+    let real_tsc = String::from_utf8_lossy(&real_tsc.stdout).trim().to_string();
+    let bin = scratch.join(format!("mutant-bin-{tag}"));
+    fs::create_dir_all(&bin).expect("create shim dir");
+    let shim = bin.join("tsc");
+    fs::write(
+        &shim,
+        format!(
+            r#"#!/bin/sh
+"{real_tsc}" "$@" || exit $?
+while [ $# -gt 0 ]; do [ "$1" = -p ] && P="$2"; shift; done
+OUTJS="$(dirname "$(dirname "$P")")/out-js"
+FILES=$(grep -rlF '{needle}' "$OUTJS" --include=auth.js)
+[ -n "$FILES" ] || {{ echo "mutation anchor not found: {needle}" >&2; exit 99; }}
+for f in $FILES; do sed -i.bak 's/{needle}/void 0/' "$f"; done
+"#
+        ),
+    )
+    .expect("write shim");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&shim, fs::Permissions::from_mode(0o755)).expect("chmod shim");
+    }
+    let name = format!("{}-{tag}", fixture.file_name().unwrap().to_string_lossy());
+    let copy = scratch.join(&name).join("project");
+    let _ = fs::remove_dir_all(scratch.join(&name));
+    copy_fixture(fixture, &copy);
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .env("PATH", path)
+        .arg("test")
+        .arg(&copy)
+        .arg("--output")
+        .arg(scratch.join(&name).join("run").join("out"))
+        .arg("--format")
+        .arg("json")
+        .output()
+        .expect("run bynkc test");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let doc: serde_json::Value = serde_json::from_str(&stdout).unwrap_or_else(|e| {
+        panic!(
+            "no JSON document ({e}).\nstdout:\n{stdout}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    let cases: Vec<(String, bool)> = doc["suites"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|s| s["cases"].as_array().into_iter().flatten())
+        .map(|c| {
+            (
+                c["name"].as_str().unwrap_or("?").to_string(),
+                c["outcome"].as_str() == Some("pass"),
+            )
+        })
+        .collect();
+    assert!(
+        !cases.is_empty(),
+        "the mutated run reported no cases: {doc}"
+    );
+    cases
+}
+
+/// #2864: `by Forged` and `by Expired` must be able to fail. Each check of the
+/// emitted Bearer verifier is turned off in turn, and exactly the cases that
+/// rely on it must turn red, while the other principal's case stays green.
+#[test]
+fn a_lax_bearer_verifier_fails_the_forged_and_expired_cases() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: the `tsc` shim is a POSIX shell script");
+        return;
+    }
+    if !(tool_exists("tsc") && tool_exists("node")) {
+        if require::is_required(REQUIRE_ENV) {
+            panic!("tsc and node are required, but {REQUIRE_ENV} is set and one is missing");
+        }
+        eprintln!("\n!!! MUTATION TEST SKIPPED !!!\nit needs `tsc` and `node` on PATH.\n");
+        return;
+    }
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/2864_system_bearer_refusals");
+    let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("behaviour-fixtures");
+    let passed = |cases: &[(String, bool)], name: &str| {
+        cases
+            .iter()
+            .find(|(n, _)| n == name)
+            .unwrap_or_else(|| panic!("no case `{name}` ran"))
+            .1
+    };
+
+    // The signature check off: a forged token is admitted.
+    let lax_sig = run_mutated(&fixture, &scratch, "sig", r#"return Err("bad signature")"#);
+    assert!(!passed(&lax_sig, "a forged token is refused"));
+    assert!(!passed(&lax_sig, "a forged raw request is refused"));
+    assert!(passed(&lax_sig, "an expired token is refused"));
+    assert!(passed(&lax_sig, "a missing token is refused"));
+    // ... and the inverted claim now holds, so the outcome is read from the seam.
+    assert!(passed(&lax_sig, "a forged token is not handled"));
+
+    // The `exp` check off: an expired token is admitted.
+    let lax_exp = run_mutated(&fixture, &scratch, "exp", r#"return Err("token expired")"#);
+    assert!(!passed(&lax_exp, "an expired token is refused"));
+    assert!(!passed(&lax_exp, "an expired raw request is refused"));
+    assert!(passed(&lax_exp, "a forged token is refused"));
+    assert!(passed(&lax_exp, "a missing token is refused"));
+    assert!(passed(&lax_exp, "an expired token is not handled"));
+}
+
 #[cfg(test)]
 mod marker {
     use super::*;

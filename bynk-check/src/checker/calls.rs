@@ -4451,10 +4451,11 @@ fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> Co
     }
 }
 
-/// #2135: whether `name` is a reserved bad-signature principal — `Forged`
-/// (a wrong secret) or `Stale` (a timestamp past the tolerance).
+/// #2135, #2864: whether `name` is a reserved bad-credential principal —
+/// `Forged` (a wrong secret), `Stale` (a timestamp past the tolerance) or
+/// `Expired` (a Bearer token whose `exp` has passed).
 pub(crate) fn is_bad_signature_principal(name: &str) -> bool {
-    matches!(name, "Forged" | "Stale")
+    matches!(name, "Forged" | "Stale" | "Expired")
 }
 
 pub(crate) fn nobody_outcome(value: &Expr, ty: TyId, ctx: &Ctx) -> TyId {
@@ -4745,36 +4746,52 @@ pub(crate) fn check_effect_let_principal(
         return;
     }
 
-    // #2135: `by Forged` / `by Stale` are reserved principals, like `Nobody`:
-    // the `system` driver signs a `Signature` route with a wrong secret, or
-    // `tolerance + 60` seconds in the past, so the real seam refuses it. They
-    // name no actor and take no identity. The `system`-only tier rule is
-    // enforced with the case's tier (`bynk.test.forged_needs_system`).
+    // #2135, #2864: `by Forged` / `by Stale` / `by Expired` are reserved
+    // principals, like `Nobody`: the `system` driver signs a `Signature` route
+    // with a wrong secret, or `tolerance + 60` seconds in the past, and a
+    // Bearer route with a token signed by a wrong secret, or one whose `exp`
+    // is an hour past, so the real seam refuses it. They name no actor and
+    // take no identity. The `system`-only tier rule is enforced with the
+    // case's tier (`bynk.test.forged_needs_system`).
     if let Some(p) = principal
         && is_bad_signature_principal(&p.actor.name)
     {
         let name = p.actor.name.as_str();
-        match handler
-            .by_clause
-            .as_ref()
-            .and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors))
-        {
-            None => {
+        let by = handler.by_clause.as_ref();
+        let sig_seam =
+            by.and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors));
+        let bearer =
+            by.is_some_and(|by| crate::actors::route_has_bearer_seam(by, &ctx.test_actors));
+        match (name, sig_seam) {
+            ("Expired", _) if !bearer => {
                 let err = CompileError::new(
-                    "bynk.test.forged_needs_signature_route",
+                    "bynk.test.expired_needs_bearer_route",
                     p.span,
-                    format!(
-                        "`by {name}` sends a bad signature to a `Signature` seam, but this handler's route has no `Signature` seam that refuses one"
-                    ),
+                    "`by Expired` sends an expired token to a `Bearer` seam, but this handler's route has no `Bearer` seam that refuses one",
                 )
                 .with_note(
-                    "use `by Forged` and `by Stale` on a route guarded by a `Signature` actor; on a Bearer route, `by Nobody` drives the seam to a `401`",
+                    "use `by Expired` on a route guarded by a `Bearer` actor; on a `Signature` route, `by Stale` sends a stale signature",
                 );
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
-            Some(seam)
-                if name == "Stale"
-                    && (seam.timestamp_header.is_none() || seam.tolerance_secs.is_none()) =>
+            ("Expired", _) => {}
+            ("Forged" | "Stale", None) if !(name == "Forged" && bearer) => {
+                let err = CompileError::new(
+                    "bynk.test.forged_needs_signature_route",
+                    p.span,
+                    if name == "Forged" {
+                        "`by Forged` sends a bad credential to a `Signature` or `Bearer` seam, but this handler's route has neither seam to refuse one".to_string()
+                    } else {
+                        "`by Stale` sends a stale signature to a `Signature` seam, but this handler's route has no `Signature` seam that refuses one".to_string()
+                    },
+                )
+                .with_note(
+                    "use `by Forged` on a route guarded by a `Signature` or `Bearer` actor, and `by Stale` on a `Signature` one; `by Nobody` drives either seam to a `401`",
+                );
+                ctx.errors.push(with_open_sum_note(err, &handler, ctx));
+            }
+            ("Stale", Some(seam))
+                if seam.timestamp_header.is_none() || seam.tolerance_secs.is_none() =>
             {
                 ctx.errors.push(
                     CompileError::new(
@@ -4787,13 +4804,13 @@ pub(crate) fn check_effect_let_principal(
                     ),
                 );
             }
-            Some(_) => {}
+            _ => {}
         }
         if let Some(idv) = &p.identity {
             ctx.errors.push(CompileError::new(
                 "bynk.test.actor_no_identity",
                 p.span,
-                format!("`{name}` presents a signature, not an identity, so it takes none — write `by {name}`"),
+                format!("`{name}` presents a bad credential, not an identity, so it takes none — write `by {name}`"),
             ));
             let _ = type_of(idv, None, ctx);
         }
@@ -5029,18 +5046,26 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
                 let _ = type_of(id, None, ctx);
             }
         }
-        // #2135: a reserved bad-signature principal reaching no http route
-        // (a `call`, an event, a cron or queue address) has no `Signature`
-        // seam to refuse it.
+        // #2135, #2864: a reserved bad-credential principal reaching no http
+        // route (a `call`, an event, a cron or queue address) has no
+        // `Signature` or `Bearer` seam to refuse it.
         ActorIdentity::Unknown if is_bad_signature_principal(name) => {
-            ctx.errors.push(
+            let err = if name == "Expired" {
+                CompileError::new(
+                    "bynk.test.expired_needs_bearer_route",
+                    p.span,
+                    "`by Expired` sends an expired token to a `Bearer` seam, but this address reaches no `Bearer`-secured http route",
+                )
+                .with_note("use `by Expired` on an http route guarded by a `Bearer` actor")
+            } else {
                 CompileError::new(
                     "bynk.test.forged_needs_signature_route",
                     p.span,
-                    format!("`by {name}` sends a bad signature to a `Signature` seam, but this address reaches no `Signature`-secured http route"),
+                    format!("`by {name}` sends a bad credential to a `Signature` or `Bearer` seam, but this address reaches no `Signature`- or `Bearer`-secured http route"),
                 )
-                .with_note("use `by Forged` and `by Stale` on an http route guarded by one `Signature` actor"),
-            );
+                .with_note("use `by Forged` on an http route guarded by a `Signature` or `Bearer` actor, and `by Stale` on a `Signature` one")
+            };
+            ctx.errors.push(err);
             if let Some(id) = &p.identity {
                 let _ = type_of(id, None, ctx);
             }

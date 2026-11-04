@@ -1,0 +1,6 @@
+suite pay.hooks as system {
+	case "an expired token to a Signature route" {
+		let r <- webhooks.POST("/webhooks/processor", Notice { id: "e", event: "x" }) by Expired
+		expect r is Rejected(Unauthorized)
+	}
+}

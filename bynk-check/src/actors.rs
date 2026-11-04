@@ -497,6 +497,26 @@ pub fn signature_seam_of_route(
     })
 }
 
+/// #2864: whether a `by` clause's route has a `Bearer` seam the `system`
+/// driver can forge or expire a token for — a lone Bearer actor (or a
+/// refinement of one), or an actor sum with a Bearer member and no open
+/// member ([`sum_has_open_member`]), whose seam never refuses a bad token.
+pub fn route_has_bearer_seam(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    if !by.is_sum() {
+        return by_clause_is_bearer(by, actors);
+    }
+    if sum_has_open_member(by, actors) {
+        return false;
+    }
+    by.actors.iter().any(|a| {
+        actors
+            .get(&a.name)
+            .and_then(|d| d.auth.as_ref())
+            .and_then(|auth| Scheme::from_name(auth.name.as_str()))
+            == Some(Scheme::Bearer)
+    })
+}
+
 /// #2155: whether a `by` clause's route has a credential seam the `system`
 /// driver can leave out (`by Nobody`): a Bearer actor (or a refinement of
 /// one), a `Signature` actor, or an actor sum with such a member and no open

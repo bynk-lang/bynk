@@ -1514,6 +1514,15 @@ impl SumAuth {
         out
     }
 
+    /// #2864: the first Bearer member's secret read: what `by Forged` and
+    /// `by Expired` sign a token with on a sum with no `Signature` member.
+    fn bearer(&self) -> Option<&str> {
+        self.members.iter().find_map(|(_, c)| match c {
+            SumCredential::Bearer(secret_read) => Some(secret_read.as_str()),
+            SumCredential::Signature(_) => None,
+        })
+    }
+
     /// The first `Signature` member: what `by Forged`/`by Stale` sign as.
     fn signature(&self) -> Option<&SigDriver> {
         self.members.iter().find_map(|(_, c)| match c {
@@ -1723,6 +1732,7 @@ fn emit_system_http_support(
             // #2019: a refinement-guarded route's signing drivers take the
             // claims the acting actor presents, signed next to `sub`.
             let mut signs_claims = false;
+            let mut lone_bearer_read: Option<String> = None;
             let (auth_header, _secret_name) = match bynk_check::actors::bearer_seam_for(
                 h,
                 &table.actors,
@@ -1750,6 +1760,7 @@ fn emit_system_http_support(
                     // fixed test secret, as it does at the seam, which reads
                     // the participant's `env` first.
                     let secret_read = secret_read_of(&seam.secret);
+                    lone_bearer_read = Some(secret_read.clone());
                     (
                         format!(
                             "\"authorization\": `Bearer ${{await __bynkSignHs256({{ {claims_spread}sub: __sub, exp: __bynkNow() + 3600 }}, {secret_read})}}`, "
@@ -1789,6 +1800,14 @@ fn emit_system_http_support(
                 (String::new(), false)
             } else {
                 (auth_header, signs_claims)
+            };
+            // #2864: the secret a `by Forged` / `by Expired` Bearer token is
+            // signed against — the lone Bearer actor's, or a sum's first
+            // Bearer member's.
+            let bearer_read: Option<String> = if is_sum {
+                sum.as_ref().and_then(SumAuth::bearer).map(str::to_string)
+            } else {
+                lone_bearer_read
             };
             if let Some(primary) = sum
                 .as_ref()
@@ -2128,6 +2147,73 @@ fn emit_system_http_support(
                             &payload_deser,
                             false,
                             vec![z.sign(&raw_body, variant)],
+                            false,
+                        ));
+                    }
+                }
+            }
+            // #2864: on a Bearer route, `by Forged` (a well-formed token signed
+            // with a secret derived from the real one) and `by Expired` (a
+            // correctly signed token whose `exp` is an hour past the test
+            // clock), typed and raw, each decoding a `401` to
+            // `Rejected(Unauthorized)`. A route with a `Signature` seam keeps
+            // the `Signature` drivers above for `Forged`.
+            if let Some(secret_read) = bearer_read.as_deref() {
+                let bearer_options = ident(format!(
+                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {body_init}}}",
+                    method = method.as_str(),
+                ));
+                let raw_bearer_options = ident(format!(
+                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {raw_body_init}}}",
+                    method = method.as_str(),
+                    raw_body_init = match body_ps.first() {
+                        Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
+                        None => String::new(),
+                    },
+                ));
+                let mut variants = vec![("expired", format!("({secret_read})"), "-")];
+                if sig.is_none() {
+                    variants.push(("forged", format!("({secret_read} + \"!\")"), "+"));
+                }
+                for (name, secret, sign) in variants {
+                    // A valid `sub`, so only the signature (`Forged`) or the
+                    // `exp` (`Expired`) is wrong. The `sub` is fixed rather
+                    // than the call's identity: `by Forged` names none.
+                    let sign_stmt = TsStmt::raw(
+                        format!(
+                            "const __token = `Bearer ${{await __bynkSignHs256({{ sub: \"bynk-test\", exp: __bynkNow() {sign} 3600 }}, {secret})}}`;"
+                        ),
+                        None,
+                    );
+                    routes.push(sysdrive_driver(
+                        &format!("{name}_"),
+                        sname,
+                        &key,
+                        driver_params.clone(),
+                        body_stmt.clone(),
+                        url.clone(),
+                        bearer_options.clone(),
+                        &binding,
+                        "__responseToUnauthOutcome",
+                        &payload_deser,
+                        false,
+                        vec![sign_stmt.clone()],
+                        false,
+                    ));
+                    if !h.params.is_empty() {
+                        routes.push(sysdrive_driver(
+                            &format!("raw{name}_"),
+                            sname,
+                            &key,
+                            raw_params.clone(),
+                            None,
+                            url.clone(),
+                            raw_bearer_options.clone(),
+                            &binding,
+                            "__responseToUnauthOutcome",
+                            &payload_deser,
+                            false,
+                            vec![sign_stmt],
                             false,
                         ));
                     }

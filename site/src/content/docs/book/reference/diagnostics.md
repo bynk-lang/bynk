@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **748** codes in total.
+There are **749** codes in total.
 
 ## Agents
 
@@ -499,9 +499,10 @@ There are **748** codes in total.
 | `bynk.test.event_needs_in_process` | A `system`-tier case delivers an event with `svc.event(e)`; at `system` an event reaches a subscriber only through its publisher's fan-out, so the case drives the emitting handler instead, or delivers the event at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.event_not_subscribed` | A test body's `svc.event(e)` delivers an event the `from Events(E)` service does not subscribe to. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.event_publisher_ambiguous` | A test body's `svc.event(e)` omits the envelope, but the event's publisher, which the default envelope names, is not one context the target declares or consumes. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.faults_needs_in_process` | A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged` or `by Stale`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.forged_needs_signature_route` | A case drives `by Forged` or `by Stale` at an address that is not an http route with a `Signature` actor (alone, or as a member of an actor sum); they send a bad signature, so only a `Signature` seam can refuse them. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.forged_needs_system` | A case drives `by Forged` or `by Stale` outside a `system`-tier case; only the `system` driver signs a request, so only there does the real `Signature` seam see the bad signature. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.expired_needs_bearer_route` | A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum); it sends a correctly signed token whose `exp` has passed, so only a `Bearer` seam can refuse it. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.faults_needs_in_process` | A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale` or `by Expired`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.forged_needs_signature_route` | A case drives `by Forged` at an address that is not an http route with a `Signature` or `Bearer` actor, or `by Stale` at one with no `Signature` actor (alone, or as a member of an actor sum); they send a bad credential, so only a `Signature` or `Bearer` seam can refuse them. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.forged_needs_system` | A case drives `by Forged`, `by Stale` or `by Expired` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature` or `Bearer` seam see the bad credential. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.nobody_needs_secured_route` | A case drives `by Nobody` at a route with no Bearer or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.oidc_needs_in_process` | A `system`-tier case calls an http route whose actor is `Oidc`-secured; the `system` driver has no token issuer yet, so the request without a token could only be refused with a `401`, and the call belongs at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.principal_claims_not_oidc` | A call-site principal passes token claims for an actor that isn't `Oidc`. |  | — |

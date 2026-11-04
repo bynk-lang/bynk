@@ -1,0 +1,6 @@
+suite pay.api as system {
+	case "an expired token to a public route" {
+		let r <- api.GET("/health") by Expired
+		expect r is Rejected(Unauthorized)
+	}
+}
