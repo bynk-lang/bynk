@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **746** codes in total.
+There are **749** codes in total.
 
 ## Agents
 
@@ -178,6 +178,9 @@ There are **746** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | `bynk.given.cross_context_unknown_capability` | `given B.Cap` names a capability the consumed context does not export. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
+| `bynk.given.fn_outside_context` | A function in a commons (or a suite) declares `given`; only a context function can. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
+| `bynk.given.fn_unsupported` | A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
+| `bynk.given.missing_for_call` | A call to a function that declares `given` from a body that does not declare those capabilities. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | [`bynk.given.undeclared_capability`](/book/guides/effects-and-capabilities/understand-the-capability-model/) | A handler uses a capability it did not declare with `given`. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | [`bynk.given.unknown_capability`](/book/reference/capabilities/#declaring-a-capability) | `given` names a capability that does not exist. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | `bynk.given.unused_capability` | A `given` capability is never used (warning). | [`given_clause`](/book/reference/grammar/#rule-given_clause) | Warning |

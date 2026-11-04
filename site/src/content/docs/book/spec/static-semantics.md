@@ -1313,7 +1313,16 @@ capability (`bynk.provider.unknown_capability`). A handler or provider MUST
 declare every capability it uses with `given`, and `given` MUST name a real
 capability; a call to an undeclared capability is rejected and an unused one
 warned (`bynk.given.unknown_capability`, `bynk.given.undeclared_capability`,
-`bynk.given.unused_capability`). A provider whose body calls an agent handler
+`bynk.given.unused_capability`). A **free function in a
+context** MAY declare `given` (#2868), and then uses those capabilities as a handler
+does; a `given` on a method, on a function that does not return `Effect[T]`, or
+naming `Events` is rejected (`bynk.given.fn_unsupported`), as is any `given` on a
+function in a commons or a suite (`bynk.given.fn_outside_context`). A call to, or a
+reference to, a function that declares `given` MUST occur in a body whose own
+`given` includes every one of the callee's (`bynk.given.missing_for_call`); the
+rule is checked at each call, so it holds along every path of calls, and the
+callee's capabilities count as used by the caller. A test `case` calling such a
+function is supplied the target's capabilities as it is for a handler. A provider whose body calls an agent handler
 MUST also list in its `given` every capability that handler is `given`, and,
 transitively, every capability `given` to the agent handlers it calls
 (`bynk.provider.agent_call_undeclared_capability`). A service or agent handler

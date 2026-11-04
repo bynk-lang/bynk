@@ -1,0 +1,6 @@
+[project]
+name = "given-fn-multi-file"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

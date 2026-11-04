@@ -1,0 +1,37 @@
+context shop.orders
+
+consumes bynk { Logger }
+
+// A function value naming a `given` function closes over the handler's `deps`.
+fn eachNote(items: List[Int], f: Int -> Effect[()]) -> Effect[()] {
+	items.forEach(f)
+}
+
+service place {
+	on call(n: Int) -> Effect[Int] given Audit, Logger {
+		let a <- book(n)
+		let b <- announce(a)
+		let c <- positive(b)
+		let _ <- eachNote([1, 2], ack)
+		Effect.pure(c)
+	}
+}
+
+// Agent handlers and provider operations are callers too.
+agent Tally {
+	key id: String
+
+	store total: Cell[Int] = 0
+
+	on call add(n: Int) -> Effect[Int] given Audit, Logger {
+		let r <- book(n)
+		total := r
+		Effect.pure(r)
+	}
+}
+
+service tally {
+	on call(n: Int) -> Effect[Int] {
+		Tally("t1").add(n)
+	}
+}

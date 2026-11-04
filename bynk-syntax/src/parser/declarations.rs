@@ -4283,7 +4283,7 @@ impl<'a> Parser<'a> {
     /// returning an empty `Vec` when the next token is not `given`. Shared by
     /// handlers (after the `by` clause, v0.155) and the service header (the
     /// service-level default, v0.155).
-    fn parse_given_clause(&mut self) -> Result<Vec<CapRef>, CompileError> {
+    pub(crate) fn parse_given_clause(&mut self) -> Result<Vec<CapRef>, CompileError> {
         let mut given = Vec::new();
         if self.peek_kind() == Some(TokenKind::Given) {
             self.bump();

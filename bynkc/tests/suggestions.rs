@@ -565,3 +565,71 @@ fn refined_field_access_carries_the_widen_note_without_an_autofix() {
         "no auto-fix for a non-`.raw` field"
     );
 }
+
+// -- #2868: a call to a `given` function, from a body that lacks its capabilities --
+
+/// The handlers file with a `given` function (`both`) ahead of the service.
+fn with_given_fn(file: String) -> String {
+    file.replacen(
+        "service handlers",
+        "fn both() -> Effect[Int] given Alpha, Beta {\n  let a <- Alpha.ping()\n  let b <- Beta.ping()\n  a + b\n}\n\nservice handlers",
+        1,
+    )
+}
+
+#[test]
+fn missing_for_call_adds_only_the_missing_capabilities() {
+    let text = with_given_fn(handlers_file(
+        " given Alpha",
+        "    let a <- Alpha.ping()\n    let b <- both()\n    a + b",
+    ));
+    let s = sole_suggestion(
+        &diagnose_with("app/handlers.bynk", &text),
+        "bynk.given.missing_for_call",
+    );
+    assert_eq!(s.message, "add `Beta` to the `given` clause");
+    let fixed = apply(&text, &s);
+    assert_eq!(
+        fixed,
+        with_given_fn(handlers_file(
+            " given Alpha, Beta",
+            "    let a <- Alpha.ping()\n    let b <- both()\n    a + b"
+        ))
+    );
+    assert_clean("app/handlers.bynk", &fixed);
+}
+
+#[test]
+fn missing_for_call_synthesises_the_clause_on_a_handler_without_one() {
+    let text = with_given_fn(handlers_file("", "    both()"));
+    let s = sole_suggestion(
+        &diagnose_with("app/handlers.bynk", &text),
+        "bynk.given.missing_for_call",
+    );
+    assert_eq!(s.message, "add `Alpha, Beta` to the `given` clause");
+    let fixed = apply(&text, &s);
+    assert_eq!(
+        fixed,
+        with_given_fn(handlers_file(" given Alpha, Beta", "    both()"))
+    );
+    assert_clean("app/handlers.bynk", &fixed);
+}
+
+#[test]
+fn missing_for_call_synthesises_the_clause_on_a_plain_function() {
+    let text = with_given_fn(handlers_file(" given Alpha, Beta", "    both()")).replacen(
+        "service handlers",
+        "fn wrapper() -> Effect[Int] {\n  both()\n}\n\nservice handlers",
+        1,
+    );
+    let s = sole_suggestion(
+        &diagnose_with("app/handlers.bynk", &text),
+        "bynk.given.missing_for_call",
+    );
+    let fixed = apply(&text, &s);
+    assert!(
+        fixed.contains("fn wrapper() -> Effect[Int] given Alpha, Beta {"),
+        "{fixed}"
+    );
+    assert_clean("app/handlers.bynk", &fixed);
+}

@@ -63,6 +63,8 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RParen, "to close the parameter list")?;
         self.expect(TokenKind::Arrow, "before the return type")?;
         let return_type = self.parse_type_ref("as the return type")?;
+        // #2868: an optional `given C1, C2` follows the return type.
+        let given = self.parse_given_clause()?;
         let where_bounds = self.parse_optional_where_bounds()?;
         // v0.115: contract clauses ride between the return type and the body —
         // any number of `requires <name>: <pred>` then `ensures <name>: <pred>`.
@@ -84,6 +86,7 @@ impl<'a> Parser<'a> {
             name,
             params,
             return_type,
+            given,
             where_bounds,
             requires,
             ensures,

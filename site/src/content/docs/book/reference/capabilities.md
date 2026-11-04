@@ -54,6 +54,35 @@ A `given` name must be a declared capability (`bynk.given.unknown_capability`); 
 call to a capability not in `given` is an error (`bynk.given.undeclared_capability`);
 a declared-but-unused capability is a warning (`bynk.given.unused_capability`).
 
+## Capabilities in functions {#capabilities-in-functions}
+
+A **free function in a context** may declare `given` after its return type, and use
+those capabilities in its body (a lambda there included):
+
+```bynk,fragment
+fn warn(what: String) -> Effect[()] given Logger {
+  Logger.error("warning: \(what)")
+}
+```
+
+- **Where.** Only a free function that returns `Effect[T]`, in a context. A function in a
+  `commons` or a suite cannot: those are shared by contexts that may consume different
+  capabilities, so they keep the function-value style (`log: (String) -> Effect[()]`). A
+  method cannot, and `Events` cannot be named (`bynk.given.fn_outside_context`,
+  `bynk.given.fn_unsupported`).
+- **Calling it.** The caller's `given` MUST include the callee's. A call, or a reference
+  to the function as a value, from a body that lacks one is
+  `bynk.given.missing_for_call`, naming the capabilities missing. This is checked at
+  every call, so it holds transitively; recursion needs no special case. A call counts
+  as a use of the callee's capabilities in the caller's `given`.
+- **Tests.** A `case` may call it directly and gets the target's capabilities as its
+  handlers do. `stub` and `expect … called` observe the calls made inside it.
+- **Generics.** The function may be generic. Capability operations keep their own type
+  arguments.
+- **Emission.** The function takes a hidden trailing `deps` parameter that carries
+  exactly the capabilities it names (before the execution context of
+  [`~>`, `within` and `race`](#within)), and every call passes the caller's `deps` on.
+
 ## Joining independent effects — `par` {#par}
 
 Every `<-` waits for its effect, so two independent calls cost the sum of their

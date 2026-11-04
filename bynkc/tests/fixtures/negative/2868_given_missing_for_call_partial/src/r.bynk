@@ -1,0 +1,31 @@
+context r
+
+capability Logger {
+	fn error(message: String) -> Effect[()]
+}
+
+capability Orders {
+	fn count(sku: String) -> Effect[Int]
+}
+
+provides Logger = NullLogger {
+	fn error(message: String) -> Effect[()] {}
+}
+
+provides Orders = FixedOrders {
+	fn count(sku: String) -> Effect[Int] {
+		3
+	}
+}
+
+fn tally(sku: String) -> Effect[Int] given Logger, Orders {
+	let _ <- Logger.error(sku)
+	Orders.count(sku)
+}
+
+service api {
+	on call(sku: String) -> Effect[Int] given Logger {
+		let _ <- Logger.error("start")
+		tally(sku)
+	}
+}

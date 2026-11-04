@@ -1,0 +1,61 @@
+================================================================================
+A context function declares the capabilities it uses
+================================================================================
+
+context shop
+
+fn warn(what: String) -> Effect[()] given Logger {
+  Logger.error(what)
+}
+
+fn tally[T](sku: String) -> Effect[Int] given Logger, Orders where T: Eq {
+  Orders.count(sku)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (generic_type_ref
+        (builtin_type)
+        (unit_type))
+      (given_clause
+        (qualified_name
+          (identifier)))
+      (block
+        (method_call
+          (identifier)
+          (identifier)
+          (identifier))))
+    (fn_decl
+      (identifier)
+      (type_param
+        (identifier))
+      (param
+        (identifier)
+        (base_type))
+      (generic_type_ref
+        (builtin_type)
+        (base_type))
+      (given_clause
+        (qualified_name
+          (identifier))
+        (qualified_name
+          (identifier)))
+      (where_clause
+        (where_bound
+          (identifier)
+          (constraint
+            (identifier))))
+      (block
+        (method_call
+          (identifier)
+          (identifier)
+          (identifier))))))
