@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.505**.
+written against **v0.506**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.506.0** | A lambda parameter may be `_`, which binds nothing — `r.mapErr((_) => 0)`, `(a, _) => a` |
+| **v0.505.4** | Matches patterns with an unambiguous separator between repetitions, such as the slug `[a-z]+(-[a-z]+)*`, are no longer refused as catastrophic; IsoDate bounds the input at 10 characters |
+| **v0.505.3** | A list literal argument to a generic call now infers the type argument (`size([1, 2])`) instead of being checked against the unsolved type variable |
 | **v0.505.2** | fmt keeps `else if` chains flat, keeps digit separators in range-pattern bounds, and keeps the blank line above a comment on a header line |
 | **v0.505.1** | Aliased types in a service signature resolve for a callee's own callers (the contract now hashes the renamed type's shape); `consumes_item` node in tree-sitter; aliased services run under `workerd` |
 | **v0.505.0** | "`consumes U { T as Alias }` renames a type `U` exports for the consuming context, so `consumes bynk.crypto { Crypto, Digest as CryptoDigest }` no longer clashes with your own `Digest`; the `name_conflict` note names the way out (#2887)" |

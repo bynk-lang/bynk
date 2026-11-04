@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A lambda parameter may be `_`, which binds nothing — `r.mapErr((_) => 0)`, `(a, _) => a`
----
+# 0732 — A lambda parameter may be `_`
 
-## ADR: lambda-wildcard-param
-title: A lambda parameter may be `_`
-summary: `_` as a lambda parameter binds nothing, repeats freely and takes its type from the expected function type
+- **Status:** Accepted (v0.506)
 
 **Context.** A callback often ignores an argument (`r.mapErr((e) => 0)`), and
 patterns already have `_`. A lambda parameter had to be an identifier, so the
