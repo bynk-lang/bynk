@@ -950,6 +950,7 @@ pub fn phase_integration_bodies(
                     &case_callees,
                     &mut body_errs,
                 );
+                check_extra_headers_let(case, &case_callees, &mut body_errs);
                 if case_effective_tier(case, d) == bynk_syntax::ast::TestTier::System {
                     check_unsigned_route_at_system(
                         case,
@@ -1653,6 +1654,7 @@ fn check_test_bodies(
             );
             let tier = case_effective_tier(case, test_decl);
             check_extra_headers_tier(case, tier, &case_callees, &mut errors);
+            check_extra_headers_let(case, &case_callees, &mut errors);
             check_faults_tier(case, tier, &mut errors);
             check_snapshot_placement(
                 case,
@@ -2409,26 +2411,21 @@ fn check_extra_headers_tier(
     if tier == bynk_syntax::ast::TestTier::System {
         return;
     }
-    let mut routes: Vec<&str> = callees
-        .values()
-        .filter_map(|c| match c {
-            checker::Callee::TestService {
-                address,
-                extra_headers: true,
-                ..
-            } => Some(address.as_str()),
-            _ => None,
-        })
-        .collect();
-    routes.sort_unstable();
-    routes.dedup();
-    for route in routes {
+    for e in exprs_in_order(&case.body) {
+        let Some(checker::Callee::TestService {
+            address,
+            extra_headers: true,
+            ..
+        }) = callees.get(&e.id)
+        else {
+            continue;
+        };
         errors.push(
             CompileError::new(
                 "bynk.test.service_call_arity",
-                case.name_span,
+                e.span,
                 format!(
-                    "case `\"{}\"` sends extra request headers to `{route}`, which declares no `headers:` parameter, but is a `{}`-tier case",
+                    "case `\"{}\"` sends extra request headers to `{address}`, which declares no `headers:` parameter, but is a `{}`-tier case",
                     case.name,
                     tier.as_str()
                 ),
@@ -2437,6 +2434,49 @@ fn check_extra_headers_tier(
                 "extra request headers can only be sent in a `system` case; at lower tiers the route sees only its declared parameters",
             ),
         );
+    }
+}
+
+/// #2931: the headers value of an extra-headers call may be a top-level `let`
+/// bound to the literal `RequestHeaders.of([…])`; run the `Authorization`
+/// check on that initialiser, so the common indirection gets the check-time
+/// diagnostic rather than the runtime drop.
+fn check_extra_headers_let(
+    case: &Case,
+    callees: &HashMap<ExprId, checker::Callee>,
+    errors: &mut Vec<CompileError>,
+) {
+    use bynk_syntax::ast::ExprKind;
+    for e in exprs_in_order(&case.body) {
+        if !matches!(
+            callees.get(&e.id),
+            Some(checker::Callee::TestService {
+                extra_headers: true,
+                ..
+            })
+        ) {
+            continue;
+        }
+        let ExprKind::MethodCall { args, .. } = &e.kind else {
+            continue;
+        };
+        let Some(ExprKind::Ident(name)) = args.last().map(|a| &a.kind) else {
+            continue;
+        };
+        // The nearest `let` of that name before the call.
+        let init = flat_statements(&case.body)
+            .into_iter()
+            .filter_map(|s| match s {
+                Statement::Let(l) | Statement::EffectLet(l) if l.name.name == name.name => {
+                    Some(&l.value)
+                }
+                _ => None,
+            })
+            .take_while(|v| v.span.start < e.span.start)
+            .last();
+        if let Some(init) = init {
+            errors.extend(checker::extra_headers_authorization_errors(init));
+        }
     }
 }
 

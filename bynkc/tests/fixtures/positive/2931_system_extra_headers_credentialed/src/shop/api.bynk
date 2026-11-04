@@ -1,0 +1,33 @@
+context shop.api
+
+actor Processor {
+	auth = Signature(
+		secret = "HOOK_SECRET",
+		header = "X-Sig",
+		timestamp = "X-Ts",
+		tolerance = 300
+	)
+}
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+type Page = { limit: Int = 10 }
+
+service api from http {
+	on GET("/me") () -> Effect[HttpResult[String]] by u: User {
+		Ok(u.identity)
+	}
+
+	on POST("/notify") (body: String) -> Effect[HttpResult[String]] by who: Processor | User {
+		match who {
+			Processor => Ok("signed \(body)")
+			User(u) => Ok("\(u): \(body)")
+		}
+	}
+
+	on GET("/items") (query: Page) -> Effect[HttpResult[String]] by Visitor {
+		Ok("limit \(query.limit)")
+	}
+}

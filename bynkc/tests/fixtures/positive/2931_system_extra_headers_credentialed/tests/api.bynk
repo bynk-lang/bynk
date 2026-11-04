@@ -1,0 +1,34 @@
+suite shop.api as system {
+	// #2931: extra headers ride in the trailing slot after the declared
+	// parameters, on a credentialed route and a typed-query route.
+	env { AUTH_JWT_SECRET = "suite-secret" }
+
+	case "a Bearer route is sent extra headers" {
+		let r <- api.GET("/me", RequestHeaders.of(["X-Trace: 1"])) by User("ada")
+		expect r is Ok("ada")
+	}
+
+	case "an actor-sum route is sent extra headers after its body" {
+		let r <- api.POST("/notify", "hi", RequestHeaders.of(["X-Trace: 1"])) by User("bob")
+		expect r is Ok("bob: hi")
+	}
+
+	case "a signed member of an actor-sum route is sent extra headers" {
+		let r <- api.POST("/notify", "hi", RequestHeaders.of(["X-Trace: 1"])) by Processor
+		expect r is Ok("signed hi")
+	}
+
+	case "a typed-query route is sent extra headers after its query" {
+		let r <- api.GET("/items", Page { limit: 7 }, RequestHeaders.of(["X-Trace: 1"])) by Visitor
+		expect r is Ok("limit 7")
+	}
+
+	// A header built outside the literal form is not seen at check time (a literal `let` is); the
+	// runtime drops its `Authorization` so the actor's credential wins.
+	case "a let-bound Authorization header does not displace the actor" {
+		let line = "Authorization: Bearer not-a-token"
+		let h = RequestHeaders.of([line, "X-Trace: 1"])
+		let r <- api.GET("/me", h) by User("ada")
+		expect r is Ok("ada")
+	}
+}

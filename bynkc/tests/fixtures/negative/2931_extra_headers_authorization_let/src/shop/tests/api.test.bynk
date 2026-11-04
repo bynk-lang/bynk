@@ -1,0 +1,7 @@
+suite shop.api as system {
+  case "a let-bound Authorization is the actor's" {
+    let h = RequestHeaders.of(["Authorization: Bearer x"])
+    let r <- api.GET("/hello", h) by Visitor
+    expect r is Ok("hi")
+  }
+}
