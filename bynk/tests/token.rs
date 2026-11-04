@@ -202,6 +202,9 @@ fn the_signer_is_byte_identical_to_the_test_runtimes() {
     for (sub, nbf) in [
         ("me", None),
         ("a/\"q\"\\", None),
+        // Non-ASCII: Latin-1 range, and above U+00FF (which `btoa` rejects) (#2877).
+        ("ünï", None),
+        ("日本語😀", Some(1_700_000_000u64)),
         ("me", Some(1_700_000_000u64)),
     ] {
         let exp = 1_800_000_000u64;
