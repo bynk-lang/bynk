@@ -65,7 +65,7 @@ denial-of-service risk):
   `\d+(,\d{3})*`. An optional separator (`[a-z]+(-?[a-z]+)*`) is ambiguous
   and refused.
 - `bynk.types.polynomial_regex`: two repetitions that can split the same text
-  (`\d*\d*`). With a `MaxLength` or `Length` predicate in the same refinement
+  (`\d*\d*`). With a `MaxLength`, `Length` or `IsoDate` (ten characters) predicate in the same refinement
   small enough for the pattern's degree (at most 3,162 characters for two
   overlapping repetitions, 215 for three) it is only a warning,
   `bynk.types.polynomial_regex_capped`, because length predicates are always
