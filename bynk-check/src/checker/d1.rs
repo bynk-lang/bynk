@@ -242,7 +242,12 @@ pub(crate) fn check_typed_read(
             method.name
         ))
     } else {
-        check_row_shape(t, &ctx.input.types, tys)
+        check_row_shape(t, &ctx.input.types, tys).and_then(|()| match &*tys.get(t) {
+            Ty::Named { name, .. } if select_columns(name, &ctx.input.types).is_empty() => {
+                Err(format!("`{name}` has no fields to select"))
+            }
+            _ => Ok(()),
+        })
     };
     if let Err(why) = shape {
         ctx.errors.push(
@@ -298,6 +303,8 @@ pub(crate) fn check_typed_read(
                 args[0].span,
                 &format!("the SQL of `{cap}.{}`", method.name),
             ));
+            // The tail is not an ordinary argument here; still type it for hover.
+            let _ = type_of(&args[0], None, ctx);
             ok = false;
         }
     }
@@ -316,10 +323,6 @@ pub(crate) fn check_typed_read(
         ));
     }
     let first = method.name == "firstAs";
-    if args[0].span != args[1].span && !matches!(args[0].kind, ExprKind::StrLit(_)) {
-        // The tail is not an ordinary argument here; still type it for hover.
-        let _ = type_of(&args[0], None, ctx);
-    }
     let sql = sql.filter(|_| ok)?;
     ctx.callees.insert(
         expr_id,
