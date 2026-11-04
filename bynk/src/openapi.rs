@@ -27,6 +27,7 @@
 //! | `Positive`            | `exclusiveMinimum: 0`                              |
 //! | `NonNegative`         | `minimum: 0`                                       |
 //! | `InRange(a, b)`       | `minimum: a`, `maximum: b`                         |
+//! | `IsoDate`             | `format: date`, `minLength: 10`, `maxLength: 10`    |
 //! | `Matches("p")`        | `pattern: "^(?:p)$"` (the codec anchors the match) |
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1208,6 +1209,14 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
             PredKind::Positive | PredKind::NonNegative | PredKind::InRange(..) if decimal => {}
             PredKind::InRangeD(..) => {}
             PredKind::NonEmpty => tighten_min(s, "minLength", 1.0),
+            // #2867: JSON Schema's `date` is RFC 3339 `full-date`, the rule
+            // `IsoDate` enforces; validators that ignore `format` still see
+            // the ten-character bound.
+            PredKind::IsoDate => {
+                s.insert("format".into(), Value::String("date".into()));
+                tighten_min(s, "minLength", 10.0);
+                tighten_max(s, "maxLength", 10.0);
+            }
             PredKind::MinLength(n) => tighten_min(s, "minLength", *n as f64),
             PredKind::MaxLength(n) => tighten_max(s, "maxLength", *n as f64),
             PredKind::Length(n) => {
@@ -1283,6 +1292,7 @@ fn render_pred(p: &PredKind) -> String {
         PredKind::NonNegative => "NonNegative".into(),
         PredKind::Positive => "Positive".into(),
         PredKind::NonEmpty => "NonEmpty".into(),
+        PredKind::IsoDate => "IsoDate".into(),
     }
 }
 
@@ -1301,6 +1311,7 @@ fn pred_prose(p: &PredKind) -> String {
         PredKind::NonNegative => "must be non-negative".into(),
         PredKind::Positive => "must be positive".into(),
         PredKind::NonEmpty => "must be non-empty".into(),
+        PredKind::IsoDate => "must be a calendar date (YYYY-MM-DD)".into(),
     }
 }
 

@@ -109,6 +109,8 @@ pub enum Predicate {
     Length { length: i64 },
     /// The whole string matches `pattern`.
     Matches { pattern: String },
+    /// A calendar date that exists, exactly `YYYY-MM-DD` (#2867).
+    IsoDate,
 }
 
 /// A `range` bound: a JSON integer for an `Int` type, a number for a `Float`.
@@ -145,6 +147,7 @@ impl Predicate {
             PredKind::MaxLength(n) => Predicate::MaxLength { length: *n },
             PredKind::Length(n) => Predicate::Length { length: *n },
             PredKind::Matches(p) => Predicate::Matches { pattern: p.clone() },
+            PredKind::IsoDate => Predicate::IsoDate,
         }
     }
 }
@@ -251,6 +254,7 @@ fn clause(kind: &PredKind) -> Clause {
         PredKind::MaxLength(n) => format!("length ≤ {n}"),
         PredKind::Length(n) => format!("length = {n}"),
         PredKind::Matches(re) => format!("the whole string matches /{re}/"),
+        PredKind::IsoDate => "a calendar date, YYYY-MM-DD".to_string(),
     };
     Clause {
         source: bynk_fmt::refinement_to_string(&Refinement {
@@ -435,6 +439,25 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
         BaseType::String => {
             let (mut min, mut max): (i64, Option<i64>) = (0, None);
             let mut pattern: Option<&str> = None;
+            // #2867: random strings are never dates; offer real ones.
+            if preds.clone().any(|k| matches!(k, PredKind::IsoDate)) {
+                let re = preds
+                    .clone()
+                    .find_map(|k| match k {
+                        PredKind::Matches(p) => Some(p),
+                        _ => None,
+                    })
+                    .and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+                for d in ["2026-11-03", "2028-02-29", "2000-02-29"] {
+                    if re.as_ref().is_none_or(|re| re.find(d).is_some()) {
+                        push(d.to_string(), &mut out);
+                    }
+                }
+                let note = out.is_empty().then(|| {
+                    "No sample date satisfies every clause; type a candidate below.".to_string()
+                });
+                return (out, note);
+            }
             for k in preds {
                 match k {
                     PredKind::NonEmpty => min = min.max(1),

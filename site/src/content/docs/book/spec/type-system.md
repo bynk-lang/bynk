@@ -275,6 +275,7 @@ commons pricing {
 | `MaxLength(n)` | length ≤ n |
 | `Length(n)` | length = n |
 | `Matches(regex)` | the whole string matches `regex`, anchored |
+| `IsoDate` | a calendar date, exactly `YYYY-MM-DD` (years 0000-9999), and a date that exists |
 
 ## §6.4 Admission & construction
 
@@ -378,6 +379,7 @@ Entailment is decided over the closed predicate vocabulary of
 |---|---|---|
 | `Int`, `Float`, `Decimal` | `Positive`, `NonNegative`, `InRange` | containment of intervals; the sender's conjunction is their intersection. `Positive` is `[1, ∞)` on `Int` and the open `(0, ∞)` on `Float` and `Decimal`. `Decimal` bounds compare by value, not scale |
 | `String` | `NonEmpty`, `MinLength`, `MaxLength`, `Length` | containment of intervals of the length |
+| `String` | `IsoDate` | `IsoDate` is exactly ten characters, so it entails every length bound that `Length(10)` does; only `IsoDate` entails `IsoDate` |
 | `String` | `Matches` | none: only an identical pattern satisfies a `Matches`. A `Matches` on the sender is otherwise ignored, so `Matches(p) && MaxLength(4)` entails `MaxLength(8)` |
 
 `Int` is modelled as unbounded, so a conclusion that holds only because of the

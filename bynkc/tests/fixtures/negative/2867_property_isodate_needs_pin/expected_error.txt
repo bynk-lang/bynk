@@ -1,0 +1,2 @@
+bynk.val.needs_pin
+for all d: Day

@@ -1820,6 +1820,7 @@ fn predicate_name_candidates() -> Vec<Completion> {
         "NonNegative",
         "Positive",
         "NonEmpty",
+        "IsoDate",
     ]
     .into_iter()
     .map(|k| {
@@ -4283,6 +4284,7 @@ fn Box.size(self) -> Int { 1 }
         let got = labels("  type Code = Int where ", "context a.b\n");
         assert!(got.contains(&"InRange".to_string()), "{got:?}");
         assert!(got.contains(&"NonNegative".to_string()));
+        assert!(got.contains(&"IsoDate".to_string()), "{got:?}");
         // #472: a match arm's `_ where <predicate>` shares the same catalogue.
         let got = labels("      _ where ", "context a.b\n");
         assert!(got.contains(&"Matches".to_string()), "{got:?}");

@@ -1,0 +1,32 @@
+suite shop.api as system {
+  case "a real date reaches the handler" {
+    let r <- api.GET("/x/:day", Wire("2026-11-03")) by User("alice")
+    expect r is Handled(_)
+  }
+  case "a leap day reaches the handler" {
+    let r <- api.GET("/x/:day", Wire("2028-02-29")) by User("alice")
+    expect r is Handled(_)
+  }
+  case "an impossible date is a 400 RefinementViolation before the handler" {
+    let r <- api.GET("/x/:day", Wire("2026-02-30")) by User("alice")
+    expect r is Rejected(RefinementViolation(_))
+  }
+  case "a non-leap Feb 29 is refused" {
+    let r <- api.GET("/x/:day", Wire("2026-02-29")) by User("alice")
+    expect r is Rejected(RefinementViolation(_))
+  }
+  case "a month out of range is refused" {
+    let r <- api.GET("/x/:day", Wire("2026-13-01")) by User("alice")
+    expect r is Rejected(RefinementViolation(_))
+  }
+  case "an unpadded date is refused" {
+    let r <- api.GET("/x/:day", Wire("2026-1-1")) by User("alice")
+    expect r is Rejected(RefinementViolation(_))
+  }
+  case "a body field is validated the same way" {
+    let ok <- api.POST("/book", Wire("{\"day\": \"2024-02-29\"}")) by User("alice")
+    expect ok is Handled(_)
+    let bad <- api.POST("/book", Wire("{\"day\": \"2026-02-30\"}")) by User("alice")
+    expect bad is Rejected(RefinementViolation(_))
+  }
+}

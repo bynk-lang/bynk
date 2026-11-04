@@ -170,6 +170,10 @@ let bad = Instant.fromIso("2026-10-30 08:54:50Z")             // None: a space, 
   names no instant without a zone), the basic form without separators, week and
   ordinal dates, and the expanded year.
 
+A date-only string is `None` here. `String where IsoDate` (see
+[refined types](/book/reference/refined-types/)) validates the same calendar
+date; `Instant.fromIso("\\(day)T00:00:00Z")` is always `Some` for such a `Day`.
+
 `Instant.fromIso(t.toIso())` is `Some(t)` for every instant in the years 0000 to
 9999. Time zones, calendar fields and ISO durations are not part of the kernel.
 

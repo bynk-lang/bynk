@@ -4079,6 +4079,13 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.iso_date() {
+            parts.extend(
+                ISO_DATE_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
         if ctx.runtime_use.settle_all() {
             parts.extend(
                 SETTLE_ALL_RUNTIME_IMPORTS
@@ -4208,6 +4215,11 @@ fn write_header_single(
             ""
         };
         // K2 (#2594): the percent-encoding helpers, imported only when called.
+        let iso_date_imports = if runtime_use.iso_date() {
+            ISO_DATE_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         let url_ops_imports = if runtime_use.url_ops() {
             URL_OPS_RUNTIME_IMPORTS
         } else {
@@ -4285,7 +4297,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4315,6 +4327,9 @@ pub(crate) const QUERY_ROUTE_SUFFIX: &str = "?query";
 /// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
 /// appended only when the body calls one.
 pub(crate) const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkInstantFromIso";
+
+/// #2867: the `IsoDate` predicate's check, appended only when a refinement check uses it.
+pub(crate) const ISO_DATE_RUNTIME_IMPORTS: &str = ", __bynkIsIsoDate";
 
 /// #2640: the join a `par { … }` block awaits, appended only when a body has one.
 pub(crate) const SETTLE_ALL_RUNTIME_IMPORTS: &str = ", __bynkSettleAll";
@@ -5756,6 +5771,11 @@ impl<'a> LowerCtx<'a> {
     /// the module imports that group.
     fn note_bytes_ops(&self) {
         self.runtime_use().note_bytes_ops();
+    }
+
+    /// #2867: record a refinement check that calls a runtime helper.
+    fn note_predicate(&self, pred: &PredKind) {
+        self.runtime_use().note_predicate(pred);
     }
 
     /// Record that this lowering emitted an `Instant` ISO-8601 helper (#2592).
@@ -7468,6 +7488,14 @@ pub fn pred_condition_and_message_for(
         PredKind::NonEmpty => (
             cmp(TsBinaryOp::GreaterThan, recv_length(), num("0".to_string())),
             "must be non-empty".to_string(),
+        ),
+        // #2867: the runtime helper owns the calendar; callers `note_predicate`.
+        PredKind::IsoDate => (
+            TsExpr::Call {
+                callee: Box::new(TsExpr::Ident("__bynkIsIsoDate".to_string())),
+                args: vec![recv()],
+            },
+            "must be a calendar date (YYYY-MM-DD)".to_string(),
         ),
         PredKind::MinLength(n) => (
             cmp(TsBinaryOp::GreaterThanEq, recv_length(), num(n.to_string())),

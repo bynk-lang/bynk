@@ -195,6 +195,11 @@ fn domain<'a>(base: &str, p: &'a str) -> Option<Domain<'a>> {
             hi: Some((a.first()?.parse().ok()?, false)),
         }));
     }
+    // #2867: `IsoDate` is exactly ten characters, so it entails every length
+    // bound `Length(10)` does. Nothing but `IsoDate` itself entails `IsoDate`.
+    if p == "IsoDate" {
+        return Some(Domain::Length(closed(10, 10)));
+    }
     if let Some(a) = pred_args(p, "Length") {
         let n = a.first()?.parse().ok()?;
         return Some(Domain::Length(closed(n, n)));
@@ -211,6 +216,11 @@ fn domain<'a>(base: &str, p: &'a str) -> Option<Domain<'a>> {
 pub fn entailed(base: &str, sender: &[String], q: &str) -> bool {
     if sender.iter().any(|p| p == q) {
         return true;
+    }
+    // #2867: being a date is more than being ten characters long, so only `IsoDate` itself
+    // satisfies `IsoDate` (it is still *sent* as `Length(10)` below).
+    if q == "IsoDate" {
+        return false;
     }
     let Some(want) = domain(base, q) else {
         // `Matches`, or a predicate this version cannot reason about: only an
@@ -317,6 +327,11 @@ mod tests {
         // A sender's `Matches` is ignored for other receiver predicates.
         assert!(entailed("String", &s(&[m, "MaxLength(4)"]), "MaxLength(8)"));
         assert!(!entailed("String", &s(&[m]), "MaxLength(8)"));
+        // #2867
+        assert!(!entailed("String", &s(&["Length(10)"]), "IsoDate"));
+        assert!(entailed("String", &s(&["IsoDate"]), "IsoDate"));
+        assert!(entailed("String", &s(&["IsoDate"]), "MaxLength(12)"));
+        assert!(!entailed("String", &s(&["IsoDate"]), "MaxLength(9)"));
     }
 
     #[test]

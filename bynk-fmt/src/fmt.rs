@@ -1737,6 +1737,7 @@ impl<'a> Formatter<'a> {
             PredKind::NonNegative => self.push("NonNegative"),
             PredKind::Positive => self.push("Positive"),
             PredKind::NonEmpty => self.push("NonEmpty"),
+            PredKind::IsoDate => self.push("IsoDate"),
         }
     }
 
@@ -3664,6 +3665,7 @@ fn pred_to_string(p: &RefinementPred) -> String {
         PredKind::NonNegative => "NonNegative".to_string(),
         PredKind::Positive => "Positive".to_string(),
         PredKind::NonEmpty => "NonEmpty".to_string(),
+        PredKind::IsoDate => "IsoDate".to_string(),
     }
 }
 

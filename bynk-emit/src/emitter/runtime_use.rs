@@ -96,6 +96,8 @@ pub(crate) struct RuntimeUse {
     bytes_ops: Cell<bool>,
     /// K3 (#2592): the module references the `Instant` ISO-8601 helpers.
     time_ops: Cell<bool>,
+    /// #2867: an `IsoDate` refinement check was emitted.
+    iso_date: Cell<bool>,
     /// #2640: the module references the `par` block's join, `__bynkSettleAll`.
     settle_all: Cell<bool>,
     /// #2683: the module references `e.within(d)`'s race, `__bynkWithin`.
@@ -187,6 +189,14 @@ impl RuntimeUse {
     /// Record that the module references the `Bytes` operation helpers (#2016).
     pub fn note_bytes_ops(&self) {
         self.bytes_ops.set(true);
+    }
+
+    /// #2867: a refinement check whose condition calls a runtime helper
+    /// (`IsoDate` -> `__bynkIsIsoDate`).
+    pub fn note_predicate(&self, pred: &bynk_syntax::ast::PredKind) {
+        if matches!(pred, bynk_syntax::ast::PredKind::IsoDate) {
+            self.iso_date.set(true);
+        }
     }
 
     /// Record that the module references the `Instant` ISO-8601 helpers (#2592).
@@ -406,6 +416,11 @@ impl RuntimeUse {
     /// Whether the `Bytes` operation helpers must be imported (#2016).
     pub fn bytes_ops(&self) -> bool {
         self.bytes_ops.get()
+    }
+
+    /// Whether `__bynkIsIsoDate` must be imported (#2867).
+    pub fn iso_date(&self) -> bool {
+        self.iso_date.get()
     }
 
     /// Whether the `Instant` ISO-8601 helpers must be imported (#2592).

@@ -289,6 +289,7 @@ fn pred_text(p: &PredKind) -> String {
         PredKind::NonNegative => "NonNegative".to_string(),
         PredKind::Positive => "Positive".to_string(),
         PredKind::NonEmpty => "NonEmpty".to_string(),
+        PredKind::IsoDate => "IsoDate".to_string(),
     }
 }
 

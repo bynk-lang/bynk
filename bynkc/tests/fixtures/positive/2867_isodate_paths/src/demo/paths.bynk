@@ -1,0 +1,24 @@
+---
+#2867: `IsoDate` through the emit paths the declared-type fixture does not
+reach: an inline record field, `is`, and a `where` pattern.
+---
+commons demo.paths
+
+type Day = String where IsoDate
+
+type Event = { on: String where IsoDate }
+
+fn decodeEvent(json: String) -> Result[Event, JsonError] {
+  Json.decode[Event](json)
+}
+
+fn isDay(s: String) -> Bool {
+  s is Day
+}
+
+fn classify(s: String) -> Int {
+  match s {
+    _ where IsoDate => 1
+    _ => 0
+  }
+}

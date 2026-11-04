@@ -1869,6 +1869,7 @@ mod tests {
                 len(v).is_some_and(|n| n as f64 <= args("MaxLength")[0])
             }
             p if p.starts_with("Length(") => len(v).is_some_and(|n| n as f64 == args("Length")[0]),
+            "IsoDate" => matches!(v, J::Str(s) if bynk_syntax::ast::is_iso_date(s)),
             other => panic!("the model does not know {other}"),
         }
     }

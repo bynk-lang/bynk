@@ -1,0 +1,3 @@
+# #2867: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# IsoDate at the HTTP boundary: path parameter and body field.
+passed=7 failed=0

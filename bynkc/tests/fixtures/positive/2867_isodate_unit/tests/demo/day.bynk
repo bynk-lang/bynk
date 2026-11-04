@@ -1,0 +1,60 @@
+---
+#2867: the calendar rule, at its edges.
+---
+suite demo.day
+
+case "a literal is admitted at compile time" {
+  expect today() == "2026-11-03"
+  expect leapDay() == "2028-02-29"
+}
+
+case "real dates are accepted by .of" {
+  expect Day.of("2026-11-03").isOk()
+  expect Day.of("2028-02-29").isOk()
+  expect Day.of("2000-02-29").isOk()
+  expect Day.of("0000-01-01").isOk()
+  expect Day.of("9999-12-31").isOk()
+  expect Day.of("2026-04-30").isOk()
+  expect Day.of("2026-12-31").isOk()
+}
+
+case "impossible dates are refused by .of" {
+  expect !Day.of("2026-02-30").isOk()
+  expect !Day.of("2026-02-29").isOk()
+  expect !Day.of("1900-02-29").isOk()
+  expect !Day.of("2026-04-31").isOk()
+  expect !Day.of("2026-13-01").isOk()
+  expect !Day.of("2026-00-10").isOk()
+  expect !Day.of("2026-01-00").isOk()
+}
+
+case "anything but exactly YYYY-MM-DD is refused" {
+  expect !Day.of("2026-1-1").isOk()
+  expect !Day.of("yesterday").isOk()
+  expect !Day.of("").isOk()
+  expect !Day.of("2026-11-03 ").isOk()
+  expect !Day.of("2026-11-03T00:00:00Z").isOk()
+  expect !Day.of("20261103").isOk()
+  expect !Day.of("2026/11/03").isOk()
+  expect !Day.of("+2026-11-03").isOk()
+}
+
+case "Json.decode enforces the same rule" {
+  expect decodeDay("\"2024-02-29\"").isOk()
+  expect !decodeDay("\"2026-02-30\"").isOk()
+  expect !decodeDay("\"2026-02-29\"").isOk()
+  expect !decodeDay("\"2026-13-01\"").isOk()
+  expect !decodeDay("\"2026-1-1\"").isOk()
+  expect decodeBooking("{\"day\": \"2000-02-29\"}").isOk()
+  expect !decodeBooking("{\"day\": \"1900-02-29\"}").isOk()
+}
+
+case "Day agrees with Instant.fromIso on a midnight" {
+  expect startOf("2028-02-29").isSome()
+  expect startOf("2000-02-29").isSome()
+  expect !startOf("2026-02-29").isSome()
+  expect !startOf("1900-02-29").isSome()
+  expect !Instant.fromIso("2026-02-29T00:00:00Z").isSome()
+  expect Instant.fromIso("2000-02-29T00:00:00Z").isSome()
+  expect !Instant.fromIso("1900-02-29T00:00:00Z").isSome()
+}

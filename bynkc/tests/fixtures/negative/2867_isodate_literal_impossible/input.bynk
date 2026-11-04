@@ -1,0 +1,9 @@
+commons demo {
+  type Day = String where IsoDate
+
+  // #2867: a literal in a position that expects a `Day` is checked at compile
+  // time. `2026-02-30` is no date, so this is a compile error.
+  fn bad() -> Day {
+    "2026-02-30"
+  }
+}

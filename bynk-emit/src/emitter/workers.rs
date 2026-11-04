@@ -840,6 +840,12 @@ pub(crate) fn emit_worker_compose(
             crate::emitter::TIME_OPS_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.iso_date() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::ISO_DATE_RUNTIME_IMPORTS,
+        );
+    }
     if runtime_use.settle_all() {
         append_missing_bindings(
             &mut runtime_imports,

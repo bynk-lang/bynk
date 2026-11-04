@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Some, None } from "../src/result.ts";
-import { __bynkInstantFromIso, __bynkInstantToIso } from "../src/time.ts";
+import { __bynkInstantFromIso, __bynkInstantToIso, __bynkIsIsoDate } from "../src/time.ts";
 
 // Standard-library K3 (#2592).
 test("toIso writes UTC with three fraction digits and Z", () => {
@@ -81,5 +81,36 @@ test("fromIso(toIso(i)) is Some(i) across years 0000 to 9999", () => {
   }
   for (const ms of samples) {
     assert.deepEqual(__bynkInstantFromIso(__bynkInstantToIso(ms)), Some(ms), String(ms));
+  }
+});
+
+// #2867: `IsoDate`.
+test("isIsoDate admits real dates and refuses impossible or malformed ones", () => {
+  for (const ok of ["2026-11-03", "2028-02-29", "2000-02-29", "0000-01-01", "9999-12-31", "2026-04-30"]) {
+    assert.equal(__bynkIsIsoDate(ok), true, ok);
+  }
+  for (const bad of [
+    "2026-02-30", "2026-02-29", "1900-02-29", "2026-04-31", "2026-13-01", "2026-00-10", "2026-01-00",
+    "2026-1-1", "yesterday", "", "2026-11-03 ", " 2026-11-03", "2026-11-03\n", "2026-11-03T00:00:00Z",
+    "20261103", "2026/11/03", "+2026-11-03", "２０２６-11-03", "2026-11-03x",
+  ]) {
+    assert.equal(__bynkIsIsoDate(bad), false, JSON.stringify(bad));
+  }
+});
+
+test("isIsoDate agrees with Instant.fromIso at midnight over generated strings", () => {
+  // A small deterministic generator over the alphabet that matters: digits near
+  // the calendar's edges, the separators, and a few stray characters.
+  let seed = 2867;
+  const next = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff);
+  const pick = (xs: string[]) => xs[next() % xs.length];
+  const years = ["0000", "0004", "1900", "2000", "2026", "2028", "2100", "9999", "26", "20260"];
+  const months = ["00", "01", "02", "04", "12", "13", "1", "99"];
+  const days = ["00", "01", "28", "29", "30", "31", "32", "1", "99"];
+  const seps = ["-", "-", "-", "/", ""];
+  for (let i = 0; i < 20000; i++) {
+    const d = `${pick(years)}${pick(seps)}${pick(months)}${pick(seps)}${pick(days)}`;
+    const viaInstant = __bynkInstantFromIso(`${d}T00:00:00Z`).tag === "Some";
+    assert.equal(__bynkIsIsoDate(d), viaInstant, d);
   }
 });

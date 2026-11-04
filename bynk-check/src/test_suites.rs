@@ -3576,7 +3576,8 @@ fn expr_struct_eq(a: &Expr, b: &Expr) -> bool {
 pub const PROP_GEN_DEPTH: u32 = 12;
 
 /// Whether a `for all x: T` binding's type is refinement-generable: refined
-/// types must not carry a `Matches` predicate (no refinement-driven generator),
+/// types must not carry a `Matches` or `IsoDate` predicate (no
+/// refinement-driven generator),
 /// and sums/records must have every component recursively generable within the
 /// depth cap. Mirrors the checker's `can_mock_bare`.
 pub fn prop_binding_generable(
@@ -3596,7 +3597,7 @@ pub fn prop_binding_generable(
             };
             match &decl.body {
                 TypeBody::Refined { refinement, .. } | TypeBody::Opaque { refinement, .. } => {
-                    !refinement_has_matches(refinement.as_ref())
+                    !refinement_lacks_generator(refinement.as_ref())
                 }
                 TypeBody::Sum(s) => s.variants.first().is_some_and(|v| {
                     v.payload.iter().all(|f| {
@@ -3607,7 +3608,7 @@ pub fn prop_binding_generable(
                 TypeBody::Record(r) => r.fields.iter().all(|f| {
                     // #2668: an inline `where Matches(…)` on a field is as
                     // ungenerable as a declared `Matches` type.
-                    !refinement_has_matches(f.refinement.as_ref())
+                    !refinement_lacks_generator(f.refinement.as_ref())
                         && checker::resolve_type_ref(&f.type_ref, types, tys)
                             .is_some_and(|t| prop_binding_generable(t, types, depth - 1, tys))
                 }),
@@ -3617,13 +3618,10 @@ pub fn prop_binding_generable(
     }
 }
 
-/// Whether a (field-inline) refinement carries a `Matches` predicate.
-fn refinement_has_matches(refinement: Option<&Refinement>) -> bool {
-    refinement.is_some_and(|r| {
-        r.predicates
-            .iter()
-            .any(|p| matches!(p.kind, PredKind::Matches(_)))
-    })
+/// Whether a (field-inline) refinement has no refinement-driven generator
+/// (`Matches`, `IsoDate`), the same set `Val[T]` pins (`refinement_needs_pin`).
+fn refinement_lacks_generator(refinement: Option<&Refinement>) -> bool {
+    refinement.is_some_and(crate::checker::refinement_needs_pin)
 }
 
 /// The refinement of a resolved refined/opaque named type, if any — used by the

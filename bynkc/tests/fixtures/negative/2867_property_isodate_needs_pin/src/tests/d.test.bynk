@@ -1,0 +1,9 @@
+suite demo.d {
+  // #2867: an `IsoDate` refinement has no refinement-driven generator, as with
+  // `Matches`; a generated string is almost never a date. Pin instead.
+  property "days cannot be generated" {
+    for all d: Day {
+      expect d == d
+    }
+  }
+}

@@ -1200,6 +1200,7 @@ fn emit_refined(
             // #1846: a renamed unexported type reports its declared name,
             // the one its owner's `.of` reports (`Code`, not `t_vault__Code`).
             let field = ty.rsplit('.').next().unwrap_or(name);
+            scalar.predicates.iter().for_each(|p| ru.note_predicate(p));
             body.extend(emit_inline_refinement_checks(
                 field,
                 &scalar.base_guards,
@@ -1389,6 +1390,7 @@ fn emit_field_refinement_checks(
     ru: &RuntimeUse,
 ) -> Vec<TsStmt> {
     let value = format!("__{fname}");
+    predicates.iter().for_each(|p| ru.note_predicate(p));
     // #2622: a `Decimal` violation reports its canonical text; the decoded
     // value holds a `bigint`, which cannot be JSON-stringified.
     let shown = if base == Some(BaseType::Decimal) {
