@@ -1,0 +1,10 @@
+context demo.web
+
+consumes bynk { Locale }
+
+service api from http {
+	on GET("/hello") () -> Effect[HttpResult[String]] by Visitor given Locale {
+		let tag <- Locale.current()
+		Ok("\(tag)")
+	}
+}

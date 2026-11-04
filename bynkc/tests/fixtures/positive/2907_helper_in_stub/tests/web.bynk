@@ -1,0 +1,20 @@
+suite web {
+	fn reply(status: Int) -> Result[Response, FetchError] {
+		Ok(Response { status: status, headers: Map.empty(), body: "" })
+	}
+	fn resp(status: Int) -> Response {
+		Response { status: status, headers: Map.empty(), body: "" }
+	}
+
+	case "helper as the value" {
+		stub Fetch.send(_) returns reply(200)
+		let s <- probe.call("https://x")
+		expect s == 200
+	}
+
+	case "helper inside Ok" {
+		stub Fetch.send(_) returns Ok(resp(200))
+		let s <- probe.call("https://x")
+		expect s == 200
+	}
+}

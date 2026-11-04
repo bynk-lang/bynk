@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "probe": "c57d00e0023b6cb0"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "probe": "Svc(\"probe\",P(\"url\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}
