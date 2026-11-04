@@ -58,9 +58,9 @@ async function test_failure_exposes_field_and_message() {
     const deps = {};
     const { Age, explain, fieldOf, messageOf } = __ns_ages;
     type Age = __ns_ages.Age;
-    if (!(fieldOf(200) !== "")) { throw __bynkExpectFailure("tests/ages.test.bynk:7:12", 210, 228, "expect fieldOf(200) != \"\"\n  expected: fieldOf(200) != \"\"\n  actual:   " + __bynkShow((fieldOf(200))) + " != " + __bynkShow((""))); }
-    if (!(messageOf(200) !== "")) { throw __bynkExpectFailure("tests/ages.test.bynk:8:12", 240, 260, "expect messageOf(200) != \"\"\n  expected: messageOf(200) != \"\"\n  actual:   " + __bynkShow((messageOf(200))) + " != " + __bynkShow((""))); }
-    if (!(explain(200) === `${String(fieldOf(200))}: ${String(messageOf(200))}`)) { throw __bynkExpectFailure("tests/ages.test.bynk:9:12", 272, 324, "expect explain(200) == \"\\(fieldOf(200)): \\(messageOf(200))\"\n  expected: explain(200) == \"\\(fieldOf(200)): \\(messageOf(200))\"\n  actual:   " + __bynkShow((explain(200))) + " == " + __bynkShow((`${String(fieldOf(200))}: ${String(messageOf(200))}`))); }
+    if (!(fieldOf(200) === "Age")) { throw __bynkExpectFailure("tests/ages.test.bynk:7:12", 210, 231, "expect fieldOf(200) == \"Age\"\n  expected: fieldOf(200) == \"Age\"\n  actual:   " + __bynkShow((fieldOf(200))) + " == " + __bynkShow(("Age"))); }
+    if (!(messageOf(200) === "must be in range [0, 150]")) { throw __bynkExpectFailure("tests/ages.test.bynk:8:12", 243, 288, "expect messageOf(200) == \"must be in range [0, 150]\"\n  expected: messageOf(200) == \"must be in range [0, 150]\"\n  actual:   " + __bynkShow((messageOf(200))) + " == " + __bynkShow(("must be in range [0, 150]"))); }
+    if (!(explain(200) === `${String(fieldOf(200))}: ${String(messageOf(200))}`)) { throw __bynkExpectFailure("tests/ages.test.bynk:9:12", 300, 352, "expect explain(200) == \"\\(fieldOf(200)): \\(messageOf(200))\"\n  expected: explain(200) == \"\\(fieldOf(200)): \\(messageOf(200))\"\n  actual:   " + __bynkShow((explain(200))) + " == " + __bynkShow((`${String(fieldOf(200))}: ${String(messageOf(200))}`))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

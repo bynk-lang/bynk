@@ -3074,7 +3074,7 @@ pub fn value_member_candidates(
         for (name, doc) in [
             (
                 "field",
-                "String — the name of the field that failed validation",
+                "String — the name of the refined type or field that failed validation",
             ),
             ("message", "String — a description of the failure"),
         ] {

@@ -250,7 +250,7 @@ A `ValidationError` has two `String` fields:
 
 | Field | Meaning |
 |---|---|
-| `field` | the name of the field or value that failed validation |
+| `field` | the name of the refined type or field that failed validation |
 | `message` | a human-readable description of the failure |
 
 It has no string form, so `"\(e)"` is refused

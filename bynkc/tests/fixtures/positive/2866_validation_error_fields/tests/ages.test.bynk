@@ -4,8 +4,8 @@ suite ages {
     expect explain(30) == "ok"
   }
   case "failure exposes field and message" {
-    expect fieldOf(200) != ""
-    expect messageOf(200) != ""
+    expect fieldOf(200) == "Age"
+    expect messageOf(200) == "must be in range [0, 150]"
     expect explain(200) == "\(fieldOf(200)): \(messageOf(200))"
   }
 }
