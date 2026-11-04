@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.502.1** | An integration test proves `bynk token` credentials against a Worker under `bynk dev` |
 | **v0.502.0** | "`ValidationError` exposes `field` and `message` (both `String`) to Bynk code; `value` stays unreachable (#2866)" |
 | **v0.501.1** | The Rust token signer is byte-compared with the test runtime's signer for non-ASCII subjects |
 | **v0.501.0** | A context function may declare `given`; its callers must declare the same capabilities (#2868, builds on #2719 and #2010) |
