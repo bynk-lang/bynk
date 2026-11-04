@@ -1,0 +1,1 @@
+bynk.given.missing_for_call `warn` needs `given Logger`, which the enclosing body does not declare

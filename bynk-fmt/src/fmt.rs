@@ -1929,6 +1929,14 @@ impl<'a> Formatter<'a> {
             let names: Vec<String> = f.type_params.iter().map(type_param_text).collect();
             self.push(&format!("[{}]", names.join(", ")));
         }
+        // #2868: a context function's `given` clause follows the return type,
+        // before any `where`, as a handler's does.
+        let given_text = if f.given.is_empty() {
+            String::new()
+        } else {
+            let names: Vec<String> = f.given.iter().map(cap_ref_src).collect();
+            format!(" given {}", names.join(", "))
+        };
         // A method's `where A: Eq` clause rides after the return type.
         let where_text = if f.where_bounds.is_empty() {
             String::new()
@@ -1943,7 +1951,10 @@ impl<'a> Formatter<'a> {
         // The signature tail that shares the parameter list's line: ` -> Ret`
         // plus the body's ` {` (a contract clause moves the body to its own
         // line, so only the return type counts then).
-        let tail = format!(" -> {}{where_text}", type_ref_to_string(&f.return_type));
+        let tail = format!(
+            " -> {}{given_text}{where_text}",
+            type_ref_to_string(&f.return_type)
+        );
         let reserve = if f.requires.is_empty() && f.ensures.is_empty() {
             tail.chars().count() + " {".len()
         } else {
@@ -1952,6 +1963,7 @@ impl<'a> Formatter<'a> {
         self.format_params(&f.params, f.has_self, reserve);
         self.push(" -> ");
         self.format_type_ref(&f.return_type);
+        self.push(&given_text);
         self.push(&where_text);
         // v0.115: contract clauses on their own indented lines between the
         // return type and the body (`requires`/`ensures <name>: <pred>`).

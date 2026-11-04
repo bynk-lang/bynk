@@ -2373,9 +2373,10 @@ pub fn free_fn_signature(name: &str, f: &bynk_syntax::ast::FnDecl) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "{name}{}({params}) -> {}{}",
+        "{name}{}({params}) -> {}{}{}",
         crate::symbols::fn_type_params_str(f),
         type_ref_str(&f.return_type),
+        crate::symbols::fn_given_str(f),
         crate::symbols::fn_where_str(f)
     )
 }
@@ -3325,6 +3326,21 @@ mod tests {
         assert!(got.contains(&"Clock".to_string()), "{got:?}");
         assert!(got.contains(&"Random".to_string()), "{got:?}");
         assert!(got.contains(&"Logger".to_string()), "{got:?}");
+    }
+
+    /// #2868: a context function's `given` completes capability names, as a
+    /// handler's does.
+    #[test]
+    fn a_fn_given_suggests_capabilities() {
+        let doc = "context a.b\n\
+                   consumes bynk { Clock }\n\
+                   capability Local { fn f() -> Effect[Int] }\n\
+                   fn step() -> Effect[Int] given Clock {\n\
+                   Clock.now()\n\
+                   }\n";
+        let got = labels("fn step() -> Effect[Int] given ", doc);
+        assert!(got.contains(&"Clock".to_string()), "flattened: {got:?}");
+        assert!(got.contains(&"Local".to_string()), "local: {got:?}");
     }
 
     #[test]

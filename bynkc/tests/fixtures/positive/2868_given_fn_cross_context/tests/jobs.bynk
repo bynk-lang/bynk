@@ -1,0 +1,11 @@
+suite ops.jobs {
+	case "a given fn reaches a consumed context's capability" {
+		let r <- stamp()
+		expect r == 0
+	}
+
+	case "a handler passes the consumed capability on" {
+		let r <- tick.call()
+		expect r == 0
+	}
+}

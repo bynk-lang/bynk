@@ -1041,7 +1041,7 @@ pub fn lower_actor_seam_ir(handler: &Handler, actors: &HashMap<String, ActorDecl
 /// [`bynk_ir::CapRefIr`] — [`CapRefIr`]'s own doc comment has the full
 /// grounding for the `QualifiedName -> String` flattening and for why a
 /// `Some` prefix is preserved unresolved.
-fn lower_cap_ref_ir(cap_ref: &CapRef) -> CapRefIr {
+pub fn lower_cap_ref_ir(cap_ref: &CapRef) -> CapRefIr {
     CapRefIr {
         context: cap_ref.context.as_ref().map(QualifiedName::joined),
         name: cap_ref.name.name.clone(),

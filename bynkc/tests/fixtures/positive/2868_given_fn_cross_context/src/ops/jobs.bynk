@@ -1,0 +1,14 @@
+context ops.jobs
+
+consumes platform.time
+
+fn stamp() -> Effect[Int] given platform.time.Clock {
+  platform.time.Clock.now()
+}
+
+service tick {
+  on call() -> Effect[Int] given platform.time.Clock {
+    let t <- stamp()
+    t
+  }
+}

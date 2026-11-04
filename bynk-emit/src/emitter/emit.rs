@@ -999,8 +999,9 @@ pub(crate) fn emit_free_fn(
     // (false) in the deploy build for zero runtime cost (DECISION J).
     contracts: bool,
     runtime_use: &RuntimeUse,
+    cross_context: &bynk_check::resolver::CrossContextInfo,
 ) -> Vec<bynk_ts::TsStmt> {
-    emit_free_fn_in(f, commons, contracts, runtime_use, true)
+    emit_free_fn_in(f, commons, contracts, runtime_use, cross_context, true)
 }
 
 /// #2834: a suite-local helper `fn` — [`emit_free_fn`] without the `export`,
@@ -1011,7 +1012,9 @@ pub(crate) fn emit_suite_fn(
     runtime_use: &RuntimeUse,
 ) -> Vec<bynk_ts::TsStmt> {
     // A suite is only ever built for `bynkc test`, which guards every contract.
-    emit_free_fn_in(f, commons, true, runtime_use, false)
+    // A suite helper cannot declare `given`, so it has no capability types to name.
+    let empty = bynk_check::resolver::CrossContextInfo::default();
+    emit_free_fn_in(f, commons, true, runtime_use, &empty, false)
 }
 
 fn emit_free_fn_in(
@@ -1019,6 +1022,7 @@ fn emit_free_fn_in(
     commons: &TypedCommons,
     contracts: bool,
     runtime_use: &RuntimeUse,
+    cross_context: &bynk_check::resolver::CrossContextInfo,
     export: bool,
 ) -> Vec<bynk_ts::TsStmt> {
     let FnName::Free(name) = &f.name else {
@@ -1048,14 +1052,51 @@ fn emit_free_fn_in(
 
     let empty = bynk_check::resolver::CrossContextInfo::default();
     let body_smb = RefCell::new(SourceMapBuilder::new());
-    let mut cx = LowerCtx::new(
-        ModuleCtx::new(commons, &empty, runtime_use),
-        BodyMode::FreeFn,
-    )
+    let given_ir: Vec<bynk_ir::CapRefIr> =
+        f.given.iter().map(bynk_lower::lower_cap_ref_ir).collect();
+    let mut cx = if given_ir.is_empty() {
+        LowerCtx::new(
+            ModuleCtx::new(commons, &empty, runtime_use),
+            BodyMode::FreeFn,
+        )
+    } else {
+        LowerCtx::new(
+            ModuleCtx::new(commons, cross_context, runtime_use),
+            BodyMode::GivenFn {
+                handler: HandlerShared {
+                    capabilities: given_ir.iter().map(|c| c.name.clone()).collect(),
+                    handler_scope: Some(format!(
+                        "{}.fn.{}",
+                        commons.commons.name.joined(),
+                        name.name
+                    )),
+                    owning_context: commons.commons.name.joined(),
+                    ..HandlerShared::default()
+                },
+            },
+        )
+    }
     .with_source_map(Some(&body_smb));
     // Constrained generics slice 1: one trailing comparator parameter per
     // `Ord`-bounded type parameter.
     params.extend(cx.declare_witnesses(f));
+    // #2868: the capabilities a `given` function names, as a hidden `deps`
+    // parameter (before the execution context): exactly the declared ones, so
+    // a caller hands over its own `deps`, which has them.
+    if !given_ir.is_empty() {
+        params.push(bynk_ts::TsParam {
+            name: "deps".to_string(),
+            ty: Some(bynk_ts::TsType::Object(
+                given_ir
+                    .iter()
+                    .map(|c| {
+                        bynk_ts::TsTypeMember::prop(c.name.clone(), cap_ref_ty(c, cross_context))
+                    })
+                    .collect(),
+            )),
+            optional: false,
+        });
+    }
     // #2719: the execution context, last.
     if commons.exec_plan.fn_needs(f) {
         params.push(exec_param("__exec"));

@@ -877,6 +877,21 @@ mod tests {
         })
     }
 
+    /// #2868: a function that declares `given` hovers with it, at the
+    /// declaration and at a call.
+    #[test]
+    fn a_given_fn_hovers_with_its_capabilities() {
+        let src = "context demo.m\n\ncapability Logger {\n  fn error(m: String) -> Effect[()]\n}\n\nfn warn(what: String) -> Effect[()] given Logger {\n  Logger.error(what)\n}\n\nservice s {\n  on call() -> Effect[()] given Logger {\n    warn(\"x\")\n  }\n}\n";
+        for nth in [0, 1] {
+            let h = hover_at(src, "warn", nth).expect("`warn` hovers");
+            assert!(
+                h.contains("fn warn(what: String) -> Effect[()] given Logger")
+                    || h.contains("warn(what: String) -> Effect[()] given Logger"),
+                "{h}"
+            );
+        }
+    }
+
     /// #2620: the ambient fault built-ins hover with their signature and doc; a
     /// declaration of the same name shadows the built-in.
     #[test]

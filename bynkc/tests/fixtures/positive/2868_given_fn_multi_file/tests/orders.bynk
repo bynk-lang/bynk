@@ -1,0 +1,19 @@
+suite shop.orders {
+	case "a given fn reaches a capability no handler lists" {
+		// `Audit` is not in the case's own scope; the harness's `deps` carry it.
+		let r <- book(4)
+		expect r == 4
+		expect Audit.note called once
+	}
+
+	case "a handler path through given functions" {
+		let r <- place.call(3)
+		expect r == 4
+	}
+
+	case "a capability only a given fn lists reaches a case" {
+		let n <- tick()
+		expect n == 9
+		expect Meter.bump called once
+	}
+}

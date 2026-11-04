@@ -233,7 +233,13 @@ pub(crate) fn emit(program: &CheckedProgram) -> String {
         if let CommonsItem::Fn(f) = item
             && let FnName::Free(_) = &f.name
         {
-            body_stmts.extend(emit_free_fn(f, commons, false, &dummy_ctx.runtime_use));
+            body_stmts.extend(emit_free_fn(
+                f,
+                commons,
+                false,
+                &dummy_ctx.runtime_use,
+                &dummy_ctx.cross_context,
+            ));
         }
     }
     // v0.22b: module-local codec helpers for Json.encode/decode targets.
@@ -461,7 +467,13 @@ pub(crate) fn emit_project(
         if let CommonsItem::Fn(f) = item
             && let FnName::Free(_) = &f.name
         {
-            let mut item_stmts = emit_free_fn(f, commons, ctx.contracts, &ctx.runtime_use);
+            let mut item_stmts = emit_free_fn(
+                f,
+                commons,
+                ctx.contracts,
+                &ctx.runtime_use,
+                &ctx.cross_context,
+            );
             if let Some(first) = item_stmts.first_mut() {
                 first.span = Some(f.span);
             }
@@ -2954,6 +2966,11 @@ fn collect_refs_in_expr(
         ExprKind::Ident(id) => {
             if let Some(type_name) = sum_owner_of_variant(&id.name, e.id, commons) {
                 record_name_ref(&type_name, local_to_file, ctx, out);
+            } else if let Some(bynk_check::checker::Callee::FnValue(decl, _)) = commons.callee(e.id)
+            {
+                // #2868: a function named as a value, from a sibling file or
+                // an imported unit, is imported where it is named.
+                record_name_ref(&decl.name.display(), local_to_file, ctx, out);
             } else if commons.assets.contains_key(&id.name)
                 || commons.embeds.contains_key(&id.name)
                 || commons.consts.contains_key(&id.name)
@@ -4652,6 +4669,10 @@ pub(crate) enum BodyMode {
     Method,
     /// A free function body (`emit_free_fn`).
     FreeFn,
+    /// #2868: a context function that declares `given`: a free function whose
+    /// hidden `deps` parameter carries exactly the capabilities it names, so a
+    /// capability call lowers as in a handler (`deps.Logger.error(…)`).
+    GivenFn { handler: HandlerShared },
     /// An agent field's static initialiser expression (`emit_agent`).
     StaticInit,
     /// v0.80: an agent invariant predicate. Carries the name of the
@@ -5196,6 +5217,7 @@ impl<'a> LowerCtx<'a> {
         match &self.mode {
             BodyMode::ServiceHandler { handler, .. }
             | BodyMode::ProviderOp { handler }
+            | BodyMode::GivenFn { handler }
             | BodyMode::AgentHandler { handler, .. }
             | BodyMode::WsDoMethod { handler, .. } => Some(handler),
             _ => None,
@@ -5206,6 +5228,7 @@ impl<'a> LowerCtx<'a> {
         match &mut self.mode {
             BodyMode::ServiceHandler { handler, .. }
             | BodyMode::ProviderOp { handler }
+            | BodyMode::GivenFn { handler }
             | BodyMode::AgentHandler { handler, .. }
             | BodyMode::WsDoMethod { handler, .. } => Some(handler),
             _ => None,
@@ -5240,7 +5263,7 @@ impl<'a> LowerCtx<'a> {
     /// carry the harness's double).
     pub(crate) fn exec_expr(&self) -> String {
         match &self.mode {
-            BodyMode::FreeFn | BodyMode::Method => "__exec".to_string(),
+            BodyMode::FreeFn | BodyMode::GivenFn { .. } | BodyMode::Method => "__exec".to_string(),
             _ => format!("{}.__exec", self.cap_deps_expr()),
         }
     }

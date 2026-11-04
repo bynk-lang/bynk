@@ -1,0 +1,12 @@
+suite shop {
+	case "a given fn logs and counts through the target's capabilities" {
+		let r <- api.call("sku")
+		expect r == 7
+		expect Logger.error called 5 times
+	}
+
+	case "a case calls a given fn directly, with the target's capabilities" {
+		let _ <- warn("direct")
+		expect Logger.error called once
+	}
+}

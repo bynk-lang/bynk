@@ -2509,6 +2509,16 @@ pub(crate) fn fn_type_params_str(f: &FnDecl) -> String {
     format!("[{}]", ps.join(", "))
 }
 
+/// #2868: ` given Logger, Orders`, or empty for a function with no `given`. It
+/// follows the return type, ahead of any `where`, as in the source.
+pub(crate) fn fn_given_str(f: &FnDecl) -> String {
+    if f.given.is_empty() {
+        return String::new();
+    }
+    let names: Vec<String> = f.given.iter().map(|g| g.display_name()).collect();
+    format!(" given {}", names.join(", "))
+}
+
 /// ` where A: Eq`, or empty without a `where` clause.
 pub(crate) fn fn_where_str(f: &FnDecl) -> String {
     if f.where_bounds.is_empty() {
@@ -2551,6 +2561,7 @@ pub(crate) fn describe_fn(f: &FnDecl) -> String {
     out.push_str(&parts.join(", "));
     out.push_str(") -> ");
     out.push_str(&type_ref_str(&f.return_type));
+    out.push_str(&fn_given_str(f));
     out.push_str(&fn_where_str(f));
     // v0.123 (slice 2): the contract clauses (v0.115), beneath the signature —
     // rendered through the formatter's own predicate renderer.
