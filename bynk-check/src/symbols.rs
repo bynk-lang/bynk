@@ -1560,6 +1560,7 @@ pub fn build_cross_context_info(
     let mut consumed_type_owners: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut consumed_type_aliases: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut callee_type_aliases: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut callee_alias_keys_out: HashMap<String, HashMap<String, String>> = HashMap::new();
     for t in &consumed_contexts {
         if let Some(own) = unit_tables
             .get(t)
@@ -1573,8 +1574,11 @@ pub fn build_cross_context_info(
                     .collect(),
             );
         }
-        let (mut other_types_combined, owners) =
+        let (mut other_types_combined, mut owners) =
             contract_types_for(t, unit_tables, unit_uses, unit_consumes);
+        // #2901: the key `t`'s view holds the declaration behind each type `t`
+        // renamed from a context of its own, where a caller names it (see below).
+        let callee_keys = callee_alias_keys(t, unit_tables, &other_types_combined);
         // #2887: the exports of `t` this unit renames (`consumes t { T as U }`):
         // the view files them under the alias, and every signature it lifts
         // below names them by it, so a call's `T` is the type `U` here and not
@@ -1609,6 +1613,34 @@ pub fn build_cross_context_info(
                     .collect(),
             );
         }
+        // #2901: a caller of `t` reads a type `t` renamed (`consumes lib { Code
+        // as LibCode }`) as the declaration, not as `t`'s alias. The signatures
+        // lifted below are rewritten to `key`: the declared name, or the
+        // qualified key `t`'s view files it under when `t` has a type of that
+        // name of its own (#2087), never the bare name then, which would be
+        // `t`'s. The alias stays a key of the view, which the contract hash
+        // reads (it is `t`'s own spelling).
+        for (alias, (key, decl)) in &callee_keys {
+            if let Some(owner) = owners.get(alias).cloned() {
+                owners.entry(key.clone()).or_insert(owner);
+            }
+            other_types_combined
+                .entry(key.clone())
+                .or_insert_with(|| decl.clone());
+        }
+        let key_of: HashMap<String, String> = callee_keys
+            .iter()
+            .map(|(alias, (key, _))| (alias.clone(), key.clone()))
+            .collect();
+        if !key_of.is_empty() {
+            callee_alias_keys_out.insert(
+                t.clone(),
+                key_of
+                    .iter()
+                    .map(|(alias, key)| (key.clone(), alias.clone()))
+                    .collect(),
+            );
+        }
         consumed_types.insert(t.clone(), other_types_combined);
         if !owners.is_empty() {
             consumed_type_owners.insert(t.clone(), owners);
@@ -1624,6 +1656,10 @@ pub fn build_cross_context_info(
                     rename_type_ref(tr, &renames);
                 }
                 rename_type_ref(&mut svc.return_type, &renames);
+                for (_, tr) in svc.params.iter_mut() {
+                    rename_type_ref(tr, &key_of);
+                }
+                rename_type_ref(&mut svc.return_type, &key_of);
                 svc.foreign_callers = sdecl
                     .handlers
                     .iter()
@@ -1657,12 +1693,14 @@ pub fn build_cross_context_info(
                         .map(|p| {
                             let mut tr = p.type_ref.clone();
                             rename_type_ref(&mut tr, &renames);
+                            rename_type_ref(&mut tr, &key_of);
                             (p.name.name.clone(), tr)
                         })
                         .collect(),
                     return_type: {
                         let mut tr = op.return_type.clone();
                         rename_type_ref(&mut tr, &renames);
+                        rename_type_ref(&mut tr, &key_of);
                         tr
                     },
                     codable_params: crate::checker::codable::codable_op_params(op),
@@ -1704,7 +1742,44 @@ pub fn build_cross_context_info(
         consumed_type_owners,
         consumed_type_aliases,
         callee_type_aliases,
+        callee_alias_keys: callee_alias_keys_out,
     }
+}
+
+/// #2901: for each type `t` renames from a context of its own, the key a
+/// caller of `t` names the declaration by, and the declaration filed under it.
+/// `view` is [`contract_types_for`] of `t`, which holds the declaration under
+/// the alias.
+///
+/// The key is the declared name when `view` holds that declaration under it.
+/// When `t` has a different type of that name (a `uses` commons type), the
+/// bare name is `t`'s own and is not used: the key is the declaration's own
+/// context and name, as the view files a clashing borrowed type (#2087).
+fn callee_alias_keys(
+    t: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    view: &HashMap<String, Arc<TypeDecl>>,
+) -> HashMap<String, (String, Arc<TypeDecl>)> {
+    let Some(table) = unit_tables.get(t) else {
+        return HashMap::new();
+    };
+    let mut out = HashMap::new();
+    for (alias, a) in &table.consumed_type_aliases {
+        let Some(decl) = view.get(alias) else {
+            continue;
+        };
+        let same = |d: &Arc<TypeDecl>| Arc::ptr_eq(d, decl) || d.span == decl.span;
+        let (key, decl) = if view.get(&a.original).is_some_and(same) {
+            (a.original.clone(), decl.clone())
+        } else {
+            let key = format!("{}__{}", a.target.replace('.', "_"), a.original);
+            let mut renamed = (**decl).clone();
+            renamed.name.name = key.clone();
+            (key, Arc::new(renamed))
+        };
+        out.insert(alias.clone(), (key, decl));
+    }
+    out
 }
 
 /// Events track, slice 0 (spine #936): project-wide "who subscribes to what"

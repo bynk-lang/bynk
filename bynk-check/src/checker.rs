@@ -5532,6 +5532,32 @@ pub(crate) fn rebrand_return_type(
     }
 }
 
+/// #2901: the caller's type table with the provider's qualified keys
+/// (`lib__Code`, #2087) that the caller names by the declaration's own name
+/// added. A provider that has a type of its own named like one it borrows
+/// files the borrowed one under a qualified key; a caller holding that same
+/// declaration under the bare name takes the value as its own type, as it
+/// would a provider's `Code` by name.
+pub(crate) fn rebrand_table(
+    caller_types: &HashMap<String, Arc<TypeDecl>>,
+    provider_types: &HashMap<String, Arc<TypeDecl>>,
+) -> HashMap<String, Arc<TypeDecl>> {
+    let mut out = caller_types.clone();
+    for (key, decl) in provider_types {
+        let bare = crate::symbols::display_type_name(key);
+        if bare == key || caller_types.contains_key(key) {
+            continue;
+        }
+        if let Some(own) = caller_types
+            .get(bare)
+            .filter(|c| Arc::ptr_eq(c, decl) || c.span == decl.span)
+        {
+            out.insert(key.clone(), own.clone());
+        }
+    }
+    out
+}
+
 /// #1941: the first type name [`rebrand_return_type`] would swap for the
 /// caller's declaration of a different shape. A returned value takes the
 /// caller's type of the same name (§6.5), so that swap would type the

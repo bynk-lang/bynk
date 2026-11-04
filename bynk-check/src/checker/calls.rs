@@ -5847,13 +5847,10 @@ fn check_cross_context_capability_call(
     let raw_ret = resolve_type_ref_in(&op.return_type, &consumed_types, &vars, tys)
         .unwrap_or(tys.intern(Ty::Unit));
     let raw_ret = substitute(raw_ret, &subst, tys);
-    if let Some(name) = rebrand_conflict(
-        raw_ret,
-        &consumed_types,
-        &ctx.input.types,
-        &caller_types,
-        tys,
-    ) {
+    let rebrand_types = rebrand_table(&ctx.input.types, &consumed_types);
+    if let Some(name) =
+        rebrand_conflict(raw_ret, &consumed_types, &rebrand_types, &caller_types, tys)
+    {
         ctx.errors.push(rebranded_return_mismatch(
             &format!("{consumed}.{cap}.{}", method.name),
             &name,
@@ -5864,7 +5861,7 @@ fn check_cross_context_capability_call(
         ));
         return None;
     }
-    Some(rebrand_return_type(raw_ret, &ctx.input.types, tys))
+    Some(rebrand_return_type(raw_ret, &rebrand_types, tys))
 }
 
 /// #1941: a returned value takes the caller's type of the same name (§6.5).
@@ -6353,13 +6350,10 @@ fn check_cross_context_call(
     // name appears in the caller's type table (v0.6 §4.5).
     let raw_ret = resolve_type_ref(&service.return_type, &consumed_types, tys)
         .unwrap_or(tys.intern(Ty::Unit));
-    if let Some(name) = rebrand_conflict(
-        raw_ret,
-        &consumed_types,
-        &ctx.input.types,
-        &caller_types,
-        tys,
-    ) {
+    let rebrand_types = rebrand_table(&ctx.input.types, &consumed_types);
+    if let Some(name) =
+        rebrand_conflict(raw_ret, &consumed_types, &rebrand_types, &caller_types, tys)
+    {
         ctx.errors.push(rebranded_return_mismatch(
             &format!("{consumed}.{}", method.name),
             &name,
@@ -6370,7 +6364,7 @@ fn check_cross_context_call(
         ));
         return None;
     }
-    Some(rebrand_return_type(raw_ret, &ctx.input.types, tys))
+    Some(rebrand_return_type(raw_ret, &rebrand_types, tys))
 }
 
 /// #2808: a `String`, `Int`, … handed to a refined or opaque type over that

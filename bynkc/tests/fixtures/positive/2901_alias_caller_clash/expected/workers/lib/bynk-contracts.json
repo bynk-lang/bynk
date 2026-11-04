@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "flip": "f709ca4714b12e21",
+    "ping": "748848b544eecb87"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "flip": "Svc(\"flip\",P(\"c\",Sum(\"Code\",V(\"Alpha\"),V(\"Beta\"))),Ret(Sum(\"Code\",V(\"Alpha\"),V(\"Beta\"))))",
+    "ping": "Svc(\"ping\",P(\"l\",Rf(\"Level\",\"Int\",\"NonNegative\")),Ret(Rf(\"Level\",\"Int\",\"NonNegative\")))"
+  }
+}

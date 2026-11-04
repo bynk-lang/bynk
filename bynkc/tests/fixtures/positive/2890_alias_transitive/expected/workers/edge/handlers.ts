@@ -14,12 +14,12 @@ export { type Code };
 
 export const probe = {
   async call(deps: { env: { APP: __ServiceBinding } }): globalThis.Promise<number> {
-    const echoed = await __callService(deps.env.APP, "echo", __serialise_app__LibCode((({ tag: "Alpha" } as Code) as unknown as lib.Code)), __deserialise_app__LibCode, "edge", "079bebf1abc5532f", deps.env, "app");
+    const echoed = await __callService(deps.env.APP, "echo", __serialise_app__lib__Code((({ tag: "Alpha" } as Code) as unknown as lib.Code)), __deserialise_app__lib__Code, "edge", "079bebf1abc5532f", deps.env, "app");
     return 1;
   },
 };
 
-export function __serialise_app__LibCode(value: lib.Code): __JsonValue {
+export function __serialise_app__lib__Code(value: lib.Code): __JsonValue {
   switch (value.tag) {
     case "Alpha":
       return { kind: "Alpha" };
@@ -28,7 +28,7 @@ export function __serialise_app__LibCode(value: lib.Code): __JsonValue {
   }
 }
 
-export function __deserialise_app__LibCode(json: __JsonValue, path: string = "$"): Result<lib.Code, __BoundaryError> {
+export function __deserialise_app__lib__Code(json: __JsonValue, path: string = "$"): Result<lib.Code, __BoundaryError> {
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

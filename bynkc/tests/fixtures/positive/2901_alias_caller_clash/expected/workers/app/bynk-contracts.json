@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "provides": {
+    "echo": "079bebf1abc5532f",
+    "level": "1a48d7416e32c8d8",
+    "run": "c6a2fb2a40cce571"
+  },
+  "expects": {
+    "lib": {
+      "flip": "f709ca4714b12e21",
+      "ping": "748848b544eecb87"
+    }
+  },
+  "provides_shapes": {
+    "echo": "Svc(\"echo\",P(\"c\",Sum(\"LibCode\",V(\"Alpha\"),V(\"Beta\"))),Ret(Sum(\"LibCode\",V(\"Alpha\"),V(\"Beta\"))))",
+    "level": "Svc(\"level\",Ret(B(\"Int\")))",
+    "run": "Svc(\"run\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "lib": {
+      "flip": "Svc(\"flip\",P(\"c\",Sum(\"Code\",V(\"Alpha\"),V(\"Beta\"))),Ret(Sum(\"Code\",V(\"Alpha\"),V(\"Beta\"))))",
+      "ping": "Svc(\"ping\",P(\"l\",Rf(\"Level\",\"Int\",\"NonNegative\")),Ret(Rf(\"Level\",\"Int\",\"NonNegative\")))"
+    }
+  }
+}
