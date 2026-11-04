@@ -1,0 +1,2 @@
+bynk.parse.expected_token
+expected `(` before the handler parameter list

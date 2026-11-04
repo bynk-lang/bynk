@@ -558,6 +558,7 @@ There are **755** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| `bynk.parse.clause_after_statement` | A `stub` or `env` clause came after a statement in a test case; they lead the case body. |  | — |
 | `bynk.parse.const_missing_type` | A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`). | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.parse.consumes_after_decls` | `consumes` appears after other declarations. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.parse.dangling_handler_annotation` | A handler-position annotation (e.g. `@cache`) is not followed by an `on` handler. |  | — |
@@ -809,7 +810,7 @@ There are **755** codes in total.
 |---|---|---|---|
 | `bynk.types.argument_mismatch` | A call, method, capability, or constructor argument has the wrong type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.types.asset_at_boundary` | An `Asset` type appears in a record field, boundary or store position; pass its `.url` instead. |  | — |
-| `bynk.types.bad_field_default` | A record or event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant, `Some`/`None`/`Ok`/`Err`, a record, a list literal, `Map.empty()`/`Set.empty()`, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. A field whose type is a generic record's type parameter, or applies a user generic, has no default. (Earlier versions reported this as `bynk.event.bad_field_default`.) |  | — |
+| `bynk.types.bad_field_default` | A record or event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant of a type this context may construct (not a `uses`-sourced commons sum, which is `bynk.context.rebrand_construction`), `Some`/`None`/`Ok`/`Err`, a record, a list literal, `Map.empty()`/`Set.empty()`, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. A field whose type is a generic record's type parameter, or applies a user generic, has no default. (Earlier versions reported this as `bynk.event.bad_field_default`.) |  | — |
 | `bynk.types.call_arity` | A function value was applied with the wrong number of arguments. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.types.cannot_infer_option_type_param` | The value type of `None` could not be inferred. | [`none_expr`](/book/reference/grammar/#rule-none_expr) | — |
 | `bynk.types.cannot_infer_result_type_params` | The type parameters of a `Result` could not be inferred. |  | — |

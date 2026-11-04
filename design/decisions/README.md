@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0732](0732-lambda-wildcard-param.md) | **A lambda parameter may be `_`** (v0.506) — `_` as a lambda parameter binds nothing, repeats freely and takes its type from the expected function type | Accepted (v0.506) |
 | [0731](0731-consumes-alias-transitive-callers.md) | **A context's service signature that names a renamed type is read by its callers under the alias** (v0.505.1) — The callee's own alias keys its contract view, so a third context calls it and the hashes agree | Accepted (v0.505.1) |
 | [0730](0730-consumes-type-alias.md) | **`consumes U { T as Alias }` renames an exported type for the consuming context** (v0.505) — How a consumed type that clashes with a local one is kept apart | Accepted (v0.505) |
 | [0729](0729-call-record-commons-qualification.md) | **Call-record types qualify `uses` commons types** (v0.504.3) — The observation call records resolve a commons type through its namespace import | Accepted (v0.504.3) |

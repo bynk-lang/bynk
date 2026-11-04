@@ -1,0 +1,2 @@
+bynk.parse.expected_token
+expected `)` to close the lambda parameter list, found identifier

@@ -1,0 +1,12 @@
+suite demo.web {
+	case "unit" {
+		let r <- api.GET("/hello") by Visitor
+		expect r == Ok("en")
+		expect Locale.current called once
+	}
+
+	case "sys" as system {
+		let r <- api.GET("/hello") by Visitor
+		expect r == Ok("en")
+	}
+}

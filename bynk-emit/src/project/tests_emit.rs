@@ -1039,8 +1039,10 @@ fn emit_integration_module(
         // #1875 review: the check pass accepted this body from the same
         // inputs, so an error here means the two have drifted, and the
         // lowering would silently fall back to untyped output.
+        // #2906: except a lower-tier case in a suite that also has `system`
+        // ones, which the check pass leaves unchecked (`mixed_system_suite`).
         debug_assert!(
-            throwaway_errors.is_empty(),
+            throwaway_errors.is_empty() || input.tier != bynk_syntax::ast::TestTier::System,
             "a system case re-typed for emission reported errors the check pass did not: {:?}",
             throwaway_errors
                 .iter()
@@ -5225,7 +5227,7 @@ fn emit_stub_class(
                         e,
                         &param.type_ref,
                         &[],
-                        &rp.clause_fixtures[idx],
+                        clause_items(rp, idx),
                         target_name,
                         unit_tables,
                         unit_uses,
@@ -5261,7 +5263,7 @@ fn emit_stub_class(
                 clause,
                 idx,
                 op,
-                &rp.clause_fixtures[idx],
+                clause_items(rp, idx),
                 target_name,
                 unit_tables,
                 unit_uses,
@@ -5332,7 +5334,7 @@ fn emit_stub_rhs(
     clause: &StubClause,
     clause_idx: usize,
     op: &CapabilityOp,
-    fixtures: &[bynk_syntax::ast::FixtureDecl],
+    fixtures: test_suites::SuiteItems<'_>,
     target_name: &str,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
@@ -5449,7 +5451,7 @@ fn lower_stub_value_block(
     e: &Expr,
     ret_type: &TypeRef,
     params: &[Param],
-    fixtures: &[bynk_syntax::ast::FixtureDecl],
+    items: test_suites::SuiteItems<'_>,
     target_name: &str,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
@@ -5462,7 +5464,8 @@ fn lower_stub_value_block(
     // #2850: the declaring suite's fixtures are names for module-level
     // constants. An operation parameter of the same name shadows one, as in the
     // checker.
-    let fixtures: Vec<bynk_syntax::ast::FixtureDecl> = fixtures
+    let fixtures: Vec<bynk_syntax::ast::FixtureDecl> = items
+        .fixtures
         .iter()
         .filter(|f| !params.iter().any(|p| p.name.name == f.name.name))
         .cloned()
@@ -5477,6 +5480,7 @@ fn lower_stub_value_block(
         tys,
     );
     let block = test_suites::value_block(e);
+    let mut helpers: Vec<String> = Vec::new();
     if let Some((resolved, _)) = test_suites::build_privileged_resolved(
         &owning_unit,
         unit_tables,
@@ -5492,7 +5496,33 @@ fn lower_stub_value_block(
                 fixtures: &fixtures,
             },
         );
+        // #2907: and its helpers, declared ahead of the value like the fixtures.
         let mut errs: Vec<CompileError> = Vec::new();
+        if !items.fns.is_empty() {
+            let (expr_types, callees) = test_suites::check_suite_fns(
+                items.fns,
+                &mut resolved,
+                unit_tables.get(&owning_unit),
+                &mut errs,
+                &mut RefSink::new(),
+                &mut LocalsSink::new(),
+                tys,
+            );
+            typed.expr_types.extend(expr_types);
+            typed.callees.extend(callees);
+            test_suites::add_suite_fns_to_typed(&mut typed, items.fns);
+            for f in items.fns {
+                let stmts = emitter::emit_suite_fn(f, &typed, runtime_use);
+                helpers.extend(stmts.iter().map(|st| bynk_ts::print_stmt(st, 0)));
+            }
+        }
+        test_suites::add_suite_fns(
+            &mut resolved,
+            test_suites::SuiteItems {
+                fns: items.fns,
+                fixtures: &[],
+            },
+        );
         // Build-mode re-check for the lowering's expr types; the analyse exit has
         // already passed, so nothing records (fresh sink).
         checker::check_handler_body(
@@ -5525,7 +5555,15 @@ fn lower_stub_value_block(
             )
         })
         .collect();
-    format!("{aliases}{body}")
+    format!("{aliases}{}{body}", helpers.concat())
+}
+
+/// #2850/#2907: what a stub clause's values may name of its suite.
+fn clause_items(rp: &test_suites::ResolvedStub, idx: usize) -> test_suites::SuiteItems<'_> {
+    test_suites::SuiteItems {
+        fns: &rp.clause_fns[idx],
+        fixtures: &rp.clause_fixtures[idx],
+    }
 }
 
 fn synthetic_typed_commons_for_target(

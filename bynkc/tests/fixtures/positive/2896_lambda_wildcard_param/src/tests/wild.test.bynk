@@ -1,0 +1,19 @@
+suite demo.wild {
+  case "mapErr with a wildcard parameter" {
+    expect recover(Err("boom")) == Err(0)
+    expect recover(Ok(3)) == Ok(3)
+  }
+
+  case "typed wildcard" {
+    expect constant(Err("x")) == Err(7)
+  }
+
+  case "wildcard beside a named parameter" {
+    expect second([5, 6, 7]) == 3
+    expect pick([5, 6, 7]) == 7
+  }
+
+  case "two wildcards in one list" {
+    expect one() == 1
+  }
+}
