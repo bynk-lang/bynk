@@ -910,22 +910,26 @@ pub fn phase_integration_bodies(
                     .iter()
                     .any(|c| case_effective_tier(c, d) == bynk_syntax::ast::TestTier::System);
             for case in &d.cases {
-                if suite_has_system
-                    && case_effective_tier(case, d) != bynk_syntax::ast::TestTier::System
-                {
-                    continue;
-                }
-                let (_, case_callees) = typecheck_integration_case_body(
-                    &participants,
-                    &view,
-                    SuiteItems::of(d),
-                    case,
-                    &cross_context,
-                    unit_tables,
-                    &mut body_errs,
-                    refs,
-                    tys,
-                );
+                let unchecked = suite_has_system
+                    && case_effective_tier(case, d) != bynk_syntax::ast::TestTier::System;
+                // The tier gates below still run on such a case; only its
+                // body type-check, which has no harness to run in, is skipped.
+                let case_callees = if unchecked {
+                    Default::default()
+                } else {
+                    typecheck_integration_case_body(
+                        &participants,
+                        &view,
+                        SuiteItems::of(d),
+                        case,
+                        &cross_context,
+                        unit_tables,
+                        &mut body_errs,
+                        refs,
+                        tys,
+                    )
+                    .1
+                };
                 check_faults_tier(case, case_effective_tier(case, d), &mut body_errs);
                 check_snapshot_placement(case, true, &mut body_errs);
                 check_event_address_tier(
