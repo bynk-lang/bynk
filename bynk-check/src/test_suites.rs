@@ -2919,11 +2919,7 @@ fn check_faults_tier(
 /// Slice C, #2905: `bynk.test.wire_needs_system` — a case below `system` that
 /// uses `Wire(…)`. Shared by the unit and integration paths: the unit path
 /// once skipped it, so an http `Wire` in a unit suite reached `tsc`.
-fn check_wire_tier(
-    case: &Case,
-    tier: bynk_syntax::ast::TestTier,
-    errors: &mut Vec<CompileError>,
-) {
+fn check_wire_tier(case: &Case, tier: bynk_syntax::ast::TestTier, errors: &mut Vec<CompileError>) {
     if tier == bynk_syntax::ast::TestTier::System || !block_uses_wire(&case.body) {
         return;
     }
