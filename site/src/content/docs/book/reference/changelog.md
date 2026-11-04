@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.507.1** | fmt keeps digit separators in integer literal patterns and events-subscription literal patterns |
 | **v0.507.0** | "`bynk token` now mints for refinement actors (signing the claims the predicate needs, as the `system` harness does) and takes `--claim name[=value]` to add claims by hand" |
 | **v0.506.5** | "`Wire(...)` in a unit-tier case is now `bynk.test.wire_needs_system`, and `Wire(...)` passed to a queue, cron, `on call` or event address is the new `bynk.test.wire_http_only` instead of failing at run time or in `tsc`" |
 | **v0.506.4** | A record field default naming a variant of a `uses`-sourced commons sum now reports `bynk.context.rebrand_construction` instead of "an invalid expression", and the `bad_field_default` note no longer lists such variants as admitted |
