@@ -1,0 +1,14 @@
+context pay
+
+exports opaque { Status }
+exports transparent { Amount }
+
+type Status = | Paid | Declined
+
+type Amount = Int where Positive
+
+service charge {
+  on call(amount: Int) -> Effect[Status] {
+    Effect.pure(Paid)
+  }
+}

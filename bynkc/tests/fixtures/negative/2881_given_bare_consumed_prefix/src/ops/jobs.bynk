@@ -1,0 +1,8 @@
+context ops.jobs
+
+consumes platform.time
+
+fn stamp() -> Effect[Int] given platform.time.Clock {
+  let c = platform
+  platform.time.Clock.now()
+}

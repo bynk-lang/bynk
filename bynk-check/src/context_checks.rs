@@ -115,14 +115,21 @@ pub fn check_handler_constraints(
             ),
             CommonsItem::Provider(p) => (p.ops.iter().map(|op| &op.body).collect(), Vec::new()),
             // #2868: a `given` function, typed with the context's declarations.
-            CommonsItem::Fn(f) if !f.given.is_empty() => (
-                vec![&f.body],
-                f.requires
-                    .iter()
-                    .chain(&f.ensures)
-                    .map(|c| &c.predicate)
-                    .collect(),
-            ),
+            // #2882: a function `given_fn_refusal` rejected was not typed
+            // (`check_given_fns`), so its body is not walked either. This pass
+            // runs on contexts only.
+            CommonsItem::Fn(f)
+                if !f.given.is_empty() && checker::given_fn_refusal(f, true).is_none() =>
+            {
+                (
+                    vec![&f.body],
+                    f.requires
+                        .iter()
+                        .chain(&f.ensures)
+                        .map(|c| &c.predicate)
+                        .collect(),
+                )
+            }
             _ => continue,
         };
         for body in bodies {

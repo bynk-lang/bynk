@@ -1,0 +1,22 @@
+context shop
+
+consumes pay
+
+capability Logger {
+  fn error(message: String) -> Effect[()]
+}
+
+provides Logger = NullLogger {
+  fn error(message: String) -> Effect[()] {}
+}
+
+// The declaration is refused (a method cannot declare `given`); its body, which
+// constructs a type `pay` owns, is not walked for context constraints.
+type Box = {
+  n: Int,
+}
+
+fn Box.show(self) -> Effect[()] given Logger {
+  let a = Amount.of(5)
+  Logger.error("box")
+}

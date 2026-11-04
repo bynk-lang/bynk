@@ -633,3 +633,47 @@ fn missing_for_call_synthesises_the_clause_on_a_plain_function() {
     );
     assert_clean("app/handlers.bynk", &fixed);
 }
+
+// -- #2881: the resolver's note on a capability a method or pure fn uses --
+
+fn note_for_fn(item: &str) -> String {
+    let text = format!(
+        "\
+context app.handlers
+
+capability Alpha {{
+  fn ping() -> Effect[Int]
+}}
+
+provides Alpha = AlphaImpl {{
+  fn ping() -> Effect[Int] {{
+    1
+  }}
+}}
+
+type Box = {{
+  n: Int,
+}}
+
+{item}
+"
+    );
+    let diags = diagnose_with("app/handlers.bynk", &text);
+    let d = diags
+        .iter()
+        .find(|d| d.error.category == "bynk.given.undeclared_capability")
+        .expect("an undeclared-capability diagnostic");
+    d.error.notes.join("\n")
+}
+
+#[test]
+fn method_and_pure_fn_notes_point_at_the_function_value_spelling() {
+    let method = note_for_fn("fn Box.show(self) -> Effect[Int] {\n  Alpha.ping()\n}");
+    assert!(method.contains("a method cannot declare `given`"), "{method}");
+    assert!(method.contains("function-value parameter"), "{method}");
+    let pure = note_for_fn("fn shout() -> Int {\n  let r = Alpha.ping()\n  1\n}");
+    assert!(pure.contains("does not return `Effect[T]`"), "{pure}");
+    assert!(pure.contains("function-value parameter"), "{pure}");
+    let free = note_for_fn("fn warn() -> Effect[Int] {\n  Alpha.ping()\n}");
+    assert!(free.contains("add `given Alpha`"), "{free}");
+}

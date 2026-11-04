@@ -1,0 +1,2 @@
+# exact
+bynk.resolve.unknown_name unknown name `platform`
