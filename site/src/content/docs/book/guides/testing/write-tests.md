@@ -268,8 +268,9 @@ stub Net.fetch(_) returns each [fails, fails, ok(resp)]  // fails twice, then su
 
 A context may rename a consumed type (`consumes bynk.crypto { Digest as
 CryptoDigest }`), but a suite is not a consuming context and does not see the
-alias: a case that writes `CryptoDigest` is `unknown name`. A `stub` pattern is
-the exception, since it resolves in the context under test and may use the alias.
+alias: a case that writes `CryptoDigest` is `unknown name`. Name the type by the
+name its unit declares (`Digest.Sha256`). A `stub` pattern resolves in the context
+under test, so it may use either name.
 
 ## Promote a case across tiers
 
