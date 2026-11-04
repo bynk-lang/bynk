@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.506.4** | A record field default naming a variant of a `uses`-sourced commons sum now reports `bynk.context.rebrand_construction` instead of "an invalid expression", and the `bad_field_default` note no longer lists such variants as admitted |
+| **v0.506.3** | A suite mixing `as system` with lower-tier cases reports only `bynk.tier.mixed_system_suite`, not a false `bynk.observe.not_a_seam`; suite helpers are callable in `stub … returns` values, and an unresolved name there is reported as unresolved, not `bynk.stub.rhs_type` |
 | **v0.506.2** | A reserved word naming an agent `on call` operation, a name on a service's `on call`, and a `stub`/`env` clause after a case statement now get targeted parse diagnostics |
 | **v0.506.1** | A typed `query` field of a refined type or enum declared in a `uses` commons now reads as its real wire kind on Workers (so `?n=2` is no longer a 400), and a context whose only capability use is a `fn … given Fetch` now imports the `bynk` namespace its `deps` name |
 | **v0.506.0** | A lambda parameter may be `_`, which binds nothing — `r.mapErr((_) => 0)`, `(a, _) => a` |
