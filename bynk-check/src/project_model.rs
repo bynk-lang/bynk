@@ -2079,6 +2079,7 @@ pub fn phase_resolve_consumes(
         let mut type_aliases: HashMap<String, crate::symbols::ConsumedTypeAlias> = HashMap::new();
         let mut alias_of: HashMap<(String, String), (String, usize)> = HashMap::new();
         let mut bare_types: HashSet<(String, String)> = HashSet::new();
+        let mut alias_sites: HashMap<String, (usize, Span)> = HashMap::new();
         let local_caps: HashSet<String> = unit_tables
             .get(name)
             .map(|t| t.capabilities.keys().cloned().collect())
@@ -2313,6 +2314,9 @@ pub fn phase_resolve_consumes(
                                 );
                                 continue;
                             }
+                            alias_sites
+                                .entry(alias.name.clone())
+                                .or_insert((i, alias.span));
                             alias_of.insert(key, (alias.name.clone(), i));
                             type_aliases.insert(alias.name.clone(), this);
                             // Both names lead to the real declaration.
@@ -2414,6 +2418,26 @@ pub fn phase_resolve_consumes(
             }
         }
         unit_consumes.insert(name.clone(), consumes_targets);
+        // An alias is a type name; a capability of the same name (flattened
+        // from a `consumes`, or local) would bind it twice in the emitted
+        // module and in the unit's own scope.
+        let mut clashing: Vec<&String> = type_aliases
+            .keys()
+            .filter(|a| flattened.contains_key(*a) || local_caps.contains(*a))
+            .collect();
+        clashing.sort();
+        for alias in clashing {
+            let (file, span) = alias_sites[alias];
+            errors.push_for(
+                Some(&parsed[file].identity_path()),
+                CompileError::new(
+                    "bynk.consumes.type_alias_conflict",
+                    span,
+                    format!("alias `{alias}` is also the name of a capability in this context"),
+                )
+                .with_note("choose an alias that is not a capability's name"),
+            );
+        }
         unit_flattened.insert(name.clone(), flattened);
         if !type_aliases.is_empty() {
             unit_type_aliases.insert(name.clone(), type_aliases);
@@ -6701,6 +6725,57 @@ mod consumes_alias_tests {
             e.notes.iter().any(|n| n.contains("Digest as CryptoDigest")),
             "{:?}",
             e.notes
+        );
+    }
+
+    #[test]
+    fn a_refused_alias_does_not_take_over_the_name_it_clashed_with() {
+        // `Report` is the local type; the clashing alias is refused and must not
+        // redirect hover or go-to-definition to the module's `Digest`.
+        let src = "context app\n\nconsumes bynk.crypto { Crypto, Digest as Report }\n\ntype Report = { total: Int }\n\nfn f(r: Report) -> Int { r.total }\n";
+        let a = run(&[("app.bynk", src)]);
+        assert_eq!(
+            a.error_categories(),
+            vec!["bynk.consumes.type_alias_conflict"]
+        );
+        // The unit does not check past the refusal, so the proof is that the
+        // index neither panics nor files the alias under the module's type:
+        // the local `Report` stays the one declaration of that name.
+        let reports: Vec<_> = a
+            .analysis
+            .index
+            .symbols
+            .keys()
+            .filter(|k| k.name == "Report" || k.name == "Digest")
+            .collect();
+        assert!(
+            reports
+                .iter()
+                .all(|k| k.unit == "app" && k.name == "Report"),
+            "{reports:?}"
+        );
+    }
+
+    #[test]
+    fn the_conflict_note_for_a_context_also_names_the_alias_form() {
+        // An alias works for a context's type as for an adapter's, so the note
+        // may recommend it there.
+        let lib = (
+            "lib.bynk",
+            "context lib\n\nexports transparent { Code }\n\ntype Code = enum { A, B }\n",
+        );
+        let codes = ("codes.bynk", "commons codes\n\ntype Code = { n: Int }\n");
+        let app = "context app\n\nuses codes\nconsumes lib\n\nfn one() -> Int { 1 }\n";
+        let a = run(&[lib, codes, ("app.bynk", app)]);
+        assert_eq!(a.error_categories(), vec!["bynk.consumes.name_conflict"]);
+        assert!(
+            a.analysis.errors[0]
+                .error
+                .notes
+                .iter()
+                .any(|n| n.contains("Code as LibCode")),
+            "{:?}",
+            a.analysis.errors[0].error.notes
         );
     }
 

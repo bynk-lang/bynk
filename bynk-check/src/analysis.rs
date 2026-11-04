@@ -865,6 +865,7 @@ pub fn analyse_project_with_policy(
         &parsed,
         &unit_uses,
         &unit_consumes,
+        &unit_type_aliases,
         std::mem::take(&mut refs),
     );
 

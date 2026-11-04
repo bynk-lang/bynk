@@ -737,7 +737,28 @@ impl IndexBuilder {
             return has(&key).then_some(key);
         }
         let ns = edge.namespace.as_ref()?;
+        let local = SymbolKey {
+            unit: ns.clone(),
+            kind: edge.kind,
+            name: edge.name.clone(),
+        };
+        if has(&local) {
+            return Some(local);
+        }
+        for target in self.uses.get(ns).into_iter().flatten() {
+            let imported = SymbolKey {
+                unit: target.clone(),
+                kind: edge.kind,
+                name: edge.name.clone(),
+            };
+            if has(&imported) {
+                return Some(imported);
+            }
+        }
         // #2887: a consumed type renamed in this unit is its alias here only.
+        // After the unit's own and `uses` names: an alias that collides with
+        // one is refused, and the name still means the declaration it clashed
+        // with.
         if edge.kind == SymbolKind::Type
             && let Some((target, original)) = self
                 .type_aliases
@@ -751,21 +772,7 @@ impl IndexBuilder {
             };
             return has(&key).then_some(key);
         }
-        let local = SymbolKey {
-            unit: ns.clone(),
-            kind: edge.kind,
-            name: edge.name.clone(),
-        };
-        if has(&local) {
-            return Some(local);
-        }
-        for target in self
-            .uses
-            .get(ns)
-            .into_iter()
-            .flatten()
-            .chain(self.consumes.get(ns).into_iter().flatten())
-        {
+        for target in self.consumes.get(ns).into_iter().flatten() {
             let imported = SymbolKey {
                 unit: target.clone(),
                 kind: edge.kind,

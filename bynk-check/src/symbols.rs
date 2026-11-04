@@ -26,6 +26,7 @@ pub fn assemble_index(
     parsed: &[ParsedFile],
     unit_uses: &HashMap<String, Vec<String>>,
     unit_consumes: &HashMap<String, Vec<String>>,
+    unit_type_aliases: &HashMap<String, HashMap<String, ConsumedTypeAlias>>,
     refs: RefSink,
 ) -> ProjectIndex {
     let mut builder = IndexBuilder::default();
@@ -33,22 +34,17 @@ pub fn assemble_index(
     uses.extend(refs.extra_uses);
     builder.set_uses(uses);
     builder.set_consumes(unit_consumes.clone());
-    let mut type_aliases: HashMap<String, HashMap<String, (String, String)>> = HashMap::new();
-    for pf in parsed {
-        for c in pf.consumes() {
-            for item in c.selected.iter().flatten() {
-                if let Some(alias) = &item.alias {
-                    type_aliases
-                        .entry(pf.unit().name().joined())
-                        .or_default()
-                        .insert(
-                            alias.name.clone(),
-                            (c.target.joined(), item.name.name.clone()),
-                        );
-                }
-            }
-        }
-    }
+    // #2887: only the aliases `phase_resolve_consumes` accepted.
+    let type_aliases = unit_type_aliases
+        .iter()
+        .map(|(unit, aliases)| {
+            let aliases = aliases
+                .iter()
+                .map(|(alias, a)| (alias.clone(), (a.target.clone(), a.original.clone())))
+                .collect();
+            (unit.clone(), aliases)
+        })
+        .collect();
     builder.set_type_aliases(type_aliases);
     for pf in parsed {
         // #2834: a suite's helper `fn`s are definitions in the suite's own
