@@ -1,0 +1,8 @@
+commons r.a
+
+fn f(n: Int) -> Int {
+	match n {
+		-1_000 => 1,
+		_ => 0,
+	}
+}

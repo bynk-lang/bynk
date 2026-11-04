@@ -3267,13 +3267,8 @@ impl<'a> Parser<'a> {
             ) || (t.kind == TokenKind::Minus
                 && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::IntLit));
             if is_literal_lead {
-                let (value, span) = self.parse_literal_value()?;
-                let text = self.slice(span).split_whitespace().collect::<String>();
-                return Ok(EventPatternValue::Literal {
-                    value,
-                    text: Some(text),
-                    span,
-                });
+                let (value, span, text) = self.parse_literal_value_text()?;
+                return Ok(EventPatternValue::Literal { value, text, span });
             }
         }
         let first = self.expect_ident("as an events subscription pattern field value")?;
