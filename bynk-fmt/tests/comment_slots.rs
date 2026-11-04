@@ -262,6 +262,25 @@ fn strip_comment(out: &str, tag: &str, blank_after: bool) -> String {
                 if closes && kept.last().is_some_and(|k| k.trim().is_empty()) {
                     kept.pop();
                 }
+                // #2893: a comment on a header line keeps the blank line that
+                // stood above it in the source, which the tight canonical
+                // header lacks.
+                let header = |l: &str| {
+                    let l = l.trim_start();
+                    l.starts_with("binding ")
+                        || l.starts_with("uses ")
+                        || l.starts_with("consumes ")
+                        || l.starts_with("exports ")
+                };
+                if kept.len() >= 2
+                    && kept[kept.len() - 1].trim().is_empty()
+                    && header(&kept[kept.len() - 2])
+                    && lines
+                        .get(i + 1 + usize::from(blank_after))
+                        .is_some_and(|next| header(next))
+                {
+                    kept.pop();
+                }
             }
             Some(j) => kept.push(line[..j].trim_end().to_string()),
             None => kept.push(line.to_string()),
