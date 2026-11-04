@@ -1157,6 +1157,17 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                         push_ground(*ty, &mut roots);
                     }
                 }
+                // #2865: a typed `D1` read decodes its row (or `List` of rows).
+                Some(bynk_check::checker::Callee::D1Select { row, first, .. }) => {
+                    push_ground(
+                        if *first {
+                            *row
+                        } else {
+                            commons.tys().intern(Ty::List(*row))
+                        },
+                        &mut roots,
+                    );
+                }
                 _ => {}
             }
             let ExprKind::MethodCall { args, .. } = &e.kind else {

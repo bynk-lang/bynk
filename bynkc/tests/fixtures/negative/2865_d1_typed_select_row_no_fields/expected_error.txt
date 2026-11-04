@@ -1,0 +1,2 @@
+bynk.types.sql_row_shape `Orders.select` reads SQL rows, but `Nothing` has no fields to select
+# exact

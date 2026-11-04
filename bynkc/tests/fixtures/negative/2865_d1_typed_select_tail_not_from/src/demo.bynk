@@ -1,0 +1,17 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Order = { id: String, qty: Int }
+
+service probe {
+  on call() -> Effect[Bool] given Orders {
+    let a <- Orders.select[Order]("WITH o AS (SELECT * FROM orders) SELECT * FROM o", [])
+    let b <- Orders.select[Order]("(SELECT * FROM orders)", [])
+    let c <- Orders.firstAs[Order]("fromage", [])
+    a is Ok(_) && b is Ok(_) && c is Ok(_)
+  }
+}

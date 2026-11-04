@@ -762,6 +762,9 @@ service api from http {
   column name, for `Json.decodeSql[List[Row]]`.
 - `first(sql, params)` gives the first row as one object, or `None` when there
   is none.
+- `select[T](tail, params)` reads every row into a `List[T]`, and
+  `firstAs[T](tail, params)` the first into an `Option[T]`, with the column list
+  written from `T` (see below).
 - `run(sql, params)` executes a write and gives a `SqlRun { changes, lastRowId
   }`: the rows it changed, and the rowid of the last row it inserted.
 - `batch(statements)` runs a `List[SqlStatement { sql, params }]` in order, in
@@ -780,6 +783,37 @@ of either (`NULL` is `None`), or a `List` of such records. Anything else is
 `bynk.types.sql_row_shape`. Only `0` and `1` become booleans: a `Bool` column
 holding `2` still fails the decode. `Json.decode` itself is unchanged and
 still refuses `0`/`1` for a `Bool`, at every boundary.
+
+#### Typed reads: `select[T]` and `firstAs[T]`
+
+`select[T]` and `firstAs[T]` read rows straight into a record, so the `SELECT`
+column list isn't spelt twice. The first argument is the statement **from
+`FROM` on**, a string literal that must not begin with `SELECT`
+(`bynk.types.select_tail_has_select`); the compiler writes `SELECT` and `T`'s
+fields as quoted identifiers, in declaration order, and prepends them at compile
+time, so the SQL is still a constant:
+
+```bynk,fragment
+type Activity = { id: String, event: String, receivedAt: Int }
+
+service feed {
+	on call(repo: String) -> Effect[Result[List[Activity], SqlReadError]] given Orders {
+		Orders.select[Activity]("FROM deliveries WHERE repo = ?1 LIMIT 50", [Text(repo)])
+	}
+}
+// runs: SELECT "id", "event", "receivedAt" FROM deliveries WHERE repo = ?1 LIMIT 50
+```
+
+A field selects the column of the same name; there is no renaming, so a computed
+column stays with `all` and `Json.decodeSql`. The tail is a literal
+(`bynk.types.sql_not_literal`) and `T` is a row, as for `Json.decodeSql`
+(`bynk.types.sql_row_shape`); `T` is the row itself, so `select[List[Row]]` is
+refused.
+
+`select` gives `Result[List[T], SqlReadError]` and `firstAs`
+`Result[Option[T], SqlReadError]`. `SqlReadError` is `Sql(SqlError)` for the
+statement's own failure and `Decode(JsonError)` for a row that did not decode,
+such as a column whose stored value disagrees with its field.
 
 Three things about the JSON a row becomes:
 

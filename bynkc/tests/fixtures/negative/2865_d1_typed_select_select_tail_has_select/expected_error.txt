@@ -1,0 +1,3 @@
+bynk.types.select_tail_has_select the SQL of `Orders.select` must start at `FROM`, not `SELECT`
+bynk.types.select_tail_has_select the SQL of `Orders.select` must start at `FROM`, not `SELECT`
+# exact

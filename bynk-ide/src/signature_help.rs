@@ -328,10 +328,29 @@ fn resolve_qualified_from(
         }
     });
     match (out, derived_base) {
+        // #2865: a derived `D1`'s typed reads are lowered by the compiler, so
+        // `D1` declares no operation for them.
+        (None, Some(base)) if base == "D1" && d1_typed_read(member).is_some() => {
+            d1_typed_read(member).map(str::to_string)
+        }
         (None, Some(base)) if !followed.contains(&base) => {
             resolve_qualified_from(&base, member, doc_text, files, followed)
         }
         (out, _) => out,
+    }
+}
+
+/// #2865: the signature of `D1.select[T]` / `D1.firstAs[T]`, compiler-lowered
+/// over `all`/`first` (so not declared operations of the capability).
+pub(crate) fn d1_typed_read(member: &str) -> Option<&'static str> {
+    match member {
+        "select" => Some(
+            "select[T](tail: String, params: List[SqlValue]) -> Effect[Result[List[T], SqlReadError]]",
+        ),
+        "firstAs" => Some(
+            "firstAs[T](tail: String, params: List[SqlValue]) -> Effect[Result[Option[T], SqlReadError]]",
+        ),
+        _ => None,
     }
 }
 
@@ -519,6 +538,21 @@ mod tests {
             resolve_label("Sessions.put", DERIVED_DOC, None).as_deref(),
             Some("put(key: String, value: String) -> Effect[()]")
         );
+    }
+
+    /// #2865: a derived `D1` has the compiler-lowered typed reads.
+    #[test]
+    fn a_derived_d1_has_the_typed_reads() {
+        const DOC: &str =
+            "context a\n\nconsumes bynk.cloudflare { D1 }\n\ncapability Orders = D1\n";
+        assert_eq!(
+            resolve_label("Orders.select", DOC, None).as_deref(),
+            Some(
+                "select[T](tail: String, params: List[SqlValue]) -> Effect[Result[List[T], SqlReadError]]"
+            )
+        );
+        assert!(resolve_label("Orders.firstAs", DOC, None).is_some());
+        assert!(resolve_label("Orders.all", DOC, None).is_some());
     }
 
     /// Review of #1968: a derivation cycle in unchecked source resolves

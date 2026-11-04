@@ -621,6 +621,16 @@ pub enum Callee {
         op: String,
         wire: Option<Arc<codable::CapEncoding>>,
     },
+    /// #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
+    /// a derived `D1` instance. Not a declared operation: the compiler writes
+    /// `sql` (the column list from the row `T`, then the literal tail) and
+    /// lowers over `all`/`first` and the `decodeSql` codec.
+    D1Select {
+        cap: String,
+        row: TyId,
+        sql: String,
+        first: bool,
+    },
     /// A cross-context capability operation call (`B.Cap.op(...)` /
     /// `Alias.Cap.op(...)`).
     CrossCap {

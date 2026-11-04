@@ -1,0 +1,4 @@
+bynk.types.select_tail_has_select the SQL of `Orders.select` must start at `FROM`
+bynk.types.select_tail_has_select the SQL of `Orders.select` must start at `FROM`
+bynk.types.select_tail_has_select the SQL of `Orders.firstAs` must start at `FROM`
+# exact

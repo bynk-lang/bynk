@@ -234,6 +234,10 @@
             "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
           },
           {
+            "label": "Query rows into a record without repeating the columns",
+            "link": "/book/guides/effects-and-capabilities/query-rows-into-a-record/"
+          },
+          {
             "label": "Rate-limit a route",
             "link": "/book/guides/effects-and-capabilities/rate-limit-a-route/"
           },
