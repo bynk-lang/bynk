@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0735](0735-system-model-scope-and-placement.md) | **The declaration-level IR becomes the system model, above the checker, with `bynk-lower` merged in as `bynk-model`** (v0.508.8) — The system model's scope, placement and name, its M-1 to M-4 requirements, and the M-1 domain clause | Accepted (v0.508.8) |
 | [0734](0734-published-set.md) | **Publish only what an installed binary reaches; retired crates point onward** (v0.508.5) — H-4 and H-5 of the crate-hygiene track; amends ADR 0099 and ADR 0100 | Accepted (v0.508.5) |
 | [0733](0733-system-extra-request-headers.md) | **A system case sends extra request headers by a trailing RequestHeaders argument** (v0.508) — Request headers reach a route with no `headers:` parameter only at system tier, as a trailing address argument | Accepted (v0.508) |
 | [0732](0732-lambda-wildcard-param.md) | **A lambda parameter may be `_`** (v0.506) — `_` as a lambda parameter binds nothing, repeats freely and takes its type from the expected function type | Accepted (v0.506) |
