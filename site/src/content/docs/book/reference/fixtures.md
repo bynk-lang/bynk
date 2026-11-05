@@ -37,12 +37,40 @@ value with `Bytes.fromUtf8` or `Json.decode[T]`.
   there (`bynk.resolve.name_conflict`): a function, type, constant, embed, asset,
   service or agent of the target or of a commons it `uses`, or `deps`.
 - **Scope:** the declaring suite only. Its `case`s, `property` bodies,
-  [helper `fn`s](/book/reference/testing/#helpers) and `stub` clauses (their
-  argument patterns, `returns` values and `after`) see it, at `unit`,
-  `integration` and `system`. Another suite, even one of the same target,
+  [helper `fn`s](/book/reference/testing/#helpers), `stub` clauses (their
+  argument patterns, `returns` values and `after`) and
+  [`env` entries](#in-env) see it, at `unit`, `integration` and `system`. Another suite, even one of the same target,
   cannot name it, and may declare a fixture of the same name.
 - **Unused:** a fixture nothing in its suite mentions is `bynk.fixture.unused`,
-  a warning. Naming it only in a `stub` clause counts as use.
+  a warning. Naming it only in a `stub` clause or an `env` entry counts as use.
+
+## A fixture in `env` {#in-env}
+
+A suite's or case's [`env`](/book/reference/testing/) entry may name one of the
+suite's fixtures instead of a `String` literal. Its participants then read the
+file's text as that variable or secret, at every tier:
+
+```bynk,fragment
+suite github.hooks as system {
+  fixture appKey = "fixtures/test-app-key.b64"
+
+  env {
+    APP_CLIENT_ID = "Iv1.testclient"
+    APP_PRIVATE_KEY = appKey
+  }
+
+  case "the webhook signs in as the app" {
+    let r <- hooks.POST("/github", RequestHeaders.of(["X-GitHub-Event: ping"]), Bytes.fromUtf8("{}"))
+    expect r is Ok(_)
+  }
+}
+```
+
+The value is the text as described below, so a trailing newline in the file is
+part of it; trim it in the code that reads the secret, or save the file without
+one. Another suite's fixture is not in scope, so naming one is
+`bynk.suite.env_not_literal`. Under `bynk dev` each value is passed to the
+Workers on the command line, which on Linux limits one value to 128 KiB.
 
 ## What the text is
 

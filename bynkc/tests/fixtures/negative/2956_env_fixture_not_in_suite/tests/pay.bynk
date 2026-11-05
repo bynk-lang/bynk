@@ -1,0 +1,9 @@
+suite shop.pay {
+	fixture processor = "fixtures/processor.txt"
+
+	case "a fixture of this suite is a value" {
+		env { PAYMENTS_PROCESSOR = processor }
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
+}

@@ -223,7 +223,8 @@ fn refusal_error(code: &'static str, f: &FixtureDecl, key: &str, detail: &str) -
 /// fixture of the same name is `bynk.resolve.name_conflict`, as an embed's is.
 /// A repeated fixture name is `bynk.fixture.duplicate`, and a name a helper
 /// `fn` of the suite declares is the helper's `bynk.suite.fn_name_clash`. A fixture no `case`,
-/// `property` or helper mentions is `bynk.fixture.unused`, a warning.
+/// `property`, helper, `stub` or `env` entry mentions is `bynk.fixture.unused`,
+/// a warning.
 pub fn check_suite_fixtures(
     suite: &SuiteDecl,
     taken: &HashSet<String>,
@@ -293,6 +294,14 @@ pub fn check_suite_fixtures(
         if let Some(a) = &st.after {
             collect_expr_idents(a, &mut mentioned);
         }
+    }
+    // #2956: and an `env` entry's value, the suite's or a case's.
+    let envs = suite
+        .envs
+        .iter()
+        .chain(suite.cases.iter().flat_map(|c| c.envs.iter()));
+    for entry in envs.flat_map(|e| e.entries.iter()) {
+        collect_expr_idents(&entry.value, &mut mentioned);
     }
     for f in &suite.fixtures {
         if !mentioned.contains(f.name.name.as_str()) {
