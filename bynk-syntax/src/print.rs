@@ -15,7 +15,7 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
-/// Scope guard installing [`WRITTEN_SOURCE`].
+/// Scope guard installing `WRITTEN_SOURCE`.
 pub struct WrittenForms(Option<std::rc::Rc<str>>);
 
 impl WrittenForms {
