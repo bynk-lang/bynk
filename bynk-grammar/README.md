@@ -1,5 +1,13 @@
 # bynk-grammar
 
+> **No longer published.** `bynk-grammar` only renders the
+> grammar reference for the Bynk repository's own tests, so no installed binary
+> depends on it. The previous release was its last crates.io release; it is not yanked, and
+> existing pins keep resolving. It continues, unpublished, at
+> [`bynk-lang/bynk`](https://github.com/bynk-lang/bynk/tree/main/bynk-grammar).
+> Nothing replaces it as a library: the rendered grammar is the Book's
+> [grammar reference](https://github.com/bynk-lang/bynk/tree/main/site/src/content/docs/book/reference/grammar.md).
+
 [![crates.io](https://img.shields.io/crates/v/bynk-grammar.svg)](https://crates.io/crates/bynk-grammar)
 [![docs.rs](https://img.shields.io/docsrs/bynk-grammar)](https://docs.rs/bynk-grammar)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
