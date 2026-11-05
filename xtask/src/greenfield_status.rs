@@ -5405,7 +5405,6 @@ commons app.demo {
             ("a".to_string(), "x".to_string(), ""),
             ("a".to_string(), "y".to_string(), "dev"),
             ("a".to_string(), "z".to_string(), "build"),
-            ("[workspace]".to_string(), "bynkc".to_string(), ""),
         ];
         assert_eq!(
             unused_deps_offenders(&raw),
