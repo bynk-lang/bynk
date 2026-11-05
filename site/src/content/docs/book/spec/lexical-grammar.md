@@ -196,6 +196,35 @@ table in §3.2.2 gives each value.
 
 One interpolation hole, `\(expr)`, inside a string literal (v0.43).
 
+### §3.2.2c raw_string
+
+{{#grammar raw_string}}
+
+A raw string literal (#2619). The single-line forms and the multi-line opener
+`r"""` are external tokens; the multi-line form's opening line and body are as
+in §3.2.2.
+
+### §3.2.2d multiline_opener_rest
+
+{{#grammar _multiline_opener_rest}}
+
+The rest of a multi-line string's opening line: a newline, or a language tag
+(#2958), optional spaces or tabs, and a newline.
+
+### §3.2.2e string_tag
+
+{{#grammar string_tag}}
+
+A multi-line string's language tag (#2958). It is not part of the value
+(§3.2.2).
+
+### §3.2.2f string_body
+
+{{#grammar string_body}}
+
+The text of an ordinary multi-line string, holding its escapes and
+interpolation holes.
+
 ### §3.2.3 boolean_literal
 
 {{#grammar boolean_literal}}

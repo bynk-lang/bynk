@@ -130,6 +130,41 @@ message template.
 **Static semantics.**
 {{#grammar-semantics string_literal}}
 
+### raw_string {#rule-raw_string}
+
+{{#grammar raw_string}}
+
+A raw string literal (#2619): `r"…"` or `r#"…"#` on one line, or the multi-line
+`r"""…"""`. The single-line forms and the `r"""` opener are tokens of the
+external scanner, because the number of `#`s is not regular. The multi-line
+form's opening line is `multiline_opener_rest`, so it may carry a language tag
+(#2958), and its body is `raw_string_body`, opaque text up to the closing `"""`.
+
+### multiline_opener_rest {#rule-_multiline_opener_rest}
+
+{{#grammar _multiline_opener_rest}}
+
+The rest of a multi-line string's opening line (#2958): a newline directly after
+the `"""`, or a `string_tag`, optional spaces or tabs, and a newline. No space
+may sit between the `"""` and the tag.
+
+### string_tag {#rule-string_tag}
+
+{{#grammar string_tag}}
+
+A multi-line string's language tag (#2958): `sql` in `"""sql`. It names the
+language of the body for editors (tree-sitter's `injections.scm`, the TextMate
+grammars) and is not part of the value. Any tag is accepted; an editor with no
+grammar for it shows a plain string.
+
+### string_body {#rule-string_body}
+
+{{#grammar string_body}}
+
+The text of an ordinary multi-line string (#2958), a node of its own so a
+language injection can name it. Its escapes and interpolation holes are its
+children.
+
 ### escape_sequence {#rule-escape_sequence}
 
 {{#grammar escape_sequence}}
