@@ -115,7 +115,8 @@ pub enum WsOpenKey<'a> {
 /// Classify `key`, the key of `open`'s connection transfer. `is_const` answers
 /// whether a name is a constant of the context. A parameter shadows a constant
 /// of the same name, and a name any top-level `let` of the body binds is a
-/// local, not the constant (or parameter) it may shadow.
+/// local, not the constant (or parameter) it may shadow; so is one a `par`
+/// block binds, since its bindings land in the enclosing scope.
 pub fn classify_open_key<'a>(
     open: &'a Handler,
     key: &'a Expr,
@@ -127,9 +128,7 @@ pub fn classify_open_key<'a>(
         }
         ExprKind::Ident(id) => {
             let name = id.name.as_str();
-            let rebound = open.body.statements.iter().any(
-                |s| matches!(s, Statement::Let(l) | Statement::EffectLet(l) if l.name.name == name),
-            );
+            let rebound = binds(&open.body.statements, name);
             if rebound {
                 WsOpenKey::Other
             } else if open.params.iter().any(|p| p.name.name == name) {
@@ -142,4 +141,14 @@ pub fn classify_open_key<'a>(
         }
         _ => WsOpenKey::Other,
     }
+}
+
+/// Whether any of `stmts` binds `name` into the body's scope: a `let`, or a
+/// `let` inside a `par` block (whose bindings land in the enclosing scope).
+fn binds(stmts: &[Statement], name: &str) -> bool {
+    stmts.iter().any(|s| match s {
+        Statement::Let(l) | Statement::EffectLet(l) => l.name.name == name,
+        Statement::Par(p) => binds(&p.statements, name),
+        _ => false,
+    })
 }
