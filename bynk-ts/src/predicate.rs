@@ -236,3 +236,17 @@ pub fn pred_condition_and_message_for(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::decimal_signed_coef;
+
+    #[test]
+    fn decimal_coefficients_drop_leading_zeros_and_negative_zero() {
+        assert_eq!(decimal_signed_coef("007"), "7");
+        assert_eq!(decimal_signed_coef("-0"), "0");
+        assert_eq!(decimal_signed_coef("-000"), "0");
+        assert_eq!(decimal_signed_coef("-12"), "-12");
+        assert_eq!(decimal_signed_coef("0"), "0");
+    }
+}
