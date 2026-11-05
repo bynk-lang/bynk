@@ -214,7 +214,6 @@ dependencies = [
  "bynk-ide",
  "bynk-project",
  "bynk-registry-core",
- "bynk-render",
  "bynk-syntax",
  "bynk-testkit",
  "clap",
