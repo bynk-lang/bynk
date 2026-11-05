@@ -336,6 +336,8 @@ mod wrangler_prewarm;
 mod write_output_reconciliation_behaviour;
 #[path = "ws_behaviour.rs"]
 mod ws_behaviour;
+#[path = "ws_open_key_target.rs"]
+mod ws_open_key_target;
 #[path = "ws_open_split_target.rs"]
 mod ws_open_split_target;
 

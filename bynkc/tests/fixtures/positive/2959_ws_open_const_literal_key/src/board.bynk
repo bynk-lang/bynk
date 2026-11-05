@@ -1,0 +1,25 @@
+context board
+
+// #2959: a literal key stays the literal even when the `on open` has a route
+// parameter. It used to be replaced by that parameter, so every upgrade reached
+// `Board(user)` instead of `Board("ci")`, the instance the body addresses.
+type Frame = { text: String }
+
+service live from websocket(in: Frame, out: Frame) {
+  on open (user: String) -> Effect[()] by v: Visitor {
+    let _ <- Board("ci").join(user, connection)
+    ()
+  }
+}
+
+agent Board {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store opened: Cell[Option[String]]
+
+  on call join(user: String, conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(user, conn)
+    opened := Some(self.id)
+    ()
+  }
+}

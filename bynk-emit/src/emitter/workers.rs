@@ -787,6 +787,7 @@ pub(crate) fn emit_worker_compose(
                         seam.as_ref(),
                         &local_agents,
                         &key_readers,
+                        &table.consts,
                     ));
                 }
                 // v0.106 (slice 3b-iii): `on close` runs in the DO (`webSocketClose`),
@@ -1389,8 +1390,9 @@ fn emit_websocket_upgrade(
     seam: Option<&bynk_check::actors::BearerSeam>,
     local_agents: &HashSet<String>,
     key_readers: &HashSet<String>,
+    consts: &HashMap<String, bynk_syntax::ast::ConstDecl>,
 ) -> TsObjectEntry {
-    use crate::emitter::websocket::{WsOpenShape, analyse_open_shape};
+    use crate::emitter::websocket::{WsOpenKey, WsOpenShape, analyse_open_shape, classify_open_key};
     // The route params (e.g. `roomId`) ride as wrapper arguments — the entry
     // extracts them from the upgrade URL's query string and passes them through.
     // P7.2: `string`, not `unknown` — a first attempt used `unknown` (raw, not
@@ -1521,39 +1523,37 @@ fn emit_websocket_upgrade(
 
     // DECISION B: resolve the hosting Durable Object from the single connection
     // transfer (`Room(roomId)` → the `ROOM` namespace, keyed by `roomId`). The
-    // shape constraint guarantees exactly one routable target.
-    let target = match analyse_open_shape(&h.body, local_agents) {
-        WsOpenShape::One(t) => t,
-        // The checker rejects zero / multiple / non-routable shapes
-        // (`bynk.ws.open_transfer_shape`); this arm is defensive.
-        _ => {
-            stmts.push(return_(Some(new_response(vec![
-                str_lit("Internal Server Error"),
-                status_object("500"),
-            ]))));
-            return TsObjectEntry::Method {
-                name: method_name,
-                is_async: true,
-                generics: Vec::new(),
-                params,
-                return_type: None,
-                doc: None,
-                inline: false,
-                body: stmts,
-            };
+    // shape constraint guarantees exactly one routable target, and #2959's key
+    // constraint (`bynk.ws.open_transfer_key`) a key the edge can evaluate: a
+    // route param, a context `const` or a literal.
+    let internal_error = |mut stmts: Vec<TsStmt>, params: Vec<TsParam>| {
+        stmts.push(return_(Some(new_response(vec![
+            str_lit("Internal Server Error"),
+            status_object("500"),
+        ]))));
+        TsObjectEntry::Method {
+            name: method_name.clone(),
+            is_async: true,
+            generics: Vec::new(),
+            params,
+            return_type: None,
+            doc: None,
+            inline: false,
+            body: stmts,
         }
     };
-    let binding = agent_binding(target.agent).name;
-    let key_js = match &target.key.kind {
-        ExprKind::Ident(id) => id.name.clone(),
-        // v1 keys are request-derivable param idents (DECISION B); a non-ident key
-        // falls back to the first route param so the route stays valid TS.
-        _ => h
-            .params
-            .first()
-            .map(|p| p.name.name.clone())
-            .unwrap_or_else(|| "\"default\"".to_string()),
+    // The checker rejects zero / multiple transfers
+    // (`bynk.ws.open_transfer_shape`) and a key the edge cannot evaluate
+    // (`bynk.ws.open_transfer_key`); these arms are defensive, and never route
+    // to a different Durable Object than the one the body addresses.
+    let WsOpenShape::One(target) = analyse_open_shape(&h.body, local_agents) else {
+        return internal_error(stmts, params);
     };
+    let key = classify_open_key(h, target.key, |n| consts.contains_key(n));
+    if matches!(key, WsOpenKey::Other) {
+        return internal_error(stmts, params);
+    }
+    let binding = agent_binding(target.agent).name;
     // The verified identity (when the actor binds one) is forwarded in the trusted
     // internal header alongside the route arguments. A binder-less `by` verifies
     // but mints no identity.
@@ -1645,7 +1645,22 @@ fn emit_websocket_upgrade(
             }
         }
     }
-    let key_ref = validated.get(&key_js).cloned().unwrap_or(ident(key_js));
+    let key_ref = match key {
+        // A route param addresses the instance by its validated value.
+        WsOpenKey::Param(name) => validated
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| ident(wire_ident(name))),
+        // #2959: a constant is a function in `handlers.ts` (`emit_consts`).
+        WsOpenKey::Const(name) => call(member(ident("handlers"), bynk_check::emitted_names::ts_ident(name)), vec![]),
+        WsOpenKey::Literal(e) => match &e.kind {
+            ExprKind::StrLit(v) => str_lit(v.clone()),
+            ExprKind::IntLit { value, .. } => num_lit(value.to_string()),
+            ExprKind::BoolLit(b) => ident(b.to_string()),
+            _ => unreachable!("classify_open_key returns only these literals"),
+        },
+        WsOpenKey::Other => unreachable!("rejected above"),
+    };
     let args_json: Vec<TsExpr> = h
         .params
         .iter()

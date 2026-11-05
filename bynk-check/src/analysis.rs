@@ -501,6 +501,15 @@ pub fn analyse_project_with_policy(
         &unit_tables,
         &mut errors,
     );
+    // #2959: Workers-only as well.
+    project_model::phase_workers_ws_open_key(
+        project_model::BuildTarget::Bundle,
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_tables,
+        &mut errors,
+    );
     // #2355 follow-up: Workers-only as well.
     project_model::phase_workers_provider_agent_cross_context(
         project_model::BuildTarget::Bundle,

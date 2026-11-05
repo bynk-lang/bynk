@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-use bynk_syntax::ast::{Block, Expr, ExprKind, Statement};
+use bynk_syntax::ast::{Block, Expr, ExprKind, Handler, Statement};
 
 /// The single connection-transfer target a `from websocket` `on open` resolves
 /// to: the agent that will host the connection, and the key expression
@@ -92,4 +92,54 @@ fn transfer_target<'a>(e: &'a Expr, local_agents: &HashSet<String>) -> Option<Ws
         agent: name.name.as_str(),
         key,
     })
+}
+
+/// #2959: how the key of the single connection transfer addresses its Durable
+/// Object. On Workers the edge (`compose.ts`) resolves the hosting instance
+/// *before* the `on open` body runs, so the key has to be something it can
+/// evaluate there on its own: a route parameter (validated from the upgrade
+/// URL), a context `const` (a pure static initialiser, `handlers.Name()`), or a
+/// literal. Anything else — a `let`-bound local, a field access, a call — is
+/// [`WsOpenKey::Other`] and rejected on Workers (`bynk.ws.open_transfer_key`).
+pub enum WsOpenKey<'a> {
+    /// A handler parameter, by name.
+    Param(&'a str),
+    /// A constant visible in the context, by name.
+    Const(&'a str),
+    /// A string, integer or boolean literal.
+    Literal(&'a Expr),
+    /// A key the edge cannot evaluate before the body runs.
+    Other,
+}
+
+/// Classify `key`, the key of `open`'s connection transfer. `is_const` answers
+/// whether a name is a constant of the context. A parameter shadows a constant
+/// of the same name, and a name any top-level `let` of the body binds is a
+/// local, not the constant (or parameter) it may shadow.
+pub fn classify_open_key<'a>(
+    open: &'a Handler,
+    key: &'a Expr,
+    is_const: impl Fn(&str) -> bool,
+) -> WsOpenKey<'a> {
+    match &key.kind {
+        ExprKind::StrLit(_) | ExprKind::IntLit { .. } | ExprKind::BoolLit(_) => {
+            WsOpenKey::Literal(key)
+        }
+        ExprKind::Ident(id) => {
+            let name = id.name.as_str();
+            let rebound = open.body.statements.iter().any(|s| {
+                matches!(s, Statement::Let(l) | Statement::EffectLet(l) if l.name.name == name)
+            });
+            if rebound {
+                WsOpenKey::Other
+            } else if open.params.iter().any(|p| p.name.name == name) {
+                WsOpenKey::Param(name)
+            } else if is_const(name) {
+                WsOpenKey::Const(name)
+            } else {
+                WsOpenKey::Other
+            }
+        }
+        _ => WsOpenKey::Other,
+    }
 }

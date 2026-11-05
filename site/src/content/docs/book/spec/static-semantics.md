@@ -1894,7 +1894,10 @@ connection-lifecycle handlers:
   under the held-resource linearity discipline
   ([§5.4.2](/book/spec/static-semantics/#542-held-resource-linearity-v0102)) — the canonical
   disposal being transfer into an agent. On the Workers target that transfer MUST
-  resolve to exactly one routable agent (`bynk.ws.open_transfer_shape`).
+  resolve to exactly one routable agent (`bynk.ws.open_transfer_shape`), keyed by
+  a parameter of `on open`, a constant of the context or a string, integer or
+  boolean literal, since the upgrade is routed before the body runs
+  (`bynk.ws.open_transfer_key`).
 - **`on message`** (v0.106) — an inbound frame arrived; its parameters are the
   route params plus the decoded frame of type `I`.
 - **`on close`** (v0.106) — the connection ended; the stored connection is
