@@ -3030,7 +3030,22 @@ fn unused_deps(root: &Path) -> Probe {
 /// reason (`unused_deps_allowlist_entries_are_live` checks both), so a stale or
 /// unexplained entry fails. The label is a crate's name, or `[workspace]` for a
 /// `[workspace.dependencies]` entry.
-const UNUSED_DEPS_ALLOWED: &[(&str, &str, &str)] = &[];
+const UNUSED_DEPS_ALLOWED: &[(&str, &str, &str)] = &[
+    (
+        "bynk-tests",
+        "bynk-driver",
+        "used by bynkc/src/main.rs, which bynk-tests/src/bin/bynkc-under-test.rs includes via \
+         include!, so no identifier appears in this crate's source. Goes with the `bynkc` \
+         retirement (track E3).",
+    ),
+    (
+        "bynk-tests",
+        "clap",
+        "used by bynkc/src/main.rs, which bynk-tests/src/bin/bynkc-under-test.rs includes via \
+         include!, so no identifier appears in this crate's source. Goes with the `bynkc` \
+         retirement (track E3).",
+    ),
+];
 
 /// One declared edge with no use: `(crate label, dependency key, table kind)`.
 /// `kind` is `""` for `[dependencies]`, `"dev"` or `"build"`.
@@ -5405,6 +5420,7 @@ commons app.demo {
             ("a".to_string(), "x".to_string(), ""),
             ("a".to_string(), "y".to_string(), "dev"),
             ("a".to_string(), "z".to_string(), "build"),
+            ("bynk-tests".to_string(), "clap".to_string(), ""),
         ];
         assert_eq!(
             unused_deps_offenders(&raw),
