@@ -123,7 +123,7 @@ or [Compile your first program](https://bynk-lang.org/book/tutorials/01-first-pr
 
 This is a Cargo workspace. The three user-facing tools — `bynkc`, `bynk`, and
 `bynk-lsp` — are front-ends over a layered set of library crates; every crate
-except `bynk-wasm`, `bynk-testkit`, `tree-sitter-bynk`'s Rust binding, `xtask`,
+except `bynk-wasm`, `bynk-testkit`, `bynk-tests`, `tree-sitter-bynk`'s Rust binding, `xtask`,
 and `fuzz` is published to crates.io at each release. Each crate's README
 says where it sits in the layering.
 
@@ -133,7 +133,7 @@ says where it sits in the layering.
 | [`bynk/`](bynk/) | The `bynk` driver — links the compiler in-process and orchestrates the Node toolchain (`doctor` / `new` / `dev` / `deploy`, plus `check` / `fmt` / `test` / `explain`). | [crates.io](https://crates.io/crates/bynk) |
 | [`bynk-lsp/`](bynk-lsp/) | The `bynk-lsp` Language Server (diagnostics, hover, go-to-definition, …). | [crates.io](https://crates.io/crates/bynk-lsp) |
 | [`bynk-syntax/`](bynk-syntax/), [`bynk-std/`](bynk-std/), [`bynk-project/`](bynk-project/), [`bynk-check/`](bynk-check/), [`bynk-ir/`](bynk-ir/), [`bynk-lower/`](bynk-lower/), [`bynk-ts/`](bynk-ts/), [`bynk-emit/`](bynk-emit/), [`bynk-strip/`](bynk-strip/), [`bynk-render/`](bynk-render/), [`bynk-fmt/`](bynk-fmt/), [`bynk-ide/`](bynk-ide/), [`bynk-driver/`](bynk-driver/) | The compiler's library crates: syntax, the standard library's first-party sources (as data), the project model, checking, the declaration IR, TypeScript emission and stripping, diagnostic rendering, formatting, editor analysis, and the command bodies the CLIs share. | crates.io |
-| [`bynk-grammar/`](bynk-grammar/) | Renders the tree-sitter grammar to EBNF for the book's grammar reference. | — (unpublished) |
+| [`bynk-tests/`](bynk-tests/) | The integration-test corpus (`tests/`, one `it` binary) and the grammar-reference renderer. | — (unpublished) |
 | [`bynk-wasm/`](bynk-wasm/) | The compiler as a wasm module, backing the [playground](https://github.com/bynk-lang/playground) and the VS Code web extension. | — |
 | [`tree-sitter-bynk/`](tree-sitter-bynk/) | The tree-sitter grammar — the source of truth for syntax highlighting. | npm |
 | [`site/`](site/) | The Bynk Book (Astro + Starlight): tutorials, how-to guides, reference, and the normative spec. Published at [bynk-lang.org](https://bynk-lang.org/book/). | — |
