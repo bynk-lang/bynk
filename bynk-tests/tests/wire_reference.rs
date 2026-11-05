@@ -19,7 +19,7 @@
 //! The Node guard skips loudly without `tsc` and `node`; `BYNK_REQUIRE_TSC=1`
 //! turns the skip into a failure.
 
-mod common;
+use xtask::site_page::to_site_page;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -42,7 +42,7 @@ fn repo(rel: &str) -> PathBuf {
 #[test]
 fn generated_wire_format_page_is_up_to_date() {
     let page = repo("site/src/content/docs/book/reference/wire-format.md");
-    let rendered = common::to_site_page(&render_reference(), "reference");
+    let rendered = to_site_page(&render_reference(), "reference");
 
     if std::env::var_os("BYNK_BLESS").is_some() {
         fs::write(&page, &rendered).unwrap();

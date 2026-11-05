@@ -9,9 +9,7 @@
 //!    must list exactly the registry's words (#2464).
 //!
 //! Regenerate the docs page with:
-//!     BYNK_BLESS=1 cargo test -p bynk-tests --test it keywords_reference::
-
-mod common;
+//!     BYNK_BLESS=1 cargo test -p xtask --test docs_consistency keywords_reference::
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -115,7 +113,7 @@ fn registry_matches_lexer_tokens() {
 fn generated_keywords_page_is_up_to_date() {
     let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../site/src/content/docs/book/reference/keywords.md");
-    let rendered = common::to_site_page(&render_markdown(), "reference");
+    let rendered = xtask::site_page::to_site_page(&render_markdown(), "reference");
 
     if std::env::var_os("BYNK_BLESS").is_some() {
         fs::write(&page, &rendered).unwrap();
@@ -126,7 +124,7 @@ fn generated_keywords_page_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/content/docs/book/reference/keywords.md is out of date.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it keywords_reference::"
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency keywords_reference::"
     );
 }
 

@@ -11,9 +11,7 @@
 //! per-construct reference (`reference/grammar.md`) embeds the same generated
 //! productions via the `{{#grammar}}` remark directive.
 //! Regenerate the appendix after a grammar change with:
-//!     BYNK_BLESS=1 cargo test -p bynk-tests --test it grammar_reference::
-
-mod common;
+//!     BYNK_BLESS=1 cargo test -p xtask --test docs_consistency grammar_reference::
 
 use std::fs;
 use std::path::PathBuf;
@@ -28,8 +26,8 @@ fn grammar_json() -> String {
 fn generated_grammar_appendix_is_up_to_date() {
     let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../site/src/content/docs/book/reference/grammar-appendix.md");
-    let rendered = common::to_site_page(
-        &bynk_tests::grammar::render_appendix(&grammar_json()),
+    let rendered = xtask::site_page::to_site_page(
+        &xtask::grammar::render_appendix(&grammar_json()),
         "reference",
     );
 
@@ -42,6 +40,6 @@ fn generated_grammar_appendix_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/content/docs/book/reference/grammar-appendix.md is out of date with the grammar.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it grammar_reference::"
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency grammar_reference::"
     );
 }

@@ -15,7 +15,7 @@
 //! The transform is applied to both rule heads and the nonterminal references
 //! inside productions, so the whole reference reads as language, not internals.
 //!
-//! See `bynk-tests/tests/grammar_reference.rs` (the appendix generator) and
+//! See `xtask/tests/docs_consistency/grammar_reference.rs` (the appendix generator) and
 //! `site/src/plugins/remark-bynk-directives.mjs` (the `{{#grammar <rule>}}`
 //! include directive the Book renders with).
 
@@ -282,8 +282,8 @@ pub fn render_appendix(grammar_json: &str) -> String {
     out.push_str("# Complete grammar (appendix)\n\n");
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
-         Source: tree-sitter-bynk/src/grammar.json, via bynk-tests/tests/grammar_reference.rs.\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it grammar_reference:: -->\n\n",
+         Source: tree-sitter-bynk/src/grammar.json, via xtask/tests/docs_consistency/grammar_reference.rs.\n     \
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency grammar_reference:: -->\n\n",
     );
     out.push_str(
         "The complete Bynk grammar, generated from the `tree-sitter-bynk` grammar. \
@@ -411,7 +411,7 @@ pub fn display_name(grammar_json: &str, name: &str) -> Result<String, GrammarErr
 /// `serde_json`'s map).
 ///
 /// The committed artifact (`site/src/generated/grammar.json`) is drift-guarded by
-/// `bynk-tests/tests/generated_grammar_json.rs`; regenerate with `BYNK_BLESS=1`.
+/// `xtask/tests/docs_consistency/generated_grammar_json.rs`; regenerate with `BYNK_BLESS=1`.
 pub fn render_site_json(grammar_json: &str) -> String {
     /// A JSON object written in the order given, whatever `serde_json`'s map is.
     struct Ordered(Vec<(String, String)>);
@@ -436,7 +436,7 @@ pub fn render_site_json(grammar_json: &str) -> String {
     }
     let doc = SiteDoc {
         _generated: "GENERATED from tree-sitter-bynk/src/grammar.json. Do not edit by hand. \
-             Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it generated_grammar_json::",
+             Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency generated_grammar_json::",
         productions: Ordered(productions),
         appendix: render_appendix(grammar_json),
     };

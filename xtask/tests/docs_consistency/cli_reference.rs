@@ -7,9 +7,7 @@
 //! where the generator authors them and where their targets remain.)
 //!
 //! Regenerate the docs page with:
-//!     BYNK_BLESS=1 cargo test -p bynk-tests --test it cli_reference::
-
-mod common;
+//!     BYNK_BLESS=1 cargo test -p xtask --test docs_consistency cli_reference::
 
 use std::fs;
 use std::path::PathBuf;
@@ -35,7 +33,7 @@ fn every_subcommand_is_documented() {
 fn generated_cli_page_is_up_to_date() {
     let page =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/content/docs/docs/cli.md");
-    let rendered = common::to_site_page(&render_markdown(), "reference");
+    let rendered = xtask::site_page::to_site_page(&render_markdown(), "reference");
 
     if std::env::var_os("BYNK_BLESS").is_some() {
         fs::write(&page, &rendered).unwrap();
@@ -46,6 +44,6 @@ fn generated_cli_page_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/content/docs/docs/cli.md is out of date.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it cli_reference::"
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency cli_reference::"
     );
 }

@@ -62,8 +62,6 @@ mod check_paths_behaviour;
 mod check_reports_past_structural_error_behaviour;
 #[path = "check_warning_reporting_behaviour.rs"]
 mod check_warning_reporting_behaviour;
-#[path = "cli_reference.rs"]
-mod cli_reference;
 #[path = "cli_rooting.rs"]
 mod cli_rooting;
 #[path = "comment_syntax_fixes.rs"]
@@ -92,24 +90,18 @@ mod cross_file_label_behaviour;
 mod debug_inspect;
 #[path = "debug_metadata.rs"]
 mod debug_metadata;
-#[path = "decisions_index.rs"]
-mod decisions_index;
 #[path = "deterministic_diagnostic_order_behaviour.rs"]
 mod deterministic_diagnostic_order_behaviour;
 #[path = "diagnose_project.rs"]
 mod diagnose_project;
 #[path = "diagnostic_hints.rs"]
 mod diagnostic_hints;
-#[path = "diagnostics_registry.rs"]
-mod diagnostics_registry;
 #[path = "doc_diagnostics.rs"]
 mod doc_diagnostics;
 #[path = "doc_examples.rs"]
 mod doc_examples;
 #[path = "doc_examples_check_behaviour.rs"]
 mod doc_examples_check_behaviour;
-#[path = "doc_version.rs"]
-mod doc_version;
 #[path = "duration.rs"]
 mod duration;
 #[path = "e2e.rs"]
@@ -158,14 +150,6 @@ mod firstparty_sources;
 mod float_codec_behaviour;
 #[path = "fuzz_smoke.rs"]
 mod fuzz_smoke;
-#[path = "generated_grammar_json.rs"]
-mod generated_grammar_json;
-#[path = "generated_site_json.rs"]
-mod generated_site_json;
-#[path = "grammar_coverage.rs"]
-mod grammar_coverage;
-#[path = "grammar_reference.rs"]
-mod grammar_reference;
 #[path = "history_behaviour.rs"]
 mod history_behaviour;
 #[path = "host_globals_qualified.rs"]
@@ -210,8 +194,6 @@ mod json_codec_behaviour;
 mod kernel_registry;
 #[path = "key_bound_fixes.rs"]
 mod key_bound_fixes;
-#[path = "keywords_reference.rs"]
-mod keywords_reference;
 #[path = "kv_behaviour.rs"]
 mod kv_behaviour;
 #[path = "let_else_staircase.rs"]
@@ -250,8 +232,6 @@ mod provider_agent_cross_context_target;
 mod query_kernel_registry;
 #[path = "question_in_case_behaviour.rs"]
 mod question_in_case_behaviour;
-#[path = "readme_layering.rs"]
-mod readme_layering;
 #[path = "recovery_never_emits.rs"]
 mod recovery_never_emits;
 #[path = "recursive_boundary_behaviour.rs"]
@@ -312,8 +292,6 @@ mod system_suite_heading_behaviour;
 mod test_json;
 #[path = "test_runner_resolution.rs"]
 mod test_runner_resolution;
-#[path = "textmate_keywords.rs"]
-mod textmate_keywords;
 #[path = "tsc_verify.rs"]
 mod tsc_verify;
 #[path = "typescript_client.rs"]

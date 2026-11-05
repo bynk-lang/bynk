@@ -9,9 +9,7 @@
 //!    registry renders.
 //!
 //! Regenerate the docs page after changing the registry with:
-//!     BYNK_BLESS=1 cargo test -p bynk-tests --test it diagnostics_registry::
-
-mod common;
+//!     BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -162,7 +160,7 @@ fn grammar_symbols_are_embeddable_rules() {
     // An *embeddable* rule has a `{{#grammar}}` entry (and `#rule-<raw>` anchor)
     // in grammar.md, so the diagnostics `Construct` deep-link resolves. This is
     // stricter than "a real rule": a collapsed trivial wrapper has no entry.
-    let embeddable: BTreeSet<String> = bynk_tests::grammar::embeddable_rules(&grammar)
+    let embeddable: BTreeSet<String> = xtask::grammar::embeddable_rules(&grammar)
         .into_iter()
         .collect();
     for info in REGISTRY {
@@ -182,7 +180,7 @@ fn grammar_symbols_are_embeddable_rules() {
 fn generated_diagnostics_page_is_up_to_date() {
     let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../site/src/content/docs/book/reference/diagnostics.md");
-    let rendered = common::to_site_page(&render_markdown(), "reference");
+    let rendered = xtask::site_page::to_site_page(&render_markdown(), "reference");
 
     if std::env::var_os("BYNK_BLESS").is_some() {
         fs::write(&page, &rendered).unwrap();
@@ -193,7 +191,7 @@ fn generated_diagnostics_page_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/content/docs/book/reference/diagnostics.md is out of date with the registry.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it diagnostics_registry::"
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::"
     );
 }
 

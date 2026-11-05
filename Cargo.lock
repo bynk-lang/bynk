@@ -421,9 +421,9 @@ dependencies = [
  "bynkc",
  "clap",
  "regex",
- "serde",
  "serde_json",
  "which",
+ "xtask",
 ]
 
 [[package]]
@@ -2957,7 +2957,10 @@ dependencies = [
  "bynk-fmt",
  "bynk-project",
  "bynk-syntax",
+ "bynkc",
+ "regex",
  "schemars",
+ "serde",
  "serde_json",
  "toml",
 ]
