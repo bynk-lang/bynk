@@ -363,7 +363,13 @@ fn dedent_multiline(text: &str) -> String {
             out.push('\n');
         }
         if i == 0 {
-            out.push_str(line);
+            // The opening line keeps a language tag (`"""sql`, #2958) as
+            // written, minus any trailing spaces after it.
+            let (line, cr) = line
+                .strip_suffix('\r')
+                .map_or((line, ""), |l| (l, "\r"));
+            out.push_str(line.trim_end_matches([' ', '\t']));
+            out.push_str(cr);
         } else if let Some(rest) = line.strip_prefix(indent) {
             out.push_str(rest);
         } else if line.trim().is_empty() {

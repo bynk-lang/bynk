@@ -1392,6 +1392,38 @@ fn decode_unicode_escape(
     }
 }
 
+/// The rest of a multi-line literal's opening line, from `body` (just past the
+/// `"""`): an optional language tag `[a-z][a-z0-9_-]*` (#2958), then — only
+/// after a tag — spaces or tabs, then `\n` or `\r\n`. Returns the tag's byte
+/// range (empty when there is none) and the offset where the first body line
+/// starts. `None` when the line holds anything else.
+///
+/// The tag is editor metadata (which language the text is, for embedded
+/// highlighting): it is not part of the value.
+fn multiline_opener(bytes: &[u8], body: usize) -> Option<(std::ops::Range<usize>, usize)> {
+    let mut p = body;
+    if bytes.get(p).is_some_and(u8::is_ascii_lowercase) {
+        p += 1;
+        while bytes
+            .get(p)
+            .is_some_and(|&b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+        {
+            p += 1;
+        }
+    }
+    let tag = body..p;
+    if !tag.is_empty() {
+        while matches!(bytes.get(p), Some(b' ' | b'\t')) {
+            p += 1;
+        }
+    }
+    match (bytes.get(p), bytes.get(p + 1)) {
+        (Some(b'\n'), _) => Some((tag, p + 1)),
+        (Some(b'\r'), Some(b'\n')) => Some((tag, p + 2)),
+        _ => None,
+    }
+}
+
 /// Scan and decode a multi-line literal (`"""` / `r"""`) opening at `start`.
 /// Returns the offset just past the closing `"""`. The closing delimiter sits on
 /// a line of its own; its indentation is stripped from every body line, and a
@@ -1407,18 +1439,19 @@ fn lex_multiline(
     chunk: &mut String,
 ) -> Result<usize, CompileError> {
     let bytes = source.as_bytes();
-    // The opening `"""` is followed by a newline (`\n` or `\r\n`).
-    let mut pos = match (bytes.get(open.body), bytes.get(open.body + 1)) {
-        (Some(b'\n'), _) => open.body + 1,
-        (Some(b'\r'), Some(b'\n')) => open.body + 2,
-        _ => {
-            return Err(CompileError::new(
-                "bynk.lex.multiline_open",
-                Span::new_in(file, start, open.body),
-                "the opening `\"\"\"` of a multi-line string must be followed by a newline",
-            )
-            .with_note("the text starts on the next line; write `\"\"\"` then press enter"));
-        }
+    // The opening `"""` is followed by an optional language tag (#2958) and a
+    // newline (`\n` or `\r\n`).
+    let Some((_, mut pos)) = multiline_opener(bytes, open.body) else {
+        return Err(CompileError::new(
+            "bynk.lex.multiline_open",
+            Span::new_in(file, start, open.body),
+            "the opening `\"\"\"` of a multi-line string must be followed by a newline",
+        )
+        .with_note(
+            "the text starts on the next line; write `\"\"\"` then press enter. \
+             An optional language tag may sit directly after the delimiter \
+             (`\"\"\"sql`): a lowercase letter, then lowercase letters, digits, `_` or `-`",
+        ));
     };
     // Pass 1: split into lines up to the closing line.
     let mut lines: Vec<(usize, usize)> = Vec::new(); // (start, end) excluding the `\n` / `\r\n`
@@ -1624,6 +1657,9 @@ pub enum StringPart {
     /// A raw literal's delimiter (`r#"` or `"#`), which the TextMate grammar
     /// cannot tell from an identifier `r` and a quote.
     RawDelimiter,
+    /// A multi-line literal's language tag (`sql` in `"""sql`, #2958): editor
+    /// metadata, not part of the value.
+    Tag,
 }
 
 /// The escape sequences and raw delimiters of every string literal in `source`
@@ -1650,6 +1686,12 @@ fn string_parts_of(source: &str, tok: Token, out: &mut Vec<(Span, StringPart)>) 
     let Some(open) = string_open(bytes, tok.span.start) else {
         return;
     };
+    if open.multi
+        && let Some((tag, _)) = multiline_opener(bytes, open.body)
+        && !tag.is_empty()
+    {
+        out.push((Span::new_in(file, tag.start, tag.end), StringPart::Tag));
+    }
     if open.raw {
         // `r#"` and the closing `"#`; a multi-line raw literal's `r"""` /
         // `"""` likewise.
@@ -2774,8 +2816,9 @@ mod tests {
             cat("\"\"\"\n    a\n  b\n    \"\"\""),
             "bynk.lex.multiline_indent"
         );
-        // Text after the opening delimiter.
-        assert_eq!(cat("\"\"\"abc\n\"\"\""), "bynk.lex.multiline_open");
+        // Text after the opening delimiter that is not a language tag.
+        assert_eq!(cat("\"\"\" abc\n\"\"\""), "bynk.lex.multiline_open");
+        assert_eq!(cat("\"\"\"ABC\n\"\"\""), "bynk.lex.multiline_open");
         // Never closed.
         assert_eq!(cat("\"\"\"\n  a\n"), "bynk.lex.unterminated_string");
         // A closing delimiter that shares a line with text.
@@ -2785,10 +2828,67 @@ mod tests {
         );
     }
 
+    /// #2958: a language tag after the opening `"""` is metadata: the value
+    /// is that of the untagged literal, in every form.
+    #[test]
+    fn multiline_tag_is_value_neutral() {
+        let body = "\n    SELECT 1\n      FROM t\n    \"\"\"";
+        let plain = string_value(&format!("\"\"\"{body}"));
+        for opener in [
+            "\"\"\"sql",
+            "\"\"\"sql  ",
+            "\"\"\"sql\t",
+            "\"\"\"x",
+            "\"\"\"my-lang_2",
+        ] {
+            assert_eq!(string_value(&format!("{opener}{body}")), plain, "{opener:?}");
+        }
+        // CRLF after a tag, and the raw form.
+        assert_eq!(
+            string_value("\"\"\"sql\r\n  a\r\n  \"\"\""),
+            string_value("\"\"\"\r\n  a\r\n  \"\"\"")
+        );
+        assert_eq!(
+            string_value("r\"\"\"regex\n  ^\\d+$\n  \"\"\""),
+            "^\\d+$"
+        );
+        // An interpolating tagged literal is still an interpolated string.
+        assert_eq!(
+            kinds("\"\"\"sql\n  hi \\(name)\n  \"\"\""),
+            vec![TokenKind::InterpStr]
+        );
+    }
+
+    /// #2958: what is not a tag stays `bynk.lex.multiline_open`.
+    #[test]
+    fn multiline_malformed_tags() {
+        let cat = |src: &str| tokenize(src).unwrap_err().category;
+        for opener in [
+            "\"\"\" sql",   // a space before the tag
+            "\"\"\"sql x",  // text after the tag
+            "\"\"\"SQL",    // uppercase
+            "\"\"\"1sql",   // starts with a digit
+            "\"\"\"-sql",   // starts with punctuation
+            "\"\"\"sql.x",  // a character outside the tag alphabet
+            "\"\"\"   ",    // trailing spaces with no tag, as before
+            "r\"\"\" sql",
+        ] {
+            assert_eq!(
+                cat(&format!("{opener}\n  a\n  \"\"\"")),
+                "bynk.lex.multiline_open",
+                "{opener:?}"
+            );
+        }
+        // The note names the tag.
+        let err = tokenize("\"\"\"SQL\n  a\n  \"\"\"").unwrap_err();
+        assert!(err.notes[0].contains("language tag"));
+    }
+
     /// #2619: the semantic-token parts of the three string forms.
     #[test]
     fn string_parts_cover_escapes_and_raw_delimiters() {
-        let src = "\"a\\n\\u{41}\" r#\"x\\n\"# \"\"\"\n  \\t \\(\"\\r\")\n  \"\"\"";
+        let src = "\"a\\n\\u{41}\" r#\"x\\n\"# \"\"\"\n  \\t \\(\"\\r\")\n  \"\"\" \
+                   \"\"\"sql\n  a\\n\n  \"\"\" r\"\"\"regex\n  \\d\n  \"\"\"";
         let texts: Vec<(&str, StringPart)> = string_parts(src)
             .into_iter()
             .map(|(s, p)| (&src[s.range()], p))
@@ -2803,6 +2903,11 @@ mod tests {
                 ("\"#", RawDelimiter),
                 ("\\t", Escape),
                 ("\\r", Escape),
+                ("sql", Tag),
+                ("\\n", Escape),
+                ("regex", Tag),
+                ("r\"\"\"", RawDelimiter),
+                ("\"\"\"", RawDelimiter),
             ]
         );
     }

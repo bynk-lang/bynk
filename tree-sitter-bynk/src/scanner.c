@@ -31,7 +31,9 @@
 enum TokenType {
     DOC_BLOCK,
     DOC_LINE,
-    RAW_STRING,
+    RAW_STRING_LINE,
+    RAW_TRIPLE_OPEN,
+    RAW_STRING_BODY,
     TYPE_APP_OPEN,
     ERROR_SENTINEL,
 };
@@ -81,10 +83,12 @@ static bool match_marker_line(TSLexer *l) {
 }
 
 // #2619: a raw string literal — `r"…"`, `r#"…"#` (any number of `#`), or the
-// multi-line `r"""…"""`. No escapes, no interpolation, so the body is opaque:
-// only the closing delimiter matters, and counting `#`s is beyond a regex
-// token. The lexer is at the `r` on entry.
-static bool scan_raw_string(TSLexer *l) {
+// opener `r"""` of a multi-line one. No escapes, no interpolation, so the body
+// is opaque: only the closing delimiter matters, and counting `#`s is beyond a
+// regex token. The lexer is at the `r` on entry. A single-line literal is one
+// RAW_STRING_LINE token; `r"""` is RAW_TRIPLE_OPEN, and the grammar takes the
+// opening line's rest (#2958: an optional language tag) and RAW_STRING_BODY.
+static bool scan_raw_string(TSLexer *l, const bool *valid_symbols) {
     advance(l); // `r`
     int hashes = 0;
     while (l->lookahead == '#') {
@@ -98,25 +102,12 @@ static bool scan_raw_string(TSLexer *l) {
     if (hashes == 0 && l->lookahead == '"') {
         advance(l); // second quote: `r""` (empty) or the start of `r"""`
         if (l->lookahead != '"') {
-            l->result_symbol = RAW_STRING;
-            return true;
+            l->result_symbol = RAW_STRING_LINE;
+            return valid_symbols[RAW_STRING_LINE];
         }
-        advance(l); // `r"""`: a multi-line raw string closes at the next `"""`
-        int quotes = 0;
-        while (l->lookahead != 0) {
-            if (l->lookahead == '"') {
-                quotes++;
-                advance(l);
-                if (quotes == 3) {
-                    l->result_symbol = RAW_STRING;
-                    return true;
-                }
-            } else {
-                quotes = 0;
-                advance(l);
-            }
-        }
-        return false;
+        advance(l); // `r"""`
+        l->result_symbol = RAW_TRIPLE_OPEN;
+        return valid_symbols[RAW_TRIPLE_OPEN];
     }
     // Single line: the body runs to a `"` followed by `hashes` `#`s.
     while (l->lookahead != 0 && l->lookahead != '\n') {
@@ -128,12 +119,38 @@ static bool scan_raw_string(TSLexer *l) {
                 seen++;
             }
             if (seen == hashes) {
-                l->result_symbol = RAW_STRING;
-                return true;
+                l->result_symbol = RAW_STRING_LINE;
+                return valid_symbols[RAW_STRING_LINE];
             }
         } else {
             advance(l);
         }
+    }
+    return false;
+}
+
+// #2958: a raw multi-line string's body: everything up to the first `"""`,
+// which is left for the grammar's closing delimiter. An empty body is no token
+// (the grammar's body is optional); no `"""` at all is unterminated.
+static bool scan_raw_string_body(TSLexer *l) {
+    bool any = false;
+    while (l->lookahead != 0) {
+        if (l->lookahead == '"') {
+            l->mark_end(l);
+            int quotes = 0;
+            while (l->lookahead == '"' && quotes < 3) {
+                advance(l);
+                quotes++;
+            }
+            if (quotes == 3) {
+                l->result_symbol = RAW_STRING_BODY;
+                return any;
+            }
+            any = true;
+            continue;
+        }
+        advance(l);
+        any = true;
     }
     return false;
 }
@@ -165,7 +182,14 @@ bool tree_sitter_bynk_external_scanner_scan(void *payload, TSLexer *lexer,
             return true;
         }
     }
-    if (!valid_symbols[DOC_BLOCK] && !valid_symbols[DOC_LINE] && !valid_symbols[RAW_STRING]) {
+    // #2958: a raw multi-line string's body, from the start of its first line
+    // up to (not including) the first `"""`. Before any whitespace skipping:
+    // the body's leading indentation is part of it.
+    if (valid_symbols[RAW_STRING_BODY] && !recovering) {
+        return scan_raw_string_body(lexer);
+    }
+    if (!valid_symbols[DOC_BLOCK] && !valid_symbols[DOC_LINE] &&
+        !valid_symbols[RAW_STRING_LINE] && !valid_symbols[RAW_TRIPLE_OPEN]) {
         return false;
     }
     // A one-line doc must be first on its line: the scanner starts at column
@@ -185,7 +209,8 @@ bool tree_sitter_bynk_external_scanner_scan(void *payload, TSLexer *lexer,
         skip(lexer);
     }
     if (lexer->lookahead == 'r') {
-        return valid_symbols[RAW_STRING] && scan_raw_string(lexer);
+        return (valid_symbols[RAW_STRING_LINE] || valid_symbols[RAW_TRIPLE_OPEN]) &&
+               scan_raw_string(lexer, valid_symbols);
     }
     if (lexer->lookahead != '-') {
         return false;

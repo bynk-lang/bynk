@@ -237,6 +237,8 @@
 (string_literal) @string
 ; #2619: an escape inside a string; a raw string has none.
 (escape_sequence) @string.escape
+; #2958: a multi-line string's language tag is metadata, not string text.
+(string_tag) @attribute
 (number_literal) @number
 (float_literal) @number
 (decimal_literal) @number

@@ -1713,7 +1713,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.lex.multiline_open",
-        "The opening `\"\"\"` of a multi-line string literal is not followed by a newline.",
+        "The opening `\"\"\"` of a multi-line string literal is not followed by a newline, or by a language tag (`\"\"\"sql`) and a newline.",
         &["string_literal"],
     ),
     d(
