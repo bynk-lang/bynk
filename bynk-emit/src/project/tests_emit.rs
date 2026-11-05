@@ -5185,32 +5185,16 @@ fn emit_stub_class(
         let mut taken: HashSet<String> = scope_names.iter().cloned().collect();
         // #2947: a suite helper inlined ahead of a value (#2907) spells its
         // signature's types unqualified, as in a case runner, so a method with
-        // one brings the `uses` commons' public names into scope the way
-        // `emit_test_scope_setup` does. A method without one is unchanged.
+        // one binds the same `uses` commons' names `emit_test_scope_setup`
+        // does (assets and embeds included). A method without one is unchanged.
         if clause_idxs.iter().any(|&i| !rp.clause_fns[i].is_empty()) {
-            for u in unit_uses.get(&owning_unit).into_iter().flatten() {
-                let Some(table) = unit_tables.get(u) else {
-                    continue;
-                };
-                let consts = table
-                    .consts
-                    .iter()
-                    .filter(|(_, d)| d.private.is_none())
-                    .map(|(n, _)| n);
-                let mut names: Vec<String> = public_types(table)
-                    .chain(public_fns(table))
-                    .chain(consts)
-                    .filter(|n| taken.insert((*n).clone()))
-                    .cloned()
-                    .collect();
-                if names.is_empty() {
-                    continue;
-                }
-                names.sort();
-                let types = aliased_types(table, |n| names.contains(n) && is_public_type(table, n));
+            for (ns, names, types) in
+                used_commons_destructures(&owning_unit, unit_tables, unit_uses, &mut HashSet::new())
+            {
+                taken.extend(names.iter().chain(types.iter().map(|(n, _)| n)).cloned());
                 crate::emitter::extend_printed_at(
                     &mut body_text,
-                    emit_ns_destructure(&test_ns(u), &names, &types),
+                    emit_ns_destructure(&ns, &names, &types),
                     2,
                 );
             }
@@ -6841,6 +6825,126 @@ fn aliased_types(table: &UnitTable, keep: impl Fn(&String) -> bool) -> Vec<(Stri
     types
 }
 
+/// The target's own names, `(local, values)`, that hide a `uses` commons' name
+/// in a test scope.
+fn target_names<'a>(
+    target_name: &str,
+    unit_tables: &'a HashMap<String, UnitTable>,
+) -> (HashSet<&'a String>, HashSet<&'a String>) {
+    // message-bundles slice 1 (#859): a name the target itself already
+    // declares must be excluded here — the same local-shadows-`uses`
+    // precedence `compose_unit_symbols` already applies to production
+    // emission (project.rs's `combined_fns`/`combined_types`), which this
+    // test-scaffold path builds independently and had never applied. Never
+    // exercised before this slice: no prior commons declared a name also
+    // present in something it `uses`. Without the filter, a target with its
+    // own `render` (a messages block's synthetic one) *and* `uses
+    // bynk.locale` (which also declares `render`) destructured both into one
+    // scope — `Cannot redeclare block-scoped variable 'render'` under `tsc`.
+    let target_local: HashSet<&String> = unit_tables
+        .get(target_name)
+        .map(|t| {
+            t.types
+                .keys()
+                .chain(t.fns.keys())
+                .chain(t.assets.keys())
+                .chain(t.embeds.keys())
+                .chain(t.consts.keys())
+                .collect()
+        })
+        .unwrap_or_default();
+    // #1925: a used commons' function or asset is hidden by any value the
+    // target declares — its services, agents and bodied providers too — as
+    // the checker's view hides it (`bynk_check::project_model::shadowed_imports`).
+    // #1927: so is a used commons' type's *value* (its constructors), which a
+    // case may not name (`check_shadowed_type_names_in_suite`). Its type
+    // alias (`type X = ns.X`, below) is still bound: it lives in TypeScript's
+    // type space, beside the target value's `const`, and the lowering names
+    // the types of checked expressions (`(__x: X) => …`, #1778).
+    let target_values: HashSet<&String> = unit_tables
+        .get(target_name)
+        .map(|t| {
+            target_local
+                .iter()
+                .copied()
+                .chain(t.services.keys())
+                .chain(t.agents.keys())
+                .chain(
+                    t.providers
+                        .values()
+                        .filter(|p| !p.external)
+                        .map(|p| &p.provider_name.name),
+                )
+                .collect()
+        })
+        .unwrap_or_default();
+    (target_local, target_values)
+}
+
+/// One commons' destructure: its namespace, the value names it binds, and the
+/// type aliases (each with its type parameters).
+type NsDestructure = (String, Vec<String>, Vec<(String, Vec<String>)>);
+
+/// The `uses` commons' names a test scope binds, as `(namespace, value names,
+/// type aliases)` per commons: what a case runner destructures, and (#2947) a
+/// stub method that inlines suite helpers. One computation, so the two scopes
+/// hide and admit the same names.
+///
+/// `seen_assets` carries the assets already bound across calls: #1883, slice 3,
+/// a name brought in by an earlier used commons is not destructured again (two
+/// used commons may not share an asset name, `bynk.uses.name_conflict`, but an
+/// asset may share none with a fn either).
+fn used_commons_destructures<'a>(
+    target_name: &str,
+    unit_tables: &'a HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    seen_assets: &mut HashSet<&'a String>,
+) -> Vec<NsDestructure> {
+    let (target_local, target_values) = target_names(target_name, unit_tables);
+    let mut out = Vec::new();
+    if let Some(used) = unit_uses.get(target_name) {
+        for u in used {
+            let ns = test_ns(u);
+            if let Some(table) = unit_tables.get(u) {
+                // #2618: a used commons' `private` declarations stay in it, as
+                // the checker's suite view leaves them out; destructuring one
+                // would redeclare a public name another used commons binds.
+                let assets = table
+                    .assets
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n)
+                    .filter(|n| seen_assets.insert(*n));
+                let embeds = table
+                    .embeds
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n);
+                let consts = table
+                    .consts
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n);
+                let mut names: Vec<String> = public_types(table)
+                    .chain(public_fns(table))
+                    .chain(assets)
+                    .chain(embeds)
+                    .chain(consts)
+                    .filter(|n| !target_values.contains(n))
+                    .cloned()
+                    .collect();
+                names.sort();
+                names.dedup();
+                let type_names = aliased_types(table, |n| {
+                    !target_local.contains(n) && is_public_type(table, n)
+                });
+                out.push((ns, names, type_names));
+            }
+        }
+    }
+    out
+}
+
 /// #1814: a suite view's hidden types grouped by owning commons, each group
 /// sorted by name.
 fn hidden_by_owner(hidden: &BTreeMap<String, String>) -> BTreeMap<String, Vec<String>> {
@@ -7071,101 +7175,13 @@ fn emit_test_scope_setup(
         );
     }
     // Bring in `uses` commons names too — the target's body can use them.
-    // message-bundles slice 1 (#859): a name the target itself already
-    // declares must be excluded here — the same local-shadows-`uses`
-    // precedence `compose_unit_symbols` already applies to production
-    // emission (project.rs's `combined_fns`/`combined_types`), which this
-    // test-scaffold path builds independently and had never applied. Never
-    // exercised before this slice: no prior commons declared a name also
-    // present in something it `uses`. Without the filter, a target with its
-    // own `render` (a messages block's synthetic one) *and* `uses
-    // bynk.locale` (which also declares `render`) destructured both into one
-    // scope — `Cannot redeclare block-scoped variable 'render'` under `tsc`.
-    let target_local: std::collections::HashSet<&String> = unit_tables
-        .get(target_name)
-        .map(|t| {
-            t.types
-                .keys()
-                .chain(t.fns.keys())
-                .chain(t.assets.keys())
-                .chain(t.embeds.keys())
-                .chain(t.consts.keys())
-                .collect()
-        })
-        .unwrap_or_default();
-    // #1925: a used commons' function or asset is hidden by any value the
-    // target declares — its services, agents and bodied providers too — as
-    // the checker's view hides it (`bynk_check::project_model::shadowed_imports`).
-    // #1927: so is a used commons' type's *value* (its constructors), which a
-    // case may not name (`check_shadowed_type_names_in_suite`). Its type
-    // alias (`type X = ns.X`, below) is still bound: it lives in TypeScript's
-    // type space, beside the target value's `const`, and the lowering names
-    // the types of checked expressions (`(__x: X) => …`, #1778).
-    let target_values: std::collections::HashSet<&String> = unit_tables
-        .get(target_name)
-        .map(|t| {
-            target_local
-                .iter()
-                .copied()
-                .chain(t.services.keys())
-                .chain(t.agents.keys())
-                .chain(
-                    t.providers
-                        .values()
-                        .filter(|p| !p.external)
-                        .map(|p| &p.provider_name.name),
-                )
-                .collect()
-        })
-        .unwrap_or_default();
-    // #1883, slice 3: a name brought in by an earlier used commons is not
-    // destructured again (two used commons may not share an asset name —
-    // `bynk.uses.name_conflict` — but an asset may share none with a fn either).
-    let mut seen_assets: std::collections::HashSet<&String> = std::collections::HashSet::new();
-    if let Some(used) = unit_uses.get(target_name) {
-        for u in used {
-            let ns = test_ns(u);
-            if let Some(table) = unit_tables.get(u) {
-                // #2618: a used commons' `private` declarations stay in it, as
-                // the checker's suite view leaves them out; destructuring one
-                // would redeclare a public name another used commons binds.
-                let assets = table
-                    .assets
-                    .iter()
-                    .filter(|(_, d)| d.private.is_none())
-                    .map(|(n, _)| n)
-                    .filter(|n| seen_assets.insert(*n));
-                let embeds = table
-                    .embeds
-                    .iter()
-                    .filter(|(_, d)| d.private.is_none())
-                    .map(|(n, _)| n);
-                let consts = table
-                    .consts
-                    .iter()
-                    .filter(|(_, d)| d.private.is_none())
-                    .map(|(n, _)| n);
-                let mut names: Vec<String> = public_types(table)
-                    .chain(public_fns(table))
-                    .chain(assets)
-                    .chain(embeds)
-                    .chain(consts)
-                    .filter(|n| !target_values.contains(n))
-                    .cloned()
-                    .collect();
-                names.sort();
-                names.dedup();
-                let type_names = aliased_types(table, |n| {
-                    !target_local.contains(n) && is_public_type(table, n)
-                });
-                bound.extend(names.iter().cloned());
-                crate::emitter::extend_printed_at(
-                    out,
-                    emit_ns_destructure(&ns, &names, &type_names),
-                    2,
-                );
-            }
-        }
+    let (_, target_values) = target_names(target_name, unit_tables);
+    let mut seen_assets: HashSet<&String> = HashSet::new();
+    for (ns, names, type_names) in
+        used_commons_destructures(target_name, unit_tables, unit_uses, &mut seen_assets)
+    {
+        bound.extend(names.iter().cloned());
+        crate::emitter::extend_printed_at(out, emit_ns_destructure(&ns, &names, &type_names), 2);
     }
     // #1814: the types the target's view reaches but does not import, from
     // their owning commons (imported by `emit_test_module`).
