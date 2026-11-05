@@ -98,13 +98,14 @@ fn transfer_target<'a>(e: &'a Expr, local_agents: &HashSet<String>) -> Option<Ws
 /// Object. On Workers the edge (`compose.ts`) resolves the hosting instance
 /// *before* the `on open` body runs, so the key has to be something it can
 /// evaluate there on its own: a route parameter (validated from the upgrade
-/// URL), a context `const` (a pure static initialiser, `handlers.Name()`), or a
-/// literal. Anything else — a `let`-bound local, a field access, a call — is
+/// URL), a `const` of the context (a pure static initialiser, `handlers.Name()`)
+/// or of a commons it `uses` (imported into `compose.ts`, #2967), or a literal. Anything else — a `let`-bound local, a field access, a call — is
 /// [`WsOpenKey::Other`] and rejected on Workers (`bynk.ws.open_transfer_key`).
 pub enum WsOpenKey<'a> {
     /// A handler parameter, by name.
     Param(&'a str),
-    /// A constant visible in the context, by name.
+    /// A constant visible in the context (its own, or a used commons' public
+    /// one), by name.
     Const(&'a str),
     /// A string, integer or boolean literal.
     Literal(&'a Expr),
@@ -113,7 +114,8 @@ pub enum WsOpenKey<'a> {
 }
 
 /// Classify `key`, the key of `open`'s connection transfer. `is_const` answers
-/// whether a name is a constant of the context. A parameter shadows a constant
+/// whether a name is a constant visible in the context
+/// ([`crate::consts::visible_consts`]). A parameter shadows a constant
 /// of the same name, and a name any top-level `let` of the body binds is a
 /// local, not the constant (or parameter) it may shadow; so is one a `par`
 /// block binds, since its bindings land in the enclosing scope.

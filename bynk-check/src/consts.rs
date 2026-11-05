@@ -21,6 +21,7 @@ use bynk_syntax::ast::{
 use bynk_syntax::error::CompileError;
 
 use crate::project_model::UnitInfo;
+use crate::symbols::UnitTable;
 
 /// Whether `name` is upper-camel case: the lexer's `constant_name` class,
 /// `/[A-Z][A-Za-z0-9_]*/`.
@@ -498,24 +499,52 @@ pub fn compose_unit_consts(
     let Some(info) = unit_info.get(name) else {
         return HashMap::new();
     };
-    let mut combined = info.table.consts.clone();
-    for used in &info.uses {
-        let Some(used_info) = unit_info.get(used) else {
+    visible_consts(&info.table, &info.uses, |u| {
+        unit_info.get(u).map(|i| &i.table)
+    })
+    .into_iter()
+    .map(|(n, c)| (n, c.decl.clone()))
+    .collect()
+}
+
+/// A constant visible in a unit ([`visible_consts`]), with where it is declared.
+pub struct VisibleConst<'a> {
+    pub decl: &'a ConstDecl,
+    /// `None` for the unit's own constant, else the used commons declaring it.
+    pub owner: Option<&'a str>,
+}
+
+/// #2967: the constants [`compose_unit_consts`] composes, from a unit's own
+/// table, its `uses` and a lookup of the used units' tables, each with its
+/// owner. The project phases that run before `UnitInfo` is assembled
+/// (`project_model::phase_workers_ws_open_key`) and the Workers emitter read
+/// the same set through this, so the checker and the emitter agree on which
+/// names are constants.
+pub fn visible_consts<'a>(
+    table: &'a UnitTable,
+    uses: &'a [String],
+    used_table: impl Fn(&str) -> Option<&'a UnitTable>,
+) -> HashMap<String, VisibleConst<'a>> {
+    let mut combined: HashMap<String, VisibleConst<'a>> = table
+        .consts
+        .iter()
+        .map(|(n, decl)| (n.clone(), VisibleConst { decl, owner: None }))
+        .collect();
+    for used in uses {
+        let Some(used_table) = used_table(used) else {
             continue;
         };
         // A used commons' `private` constants stay in it.
-        for (const_name, decl) in used_info
-            .table
-            .consts
-            .iter()
-            .filter(|(_, d)| d.private.is_none())
-        {
-            if crate::symbols::local_value_kind(&info.table, const_name).is_some() {
+        for (const_name, decl) in used_table.consts.iter().filter(|(_, d)| d.private.is_none()) {
+            if crate::symbols::local_value_kind(table, const_name).is_some() {
                 continue;
             }
             combined
                 .entry(const_name.clone())
-                .or_insert_with(|| decl.clone());
+                .or_insert(VisibleConst {
+                    decl,
+                    owner: Some(used.as_str()),
+                });
         }
     }
     combined

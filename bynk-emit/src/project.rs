@@ -2802,6 +2802,7 @@ fn run_checks(
         &groups,
         &kinds,
         &unit_tables,
+        &unit_uses,
         &mut errors,
     );
     // #2355 follow-up: on Workers, a capability whose provider constructs
@@ -3783,6 +3784,7 @@ fn build_output(
                     &bindings,
                     harness_clock_contexts.contains(ctx_name),
                     ctx_uses_exec,
+                    unit_uses.get(ctx_name).map(Vec::as_slice).unwrap_or_default(),
                 );
                 // #2136: a context a `system` suite targets gets the test
                 // build's scheduled-result hook. A deployable build strips

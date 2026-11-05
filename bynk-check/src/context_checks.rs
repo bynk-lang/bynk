@@ -1664,7 +1664,7 @@ fn check_service_protocols(
                             "a WebSocket `on open` handler must transfer its `connection` into exactly one agent — e.g. `Room(roomId).join(…, connection)` — so the upgrade can be routed to the hosting Durable Object",
                         )
                         .with_note(
-                            "transfer the connection to an agent unconditionally (not inside an `if`/`match`); key it by a handler parameter, a context `const` or a literal so the upgrade can be routed",
+                            "transfer the connection to an agent unconditionally (not inside an `if`/`match`); key it by a handler parameter, a `const` or a literal so the upgrade can be routed",
                         ),
                     ),
                     WsOpenShape::Multiple => errors.push(CompileError::new(

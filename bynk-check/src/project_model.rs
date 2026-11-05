@@ -4717,7 +4717,8 @@ pub fn provider_constructs_agent(p: &ProviderDecl, is_agent: impl Fn(&str) -> bo
 /// #2959: on the Workers target, the edge (`compose.ts`) addresses the Durable
 /// Object hosting a WebSocket connection *before* the `on open` body runs, so the
 /// key of the body's connection transfer must be something it can evaluate on its
-/// own: a route parameter, a constant of the context or a literal
+/// own: a route parameter, a constant of the context (its own, or a public one
+/// of a commons it `uses`, #2967) or a literal
 /// ([`crate::websocket::classify_open_key`]). Any other key — a `let`-bound local,
 /// a field access, a call — used to be emitted as a name `compose.ts` does not
 /// bind (a `tsc` failure) or replaced by the first route parameter (the upgrade
@@ -4730,6 +4731,7 @@ pub fn phase_workers_ws_open_key(
     groups: &BTreeMap<String, Vec<usize>>,
     kinds: &BTreeMap<String, UnitKind>,
     unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
     errors: &mut ErrorSink,
 ) {
     if target != BuildTarget::Workers {
@@ -4742,6 +4744,10 @@ pub fn phase_workers_ws_open_key(
         let Some(table) = unit_tables.get(name) else {
             continue;
         };
+        // #2967: the constants visible in the context, a used commons' public
+        // ones included, as the emitter classifies the key against.
+        let uses = unit_uses.get(name).map(Vec::as_slice).unwrap_or_default();
+        let consts = crate::consts::visible_consts(table, uses, |u| unit_tables.get(u));
         let local_agents: HashSet<String> = table.agents.keys().cloned().collect();
         for &i in indices {
             let SourceUnit::Context(ctx) = &parsed[i].unit() else {
@@ -4765,7 +4771,7 @@ pub fn phase_workers_ws_open_key(
                         continue; // a missing or ambiguous transfer has its own diagnostic
                     };
                     let key = crate::websocket::classify_open_key(open, target_agent.key, |n| {
-                        table.consts.contains_key(n)
+                        consts.contains_key(n)
                     });
                     if !matches!(key, crate::websocket::WsOpenKey::Other) {
                         continue;
@@ -4781,7 +4787,7 @@ pub fn phase_workers_ws_open_key(
                             ),
                         )
                         .with_note(
-                            "on Workers the upgrade is routed to the hosting Durable Object before the `on open` body runs; key the agent by a parameter of `on open`, a `const` of the context, or a literal",
+                            "on Workers the upgrade is routed to the hosting Durable Object before the `on open` body runs; key the agent by a parameter of `on open`, a `const` of the context or of a commons it `uses`, or a literal",
                         ),
                     );
                 }
