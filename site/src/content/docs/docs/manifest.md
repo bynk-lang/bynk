@@ -456,7 +456,7 @@ A key this section does not recognise is an error, not a silent no-op — a
 
 ## `[lsp]`
 
-Language-server settings, consumed by `bynkc-lsp`. See the
+Language-server settings, consumed by `bynk-lsp`. See the
 [`bynk-lsp` reference](/docs/tooling/bynk-lsp/).
 
 | Key | Type | Default | Notes |

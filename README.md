@@ -46,7 +46,7 @@ you.
 
 ## Install
 
-Prebuilt binaries (`bynkc`, `bynk` and the `bynkc-lsp` language server) are
+Prebuilt binaries (`bynkc`, `bynk` and the `bynk-lsp` language server) are
 published with every [release](https://github.com/bynk-lang/bynk/releases) for
 Linux (x86_64, aarch64), macOS (Intel, Apple silicon) and Windows (x86_64). No
 Rust toolchain is needed.
@@ -131,7 +131,7 @@ says where it sits in the layering.
 | ---- | ---------- | ------------ |
 | [`bynkc/`](bynkc/) | The `bynkc` compiler CLI (`compile` / `check` / `fmt` / `test`) — a thin front-end over the library crates. | [crates.io](https://crates.io/crates/bynkc) |
 | [`bynk/`](bynk/) | The `bynk` driver — links the compiler in-process and orchestrates the Node toolchain (`doctor` / `new` / `dev` / `deploy`, plus `check` / `fmt` / `test` / `explain`). | [crates.io](https://crates.io/crates/bynk) |
-| [`bynk-lsp/`](bynk-lsp/) | The `bynkc-lsp` Language Server (diagnostics, hover, go-to-definition, …). | [crates.io](https://crates.io/crates/bynk-lsp) |
+| [`bynk-lsp/`](bynk-lsp/) | The `bynk-lsp` Language Server (diagnostics, hover, go-to-definition, …). | [crates.io](https://crates.io/crates/bynk-lsp) |
 | [`bynk-syntax/`](bynk-syntax/), [`bynk-std/`](bynk-std/), [`bynk-project/`](bynk-project/), [`bynk-check/`](bynk-check/), [`bynk-ir/`](bynk-ir/), [`bynk-lower/`](bynk-lower/), [`bynk-ts/`](bynk-ts/), [`bynk-emit/`](bynk-emit/), [`bynk-strip/`](bynk-strip/), [`bynk-render/`](bynk-render/), [`bynk-fmt/`](bynk-fmt/), [`bynk-ide/`](bynk-ide/), [`bynk-driver/`](bynk-driver/) | The compiler's library crates: syntax, the standard library's first-party sources (as data), the project model, checking, the declaration IR, TypeScript emission and stripping, diagnostic rendering, formatting, editor analysis, and the command bodies the CLIs share. | crates.io |
 | [`bynk-grammar/`](bynk-grammar/) | Renders the tree-sitter grammar to EBNF for the book's grammar reference. | — (unpublished) |
 | [`bynk-wasm/`](bynk-wasm/) | The compiler as a wasm module, backing the [playground](https://github.com/bynk-lang/playground) and the VS Code web extension. | — |

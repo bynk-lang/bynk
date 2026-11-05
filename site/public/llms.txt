@@ -327,7 +327,7 @@ Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
   `bynk doctor` — check the environment.
 - `bynk add <package>` · `bynk fetch` · `bynk publish` — dependencies and the registry.
 - `bynkc` (`compile`, `check`, `fmt`, `test`) is the pure-pipeline compiler for CI.
-- `bynkc-lsp` — the language server (diagnostics, hover, completion,
+- `bynk-lsp` — the language server (diagnostics, hover, completion,
   navigation, refactorings).
 
 ## Documentation (the Bynk Book, at bynk-lang.org)

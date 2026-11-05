@@ -131,7 +131,7 @@
     },
     "lsp": {
       "additionalProperties": false,
-      "description": "Language-server settings, read by `bynkc-lsp`.",
+      "description": "Language-server settings, read by `bynk-lsp`.",
       "properties": {
         "diagnostics_debounce_ms": {
           "default": 300,

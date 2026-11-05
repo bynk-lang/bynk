@@ -92,14 +92,14 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   to infer. It is a breaking change with a machine-applicable fix; see
   [Generics and bounds](/book/reference/generics/). Next: `Ord`, `Key` and
   `Codable` as further constraints, then static methods on generic types.
-- **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
+- **Editor tooling.** Deepening the `bynk-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its
   model views (sequence diagram, documentation, architecture map, wire
   contract) are now live: they refresh on edit, follow the cursor, and survive
   a reload.
   The extension runs in vscode.dev and github.dev from the WebAssembly
   compiler, with project-wide diagnostics, hover and completion
-  ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Full `bynkc-lsp` on
+  ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Full `bynk-lsp` on
   WebAssembly (navigation, rename, references) is a later follow-up.
 - **Packaging.** In progress: path, git and registry dependencies have
   shipped. A project can name itself as a package (`[package]`), another

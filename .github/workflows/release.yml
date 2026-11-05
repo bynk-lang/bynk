@@ -232,7 +232,7 @@ jobs:
           node-version: "24"
       - name: Generate the Book bundle `bynk book` embeds
         run: node site/scripts/build-llms-full.mjs
-      - name: Build bynkc + bynk + bynkc-lsp
+      - name: Build bynkc + bynk + bynk-lsp
         run: cargo build --release --locked --target ${{ matrix.target }} -p bynkc -p bynk -p bynk-lsp
 
       - name: Package (unix)
@@ -242,12 +242,16 @@ jobs:
           bin="target/${{ matrix.target }}/release"
           stage="bynk-${GITHUB_REF_NAME}-${{ matrix.target }}"
           mkdir "$stage"
-          cp "$bin/bynkc" "$bin/bynk" "$bin/bynkc-lsp" LICENSE-MIT LICENSE-APACHE "$stage/"
+          cp "$bin/bynkc" "$bin/bynk" "$bin/bynk-lsp" LICENSE-MIT LICENSE-APACHE "$stage/"
+          # Overlap release (crate-hygiene E4a): the server's previous name, so
+          # editor configs naming `bynkc-lsp` keep working. Dropped in E4b.
+          cp "$bin/bynk-lsp" "$stage/bynkc-lsp"
           tar czf "$stage.tar.gz" "$stage"
           # Raw binaries for the VS Code extension's download-on-activate (it
           # fetches single verified files, no archive extraction): the server,
           # plus the `bynk` driver and `bynkc` compiler it puts on PATH.
-          cp "$bin/bynkc-lsp" "bynkc-lsp-${{ matrix.target }}"
+          cp "$bin/bynk-lsp" "bynk-lsp-${{ matrix.target }}"
+          cp "$bin/bynk-lsp" "bynkc-lsp-${{ matrix.target }}" # overlap; dropped in E4b
           cp "$bin/bynk" "bynk-${{ matrix.target }}"
           cp "$bin/bynkc" "bynkc-${{ matrix.target }}"
           echo "ASSET=$stage.tar.gz" >> "$GITHUB_ENV"
@@ -258,9 +262,12 @@ jobs:
           $bin = "target/${{ matrix.target }}/release"
           $stage = "bynk-$env:GITHUB_REF_NAME-${{ matrix.target }}"
           New-Item -ItemType Directory -Path $stage | Out-Null
-          Copy-Item "$bin/bynkc.exe","$bin/bynk.exe","$bin/bynkc-lsp.exe","LICENSE-MIT","LICENSE-APACHE" $stage
+          Copy-Item "$bin/bynkc.exe","$bin/bynk.exe","$bin/bynk-lsp.exe","LICENSE-MIT","LICENSE-APACHE" $stage
+          # Overlap release (crate-hygiene E4a); dropped in E4b.
+          Copy-Item "$bin/bynk-lsp.exe" "$stage/bynkc-lsp.exe"
           Compress-Archive -Path $stage -DestinationPath "$stage.zip"
-          Copy-Item "$bin/bynkc-lsp.exe" "bynkc-lsp-${{ matrix.target }}.exe"
+          Copy-Item "$bin/bynk-lsp.exe" "bynk-lsp-${{ matrix.target }}.exe"
+          Copy-Item "$bin/bynk-lsp.exe" "bynkc-lsp-${{ matrix.target }}.exe" # overlap; dropped in E4b
           Copy-Item "$bin/bynk.exe" "bynk-${{ matrix.target }}.exe"
           Copy-Item "$bin/bynkc.exe" "bynkc-${{ matrix.target }}.exe"
           "ASSET=$stage.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -270,6 +277,7 @@ jobs:
           name: ${{ matrix.target }}
           path: |
             ${{ env.ASSET }}
+            bynk-lsp-${{ matrix.target }}*
             bynkc-lsp-${{ matrix.target }}*
             bynk-${{ matrix.target }}*
             bynkc-${{ matrix.target }}*
@@ -401,7 +409,8 @@ jobs:
           path: dist
       # One SHA256SUMS over the archives AND the raw binaries (basenames, so
       # they match the flat asset names a consumer downloads). The VS Code
-      # extension's download-on-activate verifies `bynkc-lsp-<target>`,
+      # extension's download-on-activate verifies `bynk-lsp-<target>`
+      # (and, for the overlap release, `bynkc-lsp-<target>`),
       # `bynk-<target>` and `bynkc-<target>` against this file. Each artifact
       # directory holds exactly the files to publish, so `*/*` is the lot.
       - name: Checksums

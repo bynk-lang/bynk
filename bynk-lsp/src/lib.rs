@@ -1,4 +1,4 @@
-//! `bynkc-lsp` — Bynk Language Server.
+//! `bynk-lsp` — Bynk Language Server.
 //!
 //! Implements the LSP capabilities listed in `design/bynk-lsp-spec.md` §4.3:
 //! synchronisation (Full), diagnostics, hover, go-to-definition and -type/-impl,
@@ -79,7 +79,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::project::ProjectConfig;
 
-const SERVER_NAME: &str = "bynkc-lsp";
+const SERVER_NAME: &str = "bynk-lsp";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// In-memory document state.
@@ -1570,7 +1570,7 @@ impl Backend {
             self.client
                 .log_message(
                     MessageType::WARNING,
-                    format!("bynkc-lsp: file-watcher registration failed: {e}"),
+                    format!("bynk-lsp: file-watcher registration failed: {e}"),
                 )
                 .await;
         }
@@ -1590,7 +1590,7 @@ impl Backend {
             self.client
                 .log_message(
                     MessageType::WARNING,
-                    format!("bynkc-lsp: type-hierarchy registration failed: {e}"),
+                    format!("bynk-lsp: type-hierarchy registration failed: {e}"),
                 )
                 .await;
         }
@@ -2941,10 +2941,10 @@ impl LanguageServer for Backend {
         // appear at activation without a file being opened (spec §2.3).
         self.warm_projects(&folders).await;
         let msg = if folders.is_empty() {
-            "bynkc-lsp: no workspace folders; single-file mode".to_string()
+            "bynk-lsp: no workspace folders; single-file mode".to_string()
         } else {
             format!(
-                "bynkc-lsp: {} workspace folder(s); projects resolved per file",
+                "bynk-lsp: {} workspace folder(s); projects resolved per file",
                 folders.len()
             )
         };
@@ -6147,7 +6147,7 @@ pub async fn run() -> std::process::ExitCode {
                 .ok();
         }
     }
-    tracing::info!("bynkc-lsp v{} starting", SERVER_VERSION);
+    tracing::info!("bynk-lsp v{} starting", SERVER_VERSION);
     let stdout = tokio::io::stdout();
     // #1667: the server reads a re-framed copy of stdin, so one malformed
     // message is skipped rather than ending the session (see `transport`).
@@ -6169,7 +6169,7 @@ pub async fn run() -> std::process::ExitCode {
         std::process::ExitCode::SUCCESS
     } else {
         eprintln!(
-            "bynkc-lsp: the session ended without a `shutdown` request \
+            "bynk-lsp: the session ended without a `shutdown` request \
              (the client closed the connection, or sent `exit` early); see ~/.bynk-lsp.log"
         );
         std::process::ExitCode::FAILURE

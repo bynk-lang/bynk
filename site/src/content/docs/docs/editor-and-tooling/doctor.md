@@ -39,8 +39,8 @@ compiler: in-process
     wrangler — provisionable via npx (not installed)
       ↳ fix: npm install -g wrangler@4, or clear a stale npx cache (~/.npm/_npx)
 · editor [note] (optional)
-    bynkc-lsp — missing
-      ↳ fix: install bynkc-lsp (or download from releases)
+    bynk-lsp — missing
+      ↳ fix: install bynk-lsp (or download from releases)
 ```
 
 ## The capability groups
@@ -50,7 +50,7 @@ compiler: in-process
 | **compile / check / fmt** | nothing — the compiler is built into `bynk` | always available |
 | **`bynk test`** | Node ≥ 22.13 **and** `tsc` (TypeScript 5–7) or `tsx` | you can't run `test` blocks |
 | **dev / deploy** | Node ≥ 22.13 **and** `wrangler` (4.107.0 or newer for `bynk dev`) | you can't deploy to Cloudflare |
-| **editor** *(optional)* | `bynkc-lsp` | a note — editor features only |
+| **editor** *(optional)* | `bynk-lsp` | a note — editor features only |
 | **build-from-source** *(optional)* | a Rust toolchain | shown only inside the Bynk repo |
 
 A `node` below the floor (Node **22.13**: 22 is the oldest major still in
@@ -134,7 +134,7 @@ bynk doctor --format json     # structured, for CI
 compile: ok
 test: ok
 deploy: warn (npm install -g wrangler@4, or clear a stale npx cache (~/.npm/_npx))
-editor: note (install bynkc-lsp (or download from releases))
+editor: note (install bynk-lsp (or download from releases))
 ```
 
 `doctor` only **reports** — it never installs anything. Copy the fix line it

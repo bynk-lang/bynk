@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "bynkc-lsp, the Language Server for the Bynk language."
+description = "bynk-lsp, the Language Server for the Bynk language."
 keywords = ["compiler", "dsl", "lsp", "language-server", "language"]
 categories = ["development-tools", "compilers"]
 # These guards read a sibling directory — ../examples, ../bynkc — which is not part of this crate's package. Keep them out of the
@@ -50,7 +50,7 @@ pkg-fmt = "tgz"
 pkg-fmt = "zip"
 
 [[bin]]
-name = "bynkc-lsp"
+name = "bynk-lsp"
 path = "src/main.rs"
 
 [dependencies]
