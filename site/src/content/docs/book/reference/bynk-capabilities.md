@@ -723,7 +723,8 @@ variable or any other expression is `bynk.types.sql_not_literal`, so request
 data can't reach the SQL text: write `?1` and pass `Text(id)`. A long
 statement reads best as a multi-line string, `"""…"""`, which strips the
 closing delimiter's indentation and takes no interpolation holes here (a hole
-makes it an interpolated string).
+makes it an interpolated string). Tag it `"""sql` and editors highlight the
+statement as SQL; the tag is not part of the value.
 A `SqlStatement` stays in the code that built it: it can't be a service
 parameter or result, a record or event field, an agent store field or a `Json`
 target (`bynk.types.sql_statement_at_boundary`), because one that came from
@@ -741,7 +742,7 @@ type Order = { id: String, total: Int, paid: Bool }
 
 service api from http {
 	on GET("/orders/:id") (id: String) -> Effect[HttpResult[Order]] by Visitor given Orders {
-		let row <- Orders.first("""
+		let row <- Orders.first("""sql
 			SELECT id, total, paid
 			FROM orders
 			WHERE id = ?1

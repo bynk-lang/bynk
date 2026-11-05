@@ -22,7 +22,7 @@ type Activity = { id: String, event: String, receivedAt: Int }
 
 service api from http {
 	on GET("/activity/:repo") (repo: String) -> Effect[HttpResult[List[Activity]]] by Visitor given Deliveries {
-		let rows <- Deliveries.select[Activity]("""
+		let rows <- Deliveries.select[Activity]("""sql
 			FROM deliveries
 			WHERE repo = ?1
 			ORDER BY received_at DESC
@@ -40,6 +40,9 @@ The statement that runs is `SELECT "id", "event", "receivedAt" FROM deliveries
 WHERE …`: each field is a quoted column of the same name, in declaration order.
 There is no renaming: a field selects the column of the same name. A computed
 column (`count(*) AS total`) stays with `all` and `Json.decodeSql`.
+
+The `sql` after the opening `"""` is a language tag: editors highlight the
+statement as SQL, and the value is the same as without it.
 
 The tail is still a string literal, so the injection guarantee holds: data
 reaches the statement only as a bound `?1`, `?2`, … parameter. It must not begin

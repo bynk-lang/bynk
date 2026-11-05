@@ -739,7 +739,122 @@ const CASES: &[Case] = &[
     },
     Case {
         what: "multi-line string whose opening delimiter is followed by text",
-        body: "fn f() -> String {\n  \"\"\"abc\n  \"\"\"\n}",
+        body: "fn f() -> String {\n  \"\"\" abc\n  \"\"\"\n}",
+        accept: false,
+    },
+    Case {
+        what: "multi-line string with a language tag (#2958)",
+        body: "fn f() -> String {\n  \"\"\"sql\n    SELECT 1\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "language tag followed by trailing spaces (#2958)",
+        body: "fn f() -> String {\n  \"\"\"sql  \t\n    SELECT 1\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "tagged multi-line string with an interpolation hole (#2958)",
+        body: "fn f(n: String) -> String {\n  \"\"\"sql\n    \\(n)\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "raw multi-line string with a language tag (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"regex\n    ^\\d+$\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag with digits, `_` and `-` (#2958)",
+        body: "fn f() -> String {\n  \"\"\"my-lang_2\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: json (#2958)",
+        body: "fn f() -> String {\n  \"\"\"json\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: json (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"json\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: fn (#2958)",
+        body: "fn f() -> String {\n  \"\"\"fn\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: fn (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"fn\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: type (#2958)",
+        body: "fn f() -> String {\n  \"\"\"type\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: type (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"type\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: let (#2958)",
+        body: "fn f() -> String {\n  \"\"\"let\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: let (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"let\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: true (#2958)",
+        body: "fn f() -> String {\n  \"\"\"true\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: true (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"true\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: par (#2958)",
+        body: "fn f() -> String {\n  \"\"\"par\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: par (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"par\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a space before the language tag (#2958)",
+        body: "fn f() -> String {\n  \"\"\" sql\n    x\n    \"\"\"\n}",
+        accept: false,
+    },
+    Case {
+        what: "text after the language tag (#2958)",
+        body: "fn f() -> String {\n  \"\"\"sql x\n    x\n    \"\"\"\n}",
+        accept: false,
+    },
+    Case {
+        what: "an uppercase language tag (#2958)",
+        body: "fn f() -> String {\n  \"\"\"SQL\n    x\n    \"\"\"\n}",
+        accept: false,
+    },
+    Case {
+        what: "a language tag starting with a digit (#2958)",
+        body: "fn f() -> String {\n  \"\"\"1sql\n    x\n    \"\"\"\n}",
+        accept: false,
+    },
+    Case {
+        what: "untagged opening delimiter followed by spaces (#2958)",
+        body: "fn f() -> String {\n  \"\"\"  \n    x\n    \"\"\"\n}",
+        accept: false,
+    },
+    Case {
+        what: "raw multi-line string whose opening delimiter is followed by text (#2958)",
+        body: "fn f() -> String {\n  r\"\"\" abc\n    x\n    \"\"\"\n}",
         accept: false,
     },
     Case {

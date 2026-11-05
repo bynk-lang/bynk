@@ -261,7 +261,7 @@ There are **758** codes in total.
 | `bynk.lex.multiline_close_not_own_line` | A `"""` inside a multi-line string literal is not on a line of its own. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_in_hole` | A multi-line string literal appears inside an interpolation hole, which must close on its own line. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_indent` | A line of a multi-line string literal is indented less than its closing `"""`. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
-| `bynk.lex.multiline_open` | The opening `"""` of a multi-line string literal is not followed by a newline. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
+| `bynk.lex.multiline_open` | The opening `"""` of a multi-line string literal is not followed by a newline, or by a language tag (`"""sql`) and a newline. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.slash_doc` | A `///` doc comment first on its line; a Bynk doc is `--- text` or a `---` block (auto-fixable). |  | — |
 | `bynk.lex.unclosed_doc_block` | A documentation block is not closed. |  | — |
 | `bynk.lex.unexpected_character` | An unexpected character in the source. |  | — |

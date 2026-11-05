@@ -64,7 +64,8 @@ fn token_type_index(kind: SymbolKind) -> u32 {
 /// Legend index of the `variable` token type (locals; ADR 0064).
 const TOK_LOCAL: u32 = 6;
 
-/// Legend index of the `decorator` token type (handler annotations; ADR 0163).
+/// Legend index of the `decorator` token type (handler annotations; ADR 0163;
+/// #2958: a multi-line string literal's language tag).
 pub const TOK_DECORATOR: u32 = 10;
 
 /// Legend index of the `interface` token type (constraint names in a bound).
