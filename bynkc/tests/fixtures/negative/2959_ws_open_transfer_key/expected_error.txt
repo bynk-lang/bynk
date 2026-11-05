@@ -1,0 +1,1 @@
+bynk.ws.open_transfer_key the key of this `on open`'s transfer to agent `Room` is not a route parameter, a constant or a literal, so the Workers upgrade cannot address the agent's Durable Object

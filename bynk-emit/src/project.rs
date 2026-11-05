@@ -2794,6 +2794,16 @@ fn run_checks(
         &unit_tables,
         &mut errors,
     );
+    // #2959: on Workers, the `on open` transfer key must be one the edge can
+    // evaluate before the body runs.
+    project_model::phase_workers_ws_open_key(
+        target,
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_tables,
+        &mut errors,
+    );
     // #2355 follow-up: on Workers, a capability whose provider constructs
     // another context's agents cannot be built by this context's Worker.
     project_model::phase_workers_provider_agent_cross_context(

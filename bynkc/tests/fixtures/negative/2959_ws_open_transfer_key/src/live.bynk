@@ -1,0 +1,23 @@
+context live
+
+type Frame = { text: String }
+
+// #2959: on Workers the upgrade is routed before the body runs, so a key bound
+// inside the body cannot address the hosting Durable Object.
+service feed from websocket(in: Frame, out: Frame) {
+  on open () -> Effect[()] by v: Visitor {
+    let room = "lobby"
+    let _ <- Room(room).join(connection)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put("one", conn)
+    ()
+  }
+}

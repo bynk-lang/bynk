@@ -4714,6 +4714,82 @@ pub fn provider_constructs_agent(p: &ProviderDecl, is_agent: impl Fn(&str) -> bo
     })
 }
 
+/// #2959: on the Workers target, the edge (`compose.ts`) addresses the Durable
+/// Object hosting a WebSocket connection *before* the `on open` body runs, so the
+/// key of the body's connection transfer must be something it can evaluate on its
+/// own: a route parameter, a constant of the context or a literal
+/// ([`crate::websocket::classify_open_key`]). Any other key — a `let`-bound local,
+/// a field access, a call — used to be emitted as a name `compose.ts` does not
+/// bind (a `tsc` failure) or replaced by the first route parameter (the upgrade
+/// silently reached a different instance than the one the body addressed). On the
+/// bundle target the open is an ordinary surface method that evaluates any key,
+/// so the check is Workers-only, like [`phase_workers_ws_open_split`].
+pub fn phase_workers_ws_open_key(
+    target: BuildTarget,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
+    if target != BuildTarget::Workers {
+        return;
+    }
+    for (name, indices) in groups {
+        if kinds.get(name) != Some(&UnitKind::Context) {
+            continue;
+        }
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        let local_agents: HashSet<String> = table.agents.keys().cloned().collect();
+        for &i in indices {
+            let SourceUnit::Context(ctx) = &parsed[i].unit() else {
+                continue;
+            };
+            for item in &ctx.items {
+                let CommonsItem::Service(service) = item else {
+                    continue;
+                };
+                if !matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
+                    continue;
+                }
+                for open in service
+                    .handlers
+                    .iter()
+                    .filter(|h| matches!(h.kind, HandlerKind::Open))
+                {
+                    let crate::websocket::WsOpenShape::One(target_agent) =
+                        crate::websocket::analyse_open_shape(&open.body, &local_agents)
+                    else {
+                        continue; // a missing or ambiguous transfer has its own diagnostic
+                    };
+                    let key = crate::websocket::classify_open_key(open, target_agent.key, |n| {
+                        table.consts.contains_key(n)
+                    });
+                    if !matches!(key, crate::websocket::WsOpenKey::Other) {
+                        continue;
+                    }
+                    errors.push_for(
+                        Some(&parsed[i].identity_path()),
+                        CompileError::new(
+                            "bynk.ws.open_transfer_key",
+                            target_agent.key.span,
+                            format!(
+                                "the key of this `on open`'s transfer to agent `{}` is not a route parameter, a constant or a literal, so the Workers upgrade cannot address the agent's Durable Object",
+                                target_agent.agent
+                            ),
+                        )
+                        .with_note(
+                            "on Workers the upgrade is routed to the hosting Durable Object before the `on open` body runs; key the agent by a parameter of `on open`, a `const` of the context, or a literal",
+                        ),
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// #2355 follow-up: on the Workers target, a context may not require a
 /// capability whose provider, in another context, constructs that context's
 /// agents. The consumer's composition root builds the provider in-process and
