@@ -54,9 +54,29 @@ service loose {
 		let r <- Stock.select[Loose]("FROM items ORDER BY id", [])
 		match r {
 			Ok(_) => "ok"
-			Err(Decode(_)) => "decode"
-			Err(Sql(_)) => "sql"
+			Err(Decode(e)) => jsonText(e)
+			Err(Sql(e)) => sqlText(e)
 		}
+	}
+}
+
+// #2957: the bound error reaches functions typed at `SqlError` / `JsonError`.
+fn sqlText(e: SqlError) -> String {
+	"sql"
+}
+
+fn jsonText(e: JsonError) -> String {
+	"decode"
+}
+
+// #2957: the same, through `let … else match` and `firstAs`.
+service looseOne {
+	on call() -> Effect[String] given Stock {
+		let Ok(row) <- Stock.firstAs[Loose]("FROM items ORDER BY id", []) else match {
+			Err(Sql(e)) => Effect.pure(sqlText(e)),
+			Err(Decode(e)) => Effect.pure(jsonText(e)),
+		}
+		Effect.pure("ok")
 	}
 }
 
@@ -66,8 +86,8 @@ service missing {
 		let r <- Stock.select[Gone]("FROM items", [])
 		match r {
 			Ok(_) => "ok"
-			Err(Decode(_)) => "decode"
-			Err(Sql(_)) => "sql"
+			Err(Decode(e)) => jsonText(e)
+			Err(Sql(e)) => sqlText(e)
 		}
 	}
 }
