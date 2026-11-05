@@ -585,7 +585,7 @@
     },
     {
       "code": "bynk.suite.env_not_literal",
-      "summary": "An `env { … }` entry's value is not a `String` literal; a Worker's variables and secrets are strings, given verbatim."
+      "summary": "An `env { … }` entry's value is neither a `String` literal nor a `fixture` the same suite declares; a Worker's variables and secrets are strings, given verbatim."
     }
   ],
   "err_expr": [

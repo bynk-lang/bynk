@@ -2811,7 +2811,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.suite.env_not_literal",
-        "An `env { … }` entry's value is not a `String` literal; a Worker's variables and secrets are strings, given verbatim.",
+        "An `env { … }` entry's value is neither a `String` literal nor a `fixture` the same suite declares; a Worker's variables and secrets are strings, given verbatim.",
         &["env_clause"],
     ),
     dg(

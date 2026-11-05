@@ -2440,7 +2440,8 @@ An `env { NAME = "value" … }` clause gives the variables and secrets a suite's
 participants see. It sets the environment and overrides no seam, so it is legal
 at every tier, `system` included.
 
-- **Values.** Each entry's value MUST be a `String` literal
+- **Values.** Each entry's value MUST be a `String` literal or the name of a
+  `fixture` the same suite declares, whose text it is, verbatim
   (`bynk.suite.env_not_literal`).
 - **Names.** A name MUST NOT be given twice at one scope: across a suite's own
   `env` clauses, or across one case's (`bynk.suite.duplicate_env`).

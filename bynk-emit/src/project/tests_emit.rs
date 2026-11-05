@@ -323,7 +323,8 @@ pub(crate) fn process_integration_tests(
                     case,
                     suite_fns: test_suites::SuiteItems::of(d),
                     tier: super::case_effective_tier(case, d),
-                    env: bynk_check::test_env::case_env(d, case),
+                    env: bynk_check::test_env::case_env(d, case, asset_files.fixtures),
+                    env_values: bynk_check::test_env::case_env_values(d, case),
                     source: parsed[i].source(),
                     rel_path: rel_path.clone(),
                     map_source: map_source.clone(),
@@ -449,8 +450,11 @@ struct SystemCaseInput<'a> {
     /// The case's effective tier, which its suite default may supply.
     tier: bynk_syntax::ast::TestTier,
     /// #2134: the variables and secrets the case runs with (its suite's
-    /// `env`, overlaid by its own).
+    /// `env`, overlaid by its own), each fixture as its text.
     env: BTreeMap<String, String>,
+    /// #2956: the same entries as written, for the case runner, which names
+    /// a fixture's module-level constant rather than repeat its text.
+    env_values: BTreeMap<String, bynk_check::test_env::EnvValue>,
     source: &'a str,
     rel_path: String,
     map_source: String,
@@ -756,7 +760,7 @@ fn emit_integration_module(
     // held in a module-level `__bynkEnv`, which each case runner sets first:
     // the case's harness puts it on each participant's `env`, and a Bearer
     // driver signs with its secret.
-    let with_env = cases.iter().any(|c| !c.env.is_empty());
+    let with_env = cases.iter().any(|c| !c.env_values.is_empty());
     if with_env {
         let mut env_decl = TsStmt::raw(
             "// #2134: the running case's `env` entries, set by each case runner.\nlet __bynkEnv: globalThis.Record<string, string> = {};\n",
@@ -920,11 +924,7 @@ fn emit_integration_module(
         let mut case_out = String::new();
         case_out.push_str("  try {\n");
         if with_env {
-            let entries: Vec<(String, TsExpr)> = input
-                .env
-                .iter()
-                .map(|(k, v)| (k.clone(), str_lit(v.clone())))
-                .collect();
+            let entries = env_entries(&input.env_values);
             crate::emitter::extend_printed_at(
                 &mut case_out,
                 vec![TsStmt::assign(
@@ -3939,7 +3939,7 @@ fn emit_test_module(
                 &runner_name,
                 test_suites::SuiteItems::of(test_decl),
                 case,
-                with_env.then(|| bynk_check::test_env::case_env(test_decl, case)),
+                with_env.then(|| bynk_check::test_env::case_env_values(test_decl, case)),
                 deps_factory,
                 target_name,
                 target_kind,
@@ -7410,7 +7410,7 @@ fn emit_test_case_function(
     // #2134: the case's `env` entries, when the module holds `__bynkEnv`
     // (some case in it has entries): set first, and cleared on the way out
     // so a later `property` runs with none.
-    env: Option<BTreeMap<String, String>>,
+    env: Option<BTreeMap<String, bynk_check::test_env::EnvValue>>,
     deps_factory: &str,
     target_name: &str,
     target_kind: UnitKind,
@@ -7446,10 +7446,7 @@ fn emit_test_case_function(
         ));
     }
     if let Some(env) = &env {
-        let entries: Vec<(String, TsExpr)> = env
-            .iter()
-            .map(|(k, v)| (k.clone(), str_lit(v.clone())))
-            .collect();
+        let entries = env_entries(env);
         out.push_str(&bynk_ts::print_stmt(
             &TsStmt::assign(ident("__bynkEnv"), TsExpr::object(entries), None),
             2,
@@ -10463,6 +10460,21 @@ pub(crate) struct TestAssetFiles<'a> {
     pub(crate) bytes: &'a BTreeMap<String, Vec<u8>>,
     /// #2841: the text of each declared suite `fixture` file, by normalised path.
     pub(crate) fixtures: &'a BTreeMap<String, String>,
+}
+
+/// #2134/#2956: a case's `env` entries as the object `__bynkEnv` is set to: a
+/// literal as itself, and a fixture as its module-level constant
+/// ([`fixture_ident`]), so its text is in the module once.
+fn env_entries(env: &BTreeMap<String, bynk_check::test_env::EnvValue>) -> Vec<(String, TsExpr)> {
+    env.iter()
+        .map(|(k, v)| {
+            let value = match v {
+                bynk_check::test_env::EnvValue::Literal(s) => str_lit(s.clone()),
+                bynk_check::test_env::EnvValue::Fixture(path) => ident(fixture_ident(path)),
+            };
+            (k.clone(), value)
+        })
+        .collect()
 }
 
 /// #2841: the TypeScript identifier of the module-level constant holding a
