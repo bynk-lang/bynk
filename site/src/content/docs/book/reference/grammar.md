@@ -104,12 +104,17 @@ A string literal, in one of three forms:
   without changing the value, and a line indented less is
   `bynk.lex.multiline_indent`. The value's line endings are always `\n`,
   whatever the file's; write `\r\n` explicitly.
+- **Language tag** (#2958): a multi-line string may name its text's language
+  directly after the opening delimiter, `"""sql` or `r"""regex`, so editors
+  highlight the body as that language. The tag is `[a-z][a-z0-9_-]*` with no
+  space before it, and is not part of the value. An unknown tag is a plain
+  string.
 
 ```bynk,fragment
 fn statusLine() -> String { "HTTP/1.1 200 OK\r\n" }
 fn digits() -> String { r"\d+\.\d+" }
 fn query() -> String {
-	"""
+	"""sql
 	SELECT id, total
 	  FROM orders
 	 WHERE customer = ?

@@ -1,0 +1,20 @@
+suite shop.queries {
+  case "a tag is not part of the value" {
+    expect insert() == insertUntagged()
+    expect insert() == "INSERT INTO deliveries (id, event) VALUES\n  ('a', 'push')"
+  }
+
+  case "a tagged string interpolates" {
+    expect page("Hi") == "<h1>Hi</h1>"
+  }
+
+  case "a tagged raw string keeps its backslashes" {
+    expect datePattern() == "^\\d{4}-\\d{2}-\\d{2}$"
+    expect isDate("2026-11-05")
+    expect !isDate("05/11/2026")
+  }
+
+  case "an unknown tag is a plain string" {
+    expect notes() == "plain text"
+  }
+}

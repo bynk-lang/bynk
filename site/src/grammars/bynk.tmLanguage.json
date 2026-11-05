@@ -8,6 +8,8 @@
     { "include": "#doc-line" },
     { "include": "#line-comment" },
     { "include": "#annotations" },
+    { "include": "#keyword-members" },
+    { "include": "#keyword-labels" },
     { "include": "#keywords" },
     { "include": "#builtins" },
     { "include": "#types" },
@@ -179,6 +181,32 @@
         "2": { "name": "entity.name.function.decorator.bynk" }
       }
     },
+    "keyword-labels": {
+      "comment": "#79 (bynk#2837): a reserved word names a field where it is a label, followed by `:` (`{ type: String }`, `Account { type: t, .. }`, `Push(from: …)`). The words are those #keywords and #constants colour unconditionally; a guarded contextual word (`key`, `store`, `trace`, …) is already an identifier before `:`. `::` and `:=` are not a label's colon.",
+      "name": "variable.other.property.bynk",
+      "match": "\\b(commons|context|adapter|binding|suite|case|property|type|event|asset|embed|const|fn|capability|provides|stub|service|agent|actor|invariant|transition|requires|ensures|exports|uses|consumes|protocol|messages|if|else|let|do|match|is|on|given|call|by|as|expect|from|http|cron|queue|websocket|schedule|message|self|opaque|transparent|where|implies|enum|record|called|never|once|times|before|returns|each|fails|true|false)\\b(?=\\s*:(?![:=]))"
+    },
+    "keyword-members": {
+      "comment": "#79 (bynk#2837): a reserved word after `.` on the same line is a member: a method when a call or type arguments follow (`Sorted.from(xs)`, `fn Sorted.from(…)`), a field otherwise (`a.type`). A one-line match keeps the compiler's same-line rule; `(?<!\\.)` leaves `..` and `...` alone. The words are #keyword-labels' plus `trace` and `faults`, whose guards a member can trip.",
+      "patterns": [
+        {
+          "match": "(?<!\\.)(\\.)[ \\t]*\\b(commons|context|adapter|binding|suite|case|property|type|event|asset|embed|const|fn|capability|provides|stub|service|agent|actor|invariant|transition|requires|ensures|exports|uses|consumes|protocol|messages|if|else|let|do|match|is|on|given|call|by|as|expect|from|http|cron|queue|websocket|schedule|message|self|opaque|transparent|where|implies|enum|record|called|never|once|times|before|returns|each|fails|true|false|trace|faults)\\b(?=\\s*[(\\[])",
+          "captures": {
+            "2": {
+              "name": "entity.name.function.member.bynk"
+            }
+          }
+        },
+        {
+          "match": "(?<!\\.)(\\.)[ \\t]*\\b(commons|context|adapter|binding|suite|case|property|type|event|asset|embed|const|fn|capability|provides|stub|service|agent|actor|invariant|transition|requires|ensures|exports|uses|consumes|protocol|messages|if|else|let|do|match|is|on|given|call|by|as|expect|from|http|cron|queue|websocket|schedule|message|self|opaque|transparent|where|implies|enum|record|called|never|once|times|before|returns|each|fails|true|false|trace|faults)\\b",
+          "captures": {
+            "2": {
+              "name": "variable.other.property.bynk"
+            }
+          }
+        }
+      ]
+    },
     "keywords": {
       "patterns": [
         {
@@ -328,16 +356,128 @@
       ]
     },
     "strings": {
-      "comment": "String literals (#2619): raw multi-line, multi-line, raw (any number of `#`), and ordinary. A raw literal has no escapes and no interpolation. Order matters: `r\"\"\"` and `\"\"\"` before `\"`.",
+      "comment": "String literals (#2619): raw multi-line, multi-line, raw (any number of `#`), and ordinary. A raw literal has no escapes and no interpolation. Order matters: `r\"\"\"` and `\"\"\"` before `\"`. #2958: a multi-line literal may carry a language tag (`\"\"\"sql`). A known tag embeds that language's grammar in the body: one rule per tag, ahead of the untagged rules, since a TextMate include cannot be chosen by a capture. Any other tag is a plain string. This file is a copy of vscode-bynk's syntaxes/bynk.tmLanguage.json: change both together.",
       "patterns": [
         {
+          "begin": "\\br(\"\"\")(sql)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
+          "contentName": "meta.embedded.block.sql",
+          "patterns": [
+            { "include": "source.sql" }
+          ]
+        },
+        {
+          "begin": "\\br(\"\"\")(json)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
+          "contentName": "meta.embedded.block.json",
+          "patterns": [
+            { "include": "source.json" }
+          ]
+        },
+        {
+          "begin": "\\br(\"\"\")(html)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
+          "contentName": "meta.embedded.block.html",
+          "patterns": [
+            { "include": "text.html.basic" }
+          ]
+        },
+        {
+          "begin": "\\br(\"\"\")(css)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
+          "contentName": "meta.embedded.block.css",
+          "patterns": [
+            { "include": "source.css" }
+          ]
+        },
+        {
+          "begin": "\\br(\"\"\")(js)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
+          "contentName": "meta.embedded.block.js",
+          "patterns": [
+            { "include": "source.js" }
+          ]
+        },
+        {
+          "begin": "(\"\"\")(sql)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
+          "contentName": "meta.embedded.block.sql",
+          "patterns": [
+            { "include": "#string-escape" },
+            { "include": "#interpolation" },
+            { "include": "source.sql" }
+          ]
+        },
+        {
+          "begin": "(\"\"\")(json)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
+          "contentName": "meta.embedded.block.json",
+          "patterns": [
+            { "include": "#string-escape" },
+            { "include": "#interpolation" },
+            { "include": "source.json" }
+          ]
+        },
+        {
+          "begin": "(\"\"\")(html)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
+          "contentName": "meta.embedded.block.html",
+          "patterns": [
+            { "include": "#string-escape" },
+            { "include": "#interpolation" },
+            { "include": "text.html.basic" }
+          ]
+        },
+        {
+          "begin": "(\"\"\")(css)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
+          "contentName": "meta.embedded.block.css",
+          "patterns": [
+            { "include": "#string-escape" },
+            { "include": "#interpolation" },
+            { "include": "source.css" }
+          ]
+        },
+        {
+          "begin": "(\"\"\")(js)[ \\t]*$",
+          "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
+          "contentName": "meta.embedded.block.js",
+          "patterns": [
+            { "include": "#string-escape" },
+            { "include": "#interpolation" },
+            { "include": "source.js" }
+          ]
+        },
+        {
           "name": "string.quoted.triple.raw.bynk",
-          "begin": "\\br\"\"\"",
+          "begin": "\\br\"\"\"([a-z][a-z0-9_-]*)?",
+          "beginCaptures": { "1": { "name": "entity.other.attribute-name.language-tag.bynk" } },
           "end": "\"\"\""
         },
         {
           "name": "string.quoted.triple.bynk",
-          "begin": "\"\"\"",
+          "begin": "\"\"\"([a-z][a-z0-9_-]*)?",
+          "beginCaptures": { "1": { "name": "entity.other.attribute-name.language-tag.bynk" } },
           "end": "\"\"\"",
           "patterns": [
             { "include": "#string-escape" },

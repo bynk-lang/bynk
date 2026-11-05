@@ -64,8 +64,18 @@ export default defineConfig({
       plugins: [starlightLinksValidator({ exclude: ["/docs/api/**"] })],
       // Faithful `bynk` highlighting from the editor's own grammar; the fenced
       // language id is `bynk` (the grammar's own name is the display "Bynk").
+      // #2958: a tagged multi-line string (`"""sql`) embeds that language's
+      // grammar, so the languages the grammar includes load with it.
       expressiveCode: {
-        shiki: { langs: [{ ...bynkGrammar, name: "bynk" }] },
+        shiki: {
+          langs: [
+            {
+              ...bynkGrammar,
+              name: "bynk",
+              embeddedLangsLazy: ["sql", "json", "html", "css", "javascript"],
+            },
+          ],
+        },
       },
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/bynk-lang/bynk" }],
       // The Book sidebar is generated from src/SUMMARY.md; the By Example and
