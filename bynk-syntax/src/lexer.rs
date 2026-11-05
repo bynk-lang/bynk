@@ -1404,10 +1404,9 @@ fn multiline_opener(bytes: &[u8], body: usize) -> Option<(std::ops::Range<usize>
     let mut p = body;
     if bytes.get(p).is_some_and(u8::is_ascii_lowercase) {
         p += 1;
-        while bytes
-            .get(p)
-            .is_some_and(|&b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
-        {
+        while bytes.get(p).is_some_and(|&b| {
+            b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-'
+        }) {
             p += 1;
         }
     }
@@ -2841,17 +2840,18 @@ mod tests {
             "\"\"\"x",
             "\"\"\"my-lang_2",
         ] {
-            assert_eq!(string_value(&format!("{opener}{body}")), plain, "{opener:?}");
+            assert_eq!(
+                string_value(&format!("{opener}{body}")),
+                plain,
+                "{opener:?}"
+            );
         }
         // CRLF after a tag, and the raw form.
         assert_eq!(
             string_value("\"\"\"sql\r\n  a\r\n  \"\"\""),
             string_value("\"\"\"\r\n  a\r\n  \"\"\"")
         );
-        assert_eq!(
-            string_value("r\"\"\"regex\n  ^\\d+$\n  \"\"\""),
-            "^\\d+$"
-        );
+        assert_eq!(string_value("r\"\"\"regex\n  ^\\d+$\n  \"\"\""), "^\\d+$");
         // An interpolating tagged literal is still an interpolated string.
         assert_eq!(
             kinds("\"\"\"sql\n  hi \\(name)\n  \"\"\""),
@@ -2864,13 +2864,13 @@ mod tests {
     fn multiline_malformed_tags() {
         let cat = |src: &str| tokenize(src).unwrap_err().category;
         for opener in [
-            "\"\"\" sql",   // a space before the tag
-            "\"\"\"sql x",  // text after the tag
-            "\"\"\"SQL",    // uppercase
-            "\"\"\"1sql",   // starts with a digit
-            "\"\"\"-sql",   // starts with punctuation
-            "\"\"\"sql.x",  // a character outside the tag alphabet
-            "\"\"\"   ",    // trailing spaces with no tag, as before
+            "\"\"\" sql",  // a space before the tag
+            "\"\"\"sql x", // text after the tag
+            "\"\"\"SQL",   // uppercase
+            "\"\"\"1sql",  // starts with a digit
+            "\"\"\"-sql",  // starts with punctuation
+            "\"\"\"sql.x", // a character outside the tag alphabet
+            "\"\"\"   ",   // trailing spaces with no tag, as before
             "r\"\"\" sql",
         ] {
             assert_eq!(
