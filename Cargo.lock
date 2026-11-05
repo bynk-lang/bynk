@@ -304,6 +304,8 @@ version = "0.508.11"
 dependencies = [
  "bynk-check",
  "bynk-fmt",
+ "bynk-ir",
+ "bynk-lower",
  "bynk-project",
  "bynk-syntax",
  "serde_json",

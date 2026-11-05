@@ -961,6 +961,10 @@ pub fn describe_system_job_address_at<'s>(
         .last()
         .map_or(before.len(), |(i, _)| i)..];
     let target = suite.target.joined();
+    // `ServiceProtocol` rather than the model's `ProtocolIr`, under M-1's domain
+    // clause (the system-model ADR, crate-hygiene B1, #2939). The buffers here
+    // are re-parsed with recovery and never checked, and `ProtocolIr` needs a
+    // checked program.
     let is_job_service = std::iter::once(source).chain(others).any(|src| {
         let Ok(tokens) = tokenize(src) else {
             return false;
@@ -1252,10 +1256,20 @@ pub fn constraint_token_spans(source: &str) -> Vec<Span> {
     spans
 }
 
-/// The `Cache-Control` value a well-formed `@cache` emits — the same reading
-/// `bynk_lower::lower_route_cache_ir` makes, restated here because the IDE does
-/// not depend on the lowering crate. `None` when `maxAge` is missing or not a
-/// whole-second `Duration` literal (the checker flags those).
+/// The `Cache-Control` value a well-formed `@cache` emits. It is the same
+/// reading `bynk_lower::lower_route_cache_ir` makes, but taken per annotation
+/// over a parse, so it stays on the AST under M-1's domain clause (the
+/// system-model ADR, crate-hygiene B1, #2939).
+///
+/// Annotation hover must answer on a buffer that doesn't certify. There the
+/// model's reading differs on three cases the checker rejects:
+/// - a second `@cache`: the model reads the first, while hover reads the
+///   hovered one
+/// - `@cache` off `GET`: the model gives `None`
+/// - fractional seconds: the model truncates
+///
+/// `None` when `maxAge` is missing or not a whole-second `Duration` literal
+/// (the checker flags those).
 fn cache_control_of(ann: &Annotation) -> Option<String> {
     let mut max_age_secs = None;
     let mut scope = "private";
@@ -2862,6 +2876,15 @@ pub(crate) fn describe_asset(a: &AssetDecl) -> String {
 
 /// v0.123 (slice 2): the `from <protocol>` header suffix for a service, or the
 /// empty string for a plain `on call` service.
+///
+/// This matches the AST's `ServiceProtocol` rather than the model's
+/// `ProtocolIr`, under M-1's domain clause (the system-model ADR,
+/// crate-hygiene B1, #2939):
+/// - It renders the protocol as the user spelled it (`type_ref_str`), which
+///   makes it a printer, like `bynk-fmt`'s `format_service`.
+/// - Hover and the documentation page hold only a recovering parse, while
+///   `ProtocolIr` resolves its frame and event types and needs a checked
+///   program.
 fn service_protocol_suffix(p: &ServiceProtocol) -> String {
     match p {
         ServiceProtocol::Call => String::new(),
@@ -2920,16 +2943,19 @@ fn limits_summary(limits: &LimitsPolicy) -> String {
 }
 
 /// v0.123 (slice 2): the `on …` line for a handler — its route/protocol shape.
+/// Read from the system model's [`bynk_ir::IrHandlerKind`] (M-1, crate-hygiene
+/// B1, #2939), which `bynk_lower::lower_handler_kind_ir` builds from any parse.
 pub(crate) fn handler_line(h: &Handler) -> String {
-    match &h.kind {
-        HandlerKind::Call => "on call".to_string(),
-        HandlerKind::Http { method, path } => format!("on {}(\"{}\")", method.as_str(), path),
-        HandlerKind::Cron { expr } => format!("on schedule(\"{expr}\")"),
-        HandlerKind::Message => "on message".to_string(),
-        HandlerKind::Open => "on open".to_string(),
-        HandlerKind::Close => "on close".to_string(),
-        HandlerKind::Event => "on event".to_string(),
-        HandlerKind::Rejected => "on rejected".to_string(),
+    use bynk_ir::IrHandlerKind;
+    match bynk_lower::lower_handler_kind_ir(&h.kind) {
+        IrHandlerKind::Call => "on call".to_string(),
+        IrHandlerKind::Http { method, path } => format!("on {}(\"{}\")", method.as_str(), path),
+        IrHandlerKind::Cron { expr } => format!("on schedule(\"{expr}\")"),
+        IrHandlerKind::Message => "on message".to_string(),
+        IrHandlerKind::Open => "on open".to_string(),
+        IrHandlerKind::Close => "on close".to_string(),
+        IrHandlerKind::Event => "on event".to_string(),
+        IrHandlerKind::Rejected => "on rejected".to_string(),
     }
 }
 

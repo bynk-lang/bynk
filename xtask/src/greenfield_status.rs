@@ -1,6 +1,6 @@
 //! `cargo xtask greenfield-status` — the probe harness (track doc §8, proposal #999).
 //!
-//! Twenty-one probes measuring the tree against `design/bynk-greenfield-compiler.md`:
+//! Twenty-two probes measuring the tree against `design/bynk-greenfield-compiler.md`:
 //! the twelve in track doc §8, `emit_abi_shapes` (ADR 0310's probe, #999 Decision E —
 //! this slice measures the emit-ABI enumeration guard but does not wire it; wiring is
 //! packaging-track work), phase 7's own four — `ts_writes`, `ts_any`,
@@ -10,13 +10,14 @@
 //! Q5/ADR 0414 — see `design/tracks/incrementality.md` §5), plus the IR cutover
 //! track's own adoption probe, `unconsumed_ir_items` (Slice D3 of #1542 — the gate the
 //! 30 August 2026 post-restructuring review's Part 5 §8 asked for), and the
-//! runtime-semantics track's `diagnostic_coverage` (#1662, G2 of #1648).
+//! runtime-semantics track's `diagnostic_coverage` (#1662, G2 of #1648), and the
+//! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939).
 //!
-//! **Sixteen are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Seventeen are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -84,7 +85,7 @@ impl Report {
 }
 
 /// Run every probe against the tree rooted at `root` (the repo root). Used by the CLI's
-/// full report; the gating test uses the sixteen gated probes alone
+/// full report; the gating test uses the seventeen gated probes alone
 /// ([`gated_disagreements`]) so it never pays for a workspace-wide clippy pass
 /// (`wildcard_arms`) just to check the probes that are actually diffed.
 pub fn run(root: &Path) -> Report {
@@ -96,7 +97,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 16] = [
+pub const GATED_PROBES: [&str; 17] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -113,9 +114,10 @@ pub const GATED_PROBES: [&str; 16] = [
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
+    "model_readers_beyond_emit",
 ];
 
-/// The sixteen gated (zero/closure) probes only — what [`gated_disagreements`] diffs.
+/// The seventeen gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -134,6 +136,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
+        model_readers_beyond_emit(root),
     ]
 }
 
@@ -2372,6 +2375,61 @@ fn unconsumed_ir_items(root: &Path) -> Probe {
     }
 }
 
+// --- Gated probe 17: model_readers_beyond_emit -------------------------------
+
+/// Crate-hygiene track §6.2 M-3, added by slice B1 (#2939), with the
+/// system-model ADR. It counts the system model's items (the column-zero `pub`
+/// items of `bynk-ir` and `bynk-lower`, the same set [`unconsumed_ir_items`]
+/// scans) that have a production reader in a workspace crate other than the
+/// two owners **and `bynk-emit`**.
+///
+/// [`unconsumed_ir_items`] asks whether every item has *a* reader. This asks how
+/// far the model reaches past the emitter, which was its only consumer until
+/// B1. The reading names the items, so a move is reviewable.
+///
+/// **It can only rise.** The row is gated exact-match like every gated row, so
+/// each move is named in a pending file's `probes:`. On top of that,
+/// `xtask/tests/greenfield_status.rs`'s `model_readers_beyond_emit_never_falls`
+/// fails whenever a fresh count is below the committed one, whatever `probes:`
+/// says. A fall means some consumer went back to re-deriving a fact the model
+/// carries, which M-1 calls a defect.
+///
+/// Same text-level limits as [`unconsumed_ir_items`]: a name shared with an
+/// unrelated item in another crate over-counts, which errs toward a higher
+/// reading and never blocks a PR.
+fn model_readers_beyond_emit(root: &Path) -> Probe {
+    let owners = ["bynk-ir", "bynk-lower"];
+    let mut owner_files = Vec::new();
+    for owner in owners {
+        for (path, contents) in rust_files_relative(&root.join(owner).join("src")) {
+            owner_files.push((owner.to_string(), path, contents));
+        }
+    }
+    let consumer_files = workspace_crate_src_files(root);
+    let excluded = ["bynk-ir", "bynk-lower", "bynk-emit"];
+    let (read, _) = pub_items_by_readership(&owners, &excluded, &owner_files, &consumer_files);
+    Probe {
+        name: "model_readers_beyond_emit",
+        gated: true,
+        reads: model_readers_reading(&read),
+    }
+}
+
+/// `N (a, b, …)`, or `0`. [`model_readers_count`] parses it back.
+fn model_readers_reading(read: &[String]) -> String {
+    if read.is_empty() {
+        "0".to_string()
+    } else {
+        format!("{} ({})", read.len(), read.join(", "))
+    }
+}
+
+/// The leading count of a `model_readers_beyond_emit` reading, which is what
+/// the floor test compares. `None` if the reading doesn't start with a count.
+pub fn model_readers_count(reads: &str) -> Option<usize> {
+    reads.split_whitespace().next()?.parse().ok()
+}
+
 /// Every `.rs` file under `<crate>/src` for every workspace crate — each entry
 /// tagged with its crate directory name so [`unconsumed_pub_items`] can exclude
 /// an item's own crate. A workspace crate is any immediate child of `root` with
@@ -2418,6 +2476,25 @@ fn unconsumed_pub_items(
     owner_files: &[(String, PathBuf, String)],
     consumer_files: &[(String, PathBuf, String)],
 ) -> Vec<String> {
+    pub_items_by_readership(owners, owners, owner_files, consumer_files).1
+}
+
+/// The shared scan behind [`unconsumed_pub_items`] and
+/// [`model_readers_beyond_emit`]. It returns `(read, unread)`, each as sorted,
+/// deduplicated `crate::item` names, over every column-zero `pub` item in
+/// `owner_files`.
+///
+/// An item counts as read when a non-comment, non-test line names it as a whole
+/// word in a file belonging to a crate **not** in `excluded`. `excluded` always
+/// contains the owners, and may add more crates: the M-3 ratchet adds
+/// `bynk-emit`.
+fn pub_items_by_readership(
+    owners: &[&str],
+    excluded: &[&str],
+    owner_files: &[(String, PathBuf, String)],
+    consumer_files: &[(String, PathBuf, String)],
+) -> (Vec<String>, Vec<String>) {
+    debug_assert!(owners.iter().all(|o| excluded.contains(o)));
     let mut items: Vec<(String, String)> = Vec::new();
     for (krate, _, contents) in owner_files {
         let lines: Vec<&str> = contents.lines().collect();
@@ -2434,10 +2511,10 @@ fn unconsumed_pub_items(
     items.sort();
     items.dedup();
 
-    // Production, non-owner lines only — preprocessed once.
+    // Production lines outside every excluded crate only — preprocessed once.
     let consumer_lines: Vec<&str> = consumer_files
         .iter()
-        .filter(|(krate, _, _)| !owners.contains(&krate.as_str()))
+        .filter(|(krate, _, _)| !excluded.contains(&krate.as_str()))
         .flat_map(|(_, _, contents)| {
             let lines: Vec<&str> = contents.lines().collect();
             let ranges = test_mod_ranges(&lines);
@@ -2450,11 +2527,15 @@ fn unconsumed_pub_items(
         })
         .collect();
 
-    items
+    let (read, unread): (Vec<_>, Vec<_>) = items
         .iter()
-        .filter(|(_, name)| !consumer_lines.iter().any(|line| contains_word(line, name)))
-        .map(|(owner, name)| format!("{owner}::{name}"))
-        .collect()
+        .partition(|(_, name)| consumer_lines.iter().any(|line| contains_word(line, name)));
+    let names = |v: Vec<&(String, String)>| -> Vec<String> {
+        v.into_iter()
+            .map(|(owner, name)| format!("{owner}::{name}"))
+            .collect()
+    };
+    (names(read), names(unread))
 }
 
 /// The name of a column-zero `pub` item declaration, if `line` is one: `pub`
@@ -2921,7 +3002,8 @@ pub fn render_table(report: &Report) -> String {
          `verbatim_origins`/`verbatim_sites` added by P7.5 (#1307); \
          `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); \
          `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); \
-         `diagnostic_coverage` added by #1662. Sixteen \
+         `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by \
+         crate-hygiene B1 (#2939). Seventeen \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -3524,6 +3606,51 @@ mod tests {
             unconsumed_pub_items(&["bynk-ir", "bynk-lower"], &owners, &consumers),
             vec!["bynk-ir::IrExpr", "bynk-lower::lower_expr_ir"]
         );
+    }
+
+    /// Crate-hygiene B1 (#2939), M-3: `bynk-emit`'s reads don't count toward
+    /// `model_readers_beyond_emit`, a reader in any other crate does, and the
+    /// reading's count parses back for the floor test.
+    #[test]
+    fn model_readers_beyond_emit_counts_only_readers_past_the_emitter() {
+        let owners = files(&[
+            (
+                "bynk-ir",
+                "lib.rs",
+                "pub enum Kind { A }\npub struct Shape;\n",
+            ),
+            (
+                "bynk-lower",
+                "lib.rs",
+                "pub fn lower_kind() -> Kind { Kind::A }\n",
+            ),
+        ]);
+        let consumers = files(&[
+            (
+                "bynk-lower",
+                "lib.rs",
+                "pub fn lower_kind() -> Kind { Kind::A }\n",
+            ),
+            (
+                "bynk-emit",
+                "a.rs",
+                "fn f(s: Shape) -> Kind { bynk_lower::lower_kind() }\n",
+            ),
+            (
+                "bynk-ide",
+                "b.rs",
+                "// Shape is mentioned only in a comment\nfn g() -> bynk_ir::Kind { bynk_lower::lower_kind() }\n",
+            ),
+        ]);
+        let excluded = ["bynk-ir", "bynk-lower", "bynk-emit"];
+        let (read, unread) =
+            pub_items_by_readership(&["bynk-ir", "bynk-lower"], &excluded, &owners, &consumers);
+        assert_eq!(read, vec!["bynk-ir::Kind", "bynk-lower::lower_kind"]);
+        assert_eq!(unread, vec!["bynk-ir::Shape"]);
+        let reading = model_readers_reading(&read);
+        assert_eq!(reading, "2 (bynk-ir::Kind, bynk-lower::lower_kind)");
+        assert_eq!(model_readers_count(&reading), Some(2));
+        assert_eq!(model_readers_count("0"), Some(0));
     }
 
     /// One item declared in two files of the same crate (a split module) is

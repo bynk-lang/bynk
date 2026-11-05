@@ -36,12 +36,13 @@ use std::process::ExitCode;
 
 use bynk_check::wire::{self, WireBody, WireInst, WireModel, WireRef, WireType};
 use bynk_ide::wire_contract::{
-    BoundaryKind, ResponseOrigin, WireContractModel, real_context_count, wire_contract_for_service,
+    BoundaryKind, IrHttpMethod, ResponseOrigin, WireContractModel, real_context_count,
+    wire_contract_for_service,
 };
 use bynk_ide::{AnalysisRoots, ContextBoundaryInfo, ProjectDiagnostics, SchemaLock};
 use bynk_syntax::ast::{
-    BaseType, Handler, HttpMethod, HttpVariantPayload, JsonOptions, PredKind, ServiceDecl,
-    ServiceProtocol, TypeDecl, TypeRef, effective_json_options, http_variant,
+    BaseType, Handler, HttpVariantPayload, JsonOptions, PredKind, ServiceDecl, ServiceProtocol,
+    TypeDecl, TypeRef, effective_json_options, http_variant,
 };
 use bynk_syntax::error::Severity;
 use serde_json::{Map, Value, json};
@@ -490,7 +491,7 @@ fn operation(
     sel: &Selected,
     handler: &Handler,
     model: &WireContractModel,
-    method: HttpMethod,
+    method: IrHttpMethod,
     path: &str,
 ) -> Value {
     let mut op = Map::new();
@@ -595,7 +596,7 @@ fn query_parameters(r: &Renderer, components: &mut Components, ty: &TypeRef) -> 
 }
 
 /// `api` + `GET` + `/check/:client` → `api_get_check_client`.
-fn operation_id(service: &str, method: HttpMethod, path: &str) -> String {
+fn operation_id(service: &str, method: IrHttpMethod, path: &str) -> String {
     let mut id = format!("{service}_{}", method.as_str().to_lowercase());
     for seg in path.split('/').filter(|s| !s.is_empty()) {
         id.push('_');
