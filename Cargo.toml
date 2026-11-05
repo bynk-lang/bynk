@@ -83,7 +83,6 @@ bynk-strip = { path = "bynk-strip", version = "0.508.4" }
 bynk-ide = { path = "bynk-ide", version = "0.508.4" }
 bynkc = { path = "bynkc", version = "0.508.4" }
 bynk-fmt = { path = "bynk-fmt", version = "0.508.4" }
-bynk-grammar = { path = "bynk-grammar", version = "0.508.4" }
 # #1560: no `version` here, unlike every entry above — `bynk-testkit` is
 # `publish = false` (never on crates.io) and only ever a dev-dependency of
 # `bynk`/`bynkc`/`bynk-lsp`. A `version` alongside `path` makes `cargo publish`
@@ -95,6 +94,9 @@ bynk-grammar = { path = "bynk-grammar", version = "0.508.4" }
 # integration tests that use it, and workspace-local `cargo test --workspace`
 # (which does exercise them) resolves this by path regardless.
 bynk-testkit = { path = "bynk-testkit" }
+# Same reasoning as `bynk-testkit` above: `bynk-grammar` is `publish = false`
+# (published-set rule, H-4), a dev-dependency of `bynkc` only. Path-only.
+bynk-grammar = { path = "bynk-grammar" }
 ariadne = "0.6"
 clap = { version = "4", features = ["derive"] }
 logos = "0.16"

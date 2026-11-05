@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Renders the Bynk tree-sitter grammar to EBNF for the language reference."
+publish = false
 keywords = ["compiler", "dsl", "grammar", "ebnf", "language"]
 categories = ["compilers", "parser-implementations"]
 

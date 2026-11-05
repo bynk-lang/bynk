@@ -516,12 +516,12 @@ jobs:
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
       - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1
         id: auth
-      - name: cargo publish (bynk-grammar -> bynk-std -> bynk-syntax -> bynk-project -> bynk-registry-core -> bynk-ts -> bynk-render -> bynk-fmt -> bynk-check -> bynk-ir -> bynk-lower -> bynk-emit -> bynk-strip -> bynk-ide -> bynk-driver -> bynkc -> bynk -> bynk-lsp)
+      - name: cargo publish (bynk-std -> bynk-syntax -> bynk-project -> bynk-registry-core -> bynk-ts -> bynk-render -> bynk-fmt -> bynk-check -> bynk-ir -> bynk-lower -> bynk-emit -> bynk-strip -> bynk-ide -> bynk-driver -> bynkc -> bynk -> bynk-lsp)
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
           ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
-          for crate in bynk-grammar bynk-std bynk-syntax bynk-project bynk-registry-core bynk-ts bynk-render bynk-fmt bynk-check bynk-ir bynk-lower bynk-emit bynk-strip bynk-ide bynk-driver bynkc bynk bynk-lsp; do
+          for crate in bynk-std bynk-syntax bynk-project bynk-registry-core bynk-ts bynk-render bynk-fmt bynk-check bynk-ir bynk-lower bynk-emit bynk-strip bynk-ide bynk-driver bynkc bynk bynk-lsp; do
             if curl -sfL -A "bynk-release (github actions; bynk-lang/bynk)" \
                  "https://crates.io/api/v1/crates/$crate/$ver" -o /dev/null; then
               echo "::notice::$crate@$ver already on crates.io — skipping"
