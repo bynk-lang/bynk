@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Renders the Bynk tree-sitter grammar to EBNF for the language reference."
+description = "Renders the Bynk tree-sitter grammar to EBNF for the language reference. Final crates.io release; continues unpublished in the bynk-lang/bynk repository."
 keywords = ["compiler", "dsl", "grammar", "ebnf", "language"]
 categories = ["compilers", "parser-implementations"]
 
