@@ -203,10 +203,16 @@ already route through the IR):
 | File | `HandlerKind::` | `ServiceProtocol::` | `HttpMethod::` |
 |---|---|---|---|
 | `bynk-ide/src/sequence.rs` | 8 | 0 | 0 |
-| `bynk-ide/src/wire_contract.rs` | 9 | 0 | 1 |
+| `bynk-ide/src/wire_contract.rs` | 9 | 0 | 0 |
 | `bynk-ide/src/symbols.rs` | 8 | 8 | 0 |
+| `bynk-ide/src/hover.rs` | 1 | 0 | 0 |
 | `bynk/src/openapi.rs` | 2 | 2 | 0 |
 | `bynk-driver/src/smoke.rs` | 2 | 1 | 1 |
+
+*Re-counted for B1 (#2939) at `703b659d9`, with the gated probes' rules: non-comment lines outside
+`test_mod_ranges`. `wire_contract.rs`'s one `HttpMethod::` hit is in its test module, and `hover.rs:731`
+was missing. `bynk-fmt/src/fmt.rs` matches the same variants as the source printer and is out of
+scope, as M-1's domain clause says.*
 
 R6.16 (handler-invocation origin independence) gave the emitter one answer to "what is this
 handler?" The editor, the OpenAPI generator and the smoke runner don't share it.
@@ -228,11 +234,18 @@ playground and the smoke runner. `bynk-lower` stays the builder from a checked p
 
 - **M-1 One source per fact.** A consumer that matches the AST for a fact the model carries is a
   defect.
+  - **Domain clause** (amended by B1, #2939, with the system-model ADR): M-1 applies where the
+    consumer holds the model's input. The model is total over certified programs (M-2). A consumer
+    answering over an uncertified, recovering parse may read the AST for a fact whose lowering needs
+    a checked program.
+  - A source-spelling renderer is a printer, as `bynk-fmt` is, not a model reader.
+  - Each such site cites this clause in a comment.
 - **M-2 Total over certified programs.** A gap is a missing variant, not a fallback. The existing
   `Ty::Unit` fallbacks in `bynk-lower` are documented exceptions to keep or retire, not a precedent.
 - **M-3 Every item has a reader outside the model.** This is `unconsumed_ir_items` as it stands.
   B1 adds a second ratchet: the number of model items with a reader outside `bynk-emit` can only
-  rise.
+  rise. It's the gated probe `model_readers_beyond_emit`, plus a floor test that fails on a fall
+  even when a pending file's `probes:` acknowledges it.
 - **M-4 No new AST embedding.** The two documented ones (`TypeShape::Refined` carrying `BaseType`
   and `Refinement`, ADR 0366) stay. A new one needs the same written justification.
 
@@ -286,6 +299,19 @@ model:
 - removes the AST variant matches in §6.1 without adding equivalent IR-variant matches elsewhere in
   `bynk-ide`, and
 - needs no new model item whose only reader is the IDE.
+
+*How it's judged* (amended by B1, #2939). Every count is over non-comment production lines of
+`bynk-ide/src` (`sequence.rs`, `wire_contract.rs`, `symbols.rs`, `hover.rs`):
+- **C1a.** AST `HandlerKind::`/`HttpMethod::` lines go to 0. `ServiceProtocol::` lines fall under
+  M-1's domain clause: hover, the documentation page and the system-job hover answer over a parse,
+  and `ProtocolIr` needs a checked program and doesn't carry the source spelling.
+- **C1b.** Three conditions:
+  - every added `IrHandlerKind::`/`IrHttpMethod::` line sits in the function that held the AST
+    match it replaces
+  - no `bynk-ide` type mirrors a model enum variant for variant (`BoundaryKind` goes)
+  - no `bynk-ide` function lowers an AST variant to a model value
+- **C2.** The model items `bynk-ide` reads are a subset of those `bynk-emit` reads, and no item is
+  added.
 
 If B1 fails, the one-consumer shape is the honest one. `bynk-ir` and `bynk-lower` then fold into
 `bynk-emit` as modules (`emit::decl`, `emit::lower`), removing two serial steps. That path **raises

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Renders the Bynk tree-sitter grammar to EBNF for the language reference."
+description = "Renders the Bynk tree-sitter grammar to EBNF for the language reference. Final crates.io release; continues unpublished in the bynk-lang/bynk repository."
 keywords = ["compiler", "dsl", "grammar", "ebnf", "language"]
 categories = ["compilers", "parser-implementations"]
 
@@ -12,6 +12,5 @@ categories = ["compilers", "parser-implementations"]
 path = "src/lib.rs"
 
 [dependencies]
-# `preserve_order` keeps the grammar rules in source order so the rendered
-# appendix matches the committed Book `reference/grammar.md` byte for byte.
-serde_json = { workspace = true, features = ["preserve_order"] }
+serde.workspace = true
+serde_json.workspace = true

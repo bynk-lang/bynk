@@ -28,6 +28,12 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.508.10** | "A suite helper whose signature names a type from a `uses` commons no longer fails `tsc` (TS2304) when the suite has a `stub`" |
+| **v0.508.9** | "`bynk-grammar` keeps rule order itself, so `serde_json`'s `preserve_order` is off workspace-wide and the editor-contract key sort is gone" |
+| **v0.508.8** | The system model's scope and placement are recorded (crate-hygiene B1), and every handler kind's and service protocol's editor rendering is pinned by a snapshot |
+| **v0.508.7** | Internal - `bynk` no longer declares its unused `bynk-render` dependency |
+| **v0.508.6** | "CI's test job records per-test durations (nextest JUnit) as a build artifact" |
+| **v0.508.5** | Record the published-set rule (publish only what an installed binary reaches; retired crates get a final onward-pointing release); `bynk-grammar` announces its final crates.io release |
 | **v0.508.4** | "A caller of a service whose context renames a consumed type (`consumes lib { Code as LibCode }`) can name and match on the returned value as the declared type" |
 | **v0.508.3** | "A `let` bound to a literal `RequestHeaders.of([...])` and sent as extra request headers is checked for `Authorization` (`bynk.test.extra_headers_authorization`), and the below-`system` extra-headers error points at the offending call" |
 | **v0.508.2** | Deferred list elements in a generic call argument now merge through function, effect, stream, query, connection and http-outcome types, so inference no longer depends on element order |

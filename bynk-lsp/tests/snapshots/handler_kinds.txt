@@ -1,0 +1,845 @@
+=== sequence: calc call
+{
+  "participants": [
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "calc call",
+      "range": null
+    }
+  ],
+  "messages": [],
+  "blocks": []
+}
+=== wire contract: calc call
+{
+  "handlerLine": 14,
+  "kind": {
+    "kind": "Call"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 15
+    },
+    "start": {
+      "character": 2,
+      "line": 13
+    }
+  },
+  "service": "calc",
+  "unit": "kinds"
+}
+=== sequence: web GET
+{
+  "participants": [
+    {
+      "id": 1,
+      "kind": "Actor",
+      "name": "Visitor",
+      "range": {
+        "start": {
+          "line": 19,
+          "character": 66
+        },
+        "end": {
+          "line": 19,
+          "character": 79
+        }
+      }
+    },
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "web",
+      "range": null
+    }
+  ],
+  "messages": [
+    {
+      "from": 1,
+      "to": 0,
+      "kind": "Call",
+      "label": "GET /items/:id",
+      "range": {
+        "start": {
+          "line": 19,
+          "character": 2
+        },
+        "end": {
+          "line": 21,
+          "character": 3
+        }
+      },
+      "block": null
+    },
+    {
+      "from": 0,
+      "to": 1,
+      "kind": "Return",
+      "label": "Ok(id)",
+      "range": {
+        "start": {
+          "line": 20,
+          "character": 4
+        },
+        "end": {
+          "line": 20,
+          "character": 10
+        }
+      },
+      "block": null
+    }
+  ],
+  "blocks": []
+}
+=== wire contract: web GET
+{
+  "handlerLine": 20,
+  "kind": {
+    "kind": "Http",
+    "method": "GET",
+    "path": "/items/:id"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 21
+    },
+    "start": {
+      "character": 2,
+      "line": 19
+    }
+  },
+  "service": "web",
+  "unit": "kinds"
+}
+=== sequence: web POST
+{
+  "participants": [
+    {
+      "id": 1,
+      "kind": "Actor",
+      "name": "Visitor",
+      "range": {
+        "start": {
+          "line": 23,
+          "character": 65
+        },
+        "end": {
+          "line": 23,
+          "character": 78
+        }
+      }
+    },
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "web",
+      "range": null
+    }
+  ],
+  "messages": [
+    {
+      "from": 1,
+      "to": 0,
+      "kind": "Call",
+      "label": "POST /items",
+      "range": {
+        "start": {
+          "line": 23,
+          "character": 2
+        },
+        "end": {
+          "line": 25,
+          "character": 3
+        }
+      },
+      "block": null
+    },
+    {
+      "from": 0,
+      "to": 1,
+      "kind": "Return",
+      "label": "Ok(body)",
+      "range": {
+        "start": {
+          "line": 24,
+          "character": 4
+        },
+        "end": {
+          "line": 24,
+          "character": 12
+        }
+      },
+      "block": null
+    }
+  ],
+  "blocks": []
+}
+=== wire contract: web POST
+{
+  "handlerLine": 24,
+  "kind": {
+    "kind": "Http",
+    "method": "POST",
+    "path": "/items"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 25
+    },
+    "start": {
+      "character": 2,
+      "line": 23
+    }
+  },
+  "service": "web",
+  "unit": "kinds"
+}
+=== sequence: web rejected
+{
+  "participants": [
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "web rejected",
+      "range": null
+    }
+  ],
+  "messages": [],
+  "blocks": []
+}
+=== wire contract: web rejected
+{
+  "handlerLine": 28,
+  "kind": {
+    "kind": "Rejected"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 29
+    },
+    "start": {
+      "character": 2,
+      "line": 27
+    }
+  },
+  "service": "web",
+  "unit": "kinds"
+}
+=== sequence: ticker schedule
+{
+  "participants": [
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "ticker cron \"*/5 * * * *\"",
+      "range": null
+    }
+  ],
+  "messages": [],
+  "blocks": []
+}
+=== wire contract: ticker schedule
+{
+  "handlerLine": 34,
+  "kind": {
+    "expr": "*/5 * * * *",
+    "kind": "Cron"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 35
+    },
+    "start": {
+      "character": 2,
+      "line": 33
+    }
+  },
+  "service": "ticker",
+  "unit": "kinds"
+}
+=== sequence: jobs message
+{
+  "participants": [
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "jobs message",
+      "range": null
+    }
+  ],
+  "messages": [],
+  "blocks": []
+}
+=== wire contract: jobs message
+{
+  "handlerLine": 40,
+  "kind": {
+    "kind": "Message"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 41
+    },
+    "start": {
+      "character": 2,
+      "line": 39
+    }
+  },
+  "service": "jobs",
+  "unit": "kinds"
+}
+=== sequence: gate open
+{
+  "participants": [
+    {
+      "id": 1,
+      "kind": "Actor",
+      "name": "Caller",
+      "range": {
+        "start": {
+          "line": 45,
+          "character": 39
+        },
+        "end": {
+          "line": 45,
+          "character": 51
+        }
+      }
+    },
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "gate",
+      "range": null
+    },
+    {
+      "id": 2,
+      "kind": "Agent",
+      "name": "Room",
+      "range": {
+        "start": {
+          "line": 46,
+          "character": 13
+        },
+        "end": {
+          "line": 46,
+          "character": 17
+        }
+      }
+    }
+  ],
+  "messages": [
+    {
+      "from": 1,
+      "to": 0,
+      "kind": "Call",
+      "label": "open",
+      "range": {
+        "start": {
+          "line": 45,
+          "character": 2
+        },
+        "end": {
+          "line": 48,
+          "character": 3
+        }
+      },
+      "block": null
+    },
+    {
+      "from": 0,
+      "to": 2,
+      "kind": "Call",
+      "label": "join(c.identity, connection)",
+      "range": {
+        "start": {
+          "line": 46,
+          "character": 13
+        },
+        "end": {
+          "line": 46,
+          "character": 52
+        }
+      },
+      "block": null
+    },
+    {
+      "from": 2,
+      "to": 0,
+      "kind": "Return",
+      "label": "",
+      "range": {
+        "start": {
+          "line": 46,
+          "character": 13
+        },
+        "end": {
+          "line": 46,
+          "character": 52
+        }
+      },
+      "block": null
+    }
+  ],
+  "blocks": []
+}
+=== wire contract: gate open
+{
+  "handlerLine": 46,
+  "kind": {
+    "kind": "Open"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 48
+    },
+    "start": {
+      "character": 2,
+      "line": 45
+    }
+  },
+  "service": "gate",
+  "unit": "kinds"
+}
+=== sequence: gate message
+{
+  "participants": [
+    {
+      "id": 1,
+      "kind": "Actor",
+      "name": "Caller",
+      "range": {
+        "start": {
+          "line": 50,
+          "character": 56
+        },
+        "end": {
+          "line": 50,
+          "character": 68
+        }
+      }
+    },
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "gate",
+      "range": null
+    }
+  ],
+  "messages": [
+    {
+      "from": 1,
+      "to": 0,
+      "kind": "Call",
+      "label": "message",
+      "range": {
+        "start": {
+          "line": 50,
+          "character": 2
+        },
+        "end": {
+          "line": 52,
+          "character": 3
+        }
+      },
+      "block": null
+    }
+  ],
+  "blocks": []
+}
+=== wire contract: gate message
+{
+  "handlerLine": 51,
+  "kind": {
+    "kind": "Message"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 52
+    },
+    "start": {
+      "character": 2,
+      "line": 50
+    }
+  },
+  "service": "gate",
+  "unit": "kinds"
+}
+=== sequence: gate close
+{
+  "participants": [
+    {
+      "id": 1,
+      "kind": "Actor",
+      "name": "Caller",
+      "range": {
+        "start": {
+          "line": 54,
+          "character": 40
+        },
+        "end": {
+          "line": 54,
+          "character": 52
+        }
+      }
+    },
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "gate",
+      "range": null
+    }
+  ],
+  "messages": [
+    {
+      "from": 1,
+      "to": 0,
+      "kind": "Call",
+      "label": "close",
+      "range": {
+        "start": {
+          "line": 54,
+          "character": 2
+        },
+        "end": {
+          "line": 56,
+          "character": 3
+        }
+      },
+      "block": null
+    }
+  ],
+  "blocks": []
+}
+=== wire contract: gate close
+{
+  "handlerLine": 55,
+  "kind": {
+    "kind": "Close"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 56
+    },
+    "start": {
+      "character": 2,
+      "line": 54
+    }
+  },
+  "service": "gate",
+  "unit": "kinds"
+}
+=== sequence: onPing event
+{
+  "participants": [
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "onPing event",
+      "range": null
+    }
+  ],
+  "messages": [],
+  "blocks": []
+}
+=== wire contract: onPing event
+{
+  "handlerLine": 61,
+  "kind": {
+    "kind": "Event"
+  },
+  "range": {
+    "end": {
+      "character": 3,
+      "line": 62
+    },
+    "start": {
+      "character": 2,
+      "line": 60
+    }
+  },
+  "service": "onPing",
+  "unit": "kinds"
+}
+=== sequence: Counter bump
+{
+  "participants": [
+    {
+      "id": 0,
+      "kind": "Entry",
+      "name": "Counter.bump",
+      "range": null
+    }
+  ],
+  "messages": [
+    {
+      "from": 0,
+      "to": 0,
+      "kind": "StateWrite",
+      "label": "count.update(…)",
+      "range": {
+        "start": {
+          "line": 88,
+          "character": 13
+        },
+        "end": {
+          "line": 88,
+          "character": 39
+        }
+      },
+      "block": null
+    }
+  ],
+  "blocks": []
+}
+=== wire contract: Counter bump
+(none)
+=== hover: calc
+```bynk
+service calc {
+	on call
+}
+```
+
+=== hover: web
+```bynk
+service web from http {
+	on GET("/items/:id")
+	on POST("/items")
+	on rejected
+}
+```
+
+=== hover: ticker
+```bynk
+service ticker from cron {
+	on schedule("*/5 * * * *")
+}
+```
+
+=== hover: jobs
+```bynk
+service jobs from queue("jobs") {
+	on message
+}
+```
+
+=== hover: gate
+```bynk
+service gate from websocket {
+	on open
+	on message
+	on close
+}
+```
+
+=== hover: onPing
+```bynk
+service onPing from Events(Pinged) {
+	on event
+}
+```
+
+=== hover: Counter
+```bynk
+agent Counter {
+	key id: String
+	store count: Cell[Int]
+}
+```
+
+=== documentation entries
+--- [type] Frame
+```bynk
+type Frame = {
+	text: String,
+}
+```
+
+--- [event] Pinged
+```bynk
+type Pinged = {
+	n: Int,
+}
+```
+
+--- [type] UserId
+```bynk
+type UserId = opaque String
+```
+
+--- [actor] Caller
+```bynk
+actor Caller { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+```
+
+--- [service] calc
+```bynk
+service calc {
+	on call
+}
+```
+
+--- [handler] on call
+```bynk
+on call(x: Int) -> Effect[Int]
+```
+
+A handler of service `calc`.
+
+--- [service] web
+```bynk
+service web from http {
+	on GET("/items/:id")
+	on POST("/items")
+	on rejected
+}
+```
+
+--- [handler] on GET("/items/:id")
+```bynk
+on GET("/items/:id")(id: String) -> Effect[HttpResult[String]]
+```
+
+A handler of service `web`.
+
+--- [handler] on POST("/items")
+```bynk
+on POST("/items")(body: String) -> Effect[HttpResult[String]]
+```
+
+A handler of service `web`.
+
+--- [handler] on rejected
+```bynk
+on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]]
+```
+
+A handler of service `web`.
+
+--- [service] ticker
+```bynk
+service ticker from cron {
+	on schedule("*/5 * * * *")
+}
+```
+
+--- [handler] on schedule("*/5 * * * *")
+```bynk
+on schedule("*/5 * * * *")() -> Effect[Result[(), String]]
+```
+
+A handler of service `ticker`.
+
+--- [service] jobs
+```bynk
+service jobs from queue("jobs") {
+	on message
+}
+```
+
+--- [handler] on message
+```bynk
+on message(job: String) -> Effect[QueueResult]
+```
+
+A handler of service `jobs`.
+
+--- [service] gate
+```bynk
+service gate from websocket {
+	on open
+	on message
+	on close
+}
+```
+
+--- [handler] on open
+```bynk
+on open(room: String) -> Effect[()]
+```
+
+A handler of service `gate`.
+
+--- [handler] on message
+```bynk
+on message(room: String, frame: Frame) -> Effect[()]
+```
+
+A handler of service `gate`.
+
+--- [handler] on close
+```bynk
+on close(room: String) -> Effect[()]
+```
+
+A handler of service `gate`.
+
+--- [service] onPing
+```bynk
+service onPing from Events(Pinged) {
+	on event
+}
+```
+
+--- [handler] on event
+```bynk
+on event(p: Pinged) -> Effect[()]
+```
+
+A handler of service `onPing`.
+
+--- [service] ping
+```bynk
+service ping {
+	on call
+}
+```
+
+--- [handler] on call
+```bynk
+on call(n: Int) -> Effect[()]
+```
+
+A handler of service `ping`.
+
+--- [agent] Room
+```bynk
+agent Room {
+	key id: String
+	store conns: Map[UserId, Connection[Frame]]
+}
+```
+
+--- [handler] Room.join
+```bynk
+fn join(u: UserId, conn: Connection[Frame]) -> Effect[()]
+```
+
+A handler of agent `Room`.
+
+--- [agent] Counter
+```bynk
+agent Counter {
+	key id: String
+	store count: Cell[Int]
+}
+```
+
+--- [handler] Counter.bump
+```bynk
+fn bump() -> Effect[Int]
+```
+
+A handler of agent `Counter`.
+

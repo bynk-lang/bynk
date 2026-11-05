@@ -1,0 +1,9 @@
+commons demo.types
+
+type Item = {
+	n: Int,
+}
+
+fn bump(i: Item) -> Item {
+	Item { n: i.n + 1 }
+}
