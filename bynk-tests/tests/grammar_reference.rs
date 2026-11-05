@@ -28,8 +28,10 @@ fn grammar_json() -> String {
 fn generated_grammar_appendix_is_up_to_date() {
     let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../site/src/content/docs/book/reference/grammar-appendix.md");
-    let rendered =
-        common::to_site_page(&bynk_tests::grammar::render_appendix(&grammar_json()), "reference");
+    let rendered = common::to_site_page(
+        &bynk_tests::grammar::render_appendix(&grammar_json()),
+        "reference",
+    );
 
     if std::env::var_os("BYNK_BLESS").is_some() {
         fs::write(&page, &rendered).unwrap();

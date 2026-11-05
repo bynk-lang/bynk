@@ -19,12 +19,13 @@ fn diagnostics(source: &str) -> Vec<String> {
 /// echoes), now just the syntax error.
 #[test]
 fn a_broken_record_does_not_cascade() {
-    let src = include_str!("../../bynk-tests/tests/fixtures/positive/49_full_money_commons/input.bynk")
-        .replacen(
-            "minorUnits: Int where NonNegative,",
-            "minorUnits: Int where NonNegative",
-            1,
-        );
+    let src =
+        include_str!("../../bynk-tests/tests/fixtures/positive/49_full_money_commons/input.bynk")
+            .replacen(
+                "minorUnits: Int where NonNegative,",
+                "minorUnits: Int where NonNegative",
+                1,
+            );
     assert_eq!(diagnostics(&src), ["bynk.parse.expected_token @ 6:5"]);
 }
 
