@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A suite's or case's `env` entry may name a `fixture` of the same suite instead of a `String` literal (`APP_PRIVATE_KEY = appKey`), so a long test-only value such as a private key lives in one file under `fixtures/`; the text is verbatim, trailing newline included, and a use in `env` counts for `bynk.fixture.unused` (#2956)
----
+# 0738 — An `env` entry's value may be a fixture of the same suite
 
-## ADR: suite-env-fixture-value
-title: An `env` entry's value may be a fixture of the same suite
-summary: Amends ADR 0524's literal-only values; the text is verbatim and stays in the test module once
+- **Status:** Accepted (v0.509)
 
 **Context.** ADR 0524 made an `env { NAME = … }` value a `String` literal only,
 matching what a Worker's `env` holds. ADR 0720 then added `fixture`, a suite's
