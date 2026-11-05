@@ -88,6 +88,25 @@ export default {
             const body = result as __JsonValue;
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
+          case "looseOne": {
+            __route = "call looseOne";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "44dc53e8276ccc9c") {
+              globalThis.console.error("ContractMismatch shop.stock call looseOne", { service: "looseOne", expected: "44dc53e8276ccc9c", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "looseOne", expected: "44dc53e8276ccc9c", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            const argsObj = args as { [k: string]: __JsonValue };
+            const result = await surface.looseOne();
+            const body = result as __JsonValue;
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
           case "missing": {
             __route = "call missing";
             const __contract = request.headers.get("X-Bynk-Contract");

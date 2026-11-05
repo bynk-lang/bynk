@@ -2910,7 +2910,10 @@ fn lower_method_call(
     // a derived `D1`. The checker wrote the statement (`SELECT` + the column
     // list from `T` + the literal tail); this runs it through `all`/`first`
     // and decodes with the `decodeSql` codec, so no runtime op is involved.
-    // Keyed on the recorded callee, not the method name.
+    // Keyed on the recorded callee, not the method name. #2957: the error
+    // tags are `as const` — `Err<E>` infers `E` from the literal, and a bare
+    // `"Sql"` widens to `string`, so a match on `Err(Sql(e))` would not narrow
+    // and `e` would reach tsc as `JsonError | SqlError`.
     if let Some(Callee::D1Select {
         cap,
         row,
@@ -2940,19 +2943,19 @@ fn lower_method_call(
                     "first",
                     "if (__r.value.tag === \"None\") return Ok(None); \
                      const __d = __decode(__r.value.value); \
-                     return __d.tag === \"Ok\" ? Ok(Some(__d.value)) : Err({ tag: \"Decode\", error: __d.error });",
+                     return __d.tag === \"Ok\" ? Ok(Some(__d.value)) : Err({ tag: \"Decode\" as const, error: __d.error });",
                 )
             } else {
                 (
                     "all",
                     "const __d = __decode(__r.value); \
-                     return __d.tag === \"Ok\" ? Ok(__d.value) : Err({ tag: \"Decode\", error: __d.error });",
+                     return __d.tag === \"Ok\" ? Ok(__d.value) : Err({ tag: \"Decode\" as const, error: __d.error });",
                 )
             };
             return pre.finish(format!(
                 "(async () => {{ const __decode = {decoder}; \
                  const __r = await {deps}.{cap}.{op}(\"{sql}\", {params}); \
-                 if (__r.tag === \"Err\") return Err({{ tag: \"Sql\", error: __r.error }}); \
+                 if (__r.tag === \"Err\") return Err({{ tag: \"Sql\" as const, error: __r.error }}); \
                  {decode} }})()"
             ));
         }
