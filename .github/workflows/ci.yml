@@ -634,6 +634,16 @@ jobs:
           # resolvable, and several `bynkc test` runner paths branch on exactly
           # that. Not worth the risk on the OS we just put on the PR gate.
           BYNK_REQUIRE_WORKERD: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
+      # C4a (#2940): the ci profile's per-test durations (JUnit), kept so the
+      # tier split is sized from real-runner numbers. Every leg, pass or fail.
+      - name: Upload nextest JUnit
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: nextest-junit-${{ matrix.os }}
+          path: target/nextest/ci/junit.xml
+          if-no-files-found: ignore
+          retention-days: 30
       # #1672: the emitted output is verified under both TypeScript majors it
       # supports — the floor (v5, the main run above) and the current one users
       # get from `npm install -g typescript` (v7, here). Linux only: the type-
