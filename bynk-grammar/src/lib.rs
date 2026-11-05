@@ -69,7 +69,11 @@ struct Grammar {
 impl Grammar {
     fn parse(grammar_json: &str) -> Result<Grammar, serde_json::Error> {
         let doc: Value = serde_json::from_str(grammar_json)?;
-        let order = serde_json::from_str::<RuleOrder>(grammar_json)?.0;
+        // Tolerant: a root or `rules` that isn't an object has no order, and
+        // `rules()` is then `None`, as before the order was read separately.
+        let order = serde_json::from_str::<RuleOrder>(grammar_json)
+            .map(|o| o.0)
+            .unwrap_or_default();
         Ok(Grammar { doc, order })
     }
 
@@ -701,5 +705,16 @@ mod tests {
         let a = site.find("\"alpha\"").unwrap();
         let m = site.find("\"mid\"").unwrap();
         assert!(z < a && a < m);
+    }
+
+    /// A grammar with no object `rules` still parses; it just has no rules.
+    #[test]
+    fn non_object_rules_parse_as_no_rules() {
+        assert!(embeddable_rules(r#"{"rules":[]}"#).is_empty());
+        assert!(matches!(
+            render_rule(r#"{"rules":3}"#, "x"),
+            Err(GrammarError::UnknownRule(_))
+        ));
+        assert!(render_appendix("[]").contains("```ebnf"));
     }
 }
