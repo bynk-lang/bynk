@@ -169,7 +169,7 @@ fn decimal_range_expr(
     ))
 }
 
-/// [`decimal_range_expr`] printed — for `bynk-emit`'s `lower.rs`, which still
+/// The `Decimal` range check as printed text — for `bynk-emit`'s `lower.rs`, which still
 /// assembles its refinement guard from text.
 pub fn decimal_range_condition(
     recv: &str,
