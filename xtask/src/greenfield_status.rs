@@ -11,13 +11,14 @@
 //! track's own adoption probe, `unconsumed_ir_items` (Slice D3 of #1542 — the gate the
 //! 30 August 2026 post-restructuring review's Part 5 §8 asked for), and the
 //! runtime-semantics track's `diagnostic_coverage` (#1662, G2 of #1648), and the
-//! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939).
+//! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
+//! `unused_deps` (A4, #2976).
 //!
-//! **Seventeen are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Eighteen are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -85,7 +86,7 @@ impl Report {
 }
 
 /// Run every probe against the tree rooted at `root` (the repo root). Used by the CLI's
-/// full report; the gating test uses the seventeen gated probes alone
+/// full report; the gating test uses the eighteen gated probes alone
 /// ([`gated_disagreements`]) so it never pays for a workspace-wide clippy pass
 /// (`wildcard_arms`) just to check the probes that are actually diffed.
 pub fn run(root: &Path) -> Report {
@@ -97,7 +98,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 17] = [
+pub const GATED_PROBES: [&str; 18] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -115,9 +116,10 @@ pub const GATED_PROBES: [&str; 17] = [
     "unconsumed_ir_items",
     "diagnostic_coverage",
     "model_readers_beyond_emit",
+    "unused_deps",
 ];
 
-/// The seventeen gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The eighteen gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -137,6 +139,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
         model_readers_beyond_emit(root),
+        unused_deps(root),
     ]
 }
 
@@ -2990,6 +2993,218 @@ fn keystroke_latency(_root: &Path) -> Probe {
     }
 }
 
+// --- Gated probe 18: unused_deps ---------------------------------------------
+
+/// Crate-hygiene track H-3, added by slice A4 (#2976): every declared dependency
+/// edge carries a use. Counts the workspace members' declared dependencies with no
+/// non-comment use in the crate's Rust sources, plus the `[workspace.dependencies]`
+/// entries no member references. The reading is `0`, or `N (crate:dep, …)` sorted.
+///
+/// **What counts as a use** (A4's Decisions B and C): the dependency's crate
+/// identifier (its manifest key with `-` as `_`, so a `package =` rename is read by
+/// its alias) appears as a whole word on a non-`//`-comment line. That covers a
+/// `use`, a path, a macro or derive path and a re-export. Block comments are not
+/// stripped, so a name that appears only inside one reads as used: the probe fails
+/// open on that shape, the way [`is_line_comment`]'s other callers do.
+///
+/// **Which files**: a `[dependencies]` entry is read in every `.rs` file under the
+/// crate except `tests/`, `benches/` and `examples/`; a `[dev-dependencies]` entry in
+/// all of them; a `[build-dependencies]` entry in the build script only (`build = "…"`,
+/// default `build.rs`). `[target.<cfg>.…]` entries count as their kind, the cfg not
+/// evaluated. `optional = true` entries count like any other; a `dep:` entry in
+/// `[features]` is not a use. Files are found by walking the crate directory, so a
+/// custom `[lib] path` or `build =` outside `src/` (as in `tree-sitter-bynk`) is read.
+///
+/// [`UNUSED_DEPS_ALLOWED`] is the escape hatch for a crate used only by macro
+/// expansion, where no identifier appears in source.
+fn unused_deps(root: &Path) -> Probe {
+    Probe {
+        name: "unused_deps",
+        gated: true,
+        reads: unused_deps_reading(&unused_deps_offenders(&unused_deps_raw(root))),
+    }
+}
+
+/// `(workspace label, dependency, reason)` triples [`unused_deps`] does not count. An
+/// entry must name a real declared edge that would otherwise be flagged, and carry a
+/// reason (`unused_deps_allowlist_entries_are_live` checks both), so a stale or
+/// unexplained entry fails. The label is a crate's name, or `[workspace]` for a
+/// `[workspace.dependencies]` entry.
+const UNUSED_DEPS_ALLOWED: &[(&str, &str, &str)] = &[(
+    "[workspace]",
+    "bynkc",
+    "no member depends on `bynkc`; its entry carries a stamped `version = \"…\"` line, and \
+     deleting it would conflict with every `chore(stamp)` commit. It goes with the `bynkc` \
+     retirement (track E3).",
+)];
+
+/// One declared edge with no use: `(crate label, dependency key, table kind)`.
+/// `kind` is `""` for `[dependencies]`, `"dev"` or `"build"`.
+type UnusedEdge = (String, String, &'static str);
+
+/// A workspace member as `(directory label, manifest text, (relative path, contents) files)`.
+type UnusedDepsCrate = (String, String, Vec<(PathBuf, String)>);
+
+/// Every unused edge under `root`, before [`UNUSED_DEPS_ALLOWED`] is applied.
+fn unused_deps_raw(root: &Path) -> Vec<UnusedEdge> {
+    let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
+    let members = workspace_members(&manifest);
+    let crates: Vec<UnusedDepsCrate> = members
+        .iter()
+        .filter_map(|dir| {
+            let text = std::fs::read_to_string(root.join(dir).join("Cargo.toml")).ok()?;
+            Some((dir.clone(), text, rust_files_relative(&root.join(dir))))
+        })
+        .collect();
+    unused_deps_over(&manifest, &crates)
+}
+
+/// `[workspace] members` of a root manifest.
+fn workspace_members(manifest: &str) -> Vec<String> {
+    let Ok(doc) = manifest.parse::<toml::Table>() else {
+        return Vec::new();
+    };
+    doc.get("workspace")
+        .and_then(|w| w.get("members"))
+        .and_then(|m| m.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A manifest's dependency tables as `(key, kind, is_workspace_ref)`, covering the
+/// three kinds at the top level and under every `[target.<cfg>]`.
+fn declared_edges(doc: &toml::Table) -> Vec<(String, &'static str, bool)> {
+    let mut out = Vec::new();
+    let mut collect = |tables: &toml::Table| {
+        for (table, kind) in [
+            ("dependencies", ""),
+            ("dev-dependencies", "dev"),
+            ("build-dependencies", "build"),
+        ] {
+            if let Some(deps) = tables.get(table).and_then(|t| t.as_table()) {
+                for (key, value) in deps {
+                    let workspace_ref = value
+                        .as_table()
+                        .and_then(|t| t.get("workspace"))
+                        .and_then(|w| w.as_bool())
+                        .unwrap_or(false);
+                    out.push((key.clone(), kind, workspace_ref));
+                }
+            }
+        }
+    };
+    collect(doc);
+    if let Some(targets) = doc.get("target").and_then(|t| t.as_table()) {
+        for target in targets.values().filter_map(|t| t.as_table()) {
+            collect(target);
+        }
+    }
+    out
+}
+
+/// [`unused_deps_raw`]'s counting logic over in-memory inputs: the root manifest and
+/// each member as `(directory label, manifest text, (relative path, contents) files)`.
+fn unused_deps_over(root_manifest: &str, crates: &[UnusedDepsCrate]) -> Vec<UnusedEdge> {
+    let mut out: Vec<UnusedEdge> = Vec::new();
+    let mut referenced: BTreeSet<String> = BTreeSet::new();
+    for (dir, manifest, files) in crates {
+        let Ok(doc) = manifest.parse::<toml::Table>() else {
+            continue;
+        };
+        let name = doc
+            .get("package")
+            .and_then(|p| p.get("name"))
+            .and_then(|n| n.as_str())
+            .unwrap_or(dir)
+            .to_string();
+        let build_script = match doc.get("package").and_then(|p| p.get("build")) {
+            Some(toml::Value::String(path)) => Some(path.clone()),
+            Some(toml::Value::Boolean(false)) => None,
+            _ => Some("build.rs".to_string()),
+        };
+        for (key, kind, workspace_ref) in declared_edges(&doc) {
+            if workspace_ref {
+                referenced.insert(key.clone());
+            }
+            let ident = key.replace('-', "_");
+            let used = files.iter().any(|(rel, contents)| {
+                let top = rel.components().next().and_then(|c| c.as_os_str().to_str());
+                let dev_only = matches!(top, Some("tests" | "benches" | "examples"));
+                let is_build = build_script
+                    .as_deref()
+                    .is_some_and(|b| rel.to_string_lossy().replace('\\', "/") == b);
+                let in_scope = match kind {
+                    "dev" => true,
+                    "build" => is_build,
+                    _ => !dev_only,
+                };
+                in_scope && mentions_ident(contents, &ident)
+            });
+            if !used {
+                out.push((name.clone(), key, kind));
+            }
+        }
+    }
+    if let Ok(root_doc) = root_manifest.parse::<toml::Table>()
+        && let Some(table) = root_doc
+            .get("workspace")
+            .and_then(|w| w.get("dependencies"))
+            .and_then(|d| d.as_table())
+    {
+        for key in table.keys() {
+            if !referenced.contains(key) {
+                out.push(("[workspace]".to_string(), key.clone(), ""));
+            }
+        }
+    }
+    out
+}
+
+/// True if some non-`//`-comment line of `src` holds `ident` as a whole word (the
+/// characters on either side are not identifier characters).
+fn mentions_ident(src: &str, ident: &str) -> bool {
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    src.lines().filter(|l| !is_line_comment(l)).any(|line| {
+        line.match_indices(ident).any(|(at, _)| {
+            let before = line[..at].chars().next_back();
+            let after = line[at + ident.len()..].chars().next();
+            !before.is_some_and(is_word) && !after.is_some_and(is_word)
+        })
+    })
+}
+
+/// `crate:dep` (with `[dev]`/`[build]` for those tables) for every edge not in
+/// [`UNUSED_DEPS_ALLOWED`], sorted.
+fn unused_deps_offenders(raw: &[UnusedEdge]) -> Vec<String> {
+    let mut out: Vec<String> = raw
+        .iter()
+        .filter(|(krate, dep, _)| {
+            !UNUSED_DEPS_ALLOWED
+                .iter()
+                .any(|(k, d, _)| k == krate && d == dep)
+        })
+        .map(|(krate, dep, kind)| match *kind {
+            "" => format!("{krate}:{dep}"),
+            kind => format!("{krate}:{dep}[{kind}]"),
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// `N (a, b, …)`, or `0`.
+fn unused_deps_reading(offenders: &[String]) -> String {
+    if offenders.is_empty() {
+        "0".to_string()
+    } else {
+        format!("{} ({})", offenders.len(), offenders.join(", "))
+    }
+}
+
 // --- Rendering + diffing ---------------------------------------------------
 
 /// The committed table: a plain Markdown table, probe name → gated?/reads, plus a
@@ -3006,7 +3221,7 @@ pub fn render_table(report: &Report) -> String {
          `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); \
          `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); \
          `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by \
-         crate-hygiene B1 (#2939). Seventeen \
+         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976). Eighteen \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -5009,5 +5224,148 @@ commons app.demo {
                 .to_string(),
         )];
         assert!(!stability_test_present(&check_tests));
+    }
+
+    // --- unused_deps (A4, #2976) --------------------------------------------------
+
+    type TestCrate<'a> = (&'a str, &'a str, &'a [(&'a str, &'a str)]);
+
+    fn deps_over(root: &str, crates: &[TestCrate<'_>]) -> Vec<String> {
+        let crates: Vec<UnusedDepsCrate> = crates
+            .iter()
+            .map(|(dir, manifest, files)| {
+                (
+                    dir.to_string(),
+                    manifest.to_string(),
+                    files
+                        .iter()
+                        .map(|(p, c)| (PathBuf::from(p), c.to_string()))
+                        .collect(),
+                )
+            })
+            .collect();
+        let raw = unused_deps_over(root, &crates);
+        let mut out: Vec<String> = raw
+            .iter()
+            .map(|(k, d, kind)| format!("{k}:{d}:{kind}"))
+            .collect();
+        out.sort();
+        out
+    }
+
+    const ROOT: &str = "[workspace]\nmembers = [\"a\"]\n";
+
+    fn manifest(deps: &str) -> String {
+        format!("[package]\nname = \"a\"\n{deps}")
+    }
+
+    #[test]
+    fn unused_deps_flags_a_dependency_with_no_use_and_passes_a_used_one() {
+        let m = manifest("[dependencies]\nused = \"1\"\nunused = \"1\"\n");
+        let got = deps_over(ROOT, &[("a", &m, &[("src/lib.rs", "use used::f;\n")])]);
+        assert_eq!(got, ["a:unused:"]);
+    }
+
+    #[test]
+    fn unused_deps_ignores_a_comment_and_a_longer_identifier() {
+        let m = manifest("[dependencies]\nserde = \"1\"\n");
+        let src =
+            "// serde is not used\n/// serde either\nuse serde_json::Value;\nlet my_serde = 1;\n";
+        assert_eq!(
+            deps_over(ROOT, &[("a", &m, &[("src/lib.rs", src)])]),
+            ["a:serde:"]
+        );
+        // A macro, a derive path and a re-export are uses.
+        for used in [
+            "serde::de();",
+            "#[derive(serde::Serialize)] struct S;",
+            "pub use serde::Serialize;",
+            "m!(serde::x);",
+        ] {
+            assert!(deps_over(ROOT, &[("a", &m, &[("src/lib.rs", used)])]).is_empty());
+        }
+    }
+
+    #[test]
+    fn unused_deps_reads_a_renamed_dependency_by_its_alias() {
+        let m = manifest("[dependencies]\nalias = { package = \"real-name\", version = \"1\" }\n");
+        assert!(deps_over(ROOT, &[("a", &m, &[("src/lib.rs", "use alias::f;")])]).is_empty());
+        assert_eq!(
+            deps_over(ROOT, &[("a", &m, &[("src/lib.rs", "use real_name::f;")])]),
+            ["a:alias:"]
+        );
+    }
+
+    #[test]
+    fn unused_deps_counts_dev_dependencies_in_tests_but_not_normal_ones() {
+        let m = manifest("[dependencies]\nn = \"1\"\n[dev-dependencies]\nd = \"1\"\n");
+        let files: &[(&str, &str)] = &[
+            ("src/lib.rs", "fn f() {}"),
+            ("tests/t.rs", "use n::x; use d::y;"),
+        ];
+        // `n` is a normal dependency used only under `tests/`: not a use. `d` is.
+        assert_eq!(deps_over(ROOT, &[("a", &m, files)]), ["a:n:"]);
+    }
+
+    #[test]
+    fn unused_deps_reads_a_build_dependency_in_the_build_script_only() {
+        let m = manifest("build = \"bindings/rust/build.rs\"\n[build-dependencies]\ncc = \"1\"\n");
+        let ok: &[(&str, &str)] = &[("bindings/rust/build.rs", "cc::Build::new();")];
+        assert!(deps_over(ROOT, &[("a", &m, ok)]).is_empty());
+        let elsewhere: &[(&str, &str)] = &[("src/lib.rs", "use cc::Build;")];
+        assert_eq!(deps_over(ROOT, &[("a", &m, elsewhere)]), ["a:cc:build"]);
+    }
+
+    #[test]
+    fn unused_deps_reads_target_tables_and_optional_dependencies() {
+        let m = manifest(
+            "[target.'cfg(unix)'.dependencies]\nlibc = \"1\"\n[dependencies]\nschemars = { version = \"1\", optional = true }\n[features]\nschema = [\"dep:schemars\"]\n",
+        );
+        // `dep:schemars` in `[features]` is not a use; a `cfg(feature)` use is.
+        assert_eq!(
+            deps_over(ROOT, &[("a", &m, &[("src/lib.rs", "fn f() {}")])]),
+            ["a:libc:", "a:schemars:"]
+        );
+        let src = "#[cfg(unix)] use libc::c_int;\n#[cfg(feature = \"schema\")] use schemars::JsonSchema;\n";
+        assert!(deps_over(ROOT, &[("a", &m, &[("src/lib.rs", src)])]).is_empty());
+    }
+
+    #[test]
+    fn unused_deps_flags_a_workspace_entry_no_member_references() {
+        let root = "[workspace]\nmembers = [\"a\"]\n[workspace.dependencies]\nused = \"1\"\norphan = \"1\"\n";
+        let m = manifest("[dependencies]\nused.workspace = true\n");
+        let got = deps_over(root, &[("a", &m, &[("src/lib.rs", "use used::f;")])]);
+        assert_eq!(got, ["[workspace]:orphan:"]);
+    }
+
+    #[test]
+    fn unused_deps_offenders_apply_the_allowlist_and_label_dev_and_build() {
+        let raw = vec![
+            ("a".to_string(), "x".to_string(), ""),
+            ("a".to_string(), "y".to_string(), "dev"),
+            ("a".to_string(), "z".to_string(), "build"),
+            ("[workspace]".to_string(), "bynkc".to_string(), ""),
+        ];
+        assert_eq!(
+            unused_deps_offenders(&raw),
+            ["a:x", "a:y[dev]", "a:z[build]"]
+        );
+        assert_eq!(unused_deps_reading(&[]), "0");
+        assert_eq!(unused_deps_reading(&["a:x".to_string()]), "1 (a:x)");
+    }
+
+    /// Every allowlist entry names a declared edge that would otherwise be flagged
+    /// (so a fixed or deleted edge fails here and the entry gets removed) and says why.
+    #[test]
+    fn unused_deps_allowlist_entries_are_live() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let raw = unused_deps_raw(&root);
+        for (krate, dep, reason) in UNUSED_DEPS_ALLOWED {
+            assert!(!reason.trim().is_empty(), "{krate}:{dep} has no reason");
+            assert!(
+                raw.iter().any(|(k, d, _)| k == krate && d == dep),
+                "allowlisted {krate}:{dep} is no longer an unused edge; remove it"
+            );
+        }
     }
 }
