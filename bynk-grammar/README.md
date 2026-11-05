@@ -6,8 +6,7 @@
 > existing pins keep resolving. It continues, unpublished, at
 > [`bynk-lang/bynk`](https://github.com/bynk-lang/bynk/tree/main/bynk-grammar).
 > Nothing replaces it as a library: the rendered grammar is the Book's
-> [grammar reference](https://github.com/bynk-lang/bynk/tree/main/site/src/content/docs/book/reference).
-
+> [grammar reference](https://github.com/bynk-lang/bynk/tree/main/site/src/content/docs/book/reference/grammar.md).
 
 [![crates.io](https://img.shields.io/crates/v/bynk-grammar.svg)](https://crates.io/crates/bynk-grammar)
 [![docs.rs](https://img.shields.io/docsrs/bynk-grammar)](https://docs.rs/bynk-grammar)
