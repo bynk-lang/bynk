@@ -508,6 +508,7 @@ pub fn analyse_project_with_policy(
         &groups,
         &kinds,
         &unit_tables,
+        &unit_uses,
         &mut errors,
     );
     // #2355 follow-up: Workers-only as well.

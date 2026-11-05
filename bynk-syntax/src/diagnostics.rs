@@ -3738,7 +3738,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.ws.open_transfer_key",
-        "On the Workers target, the key of a WebSocket `on open` handler's connection transfer is not a route parameter, a context constant or a literal — the upgrade is routed to the hosting Durable Object before the body runs, so the edge must be able to evaluate the key on its own.",
+        "On the Workers target, the key of a WebSocket `on open` handler's connection transfer is not a route parameter, a constant of the context or of a commons it uses, or a literal — the upgrade is routed to the hosting Durable Object before the body runs, so the edge must be able to evaluate the key on its own.",
     ),
     d(
         "bynk.ws.open_transfer_shape",
