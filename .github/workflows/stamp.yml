@@ -161,7 +161,11 @@ jobs:
             echo "No pending increments to stamp — nothing to push."
             exit 0
           fi
-          # Attribute the commit to the stamp App's bot identity.
+          # Attribute the commit to the stamp App's bot identity. ci.yml (the
+          # Linux-only stamp matrix), codeql.yml and scorecard.yml (their
+          # job-level skips) recognise the stamp commit by this author name
+          # (`bynk-stamp[bot]`) plus the `chore(stamp):` message below — if the
+          # App's slug or the message changes, update all three.
           slug='${{ steps.app-token.outputs.app-slug }}'
           uid="$(gh api "/users/${slug}[bot]" --jq .id)"
           git config user.name "${slug}[bot]"
