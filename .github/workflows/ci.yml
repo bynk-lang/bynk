@@ -636,6 +636,8 @@ jobs:
           BYNK_REQUIRE_WORKERD: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
       # C4a (#2940): the ci profile's per-test durations (JUnit), kept so the
       # tier split is sized from real-runner numbers. Every leg, pass or fail.
+      # Keep this ABOVE the TS7 re-run below: that run rewrites the same path
+      # with only its subset.
       - name: Upload nextest JUnit
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

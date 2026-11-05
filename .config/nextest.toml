@@ -106,7 +106,7 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 
 # C4a (crate-hygiene track, #2940): per-test durations, so the suite's tiers can
 # be sized from CI rather than guessed. The file is written to
-# target/nextest/ci/junit.xml and ci.yml's Linux leg uploads it as an artifact.
+# target/nextest/ci/junit.xml and ci.yml's test job uploads it from every matrix leg.
 # Passing tests carry no output, so the file stays small.
 [profile.ci.junit]
 path = "junit.xml"
