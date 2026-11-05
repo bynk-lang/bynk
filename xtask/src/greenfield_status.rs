@@ -2387,12 +2387,15 @@ fn unconsumed_ir_items(root: &Path) -> Probe {
 /// far the model reaches past the emitter, which was its only consumer until
 /// B1. The reading names the items, so a move is reviewable.
 ///
-/// **It can only rise.** The row is gated exact-match like every gated row, so
-/// each move is named in a pending file's `probes:`. On top of that,
+/// **Its count can only rise.** The row is gated exact-match like every gated
+/// row, so each move is named in a pending file's `probes:`. On top of that,
 /// `xtask/tests/greenfield_status.rs`'s `model_readers_beyond_emit_never_falls`
 /// fails whenever a fresh count is below the committed one, whatever `probes:`
 /// says. A fall means some consumer went back to re-deriving a fact the model
-/// carries, which M-1 calls a defect.
+/// carries, which M-1 calls a defect. The mechanical floor is on the count, not
+/// the set: dropping one item while adding another keeps the count, and only
+/// the exact-match row (and so its `probes:` acknowledgement) surfaces the swap
+/// for review.
 ///
 /// Same text-level limits as [`unconsumed_ir_items`]: a name shared with an
 /// unrelated item in another crate over-counts, which errs toward a higher

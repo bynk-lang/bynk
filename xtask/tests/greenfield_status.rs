@@ -66,6 +66,12 @@ fn greenfield_status_table_is_current() {
 /// outside `bynk-emit` can only rise. `greenfield_status_table_is_current`
 /// accepts any move a pending file's `probes:` acknowledges. This test refuses
 /// a fall even then, so the ratchet holds mechanically rather than by review.
+/// It guards the count, not the set: a swap of one item for another keeps the
+/// count and is left to the gated row's `probes:` acknowledgement.
+///
+/// The committed row must exist (the stamp's `refresh_gated_rows` refuses a
+/// gated probe with no row), so the floor is read from it rather than
+/// defaulting to 0.
 #[test]
 fn model_readers_beyond_emit_never_falls() {
     let root = repo_root();
@@ -90,7 +96,9 @@ fn model_readers_beyond_emit_never_falls() {
         now >= floor,
         "model_readers_beyond_emit fell from {floor} to {now} ({}): a consumer stopped \
          reading the system model. M-1 calls re-deriving a fact the model carries a defect. \
-         Read the model instead, or argue the fall in the track doc first.",
+         Read the model instead. A fall argued in the track doc lands by lowering this \
+         probe's committed row in design/greenfield-status.md to the new reading in the \
+         same PR, and naming the probe in that PR's pending file's `probes:`.",
         live.reads
     );
 }
