@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "The helpers that build the Bynk emitter's declaration-level IR (bynk-ir) from a checked program."
+description = "The helpers that build the Bynk emitter's declaration-level IR (bynk-ir) from a checked program. Final crates.io release; superseded by bynk-model."
 keywords = ["compiler", "dsl", "ir", "language"]
 categories = ["compilers"]
 
