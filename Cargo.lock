@@ -289,17 +289,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
-name = "bynk-grammar"
-version = "0.510.8"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
->>>>>>> origin/main
 name = "bynk-ide"
 version = "0.510.8"
 dependencies = [
@@ -418,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-tests"
-version = "0.510.7"
+version = "0.510.8"
 dependencies = [
  "bynk-check",
  "bynk-driver",
