@@ -1,5 +1,13 @@
 # bynk-ir
 
+> **Final release: superseded by
+> [`bynk-model`](https://crates.io/crates/bynk-model).** `bynk-ir` and
+> [`bynk-lower`](https://crates.io/crates/bynk-lower) merge into one crate, `bynk-model`,
+> the Bynk system model (the system-model ADR; crate-hygiene track
+> [#2775](https://github.com/bynk-lang/bynk/issues/2775), slice B1). This is
+> `bynk-ir`'s final crates.io release. It is not yanked, and existing pins keep
+> resolving. New code depends on `bynk-model`, which ships from the next release.
+
 [![crates.io](https://img.shields.io/crates/v/bynk-ir.svg)](https://crates.io/crates/bynk-ir)
 [![docs.rs](https://img.shields.io/docsrs/bynk-ir)](https://docs.rs/bynk-ir)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
