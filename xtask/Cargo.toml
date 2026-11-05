@@ -16,9 +16,8 @@ serde_json.workspace = true
 bynk-project = { workspace = true, features = ["schema"] }
 bynk-fmt = { workspace = true, features = ["schema"] }
 schemars.workspace = true
-
-[dev-dependencies]
-# #2096: `tests/manifest_schema.rs` parses the reference page's example manifest.
+# #2096: `tests/manifest_schema.rs` parses the reference page's example manifest; A4
+# (#2976): the `unused_deps` probe parses the workspace's `Cargo.toml` files.
 toml.workspace = true
 
 [lib]

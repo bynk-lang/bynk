@@ -1,6 +1,6 @@
 //! Drift guard: `design/greenfield-status.md` matches a fresh probe run.
 //!
-//! Only the seventeen gated (zero/closure/existence) probes are diffed — `wildcard_arms`,
+//! Only the eighteen gated (zero/closure/existence) probes are diffed — `wildcard_arms`,
 //! `keep_in_sync`, `test_density`, `fixture_kinds`, `keystroke_latency` are trend
 //! probes, recomputed and printed by `cargo xtask greenfield-status` but never gated
 //! here (#999 Decision D): they move on nearly any ordinary Rust PR (or, for

@@ -161,8 +161,11 @@ Small, independent, probe-invariant. Each is a separate PR.
   something the syntax crate can own, and the checker keeps the exact text it renders today (H-1).
 - **A4.** An xtask probe, `unused_deps`, that fails when a declared workspace dependency has no
   non-comment use (H-3) (Q-A3). Being a probe means it sits beside the other `greenfield-status`
-  rows and needs no new tool under `deny.toml` or the MSRV policy. It reads 0 once A1–A3 land and
-  is gated at 0.
+  rows and needs no new tool under `deny.toml` or the MSRV policy. It did not read 0 once A1–A3 landed:
+  a measurement found three more unused edges (`bynk-emit` and `bynkc` on `serde`, `bynk-lsp` on
+  `tracing-appender`) and an orphaned workspace entry, so A4 splits into A4a (remove them) and A4b
+  (the probe, gated at 0; the `bynkc` workspace entry is allowlisted until E3 retires it, because
+  deleting its stamped `version` line would conflict with every stamp commit) (#2976).
 
 ## 6. Workstream B — the system model (`bynk-ir` becomes `bynk-model`)
 
