@@ -1080,6 +1080,8 @@ fn binary_precedence(op: TsBinaryOp) -> u8 {
         | TsBinaryOp::GreaterThanEq
         | TsBinaryOp::LessThanEq => 5,
         TsBinaryOp::Add => 6,
+        TsBinaryOp::Mul => 7,
+        TsBinaryOp::Exp => 8,
     }
 }
 
@@ -1123,6 +1125,10 @@ fn render_binary_operand(out: &mut String, outer_op: TsBinaryOp, expr: &TsExpr, 
         // finding 1, for `Arrow`; #1323 adds `Conditional` proactively, the
         // same class of gap).
         TsExpr::As { .. } | TsExpr::Arrow { .. } | TsExpr::Conditional { .. } => true,
+        // #2955 review: a unary or `await` operand directly left of `**` is a
+        // JS syntax error (`!a ** b`, `typeof a ** b`, `await a ** b`), not a
+        // precedence question, so it always parenthesizes there.
+        TsExpr::Unary { .. } | TsExpr::Await(_) if outer_op == TsBinaryOp::Exp && is_left => true,
         TsExpr::Binary { op: inner_op, .. } => {
             let mixes_nullish = (outer_op == TsBinaryOp::NullishCoalescing)
                 != (*inner_op == TsBinaryOp::NullishCoalescing);
@@ -1612,6 +1618,8 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
                 TsBinaryOp::In => " in ",
                 TsBinaryOp::GreaterThanEq => " >= ",
                 TsBinaryOp::LessThanEq => " <= ",
+                TsBinaryOp::Mul => " * ",
+                TsBinaryOp::Exp => " ** ",
             });
             render_binary_operand(out, *op, right, false);
         }
@@ -4138,6 +4146,77 @@ mod tests {
         ));
         let printed = print(&program, "x.bynk", "", "x.ts");
         assert_eq!(printed.text, "a ?? (b ?? c);\n");
+    }
+
+    /// #2955: `*`/`**` sit above `+`, so a `**` right operand of `*` prints
+    /// flat (the `Decimal` range check's `c * 10n ** BigInt(s)`), a `+`
+    /// operand of `*` gets parens, and a same-operator `**` chain keeps them.
+    #[test]
+    fn multiplication_and_exponentiation_precedence() {
+        let bin = |op, l: TsExpr, r: TsExpr| TsExpr::Binary {
+            op,
+            left: Box::new(l),
+            right: Box::new(r),
+        };
+        let id = |s: &str| TsExpr::Ident(s.to_string());
+        let cases = [
+            (
+                bin(
+                    TsBinaryOp::Mul,
+                    id("a"),
+                    bin(TsBinaryOp::Exp, id("b"), id("c")),
+                ),
+                "a * b ** c",
+            ),
+            (
+                bin(
+                    TsBinaryOp::Mul,
+                    bin(TsBinaryOp::Add, id("a"), id("b")),
+                    id("c"),
+                ),
+                "(a + b) * c",
+            ),
+            (
+                bin(
+                    TsBinaryOp::Exp,
+                    id("a"),
+                    bin(TsBinaryOp::Exp, id("b"), id("c")),
+                ),
+                "a ** (b ** c)",
+            ),
+            (
+                bin(
+                    TsBinaryOp::GreaterThanEq,
+                    bin(TsBinaryOp::Mul, id("a"), id("b")),
+                    bin(TsBinaryOp::Mul, id("c"), id("d")),
+                ),
+                "a * b >= c * d",
+            ),
+        ];
+        for (expr, want) in cases {
+            assert_eq!(crate::print_expr(&expr), want);
+        }
+    }
+
+    /// #2955 review: `!a ** b` and `await a ** b` are JS syntax errors, so a
+    /// unary or `await` left operand of `**` is parenthesized; on the right
+    /// it needs none.
+    #[test]
+    fn exponentiation_parenthesizes_a_unary_left_operand() {
+        let not_a = TsExpr::Unary {
+            op: TsUnaryOp::Not,
+            expr: Box::new(TsExpr::Ident("a".to_string())),
+        };
+        let exp = |l: TsExpr, r: TsExpr| TsExpr::Binary {
+            op: TsBinaryOp::Exp,
+            left: Box::new(l),
+            right: Box::new(r),
+        };
+        let b = || TsExpr::Ident("b".to_string());
+        assert_eq!(crate::print_expr(&exp(not_a.clone(), b())), "(!a) ** b");
+        assert_eq!(crate::print_expr(&exp(b(), not_a)), "b ** !a");
+        let await_a = TsExpr::Await(Box::new(TsExpr::Ident("a".to_string())));
+        assert_eq!(crate::print_expr(&exp(await_a, b())), "(await a) ** b");
     }
 
     /// Review of #1314, finding 1: `TsLit::Str` escaped only `"`/`\`, so a
