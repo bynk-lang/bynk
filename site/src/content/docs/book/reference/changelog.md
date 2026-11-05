@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.508.10** | "A suite helper whose signature names a type from a `uses` commons no longer fails `tsc` (TS2304) when the suite has a `stub`" |
 | **v0.508.9** | "`bynk-grammar` keeps rule order itself, so `serde_json`'s `preserve_order` is off workspace-wide and the editor-contract key sort is gone" |
 | **v0.508.8** | The system model's scope and placement are recorded (crate-hygiene B1), and every handler kind's and service protocol's editor rendering is pinned by a snapshot |
 | **v0.508.7** | Internal - `bynk` no longer declares its unused `bynk-render` dependency |
