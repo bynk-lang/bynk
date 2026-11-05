@@ -305,6 +305,9 @@ pub(crate) fn emit_worker_compose(
     // #2967: the commons this context `uses`, whose public constants can key a
     // WebSocket `on open`'s transfer (`bynk_check::consts::visible_consts`).
     uses: &[String],
+    // #2969: used commons → the file declaring each of its functions and
+    // constants (`FileDeclIndex::fns`), for a commons split across files.
+    used_decl_paths: &HashMap<String, HashMap<String, std::path::PathBuf>>,
 ) -> (TsProgram, bool) {
     // #2967: the constants visible in this context, as the checker's
     // `phase_workers_ws_open_key` classifies a transfer key against them.
@@ -1006,21 +1009,28 @@ pub(crate) fn emit_worker_compose(
     // itself, as the context's own modules do: `handlers.ts` imports it without
     // re-exporting it. Aliased, so a constant named like a binding of this
     // module (`Env`, `handlers`) cannot shadow it.
-    let mut by_owner: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    // #2969: grouped by the module that declares each constant, which for a
+    // commons split across files is one of its files, not the commons path.
+    let mut by_module: BTreeMap<std::path::PathBuf, Vec<String>> = BTreeMap::new();
     for (alias, (owner, name)) in &const_imports {
-        by_owner.entry(owner.as_str()).or_default().push(format!(
+        let module = used_decl_paths
+            .get(owner)
+            .and_then(|paths| paths.get(name))
+            .cloned()
+            .unwrap_or_else(|| crate::project::EmitProjectCtx::commons_path(owner));
+        by_module.entry(module).or_default().push(format!(
             "{} as {alias}",
             bynk_check::emitted_names::ts_ident(name)
         ));
     }
-    for (owner, names) in by_owner {
+    for (module, names) in by_module {
         program.push(TsStmt::decl(
             TsDecl::Import {
                 type_only: false,
                 names,
                 from: crate::emitter::cross_commons_import_specifier_for_path(
                     &crate::project::worker_handlers_source_path(context),
-                    &crate::project::EmitProjectCtx::commons_path(owner),
+                    &module,
                     import_ext,
                 ),
             },
