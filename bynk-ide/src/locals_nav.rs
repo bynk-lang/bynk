@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn resolves_a_real_local_from_diagnose_project() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../bynkc/tests/fixtures/inlay/clean/src");
+            .join("../bynk-tests/tests/fixtures/inlay/clean/src");
         let r = crate::testkit::diagnose_project(&root);
         let file = r
             .files
@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn describe_local_renders_kind_and_type() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../bynkc/tests/fixtures/inlay/clean/src");
+            .join("../bynk-tests/tests/fixtures/inlay/clean/src");
         let r = crate::testkit::diagnose_project(&root);
         let file = r
             .files

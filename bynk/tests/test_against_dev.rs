@@ -64,7 +64,7 @@ fn system_suites_run_against_a_local_bynk_dev_one_per_env() {
         return;
     }
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../bynkc/tests/fixtures/positive/2134_suite_env");
+        .join("../bynk-tests/tests/fixtures/positive/2134_suite_env");
     let dir = std::env::temp_dir().join(format!("bynk-against-dev-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let proj = dir.join("proj");

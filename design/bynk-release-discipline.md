@@ -130,7 +130,7 @@ the review named are **already closed in code**:
 - **`doc_examples`** compiles every `` ```bynk `` block in the Book, the Developer
   Documentation, the landing page, **and the root `README.md`** — the last added
   after the front-page showcase "had drifted through three syntax revisions before
-  this gate covered it" (`bynkc/tests/doc_examples.rs`). The about pages live under
+  this gate covered it" (`bynk-tests/tests/doc_examples.rs`). The about pages live under
   `book/` and are covered by the same gate.
 - **`doc_diagnostics`** checks that quoted diagnostic output matches the compiler;
   **`doc_version`** that version references do not drift; **`grammar_reference`**
@@ -193,7 +193,7 @@ the new date.** The recommended option of #1677's Decision A.
    later than any of:
    - the release itself;
    - the newest date the `workerd` behind the smokes' wrangler
-     (`bynkc/tests/wrangler/mod.rs`'s `SPEC`) supports;
+     (`bynk-tests/tests/wrangler/mod.rs`'s `SPEC`) supports;
    - **the newest date supported by a wrangler released at least three months
      before the review** (the lag rule, added at the first review, #1731).
 

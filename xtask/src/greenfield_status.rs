@@ -2921,7 +2921,7 @@ fn diagnostic_coverage(root: &Path) -> Probe {
 
 // --- Reported probe 4: fixture_kinds --------------------------------------
 
-/// R11.2. Fixture directories under `bynkc/tests` using each assertion granularity —
+/// R11.2. Fixture directories under `bynk-tests/tests` using each assertion granularity —
 /// `expected_contains.txt` / `expected_absent.txt` / `expected_diagnostics.txt` — set
 /// against the older, coarser `expected_error.txt` (category-string) convention.
 ///
@@ -2929,10 +2929,10 @@ fn diagnostic_coverage(root: &Path) -> Probe {
 /// - `warnings` (`expected_warnings.txt`, a positive fixture's pinned warnings), which
 ///   this probe had never counted;
 /// - `run` (`expected_run.txt`), the positive fixtures whose `suite`s
-///   `bynkc/tests/behaviour_fixtures.rs` actually *runs*, the one granularity that
+///   `bynk-tests/tests/behaviour_fixtures.rs` actually *runs*, the one granularity that
 ///   asserts runtime behaviour rather than emitted text or diagnostics.
 fn fixture_kinds(root: &Path) -> Probe {
-    let tests_dir = root.join("bynkc/tests");
+    let tests_dir = root.join("bynk-tests/tests");
     let contains = count_files_named(&tests_dir, "expected_contains.txt");
     let absent = count_files_named(&tests_dir, "expected_absent.txt");
     let diagnostics = count_files_named(&tests_dir, "expected_diagnostics.txt");

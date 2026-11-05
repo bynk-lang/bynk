@@ -29,7 +29,7 @@ use crate::probe::Provenance;
 /// tree is already up to date). `false` for
 /// `compile_once_warnings_behaviour.rs`, the only other caller: it compiles a
 /// **committed** repo fixture in place, the same hazard
-/// `bynkc/tests/e2e.rs`'s in-place fixtures have — an unconditional write
+/// `bynk-tests/tests/e2e.rs`'s in-place fixtures have — an unconditional write
 /// would leave a real `bynk.schema.lock` in the tree on every test run.
 pub fn compile_once(
     compiler: &Compiler,

@@ -1203,7 +1203,7 @@ pub(crate) mod tests {
 
     /// Parse `config` as `deploy` does. The literals in these tests are the
     /// emitter's real output (`bynk-emit/src/emitter/wrangler.rs`), pinned
-    /// fixture-side by `bynkc/tests/fixtures/positive/` — 121 (an agent), 151
+    /// fixture-side by `bynk-tests/tests/fixtures/positive/` — 121 (an agent), 151
     /// (a queue) and 372 (KV + agent + queue in one context). Deploy reads what
     /// the emitter writes, so the two must depict the same file.
     fn parse_config(label: &str, text: &str) -> Resources {
@@ -1483,7 +1483,7 @@ service = "commerce-payment"
 
     #[test]
     fn a_queue_only_context_declares_its_queues_by_name() {
-        // `bynkc/tests/fixtures/positive/153_queue_multiple` — two
+        // `bynk-tests/tests/fixtures/positive/153_queue_multiple` — two
         // `from queue(...)` services in one context.
         assert_eq!(
             parse_config(
@@ -1554,7 +1554,7 @@ max_batch_size = 10
 
     #[test]
     fn a_do_only_context_declares_the_classes_the_push_will_export() {
-        // `bynkc/tests/fixtures/positive/121_workers_with_agent` — an agent, so
+        // `bynk-tests/tests/fixtures/positive/121_workers_with_agent` — an agent, so
         // a DO binding and the `exports` entry that registers its class.
         assert_eq!(
             parse_config(
@@ -1580,7 +1580,7 @@ storage = "sqlite"
 
     #[test]
     fn a_context_declaring_every_v1_resource_is_read_whole() {
-        // `bynkc/tests/fixtures/positive/372_kv_agent_queue_workers` — the
+        // `bynk-tests/tests/fixtures/positive/372_kv_agent_queue_workers` — the
         // combination slice 1 completes: KV (slice 0), an agent's export and
         // a queue, in one context. Each kind is read independently, so one
         // present must not mask another.

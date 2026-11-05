@@ -9,7 +9,7 @@ handler never learns whether, or how, a subscriber ran.
 **Understand**
 - [Understand events](/book/guides/events/understand-events/)
 
-**Worked example:** [`bynkc/tests/events_behaviour.rs`](https://github.com/bynk-lang/bynk/blob/main/bynkc/tests/events_behaviour.rs)
+**Worked example:** [`bynk-tests/tests/events_behaviour.rs`](https://github.com/bynk-lang/bynk/blob/main/bynk-tests/tests/events_behaviour.rs)
 — a publisher, a subscriber, and the release-at-commit/abort-suppression proof,
 compiled and run under real `tsc` + `node`.
 

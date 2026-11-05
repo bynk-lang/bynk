@@ -6157,7 +6157,7 @@ mod native_platform_closure_tests {
     /// states: a context whose *only* path to a platform-native unit is a
     /// provider's `given` — `provides Cache = LocalCache given
     /// bynk.cloudflare.Kv { … }`, with no handler ever naming `Kv` directly —
-    /// must still be recognised as native. `bynkc/tests/fixtures/negative/
+    /// must still be recognised as native. `bynk-tests/tests/fixtures/negative/
     /// 1030_kv_provider_given_wrong_platform` pins the same contract
     /// end-to-end through `run_checks`.
     #[test]

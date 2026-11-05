@@ -15,7 +15,7 @@
 //! The transform is applied to both rule heads and the nonterminal references
 //! inside productions, so the whole reference reads as language, not internals.
 //!
-//! See `bynkc/tests/grammar_reference.rs` (the appendix generator) and
+//! See `bynk-tests/tests/grammar_reference.rs` (the appendix generator) and
 //! `site/src/plugins/remark-bynk-directives.mjs` (the `{{#grammar <rule>}}`
 //! include directive the Book renders with).
 
@@ -282,8 +282,8 @@ pub fn render_appendix(grammar_json: &str) -> String {
     out.push_str("# Complete grammar (appendix)\n\n");
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
-         Source: tree-sitter-bynk/src/grammar.json, via bynkc/tests/grammar_reference.rs.\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it grammar_reference:: -->\n\n",
+         Source: tree-sitter-bynk/src/grammar.json, via bynk-tests/tests/grammar_reference.rs.\n     \
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it grammar_reference:: -->\n\n",
     );
     out.push_str(
         "The complete Bynk grammar, generated from the `tree-sitter-bynk` grammar. \

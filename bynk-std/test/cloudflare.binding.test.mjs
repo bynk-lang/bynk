@@ -15,7 +15,7 @@
 // `list_complete: false` and a `cursor` while more remain, and no cursor on
 // the last page; `put` takes `{ expirationTtl }` in seconds. Pages are small
 // here so that draining several of them is exercised. Whether the fake matches
-// the platform is what `bynkc/tests/binding_workerd.rs` checks, on `workerd`.
+// the platform is what `bynk-tests/tests/binding_workerd.rs` checks, on `workerd`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -258,7 +258,7 @@ t("WorkersService.send: a missing binding names it", async () => {
 // `truncated: true` and a `cursor` while more remain, and `httpMetadata` and
 // `customMetadata` only when `include` asks for them. Pages are small here so
 // that paging is exercised. Whether the fake matches the platform is what
-// `bynkc/tests/binding_workerd.rs` checks, on `workerd`.
+// `bynk-tests/tests/binding_workerd.rs` checks, on `workerd`.
 function fakeR2(pageSize = 2) {
   const objects = new Map();
   const uploads = new Map();

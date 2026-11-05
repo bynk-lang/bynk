@@ -635,7 +635,7 @@ jobs:
       # and installs nothing.
       #
       # The spec must stay in step with the tests' own; a drift guard
-      # (bynkc/tests/wrangler/mod.rs) fails if it doesn't.
+      # (bynk-tests/tests/wrangler/mod.rs) fails if it doesn't.
       #
       # Not fatal off Linux, where the smokes are allowed to skip anyway. On
       # Linux BYNK_REQUIRE_WORKERD makes wrangler mandatory, so a failure here
@@ -666,7 +666,7 @@ jobs:
           # guard; #971 fixed the identical guard in another test four days
           # later, both only after the breakage had landed on `main`), because
           # each test carried its own copy. It now has exactly one
-          # implementation: bynkc/tests/require/mod.rs, which is unit-tested on
+          # implementation: bynk-tests/tests/require/mod.rs, which is unit-tested on
           # the empty case specifically. A new workerd test calls that, and the
           # two halves of the contract cannot drift apart again.
           #
@@ -712,9 +712,9 @@ jobs:
           esac
       - name: Type-check emitted output under TypeScript 7
         if: matrix.os == 'ubuntu-latest'
-        # bynkc's integration tests are one binary (`it`, see bynkc/tests/it.rs);
+        # bynkc's integration tests are one binary (`it`, see bynk-tests/tests/it.rs);
         # each file's tests are prefixed with its stem.
-        run: cargo nextest run --locked --profile ci -p bynkc --test it -E 'test(/^(tsc_verify|examples|behaviour_fixtures)::/)'
+        run: cargo nextest run --locked --profile ci -p bynk-tests --test it -E 'test(/^(tsc_verify|examples|behaviour_fixtures)::/)'
         env:
           BYNK_REQUIRE_TSC: "1"
 
@@ -762,7 +762,7 @@ jobs:
       # saves. bynkc's integration tests are one binary (`it`), selected by
       # their file's module prefix.
       - name: Type-stripping and inspect tests under the floor
-        run: "cargo test -p bynkc --locked --test it -- tsc_verify:: debug_inspect::"
+        run: "cargo test -p bynk-tests --locked --test it -- tsc_verify:: debug_inspect::"
         env:
           BYNK_REQUIRE_TSC: "1"
       - name: "@bynk/runtime tests under the floor"
@@ -1199,12 +1199,12 @@ jobs:
     # The two cross-component drift guards read files that live OUTSIDE the
     # `rust` filter, so the main `test` job's gate doesn't cover a one-sided
     # change to them:
-    #   - bynkc/tests/grammar_reference.rs reads tree-sitter-bynk/src/grammar.json
+    #   - bynk-tests/tests/grammar_reference.rs reads tree-sitter-bynk/src/grammar.json
     #     (a `grammar` input) and asserts the Book's reference/grammar-appendix.md
     #     still matches the rendered EBNF;
-    #   - bynkc/tests/decisions_index.rs reads design/decisions/**.md (a
+    #   - bynk-tests/tests/decisions_index.rs reads design/decisions/**.md (a
     #     `decisions` input) and asserts decisions/README.md indexes every ADR.
-    #   - bynkc/tests/readme_layering.rs reads bynk-*/README.md (a `readmes`
+    #   - bynk-tests/tests/readme_layering.rs reads bynk-*/README.md (a `readmes`
     #     input) and asserts the crate-layering diagram matches the manifests.
     #   - xtask validates design/pending/**.md (a `pending` input) against the
     #     pending-increment format (increment-allocation track).
@@ -1234,13 +1234,13 @@ jobs:
       # so nextest's parallelism buys nothing here, and adding its install
       # step would only tax the cheap grammar/decisions PRs this job
       # exists for. bynkc's guards live in its one integration binary (`it`,
-      # see bynkc/tests/it.rs), selected by their file's module prefix.
+      # see bynk-tests/tests/it.rs), selected by their file's module prefix.
       - name: Grammar appendix ↔ tree-sitter grammar
-        run: "cargo test -p bynkc --test it grammar_reference::"
+        run: "cargo test -p bynk-tests --test it grammar_reference::"
       - name: Decision-record index ↔ ADR files
-        run: "cargo test -p bynkc --test it decisions_index::"
+        run: "cargo test -p bynk-tests --test it decisions_index::"
       - name: Crate-layering diagram ↔ crate manifests
-        run: "cargo test -p bynkc --test it readme_layering::"
+        run: "cargo test -p bynk-tests --test it readme_layering::"
       - name: Pending-increment files ↔ format; bynk.toml schema
         run: cargo test -p xtask
 

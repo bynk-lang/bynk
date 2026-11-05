@@ -2,7 +2,7 @@
 //! `wire_contract_at`/`to_wire` path, driven against real `diagnose_project`
 //! output — `examples/rate-limiter` (HTTP, single-context) and a synthetic
 //! two-context project (`on call`, a real cross-context contract hash). Item
-//! 3 (the anti-drift e2e fixture + `bynkc/tests/wire_shape_drift.rs`) is a
+//! 3 (the anti-drift e2e fixture + `bynk-tests/tests/wire_shape_drift.rs`) is a
 //! later phase, per the plan.
 //!
 //! `bynk-lsp` is a binary crate: this file includes the pure modules

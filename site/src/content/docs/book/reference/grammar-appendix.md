@@ -2,8 +2,8 @@
 title: Complete grammar (appendix)
 ---
 <!-- GENERATED FILE — do not edit by hand.
-     Source: tree-sitter-bynk/src/grammar.json, via bynkc/tests/grammar_reference.rs.
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it grammar_reference:: -->
+     Source: tree-sitter-bynk/src/grammar.json, via bynk-tests/tests/grammar_reference.rs.
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it grammar_reference:: -->
 
 The complete Bynk grammar, generated from the `tree-sitter-bynk` grammar. For the annotated, per-construct reference see [Syntax & grammar](/book/reference/grammar/).
 

@@ -8,7 +8,7 @@ name: CodeQL
 # CodeQL's load-bearing coverage here is the TypeScript surface; the Rust leg is
 # maturing — defense-in-depth over what `clippy` + the type system already give.
 # The *behavioral* guard for the emitted auth verifier is the bearer-auth test
-# (`bynkc/tests/bearer_auth.rs`), not SAST — see ADR 0087.
+# (`bynk-tests/tests/bearer_auth.rs`), not SAST — see ADR 0087.
 
 on:
   # SAST analyses only Rust + TypeScript, so skip docs/design/markdown-only

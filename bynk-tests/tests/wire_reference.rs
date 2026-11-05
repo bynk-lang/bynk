@@ -15,7 +15,7 @@
 //!   status and body.
 //!
 //! Regenerate the page after an intended change with:
-//!     BYNK_BLESS=1 cargo test -p bynkc --test it wire_reference::
+//!     BYNK_BLESS=1 cargo test -p bynk-tests --test it wire_reference::
 //! The Node guard skips loudly without `tsc` and `node`; `BYNK_REQUIRE_TSC=1`
 //! turns the skip into a failure.
 
@@ -53,7 +53,7 @@ fn generated_wire_format_page_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/content/docs/book/reference/wire-format.md is out of date with the wire format.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it wire_reference::"
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it wire_reference::"
     );
 }
 
@@ -132,7 +132,7 @@ fn marker(check: CallCheck) -> String {
 #[test]
 fn the_emitted_dispatch_makes_the_published_checks_in_order() {
     let golden = repo(
-        "bynkc/tests/fixtures/positive/2013_foreign_callers/expected/workers/shop-orders/index.ts",
+        "bynk-tests/tests/fixtures/positive/2013_foreign_callers/expected/workers/shop-orders/index.ts",
     );
     let ts = fs::read_to_string(&golden).unwrap();
     let start = ts

@@ -9,7 +9,7 @@
 #   - tree-sitter-bynk/package.json   version
 #   - the lockfiles (Cargo.lock, package-lock.json)
 #   - the Bynk Book's current-version banners (the Book, MAJOR.MINOR) —
-#     guarded by bynkc/tests/doc_version.rs (Workstream 0)
+#     guarded by bynk-tests/tests/doc_version.rs (Workstream 0)
 #
 # The release workflow's verify job refuses a tag that doesn't match all of
 # them, so run this in the increment PR and land the bump with the increment.
@@ -51,7 +51,7 @@ rm tree-sitter-bynk/package.json.bak
 
 # The book's current-version banners track MAJOR.MINOR (patches are
 # non-language). Only these "current version" banners move — never the
-# historical "introduced in vX" feature markers. `bynkc/tests/doc_version.rs`
+# historical "introduced in vX" feature markers. `bynk-tests/tests/doc_version.rs`
 # fails CI if any banner drifts from the released version.
 mm="${ver%.*}"
 book="site/src/content/docs/book"

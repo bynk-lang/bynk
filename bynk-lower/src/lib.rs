@@ -1058,7 +1058,7 @@ pub fn lower_cap_ref_ir(cap_ref: &CapRef) -> CapRefIr {
 /// Decision E: targeted minimal fixtures, one per node kind this slice
 /// covers, staying strictly inside the subset [`lower_expr_ir`]/
 /// [`lower_stmt_ir`] actually implement — not a walk over the real
-/// `bynkc/tests/fixtures/positive` corpus, which hits an unimplemented
+/// `bynk-tests/tests/fixtures/positive` corpus, which hits an unimplemented
 /// `Match`/`Call` arm within a few lines of almost any real fixture.
 #[cfg(test)]
 mod tests {
@@ -1431,7 +1431,7 @@ service Api from http {
         ));
     }
 
-    /// Mirrors `bynkc/tests/fixtures/positive/236_websocket_chatroom` in
+    /// Mirrors `bynk-tests/tests/fixtures/positive/236_websocket_chatroom` in
     /// full — `on open`/`on message`/`on close` all present, the same
     /// shape the real fixture uses — so this fixture's own tests can cover
     /// both the owned (`on open`) and borrowed (`on message`/`on close`,

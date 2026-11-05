@@ -34,7 +34,7 @@ fn assert_prewarms(path: &Path) {
         yaml.contains(&expected),
         "{} must pre-warm the npx cache with `{expected}` before running the \
          suite — without it the workerd smokes race on a cold `~/.npm/_npx` \
-         install (see bynkc/tests/wrangler/mod.rs). If the spec was bumped, \
+         install (see bynk-tests/tests/wrangler/mod.rs). If the spec was bumped, \
          bump it here and in the workflow together.",
         path.display()
     );

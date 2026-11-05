@@ -143,7 +143,7 @@ fn the_overlays_findings_across_the_corpus_are_pinned() {
     // 143 agents and 14 state fields when this was written.
     assert!(agents >= 140, "only {agents} agents found");
     assert!(machines >= 14, "only {machines} state fields found");
-    let fixture = |f: &str| format!("bynkc/tests/fixtures/positive/{f}");
+    let fixture = |f: &str| format!("bynk-tests/tests/fixtures/positive/{f}");
     assert_eq!(
         findings,
         [

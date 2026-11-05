@@ -2,7 +2,7 @@
 title: Testing & fixtures
 ---
 The compiler's correctness rests on a large fixture suite plus a TypeScript
-type-check gate. Both live under `bynkc/tests/`.
+type-check gate. Both live under `bynk-tests/tests/`.
 
 ## The fixture suite
 

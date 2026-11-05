@@ -11,8 +11,8 @@ docs/book/
 
 # `bynkc test` build output written into a fixture dir (never tracked; the
 # fixtures are driven from temp dirs, so a committed out/ is stale cruft)
-bynkc/tests/fixtures/**/out/
-bynkc/tests/fixtures/**/out-js/
+bynk-tests/tests/fixtures/**/out/
+bynk-tests/tests/fixtures/**/out-js/
 
 # Likewise for the examples: `bynkc test` and `bynkc compile` write here
 examples/**/out/

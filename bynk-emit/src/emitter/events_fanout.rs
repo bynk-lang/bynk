@@ -484,7 +484,7 @@ mod tests {
     #[test]
     fn matches_the_real_fixtures_own_events_fanout_ts_byte_for_byte() {
         let expected = include_str!(
-            "../../../bynkc/tests/fixtures/positive/966_event_field_default_cross_context/\
+            "../../../bynk-tests/tests/fixtures/positive/966_event_field_default_cross_context/\
              expected/workers/commerce-order/events_fanout.ts"
         );
         let mut routes = BTreeMap::new();

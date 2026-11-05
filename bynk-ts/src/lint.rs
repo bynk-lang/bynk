@@ -16,7 +16,7 @@
 //! naming `namespace` in prose (`"...requires a KV namespace binding..."`)
 //! is not a `namespace` declaration.
 //!
-//! #1538 wires this into `bynkc/tests/tsc_verify.rs`, over every
+//! #1538 wires this into `bynk-tests/tests/tsc_verify.rs`, over every
 //! `Verbatim`/`VerbatimExpr` leaf `TsProgram::verbatim_content` finds by
 //! walking a compiled fixture's tree — real, CI-visible `Verbatim` content
 //! to check, closing Decision F's own deferral ("wiring it into a real

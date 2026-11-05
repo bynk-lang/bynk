@@ -274,7 +274,7 @@ fn err_structural_mismatch(path_expr: &str, expected: &str, actual: TsExpr) -> T
 /// text `path: path`). Every real call site *here*, by contrast, validates
 /// a function's own top-level `path` parameter directly, which TypeScript's
 /// object-literal shorthand prints as bare `path,` — confirmed byte-for-byte
-/// against `bynkc/tests/fixtures/positive/254_multi_file_commons_workers_
+/// against `bynk-tests/tests/fixtures/positive/254_multi_file_commons_workers_
 /// codec/expected/money/cents.ts:26` (`emit_refined`'s own pre-conversion
 /// text). [`TsExpr::object`]'s convenience constructor only builds
 /// [`TsObjectEntry::Prop`] entries, which would print `path: path` instead
@@ -425,7 +425,7 @@ mod qualified_ts_type_tests {
     /// Review of #1438, finding 2: the exact regression this slice
     /// introduced and fixed (`shop_payment..PayError`, a doubled
     /// separator) — pinned directly, not left to depend on a real `tsc`
-    /// run in `bynkc/tests/coverage_behaviour.rs`.
+    /// run in `bynk-tests/tests/coverage_behaviour.rs`.
     #[test]
     fn dotted_qual_entry_renders_a_single_separator() {
         let qual: Qual = [("PayError".to_string(), "shop_payment.".to_string())]
@@ -2041,7 +2041,7 @@ mod emit_sum_codec_tests {
     /// "...", f1: ..., f2: ..., ... }` shape with 2+ payload fields found
     /// zero matches — not assumed): a payload-carrying variant with TWO OR
     /// MORE fields. The one real multi-field sum in the fixture corpus
-    /// (`bynkc/tests/fixtures/positive/474_or_patterns`'s own
+    /// (`bynk-tests/tests/fixtures/positive/474_or_patterns`'s own
     /// `BookingState`) never crosses the wire boundary, so `serialise_
     /// BookingState`/`deserialise_BookingState` are never generated; every
     /// sum type that DOES cross the boundary (`Status`, `MessageArg`,

@@ -9,7 +9,7 @@
 //!    must list exactly the registry's words (#2464).
 //!
 //! Regenerate the docs page with:
-//!     BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference::
+//!     BYNK_BLESS=1 cargo test -p bynk-tests --test it keywords_reference::
 
 mod common;
 
@@ -126,7 +126,7 @@ fn generated_keywords_page_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/content/docs/book/reference/keywords.md is out of date.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference::"
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it keywords_reference::"
     );
 }
 

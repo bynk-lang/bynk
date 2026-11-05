@@ -286,7 +286,7 @@ fn duration_millis_static_is_classified_intrinsic() {
     // conversion — the emitted TS is just `return n;`, with no "Duration" or
     // "millis" substring left to assert on. `bynk-emit`'s own
     // `check_duration_static`/lowering agreement is exercised by the
-    // existing fixture suite (e.g. `bynkc/tests/fixtures/positive`'s
+    // existing fixture suite (e.g. `bynk-tests/tests/fixtures/positive`'s
     // Duration cases); this test only pins the checker's own classification.
     let src = r#"
 commons demo {

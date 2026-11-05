@@ -93,7 +93,7 @@ fn compile_once_surfaces_non_failing_warnings() {
     let mut ok = false;
     let stderr = with_captured_stderr(|| {
         // #980: this fixture is a committed repo directory, not a scratch
-        // one — the same hazard `bynkc/tests/e2e.rs` has for its in-place
+        // one — the same hazard `bynk-tests/tests/e2e.rs` has for its in-place
         // fixtures. `schema_registry: false` keeps this test from writing a
         // real `bynk.schema.lock` into the tree on every run.
         ok = compile_once(&compiler, &project_root, &build_dir, false);

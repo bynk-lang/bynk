@@ -421,7 +421,7 @@ export class LocaleProvider implements Locale {
   // assigning constructor instead): a parameter property isn't
   // strip-removable — it implicitly declares *and* assigns a field, which
   // breaks both `--inspect` debug sessions and the in-browser eval path
-  // (`bynkc/tests/tsc_verify.rs`'s `all_emitted_typescript_strips_under_node`
+  // (`bynk-tests/tests/tsc_verify.rs`'s `all_emitted_typescript_strips_under_node`
   // gate catches this class of construct).
   private request?: Request;
   private declaredLocales: readonly string[];

@@ -9,7 +9,7 @@
 // plain `{ now }`, and the environment is a plain object.
 //
 // Every test is named `<binding> <Provider>.<method>: <claim>`. The coverage
-// guard in `bynkc/tests/binding_behaviour.rs` reads those names from the run and
+// guard in `bynk-tests/tests/binding_behaviour.rs` reads those names from the run and
 // fails if a provider method has none.
 
 import { test } from "node:test";

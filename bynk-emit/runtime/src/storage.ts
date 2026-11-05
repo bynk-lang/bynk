@@ -60,7 +60,7 @@ function cloneStored<T>(value: T): T {
  *   still held here, so a commit later *refused* by an invariant had already
  *   happened. Cloning on `get` gives each handler its own state, so a refused
  *   commit leaves storage untouched. The regression is pinned by
- *   `bynkc/tests/store_behaviour.rs`'s
+ *   `bynk-tests/tests/store_behaviour.rs`'s
  *   `refused_commit_does_not_leak_an_in_place_store_write`.
  */
 export class InMemoryStorage implements DurableObjectStorage {

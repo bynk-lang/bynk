@@ -172,7 +172,7 @@ fn corpus() -> Vec<(String, String)> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
-        .join("bynkc/tests/fixtures/positive");
+        .join("bynk-tests/tests/fixtures/positive");
     let mut files: Vec<PathBuf> = Vec::new();
     let mut stack = vec![root.clone()];
     while let Some(dir) = stack.pop() {

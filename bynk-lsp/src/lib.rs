@@ -378,7 +378,7 @@ impl Backend {
     /// Locate the nearest ancestor directory named `src`, walking upward from
     /// `start`. This is the implicit source root of a *rootless* tree — the
     /// same `src/`-without-`bynk.toml` layout `bynkc` compiles in its legacy
-    /// single-tree mode (`bynkc/tests/e2e.rs` `compile_fixture`), which the
+    /// single-tree mode (`bynk-tests/tests/e2e.rs` `compile_fixture`), which the
     /// compiler fixtures use. Returns that `src` directory.
     fn find_source_root(start: &std::path::Path) -> Option<PathBuf> {
         let mut current = if start.is_file() {
@@ -8514,7 +8514,7 @@ mod tests {
             .parent()
             .expect("workspace root");
         let make = ws.join(
-            "bynkc/tests/fixtures/positive/\
+            "bynk-tests/tests/fixtures/positive/\
              252_multi_file_commons_dotted_test/src/shipping/rates/make.bynk",
         );
         assert!(make.is_file(), "fixture present: {}", make.display());

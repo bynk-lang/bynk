@@ -10,8 +10,8 @@
 //! A test's name gains its file's stem as a prefix: `tsc_verify.rs`'s
 //! `emitted_typescript_passes_tsc_strict` is now
 //! `tsc_verify::emitted_typescript_passes_tsc_strict`. Run one file's tests
-//! with `cargo nextest run -p bynkc --test it -E 'test(/^tsc_verify::/)'`, or
-//! `cargo test -p bynkc --test it tsc_verify::`.
+//! with `cargo nextest run -p bynk-tests --test it -E 'test(/^tsc_verify::/)'`, or
+//! `cargo test -p bynk-tests --test it tsc_verify::`.
 //!
 //! Adding a test file: add its `mod` line below, in order. `it_lists_every_file`
 //! fails if a file in this directory is missing from the list.
