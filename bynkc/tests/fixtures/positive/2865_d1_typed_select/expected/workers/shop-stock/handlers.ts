@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError, JsonError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 
-import { SqlReadError, SqlValue } from "../../bynk/cloudflare.js";
+import { SqlError, SqlReadError, SqlValue } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 import { __serialise_SqlError, __deserialise_SqlError, __serialise_SqlReadError, __deserialise_SqlReadError } from "../../bynk/cloudflare.js";
@@ -35,6 +35,14 @@ export interface Gone {
 
 export const Gone = {
 };
+
+export function sqlText(e: SqlError): string {
+  return "sql";
+}
+
+export function jsonText(e: JsonError): string {
+  return "decode";
+}
 
 export type Stock = bynk_cloudflare.D1;
 
@@ -71,27 +79,48 @@ export const putWord = {
 
 export const listing = {
   async call(min: number, deps: { Stock: Stock }): globalThis.Promise<Result<readonly Item[], SqlReadError>> {
-    return (async () => { const __decode = (__s: string): Result<readonly Item[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __flags = (__o: __JsonValue): void => { if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return; const __row = __o as { [k: string]: __JsonValue }; for (const __k of ["live"]) { if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; } }; if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); const __r = __deserialise_List_Item(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Item[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\", \"qty\", \"note\", \"live\" FROM items WHERE qty >= ?1 ORDER BY id", [SqlValue.Integer(min)]); if (__r.tag === "Err") return Err({ tag: "Sql", error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode", error: __d.error }); })();
+    return (async () => { const __decode = (__s: string): Result<readonly Item[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __flags = (__o: __JsonValue): void => { if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return; const __row = __o as { [k: string]: __JsonValue }; for (const __k of ["live"]) { if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; } }; if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); const __r = __deserialise_List_Item(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Item[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\", \"qty\", \"note\", \"live\" FROM items WHERE qty >= ?1 ORDER BY id", [SqlValue.Integer(min)]); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error }); })();
   },
 };
 
 export const lookup = {
   async call(id: string, deps: { Stock: Stock }): globalThis.Promise<Result<Option<Item>, SqlReadError>> {
-    return (async () => { const __decode = (__s: string): Result<Item, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __flags = (__o: __JsonValue): void => { if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return; const __row = __o as { [k: string]: __JsonValue }; for (const __k of ["live"]) { if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; } }; if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); const __r = __deserialise_Item(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Item); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.first("SELECT \"id\", \"qty\", \"note\", \"live\" FROM items WHERE id = ?1", [SqlValue.Text(id)]); if (__r.tag === "Err") return Err({ tag: "Sql", error: __r.error }); if (__r.value.tag === "None") return Ok(None); const __d = __decode(__r.value.value); return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "Decode", error: __d.error }); })();
+    return (async () => { const __decode = (__s: string): Result<Item, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __flags = (__o: __JsonValue): void => { if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return; const __row = __o as { [k: string]: __JsonValue }; for (const __k of ["live"]) { if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; } }; if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); const __r = __deserialise_Item(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Item); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.first("SELECT \"id\", \"qty\", \"note\", \"live\" FROM items WHERE id = ?1", [SqlValue.Text(id)]); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); if (__r.value.tag === "None") return Ok(None); const __d = __decode(__r.value.value); return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "Decode" as const, error: __d.error }); })();
   },
 };
 
 export const loose = {
   async call(deps: { Stock: Stock }): globalThis.Promise<string> {
-    const r = await (async () => { const __decode = (__s: string): Result<readonly Loose[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Loose(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Loose[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\", \"qty\" FROM items ORDER BY id", []); if (__r.tag === "Err") return Err({ tag: "Sql", error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode", error: __d.error }); })();
+    const r = await (async () => { const __decode = (__s: string): Result<readonly Loose[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Loose(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Loose[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\", \"qty\" FROM items ORDER BY id", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error }); })();
     if (r.tag === "Ok") {
       return "ok";
     }
     if (r.tag === "Err" && r.error.tag === "Decode") {
-      return "decode";
+      const e = r.error.error;
+      return jsonText(e);
     }
     if (r.tag === "Err" && r.error.tag === "Sql") {
-      return "sql";
+      const e = r.error.error;
+      return sqlText(e);
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};
+
+export const looseOne = {
+  async call(deps: { Stock: Stock }): globalThis.Promise<string> {
+    const __letElse1932 = await (async () => { const __decode = (__s: string): Result<Loose, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Loose(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Loose); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.first("SELECT \"id\", \"qty\" FROM items ORDER BY id", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); if (__r.value.tag === "None") return Ok(None); const __d = __decode(__r.value.value); return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "Decode" as const, error: __d.error }); })();
+    if (__letElse1932.tag === "Ok") {
+      const row = __letElse1932.value;
+      return "ok";
+    }
+    if (__letElse1932.tag === "Err" && __letElse1932.error.tag === "Sql") {
+      const e = __letElse1932.error.error;
+      return sqlText(e);
+    }
+    if (__letElse1932.tag === "Err" && __letElse1932.error.tag === "Decode") {
+      const e = __letElse1932.error.error;
+      return jsonText(e);
     }
     throw new globalThis.Error("non-exhaustive match");
   },
@@ -99,15 +128,17 @@ export const loose = {
 
 export const missing = {
   async call(deps: { Stock: Stock }): globalThis.Promise<string> {
-    const r = await (async () => { const __decode = (__s: string): Result<readonly Gone[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Gone(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Gone[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\", \"absent\" FROM items", []); if (__r.tag === "Err") return Err({ tag: "Sql", error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode", error: __d.error }); })();
+    const r = await (async () => { const __decode = (__s: string): Result<readonly Gone[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Gone(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Gone[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\", \"absent\" FROM items", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error }); })();
     if (r.tag === "Ok") {
       return "ok";
     }
     if (r.tag === "Err" && r.error.tag === "Decode") {
-      return "decode";
+      const e = r.error.error;
+      return jsonText(e);
     }
     if (r.tag === "Err" && r.error.tag === "Sql") {
-      return "sql";
+      const e = r.error.error;
+      return sqlText(e);
     }
     throw new globalThis.Error("non-exhaustive match");
   },
