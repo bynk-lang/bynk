@@ -68,7 +68,6 @@ bynk-grammar.workspace = true
 # `test_json`/`coverage` moved down into `bynk-driver` (Wave 5 §5.4); the
 # integration tests still build/inspect `serde_json::Value` documents
 # directly (test_json.rs, source_map_bodies.rs, grammar_coverage.rs).
-serde.workspace = true
 serde_json.workspace = true
 # `tool_exists`/`probe` moved down into `bynk-driver` (Wave 5 §5.4); a couple
 # of integration tests still do their own PATH probe for a toolchain binary
