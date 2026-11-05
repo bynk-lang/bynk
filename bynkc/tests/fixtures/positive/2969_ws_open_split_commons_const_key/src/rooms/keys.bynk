@@ -1,0 +1,6 @@
+commons rooms
+
+// #2969: the constant keying the `on open`'s transfer lives in a file of a
+// commons split across files, so there is no single `rooms` module to import
+// it from.
+const LOBBY: String = "lobby"

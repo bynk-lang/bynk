@@ -3767,6 +3767,20 @@ fn build_output(
                     .services
                     .values()
                     .any(|s| s.handlers.iter().any(|h| table.exec_plan.handler_needs(h)));
+                // #2969: the file of each used commons that declares each of its
+                // functions and constants, so `compose.ts` imports a commons
+                // constant from its declaring module, as `handlers.ts` does,
+                // when the commons is split across files.
+                let used_decl_paths: HashMap<String, HashMap<String, PathBuf>> = unit_uses
+                    .get(ctx_name)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|u| {
+                        let indices = groups.get(u)?;
+                        let index = bynk_check::symbols::build_file_decl_index(indices, &parsed);
+                        Some((u.clone(), index.fns))
+                    })
+                    .collect();
                 let (compose_ts, needs_locale_request) = emitter::emit_worker_compose(
                     ctx_name,
                     table,
@@ -3788,6 +3802,7 @@ fn build_output(
                         .get(ctx_name)
                         .map(Vec::as_slice)
                         .unwrap_or_default(),
+                    &used_decl_paths,
                 );
                 // #2136: a context a `system` suite targets gets the test
                 // build's scheduled-result hook. A deployable build strips
