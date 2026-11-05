@@ -1010,7 +1010,7 @@ impl<'a> Parser<'a> {
                     // Built-in type-name dispatch. Each arm below uses the exact
                     // `name == "<Name>"` idiom: the drift guard
                     // `builtin_type_names_match_parser_dispatch`
-                    // (`bynkc/tests/keywords_reference.rs`) scans this file for
+                    // (`bynk-tests/tests/keywords_reference.rs`) scans this file for
                     // that idiom and asserts the set equals `BUILTIN_TYPE_NAMES`,
                     // which also gates the `bynk.resolve.reserved_builtin_type`
                     // redeclaration diagnostic. Keep new built-ins in this form,

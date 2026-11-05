@@ -320,7 +320,7 @@ fn new_entry_point_reports_errors_on_a_broken_project() {
 /// function-type-boundary checks). Same source as
 /// `bynk-lsp/tests/analysis_residual_gap.rs`'s
 /// `function_type_boundary_diagnostic_present` (copied from
-/// `bynkc/tests/fixtures/negative/152_fn_type_in_service_sig`), the analogous
+/// `bynk-tests/tests/fixtures/negative/152_fn_type_in_service_sig`), the analogous
 /// pin one layer up, at the `bynk-ide`/`bynk-lsp` call path.
 #[test]
 fn new_entry_point_reports_a_function_type_boundary_violation() {

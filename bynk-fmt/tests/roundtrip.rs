@@ -20,7 +20,7 @@ fn fixture_dirs() -> Vec<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
-        .join("bynkc/tests/fixtures/positive");
+        .join("bynk-tests/tests/fixtures/positive");
     let mut out = Vec::new();
     if let Ok(rd) = fs::read_dir(&root) {
         for entry in rd.flatten() {

@@ -55,7 +55,7 @@ reading the table, and follows each injected unit's own `uses`/`consumes` lines,
 so dependencies between first-party units are never listed by hand.
 
 The TypeScript bindings are tested beside a project built for them, one per
-platform, that consumes the whole standard library (`bynkc/tests/stdlib_scaffold`):
+platform, that consumes the whole standard library (`bynk-tests/tests/stdlib_scaffold`):
 `binding_scaffold.rs` type-checks each with `tsc --strict`, and
 `binding_behaviour.rs` runs the `node --test` files in `bynk-std/test/` against
 the compiled bindings. **Every provider method needs a test** named

@@ -240,7 +240,7 @@ pub const CLOUDFLARE_ADAPTER_SRC: &str = include_str!("../lib/cloudflare/bynk.cl
 /// A view over [`UNITS`], in its order, which is observable: hover takes the
 /// first source declaring a name, and completion lists units in this order. The
 /// `firstparty_sources_cover_every_src_const` drift guard
-/// (`bynkc/tests/firstparty_sources.rs`) fails if a `*_SRC` const is left out of
+/// (`bynk-tests/tests/firstparty_sources.rs`) fails if a `*_SRC` const is left out of
 /// [`UNITS`].
 pub const FIRSTPARTY_SOURCES: &[(&str, &str)] = &SOURCES;
 

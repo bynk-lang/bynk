@@ -10,7 +10,7 @@
 //! emitter builds the `/_bynk/call/` dispatch from [`CallCheck`] and the header
 //! names below, and [`mod@reference`] renders `reference/wire-format.md` from the
 //! same values plus [`crate::wire`]'s encoding model and [`crate::contract`]'s
-//! hash. `bynkc/tests/wire_reference.rs` holds the page, the emitted dispatch,
+//! hash. `bynk-tests/tests/wire_reference.rs` holds the page, the emitted dispatch,
 //! the runtime's `callService` and the generated codecs to it.
 //!
 //! **Stability (version 1).** Additive only: a new status code, a new error

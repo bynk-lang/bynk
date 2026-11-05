@@ -79,7 +79,7 @@ book is untouched; silence is an oversight. See design/proposals/README.md §"Do
 ## Done when
 
 - <observable acceptance criteria — the behaviour a reviewer can check.>
-- Fixtures (next free indices) cover <the cases>. A change to what a program *does* at runtime is proved by a behavioural fixture (an `expected_run.txt` suite run by `bynkc/tests/behaviour_fixtures.rs`), not only by a golden.
+- Fixtures (next free indices) cover <the cases>. A change to what a program *does* at runtime is proved by a behavioural fixture (an `expected_run.txt` suite run by `bynk-tests/tests/behaviour_fixtures.rs`), not only by a golden.
 - Docs current per the delta above; tooling surfaces stated.
 - Version bump (`scripts/bump-version.sh`) for a language/tooling increment.
 - A new ADR records the forks; its number is assigned when the implementing PR lands. The implementing PR closes this issue (`Closes #<this>`).

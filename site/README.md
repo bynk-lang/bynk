@@ -8,7 +8,7 @@ An [Astro](https://astro.build/) + [Starlight](https://starlight.astro.build/) s
 - **Bynk by Example** (`src/content/docs/by-example/`): project pages built from `../examples/` and a snippets tier. The `<Example>` component reads real source, so a page cannot drift from what the compiler checks, and runnable blocks link to (or embed) the playground.
 - **Developer docs** (`src/content/docs/docs/`): the CLI, manifest, emission and tooling, plus generated crate API docs.
 
-Every fenced `bynk` block is compiled by the `doc_examples` gate in `bynkc/tests/`, so the code shown is checked by CI.
+Every fenced `bynk` block is compiled by the `doc_examples` gate in `bynk-tests/tests/`, so the code shown is checked by CI.
 
 ## How it fits together
 

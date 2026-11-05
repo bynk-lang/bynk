@@ -11,7 +11,7 @@ for target in parse compile; do
 done
 
 i=0
-find ../bynkc/tests/fixtures ../examples -name '*.bynk' -type f | while read -r f; do
+find ../bynk-tests/tests/fixtures ../examples -name '*.bynk' -type f | while read -r f; do
   i=$((i + 1))
   for target in parse compile; do
     cp "$f" "corpus/$target/seed-$i.bynk"

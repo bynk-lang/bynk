@@ -6,7 +6,7 @@
 //! stays the same across many releases, so a mismatch can build cleanly. That
 //! is how the pin sat at 0.2.126 for weeks after `Cargo.lock` moved to 0.2.127
 //! (#1522), under a comment saying the two matched. This guard is copied from
-//! `bynkc/tests/wrangler_prewarm.rs`: the lockfile is the truth, and a lockfile
+//! `bynk-tests/tests/wrangler_prewarm.rs`: the lockfile is the truth, and a lockfile
 //! bump that leaves a workflow behind fails here instead of going unnoticed.
 
 use std::path::PathBuf;

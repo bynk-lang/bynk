@@ -95,7 +95,7 @@ The plugin replaces it with an EBNF code block holding that production, rendered
 from the committed `site/src/generated/grammar.json` (the same source the
 [grammar appendix](/book/reference/grammar-appendix/) is built from) so it cannot
 drift from the parser. That JSON is itself a drift-guarded render of the grammar
-— `bynk-grammar/tests/generated_grammar_json.rs` regenerates and checks it — so
+— `bynk-tests/tests/generated_grammar_json.rs` regenerates and checks it — so
 the rendered production is **generated, never hand-edited**. An unknown rule name
 throws at build time, so a typo cannot silently vanish.
 
@@ -111,14 +111,14 @@ parsing*. Embed the diagnostics that constrain a construct with:
 The plugin replaces it with a bullet list of the governing diagnostics, read
 from `site/src/generated/grammar-semantics.json` — the rule → diagnostics map.
 That file is generated from the `grammar_symbol` field on each diagnostic in the
-registry and drift-guarded by `bynkc/tests/generated_site_json.rs`, which also
+registry and drift-guarded by `bynk-tests/tests/generated_site_json.rs`, which also
 checks every `grammar_symbol` names a real grammar rule. A construct with no
 diagnostics yields a neutral line rather than failing, since an unconstrained
 production is legitimate; to add or change a mapping, edit `grammar_symbol` and
 re-bless.
 
 The annotated reference ([`reference/grammar.md`](/book/reference/grammar/)) must
-cover every production: `bynkc/tests/grammar_coverage.rs` asserts that each
+cover every production: `bynk-tests/tests/grammar_coverage.rs` asserts that each
 embeddable grammar rule has exactly one `{{#grammar <rule>}}` entry with a
 matching `{#rule-<rule>}` heading anchor (a custom heading id — see below), and
 that every directive argument names a real rule. So a new production cannot ship
@@ -138,7 +138,7 @@ its captured transcript:
 
 1. Write a standalone failing program at `site/src/diagnostics/<id>.bynk` (a
    `commons` or `context` block, like a doc example, but one that must error).
-2. Run `BYNK_BLESS=1 cargo test -p bynkc --test it doc_diagnostics::`. This compiles
+2. Run `BYNK_BLESS=1 cargo test -p bynk-tests --test it doc_diagnostics::`. This compiles
    the fixture, asserts it fails, and writes the real diagnostic — colour-free,
    with a stable `<id>.bynk` label — to `site/src/diagnostics/<id>.txt`.
 3. On the page, show the source in a `bynk,fail` fence and the transcript in a
@@ -184,7 +184,7 @@ device in use.
 Several mechanisms keep the docs honest. Some run inside the site build; the
 rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
 
-1. **Every example compiles.** `bynkc/tests/doc_examples.rs` extracts every
+1. **Every example compiles.** `bynk-tests/tests/doc_examples.rs` extracts every
    fenced ```` ```bynk ```` block from `site/src/content/docs/book/**` and
    compiles it — `commons` blocks in-process, `context` blocks as a temp
    project, and a block with neither header inside a synthetic `commons` (or
@@ -217,7 +217,7 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    relevant change:
 
    ```sh
-   BYNK_BLESS=1 cargo test -p bynkc --test it -- diagnostics_registry:: \
+   BYNK_BLESS=1 cargo test -p bynk-tests --test it -- diagnostics_registry:: \
                                                    keywords_reference:: \
                                                    cli_reference:: \
                                                    grammar_reference::
@@ -225,7 +225,7 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
 
    The two generated JSON artifacts behind the directives —
    `site/src/generated/grammar.json` and `grammar-semantics.json` — are guarded
-   the same way (`bynk-grammar`'s `generated_grammar_json` and `bynkc`'s
+   the same way (`bynk-tests`'s `generated_grammar_json` and
    `generated_site_json`); re-bless them with `BYNK_BLESS=1` too.
 
 3. **Link checking.** `starlight-links-validator` validates internal links on
@@ -238,7 +238,7 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    `sidebar.json` or `llms-full.txt` no longer matches its source (see
    *Machine-readable Book*, below).
 
-5. **Version banners.** `bynkc/tests/doc_version.rs` checks the Book's
+5. **Version banners.** `bynk-tests/tests/doc_version.rs` checks the Book's
    current-version banners; `scripts/bump-version.sh` rewrites them, so there is
    no manual bump step (see *Docs ship with the feature*).
 
@@ -353,7 +353,7 @@ Treat docs as part of an increment's definition of done (see
 [specification](/book/spec/) chapters (per *Keeping the spec current* above), and
 add a changelog entry. The Book's current-version banners are single-sourced —
 `scripts/bump-version.sh` rewrites them (and regenerates `llms-full.txt`) and
-`bynkc/tests/doc_version.rs` fails CI on drift, so there is no manual
+`bynk-tests/tests/doc_version.rs` fails CI on drift, so there is no manual
 version-bump step. Finally, check that any touched tutorial or guide still
 compiles under the doc-example gate, and run `npm run build` from `site/` to
 confirm the page renders and its links resolve.

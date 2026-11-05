@@ -6052,7 +6052,7 @@ service Api {
 
     #[test]
     fn sum_by_clause_persists_an_actor_sum_binding() {
-        // Mirrors `bynkc/tests/fixtures/positive/916_bytes_http_sum_body`:
+        // Mirrors `bynk-tests/tests/fixtures/positive/916_bytes_http_sum_body`:
         // an HTTP route's `by who: User | Visitor` sum, `User` a real
         // `Bearer`-scheme local actor, `Visitor` the prelude unit-identity
         // actor — a sum's own peers must carry distinguishable schemes

@@ -2924,7 +2924,7 @@ fn diagnostic_coverage(root: &Path) -> Probe {
 
 // --- Reported probe 4: fixture_kinds --------------------------------------
 
-/// R11.2. Fixture directories under `bynkc/tests` using each assertion granularity —
+/// R11.2. Fixture directories under `bynk-tests/tests` using each assertion granularity —
 /// `expected_contains.txt` / `expected_absent.txt` / `expected_diagnostics.txt` — set
 /// against the older, coarser `expected_error.txt` (category-string) convention.
 ///
@@ -2932,10 +2932,10 @@ fn diagnostic_coverage(root: &Path) -> Probe {
 /// - `warnings` (`expected_warnings.txt`, a positive fixture's pinned warnings), which
 ///   this probe had never counted;
 /// - `run` (`expected_run.txt`), the positive fixtures whose `suite`s
-///   `bynkc/tests/behaviour_fixtures.rs` actually *runs*, the one granularity that
+///   `bynk-tests/tests/behaviour_fixtures.rs` actually *runs*, the one granularity that
 ///   asserts runtime behaviour rather than emitted text or diagnostics.
 fn fixture_kinds(root: &Path) -> Probe {
-    let tests_dir = root.join("bynkc/tests");
+    let tests_dir = root.join("bynk-tests/tests");
     let contains = count_files_named(&tests_dir, "expected_contains.txt");
     let absent = count_files_named(&tests_dir, "expected_absent.txt");
     let diagnostics = count_files_named(&tests_dir, "expected_diagnostics.txt");
@@ -3030,13 +3030,22 @@ fn unused_deps(root: &Path) -> Probe {
 /// reason (`unused_deps_allowlist_entries_are_live` checks both), so a stale or
 /// unexplained entry fails. The label is a crate's name, or `[workspace]` for a
 /// `[workspace.dependencies]` entry.
-const UNUSED_DEPS_ALLOWED: &[(&str, &str, &str)] = &[(
-    "[workspace]",
-    "bynkc",
-    "no member depends on `bynkc`; its entry carries a stamped `version = \"…\"` line, and \
-     deleting it would conflict with every `chore(stamp)` commit. It goes with the `bynkc` \
-     retirement (track E3).",
-)];
+const UNUSED_DEPS_ALLOWED: &[(&str, &str, &str)] = &[
+    (
+        "bynk-tests",
+        "bynk-driver",
+        "used by bynkc/src/main.rs, which bynk-tests/src/bin/bynkc-under-test.rs includes via \
+         include!, so no identifier appears in this crate's source. Goes with the `bynkc` \
+         retirement (track E3).",
+    ),
+    (
+        "bynk-tests",
+        "clap",
+        "used by bynkc/src/main.rs, which bynk-tests/src/bin/bynkc-under-test.rs includes via \
+         include!, so no identifier appears in this crate's source. Goes with the `bynkc` \
+         retirement (track E3).",
+    ),
+];
 
 /// One declared edge with no use: `(crate label, dependency key, table kind)`.
 /// `kind` is `""` for `[dependencies]`, `"dev"` or `"build"`.
@@ -5411,7 +5420,7 @@ commons app.demo {
             ("a".to_string(), "x".to_string(), ""),
             ("a".to_string(), "y".to_string(), "dev"),
             ("a".to_string(), "z".to_string(), "build"),
-            ("[workspace]".to_string(), "bynkc".to_string(), ""),
+            ("bynk-tests".to_string(), "clap".to_string(), ""),
         ];
         assert_eq!(
             unused_deps_offenders(&raw),

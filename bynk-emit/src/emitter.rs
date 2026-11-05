@@ -100,7 +100,7 @@ pub use runtime_files::{RUNTIME_DIR, emit_all_runtime_modules, rewrite_runtime_i
 /// sources that also declare it (`runtime/src/agent.ts`'s
 /// `dispatchToEventsFanout`, `runtime/src/boundary.ts`'s `deliverEvent`) are
 /// hand-edited files this constant cannot reach — keep them textually
-/// identical to this shape by hand; `cargo test -p bynkc --test it --
+/// identical to this shape by hand; `cargo test -p bynk-tests --test it --
 /// events_workers_wiring:: events_envelope_behaviour::` exercises every hop
 /// and would fail on a real mismatch.
 ///
@@ -6643,7 +6643,7 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
         // general `TsType::Fn` rendering, correctly matching the real
         // parametered-function-type case, has no such wrap, but every
         // fixture's own Query annotation does — e.g.
-        // `bynkc/tests/fixtures/positive/302_query_annotated_let/expected/
+        // `bynk-tests/tests/fixtures/positive/302_query_annotated_let/expected/
         // probe.ts:46`). `TsType` has no general parenthesisation wrapper
         // (adding one for this single real use would be inventing a new
         // variant beyond this slice's own authorised gap list — `readonly`
@@ -6827,7 +6827,7 @@ mod ts_type_ref_tests {
     /// text wraps the whole function type in an *extra* outer paren pair
     /// (`(() => readonly T[])`), distinct from a bare `Fn` type's own
     /// convention (no outer wrap) — caught only by this zero-diff check
-    /// against `bynkc/tests/fixtures/positive/302_query_annotated_let/
+    /// against `bynk-tests/tests/fixtures/positive/302_query_annotated_let/
     /// expected/probe.ts`, not by reasoning about the algebra alone.
     #[test]
     fn query_wraps_the_whole_function_type_in_parens() {

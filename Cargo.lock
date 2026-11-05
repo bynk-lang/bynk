@@ -289,14 +289,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bynk-grammar"
-version = "0.510.8"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "bynk-ide"
 version = "0.510.8"
 dependencies = [
@@ -414,6 +406,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "bynk-tests"
+version = "0.510.8"
+dependencies = [
+ "bynk-check",
+ "bynk-driver",
+ "bynk-emit",
+ "bynk-fmt",
+ "bynk-ide",
+ "bynk-project",
+ "bynk-syntax",
+ "bynk-testkit",
+ "bynk-ts",
+ "bynkc",
+ "clap",
+ "regex",
+ "serde",
+ "serde_json",
+ "which",
+]
+
+[[package]]
 name = "bynk-ts"
 version = "0.510.8"
 dependencies = [
@@ -444,19 +457,10 @@ dependencies = [
  "bynk-check",
  "bynk-driver",
  "bynk-emit",
- "bynk-fmt",
- "bynk-grammar",
- "bynk-ide",
- "bynk-project",
  "bynk-render",
  "bynk-strip",
  "bynk-syntax",
- "bynk-testkit",
- "bynk-ts",
  "clap",
- "regex",
- "serde_json",
- "which",
 ]
 
 [[package]]

@@ -484,7 +484,7 @@ incremental property falls out.
 Second, the query already exists in substance. ADR 0200's cross-context contract hash is a canonical
 content hash over a unit's public surface — "one canonical normal form, owned by `bynk-check`, shared
 by the matcher and the hash" — built to make cross-context calls fail closed, and guarded over the
-whole fixture corpus by `bynkc/tests/contract_hash.rs`. That is `UnitSignature`'s identity function,
+whole fixture corpus by `bynk-tests/tests/contract_hash.rs`. That is `UnitSignature`'s identity function,
 pointed at a different problem.
 
 **R3.15 — The granularity is committed; the scheduler is deferred.** Whether memoisation is provided

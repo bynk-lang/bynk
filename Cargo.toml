@@ -17,12 +17,14 @@ members = [
     "bynkc",
     "bynk",
     "bynk-fmt",
-    "bynk-grammar",
     "bynk-lsp",
     # Content-ownership track (#1086) slice 3: cross-crate test fixtures built
     # on production discovery. Not a product crate: dev-only, unpublished,
     # kept off the release workflows' hardcoded crate list.
     "bynk-testkit",
+    # The integration-test corpus and the grammar renderer (C3). Not a product
+    # crate: unpublished, kept off the release workflows' crate list.
+    "bynk-tests",
     # Rust binding for the tree-sitter grammar (unpublished). Exists only so the
     # cross-parser conformance test can diff tree-sitter against bynk-syntax;
     # `publish = false`, kept off the release workflows' hardcoded crate list.
@@ -94,9 +96,6 @@ bynk-fmt = { path = "bynk-fmt", version = "0.510.8" }
 # integration tests that use it, and workspace-local `cargo test --workspace`
 # (which does exercise them) resolves this by path regardless.
 bynk-testkit = { path = "bynk-testkit" }
-# Same reasoning as `bynk-testkit` above: `bynk-grammar` is `publish = false`
-# (published-set rule, H-4), a dev-dependency of `bynkc` only. Path-only.
-bynk-grammar = { path = "bynk-grammar" }
 ariadne = "0.6"
 clap = { version = "4", features = ["derive"] }
 logos = "0.16"

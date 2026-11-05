@@ -2,8 +2,8 @@
 title: Wire format (version 1)
 ---
 <!-- GENERATED FILE — do not edit by hand.
-     Source: bynk-check/src/wire_format.rs and wire_format/reference.rs, via bynkc/tests/wire_reference.rs.
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it wire_reference:: -->
+     Source: bynk-check/src/wire_format.rs and wire_format/reference.rs, via bynk-tests/tests/wire_reference.rs.
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it wire_reference:: -->
 
 How one Bynk context calls another context's `on call` service over a
 Cloudflare Service Binding: the request, the checks the callee makes, the
@@ -14,7 +14,7 @@ This page is generated from the compiler. The header names, the check order
 and the status codes are the constants the emitter builds the call dispatch
 from; the encoding table is read from the compiler's wire model; and every
 example below is run through the codecs the compiler generates for the
-example context, by `bynkc/tests/wire_reference.rs`.
+example context, by `bynk-tests/tests/wire_reference.rs`.
 
 ## Version and stability
 

@@ -11296,7 +11296,7 @@ mod tests {
     #[test]
     fn matches_the_real_fixtures_own_tests_main_ts_byte_for_byte() {
         let expected = include_str!(
-            "../../../bynkc/tests/fixtures/positive/109_test_with_opaque_construction/\
+            "../../../bynk-tests/tests/fixtures/positive/109_test_with_opaque_construction/\
              expected/tests/main.ts"
         );
         let tests = vec![RunnableTest {
@@ -11337,7 +11337,7 @@ mod tests {
         use bynk_syntax::ast::SourceUnit;
 
         let expected = include_str!(
-            "../../../bynkc/tests/fixtures/positive/251_multi_file_commons_test/\
+            "../../../bynk-tests/tests/fixtures/positive/251_multi_file_commons_test/\
              expected/thing.ts"
         );
         let commons = |name: &str| {

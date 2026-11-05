@@ -1126,7 +1126,7 @@ mod patch_tests {
 
     /// A full, realistic `wrangler.toml` — every stanza `emit_wrangler_toml`
     /// can produce, in its real order, with its real banner and inline
-    /// comment (mirrors `bynkc/tests/fixtures/positive/
+    /// comment (mirrors `bynk-tests/tests/fixtures/positive/
     /// 372_kv_agent_queue_workers/expected/workers/ops-hub/wrangler.toml`
     /// byte-for-byte). Review of #1305, finding 2: every test below asserts
     /// **exact** patched text against this fixture, not just "the changed

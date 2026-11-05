@@ -114,7 +114,7 @@ fn an_actor_is_not_confused_with_a_type_sharing_its_prefix() {
 #[test]
 fn a_method_still_answers_to_its_bare_name() {
     let text = analysed(
-        "../bynkc/tests/fixtures/positive/216_method_index/src",
+        "../bynk-tests/tests/fixtures/positive/216_method_index/src",
         "shop.bynk",
     );
     let span = symbols::find_declaration_span(&text, "bump").expect("a bare method name resolves");

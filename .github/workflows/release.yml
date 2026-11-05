@@ -176,7 +176,7 @@ jobs:
       # cache here means every test finds a complete cache and installs nothing.
       #
       # The spec must stay in step with the tests' own; a drift guard
-      # (bynkc/tests/wrangler/mod.rs) fails if it doesn't.
+      # (bynk-tests/tests/wrangler/mod.rs) fails if it doesn't.
       #
       # Not fatal off Linux, where the smokes are allowed to skip anyway. On
       # Linux BYNK_REQUIRE_WORKERD makes wrangler mandatory, so a failure here
@@ -189,7 +189,7 @@ jobs:
         env:
           BYNK_REQUIRE_TSC: "1"
           # Empty off Linux, and empty means "not required" — the contract lives
-          # in bynkc/tests/require/mod.rs. See the longer note in ci.yml,
+          # in bynk-tests/tests/require/mod.rs. See the longer note in ci.yml,
           # including why this is not a `shell: bash` conditional export.
           BYNK_REQUIRE_WORKERD: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
 

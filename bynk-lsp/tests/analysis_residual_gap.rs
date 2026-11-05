@@ -6,7 +6,7 @@
 //! arm **minus** the categories this file pins (see
 //! `bynk_check::analysis`'s own module doc comment for the full accounting).
 //!
-//! Each fixture below is copied from a real `bynkc/tests/fixtures/negative`
+//! Each fixture below is copied from a real `bynk-tests/tests/fixtures/negative`
 //! case that the CLI (`bynk_emit::project::compile_project`) rejects with
 //! the named category — so each one is a *known-real* violation, not a
 //! guess at one. This crate cannot depend on `bynk-emit` at all (R10.2,
@@ -143,7 +143,7 @@ fn assert_units_resolved(pd: &bynk_ide::ProjectDiagnostics, units: &[&str]) {
 /// block) is now called by `bynk_check::analysis::analyse_project`. Flipped
 /// from a pinned absence to a positive-coverage assertion rather than
 /// deleted, per the module doc's own instruction. Copied from
-/// `bynkc/tests/fixtures/negative/480_messages_missing_reference`.
+/// `bynk-tests/tests/fixtures/negative/480_messages_missing_reference`.
 #[test]
 fn messages_bundle_diagnostic_present() {
     const SRC: &str =
@@ -167,7 +167,7 @@ fn messages_bundle_diagnostic_present() {
 /// (`bynk.locale.multiple_message_bundles`) is now called by
 /// `bynk_check::analysis::analyse_project`. Flipped from a pinned absence to
 /// a positive-coverage assertion rather than deleted. Copied from
-/// `bynkc/tests/fixtures/negative/496_locale_multiple_message_bundles`.
+/// `bynk-tests/tests/fixtures/negative/496_locale_multiple_message_bundles`.
 #[test]
 fn locale_bundle_ambiguity_diagnostic_present() {
     const MSGS_A: &str = "commons msgs_a\n\nuses bynk.locale\n\nmessages \"en\" @reference {\n  \"greeting\" => \"Hello\"\n}\n";
@@ -201,7 +201,7 @@ fn locale_bundle_ambiguity_diagnostic_present() {
 /// naming a misspelled event) is now called by
 /// `bynk_check::analysis::analyse_project`. Flipped from a pinned absence to
 /// a positive-coverage assertion rather than deleted. Copied from
-/// `bynkc/tests/fixtures/negative/505_events_unknown_subscription`
+/// `bynk-tests/tests/fixtures/negative/505_events_unknown_subscription`
 /// (target-independent: the check takes no `BuildTarget`, so the source
 /// fixture's `target.txt = workers` is not needed here —
 /// `analyse_project_with` (deleted at #1541) hardcoded `BuildTarget::Bundle`
@@ -234,7 +234,7 @@ fn event_subscription_diagnostic_present() {
 /// Category 4 of 6 (a non-regression, see this file's module doc comment):
 /// `check_platform_lock`, now `bynk_check::project_model::phase_platform_lock`
 /// (P5.3) (`bynk.target.vendor_required`). Fixture copied from
-/// `bynkc/tests/fixtures/negative/150_kv_on_node_platform`, whose CLI-level
+/// `bynk-tests/tests/fixtures/negative/150_kv_on_node_platform`, whose CLI-level
 /// violation needs `--platform node` — `analyse_project` always analyses as
 /// `Platform::default()` (Cloudflare)/`BuildTarget::Bundle`, under which this
 /// exact fixture is *not* a violation (Cloudflare-native `Kv` consumed while
@@ -270,7 +270,7 @@ fn platform_lock_diagnostic_stays_absent() {
 /// `run_checks` see it, with no hook and no diagnostic-ordering drift
 /// between them. Flipped from a pinned absence to a positive-coverage
 /// assertion rather than deleted, per this module's own instruction. Copied
-/// from `bynkc/tests/fixtures/negative/152_fn_type_in_service_sig`.
+/// from `bynk-tests/tests/fixtures/negative/152_fn_type_in_service_sig`.
 #[test]
 fn function_type_boundary_diagnostic_present() {
     const API: &str = "context hof.api\n\nservice runner {\n  on call(f: Int -> Int) -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";

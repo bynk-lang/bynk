@@ -277,7 +277,7 @@ mod tests {
     use super::*;
 
     // `secret_reads_of`'s own walk (`walk_block`/`walk_expr`) is pinned
-    // end-to-end by `bynkc/tests/fixtures/positive/374_secrets_computed_name`
+    // end-to-end by `bynk-tests/tests/fixtures/positive/374_secrets_computed_name`
     // (`target.txt` = `workers`) — an earlier version of this comment pointed
     // at `differential_analysis.rs`/`analysis_residual_gap.rs` instead, which
     // was wrong: this PR's own additions to both establish that neither can

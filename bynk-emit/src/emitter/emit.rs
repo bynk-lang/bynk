@@ -1441,7 +1441,7 @@ mod emit_free_fn_tests {
 
     /// #1351: pins `emit_free_fn`'s own real generic/non-generic output
     /// byte-for-byte against `198_generic_identity_compose`'s own real
-    /// `expected.ts` (`bynkc/tests/fixtures/positive/198_generic_identity_compose`)
+    /// `expected.ts` (`bynk-tests/tests/fixtures/positive/198_generic_identity_compose`)
     /// — a generic single-param function, a multi-generic multi-param one
     /// (function-typed params, exercising `TsParam.ty`'s own `Fn` arm), and
     /// a plain non-generic one, transcribed directly from that fixture.
@@ -9312,7 +9312,7 @@ commons demo {
     /// union shape and its generic payload-constructor arrows byte-for-byte
     /// — the expected strings below are transcribed directly from
     /// `406_generic_sum_envelope`'s own real `expected.ts`
-    /// (`bynkc/tests/fixtures/positive/406_generic_sum_envelope`), confirmed
+    /// (`bynk-tests/tests/fixtures/positive/406_generic_sum_envelope`), confirmed
     /// to match it exactly, not independently invented text that merely
     /// looks plausible.
     #[test]

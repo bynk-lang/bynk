@@ -8,7 +8,7 @@
 # Nightly toolchain (libFuzzer instrumentation); seeded from the fixture
 # corpus so runs start deep in the grammar. Crashing inputs are uploaded as
 # artifacts — add each fix's reproducer to the in-tree smoke test
-# (bynkc/tests/fuzz_smoke.rs), which runs the same invariants on every
+# (bynk-tests/tests/fuzz_smoke.rs), which runs the same invariants on every
 # ordinary CI pass.
 name: fuzz
 

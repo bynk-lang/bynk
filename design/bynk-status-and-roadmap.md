@@ -137,7 +137,7 @@ formatter. The following are **fully wired end-to-end** and fixture-exercised
   `runtime.ts`; first-party sources authored as files and vendored via
   `include_str!` (v0.48, ADR 0086).
 - **Quality gate**: every project-form fixture's emitted TypeScript is compiled
-  under `tsc --strict --noEmit` (`bynkc/tests/tsc_verify.rs`); an
+  under `tsc --strict --noEmit` (`bynk-tests/tests/tsc_verify.rs`); an
   emitted-output guard fails on placeholder markers.
 
 ---

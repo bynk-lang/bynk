@@ -3,7 +3,7 @@
 # below); local `cargo nextest run` uses `default`.
 #
 # Why nextest at all: the suite is ~700 tests spread across dozens of
-# integration-test binaries (the bynkc/tests/fixtures/** corpus especially).
+# integration-test binaries (the bynk-tests/tests/fixtures/** corpus especially).
 # `cargo test` runs those binaries sequentially; nextest runs one process pool
 # across all of them, cutting the test leg's wall-clock. There are no rustdoc
 # doctests in the tree (nextest cannot run those), so nothing is lost — the
@@ -98,7 +98,7 @@ status-level = "slow"
 #
 # One cost on unix: terminating a workerd leg skips its `Drop`, and its
 # `wrangler dev` chain runs in a process group of its own (#1686,
-# `bynkc/tests/wrangler/mod.rs`), out of reach of nextest's signal. The chain is
+# `bynk-tests/tests/wrangler/mod.rs`), out of reach of nextest's signal. The chain is
 # left running for the rest of the job. The retry still boots: it is a fresh
 # process, so it gets a fresh port (`20000 + pid % 10000`). A leaked chain is
 # the lesser cost; a hang that cancels the job leaves the whole run unnamed.
@@ -132,23 +132,23 @@ retries = 0
 # the suite's slowest tests change. Overrides set in `default` apply to every
 # profile, `ci` included.
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::it) & test(=behaviour_fixtures::marked_positive_fixtures_behave_as_expected)'
+filter = 'binary_id(bynk-tests::it) & test(=behaviour_fixtures::marked_positive_fixtures_behave_as_expected)'
 priority = 100
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::it) & test(=tsc_verify::emitted_typescript_passes_tsc_strict)'
+filter = 'binary_id(bynk-tests::it) & test(=tsc_verify::emitted_typescript_passes_tsc_strict)'
 priority = 90
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::it) & test(=example_tests_behaviour::every_example_test_suite_passes)'
+filter = 'binary_id(bynk-tests::it) & test(=example_tests_behaviour::every_example_test_suite_passes)'
 priority = 80
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::it) & test(=import_closure::every_emitted_module_binds_every_name_it_uses)'
+filter = 'binary_id(bynk-tests::it) & test(=import_closure::every_emitted_module_binds_every_name_it_uses)'
 priority = 70
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::it) & test(=tsc_verify::emitted_javascript_is_valid_under_node)'
+filter = 'binary_id(bynk-tests::it) & test(=tsc_verify::emitted_javascript_is_valid_under_node)'
 priority = 60
 
 [[profile.default.overrides]]
@@ -156,11 +156,11 @@ filter = 'binary_id(bynk-fmt::comment_slots) & test(=a_comment_at_every_slot_is_
 priority = 50
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::it) & (test(/^remote_target_behaviour::/) | test(/^binding_workerd::/))'
+filter = 'binary_id(bynk-tests::it) & (test(/^remote_target_behaviour::/) | test(/^binding_workerd::/))'
 priority = 40
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::it) & test(=tsc_verify::js_artefact_strips_every_fixture_to_js_shape)'
+filter = 'binary_id(bynk-tests::it) & test(=tsc_verify::js_artefact_strips_every_fixture_to_js_shape)'
 priority = 40
 
 # On Windows, the registry conformance faults test opened dozens of loopback

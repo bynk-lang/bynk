@@ -3,7 +3,7 @@ title: "CLI (`bynkc`)"
 ---
 <!-- GENERATED FILE — do not edit by hand.
      Source: bynkc/src/cli.rs (`render_markdown`).
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it cli_reference:: -->
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it cli_reference:: -->
 
 The Bynk compiler
 

@@ -5,11 +5,11 @@
 //! compiler: the version, headers and check order from [`super`], the base-type
 //! encodings from [`crate::wire`], and the contract hash from
 //! [`crate::contract`], computed on [`EXAMPLE_SOURCE`]. The page's examples
-//! ([`EXAMPLES`]) are executed: `bynkc/tests/wire_reference.rs` compiles
+//! ([`EXAMPLES`]) are executed: `bynk-tests/tests/wire_reference.rs` compiles
 //! [`EXAMPLE_SOURCE`] to Workers, runs every example through the generated
 //! codecs on Node, and checks the emitted hashes and dispatch against this page.
 //! Regenerate the page with
-//! `BYNK_BLESS=1 cargo test -p bynkc --test it wire_reference::`.
+//! `BYNK_BLESS=1 cargo test -p bynk-tests --test it wire_reference::`.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -116,7 +116,7 @@ pub struct Example {
 const LINE: &str = r#"{"sku":"A-1","qty":2,"wait":1500,"delay":{"kind":"Some","value":250},"at":1767225600000,"blob":"aGk=","note":{"kind":"Some","value":"gift"},"tags":["new"],"stock":[["lon",3]],"rush":false}"#;
 
 /// The page's examples, each run through the generated codecs by
-/// `bynkc/tests/wire_reference.rs`.
+/// `bynk-tests/tests/wire_reference.rs`.
 pub const EXAMPLES: &[Example] = &[
     Example {
         ty: "Line",
@@ -464,8 +464,8 @@ pub fn render_reference() -> String {
         r#"# Wire format (version {WIRE_VERSION})
 
 <!-- GENERATED FILE — do not edit by hand.
-     Source: bynk-check/src/wire_format.rs and wire_format/reference.rs, via bynkc/tests/wire_reference.rs.
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it wire_reference:: -->
+     Source: bynk-check/src/wire_format.rs and wire_format/reference.rs, via bynk-tests/tests/wire_reference.rs.
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it wire_reference:: -->
 
 How one Bynk context calls another context's `on call` service over a
 Cloudflare Service Binding: the request, the checks the callee makes, the
@@ -476,7 +476,7 @@ This page is generated from the compiler. The header names, the check order
 and the status codes are the constants the emitter builds the call dispatch
 from; the encoding table is read from the compiler's wire model; and every
 example below is run through the codecs the compiler generates for the
-example context, by `bynkc/tests/wire_reference.rs`.
+example context, by `bynk-tests/tests/wire_reference.rs`.
 
 ## Version and stability
 

@@ -535,7 +535,7 @@ pub struct CompileOptions {
     /// deploy/dev build turn it on and write the reconciled lock back;
     /// `check`'s and `test`'s directory paths (#2078) turn it on read-only,
     /// so a non-additive change fails them too, and never write it. Every
-    /// library/test caller (in-memory builds, `bynkc/tests/e2e.rs`'s
+    /// library/test caller (in-memory builds, `bynk-tests/tests/e2e.rs`'s
     /// in-place fixture compiles, `bynk-emit`'s own `sources`-driven tests,
     /// the LSP) leaves it off, so a compile never mutates a project tree it
     /// wasn't asked to.
@@ -560,7 +560,7 @@ pub struct CompileOptions {
     /// [`crate::DEFAULT_COMPATIBILITY_FLAGS`]; a duplicate is dropped with a
     /// `bynk.project.duplicate_compatibility_flag` warning. Empty by default:
     /// `bynk-driver`'s `project_options`/`try_project_options` read the
-    /// manifest and set it, as does `bynkc/tests/e2e.rs` for a fixture.
+    /// manifest and set it, as does `bynk-tests/tests/e2e.rs` for a fixture.
     pub compatibility_flags: Vec<String>,
     /// `bynk.toml`'s `[workers] workers_dev`: written into every
     /// `wrangler.toml` when set, left out when `None`.

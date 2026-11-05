@@ -20,7 +20,7 @@
 //! its own `#[should_panic]` test naming the row, so the suite stays green
 //! while the bug is open and fails the moment it is fixed: the fixing PR moves
 //! the row into [`ROWS`] and deletes the `#[should_panic]` test, the same
-//! strict-xfail discipline as `bynkc/tests/behaviour_fixtures.rs`.
+//! strict-xfail discipline as `bynk-tests/tests/behaviour_fixtures.rs`.
 
 use crate::checker::{NamedKind, Ty};
 use crate::testkit::{Analysed, analyse};

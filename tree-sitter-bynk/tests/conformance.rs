@@ -955,7 +955,7 @@ fn totality_positive_corpus_accepted_by_both_parsers() {
     let mut files = Vec::new();
     collect_bynk_files_from(&root.join("examples"), &mut files);
     collect_bynk_files_from(&root.join("bynk-std/lib"), &mut files);
-    collect_bynk_files_from(&root.join("bynkc/tests/fixtures/positive"), &mut files);
+    collect_bynk_files_from(&root.join("bynk-tests/tests/fixtures/positive"), &mut files);
     files.sort();
 
     let mut mismatches = Vec::new();
@@ -1195,7 +1195,7 @@ const EXCLUDED_PARSE_TIME_FIXTURES: &[(&str, &str)] = &[
 #[test]
 fn totality_parse_error_negative_fixtures_rejected_by_both_parsers() {
     let root = workspace_root();
-    let negative_root = root.join("bynkc/tests/fixtures/negative");
+    let negative_root = root.join("bynk-tests/tests/fixtures/negative");
     let mut dirs = Vec::new();
     if let Ok(rd) = fs::read_dir(&negative_root) {
         for entry in rd.flatten() {

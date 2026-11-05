@@ -16,7 +16,7 @@ fn analysed() -> (ProjectDiagnostics, PathBuf, String, PathBuf) {
     analysed_file("tests/unit.bynk")
 }
 
-const FIXTURE: &str = "../bynkc/tests/fixtures/positive/2834_suite_fn_helpers";
+const FIXTURE: &str = "../bynk-tests/tests/fixtures/positive/2834_suite_fn_helpers";
 
 fn analysed_file(file: &str) -> (ProjectDiagnostics, PathBuf, String, PathBuf) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURE);

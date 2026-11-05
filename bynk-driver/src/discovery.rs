@@ -36,7 +36,7 @@
 //! &HashMap::new())` pattern that is `bynk-ide`'s (and `bynkc`'s test suite's)
 //! dominant way of exercising this whole analysis path (100+ call sites
 //! spanning `bynk-ide`'s own inline test modules, `bynk-lsp/tests`, and
-//! `bynkc/tests`) — every one depends on `read_source`'s fallback today.
+//! `bynk-tests/tests`) — every one depends on `read_source`'s fallback today.
 //! Closing `discovery.rs` for good needs all of that migrated first, which is
 //! bigger than either #1077 or #1079's issue text currently describes; #1077
 //! stays open pending that combined, design-reviewed effort. `fs_below_driver`

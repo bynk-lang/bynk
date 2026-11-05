@@ -323,7 +323,7 @@ fn actor_reference_hovers_as_its_declaration() {
 #[test]
 fn method_reference_hovers_the_bound_method_not_a_same_named_one() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/216_method_index/src",
+        "../bynk-tests/tests/fixtures/positive/216_method_index/src",
         "shop.bynk",
     );
 
@@ -354,7 +354,7 @@ fn method_reference_hovers_the_bound_method_not_a_same_named_one() {
 #[test]
 fn capability_op_reference_hovers_the_projects_own_op() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/160_provider_given_basic/src",
+        "../bynk-tests/tests/fixtures/positive/160_provider_given_basic/src",
         "demo.bynk",
     );
 
@@ -636,7 +636,7 @@ fn the_todo_example_analyses_cleanly() {
 #[test]
 fn a_documented_field_hovers_with_its_doc_everywhere() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/1888_one_line_docs/src",
+        "../bynk-tests/tests/fixtures/positive/1888_one_line_docs/src",
         "model.bynk",
     );
     for (anchor, needle) in [
@@ -680,7 +680,7 @@ fn a_documented_field_hovers_with_its_doc_everywhere() {
 #[test]
 fn a_documented_variant_hovers_with_its_doc() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/1888_one_line_docs/src",
+        "../bynk-tests/tests/fixtures/positive/1888_one_line_docs/src",
         "model.bynk",
     );
     for anchor in ["| Circle(", "Circle(radius) =>"] {
@@ -707,7 +707,7 @@ fn asset_reference_hovers_as_its_declaration() {
     // found (`bynk.asset.missing_file`); hover reads the declaration, never
     // the file, so it answers all the same.
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/1883_asset_workers/src",
+        "../bynk-tests/tests/fixtures/positive/1883_asset_workers/src",
         "board.bynk",
     );
     let hover = hover_at(&r, &rel, &text, &root, at(&text, "style.url", "style"))
@@ -722,7 +722,7 @@ fn asset_reference_hovers_as_its_declaration() {
 
     // ADR 0190 D2: the declaration renders the same content.
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/1883_asset_workers/src",
+        "../bynk-tests/tests/fixtures/positive/1883_asset_workers/src",
         "page.bynk",
     );
     let decl = hover_at(&r, &rel, &text, &root, at(&text, "asset style", "style"))
@@ -735,7 +735,7 @@ fn asset_reference_hovers_as_its_declaration() {
 #[test]
 fn asset_reference_gets_the_asset_semantic_token() {
     let (r, rel, text, _) = analysed(
-        "../bynkc/tests/fixtures/positive/1883_asset_workers/src",
+        "../bynk-tests/tests/fixtures/positive/1883_asset_workers/src",
         "board.bynk",
     );
     let legend = bynk_lsp::index_queries::semantic_tokens_legend();
@@ -771,7 +771,7 @@ fn asset_reference_gets_the_asset_semantic_token() {
 #[test]
 fn embed_reference_hovers_as_its_declaration() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/2387_embed_unit/src",
+        "../bynk-tests/tests/fixtures/positive/2387_embed_unit/src",
         "web.bynk",
     );
     let hover = hover_at(&r, &rel, &text, &root, at(&text, "Ok(shell)", "shell"))
@@ -785,7 +785,7 @@ fn embed_reference_hovers_as_its_declaration() {
     }
 
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/2387_embed_unit/src",
+        "../bynk-tests/tests/fixtures/positive/2387_embed_unit/src",
         "page.bynk",
     );
     let decl = hover_at(&r, &rel, &text, &root, at(&text, "embed shell", "shell"))
@@ -798,7 +798,7 @@ fn embed_reference_hovers_as_its_declaration() {
 #[test]
 fn embed_reference_gets_the_embed_semantic_token() {
     let (r, rel, text, _) = analysed(
-        "../bynkc/tests/fixtures/positive/2387_embed_unit/src",
+        "../bynk-tests/tests/fixtures/positive/2387_embed_unit/src",
         "web.bynk",
     );
     let legend = bynk_lsp::index_queries::semantic_tokens_legend();
@@ -833,7 +833,7 @@ fn embed_reference_gets_the_embed_semantic_token() {
 #[test]
 fn const_reference_hovers_as_its_declaration() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/2617_const_uses_and_sibling/src",
+        "../bynk-tests/tests/fixtures/positive/2617_const_uses_and_sibling/src",
         "api/service.bynk",
     );
     let hover = hover_at(
@@ -850,7 +850,7 @@ fn const_reference_hovers_as_its_declaration() {
     );
 
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/2617_const_uses_and_sibling/src",
+        "../bynk-tests/tests/fixtures/positive/2617_const_uses_and_sibling/src",
         "limits/limits.bynk",
     );
     let decl = hover_at(
@@ -869,7 +869,7 @@ fn const_reference_hovers_as_its_declaration() {
 #[test]
 fn const_reference_gets_the_constant_semantic_token() {
     let (r, rel, text, _) = analysed(
-        "../bynkc/tests/fixtures/positive/2617_const_uses_and_sibling/src",
+        "../bynk-tests/tests/fixtures/positive/2617_const_uses_and_sibling/src",
         "api/service.bynk",
     );
     let legend = bynk_lsp::index_queries::semantic_tokens_legend();
@@ -903,7 +903,7 @@ fn const_reference_gets_the_constant_semantic_token() {
 #[test]
 fn fixed_path_asset_hovers_its_at_path() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/1883_asset_fixed_paths_workers/src",
+        "../bynk-tests/tests/fixtures/positive/1883_asset_fixed_paths_workers/src",
         "board.bynk",
     );
     let hover = hover_at(&r, &rel, &text, &root, at(&text, "favicon.url", "favicon"))
@@ -923,7 +923,7 @@ fn fixed_path_asset_hovers_its_at_path() {
 #[test]
 fn derived_capability_hovers_as_an_instance_of_its_base() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/1966_derived_kv_workers/src",
+        "../bynk-tests/tests/fixtures/positive/1966_derived_kv_workers/src",
         "cart.bynk",
     );
 
@@ -976,7 +976,7 @@ fn derived_capability_hovers_as_an_instance_of_its_base() {
 #[test]
 fn hover_shows_a_qualified_key_by_its_declarations_name() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/2087_consumed_opaque_qualified_key",
+        "../bynk-tests/tests/fixtures/positive/2087_consumed_opaque_qualified_key",
         "ledger.bynk",
     );
     let h = hover_at(
@@ -998,7 +998,7 @@ fn hover_shows_a_qualified_key_by_its_declarations_name() {
 #[test]
 fn system_cron_and_queue_addresses_hover_as_worker_entries() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/2136_system_cron_queue",
+        "../bynk-tests/tests/fixtures/positive/2136_system_cron_queue",
         "tests/jobs.bynk",
     );
     let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
@@ -1016,7 +1016,7 @@ fn system_cron_and_queue_addresses_hover_as_worker_entries() {
     assert!(message.contains("`queue` entry"), "{message}");
 
     let (r2, rel2, text2, root2) = analysed(
-        "../bynkc/tests/fixtures/positive/2131_cron_queue_address_in_process",
+        "../bynk-tests/tests/fixtures/positive/2131_cron_queue_address_in_process",
         "tests/jobs.bynk",
     );
     let in_process = hover_at(
@@ -1038,7 +1038,7 @@ fn system_cron_and_queue_addresses_hover_as_worker_entries() {
 #[test]
 fn run_id_hovers_as_the_test_run() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/2138_run_id",
+        "../bynk-tests/tests/fixtures/positive/2138_run_id",
         "tests/system.bynk",
     );
     let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
@@ -1047,7 +1047,7 @@ fn run_id_hovers_as_the_test_run() {
     assert!(h.contains("test run's identity"), "{h}");
 
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/2138_run_id",
+        "../bynk-tests/tests/fixtures/positive/2138_run_id",
         "tests/unit.bynk",
     );
     let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
@@ -1066,7 +1066,7 @@ fn run_id_hovers_as_the_test_run() {
 #[test]
 fn keyword_named_members_get_property_and_method_tokens() {
     let (r, rel, text, root) = analysed(
-        "../bynkc/tests/fixtures/positive/2837_keyword_field_names/src",
+        "../bynk-tests/tests/fixtures/positive/2837_keyword_field_names/src",
         "payload.bynk",
     );
     let legend = bynk_lsp::index_queries::semantic_tokens_legend();
@@ -1116,7 +1116,7 @@ fn keyword_named_members_get_property_and_method_tokens() {
 #[test]
 fn keyword_names_the_index_misses_get_lexical_tokens() {
     let (_, _, text, _) = analysed(
-        "../bynkc/tests/fixtures/positive/2837_keyword_field_names/src",
+        "../bynk-tests/tests/fixtures/positive/2837_keyword_field_names/src",
         "payload.bynk",
     );
     let spans = bynk_lsp::symbols::keyword_name_token_spans(&text);

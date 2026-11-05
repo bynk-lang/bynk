@@ -449,7 +449,7 @@ ADR.
     `bynk-check` and versioned in lockstep (`version.workspace = true`). The
     name `bynk-std` was unclaimed on crates.io on 2026-10-14.
   - *Must hold:* byte-identical emitted output (P-5); the crate builds for
-    `wasm32`; and the `bynkc/tests/firstparty_sources.rs` guards move with
+    `wasm32`; and the `bynk-tests/tests/firstparty_sources.rs` guards move with
     the sources or point at the new crate.
 - **D2 — The stdlib's 1.0 promise. SETTLED 2026-10-14: a tiered promise.**
   Context: Gate 1 of `bynk-1.0-definition.md` *does* address capabilities. It
