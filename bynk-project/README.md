@@ -45,7 +45,7 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
     ├── bynk-emit          build sequencing, TS emission       + ts, ir, lower, project
     │   ├── bynk-strip     TS → JS type-stripping              + ts
     │   └── bynk-driver    shared CLI command bodies           + fmt, project, render, ts
-    └── bynk-ide           non-bailing editor analysis         + project, fmt
+    └── bynk-ide           non-bailing editor analysis         + project, fmt, ir, lower
 bynk-std                   first-party sources and bindings, as data
 ```
 
