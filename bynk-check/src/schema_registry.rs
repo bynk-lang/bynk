@@ -85,7 +85,7 @@ fn snapshot(event: &EventDecl) -> Vec<FieldShape> {
 
 /// A stable surface-form rendering of a `TypeRef`, for the registry's own
 /// stored shape only. Deliberately **not** `bynk-fmt`'s `type_ref_to_string`
-/// (private, and neither `bynk-emit` nor `bynk-check` depends on `bynk-fmt`)
+/// (private to the printer, and neither `bynk-emit` nor `bynk-check` depends on `bynk-fmt`)
 /// — and deliberately not required to match either the formatter's or the
 /// checker's own rendering byte-for-byte: this string is compared only
 /// against itself, across builds, never displayed to a user. Exhaustive, no

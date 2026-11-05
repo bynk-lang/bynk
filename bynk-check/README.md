@@ -39,9 +39,8 @@ It holds:
 `bynk-check` is the layer between the syntax leaf and everything that emits or
 analyses; besides [`bynk-syntax`](https://crates.io/crates/bynk-syntax) it
 depends only on [`bynk-project`](https://crates.io/crates/bynk-project) (the
-project model), [`bynk-std`](https://crates.io/crates/bynk-std) (the
-first-party sources, as data) and [`bynk-fmt`](https://crates.io/crates/bynk-fmt)
-(whose expression printer labels the agent state model's guards):
+project model) and [`bynk-std`](https://crates.io/crates/bynk-std) (the
+first-party sources, as data):
 
 ```text
 bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
@@ -49,7 +48,7 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 ├── bynk-ts                the TypeScript tree and its printer
 ├── bynk-render            diagnostic rendering
 ├── bynk-fmt               the formatter
-└── bynk-check             name resolution and type checking   + project, std, fmt
+└── bynk-check             name resolution and type checking   + project, std
     ├── bynk-ir            declaration-level IR
     │   └── bynk-lower     AST → IR helpers
     ├── bynk-emit          build sequencing, TS emission       + ts, ir, lower, project

@@ -16,7 +16,7 @@ pub use fmt::{FormatError, FormatOptions, IndentStyle, format_source, normalize_
 // v0.123 (editor-currency slice 2): the surface renderers for an expression and
 // a refinement, exposed so `bynk-lsp` hover renders predicates / `where`
 // clauses through the formatter's own logic rather than a copy that could drift.
-pub use fmt::{expr_to_string, refinement_to_string};
+pub use bynk_syntax::print::{expr_to_string, refinement_to_string};
 // v0.137.0 (ADR 0161): the storage-annotation renderer, exposed so `bynk-lsp`
 // agent-state hover renders a `store` field's `@indexed`/`@bounded`/… through
 // the formatter's own logic rather than a drift-prone copy.
@@ -26,7 +26,7 @@ pub use fmt::annotation_to_string;
 // parser resolves escapes at lex time), so `bynk-lsp` hover must re-escape it to
 // render valid Bynk, exactly as `format_actor` does. Without it the two renderers
 // agree until the value contains a `"` or a `\`.
-pub use fmt::escape_string;
+pub use bynk_syntax::print::escape_string;
 
 // #972: the `[fmt]` section of a project's `bynk.toml`, layered under the CLI's
 // own flags by `bynkc fmt`/`bynk fmt` and read directly by `bynk-lsp` for

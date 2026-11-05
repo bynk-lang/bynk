@@ -24,6 +24,5 @@ bynk-std.workspace = true
 bynk-project.workspace = true
 # #2220: the agent state model (`agent_state`) labels its guards with the
 # formatter's expression printer; guards are merged by that text.
-bynk-fmt.workspace = true
 # Refinement-predicate validation in the checker.
 regress.workspace = true
