@@ -57,7 +57,7 @@ bynk-std                   first-party sources and bindings, as data
 
 Each crate depends on its parent in the tree, plus any crates listed after
 its `+`. The front-ends sit on top: the `bynkc` and `bynk` CLIs over
-`bynk-driver`, the `bynkc-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
+`bynk-driver`, the `bynk-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
 the unpublished `bynk-wasm` playground module over `bynk-emit`, `bynk-strip`,
 and `bynk-ide`.
 

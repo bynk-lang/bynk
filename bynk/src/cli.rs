@@ -813,7 +813,7 @@ pub enum CapabilityArg {
     Test,
     /// dev / deploy to Cloudflare — Node + wrangler.
     Deploy,
-    /// Editor support — bynkc-lsp.
+    /// Editor support — bynk-lsp.
     Editor,
     /// Build Bynk from source — a Rust toolchain.
     Build,

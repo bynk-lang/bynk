@@ -1,4 +1,4 @@
-//! `bynkc-lsp` — the Bynk Language Server binary.
+//! `bynk-lsp` — the Bynk Language Server binary.
 //!
 //! Slice C (the `[lib]` seam): the server implementation lives in the crate's
 //! library ([`bynk_lsp`]); this binary is a thin entry point so integration

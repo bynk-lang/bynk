@@ -56,7 +56,7 @@ struct PathsTable {
     exclude: Option<PathList>,
 }
 
-/// Language-server settings, read by `bynkc-lsp`.
+/// Language-server settings, read by `bynk-lsp`.
 #[derive(JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]

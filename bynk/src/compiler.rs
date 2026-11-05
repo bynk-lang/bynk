@@ -7,7 +7,7 @@
 //!    `bynk.executablePath`-style escape hatch);
 //! 2. `bynkc` on `PATH`;
 //! 3. a `bynkc` sibling of the running `bynk` binary (mirrors how `vscode-bynk`
-//!    resolves `bynkc-lsp` next to itself).
+//!    resolves `bynk-lsp` next to itself).
 //!
 //! An explicit override wins when set — an override that only applied after
 //! auto-discovery failed would be useless. The skew check exists *because* this

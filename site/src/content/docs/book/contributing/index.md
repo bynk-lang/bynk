@@ -15,7 +15,7 @@ VS Code extension lives in its own repository,
 |---|---|
 | `bynkc` | The compiler and CLI (`bynkc`): lex → parse → resolve → check → emit. |
 | `bynk-fmt` | The formatter, a leaf over `bynk-syntax`. |
-| `bynk-lsp` | The language server (`bynkc-lsp`), built on `tower-lsp`. |
+| `bynk-lsp` | The language server (`bynk-lsp`), built on `tower-lsp`. |
 | `tree-sitter-bynk` | The grammar (`grammar.js` → generated parser) and highlight queries. |
 
 The workspace targets the **Rust 2024 edition**.
