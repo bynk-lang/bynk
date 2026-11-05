@@ -235,7 +235,7 @@ fn lower_base_literal(base: BaseType, e: &Expr) -> Result<String, DefaultReason>
             ))
         }
         (BaseType::String, ExprKind::StrLit(s)) if !negate => {
-            Ok(format!("\"{}\"", escape_ts_literal(s)))
+            Ok(format!("\"{}\"", bynk_ts::escape_ts_literal(s)))
         }
         (BaseType::Bool, ExprKind::BoolLit(b)) if !negate => Ok(b.to_string()),
         (BaseType::Duration, ExprKind::DurationLit { millis, .. }) if !negate => {
@@ -489,29 +489,4 @@ pub fn lower_field_default_value(
             "this field type cannot carry a default".to_string(),
         )),
     }
-}
-
-/// Escapes a string for embedding in a TypeScript double-quoted string
-/// literal. `pub` because `bynk-emit`'s `escape_ts_string` (~65 call sites
-/// across the emitter's real emission code) delegates here rather than
-/// keeping its own copy — the two must stay byte-identical since both
-/// splice into generated TypeScript, so this is the one shared definition.
-pub fn escape_ts_literal(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            '\t' => out.push_str("\\t"),
-            '\r' => out.push_str("\\r"),
-            // #2619: `\0`, other control characters and the JS line terminators
-            // U+2028/U+2029 print as `\u{…}` escapes (valid in strings and templates).
-            c if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') => {
-                out.push_str(&format!("\\u{{{:X}}}", c as u32));
-            }
-            c => out.push(c),
-        }
-    }
-    out
 }
