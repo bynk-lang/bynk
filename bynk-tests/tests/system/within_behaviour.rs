@@ -22,7 +22,9 @@
 //! Skips loudly without `node`; `BYNK_REQUIRE_TSC=1` turns the skip into a
 //! failure, as the other Node-driven suites do.
 
+#[path = "../require/mod.rs"]
 mod require;
+#[path = "../tools/mod.rs"]
 mod tools;
 
 use std::fs;
@@ -383,16 +385,16 @@ fn the_virtual_time_runtime_advances_only_virtual_time() {
     let tmp = std::env::temp_dir().join(format!("bynk-virtual-time-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
-    let runtime = include_str!("../../bynk-emit/src/emitter/test_runtime/virtual_time.ts");
+    let runtime = include_str!("../../../bynk-emit/src/emitter/test_runtime/virtual_time.ts");
     // The real helper, reading the harness timers from `exec.timers`.
     fs::write(
         tmp.join("result.ts"),
-        include_str!("../../bynk-emit/runtime/src/result.ts"),
+        include_str!("../../../bynk-emit/runtime/src/result.ts"),
     )
     .unwrap();
     fs::write(
         tmp.join("settle.ts"),
-        include_str!("../../bynk-emit/runtime/src/settle.ts"),
+        include_str!("../../../bynk-emit/runtime/src/settle.ts"),
     )
     .unwrap();
     fs::write(

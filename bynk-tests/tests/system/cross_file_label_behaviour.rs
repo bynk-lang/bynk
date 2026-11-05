@@ -171,7 +171,7 @@ service api from http {{
     Scratch(dir)
 }
 
-const STDLIB: &str = include_str!("../../bynk-std/lib/core/bynk.bynk");
+const STDLIB: &str = include_str!("../../../bynk-std/lib/core/bynk.bynk");
 
 fn assert_firstparty_label_in_its_own_source(subcommand: &str) {
     let project = missing_headers_project(subcommand);

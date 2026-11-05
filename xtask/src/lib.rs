@@ -23,6 +23,7 @@ pub mod greenfield_status;
 pub mod manifest_schema;
 pub mod site_page;
 pub mod stamp;
+pub mod tiers;
 
 /// The bump level an increment declares. The stamp turns this into the next
 /// `X.Y.Z` in merge order; the format never carries a concrete number.

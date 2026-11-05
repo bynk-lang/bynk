@@ -11,6 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
+#[path = "../wrangler/mod.rs"]
 mod wrangler;
 
 fn workflow(name: &str) -> PathBuf {

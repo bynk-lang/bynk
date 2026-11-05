@@ -17,7 +17,9 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+#[path = "../require/mod.rs"]
 mod require;
+#[path = "../wrangler/mod.rs"]
 mod wrangler;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_WORKERD";

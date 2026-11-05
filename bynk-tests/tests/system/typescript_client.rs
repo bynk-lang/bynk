@@ -21,7 +21,9 @@
 //!
 //! The end-to-end call under `workerd` is `typescript_client_workerd.rs`.
 
+#[path = "../require/mod.rs"]
 mod require;
+#[path = "../tools/mod.rs"]
 mod tools;
 
 use std::collections::BTreeMap;

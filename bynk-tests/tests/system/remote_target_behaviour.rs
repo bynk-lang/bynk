@@ -28,6 +28,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
+#[path = "../require/mod.rs"]
 mod require;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";

@@ -20,7 +20,9 @@
 use std::fs;
 use std::process::Command;
 
+#[path = "../require/mod.rs"]
 mod require;
+#[path = "../tools/mod.rs"]
 mod tools;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";

@@ -26,8 +26,11 @@
 //! see `events_ordering_workerd.rs` for why each exists. Teardown is the shared
 //! [`wrangler::Wrangler`]'s process-group stop.
 
+#[path = "../require/mod.rs"]
 mod require;
+#[path = "../tools/mod.rs"]
 mod tools;
+#[path = "../wrangler/mod.rs"]
 mod wrangler;
 
 use std::fs;

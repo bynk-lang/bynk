@@ -14,8 +14,17 @@ compiler once rather than once per file. Run a file's tests by its module name:
 
 ```sh
 cargo test -p bynk-tests --test it behaviour_fixtures::
-cargo nextest run -p bynk-tests --test it -E 'test(/^tsc_verify::/)'
+cargo nextest run -p bynk-tests --test it -E 'test(/^system::tsc_verify::/)'
 ```
+
+## Tiers
+
+The files are grouped by tier: `tests/integration/` (in-process pipeline tests
+and the fixture corpus) and `tests/system/` (anything that starts the compiler
+binary, `tsc`, `node`, `workerd` or `wrangler`). A test's name starts with its
+tier, `system::tsc_verify::…`, and `.config/nextest.toml`'s `ci-unit`,
+`ci-integration` and `ci-system` profiles select by it. `cargo xtask tier-probe`
+fails when a test is in no tier or in two. See `tests/it.rs`.
 
 Regenerate a blessed reference page with `BYNK_BLESS=1`, for example
 `BYNK_BLESS=1 cargo test -p xtask --test docs_consistency grammar_reference::`.

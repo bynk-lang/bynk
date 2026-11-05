@@ -10,6 +10,7 @@
 //! not exist, so spawning it fails.
 
 #[cfg(windows)]
+#[path = "../require/mod.rs"]
 mod require;
 
 use std::path::{Path, PathBuf};
