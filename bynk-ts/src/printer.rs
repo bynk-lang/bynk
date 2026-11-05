@@ -1080,6 +1080,8 @@ fn binary_precedence(op: TsBinaryOp) -> u8 {
         | TsBinaryOp::GreaterThanEq
         | TsBinaryOp::LessThanEq => 5,
         TsBinaryOp::Add => 6,
+        TsBinaryOp::Mul => 7,
+        TsBinaryOp::Exp => 8,
     }
 }
 
@@ -1612,6 +1614,8 @@ fn render_expr(out: &mut String, expr: &TsExpr) {
                 TsBinaryOp::In => " in ",
                 TsBinaryOp::GreaterThanEq => " >= ",
                 TsBinaryOp::LessThanEq => " <= ",
+                TsBinaryOp::Mul => " * ",
+                TsBinaryOp::Exp => " ** ",
             });
             render_binary_operand(out, *op, right, false);
         }

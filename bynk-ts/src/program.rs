@@ -1694,6 +1694,16 @@ pub enum TsBinaryOp {
     /// [`TsBinaryOp::GreaterThanEq`], symmetric with it the way
     /// `GreaterThan`/`LessThan` already are.
     LessThanEq,
+    /// `*` — #2955's own real gap: the `Decimal` range check
+    /// (`decimal_range_expr`) scales each side to a common scale with
+    /// `bigint` arithmetic (`coefficient * 10n ** …`). Multiplicative tier,
+    /// one above [`TsBinaryOp::Add`].
+    Mul,
+    /// `**` — the same gap's other half (`10n ** globalThis.BigInt(scale)`).
+    /// Exponentiation tier, one above [`TsBinaryOp::Mul`]. Right-associative
+    /// in JS/TS, so the printer's default "same operator nested in itself
+    /// parenthesises" rule keeps any chained `**` correct.
+    Exp,
 }
 
 /// A literal — the three kinds `events_fanout.rs` uses (a string, a number,
