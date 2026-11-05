@@ -1,12 +1,6 @@
----
-level: patch
-probes: emit_diagnostics, diagnostic_coverage
-changelog: "A Workers WebSocket `on open` keyed by a context `const` now builds, a literal key with a route parameter now reaches the instance the body addresses instead of one keyed by the parameter, and any other key is a compile error on Workers (`bynk.ws.open_transfer_key`)"
----
+# 0737 — A Workers WebSocket `on open` transfer is keyed by a route parameter, a constant or a literal
 
-## ADR: ws-open-transfer-key
-title: A Workers WebSocket `on open` transfer is keyed by a route parameter, a constant or a literal
-summary: What the edge can evaluate to route an upgrade before the body runs, and why other keys are rejected
+- **Status:** Accepted (v0.508.13)
 
 **Context.** On Workers, `compose.ts` routes a WebSocket upgrade to the Durable Object of the agent the `on open` transfers its connection to, and it does so before the body runs (ADR 0132). The emitter assumed the transfer's key was a route parameter. A context `const` was emitted as a bare name that `compose.ts` does not bind, so `tsc` failed; constants are functions in `handlers.ts`. Any other key, a literal included, was replaced by the first route parameter, so `Room("lobby")` in `on open (user: String)` routed each upgrade to `Room(user)` and a broadcast to `Room("lobby")` reached no one (#2959). `bynk check` accepted both.
 
