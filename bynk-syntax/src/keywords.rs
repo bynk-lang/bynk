@@ -311,7 +311,7 @@ pub fn is_reserved_contextual(word: &str) -> bool {
 ///
 /// Single source of truth: [`is_builtin_type_name`] gates the resolver's
 /// redeclaration diagnostic, and a drift guard
-/// (`bynk-tests/tests/keywords_reference.rs`) asserts this list equals the set of
+/// (`xtask/tests/docs_consistency/keywords_reference.rs`) asserts this list equals the set of
 /// names the type parser dispatches on. Keep it sorted.
 pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
     k(
@@ -391,7 +391,7 @@ pub fn render_markdown() -> String {
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
          Source: bynk-syntax/src/keywords.rs (`render_markdown`).\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it keywords_reference:: -->\n\n",
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency keywords_reference:: -->\n\n",
     );
     out.push_str(
         "Bynk reserves names in four tiers. The first two are lexer keywords; the \

@@ -34,7 +34,7 @@ gave for free.
 |---|---|---|
 | Legend drift guard | `bynk-lsp/tests/legend_drift.rs` reads `../vscode-bynk/package.json` | §4 |
 | Snippet scaffolds compile | `bynk-lsp/tests/scaffolds_compile.rs` reads `snippets/bynk.json` | §4 |
-| TextMate keywords | `bynk-tests/tests/textmate_keywords.rs` reads `syntaxes/bynk.tmLanguage.json` | §4 |
+| TextMate keywords | `xtask/tests/docs_consistency/textmate_keywords.rs` reads `syntaxes/bynk.tmLanguage.json` | §4 |
 | wasm build | `npm run build:wasm` → `../scripts/build-wasm.sh` | consume `bynk-web-<tag>.tar.gz` |
 | Version lockstep | `release.yml` `verify` (ext version == workspace), `bump-version.sh`, `stamp.yml` (`git add vscode-bynk`) | §6 |
 | Server pin | `server-pin` job pushes to `main`; `scripts/{check,next}-server-pin.sh`; `xtask/tests/server_pin.rs` | move / rework, §6 |
