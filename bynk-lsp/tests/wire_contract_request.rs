@@ -16,13 +16,13 @@ use std::path::{Path, PathBuf};
 
 use bynk_check::wire::{Provenance, Revalidation, WireBody};
 use bynk_ide::wire_contract::{
-    BoundaryKind, Envelope, NoCrossContextReason, ResponseOrigin, real_context_count,
+    BoundaryKind, Envelope, IrHttpMethod, NoCrossContextReason, ResponseOrigin, real_context_count,
     wire_contract_at,
 };
 use bynk_lsp::wire_contract_request::{
     WcBody, WcBoundaryKind, WcEnvelope, WcProvenance, WcResponseOrigin, to_wire,
 };
-use bynk_syntax::ast::{HttpMethod, PredKind};
+use bynk_syntax::ast::PredKind;
 
 fn find_offset(text: &str, needle: &str) -> usize {
     text.find(needle)
@@ -90,7 +90,7 @@ fn rate_limiter_http_boundary() {
     assert_eq!(
         model.kind,
         BoundaryKind::Http {
-            method: HttpMethod::Get,
+            method: IrHttpMethod::Get,
             path: "/check/:client".to_string(),
         }
     );

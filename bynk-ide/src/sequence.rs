@@ -216,20 +216,22 @@ pub fn sequence_model(
 
 /// The handler's request descriptor — its method + path (`GET /check/:client`),
 /// method name, or lifecycle kind. Labels the initial actor→entry message, and
-/// (when there is no actor) the entry box's own discriminator suffix.
+/// (when there is no actor) the entry box's own discriminator suffix. Read from
+/// the system model's [`bynk_ir::IrHandlerKind`] (M-1, crate-hygiene B1, #2939).
 fn discriminator(handler: &Handler) -> String {
-    match &handler.kind {
-        HandlerKind::Call => match handler.method_name.as_ref() {
+    use bynk_ir::IrHandlerKind;
+    match bynk_lower::lower_handler_kind_ir(&handler.kind) {
+        IrHandlerKind::Call => match handler.method_name.as_ref() {
             Some(m) => m.name.clone(),
             None => "call".to_string(),
         },
-        HandlerKind::Http { method, path } => format!("{} {}", method.as_str(), path),
-        HandlerKind::Cron { expr } => format!("cron \"{expr}\""),
-        HandlerKind::Message => "message".to_string(),
-        HandlerKind::Open => "open".to_string(),
-        HandlerKind::Close => "close".to_string(),
-        HandlerKind::Event => "event".to_string(),
-        HandlerKind::Rejected => "rejected".to_string(),
+        IrHandlerKind::Http { method, path } => format!("{} {}", method.as_str(), path),
+        IrHandlerKind::Cron { expr } => format!("cron \"{expr}\""),
+        IrHandlerKind::Message => "message".to_string(),
+        IrHandlerKind::Open => "open".to_string(),
+        IrHandlerKind::Close => "close".to_string(),
+        IrHandlerKind::Event => "event".to_string(),
+        IrHandlerKind::Rejected => "rejected".to_string(),
     }
 }
 

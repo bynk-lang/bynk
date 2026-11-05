@@ -14,6 +14,8 @@ path = "src/lib.rs"
 
 [dependencies]
 # The syntax foundation this layer analyses.
+# #2220: the agent state model (`agent_state`) labels its guards with the expression
+# printer (`bynk_syntax::print`); guards are merged by that text.
 bynk-syntax.workspace = true
 # The first-party sources, bindings and metadata, as data (standard-library
 # track, #1940): re-exported unchanged as `firstparty`.
@@ -23,8 +25,5 @@ bynk-std.workspace = true
 # crate and resolves/checks via this crate's own already-local modules.
 bynk-project.workspace = true
 bynk-ts.workspace = true
-# #2220: the agent state model (`agent_state`) labels its guards with the
-# formatter's expression printer; guards are merged by that text.
-bynk-fmt.workspace = true
 # Refinement-predicate validation in the checker.
 regress.workspace = true

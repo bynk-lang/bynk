@@ -11,6 +11,7 @@ It holds the modules every other layer depends *on* and none depend *up* from:
 
 - `lexer` — the [`logos`](https://crates.io/crates/logos)-driven token stream.
 - `parser` / `ast` — hand-written recursive descent and the syntax tree it builds.
+- `print` — renders an expression, pattern or statement back to Bynk source text (shared by the formatter and the checker's diagnostics).
 - `span` — source byte ranges, plus the `line_col` position utility.
 - `keywords` — the reserved-word table.
 - `error` — `CompileError` (the structured, spanned diagnostic every phase
@@ -31,13 +32,13 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 ├── bynk-ts                the TypeScript tree and its printer
 ├── bynk-render            diagnostic rendering
 ├── bynk-fmt               the formatter
-└── bynk-check             name resolution and type checking   + project, std, fmt, ts
+└── bynk-check             name resolution and type checking   + project, std, ts
     ├── bynk-ir            declaration-level IR
     │   └── bynk-lower     AST → IR helpers
     ├── bynk-emit          build sequencing, TS emission       + ts, ir, lower, project
     │   ├── bynk-strip     TS → JS type-stripping              + ts
     │   └── bynk-driver    shared CLI command bodies           + fmt, project, render, ts
-    └── bynk-ide           non-bailing editor analysis         + project, fmt
+    └── bynk-ide           non-bailing editor analysis         + project, fmt, ir, lower
 bynk-std                   first-party sources and bindings, as data
 ```
 

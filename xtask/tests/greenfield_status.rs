@@ -1,6 +1,6 @@
 //! Drift guard: `design/greenfield-status.md` matches a fresh probe run.
 //!
-//! Only the sixteen gated (zero/closure/existence) probes are diffed — `wildcard_arms`,
+//! Only the seventeen gated (zero/closure/existence) probes are diffed — `wildcard_arms`,
 //! `keep_in_sync`, `test_density`, `fixture_kinds`, `keystroke_latency` are trend
 //! probes, recomputed and printed by `cargo xtask greenfield-status` but never gated
 //! here (#999 Decision D): they move on nearly any ordinary Rust PR (or, for
@@ -59,5 +59,46 @@ fn greenfield_status_table_is_current() {
             ))
             .collect::<Vec<_>>()
             .join("\n")
+    );
+}
+
+/// Crate-hygiene §6.2 M-3 (B1, #2939): the number of system-model items read
+/// outside `bynk-emit` can only rise. `greenfield_status_table_is_current`
+/// accepts any move a pending file's `probes:` acknowledges. This test refuses
+/// a fall even then, so the ratchet holds mechanically rather than by review.
+/// It guards the count, not the set: a swap of one item for another keeps the
+/// count and is left to the gated row's `probes:` acknowledgement.
+///
+/// The committed row must exist (the stamp's `refresh_gated_rows` refuses a
+/// gated probe with no row), so the floor is read from it rather than
+/// defaulting to 0.
+#[test]
+fn model_readers_beyond_emit_never_falls() {
+    let root = repo_root();
+    let probes = xtask::greenfield_status::run_gated(&root);
+    let live = probes
+        .iter()
+        .find(|p| p.name == "model_readers_beyond_emit")
+        .expect("model_readers_beyond_emit runs as a gated probe");
+    let committed = std::fs::read_to_string(xtask::greenfield_status::table_path(&root))
+        .expect("read the committed greenfield-status table");
+    let row_prefix = "| `model_readers_beyond_emit` | yes | ";
+    let committed_reads = committed
+        .lines()
+        .find_map(|l| l.strip_prefix(row_prefix))
+        .and_then(|l| l.strip_suffix(" |"))
+        .expect("the committed table has a model_readers_beyond_emit row");
+    let floor = xtask::greenfield_status::model_readers_count(committed_reads)
+        .expect("the committed reading starts with a count");
+    let now = xtask::greenfield_status::model_readers_count(&live.reads)
+        .expect("the live reading starts with a count");
+    assert!(
+        now >= floor,
+        "model_readers_beyond_emit fell from {floor} to {now} ({}): a consumer stopped \
+         reading the system model. M-1 calls re-deriving a fact the model carries a defect. \
+         Read the model instead. A fall argued in the track doc lands by lowering this \
+         probe's committed row in design/greenfield-status.md to the new reading in the \
+         same PR, and naming the probe in that PR's pending file's `probes:`.",
+        live.reads
     );
 }

@@ -17,7 +17,7 @@ pub fn branch_outcome(tail: &Expr) -> Option<String> {
         ExprKind::UnitLit | ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Block(_) => {
             None
         }
-        _ => Some(bynk_fmt::expr_to_string(inner)),
+        _ => Some(bynk_syntax::print::expr_to_string(inner)),
     }
 }
 
