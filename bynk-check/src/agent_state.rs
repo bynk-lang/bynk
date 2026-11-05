@@ -931,7 +931,7 @@ impl Walker<'_> {
             } else {
                 let label = format!(
                     "{} is {}",
-                    bynk_fmt::expr_to_string(scrutinee),
+                    bynk_syntax::print::expr_to_string(scrutinee),
                     pattern_summary(&arm.pattern)
                 );
                 Self::guarded(paths.clone(), label)
@@ -961,7 +961,7 @@ impl Walker<'_> {
         match self.facts(cond, truth) {
             Some(allowed) => self.constrain(paths, &allowed),
             None => {
-                let text = bynk_fmt::expr_to_string(cond);
+                let text = bynk_syntax::print::expr_to_string(cond);
                 let label = if truth { text } else { format!("!({text})") };
                 Self::guarded(paths, label)
             }
