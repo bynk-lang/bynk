@@ -17,8 +17,6 @@ path = "src/lib.rs"
 # registry (`bynk.schema.lock`), same format.
 toml.workspace = true
 toml_edit.workspace = true
-# #980: (de)serialising the schema registry document.
-serde.workspace = true
 # The layers this orchestrates: syntax (AST/spans) and the checked program.
 bynk-syntax.workspace = true
 bynk-ts.workspace = true
