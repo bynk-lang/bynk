@@ -7,7 +7,8 @@
 //! `schedule`, `message`, `open`, `close`, `event`, `rejected`) and all six
 //! service protocols. Per handler it pins:
 //! - the `bynk/sequenceModel` wire JSON
-//! - the `bynk/wireContract` wire JSON's `kind`, `service` and `handlerLine`
+//! - the `bynk/wireContract` wire JSON's `unit`, `service`, `kind`, `handlerLine`
+//!   and `range`
 //!
 //! Per service it pins the hover (`describe_symbol`), plus every
 //! documentation-page entry's heading and Markdown.
@@ -188,6 +189,7 @@ fn sorted_pretty(v: &serde_json::Value, indent: usize) -> String {
 
 fn render() -> String {
     let root = setup_project(&[("kinds.bynk", KINDS_SRC)]);
+    let _cleanup = Cleanup(root.clone());
     let sources =
         bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
     let diag = bynk_ide::diagnose_project(&root, &sources);
@@ -280,7 +282,41 @@ fn render() -> String {
         writeln!(out, "--- [{}] {}", e.kind, e.name).unwrap();
         writeln!(out, "{}", e.markdown).unwrap();
     }
-    let _ = std::fs::remove_dir_all(&root);
+    out
+}
+
+/// Removes the temp project however `render` exits, including on a panic.
+struct Cleanup(PathBuf);
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// The first line where `actual` and `expected` differ, with a little context,
+/// so a drift is readable in a CI log without the whole snapshot.
+fn first_difference(actual: &str, expected: &str) -> String {
+    let (a, e): (Vec<&str>, Vec<&str>) = (actual.lines().collect(), expected.lines().collect());
+    let at = (0..a.len().max(e.len()))
+        .find(|&i| a.get(i) != e.get(i))
+        .unwrap_or(0);
+    let from = at.saturating_sub(3);
+    let mut out = format!("first difference at line {}:\n", at + 1);
+    for i in from..(at + 4) {
+        let (x, y) = (a.get(i).copied(), e.get(i).copied());
+        if x == y {
+            if let Some(l) = x {
+                out.push_str(&format!("    {l}\n"));
+            }
+        } else {
+            if let Some(l) = y {
+                out.push_str(&format!("  - {l}\n"));
+            }
+            if let Some(l) = x {
+                out.push_str(&format!("  + {l}\n"));
+            }
+        }
+    }
     out
 }
 
@@ -298,7 +334,8 @@ fn handler_kind_and_protocol_renderings_are_pinned() {
     assert!(
         actual == expected,
         "handler-kind renderings drifted from {} (H-1). Re-bless only for an intended \
-         change.\n--- actual ---\n{actual}",
-        path.display()
+         change.\n{}",
+        path.display(),
+        first_difference(&actual, &expected)
     );
 }
