@@ -1,7 +1,10 @@
 //! The TypeScript tree and printer (phase 7 of the compiler trajectory,
 //! `design/bynk-compiler-trajectory.md`). Emission produces nodes
 //! ([`TsProgram`]/[`TsStmt`]); [`printer::print`] is the only code in the
-//! compiler that writes a character (R7.3).
+//! compiler that writes a character (R7.3). The crate also holds the
+//! `PredKind` → check-condition mapping ([`pred_condition_and_message`]) and the one
+//! TypeScript string escaper ([`escape_ts_literal`]), shared by the emitter, the
+//! checker's wire defaults and the language server (crate-hygiene A2).
 //!
 //! **Invariant:** this crate depends on `bynk-syntax` **only** (for
 //! [`bynk_syntax::span::Span`], reused unchanged rather than redefined —
@@ -32,6 +35,7 @@
 
 mod lint;
 mod name_closure;
+mod predicate;
 mod printer;
 mod program;
 mod source_map;
@@ -40,6 +44,10 @@ pub use lint::{Violation, verbatim_violations};
 pub use name_closure::{
     ModuleExports, NamespaceMemberUse, module_exports, namespace_member_uses, type_only_value_uses,
     unbound_names, value_imports,
+};
+pub use predicate::{
+    decimal_range_condition, decimal_signed_coef, escape_ts_literal, pred_condition_and_message,
+    pred_condition_and_message_for,
 };
 pub use printer::{
     Printed, print, print_class_method, print_class_method_and_merge, print_expr,
