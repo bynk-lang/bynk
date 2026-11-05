@@ -1,0 +1,983 @@
+//! State-migrations S0 (#2204; the retired track's summary in
+//! `design/archive/retired-tracks.md`, §3.1, §3.4): `bynk.schema.lock`
+//! records every agent class's stored state shape, and a build refuses a
+//! change deployed data cannot be read through.
+//!
+//! Each test drives a scratch project through several builds, reading and
+//! writing the lock the way `bynk-driver`'s production callers do, exactly as
+//! `events_schema_registry_behaviour.rs` does for events.
+
+use bynkc::{BuildTarget, SchemaLock};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+/// A scratch project with one `.bynk` source and its lock.
+struct Project {
+    root: PathBuf,
+}
+
+impl Project {
+    fn new(name: &str) -> Self {
+        let root = std::env::temp_dir().join(format!(
+            "bynk-agent-state-lock-{name}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("shop")).unwrap();
+        Project { root }
+    }
+
+    fn lock_path(&self) -> PathBuf {
+        self.root.join("bynk.schema.lock")
+    }
+
+    fn lock(&self) -> String {
+        fs::read_to_string(self.lock_path()).unwrap()
+    }
+
+    /// Build `source`. On success, write the reconciled lock as a real caller
+    /// would and return the rendered warnings; on failure, return the
+    /// rendered errors and leave the lock alone.
+    fn build(&self, source: &str) -> Result<String, String> {
+        fs::write(self.root.join("shop/cart.bynk"), source).unwrap();
+        let existing = bynk_driver::schema_lock::read(&self.root).unwrap();
+        let options = bynk_testkit::compile_options_single(&self.root)
+            .target(BuildTarget::Bundle)
+            .schema_registry(SchemaLock::On { existing });
+        match bynkc::compile_project(&options) {
+            Ok(out) => {
+                if let Some(content) = &out.schema_lock {
+                    bynk_driver::schema_lock::write(&self.root, content).unwrap();
+                }
+                let warnings: Vec<bynkc::CompileError> =
+                    out.warnings.iter().map(|w| w.error.clone()).collect();
+                Ok(bynkc::render_project_errors(&warnings))
+            }
+            Err(failure) => Err(bynkc::render_project_errors(&failure.flatten())),
+        }
+    }
+
+    fn build_ok(&self, source: &str) -> String {
+        self.build(source)
+            .unwrap_or_else(|e| panic!("expected a clean build:\n{e}"))
+    }
+
+    fn build_err(&self, source: &str) -> String {
+        match self.build(source) {
+            Ok(_) => panic!("expected the build to be refused"),
+            Err(e) => e,
+        }
+    }
+}
+
+impl Drop for Project {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+fn cart(fields: &str) -> String {
+    format!(
+        "context shop\n\nagent Cart {{\n  key id: String\n\n{fields}\n\n  on call ping() -> Effect[Int] {{\n    1\n  }}\n}}\n"
+    )
+}
+
+/// `source` with `decl` inserted after its `context` line.
+fn with_decl(decl: &str, source: &str) -> String {
+    source.replacen("context shop\n", &format!("context shop\n\n{decl}\n"), 1)
+}
+
+fn agent_version(lock: &str) -> &str {
+    let at = lock.find("[agents.\"shop.Cart\"]").expect("a Cart entry");
+    let rest = &lock[at..];
+    let line = rest
+        .lines()
+        .find(|l| l.starts_with("version = "))
+        .expect("a version line");
+    line.trim_start_matches("version = ")
+}
+
+/// `bynkc check <root>`, which reconciles against the lock read-only
+/// (ADR 0493). Returns whether it passed and its combined output.
+fn check(root: &Path) -> (bool, String) {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+        .args(["check".as_ref(), root.as_os_str()])
+        .output()
+        .expect("run bynkc");
+    let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
+    s.push_str(&String::from_utf8_lossy(&out.stderr));
+    (out.status.success(), s)
+}
+
+/// The track's first fixture (#539): renaming `store owner` to
+/// `store ownerName` compiled with exit 0 and orphaned the stored value.
+#[test]
+fn renaming_a_store_field_is_refused_and_names_the_pairing() {
+    let p = Project::new("rename");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let before = p.lock();
+    assert!(before.starts_with("version = 2"), "{before}");
+    assert_eq!(agent_version(&before), "1", "{before}");
+
+    let err = p.build_err(&cart("  store ownerName: Cell[String]"));
+    assert!(
+        err.contains("bynk.agent.non_additive_state_change"),
+        "{err}"
+    );
+    assert!(err.contains("field(s) removed: owner"), "{err}");
+    assert!(
+        err.contains("`owner` was removed and `ownerName` added with the same stored shape"),
+        "{err}"
+    );
+    assert!(err.contains("[agents.\"shop.Cart\"]"), "{err}");
+    assert_eq!(p.lock(), before, "a refused build must not touch the lock");
+}
+
+#[test]
+fn two_same_shaped_renames_suggest_no_pairing() {
+    let p = Project::new("ambiguous");
+    p.build_ok(&cart(
+        "  store first: Cell[String]\n  store second: Cell[String]",
+    ));
+    let err = p.build_err(&cart(
+        "  store one: Cell[String]\n  store two: Cell[String]",
+    ));
+    assert!(
+        err.contains("bynk.agent.non_additive_state_change"),
+        "{err}"
+    );
+    assert!(err.contains("cannot be inferred"), "{err}");
+    assert!(!err.contains("was removed and"), "{err}");
+}
+
+#[test]
+fn adding_a_field_bumps_the_version_and_reordering_does_not() {
+    let p = Project::new("additive");
+    p.build_ok(&cart("  store a: Cell[Int]\n  store b: Cell[String]"));
+    p.build_ok(&cart("  store b: Cell[String]\n  store a: Cell[Int]"));
+    assert_eq!(agent_version(&p.lock()), "1", "reordering is not a change");
+
+    p.build_ok(&cart(
+        "  store a: Cell[Int]\n  store b: Cell[String]\n  store c: Map[String, Int]",
+    ));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "{lock}");
+    assert!(lock.contains("additive = true"), "{lock}");
+}
+
+/// #2688: an existing record field that gains a default is a recorded
+/// (additive) change, so the lock's history stays honest for the
+/// "lost its default" check.
+#[test]
+fn a_record_field_that_gains_a_default_bumps_the_version() {
+    let p = Project::new("gained-default");
+    let src = |prefs: &str| with_decl(prefs, &cart("  store byId: Map[String, Prefs]"));
+    p.build_ok(&src("type Prefs = { theme: String, size: Int }"));
+    assert_eq!(agent_version(&p.lock()), "1");
+
+    p.build_ok(&src("type Prefs = { theme: String, size: Int = 12 }"));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "{lock}");
+    assert!(lock.contains("additive = true"), "{lock}");
+
+    // Losing it again is refused.
+    let err = p.build_err(&src("type Prefs = { theme: String, size: Int }"));
+    assert!(err.contains("lost its default"), "{err}");
+}
+
+#[test]
+fn retyping_retyping_inside_a_record_and_changing_kind_are_refused() {
+    let p = Project::new("retype");
+    let with_item = |item: &str, fields: &str| with_decl(item, &cart(fields));
+    let base = with_item(
+        "type Item = { title: String, qty: Int }",
+        "  store items: Map[String, Item]\n  store n: Cell[Int]",
+    );
+    p.build_ok(&base);
+
+    // Renaming the record *type* changes nothing on disk.
+    p.build_ok(&with_item(
+        "type Entry = { title: String, qty: Int }",
+        "  store items: Map[String, Entry]\n  store n: Cell[Int]",
+    ));
+    assert_eq!(
+        agent_version(&p.lock()),
+        "1",
+        "a type rename is not a change"
+    );
+
+    let err = p.build_err(&with_item(
+        "type Entry = { name: String, qty: Int }",
+        "  store items: Map[String, Entry]\n  store n: Cell[Int]",
+    ));
+    assert!(err.contains("field(s) retyped: items"), "{err}");
+
+    let err = p.build_err(&with_item(
+        "type Entry = { title: String, qty: Int }",
+        "  store items: Map[String, Entry]\n  store n: Cell[String]",
+    ));
+    assert!(err.contains("field(s) retyped: n"), "{err}");
+
+    let err = p.build_err(&with_item(
+        "type Entry = { title: String, qty: Int }",
+        "  store items: Map[String, Entry]\n  store n: Set[Int]",
+    ));
+    assert!(err.contains("field(s) changed storage kind: n"), "{err}");
+}
+
+/// The #539 failure one level down (#2204 review): a stored sum's payload is
+/// keyed by field name, so renaming a payload field orphans data just as
+/// renaming a `store` field does, while reordering payload fields does not.
+#[test]
+fn renaming_a_sum_payload_field_is_refused_and_reordering_is_not() {
+    let p = Project::new("payload");
+    let with_sum = |sum: &str| with_decl(sum, &cart("  store last: Cell[Option[Event]]"));
+    p.build_ok(&with_sum(
+        "type Event = | Added(sku: String, qty: Int) | Cleared",
+    ));
+    p.build_ok(&with_sum(
+        "type Event = | Added(qty: Int, sku: String) | Cleared",
+    ));
+    assert_eq!(agent_version(&p.lock()), "1", "reordering is not a change");
+    let err = p.build_err(&with_sum(
+        "type Event = | Added(item: String, qty: Int) | Cleared",
+    ));
+    assert!(err.contains("field(s) retyped: last"), "{err}");
+}
+
+#[test]
+fn a_refinement_change_warns_and_bumps_the_version() {
+    let p = Project::new("refine");
+    let with_qty = |pred: &str| {
+        with_decl(
+            &format!("type Qty = Int where {pred}"),
+            &cart("  store q: Cell[Qty] = 0"),
+        )
+    };
+    p.build_ok(&with_qty("InRange(0, 10)"));
+    let warnings = p.build_ok(&with_qty("InRange(0, 5)"));
+    assert!(
+        warnings.contains("bynk.agent.refinement_changed"),
+        "{warnings}"
+    );
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "{lock}");
+}
+
+#[test]
+fn removing_an_agent_class_is_refused() {
+    let p = Project::new("removed");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err("context shop\n\nfn noop() -> Int {\n  1\n}\n");
+    assert!(err.contains("bynk.agent.class_removed"), "{err}");
+    assert!(err.contains("`shop.Cart`"), "{err}");
+}
+
+#[test]
+fn a_v1_lock_upgrades_on_build_and_is_left_alone_by_check() {
+    let p = Project::new("upgrade");
+    fs::write(p.lock_path(), "version = 1\n\n[events]\n").unwrap();
+    fs::write(
+        p.root.join("shop/cart.bynk"),
+        cart("  store owner: Cell[String]"),
+    )
+    .unwrap();
+
+    let (ok, out) = check(&p.root);
+    assert!(ok, "a v1 lock must be readable:\n{out}");
+    assert_eq!(p.lock(), "version = 1\n\n[events]\n", "check never writes");
+
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let lock = p.lock();
+    assert!(lock.starts_with("version = 2"), "{lock}");
+    assert!(lock.contains("[agents.\"shop.Cart\"]"), "{lock}");
+}
+
+#[test]
+fn check_reports_a_refused_change_without_writing() {
+    let p = Project::new("check");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let before = p.lock();
+    fs::write(
+        p.root.join("shop/cart.bynk"),
+        cart("  store ownerName: Cell[String]"),
+    )
+    .unwrap();
+    let (ok, out) = check(&p.root);
+    assert!(!ok, "check must fail:\n{out}");
+    assert!(
+        out.contains("bynk.agent.non_additive_state_change"),
+        "{out}"
+    );
+    assert_eq!(p.lock(), before);
+}
+
+/// The S1 `__v` marker lives inside the stored record (track §3.2), so no
+/// `store` field may ever be named `__v`. The grammar already guarantees it:
+/// an identifier is `[A-Za-z][A-Za-z0-9_]*`, so `__v` lexes as `_`, `_`, `v`
+/// and never parses as a field name. This pins that guarantee; if identifiers
+/// ever admit a leading `_`, a reservation check must land with the change.
+#[test]
+fn no_store_field_can_start_with_an_underscore() {
+    let p = Project::new("reserved");
+    let err = p.build_err(&cart("  store __v: Cell[Int]"));
+    assert!(err.contains("bynk.parse.expected_token"), "{err}");
+}
+
+// ---------------------------------------------------------------------------
+// State-migrations S2 (#2224): `migrate from N` steps.
+// ---------------------------------------------------------------------------
+
+/// `source`'s `cart(...)` with `decls` inserted after the context line.
+fn cart_with(decls: &str, fields: &str) -> String {
+    with_decl(decls, &cart(fields))
+}
+
+/// The track's first fixture turns positive: the rename carried by a step
+/// builds, and the lock records version 2 as a non-additive change.
+#[test]
+fn a_rename_carried_by_a_migrate_step_builds() {
+    let p = Project::new("s2-rename");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    p.build_ok(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    ));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "{lock}");
+    assert!(lock.contains("version = 2\nadditive = false"), "{lock}");
+}
+
+/// S0's rename diagnostic now names the step that would carry it.
+#[test]
+fn the_rename_diagnostic_suggests_a_concrete_step() {
+    let p = Project::new("s2-hint");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart("  store ownerName: Cell[String]"));
+    assert!(err.contains("type CartV1 = { owner: String }"), "{err}");
+    assert!(
+        err.contains("migrate from 1 (old: CartV1) { ownerName := old.owner }"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_step_whose_old_shape_does_not_match_the_lock_is_refused() {
+    let p = Project::new("s2-shape");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: Int }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := \"x\"\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_shape_mismatch"), "{err}");
+    assert!(err.contains("recorded it as `Cell` of `String`"), "{err}");
+}
+
+#[test]
+fn a_step_that_leaves_a_removed_field_unread_is_incomplete() {
+    let p = Project::new("s2-incomplete");
+    p.build_ok(&cart(
+        "  store owner: Cell[String]\n  store total: Cell[Int]",
+    ));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_incomplete"), "{err}");
+    assert!(
+        err.contains("neither read (`old.f`) nor dropped: total"),
+        "{err}"
+    );
+    // Dropping it, on purpose, completes the step.
+    p.build_ok(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n    drop total\n  }",
+    ));
+}
+
+#[test]
+fn a_retyped_field_must_be_assigned_and_a_rekinded_set_may_be_dropped() {
+    let p = Project::new("s2-retype");
+    p.build_ok(&cart("  store total: Cell[Int]\n  store tags: Set[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { total: Int }",
+        "  store total: Cell[String]\n  store tags: Cell[Int]\n\n  migrate from 1 (old: CartV1) {\n    drop tags\n  }",
+    ));
+    assert!(
+        err.contains("changed field(s) not assigned: total"),
+        "{err}"
+    );
+    p.build_ok(&cart_with(
+        "type CartV1 = { total: Int }",
+        "  store total: Cell[String]\n  store tags: Cell[Int]\n\n  migrate from 1 (old: CartV1) {\n    total := \"n\"\n    drop tags\n  }",
+    ));
+}
+
+#[test]
+fn a_step_from_an_unrecorded_version_is_refused() {
+    let p = Project::new("s2-unknown");
+    // A fresh lock baselines at version 1, so nothing older exists (F).
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store owner: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    owner := old.owner\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_unknown_version"), "{err}");
+}
+
+#[test]
+fn two_steps_from_one_version_are_refused() {
+    let p = Project::new("s2-dup");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_duplicate"), "{err}");
+}
+
+/// Decision C: a step from 2 also covers version 1 when 1 -> 2 was additive,
+/// so only a version below an uncovered non-additive change warns.
+#[test]
+fn a_step_covers_its_additive_predecessors_and_an_uncovered_version_warns() {
+    let p = Project::new("s2-additive");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    p.build_ok(&cart(
+        "  store owner: Cell[String]\n  store note: Cell[String]",
+    ));
+    assert_eq!(agent_version(&p.lock()), "2");
+    let warnings = p.build_ok(&cart_with(
+        "type CartV2 = { owner: String, note: String = \"n/a\" }",
+        "  store ownerName: Cell[String]\n  store note: Cell[String]\n\n  migrate from 2 (old: CartV2) {\n    ownerName := old.owner\n  }",
+    ));
+    assert_eq!(agent_version(&p.lock()), "3");
+    assert!(!warnings.contains("version_without_path"), "{warnings}");
+
+    // Version 3 -> 4 is non-additive and covered only from 3: versions 1 and 2
+    // still have their step from 2, so nothing warns. Dropping that step
+    // leaves them without a path.
+    let warnings = p.build_ok(&cart_with(
+        "type CartV2 = { owner: String, note: String = \"n/a\" }\ntype CartV3 = { note: String }",
+        "  store ownerName: Cell[String]\n  store memo: Cell[String]\n\n  migrate from 2 (old: CartV2) {\n    ownerName := old.owner\n    memo := old.note\n  }\n  migrate from 3 (old: CartV3) {\n    memo := old.note\n  }",
+    ));
+    assert_eq!(agent_version(&p.lock()), "4");
+    assert!(!warnings.contains("version_without_path"), "{warnings}");
+    let warnings = p.build_ok(&cart_with(
+        "type CartV3 = { note: String }",
+        "  store ownerName: Cell[String]\n  store memo: Cell[String]\n\n  migrate from 3 (old: CartV3) {\n    memo := old.note\n  }",
+    ));
+    assert!(
+        warnings.contains("bynk.agent.version_without_path"),
+        "{warnings}"
+    );
+    assert!(
+        warnings.contains("stored version 1 has no path"),
+        "{warnings}"
+    );
+}
+
+/// S4 (#2259 Decision G): once a sweep raises the floor past a step's
+/// version, the step is dead code. It warns rather than failing the build,
+/// and deleting it builds cleanly.
+#[test]
+fn a_step_below_the_floor_warns_and_can_be_deleted() {
+    let p = Project::new("s4-below-floor");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let renamed = cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    );
+    p.build_ok(&renamed);
+    assert_eq!(agent_version(&p.lock()), "2");
+
+    // What `bynk migrate sweep` does once every environment holds version 2.
+    let mut reg = bynk_project::schema_registry::parse(Some(&p.lock()), &p.root).unwrap();
+    assert_eq!(reg.raise_floor("shop.Cart", 2), Ok(true));
+    bynk_driver::schema_lock::write(&p.root, &bynk_project::schema_registry::serialize(&reg))
+        .unwrap();
+
+    let warnings = p.build_ok(&renamed);
+    assert!(
+        warnings.contains("bynk.agent.migrate_below_floor"),
+        "{warnings}"
+    );
+    assert!(
+        warnings.contains("floor is 2, so no stored instance can hold version 1"),
+        "{warnings}"
+    );
+    assert_eq!(agent_version(&p.lock()), "2");
+    let warnings = p.build_ok(&cart("  store ownerName: Cell[String]"));
+    assert!(!warnings.contains("migrate_below_floor"), "{warnings}");
+    assert!(!warnings.contains("version_without_path"), "{warnings}");
+}
+
+/// Decision A: an old field matches on structure; a refinement-only
+/// difference warns rather than refusing.
+#[test]
+fn an_old_field_differing_only_in_refinement_warns() {
+    let p = Project::new("s2-refine");
+    p.build_ok(&with_decl(
+        "type Name = String where NonEmpty",
+        &cart("  store owner: Cell[Name] = \"a\""),
+    ));
+    let warnings = p.build_ok(&cart_with(
+        "type Name = String where NonEmpty\ntype CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    ));
+    assert!(
+        warnings.contains("bynk.agent.refinement_changed"),
+        "{warnings}"
+    );
+    assert!(
+        warnings.contains("`CartV1.owner` differs from version 1"),
+        "{warnings}"
+    );
+}
+
+#[test]
+fn a_step_body_must_be_pure_key_free_and_assign_each_field_once() {
+    let p = Project::new("s2-body");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n    ownerName := id\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_impure"), "{err}");
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n    ownerName := \"b\"\n  }",
+    ));
+    assert!(
+        err.contains("bynk.agent.migrate_duplicate_assignment"),
+        "{err}"
+    );
+}
+
+/// #2243 review: an old field of type `Map[K, V]` names whatever version N
+/// recorded — a store `Map`, or a `Cell` holding a map value.
+#[test]
+fn an_old_map_field_matches_a_cell_holding_a_map() {
+    let p = Project::new("s2-cellmap");
+    p.build_ok(&cart(
+        "  store prices: Cell[Map[String, Int]] = Map.empty()",
+    ));
+    p.build_ok(&cart_with(
+        "type CartV1 = { prices: Map[String, Int] }",
+        "  store costs: Cell[Map[String, Int]] = Map.empty()\n\n  migrate from 1 (old: CartV1) {\n    costs := old.prices\n  }",
+    ));
+    assert_eq!(agent_version(&p.lock()), "2");
+}
+
+/// #2243 review: a `let` rejected as impure still binds its name, so a later
+/// use reports nothing beyond the one real diagnostic.
+#[test]
+fn an_impure_let_reports_once() {
+    let p = Project::new("s2-impure-let");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    let k = id\n    ownerName := k\n    drop owner\n  }",
+    ));
+    assert_eq!(err.matches("bynk.agent.migrate_impure").count(), 1, "{err}");
+    assert!(
+        !err.contains("unknown"),
+        "no cascade from the rejected `let`: {err}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// State-migrations S3 (#2248): renaming and removing agent classes.
+// ---------------------------------------------------------------------------
+
+fn agent(name: &str, header_extra: &str, fields: &str) -> String {
+    format!(
+        "agent {name}{header_extra} {{\n  key id: String\n\n{fields}\n\n  on call ping() -> Effect[Int] {{\n    1\n  }}\n}}\n"
+    )
+}
+
+fn shop(items: &[String]) -> String {
+    format!("context shop\n\n{}", items.join("\n"))
+}
+
+/// The lock section for one class, from its `[agents."shop.<Class>"]` header
+/// to the next class's.
+fn class_section<'a>(lock: &'a str, class: &str) -> Option<&'a str> {
+    let header = format!("[agents.\"shop.{class}\"]");
+    let at = lock.find(&header)?;
+    let rest = &lock[at + header.len()..];
+    let end = rest.find("\n[agents.").unwrap_or(rest.len());
+    Some(&rest[..end])
+}
+
+/// `agent Basket replaces Cart` moves Cart's lock entry, history and all, to
+/// Basket; a later step on Basket reads Cart's recorded version.
+#[test]
+fn a_rename_moves_the_class_history_in_the_lock() {
+    let p = Project::new("s3-rename");
+    p.build_ok(&shop(&[agent("Cart", "", "  store owner: Cell[String]")]));
+    p.build_ok(&shop(&[agent(
+        "Cart",
+        "",
+        "  store owner: Cell[String]\n  store note: Cell[String]",
+    )]));
+    p.build_ok(&shop(&[agent(
+        "Basket",
+        " replaces Cart",
+        "  store owner: Cell[String]\n  store note: Cell[String]",
+    )]));
+    let lock = p.lock();
+    assert!(class_section(&lock, "Cart").is_none(), "{lock}");
+    let basket = class_section(&lock, "Basket").expect("Basket recorded");
+    assert!(
+        basket.contains("version = 2"),
+        "the history moved with it: {basket}"
+    );
+
+    // A non-additive change on the renamed class needs a step from 2.
+    p.build_ok(&shop(&[
+        "type BasketV2 = { owner: String }".to_string(),
+        agent(
+            "Basket",
+            " replaces Cart",
+            "  store ownerName: Cell[String]\n  store note: Cell[String]\n\n  migrate from 2 (old: BasketV2) {\n    ownerName := old.owner\n  }",
+        ),
+    ]));
+    let basket = class_section(&p.lock(), "Basket")
+        .map(str::to_string)
+        .unwrap();
+    assert!(basket.contains("version = 3"), "{basket}");
+}
+
+#[test]
+fn removing_a_class_drops_its_lock_entry() {
+    let p = Project::new("s3-remove");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        "removed agent Wishlist\n".to_string(),
+    ]));
+    assert!(class_section(&p.lock(), "Wishlist").is_none());
+}
+
+#[test]
+fn a_class_dropped_without_a_declaration_names_both_declarations() {
+    let p = Project::new("s3-dropped");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    let err = p.build_err(&shop(&[agent("Cart", "", "  store owner: Cell[String]")]));
+    assert!(err.contains("bynk.agent.class_removed"), "{err}");
+    assert!(err.contains("`removed agent Wishlist`"), "{err}");
+    assert!(err.contains("`agent New replaces Wishlist`"), "{err}");
+}
+
+#[test]
+fn rename_and_removal_misuse_is_refused() {
+    let p = Project::new("s3-misuse");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    // An old name the lock never recorded.
+    let err = p.build_err(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+        agent("Basket", " replaces Trolley", "  store owner: Cell[String]"),
+    ]));
+    assert!(err.contains("bynk.agent.replaces_unknown"), "{err}");
+    // An old name still declared.
+    let err = p.build_err(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+        agent("Basket", " replaces Cart", "  store owner: Cell[String]"),
+    ]));
+    assert!(err.contains("bynk.agent.replaces_live"), "{err}");
+    // A removal of a live class.
+    let err = p.build_err(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+        "removed agent Cart\n".to_string(),
+    ]));
+    assert!(err.contains("bynk.agent.removed_live"), "{err}");
+    // Renamed and removed at once.
+    let err = p.build_err(&shop(&[
+        agent("Basket", " replaces Cart", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+        "removed agent Cart\n".to_string(),
+    ]));
+    assert!(err.contains("bynk.agent.class_conflict"), "{err}");
+    // Renamed onto a class with its own recorded history.
+    let err = p.build_err(&shop(&[agent(
+        "Wishlist",
+        " replaces Cart",
+        "  store n: Cell[Int]",
+    )]));
+    assert!(err.contains("bynk.agent.class_conflict"), "{err}");
+}
+
+/// A removal stays declared until Cloudflare reports its tombstone stale; the
+/// builds after the one that dropped the lock entry, and a removal of a class
+/// the lock never recorded, build quietly.
+#[test]
+fn a_removal_builds_quietly_once_applied_and_for_an_unrecorded_class() {
+    let p = Project::new("s3-quiet");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    let source = shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        "removed agent Wishlist\n".to_string(),
+        "removed agent Ghost\n".to_string(),
+    ]);
+    p.build_ok(&source);
+    let again = p.build_ok(&source);
+    assert!(!again.contains("bynk.agent"), "{again}");
+}
+
+/// The emitted `wrangler.toml` carries a `renamed` tombstone pointing at the
+/// live class and a `deleted` one, and no binding for either old class.
+#[test]
+fn renames_and_removals_emit_exports_tombstones() {
+    let p = Project::new("s3-emit");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    fs::write(
+        p.root.join("shop/cart.bynk"),
+        shop(&[
+            agent("Basket", " replaces Cart", "  store owner: Cell[String]"),
+            "removed agent Wishlist\n".to_string(),
+        ]),
+    )
+    .unwrap();
+    let existing = bynk_driver::schema_lock::read(&p.root).unwrap();
+    let out = bynkc::compile_project(
+        &bynk_testkit::compile_options_single(&p.root)
+            .target(BuildTarget::Workers)
+            .schema_registry(SchemaLock::On { existing }),
+    )
+    .map_err(bynkc::ProjectFailure::flatten)
+    .expect("the workers build compiles");
+    let toml = out
+        .artefacts
+        .docs
+        .iter()
+        .find(|(path, _)| path.ends_with("wrangler.toml"))
+        .map(|(_, doc)| doc.text())
+        .expect("a wrangler.toml");
+    assert!(
+        toml.contains("[exports.Cart]\ntype = \"durable-object\"\nstate = \"renamed\"\nrenamed_to = \"Basket\""),
+        "{toml}"
+    );
+    assert!(
+        toml.contains("[exports.Wishlist]\ntype = \"durable-object\"\nstate = \"deleted\""),
+        "{toml}"
+    );
+    assert!(!toml.contains("class_name = \"Cart\""), "{toml}");
+    assert!(!toml.contains("class_name = \"Wishlist\""), "{toml}");
+}
+
+/// #2253 review: an applied rename is remembered on the entry
+/// (`renamed_from`), so a mistyped `replaces` on a class with its own history
+/// is still `replaces_unknown` rather than passing as "already applied".
+#[test]
+fn a_mistyped_replaces_after_a_rename_is_still_refused() {
+    let p = Project::new("s3-typo");
+    p.build_ok(&shop(&[agent("Cart", "", "  store owner: Cell[String]")]));
+    p.build_ok(&shop(&[agent(
+        "Basket",
+        " replaces Cart",
+        "  store owner: Cell[String]",
+    )]));
+    let lock = p.lock();
+    let basket = class_section(&lock, "Basket").unwrap();
+    assert!(basket.contains("renamed_from = [\"Cart\"]"), "{basket}");
+    // The genuine declaration, kept until its tombstone is stale, builds.
+    p.build_ok(&shop(&[agent(
+        "Basket",
+        " replaces Cart",
+        "  store owner: Cell[String]",
+    )]));
+    // A typo does not.
+    let err = p.build_err(&shop(&[agent(
+        "Basket",
+        " replaces Crat",
+        "  store owner: Cell[String]",
+    )]));
+    assert!(err.contains("bynk.agent.replaces_unknown"), "{err}");
+}
+
+// ---------------------------------------------------------------------------
+// #2676: a record field added with a default inside stored state is additive.
+// ---------------------------------------------------------------------------
+
+/// `type Prefs = …` and a `Cart` holding it in every value position.
+fn prefs_cart(prefs: &str) -> String {
+    with_decl(
+        prefs,
+        &cart(
+            "  store one: Cell[Prefs] = Prefs { theme: \"light\" }\n  store byId: Map[String, Prefs]\n  store many: Cell[List[Prefs]] = []\n  store log: Log[Prefs]",
+        ),
+    )
+}
+
+/// The lock with every recorded path removed, as a toolchain before #2676
+/// wrote it.
+fn without_paths(lock: &str) -> String {
+    let mut out = Vec::new();
+    let mut skipping = false;
+    for line in lock.lines() {
+        if line.ends_with(".shapes.fields.paths]]") {
+            skipping = true;
+            continue;
+        }
+        if skipping && line.starts_with('[') {
+            skipping = false;
+        }
+        if !skipping {
+            out.push(line);
+        }
+    }
+    out.join("\n") + "\n"
+}
+
+#[test]
+fn a_record_field_added_with_a_default_is_additive_in_every_value_position() {
+    let p = Project::new("nested-default");
+    p.build_ok(&prefs_cart("type Prefs = { theme: String }"));
+    assert!(p.lock().contains("path = \"one.theme\""), "{}", p.lock());
+
+    p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12 }",
+    ));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "{lock}");
+    assert!(lock.contains("additive = true"), "{lock}");
+    for path in ["one.size", "byId#1.size", "many[].size", "log.size"] {
+        assert!(
+            lock.contains(&format!("path = \"{path}\"")),
+            "{path}:\n{lock}"
+        );
+    }
+
+    // A defaulted record field brings its own fields with it.
+    p.build_ok(&with_decl(
+        "type Extra = { note: String }",
+        &prefs_cart(
+            "type Prefs = { theme: String, size: Int = 12, extra: Extra = Extra { note: \"\" } }",
+        ),
+    ));
+    assert_eq!(agent_version(&p.lock()), "3", "{}", p.lock());
+}
+
+#[test]
+fn a_nested_change_that_is_not_a_defaulted_addition_names_its_path() {
+    let p = Project::new("nested-refused");
+    p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12 }",
+    ));
+    let before = p.lock();
+
+    let err = p.build_err(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12, dark: Bool }",
+    ));
+    assert!(
+        err.contains("bynk.agent.non_additive_state_change"),
+        "{err}"
+    );
+    assert!(
+        err.contains("one (one.dark added without a default)"),
+        "{err}"
+    );
+
+    let err = p.build_err(&prefs_cart("type Prefs = { size: Int = 12 }"));
+    assert!(err.contains("one.theme removed"), "{err}");
+
+    let err = p.build_err(&prefs_cart(
+        "type Prefs = { theme: String, size: String = \"12\" }",
+    ));
+    assert!(err.contains("one.size retyped"), "{err}");
+
+    let err = p.build_err(&prefs_cart("type Prefs = { theme: String, size: Int }"));
+    assert!(err.contains("one.size lost its default"), "{err}");
+
+    assert_eq!(p.lock(), before, "a refused build must not touch the lock");
+}
+
+#[test]
+fn a_new_variant_in_stored_state_stays_non_additive() {
+    let p = Project::new("nested-variant");
+    let with_sum = |sum: &str| with_decl(sum, &cart("  store last: Cell[Option[Event]]"));
+    p.build_ok(&with_sum("type Event = | Added(sku: String) | Cleared"));
+    let err = p.build_err(&with_sum(
+        "type Event = | Added(sku: String) | Cleared | Paused",
+    ));
+    assert!(err.contains("last?|Paused variant added"), "{err}");
+}
+
+#[test]
+fn a_lock_without_paths_is_backfilled_by_an_unchanged_build() {
+    let p = Project::new("backfill");
+    let base = prefs_cart("type Prefs = { theme: String }");
+    p.build_ok(&base);
+    let legacy = without_paths(&p.lock());
+    assert!(!legacy.contains("paths"), "{legacy}");
+    fs::write(p.lock_path(), &legacy).unwrap();
+
+    // Against a snapshot with no paths, a nested change is judged as before
+    // #2676, and the note says how to get past it.
+    let err = p.build_err(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12 }",
+    ));
+    assert!(
+        err.contains("field(s) retyped: byId, log, many, one"),
+        "{err}"
+    );
+    assert!(err.contains("predates per-path shapes"), "{err}");
+
+    // An unchanged build fills the paths in without a version bump...
+    p.build_ok(&base);
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "1", "{lock}");
+    assert!(lock.contains("path = \"one.theme\""), "{lock}");
+
+    // ...after which the same change is additive.
+    p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String, size: Int = 12 }",
+    ));
+    assert_eq!(agent_version(&p.lock()), "2", "{}", p.lock());
+}
+
+/// #2676: with paths recorded, a refinement change is read position by
+/// position, so a record gaining a defaulted field is not mistaken for one,
+/// and a narrowed predicate inside a record still warns.
+#[test]
+fn a_refinement_inside_a_record_is_read_position_by_position() {
+    let p = Project::new("nested-refine");
+    p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String where MaxLength(20) }",
+    ));
+
+    let warnings = p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String where MaxLength(20), size: Int = 12 }",
+    ));
+    assert!(
+        !warnings.contains("bynk.agent.refinement_changed"),
+        "{warnings}"
+    );
+    assert_eq!(agent_version(&p.lock()), "2", "{}", p.lock());
+
+    let warnings = p.build_ok(&prefs_cart(
+        "type Prefs = { theme: String where MaxLength(10), size: Int = 12 }",
+    ));
+    assert!(
+        warnings.contains("bynk.agent.refinement_changed"),
+        "{warnings}"
+    );
+    assert_eq!(agent_version(&p.lock()), "3", "{}", p.lock());
+}

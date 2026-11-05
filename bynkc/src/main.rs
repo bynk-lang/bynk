@@ -1,4 +1,4 @@
-//! bynkc — the Bynk v0.3 compiler CLI.
+// bynkc — the Bynk v0.3 compiler CLI.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

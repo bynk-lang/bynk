@@ -8,16 +8,8 @@ homepage.workspace = true
 description = "The Bynk compiler CLI: type-checks Bynk source and compiles it to typed TypeScript for Cloudflare Workers."
 keywords = ["compiler", "dsl", "typescript", "language"]
 categories = ["compilers"]
-# One integration-test binary, not one per file: see tests/it.rs. Linking ~130
-# test binaries, each the whole compiler, dominated the Windows CI build.
-autotests = false
-
 [lib]
 path = "src/lib.rs"
-
-[[test]]
-name = "it"
-path = "tests/it.rs"
 
 # `cargo binstall` fetches the release archive instead of compiling; the layout
 # is the one release.yml's `binaries` job packages.
@@ -54,39 +46,3 @@ bynk-strip.workspace = true
 # `bynkc` re-exports them; its ProjectFailure flatteners delegate to them.
 bynk-render.workspace = true
 clap.workspace = true
-
-[dev-dependencies]
-regex.workspace = true
-# The formatter, now a real leaf over bynk-syntax (slice 2). R10.4 residue
-# (#1048): `bynkc`'s own `bynkc fmt` command reaches it via `bynk-driver`, not
-# a `bynkc::fmt` re-export, so nothing in `bynkc/src/` needs it — only two
-# integration tests do (firstparty_sources.rs, suggestions.rs), same shape as
-# the `bynk-ide` dev-dependency below.
-bynk-fmt.workspace = true
-# The grammar reference (tests/grammar_reference.rs) is rendered by this crate.
-bynk-grammar.workspace = true
-# `test_json`/`coverage` moved down into `bynk-driver` (Wave 5 §5.4); the
-# integration tests still build/inspect `serde_json::Value` documents
-# directly (test_json.rs, source_map_bodies.rs, grammar_coverage.rs).
-serde.workspace = true
-serde_json.workspace = true
-# `tool_exists`/`probe` moved down into `bynk-driver` (Wave 5 §5.4); a couple
-# of integration tests still do their own PATH probe for a toolchain binary
-# (examples.rs, workers_runtime_smoke.rs).
-which.workspace = true
-# The IDE/LSP analysis surface (diagnose, diagnose_project) — extracted in
-# slice 5. Wave 5 §5.3 (compiler-pipeline review #41): nothing in the
-# workspace depended on `bynkc`'s re-export of it, and the binary itself
-# never called it — only `bynkc`'s own integration tests exercise it, so it
-# moves to a dev-dependency instead of shipping in the `bynkc` binary/library.
-bynk-ide.workspace = true
-# Content-ownership track (#1086) slice 3: the CompileOptions::single/::split
-# bare-call replacement for this crate's own integration-test fixtures.
-bynk-testkit.workspace = true
-# #1538: `verbatim_violations` — tests/tsc_verify.rs runs it over every
-# positive fixture's compiled TypeScript, now that real `Verbatim` content
-# exists to check.
-bynk-ts.workspace = true
-# State-migrations S4 (#2259): tests/agent_state_schema_lock.rs raises an
-# agent's floor the way `bynk migrate sweep` does, through the lock's own type.
-bynk-project.workspace = true
