@@ -3784,7 +3784,10 @@ fn build_output(
                     &bindings,
                     harness_clock_contexts.contains(ctx_name),
                     ctx_uses_exec,
-                    unit_uses.get(ctx_name).map(Vec::as_slice).unwrap_or_default(),
+                    unit_uses
+                        .get(ctx_name)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default(),
                 );
                 // #2136: a context a `system` suite targets gets the test
                 // build's scheduled-result hook. A deployable build strips

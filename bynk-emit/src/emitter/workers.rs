@@ -1008,10 +1008,10 @@ pub(crate) fn emit_worker_compose(
     // module (`Env`, `handlers`) cannot shadow it.
     let mut by_owner: BTreeMap<&str, Vec<String>> = BTreeMap::new();
     for (alias, (owner, name)) in &const_imports {
-        by_owner
-            .entry(owner.as_str())
-            .or_default()
-            .push(format!("{} as {alias}", bynk_check::emitted_names::ts_ident(name)));
+        by_owner.entry(owner.as_str()).or_default().push(format!(
+            "{} as {alias}",
+            bynk_check::emitted_names::ts_ident(name)
+        ));
     }
     for (owner, names) in by_owner {
         program.push(TsStmt::decl(

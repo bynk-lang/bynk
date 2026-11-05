@@ -535,16 +535,18 @@ pub fn visible_consts<'a>(
             continue;
         };
         // A used commons' `private` constants stay in it.
-        for (const_name, decl) in used_table.consts.iter().filter(|(_, d)| d.private.is_none()) {
+        for (const_name, decl) in used_table
+            .consts
+            .iter()
+            .filter(|(_, d)| d.private.is_none())
+        {
             if crate::symbols::local_value_kind(table, const_name).is_some() {
                 continue;
             }
-            combined
-                .entry(const_name.clone())
-                .or_insert(VisibleConst {
-                    decl,
-                    owner: Some(used.as_str()),
-                });
+            combined.entry(const_name.clone()).or_insert(VisibleConst {
+                decl,
+                owner: Some(used.as_str()),
+            });
         }
     }
     combined
