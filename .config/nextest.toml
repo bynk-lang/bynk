@@ -104,6 +104,14 @@ status-level = "slow"
 # the lesser cost; a hang that cancels the job leaves the whole run unnamed.
 slow-timeout = { period = "120s", terminate-after = 5 }
 
+# C4a (crate-hygiene track, #2940): per-test durations, so the suite's tiers can
+# be sized from CI rather than guessed. The file is written to
+# target/nextest/ci/junit.xml and ci.yml's test job uploads it from every matrix leg.
+# Passing tests carry no output, so the file stays small.
+[profile.ci.junit]
+path = "junit.xml"
+store-success-output = false
+
 [profile.default]
 # Local runs keep the default (0) retries so flakes surface immediately.
 retries = 0
