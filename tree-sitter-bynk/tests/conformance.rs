@@ -768,6 +768,66 @@ const CASES: &[Case] = &[
         accept: true,
     },
     Case {
+        what: "a language tag that is also a keyword: json (#2958)",
+        body: "fn f() -> String {\n  \"\"\"json\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: json (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"json\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: fn (#2958)",
+        body: "fn f() -> String {\n  \"\"\"fn\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: fn (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"fn\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: type (#2958)",
+        body: "fn f() -> String {\n  \"\"\"type\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: type (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"type\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: let (#2958)",
+        body: "fn f() -> String {\n  \"\"\"let\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: let (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"let\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: true (#2958)",
+        body: "fn f() -> String {\n  \"\"\"true\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: true (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"true\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a language tag that is also a keyword: par (#2958)",
+        body: "fn f() -> String {\n  \"\"\"par\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
+        what: "a raw language tag that is also a keyword: par (#2958)",
+        body: "fn f() -> String {\n  r\"\"\"par\n    x\n    \"\"\"\n}",
+        accept: true,
+    },
+    Case {
         what: "a space before the language tag (#2958)",
         body: "fn f() -> String {\n  \"\"\" sql\n    x\n    \"\"\"\n}",
         accept: false,

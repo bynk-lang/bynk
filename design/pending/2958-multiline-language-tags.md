@@ -28,8 +28,9 @@ grammar. So the marker has to be lexical syntax, which the compiler owns.
   `bynk.lex.multiline_open`, whose note now mentions the tag. An untagged `"""`
   still takes nothing before its newline, not even spaces.
 - *Open set.* The lexer accepts any tag. Editors map the tags they know: `sql`,
-  `json`, `html`, `css` and `js` in the TextMate grammars, and whatever
-  tree-sitter grammar an editor has in `injections.scm`. An unknown tag is a
+  `json`, `html`, `css` and `js` in the site's TextMate grammar (and in
+  vscode-bynk's, through its own PR), and whatever tree-sitter grammar an
+  editor has, through `injections.scm`. An unknown tag is a
   plain string. New editor mappings never need a compiler release.
 - *Value-neutral, no checking.* The tag is not part of the value: the token,
   decoded value and type are those of the untagged literal, so the checker,
@@ -48,9 +49,10 @@ body as the tag's language. The raw multi-line string is now an external
 opener, the opening line's rest, and an external body, so its tag and body are
 nodes too, and its opener is now validated like the compiler's.
 
-**Consequences.** `"""sql` highlights as SQL in VS Code (once vscode-bynk takes
-the matching grammar rules), in the book, and in tree-sitter editors. The two
-TextMate grammar copies (vscode-bynk's and the site's) carry the same rules and
-say so in a comment. They were also brought back into sync. A `regex` tag has no
-TextMate mapping, because neither VS Code nor Shiki ships a standalone regex
-grammar, but tree-sitter editors with a `regex` grammar inject it.
+**Consequences.** `"""sql` highlights as SQL in the book and in tree-sitter
+editors. VS Code follows when vscode-bynk takes the same TextMate rules in its
+own PR. The site's grammar is a copy of vscode-bynk's, and now carries the tag
+rules first, with a comment saying to change both together. It also regained the
+two keyword rules it had drifted without. A `regex` tag has no TextMate mapping,
+because neither VS Code nor Shiki ships a standalone regex grammar, but
+tree-sitter editors with a `regex` grammar inject it.
