@@ -2380,7 +2380,9 @@ impl Backend {
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
         );
         // #2619: escape sequences in every form of string literal, and a raw
-        // literal's delimiters as `string`.
+        // literal's delimiters as `string`. #2958: a multi-line literal's
+        // language tag as `decorator`; the body gets no token, so an editor's
+        // embedded-language highlighting shows through.
         dt.extend(
             bynk_syntax::lexer::string_parts(text)
                 .into_iter()
@@ -2390,6 +2392,11 @@ impl Backend {
                     }
                     bynk_syntax::lexer::StringPart::RawDelimiter => {
                         (s, crate::semantic_tokens::TOK_STRING)
+                    }
+                    // #2958: a multi-line literal's language tag reads as
+                    // metadata, not string text.
+                    bynk_syntax::lexer::StringPart::Tag => {
+                        (s, crate::semantic_tokens::TOK_DECORATOR)
                     }
                 }),
         );

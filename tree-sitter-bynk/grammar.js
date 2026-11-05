@@ -39,7 +39,15 @@ const PREC = {
 module.exports = grammar({
   name: "bynk",
 
-  externals: ($) => [$.doc_block, $.doc_line, $.raw_string, $._type_app_open, $._error_sentinel],
+  externals: ($) => [
+    $.doc_block,
+    $.doc_line,
+    $._raw_string_line,
+    $._raw_triple_open,
+    $.raw_string_body,
+    $._type_app_open,
+    $._error_sentinel,
+  ],
 
   extras: ($) => [/\s+/, $.doc_line, $.line_comment, $.doc_block],
 
@@ -2226,24 +2234,51 @@ module.exports = grammar({
           '"',
         ),
         // #2619: a multi-line string. The opening `"""` is followed by a
-        // newline; the body may hold lone or doubled quotes; escapes and
-        // interpolation are those of an ordinary string. (Indentation stripping
-        // is a value rule, not a shape: the compiler checks it.)
+        // newline, or (#2958) by a language tag and a newline; the body may
+        // hold lone or doubled quotes; escapes and interpolation are those of
+        // an ordinary string. (Indentation stripping is a value rule, not a
+        // shape: the compiler checks it.)
+        seq('"""', $._multiline_opener_rest, optional($.string_body), '"""'),
+        // #2619: a raw string (`r"…"`, `r#"…"#`, `r"""…"""`): no escapes, no
+        // interpolation.
+        $.raw_string,
+      ),
+    // #2958: the rest of a multi-line string's opening line: a newline, or a
+    // language tag, optional spaces or tabs, and a newline. No space may come
+    // between the `"""` and the tag.
+    _multiline_opener_rest: ($) =>
+      choice(
+        token.immediate(/\r?\n/),
+        seq(field("tag", $.string_tag), token.immediate(/[ \t]*\r?\n/)),
+      ),
+    // #2958: a multi-line string's language tag (`sql` in `"""sql`): editor
+    // metadata naming the language of the body, for `injections.scm`. It is
+    // not part of the value.
+    string_tag: () => token.immediate(/[a-z][a-z0-9_-]*/),
+    // #2958: a multi-line string's body, a node of its own so an injection
+    // can name it. Interpolation holes and escapes are its children.
+    string_body: ($) =>
+      repeat1(
+        choice(
+          token.immediate(prec(1, /[^"\\]+/)),
+          token.immediate(prec(1, /"{1,2}[^"\\]/)),
+          $.escape_sequence,
+          $.string_interpolation,
+        ),
+      ),
+    // #2619: a raw string. Single-line forms are one external token (the `#`
+    // count is not regular); the multi-line form (#2958) is an external
+    // opener `r"""`, the opening line's rest, an external opaque body, and
+    // the closing `"""`, so the tag and body are nodes of their own.
+    raw_string: ($) =>
+      choice(
+        $._raw_string_line,
         seq(
-          token(/"""\r?\n/),
-          repeat(
-            choice(
-              token.immediate(prec(1, /[^"\\]+/)),
-              token.immediate(prec(1, /"{1,2}[^"\\]/)),
-              $.escape_sequence,
-              $.string_interpolation,
-            ),
-          ),
+          $._raw_triple_open,
+          $._multiline_opener_rest,
+          optional($.raw_string_body),
           '"""',
         ),
-        // #2619: a raw string (`r"…"`, `r#"…"#`, `r"""…"""`): no escapes, no
-        // interpolation. An external token — the `#` count is not regular.
-        $.raw_string,
       ),
     // `\n \t \r \0 \" \\` and `\u{1–6 hex digits}` (#2619). Whether a `\u{…}`
     // names a scalar value (not a surrogate, at most 10FFFF) is the compiler's

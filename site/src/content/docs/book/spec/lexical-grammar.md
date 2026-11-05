@@ -110,7 +110,8 @@ the `#`s and the `"`; `r "x"` is an identifier `r` and a string. A raw literal i
 on one line; use the raw multi-line form for several.
 
 **Multi-line** — `"""…"""` and the raw form `r"""…"""`. The opening delimiter is
-followed by a newline (`bynk.lex.multiline_open` otherwise) and the closing
+followed by a newline, or by a **language tag** and a newline
+(`bynk.lex.multiline_open` otherwise), and the closing
 delimiter has a line of its own (`bynk.lex.multiline_close_not_own_line` when a
 `"""` ends a line of text). The text is the lines between them, joined by `\n`:
 
@@ -134,6 +135,27 @@ delimiter has a line of its own (`bynk.lex.multiline_close_not_own_line` when a
   are found, and never inside a hole; the newline right after the opening
   delimiter is not part of the value; a lone `\r` is not a line break.
 
+A **language tag** (#2958) names the language of a multi-line literal's text,
+for editors to highlight it: `"""sql`, `r"""regex`. It is a lowercase letter
+followed by lowercase letters, digits, `_` or `-` (`[a-z][a-z0-9_-]*`), written
+directly against the opening delimiter, and may be followed by spaces or tabs
+before the newline. Anything else after the delimiter is
+`bynk.lex.multiline_open`: a space before the tag (`""" sql`), an uppercase or
+digit-first tag, or text after the tag. Trailing spaces or tabs without a tag
+are an error too. The tag is **not part of the value**: the text still starts
+on the next line, and `"""sql` has the same value, token and type as `"""` with
+the same body. Any tag is accepted; which tags an editor highlights is the
+editor's choice, and an unknown tag is plain string text. The single-line forms
+take no tag.
+
+```bynk,fragment
+fn insert() -> String {
+	"""sql
+	INSERT INTO deliveries (id, event) VALUES ('a', 'push')
+	"""
+}
+```
+
 A multi-line string cannot appear inside an interpolation hole
 (`bynk.lex.multiline_in_hole`): a hole closes on the line it opens on. A line
 whose text starts with `"""` closes the literal unless a letter, digit, `_` or
@@ -142,7 +164,10 @@ whose text starts with `"""` closes the literal unless a letter, digit, `_` or
 
 Design choices (#2619): the closing delimiter has a line to itself, a
 single-line raw literal cannot span lines, and `#` delimiters belong to the
-single-line raw form only (there is no `r#"""`).
+single-line raw form only (there is no `r#"""`). The language tag (#2958) sits on `"""`, not on
+Markdown-style backtick fences, because Bynk source is so often shown inside
+Markdown fences; and the compiler keeps no list of tags, so a new editor
+mapping never needs a compiler release.
 
 Indentation is removed *before* escapes are read, so `\t` is a tab in the value
 whatever the margin.
@@ -170,6 +195,35 @@ table in §3.2.2 gives each value.
 {{#grammar string_interpolation}}
 
 One interpolation hole, `\(expr)`, inside a string literal (v0.43).
+
+### §3.2.2c raw_string
+
+{{#grammar raw_string}}
+
+A raw string literal (#2619). The single-line forms and the multi-line opener
+`r"""` are external tokens; the multi-line form's opening line and body are as
+in §3.2.2.
+
+### §3.2.2d multiline_opener_rest
+
+{{#grammar _multiline_opener_rest}}
+
+The rest of a multi-line string's opening line: a newline, or a language tag
+(#2958), optional spaces or tabs, and a newline.
+
+### §3.2.2e string_tag
+
+{{#grammar string_tag}}
+
+A multi-line string's language tag (#2958). It is not part of the value
+(§3.2.2).
+
+### §3.2.2f string_body
+
+{{#grammar string_body}}
+
+The text of an ordinary multi-line string, holding its escapes and
+interpolation holes.
 
 ### §3.2.3 boolean_literal
 

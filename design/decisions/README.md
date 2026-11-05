@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0739](0739-multiline-string-language-tags.md) | **A multi-line string literal may carry a language tag for editors** (v0.510) — `"""sql` / `r"""regex`; an open, value-neutral tag the lexer accepts and editors map (amends 0694) | Accepted (v0.510) |
 | [0738](0738-suite-env-fixture-value.md) | **An `env` entry's value may be a fixture of the same suite** (v0.509) — Amends ADR 0524's literal-only values; the text is verbatim and stays in the test module once | Accepted (v0.509) |
 | [0737](0737-ws-open-transfer-key.md) | **A Workers WebSocket `on open` transfer is keyed by a route parameter, a constant or a literal** (v0.508.13) — What the edge can evaluate to route an upgrade before the body runs, and why other keys are rejected | Accepted (v0.508.13) |
 | [0736](0736-installables.md) | **bynk and bynk-lsp are the only release binaries; bynkc-lsp is retired** (v0.508.12) — One driver binary runs every command in-process; the language server is bynk-lsp | Accepted (v0.508.12) |

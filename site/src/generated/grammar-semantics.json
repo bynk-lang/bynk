@@ -1595,7 +1595,7 @@
     },
     {
       "code": "bynk.lex.multiline_open",
-      "summary": "The opening `\"\"\"` of a multi-line string literal is not followed by a newline."
+      "summary": "The opening `\"\"\"` of a multi-line string literal is not followed by a newline, or by a language tag (`\"\"\"sql`) and a newline."
     },
     {
       "code": "bynk.lex.unterminated_interpolation",

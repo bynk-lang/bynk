@@ -1,0 +1,18 @@
+commons demo
+
+fn insert() -> String {
+      """sql   
+        INSERT INTO t (id) VALUES
+          ('a')
+        """
+}
+fn pattern() -> String {
+  r"""regex
+    ^\d{4}-\d{2}$
+    """
+}
+fn page(title: String) -> String {
+"""html
+<h1>\(title)</h1>
+"""
+}

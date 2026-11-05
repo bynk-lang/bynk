@@ -9393,6 +9393,32 @@
     }
   },
   {
+    "type": "raw_string",
+    "named": true,
+    "fields": {
+      "tag": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "string_tag",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "raw_string_body",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "record_construction",
     "named": true,
     "fields": {
@@ -11496,6 +11522,25 @@
     }
   },
   {
+    "type": "string_body",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "escape_sequence",
+          "named": true
+        },
+        {
+          "type": "string_interpolation",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "string_interpolation",
     "named": true,
     "fields": {},
@@ -11637,7 +11682,18 @@
   {
     "type": "string_literal",
     "named": true,
-    "fields": {},
+    "fields": {
+      "tag": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "string_tag",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": false,
@@ -11648,6 +11704,10 @@
         },
         {
           "type": "raw_string",
+          "named": true
+        },
+        {
+          "type": "string_body",
           "named": true
         },
         {
@@ -14096,7 +14156,7 @@
     "named": false
   },
   {
-    "type": "raw_string",
+    "type": "raw_string_body",
     "named": true
   },
   {
@@ -14146,6 +14206,10 @@
   {
     "type": "store",
     "named": false
+  },
+  {
+    "type": "string_tag",
+    "named": true
   },
   {
     "type": "stub",

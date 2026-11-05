@@ -1,0 +1,7 @@
+commons demo
+
+fn sql() -> String {
+  """1sql
+  SELECT 1
+  """
+}
