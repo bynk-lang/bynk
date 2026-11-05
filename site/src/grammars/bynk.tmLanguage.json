@@ -5,8 +5,9 @@
   "fileTypes": ["bynk"],
   "injections": {
     "L:meta.interpolated.bynk - meta.embedded.interpolation.bynk": {
-      "comment": "#90: a non-raw tagged multi-line string (\"\"\"sql) is still a Bynk string, so `\\(…)` is a hole anywhere in its body — inside the embedded language's own strings and comments, and in value position (`\"n\": \\(x)`), where that grammar's rules, not the body's top-level includes, are active. The `L:` makes the hole win over the embedded rule at the same position (JSON's invalid-escape rule). Raw r\"\"\"sql bodies carry no meta.interpolated.bynk, so they stay literal; inside a hole the exclusion stops a raw Bynk string from growing a hole.",
+      "comment": "#90: a non-raw tagged multi-line string (\"\"\"sql) is still a Bynk string, so `\\(…)` is a hole anywhere in its body — inside the embedded language's own strings and comments, and in value position (`\"n\": \\(x)`), where that grammar's rules, not the body's top-level includes, are active. The `L:` makes the hole win over the embedded rule at the same position (JSON's invalid-escape rule). Raw r\"\"\"sql bodies carry no meta.interpolated.bynk, so they stay literal; inside a hole the exclusion stops a raw Bynk string from growing a hole. #string-escape comes first, as in #strings, so an escaped `\\\\(` is a backslash and a literal paren even where the embedded grammar has no escapes of its own (a SQL '…', a JS comment); Bynk decodes those escapes before the embedded language sees the text.",
       "patterns": [
+        { "include": "#string-escape" },
         { "include": "#interpolation" }
       ]
     }
