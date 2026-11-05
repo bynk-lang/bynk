@@ -1,0 +1,19 @@
+// #2947: a suite helper naming a `uses`-commons type is inlined into every stub
+// value (#2907), so the stub's method must bring that commons into scope.
+suite demo.clock
+
+fn item() -> Item {
+	bump(Item { n: 0 })
+}
+
+case "a stub that never calls the helper" {
+	stub Clock.now() returns Instant.fromEpochMillis(0)
+	let n <- stamp.call(item())
+	expect n == 1
+}
+
+case "a stub over a sequence beside the helper" {
+	stub Clock.now() returns each [Instant.fromEpochMillis(0), Instant.fromEpochMillis(1)]
+	let n <- stamp.call(item())
+	expect n == 1
+}

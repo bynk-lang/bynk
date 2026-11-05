@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "stamp": "dc6b8f7ca5f6d25a"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "stamp": "Svc(\"stamp\",P(\"item\",Rec(\"Item\",F(\"n\",B(\"Int\")))),Ret(B(\"Int\")))"
+  }
+}
