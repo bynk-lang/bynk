@@ -74,7 +74,7 @@ override and any driver↔compiler skew.
 ## Design
 
 - **Links the pipeline** — the driver links the compiler library crates
-  (`bynk-driver` / `bynk-emit` / `bynk-syntax` / `bynk-render` / `bynk-fmt`) and
+  (`bynk-driver` / `bynk-emit` / `bynk-syntax` / `bynk-fmt`) and
   compiles in-process, rather than shelling the `bynkc` binary, so it is
   self-contained
   ([ADR 0101](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0101-front-end-links-pipeline-binary-topology.md),

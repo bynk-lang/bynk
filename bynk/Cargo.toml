@@ -30,7 +30,8 @@ path = "src/lib.rs"
 # Slice 7: the driver links the pipeline in-process instead of shelling `bynkc`.
 # `bynk-emit` gives it `compile_project` + `compile_with_warnings` + `write_output`
 # + the Node floor; `bynk-syntax` the lexer (name validation) + `CompileError`;
-# `bynk-fmt` the formatter behind `bynk fmt` (v0.133). It no longer depends on the `bynkc` crate.
+# `bynk-fmt` the formatter behind `bynk fmt` (v0.133). It no longer depends on
+# the `bynkc` crate.
 bynk-emit.workspace = true
 # #521: the shared bynkc/bynk front-end (fmt/check bodies, flatteners, rooting).
 bynk-driver.workspace = true
