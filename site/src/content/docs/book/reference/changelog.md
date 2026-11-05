@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.3** | Internal - the expression printer moves from `bynk-fmt` into `bynk-syntax`; `bynk-check` no longer depends on `bynk-fmt` |
 | **v0.510.2** | "A Workers WebSocket `on open` keyed by a `const` of a used commons split across files now builds: `compose.ts` imports it from the file that declares it, where it imported from a commons module such a commons does not emit (#2969)" |
 | **v0.510.1** | "A Workers WebSocket `on open` can key its connection transfer by a public `const` of a commons the context `uses`, as it can by the context's own `const`; it was rejected with `bynk.ws.open_transfer_key` (#2967)" |
 | **v0.510.0** | A multi-line string may carry a language tag, `"""sql` or `r"""regex`, so editors highlight its text as that language; the tag is not part of the value |
