@@ -8,7 +8,7 @@
 //! candidate against the predicate and names every clause that fails.
 //!
 //! **Where the check runs (DECISION A).** In the client, over the same
-//! condition the emitter lowers for `.of` — [`bynk_emit::emitter::pred_condition_and_message`].
+//! condition the emitter lowers for `.of` — [`bynk_ts::pred_condition_and_message`].
 //! The server does not run anything. Each clause carries its condition twice:
 //!
 //! - `predicate` (#2587), the clause in structured form — one of a closed set
@@ -242,7 +242,7 @@ pub fn model_for(decl: &TypeDecl, with_examples: bool) -> Option<RefinedModel> {
 }
 
 fn clause(kind: &PredKind) -> Clause {
-    let (cond, message) = bynk_emit::emitter::pred_condition_and_message(kind, "value");
+    let (cond, message) = bynk_ts::pred_condition_and_message(kind, "value");
     let description = match kind {
         PredKind::NonNegative => "value ≥ 0".to_string(),
         PredKind::Positive => "value > 0".to_string(),

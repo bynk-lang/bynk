@@ -244,6 +244,7 @@ dependencies = [
  "bynk-project",
  "bynk-std",
  "bynk-syntax",
+ "bynk-ts",
  "regress",
 ]
 
@@ -333,7 +334,6 @@ version = "0.508.4"
 dependencies = [
  "bynk-check",
  "bynk-driver",
- "bynk-emit",
  "bynk-fmt",
  "bynk-ide",
  "bynk-project",

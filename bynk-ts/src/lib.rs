@@ -32,6 +32,7 @@
 
 mod lint;
 mod name_closure;
+mod predicate;
 mod printer;
 mod program;
 mod source_map;
@@ -40,6 +41,10 @@ pub use lint::{Violation, verbatim_violations};
 pub use name_closure::{
     ModuleExports, NamespaceMemberUse, module_exports, namespace_member_uses, type_only_value_uses,
     unbound_names, value_imports,
+};
+pub use predicate::{
+    decimal_range_condition, decimal_signed_coef, escape_ts_literal, pred_condition_and_message,
+    pred_condition_and_message_for,
 };
 pub use printer::{
     Printed, print, print_class_method, print_class_method_and_merge, print_expr,

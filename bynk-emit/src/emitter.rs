@@ -25,7 +25,10 @@ use std::sync::Arc;
 // unchanged — `bynk-ts/src/source_map.rs`'s own module doc has the full
 // grounding for why this API stays as-is while `bynk-ts`'s own printer
 // gets a second, simpler way to use the same type.
-use bynk_ts::{SourceMapBuilder, TsType};
+use bynk_ts::{
+    SourceMapBuilder, TsType, decimal_range_condition, decimal_signed_coef,
+    pred_condition_and_message, pred_condition_and_message_for,
+};
 
 use crate::project::{BuildTarget, EmitProjectCtx, ImportExt, UnitKind, UnitTable};
 use bynk_check::builtin_names::map_query;
@@ -6398,19 +6401,6 @@ pub(crate) fn decimal_ts_literal(coef: &str, scale: u32) -> String {
     )
 }
 
-/// #2622: a coefficient as a signed `bigint` literal body: no leading zeros
-/// (`007n` is not valid TypeScript) and no negative zero.
-pub(crate) fn decimal_signed_coef(coef: &str) -> String {
-    let (neg, mag) = match coef.strip_prefix('-') {
-        Some(rest) => (true, rest),
-        None => (false, coef),
-    };
-    let mag = mag.trim_start_matches('0');
-    let mag = if mag.is_empty() { "0" } else { mag };
-    let sign = if neg && mag != "0" { "-" } else { "" };
-    format!("{sign}{mag}")
-}
-
 pub(crate) fn ts_type_ref(r: &TypeRef) -> String {
     ts_type_ref_with(r, None)
 }
@@ -7412,208 +7402,9 @@ pub(crate) fn payload_prop(field: &str) -> String {
 /// inline values (#2476) name the same variable the emitter declares.
 pub(crate) use bynk_check::emitted_names::ts_ident;
 
-/// Delegates to `bynk_check::wire_default::escape_ts_literal` — the two
-/// splice into generated TypeScript from opposite sides (real emission here,
-/// event-field wire defaults there), so a correction to the escaping rules
-/// must land once, not drift between two copies.
-pub(crate) fn escape_ts_string(s: &str) -> String {
-    bynk_check::wire_default::escape_ts_literal(s)
-}
-
-/// #661 (Decision D)/#70 review: the one `PredKind` → runtime-check mapping,
-/// shared by the owner-side check (`emit::emit_pred_check`, over a `value`
-/// binding) and the boundary-side inline check
-/// (`serialisation::emit_inline_pred_check`, over a `json` binding) — the
-/// two used to hand-roll this mapping independently, pinned identical only by
-/// a comment, so amending one (e.g. the `Matches` regex's `^(?:…)$` anchoring)
-/// could silently drift from the other. `receiver` is the bound name the
-/// generated condition reads (`value` or `json`); the returned message is the
-/// same either side of the boundary by construction.
-///
-/// #1471: `cond` is a real [`bynk_ts::TsExpr`], not opaque text — the
-/// blocker (`bynk_ts::TsBinaryOp` had no `>=`/`<=`) is resolved by that
-/// enum's own new `GreaterThanEq`/`LessThanEq` variants. Both real callers
-/// wrap the returned expression in their own `Unary::Not`/`Paren` unchanged;
-/// only this function's own arms changed, from `format!`ing condition text
-/// to building the equivalent node tree.
-///
-/// Review of #1336: both real callers (`emit::emit_pred_check`,
-/// `serialisation::emit_inline_pred_check`) splice the returned `message`
-/// straight into a TypeScript string literal **unescaped** — safe today only
-/// because every arm's own message is either static English text or already
-/// `escape_ts_string`-escaped (the `Matches` arm's own pattern). A future arm
-/// returning raw, unescaped text (a predicate carrying a user-supplied string
-/// operand, say) would emit a malformed or injectable literal at both call
-/// sites, and nothing in the existing fixture corpus would catch it. This
-/// invariant must match at every arm added here, not just the ones that exist
-/// today — return plain text or already-`escape_ts_string`-escaped text only.
-/// `msg` stays exactly this opaque `String`, unchanged by #1471: only the
-/// `cond` side of the pair became a real node (see the `Matches` arm below
-/// for why the message keeps its own already-escaped copy of the pattern
-/// separate from the condition's raw, unescaped one).
-pub fn pred_condition_and_message(pred: &PredKind, receiver: &str) -> (bynk_ts::TsExpr, String) {
-    pred_condition_and_message_for(pred, receiver, None)
-}
-
-/// #2622: the condition a `Decimal` value must satisfy for `pred`, as inline
-/// TypeScript over the `{ coefficient, scale }` object (no runtime import).
-fn decimal_pred_condition(pred: &PredKind, recv: &str) -> Option<(String, String)> {
-    match pred {
-        PredKind::NonNegative => Some((
-            format!("({recv}).coefficient >= 0n"),
-            "must be non-negative".to_string(),
-        )),
-        PredKind::Positive => Some((
-            format!("({recv}).coefficient > 0n"),
-            "must be positive".to_string(),
-        )),
-        PredKind::InRangeD(a, b) => Some((
-            decimal_range_condition(recv, a, b),
-            format!(
-                "must be in range [{}, {}]",
-                bynk_syntax::decimal::render(&a.coef, a.scale),
-                bynk_syntax::decimal::render(&b.coef, b.scale)
-            ),
-        )),
-        _ => None,
-    }
-}
-
-/// `lo <= recv <= hi` over `Decimal` objects, comparing at a common scale with
-/// `bigint` arithmetic so the check needs no helper import.
-pub(crate) fn decimal_range_condition(
-    recv: &str,
-    lo: &bynk_syntax::ast::DecimalBound,
-    hi: &bynk_syntax::ast::DecimalBound,
-) -> String {
-    let bound = |op: &str, b: &bynk_syntax::ast::DecimalBound| {
-        let coef = decimal_signed_coef(&b.coef);
-        format!(
-            "(({recv}).coefficient * 10n ** globalThis.BigInt({}) {op} ({coef}n) * 10n ** globalThis.BigInt(({recv}).scale))",
-            b.scale
-        )
-    };
-    format!("({} && {})", bound(">=", lo), bound("<=", hi))
-}
-
-/// [`pred_condition_and_message`] knowing the receiver's base type: a
-/// `Decimal` is an object, so its numeric predicates are not `recv > 0`.
-pub fn pred_condition_and_message_for(
-    pred: &PredKind,
-    receiver: &str,
-    base: Option<BaseType>,
-) -> (bynk_ts::TsExpr, String) {
-    use bynk_ts::{TsBinaryOp, TsExpr, TsLit};
-    if (base == Some(BaseType::Decimal) || matches!(pred, PredKind::InRangeD(..)))
-        && let Some((cond, msg)) = decimal_pred_condition(pred, receiver)
-    {
-        return (TsExpr::Ident(cond), msg);
-    }
-
-    let recv = || TsExpr::Ident(receiver.to_string());
-    let recv_length = || TsExpr::Member {
-        object: Box::new(recv()),
-        property: "length".to_string(),
-    };
-    let num = |n: String| TsExpr::Lit(TsLit::Num(n));
-    let cmp = |op, left, right| TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    };
-
-    match pred {
-        PredKind::NonNegative => (
-            cmp(TsBinaryOp::GreaterThanEq, recv(), num("0".to_string())),
-            "must be non-negative".to_string(),
-        ),
-        PredKind::Positive => (
-            cmp(TsBinaryOp::GreaterThan, recv(), num("0".to_string())),
-            "must be positive".to_string(),
-        ),
-        PredKind::InRange(a, b) => {
-            let (a, b) = (a.value, b.value);
-            (
-                cmp(
-                    TsBinaryOp::And,
-                    cmp(TsBinaryOp::GreaterThanEq, recv(), num(a.to_string())),
-                    cmp(TsBinaryOp::LessThanEq, recv(), num(b.to_string())),
-                ),
-                format!("must be in range [{a}, {b}]"),
-            )
-        }
-        PredKind::InRangeF(a, b) => {
-            let (a, b) = (&a.lexeme, &b.lexeme);
-            (
-                cmp(
-                    TsBinaryOp::And,
-                    cmp(TsBinaryOp::GreaterThanEq, recv(), num(a.clone())),
-                    cmp(TsBinaryOp::LessThanEq, recv(), num(b.clone())),
-                ),
-                format!("must be in range [{a}, {b}]"),
-            )
-        }
-        // Handled above (a `Decimal` base); not reachable for another base.
-        PredKind::InRangeD(..) => unreachable!("decimal predicates return early"),
-        PredKind::NonEmpty => (
-            cmp(TsBinaryOp::GreaterThan, recv_length(), num("0".to_string())),
-            "must be non-empty".to_string(),
-        ),
-        // #2867: the runtime helper owns the calendar; callers `note_predicate`.
-        PredKind::IsoDate => (
-            TsExpr::Call {
-                callee: Box::new(TsExpr::Ident("__bynkIsIsoDate".to_string())),
-                args: vec![recv()],
-            },
-            "must be a calendar date (YYYY-MM-DD)".to_string(),
-        ),
-        PredKind::MinLength(n) => (
-            cmp(TsBinaryOp::GreaterThanEq, recv_length(), num(n.to_string())),
-            format!("length must be at least {n}"),
-        ),
-        PredKind::MaxLength(n) => (
-            cmp(TsBinaryOp::LessThanEq, recv_length(), num(n.to_string())),
-            format!("length must be at most {n}"),
-        ),
-        PredKind::Length(n) => (
-            cmp(TsBinaryOp::StrictEq, recv_length(), num(n.to_string())),
-            format!("length must be exactly {n}"),
-        ),
-        PredKind::Matches(pat) => {
-            // The condition's own `RegExp` source uses `pat` raw, not
-            // `escaped` — `TsLit::Str`'s printer already applies the exact
-            // same escaping as `escape_ts_string`
-            // (`bynk_check::wire_default::escape_ts_literal`, kept
-            // deliberately identical — see `bynk-ts/src/printer.rs`'s own
-            // `render_lit`), so escaping `pat` here too would double-escape
-            // it, same bug class `msg`'s own doc above already argues
-            // against. `escaped` is still needed for `msg`, which is opaque
-            // text spliced with no further escaping.
-            let escaped = escape_ts_string(pat);
-            let pattern = cmp(
-                TsBinaryOp::Add,
-                cmp(
-                    TsBinaryOp::Add,
-                    TsExpr::Lit(TsLit::Str("^(?:".to_string())),
-                    TsExpr::Lit(TsLit::Str(pat.clone())),
-                ),
-                TsExpr::Lit(TsLit::Str(")$".to_string())),
-            );
-            let regexp = TsExpr::New {
-                callee: Box::new(TsExpr::Ident("globalThis.RegExp".to_string())),
-                args: vec![pattern],
-            };
-            let test_call = TsExpr::Call {
-                callee: Box::new(TsExpr::Member {
-                    object: Box::new(regexp),
-                    property: "test".to_string(),
-                }),
-                args: vec![recv()],
-            };
-            (test_call, format!("must match /{escaped}/"))
-        }
-    }
-}
+/// The one TypeScript string-literal escaper lives in `bynk_ts` (crate-hygiene A2);
+/// the emitter keeps its historical name for it.
+pub(crate) use bynk_ts::escape_ts_literal as escape_ts_string;
 
 #[allow(dead_code)]
 fn _unused_hashmap(_h: HashMap<String, ()>) {}

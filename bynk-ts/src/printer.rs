@@ -1685,31 +1685,9 @@ fn render_lit(out: &mut String, lit: &TsLit) {
     match lit {
         TsLit::Str(s) => {
             out.push('"');
-            // Matches `bynk_check::wire_default::escape_ts_literal`
-            // byte-for-byte (review of #1314, finding 1) — the previous
-            // version escaped only `"`/`\`, so a `\n`/`\t`/`\r` inside a
-            // literal printed raw into the output, an unterminated string
-            // literal `tsc` can't parse. `bynk-ts` can't depend on
-            // `bynk-check` to share that function directly (this crate's
-            // own module doc: `bynk-syntax` only) — inlined instead, kept
-            // deliberately identical rather than reinvented, since both
-            // this printer and `bynk-emit`'s `escape_ts_string` splice into
-            // generated TypeScript and must never disagree.
-            for c in s.chars() {
-                match c {
-                    '\\' => out.push_str("\\\\"),
-                    '"' => out.push_str("\\\""),
-                    '\n' => out.push_str("\\n"),
-                    '\t' => out.push_str("\\t"),
-                    '\r' => out.push_str("\\r"),
-                    // #2619: `\0`, other control characters and the JS line terminators
-                    // U+2028/U+2029 print as `\u{…}` escapes (valid in strings and templates).
-                    c if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') => {
-                        out.push_str(&format!("\\u{{{:X}}}", c as u32));
-                    }
-                    c => out.push(c),
-                }
-            }
+            // One shared escaper (`crate::predicate::escape_ts_literal`): this printer,
+            // `bynk-emit` and `bynk-check`'s wire defaults must never disagree.
+            out.push_str(&crate::predicate::escape_ts_literal(s));
             out.push('"');
         }
         TsLit::Num(n) => out.push_str(n),
@@ -4165,7 +4143,7 @@ mod tests {
     /// Review of #1314, finding 1: `TsLit::Str` escaped only `"`/`\`, so a
     /// literal containing a newline, tab, or carriage return printed raw —
     /// unterminated-string-literal TypeScript `tsc` can't parse. Pins the
-    /// fix against every character `bynk_check::wire_default::
+    /// fix against every character `crate::predicate::
     /// escape_ts_literal` escapes.
     #[test]
     fn escapes_newline_tab_and_carriage_return_in_a_string_literal() {
