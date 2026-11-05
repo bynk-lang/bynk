@@ -158,7 +158,11 @@ impl<'de> Deserialize<'de> for KeysOnly {
                 let mut keys = Vec::new();
                 while let Some(k) = m.next_key::<String>()? {
                     m.next_value::<IgnoredAny>()?;
-                    keys.push(k);
+                    // A repeated key keeps its last value in the map, so list
+                    // it once, at its first position.
+                    if !keys.contains(&k) {
+                        keys.push(k);
+                    }
                 }
                 Ok(KeysOnly(keys))
             }
@@ -691,6 +695,11 @@ mod tests {
         let z = appendix.find("zeta ::=").unwrap();
         let a = appendix.find("alpha ::=").unwrap();
         let m = appendix.find("mid ::=").unwrap();
+        assert!(z < a && a < m);
+        let site = render_site_json(g);
+        let z = site.find("\"zeta\"").unwrap();
+        let a = site.find("\"alpha\"").unwrap();
+        let m = site.find("\"mid\"").unwrap();
         assert!(z < a && a < m);
     }
 }

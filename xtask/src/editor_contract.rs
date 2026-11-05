@@ -97,3 +97,17 @@ pub fn render_release(tag: &str) -> String {
 pub fn write(root: &Path) -> std::io::Result<()> {
     std::fs::write(root.join(SNAPSHOT_PATH), render())
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    /// `generate` builds objects with `json!` and relies on `serde_json`'s map
+    /// being key-sorted. A crate anywhere in the workspace build enabling
+    /// `preserve_order` would reorder the snapshot (differently under
+    /// `--workspace` than `-p xtask`); this fails first, naming the cause.
+    #[test]
+    fn serde_json_maps_are_key_sorted() {
+        assert_eq!(json!({"b": 1, "a": 2}).to_string(), r#"{"a":2,"b":1}"#);
+    }
+}
