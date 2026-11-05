@@ -44,7 +44,9 @@
 //! instead of editing a count every other open change also edits.
 //! `BYNK_BLESS=1 cargo test -p bynk-fmt --test comment_slots` rewrites the pin
 //! files from the current run: after adding a fixture, or after a formatter
-//! change, with the moved counts reviewed in the diff.
+//! change, with the moved counts reviewed in the diff. The corpus is checked in
+//! [`SHARDS`] shards (one test each, by fixture), so a blessing run covers all
+//! of them; `cargo test` runs them in parallel.
 //!
 //! **Sampling.** Checking every candidate takes well over half a minute in a
 //! debug build, so by default
@@ -109,11 +111,11 @@ fn read_pins() -> BTreeMap<String, Refused> {
 
 /// Rewrites the pin directory to exactly `actual`: one file per fixture with
 /// any refusal, and no file for the rest.
-fn bless_pins(actual: &BTreeMap<String, Refused>) {
+fn bless_pins(actual: &BTreeMap<String, Refused>, shard: usize) {
     let dir = pin_dir();
     fs::create_dir_all(&dir).expect("create pin dir");
     for name in read_pins().keys() {
-        if !actual.contains_key(name) {
+        if !actual.contains_key(name) && shard_of(name) == shard {
             fs::remove_file(dir.join(format!("{name}.refused"))).expect("remove stale pin");
         }
     }
@@ -347,8 +349,45 @@ fn known_candidate(kind: Kind, site: &Site) -> bool {
         .any(|&(_, _, k, covers)| k == kind && covers(site))
 }
 
-#[test]
-fn a_comment_at_every_slot_is_kept_or_refused() {
+/// The corpus is split into this many shards, one `#[test]` each, so the run is
+/// spread over the test runner's cores instead of being one 55 s (CI: 200 s)
+/// test that bounds the whole unit tier (C4, #2940). A fixture belongs to the
+/// shard its name hashes to, so each shard checks whole fixtures and their pins.
+const SHARDS: usize = 8;
+
+/// The shard a fixture (or pin) name belongs to. Stable across platforms and
+/// runs, like [`sampled`].
+fn shard_of(fixture: &str) -> usize {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in fixture.bytes() {
+        h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+    }
+    (h % SHARDS as u64) as usize
+}
+
+macro_rules! shards {
+    ($($name:ident => $n:expr),* $(,)?) => {
+        $(#[test] fn $name() { check_shard($n); })*
+        /// Every shard has a test: a miscounted `SHARDS` would leave fixtures unchecked.
+        #[test]
+        fn every_shard_has_a_test() {
+            assert_eq!([$($n),*], std::array::from_fn::<usize, SHARDS, _>(|i| i));
+        }
+    };
+}
+
+shards! {
+    a_comment_at_every_slot_is_kept_or_refused_shard_0 => 0,
+    a_comment_at_every_slot_is_kept_or_refused_shard_1 => 1,
+    a_comment_at_every_slot_is_kept_or_refused_shard_2 => 2,
+    a_comment_at_every_slot_is_kept_or_refused_shard_3 => 3,
+    a_comment_at_every_slot_is_kept_or_refused_shard_4 => 4,
+    a_comment_at_every_slot_is_kept_or_refused_shard_5 => 5,
+    a_comment_at_every_slot_is_kept_or_refused_shard_6 => 6,
+    a_comment_at_every_slot_is_kept_or_refused_shard_7 => 7,
+}
+
+fn check_shard(shard: usize) {
     let exhaustive = std::env::var_os("BYNK_FMT_EXHAUSTIVE").is_some();
     let opts = FormatOptions::default();
     let mut counts: BTreeMap<(Outcome, Kind), usize> = BTreeMap::new();
@@ -357,6 +396,9 @@ fn a_comment_at_every_slot_is_kept_or_refused() {
     let mut failures: Vec<String> = Vec::new();
 
     for (file, src) in corpus() {
+        if shard_of(fixture_of(&file)) != shard {
+            continue;
+        }
         let Ok(base) = format_source(&src, &opts) else {
             continue;
         };
@@ -514,11 +556,14 @@ fn a_comment_at_every_slot_is_kept_or_refused() {
         return;
     }
     if std::env::var_os("BYNK_BLESS").is_some() {
-        bless_pins(&refused_by_fixture);
+        bless_pins(&refused_by_fixture, shard);
         eprintln!("blessed {} comment-slot pins", refused_by_fixture.len());
         return;
     }
-    let pins = read_pins();
+    let pins: BTreeMap<String, Refused> = read_pins()
+        .into_iter()
+        .filter(|(name, _)| shard_of(name) == shard)
+        .collect();
     let names: std::collections::BTreeSet<&String> =
         pins.keys().chain(refused_by_fixture.keys()).collect();
     let moved: Vec<String> = names
