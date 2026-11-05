@@ -3936,7 +3936,7 @@ pub fn render_grammar_semantics_json() -> String {
         serde_json::Value::String(
             "Generated from the grammar_symbol field of bynkc/src/diagnostics.rs. \
              Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p \
-             bynkc --test it diagnostics_registry::"
+             bynk-tests --test it diagnostics_registry::"
                 .to_string(),
         ),
     );

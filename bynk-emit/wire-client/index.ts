@@ -1003,7 +1003,7 @@ export interface ServiceBinding {
 // the Worker serves, so the prefix alone proves nothing about the sender, and
 // one key per edge means a key's holder can claim only its own name. Bynk's
 // emitter holds the same values in `bynk_check::wire_format`, and
-// `bynk-tests/tests/wire_reference.rs` fails if the two disagree.
+// `bynkc/tests/wire_reference.rs` fails if the two disagree.
 export const CALLER_HEADER = "X-Bynk-Caller";
 export const TIMESTAMP_HEADER = "X-Bynk-Timestamp";
 export const SIGNATURE_HEADER = "X-Bynk-Signature";
@@ -1199,7 +1199,7 @@ export async function verifyCall(
 // (`reference/wire-format.md`). A caller states the version it speaks; a callee
 // accepts a range of them and treats an absent header as version 1. Bynk's
 // emitter holds the same values in `bynk_check::wire_format`, and
-// `bynk-tests/tests/wire_reference.rs` fails if the two disagree.
+// `bynkc/tests/wire_reference.rs` fails if the two disagree.
 export const WIRE_VERSION_HEADER = "X-Bynk-Wire";
 export const WIRE_VERSION = "1";
 
