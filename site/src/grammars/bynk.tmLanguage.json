@@ -3,6 +3,15 @@
   "name": "Bynk",
   "scopeName": "source.bynk",
   "fileTypes": ["bynk"],
+  "injections": {
+    "L:meta.interpolated.bynk - meta.embedded.interpolation.bynk": {
+      "comment": "#90: a non-raw tagged multi-line string (\"\"\"sql) is still a Bynk string, so `\\(…)` is a hole anywhere in its body — inside the embedded language's own strings and comments, and in value position (`\"n\": \\(x)`), where that grammar's rules, not the body's top-level includes, are active. The `L:` makes the hole win over the embedded rule at the same position (JSON's invalid-escape rule). Raw r\"\"\"sql bodies carry no meta.interpolated.bynk, so they stay literal; inside a hole the exclusion stops a raw Bynk string from growing a hole. #string-escape comes first, as in #strings, so an escaped `\\\\(` is a backslash and a literal paren even where the embedded grammar has no escapes of its own (a SQL '…', a JS comment); Bynk decodes those escapes before the embedded language sees the text.",
+      "patterns": [
+        { "include": "#string-escape" },
+        { "include": "#interpolation" }
+      ]
+    }
+  },
   "patterns": [
     { "include": "#doc-block" },
     { "include": "#doc-line" },
@@ -356,116 +365,177 @@
       ]
     },
     "strings": {
-      "comment": "String literals (#2619): raw multi-line, multi-line, raw (any number of `#`), and ordinary. A raw literal has no escapes and no interpolation. Order matters: `r\"\"\"` and `\"\"\"` before `\"`. #2958: a multi-line literal may carry a language tag (`\"\"\"sql`). A known tag embeds that language's grammar in the body: one rule per tag, ahead of the untagged rules, since a TextMate include cannot be chosen by a capture. Any other tag is a plain string. This file is a copy of vscode-bynk's syntaxes/bynk.tmLanguage.json: change both together.",
+      "comment": "String literals (#2619): raw multi-line, multi-line, raw (any number of `#`), and ordinary. A raw literal has no escapes and no interpolation. Order matters: `r\"\"\"` and `\"\"\"` before `\"`. #2958: a multi-line literal may carry a language tag (`\"\"\"sql`). A known tag embeds that language's grammar in the body: one rule per tag, ahead of the untagged rules, since a TextMate include cannot be chosen by a capture. Any other tag is a plain string. The body is a begin/while rule that stops at the closing-delimiter line (the lexer's rule: indentation, then `\"\"\"` not followed by an identifier character or a quote), as Markdown's fenced code blocks do. The `while` is checked at every line start, even inside the embedded grammar's open rules, so an unclosed quote or bracket in the body cannot carry that language past the closing `\"\"\"`. This file is a copy of vscode-bynk's syntaxes/bynk.tmLanguage.json: change both together.",
       "patterns": [
         {
           "begin": "\\br(\"\"\")(sql)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
-          "contentName": "meta.embedded.block.sql",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.raw.bynk" } },
           "patterns": [
-            { "include": "source.sql" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.sql",
+              "patterns": [
+                { "include": "source.sql" }
+              ]
+            }
           ]
         },
         {
           "begin": "\\br(\"\"\")(json)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
-          "contentName": "meta.embedded.block.json",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.raw.bynk" } },
           "patterns": [
-            { "include": "source.json" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.json",
+              "patterns": [
+                { "include": "source.json" }
+              ]
+            }
           ]
         },
         {
           "begin": "\\br(\"\"\")(html)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
-          "contentName": "meta.embedded.block.html",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.raw.bynk" } },
           "patterns": [
-            { "include": "text.html.basic" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.html",
+              "patterns": [
+                { "include": "text.html.basic" }
+              ]
+            }
           ]
         },
         {
           "begin": "\\br(\"\"\")(css)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
-          "contentName": "meta.embedded.block.css",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.raw.bynk" } },
           "patterns": [
-            { "include": "source.css" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.css",
+              "patterns": [
+                { "include": "source.css" }
+              ]
+            }
           ]
         },
         {
           "begin": "\\br(\"\"\")(js)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.raw.bynk" } },
-          "contentName": "meta.embedded.block.js",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.raw.bynk" } },
           "patterns": [
-            { "include": "source.js" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.js",
+              "patterns": [
+                { "include": "source.js" }
+              ]
+            }
           ]
         },
         {
           "begin": "(\"\"\")(sql)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
-          "contentName": "meta.embedded.block.sql",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.bynk" } },
           "patterns": [
-            { "include": "#string-escape" },
-            { "include": "#interpolation" },
-            { "include": "source.sql" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.sql meta.interpolated.bynk",
+              "patterns": [
+                { "include": "#string-escape" },
+                { "include": "#interpolation" },
+                { "include": "#sql-strings" },
+                { "include": "source.sql" }
+              ]
+            }
           ]
         },
         {
           "begin": "(\"\"\")(json)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
-          "contentName": "meta.embedded.block.json",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.bynk" } },
           "patterns": [
-            { "include": "#string-escape" },
-            { "include": "#interpolation" },
-            { "include": "source.json" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.json meta.interpolated.bynk",
+              "patterns": [
+                { "include": "#string-escape" },
+                { "include": "#interpolation" },
+                { "include": "source.json" }
+              ]
+            }
           ]
         },
         {
           "begin": "(\"\"\")(html)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
-          "contentName": "meta.embedded.block.html",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.bynk" } },
           "patterns": [
-            { "include": "#string-escape" },
-            { "include": "#interpolation" },
-            { "include": "text.html.basic" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.html meta.interpolated.bynk",
+              "patterns": [
+                { "include": "#string-escape" },
+                { "include": "#interpolation" },
+                { "include": "text.html.basic" }
+              ]
+            }
           ]
         },
         {
           "begin": "(\"\"\")(css)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
-          "contentName": "meta.embedded.block.css",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.bynk" } },
           "patterns": [
-            { "include": "#string-escape" },
-            { "include": "#interpolation" },
-            { "include": "source.css" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.css meta.interpolated.bynk",
+              "patterns": [
+                { "include": "#string-escape" },
+                { "include": "#interpolation" },
+                { "include": "source.css" }
+              ]
+            }
           ]
         },
         {
           "begin": "(\"\"\")(js)[ \\t]*$",
           "beginCaptures": { "0": { "name": "string.quoted.triple.bynk" }, "2": { "name": "entity.other.attribute-name.language-tag.bynk" } },
-          "end": "\"\"\"",
-          "endCaptures": { "0": { "name": "string.quoted.triple.bynk" } },
-          "contentName": "meta.embedded.block.js",
+          "end": "^[ \\t]*(\"\"\")",
+          "endCaptures": { "1": { "name": "string.quoted.triple.bynk" } },
           "patterns": [
-            { "include": "#string-escape" },
-            { "include": "#interpolation" },
-            { "include": "source.js" }
+            {
+              "begin": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "while": "^(?![ \\t]*\"\"\"(?![A-Za-z0-9_\"]))",
+              "contentName": "meta.embedded.block.js meta.interpolated.bynk",
+              "patterns": [
+                { "include": "#string-escape" },
+                { "include": "#interpolation" },
+                { "include": "source.js" }
+              ]
+            }
           ]
         },
         {
@@ -497,6 +567,32 @@
             { "include": "#string-escape" },
             { "include": "#interpolation" }
           ]
+        }
+      ]
+    },
+    "sql-strings": {
+      "comment": "#90: SQL's own grammar matches a one-line '…', \"…\" or `…` literal with a single regex, which an injection cannot break into, so a non-raw \"\"\"sql body takes its strings as begin/end rules under SQL's scope names. The meta.interpolated.bynk injection then finds `\\(…)` holes inside them. A doubled '' is two adjacent strings, scoped the same as one.",
+      "patterns": [
+        {
+          "name": "string.quoted.single.sql",
+          "begin": "(?:(?<![a-zA-Z0-9_])(N))?(')",
+          "beginCaptures": { "2": { "name": "punctuation.definition.string.begin.sql" } },
+          "end": "'",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.sql" } }
+        },
+        {
+          "name": "string.quoted.double.sql",
+          "begin": "\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.sql" } },
+          "end": "\"",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.sql" } }
+        },
+        {
+          "name": "string.quoted.other.backtick.sql",
+          "begin": "`",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.sql" } },
+          "end": "`",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.sql" } }
         }
       ]
     },

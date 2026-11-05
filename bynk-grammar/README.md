@@ -1,8 +1,8 @@
 # bynk-grammar
 
-> **No longer published after this release.** `bynk-grammar` only renders the
+> **No longer published.** `bynk-grammar` only renders the
 > grammar reference for the Bynk repository's own tests, so no installed binary
-> depends on it. This is its final crates.io release; it is not yanked, and
+> depends on it. The previous release was its last crates.io release; it is not yanked, and
 > existing pins keep resolving. It continues, unpublished, at
 > [`bynk-lang/bynk`](https://github.com/bynk-lang/bynk/tree/main/bynk-grammar).
 > Nothing replaces it as a library: the rendered grammar is the Book's
