@@ -6,7 +6,7 @@ The [tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for the
 [Bynk](https://github.com/bynk-lang/bynk) language — the source of truth for
 tree-sitter syntax highlighting (`queries/highlights.scm`), the playground's
 editor, and the Book's grammar reference (rendered from `src/grammar.json` by
-[`bynk-grammar`](https://crates.io/crates/bynk-grammar)).
+`bynk-tests`'s `grammar` module, formerly the `bynk-grammar` crate, whose [last crates.io release](https://crates.io/crates/bynk-grammar) points here).
 
 This directory is **two things**:
 

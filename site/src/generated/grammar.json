@@ -1,5 +1,5 @@
 {
-  "_generated": "GENERATED from tree-sitter-bynk/src/grammar.json. Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p bynk-grammar --test generated_grammar_json",
+  "_generated": "GENERATED from tree-sitter-bynk/src/grammar.json. Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it generated_grammar_json::",
   "productions": {
     "source_file": "source_file ::= (commons_decl | context_decl | adapter_decl | suite_decl)+ | item_fragment+ | expr_fragment",
     "_item_fragment": "item_fragment ::= context_body_item | handler | store_field | key_decl",

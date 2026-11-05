@@ -95,7 +95,7 @@ The plugin replaces it with an EBNF code block holding that production, rendered
 from the committed `site/src/generated/grammar.json` (the same source the
 [grammar appendix](/book/reference/grammar-appendix/) is built from) so it cannot
 drift from the parser. That JSON is itself a drift-guarded render of the grammar
-— `bynk-grammar/tests/generated_grammar_json.rs` regenerates and checks it — so
+— `bynk-tests/tests/generated_grammar_json.rs` regenerates and checks it — so
 the rendered production is **generated, never hand-edited**. An unknown rule name
 throws at build time, so a typo cannot silently vanish.
 
@@ -225,7 +225,7 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
 
    The two generated JSON artifacts behind the directives —
    `site/src/generated/grammar.json` and `grammar-semantics.json` — are guarded
-   the same way (`bynk-grammar`'s `generated_grammar_json` and `bynkc`'s
+   the same way (`bynk-tests`'s `generated_grammar_json` and
    `generated_site_json`); re-bless them with `BYNK_BLESS=1` too.
 
 3. **Link checking.** `starlight-links-validator` validates internal links on

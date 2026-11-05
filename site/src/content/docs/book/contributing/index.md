@@ -25,7 +25,7 @@ The workspace targets the **Rust 2024 edition**.
 ```sh
 cargo build                 # build all workspace crates
 cargo test                  # run the whole Rust test suite
-cargo test -p bynkc         # just the compiler's tests
+cargo test -p bynk-tests     # the integration corpus (one `it` binary)
 ```
 
 `cargo test -p bynkc` runs, among others:

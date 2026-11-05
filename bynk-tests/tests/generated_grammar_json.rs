@@ -7,7 +7,7 @@
 //! This test regenerates it and fails if the committed copy is stale.
 //!
 //! Regenerate with:
-//!   BYNK_BLESS=1 cargo test -p bynk-grammar --test generated_grammar_json
+//!   BYNK_BLESS=1 cargo test -p bynk-tests --test it generated_grammar_json::
 
 use std::fs;
 use std::path::PathBuf;
@@ -30,6 +30,6 @@ fn generated_grammar_json_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/generated/grammar.json is out of date with the grammar.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-grammar --test generated_grammar_json"
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it generated_grammar_json::"
     );
 }

@@ -411,7 +411,7 @@ pub fn display_name(grammar_json: &str, name: &str) -> Result<String, GrammarErr
 /// `serde_json`'s map).
 ///
 /// The committed artifact (`site/src/generated/grammar.json`) is drift-guarded by
-/// `bynk-grammar/tests/generated_grammar_json.rs`; regenerate with `BYNK_BLESS=1`.
+/// `bynk-tests/tests/generated_grammar_json.rs`; regenerate with `BYNK_BLESS=1`.
 pub fn render_site_json(grammar_json: &str) -> String {
     /// A JSON object written in the order given, whatever `serde_json`'s map is.
     struct Ordered(Vec<(String, String)>);
@@ -436,7 +436,7 @@ pub fn render_site_json(grammar_json: &str) -> String {
     }
     let doc = SiteDoc {
         _generated: "GENERATED from tree-sitter-bynk/src/grammar.json. Do not edit by hand. \
-             Regenerate with: BYNK_BLESS=1 cargo test -p bynk-grammar --test generated_grammar_json",
+             Regenerate with: BYNK_BLESS=1 cargo test -p bynk-tests --test it generated_grammar_json::",
         productions: Ordered(productions),
         appendix: render_appendix(grammar_json),
     };

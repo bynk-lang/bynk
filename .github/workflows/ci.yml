@@ -649,7 +649,7 @@ jobs:
       #   - diagnostics_registry / keywords_reference / cli_reference / grammar_reference
       #     — assert the generated reference pages are up to date
       #   - the fixture suite and the tsc-strict verification stage
-      # The other crates (bynk-fmt, bynk-lsp, bynk-grammar) contribute their own
+      # The other crates (bynk-fmt, bynk-lsp) contribute their own
       # unit tests.
       # --locked: fail if Cargo.lock would change (no silent lockfile drift).
       # BYNK_REQUIRE_TSC makes a missing `tsc` a hard failure rather than a skip.
@@ -712,7 +712,7 @@ jobs:
           esac
       - name: Type-check emitted output under TypeScript 7
         if: matrix.os == 'ubuntu-latest'
-        # bynkc's integration tests are one binary (`it`, see bynk-tests/tests/it.rs);
+        # bynk-tests's integration tests are one binary (`it`, see bynk-tests/tests/it.rs);
         # each file's tests are prefixed with its stem.
         run: cargo nextest run --locked --profile ci -p bynk-tests --test it -E 'test(/^(tsc_verify|examples|behaviour_fixtures)::/)'
         env:
