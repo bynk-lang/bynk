@@ -1,0 +1,12 @@
+// #2956: another suite's fixture, or a name that is no fixture, is not a value.
+suite shop.pay {
+	env {
+		PAYMENTS_PROCESSOR = processor
+		REGION = region
+	}
+
+	case "another suite's fixture is not in scope" {
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
+}

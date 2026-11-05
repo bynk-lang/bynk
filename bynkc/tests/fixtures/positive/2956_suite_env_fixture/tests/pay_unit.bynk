@@ -1,0 +1,21 @@
+suite shop.pay {
+	// #2956: an `env` value may name a `fixture` of the same suite.
+	fixture processor = "fixtures/processor.txt"
+	fixture override = "fixtures/override.txt"
+
+	env {
+		PAYMENTS_PROCESSOR = processor
+	}
+
+	case "unit: the processor comes from a fixture in the suite env" {
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
+
+	// The file's trailing newline is part of the value, verbatim.
+	case "unit: a case env overrides with another fixture" {
+		env { PAYMENTS_PROCESSOR = override }
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("live\n")
+	}
+}
