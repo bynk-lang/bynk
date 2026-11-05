@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.8** | Internal - a gated `unused_deps` probe in `greenfield-status` fails CI on a declared dependency with no use |
 | **v0.510.7** | Internal - drop three unused dependency edges (`bynk-emit` and `bynkc` on `serde`, `bynk-lsp` on `tracing-appender`) |
 | **v0.510.6** | "`bynk-grammar` becomes unpublished (`publish = false`, path-only workspace entry) and leaves both release workflows' crate lists" |
 | **v0.510.5** | The `bynk-ir` and `bynk-lower` crates announce their final crates.io release; both are superseded by `bynk-model` (crate-hygiene B1) |
