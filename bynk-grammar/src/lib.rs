@@ -22,6 +22,8 @@
 use std::error::Error;
 use std::fmt;
 
+use serde::de::{Deserializer, IgnoredAny, MapAccess, Visitor};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 
 /// An error rendering a grammar production.
@@ -54,14 +56,121 @@ impl Error for GrammarError {}
 /// read fine after collapsing wrappers and stripping the leading underscore.
 const OVERRIDES: &[(&str, &str)] = &[];
 
-fn rules_of(grammar: &Value) -> Option<&Map<String, Value>> {
-    grammar.get("rules").and_then(Value::as_object)
+/// A parsed grammar document plus the source order of its top-level rules.
+///
+/// `serde_json`'s object map is key-sorted unless the workspace-unifying
+/// `preserve_order` feature is on, so the rule order the reference depends on
+/// is read here, from the text, and never from the map.
+struct Grammar {
+    doc: Value,
+    order: Vec<String>,
+}
+
+impl Grammar {
+    fn parse(grammar_json: &str) -> Result<Grammar, serde_json::Error> {
+        let doc: Value = serde_json::from_str(grammar_json)?;
+        let order = serde_json::from_str::<RuleOrder>(grammar_json)?.0;
+        Ok(Grammar { doc, order })
+    }
+
+    fn rules(&self) -> Option<Rules<'_>> {
+        let map = self.doc.get("rules").and_then(Value::as_object)?;
+        Some(Rules {
+            map,
+            order: &self.order,
+        })
+    }
+}
+
+/// The top-level rules of a [`Grammar`], iterated in source order.
+#[derive(Clone, Copy)]
+struct Rules<'a> {
+    map: &'a Map<String, Value>,
+    order: &'a [String],
+}
+
+impl<'a> Rules<'a> {
+    fn get(&self, name: &str) -> Option<&'a Value> {
+        self.map.get(name)
+    }
+
+    fn contains_key(&self, name: &str) -> bool {
+        self.map.contains_key(name)
+    }
+
+    fn keys(&self) -> impl Iterator<Item = &'a String> + use<'a> {
+        self.order.iter()
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> + use<'a> {
+        let map = self.map;
+        self.order
+            .iter()
+            .filter_map(move |k| map.get(k).map(|v| (k, v)))
+    }
+}
+
+/// Deserialises only the key order of the top-level `rules` object.
+struct RuleOrder(Vec<String>);
+
+impl<'de> Deserialize<'de> for RuleOrder {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Doc(Vec<String>);
+        struct DocVisitor;
+        impl<'de> Visitor<'de> for DocVisitor {
+            type Value = Doc;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a grammar object")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut m: A) -> Result<Doc, A::Error> {
+                let mut order = Vec::new();
+                while let Some(key) = m.next_key::<String>()? {
+                    if key == "rules" {
+                        order = m.next_value::<KeysOnly>()?.0;
+                    } else {
+                        m.next_value::<IgnoredAny>()?;
+                    }
+                }
+                Ok(Doc(order))
+            }
+        }
+        impl<'de> Deserialize<'de> for Doc {
+            fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+                d.deserialize_map(DocVisitor)
+            }
+        }
+        Ok(RuleOrder(Doc::deserialize(d)?.0))
+    }
+}
+
+/// An object's keys, in text order, with the values skipped.
+struct KeysOnly(Vec<String>);
+
+impl<'de> Deserialize<'de> for KeysOnly {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = KeysOnly;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("an object")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut m: A) -> Result<KeysOnly, A::Error> {
+                let mut keys = Vec::new();
+                while let Some(k) = m.next_key::<String>()? {
+                    m.next_value::<IgnoredAny>()?;
+                    keys.push(k);
+                }
+                Ok(KeysOnly(keys))
+            }
+        }
+        d.deserialize_map(V)
+    }
 }
 
 /// If `name`'s body is a single `SYMBOL` (a trivial `_x ::= y` wrapper), return
 /// the target rule name. Such wrappers are collapsed: they never appear as their
 /// own production, and references to them render as the target's display name.
-fn trivial_wrapper_target<'a>(rules: &'a Map<String, Value>, name: &str) -> Option<&'a str> {
+fn trivial_wrapper_target<'a>(rules: Rules<'a>, name: &str) -> Option<&'a str> {
     let body = rules.get(name)?;
     if body.get("type").and_then(Value::as_str) == Some("SYMBOL") {
         body.get("name").and_then(Value::as_str)
@@ -72,7 +181,7 @@ fn trivial_wrapper_target<'a>(rules: &'a Map<String, Value>, name: &str) -> Opti
 
 /// The readable display name of a grammar rule: collapse a trivial-wrapper chain
 /// to its target, apply any override, else strip a single leading underscore.
-fn display_name_in(rules: &Map<String, Value>, name: &str) -> String {
+fn display_name_in(rules: Rules<'_>, name: &str) -> String {
     if let Some(target) = trivial_wrapper_target(rules, name) {
         return display_name_in(rules, target);
     }
@@ -85,7 +194,7 @@ fn display_name_in(rules: &Map<String, Value>, name: &str) -> String {
 /// Render a grammar node to EBNF text plus a precedence level:
 /// 0 = choice (`a | b`), 1 = sequence (`a b`), 2 = atom / postfix (`x`, `(…)*`).
 /// Nonterminal (`SYMBOL`) references are rendered with their display name.
-fn render(rules: &Map<String, Value>, node: &Value) -> (String, u8) {
+fn render(rules: Rules<'_>, node: &Value) -> (String, u8) {
     match node.get("type").and_then(Value::as_str).unwrap_or("") {
         "SYMBOL" => (
             display_name_in(rules, node["name"].as_str().unwrap_or("?")),
@@ -134,12 +243,12 @@ fn members(node: &Value) -> Vec<Value> {
 }
 
 /// Wrap so the result can be a postfix operand (`*`, `+`, `?`): needs an atom.
-fn wrap_atom(rules: &Map<String, Value>, node: &Value) -> String {
+fn wrap_atom(rules: Rules<'_>, node: &Value) -> String {
     wrap(rules, node, 2)
 }
 
 /// Wrap `node`'s rendering in parens if its level is below `min`.
-fn wrap(rules: &Map<String, Value>, node: &Value, min: u8) -> String {
+fn wrap(rules: Rules<'_>, node: &Value, min: u8) -> String {
     let (s, level) = render(rules, node);
     if level < min { format!("({s})") } else { s }
 }
@@ -159,7 +268,7 @@ fn render_extra(node: &Value) -> String {
 /// notation note, the full `ebnf` block of every production (display names,
 /// trivial wrappers collapsed), and the Tokens & trivia section.
 pub fn render_appendix(grammar_json: &str) -> String {
-    let grammar: Value = serde_json::from_str(grammar_json).expect("grammar.json parses");
+    let grammar = Grammar::parse(grammar_json).expect("grammar.json parses");
 
     let mut out = String::new();
     out.push_str("# Complete grammar (appendix)\n\n");
@@ -182,8 +291,8 @@ pub fn render_appendix(grammar_json: &str) -> String {
     );
 
     out.push_str("```ebnf\n");
-    if let Some(rules) = rules_of(&grammar) {
-        for (name, body) in rules {
+    if let Some(rules) = grammar.rules() {
+        for (name, body) in rules.iter() {
             // Trivial wrappers are collapsed into their target.
             if trivial_wrapper_target(rules, name).is_some() {
                 continue;
@@ -198,17 +307,17 @@ pub fn render_appendix(grammar_json: &str) -> String {
     out.push_str("```\n\n");
 
     out.push_str("## Tokens & trivia\n\n");
-    if let Some(word) = grammar.get("word").and_then(Value::as_str) {
+    if let Some(word) = grammar.doc.get("word").and_then(Value::as_str) {
         out.push_str(&format!("- **Word token:** `{word}`\n"));
     }
-    if let Some(extras) = grammar.get("extras").and_then(Value::as_array) {
+    if let Some(extras) = grammar.doc.get("extras").and_then(Value::as_array) {
         let rendered: Vec<String> = extras.iter().map(render_extra).collect();
         out.push_str(&format!(
             "- **Ignored between tokens:** {}\n",
             rendered.join(", ")
         ));
     }
-    if let Some(externals) = grammar.get("externals").and_then(Value::as_array) {
+    if let Some(externals) = grammar.doc.get("externals").and_then(Value::as_array) {
         let rendered: Vec<String> = externals.iter().map(render_extra).collect();
         out.push_str(&format!("- **External tokens:** {}\n", rendered.join(", ")));
     }
@@ -218,11 +327,9 @@ pub fn render_appendix(grammar_json: &str) -> String {
 
 /// Look up a rule body by name, erroring if the grammar is unparseable or the
 /// rule is not a top-level production.
-fn rule_body<'a>(grammar: &'a Value, name: &str) -> Result<&'a Value, GrammarError> {
-    grammar
-        .get("rules")
-        .and_then(Value::as_object)
-        .and_then(|rules| rules.get(name))
+fn rule_body<'a>(rules: Rules<'a>, name: &str) -> Result<&'a Value, GrammarError> {
+    rules
+        .get(name)
         .ok_or_else(|| GrammarError::UnknownRule(name.to_string()))
 }
 
@@ -232,13 +339,11 @@ fn rule_body<'a>(grammar: &'a Value, name: &str) -> Result<&'a Value, GrammarErr
 /// Errors if the grammar JSON cannot be parsed, or if `name` is not a top-level
 /// rule of the grammar.
 pub fn render_rule(grammar_json: &str, name: &str) -> Result<String, GrammarError> {
-    let grammar: Value =
-        serde_json::from_str(grammar_json).map_err(|e| GrammarError::Parse(e.to_string()))?;
+    let grammar = Grammar::parse(grammar_json).map_err(|e| GrammarError::Parse(e.to_string()))?;
     let rules = grammar
-        .get("rules")
-        .and_then(Value::as_object)
+        .rules()
         .ok_or_else(|| GrammarError::UnknownRule(name.to_string()))?;
-    let body = rule_body(&grammar, name)?;
+    let body = rule_body(rules, name)?;
     Ok(render(rules, body).0)
 }
 
@@ -246,13 +351,11 @@ pub fn render_rule(grammar_json: &str, name: &str) -> Result<String, GrammarErro
 /// in the appendix (no surrounding fence). This is what `{{#grammar <rule>}}`
 /// embeds.
 pub fn render_production(grammar_json: &str, name: &str) -> Result<String, GrammarError> {
-    let grammar: Value =
-        serde_json::from_str(grammar_json).map_err(|e| GrammarError::Parse(e.to_string()))?;
+    let grammar = Grammar::parse(grammar_json).map_err(|e| GrammarError::Parse(e.to_string()))?;
     let rules = grammar
-        .get("rules")
-        .and_then(Value::as_object)
+        .rules()
         .ok_or_else(|| GrammarError::UnknownRule(name.to_string()))?;
-    let body = rule_body(&grammar, name)?;
+    let body = rule_body(rules, name)?;
     Ok(format!(
         "{} ::= {}",
         display_name_in(rules, name),
@@ -265,10 +368,10 @@ pub fn render_production(grammar_json: &str, name: &str) -> Result<String, Gramm
 /// layer collapses (so this can never disagree with what is rendered). Grammar
 /// rule order is preserved. Returns an empty vector if the JSON is unparseable.
 pub fn embeddable_rules(grammar_json: &str) -> Vec<String> {
-    let Ok(grammar) = serde_json::from_str::<Value>(grammar_json) else {
+    let Ok(grammar) = Grammar::parse(grammar_json) else {
         return Vec::new();
     };
-    let Some(rules) = rules_of(&grammar) else {
+    let Some(rules) = grammar.rules() else {
         return Vec::new();
     };
     rules
@@ -281,11 +384,9 @@ pub fn embeddable_rules(grammar_json: &str) -> Vec<String> {
 /// The readable display name for a top-level rule. Errors if the grammar is
 /// unparseable or `name` is not a top-level rule.
 pub fn display_name(grammar_json: &str, name: &str) -> Result<String, GrammarError> {
-    let grammar: Value =
-        serde_json::from_str(grammar_json).map_err(|e| GrammarError::Parse(e.to_string()))?;
+    let grammar = Grammar::parse(grammar_json).map_err(|e| GrammarError::Parse(e.to_string()))?;
     let rules = grammar
-        .get("rules")
-        .and_then(Value::as_object)
+        .rules()
         .ok_or_else(|| GrammarError::UnknownRule(name.to_string()))?;
     if !rules.contains_key(name) {
         return Err(GrammarError::UnknownRule(name.to_string()));
@@ -298,33 +399,40 @@ pub fn display_name(grammar_json: &str, name: &str) -> Result<String, GrammarErr
 /// `<name> ::= <rhs>` line [`render_production`] embeds, over [`embeddable_rules`]),
 /// and the full-grammar page reads `appendix` ([`render_appendix`]). Because both
 /// come from the same renderer as the mdBook preprocessor, the site cannot drift
-/// from the book. Object keys preserve grammar order (serde_json `preserve_order`).
+/// from the book. Object keys preserve grammar order (read from the source text, not from
+/// `serde_json`'s map).
 ///
 /// The committed artifact (`site/src/generated/grammar.json`) is drift-guarded by
 /// `bynk-grammar/tests/generated_grammar_json.rs`; regenerate with `BYNK_BLESS=1`.
 pub fn render_site_json(grammar_json: &str) -> String {
-    let mut productions = Map::new();
-    for rule in embeddable_rules(grammar_json) {
-        if let Ok(production) = render_production(grammar_json, &rule) {
-            productions.insert(rule, Value::String(production));
+    /// A JSON object written in the order given, whatever `serde_json`'s map is.
+    struct Ordered(Vec<(String, String)>);
+    impl Serialize for Ordered {
+        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            s.collect_map(self.0.iter().map(|(k, v)| (k, v)))
         }
     }
-    let mut doc = Map::new();
-    doc.insert(
-        "_generated".into(),
-        Value::String(
-            "GENERATED from tree-sitter-bynk/src/grammar.json. Do not edit by hand. \
-             Regenerate with: BYNK_BLESS=1 cargo test -p bynk-grammar --test generated_grammar_json"
-                .into(),
-        ),
-    );
-    doc.insert("productions".into(), Value::Object(productions));
-    doc.insert(
-        "appendix".into(),
-        Value::String(render_appendix(grammar_json)),
-    );
-    let mut out =
-        serde_json::to_string_pretty(&Value::Object(doc)).expect("serialise grammar JSON");
+    /// Fields serialise in declaration order.
+    #[derive(Serialize)]
+    struct SiteDoc {
+        _generated: &'static str,
+        productions: Ordered,
+        appendix: String,
+    }
+
+    let mut productions = Vec::new();
+    for rule in embeddable_rules(grammar_json) {
+        if let Ok(production) = render_production(grammar_json, &rule) {
+            productions.push((rule, production));
+        }
+    }
+    let doc = SiteDoc {
+        _generated: "GENERATED from tree-sitter-bynk/src/grammar.json. Do not edit by hand. \
+             Regenerate with: BYNK_BLESS=1 cargo test -p bynk-grammar --test generated_grammar_json",
+        productions: Ordered(productions),
+        appendix: render_appendix(grammar_json),
+    };
+    let mut out = serde_json::to_string_pretty(&doc).expect("serialise grammar JSON");
     out.push('\n');
     out
 }
@@ -340,10 +448,6 @@ mod tests {
         let path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tree-sitter-bynk/src/grammar.json");
         fs::read_to_string(path).expect("read grammar.json")
-    }
-
-    fn rules(grammar: &Value) -> &Map<String, Value> {
-        grammar.get("rules").and_then(Value::as_object).unwrap()
     }
 
     #[test]
@@ -534,8 +638,8 @@ mod tests {
     #[test]
     fn display_names_are_unique() {
         let g = grammar_json();
-        let grammar: Value = serde_json::from_str(&g).unwrap();
-        let rules = rules(&grammar);
+        let grammar = Grammar::parse(&g).unwrap();
+        let rules = grammar.rules().unwrap();
         let mut seen: HashMap<String, String> = HashMap::new();
         for name in rules.keys() {
             if trivial_wrapper_target(rules, name).is_some() {
@@ -556,8 +660,8 @@ mod tests {
     fn every_displayed_rule_matches_the_appendix() {
         let g = grammar_json();
         let appendix = render_appendix(&g);
-        let grammar: Value = serde_json::from_str(&g).unwrap();
-        let rules = rules(&grammar);
+        let grammar = Grammar::parse(&g).unwrap();
+        let rules = grammar.rules().unwrap();
 
         let mut displayed = 0;
         for name in rules.keys() {
@@ -575,5 +679,18 @@ mod tests {
         // One `::=` per displayed rule — collapsed wrappers added no lines and
         // no production is duplicated. (No grammar token contains `::=`.)
         assert_eq!(appendix.matches("::=").count(), displayed);
+    }
+
+    /// Rule order is the source order of the text, not the (key-sorted) order
+    /// of `serde_json`'s map, so it can't depend on which crates share a build.
+    #[test]
+    fn rule_order_follows_the_source_text() {
+        let g = r#"{"rules":{"zeta":{"type":"BLANK"},"alpha":{"type":"BLANK"},"mid":{"type":"BLANK"}}}"#;
+        assert_eq!(embeddable_rules(g), ["zeta", "alpha", "mid"]);
+        let appendix = render_appendix(g);
+        let z = appendix.find("zeta ::=").unwrap();
+        let a = appendix.find("alpha ::=").unwrap();
+        let m = appendix.find("mid ::=").unwrap();
+        assert!(z < a && a < m);
     }
 }
