@@ -31,8 +31,11 @@ lives in `bynk-check`, shared with the checker, and is re-exported here as
 `bynk-ide` sits *beside* the emitter, not above it: it depends on
 [`bynk-syntax`](https://crates.io/crates/bynk-syntax),
 [`bynk-check`](https://crates.io/crates/bynk-check),
-[`bynk-project`](https://crates.io/crates/bynk-project), and
-[`bynk-fmt`](https://crates.io/crates/bynk-fmt), and never links `bynk-emit`:
+[`bynk-project`](https://crates.io/crates/bynk-project),
+[`bynk-fmt`](https://crates.io/crates/bynk-fmt), and the system model
+([`bynk-ir`](https://crates.io/crates/bynk-ir) and
+[`bynk-lower`](https://crates.io/crates/bynk-lower), for handler kinds), and never
+links `bynk-emit`:
 
 ```text
 bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
@@ -46,7 +49,7 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
     ├── bynk-emit          build sequencing, TS emission       + ts, ir, lower, project
     │   ├── bynk-strip     TS → JS type-stripping              + ts
     │   └── bynk-driver    shared CLI command bodies           + fmt, project, render, ts
-    └── bynk-ide           non-bailing editor analysis         + project, fmt
+    └── bynk-ide           non-bailing editor analysis         + project, fmt, ir, lower
 bynk-std                   first-party sources and bindings, as data
 ```
 

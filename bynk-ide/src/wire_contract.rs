@@ -44,46 +44,19 @@ use bynk_syntax::span::{FileId, Span};
 
 const HTTP_RESULT: &str = bynk_check::builtin_names::types::HTTP_RESULT;
 
-/// Which protocol hosts the hovered handler — the header facts
-/// `discriminator` (`bynk-ide/src/sequence.rs`) also renders, kept here as
-/// their own IDE-shaped type rather than re-exporting [`HandlerKind`]
-/// directly, so a future field this peek needs (that `HandlerKind` has no
-/// room for) is a local addition, not an upstream one.
-#[derive(Debug, Clone, PartialEq)]
-pub enum BoundaryKind {
-    Http {
-        method: HttpMethod,
-        path: String,
-    },
-    Call,
-    Cron {
-        expr: String,
-    },
-    Message,
-    Open,
-    Close,
-    Event,
-    /// `on rejected` (#2341): reached only by the router's own rejections.
-    Rejected,
-}
-
-impl BoundaryKind {
-    fn from_handler(h: &Handler) -> Self {
-        match &h.kind {
-            HandlerKind::Http { method, path } => BoundaryKind::Http {
-                method: *method,
-                path: path.clone(),
-            },
-            HandlerKind::Call => BoundaryKind::Call,
-            HandlerKind::Cron { expr } => BoundaryKind::Cron { expr: expr.clone() },
-            HandlerKind::Message => BoundaryKind::Message,
-            HandlerKind::Open => BoundaryKind::Open,
-            HandlerKind::Close => BoundaryKind::Close,
-            HandlerKind::Event => BoundaryKind::Event,
-            HandlerKind::Rejected => BoundaryKind::Rejected,
-        }
-    }
-}
+/// Which protocol hosts the hovered handler: the system model's own
+/// [`bynk_ir::IrHandlerKind`], read through `bynk_lower::lower_handler_kind_ir`.
+///
+/// This was an IDE-local mirror of `HandlerKind` until crate-hygiene B1 (#2939).
+/// It was kept separate "so a future field this peek needs is a local
+/// addition". The system-model ADR reverses that under M-1: a field the peek
+/// needs becomes a field of the model, where it gets a second reader for free.
+///
+/// The re-export keeps the old name, so `bynk-lsp` and `bynk openapi` name the
+/// model's type without a dependency edge of their own.
+pub use bynk_ir::IrHandlerKind as BoundaryKind;
+/// [`BoundaryKind::Http`]'s method: the model's [`bynk_ir::IrHttpMethod`].
+pub use bynk_ir::IrHttpMethod;
 
 /// The request shape a handler's caller sends. **Three cases, not two** —
 /// `bynk-emit/src/emitter/workers_entry.rs`'s `h.params.len() == 1` branch is
@@ -317,11 +290,11 @@ pub fn wire_contract_for_service(
         .collect();
 
     let envelope = envelope_for(handler, &info.types);
-    let kind = BoundaryKind::from_handler(handler);
+    let kind = bynk_lower::lower_handler_kind_ir(&handler.kind);
 
     let no_cross_context = if context_count <= 1 {
         Some(NoCrossContextReason::SingleContext)
-    } else if handler.kind != HandlerKind::Call {
+    } else if kind != bynk_ir::IrHandlerKind::Call {
         Some(NoCrossContextReason::NotACallHandler)
     } else {
         None
@@ -906,7 +879,7 @@ service api from http {
         assert_eq!(
             model.kind,
             BoundaryKind::Http {
-                method: HttpMethod::Get,
+                method: IrHttpMethod::Get,
                 path: "/check/:client".to_string(),
             }
         );

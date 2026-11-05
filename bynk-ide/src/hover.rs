@@ -703,7 +703,7 @@ fn header_handler_at(text: &str, offset: usize) -> Option<(String, bynk_syntax::
 /// defaulted (with the default). Empty for the raw `RequestQuery` view and for
 /// anything that is not that parameter.
 fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
-    use bynk_syntax::ast::{CommonsItem, HandlerKind, SourceUnit, TypeBody, TypeRef};
+    use bynk_syntax::ast::{CommonsItem, SourceUnit, TypeBody, TypeRef};
     let word_start = text[..a.offset]
         .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
         .map_or(0, |i| i + 1);
@@ -728,8 +728,10 @@ fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
             return None;
         };
         s.handlers.iter().find(|h| {
-            matches!(h.kind, HandlerKind::Http { .. })
-                && h.span.start <= a.offset
+            matches!(
+                bynk_lower::lower_handler_kind_ir(&h.kind),
+                bynk_ir::IrHandlerKind::Http { .. }
+            ) && h.span.start <= a.offset
                 && a.offset < h.span.end
         })
     })?;
