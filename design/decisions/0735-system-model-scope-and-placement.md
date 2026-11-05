@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The system model's scope and placement are recorded (crate-hygiene B1), and every handler kind's and service protocol's editor rendering is pinned by a snapshot
----
+# 0735 — The declaration-level IR becomes the system model, above the checker, with `bynk-lower` merged in as `bynk-model`
 
-## ADR: system-model-scope-and-placement
-title: The declaration-level IR becomes the system model, above the checker, with `bynk-lower` merged in as `bynk-model`
-summary: The system model's scope, placement and name, its M-1 to M-4 requirements, and the M-1 domain clause
+- **Status:** Accepted (v0.508.8)
 
 **Context.** `bynk-ir` holds the declaration-level IR that Part 15.1 of
 `design/bynk-greenfield-compiler.md` adopted: protocols, handler kinds and routes,
