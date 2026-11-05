@@ -10,7 +10,7 @@ use crate::span::Span;
 
 thread_local! {
     /// The source being formatted, so a string literal can be re-emitted as it
-    /// was written (#2619). Set by [`render_units`] for the duration of a render.
+    /// was written (#2619). Set by `render_units` (in `bynk-fmt`) for the duration of a render.
     static WRITTEN_SOURCE: std::cell::RefCell<Option<std::rc::Rc<str>>> =
         const { std::cell::RefCell::new(None) };
 }
