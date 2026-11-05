@@ -1,0 +1,28 @@
+context live
+
+uses rooms
+
+// #2967: a public `const` of a commons the context `uses` keys the `on open`'s
+// transfer as a context `const` does. The edge evaluates it before the body
+// runs, so `compose.ts` imports it from the commons itself: `handlers.ts`
+// imports it too, but does not re-export it.
+type Frame = { text: String }
+
+service feed from websocket(in: Frame, out: Frame) {
+  on open () -> Effect[()] by v: Visitor {
+    let _ <- Room(LOBBY).join(connection)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store opened: Cell[Option[String]]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(self.id, conn)
+    opened := Some(self.id)
+    ()
+  }
+}

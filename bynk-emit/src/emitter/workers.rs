@@ -10,7 +10,7 @@
 //! `writeln!`-ing a `String` — this file's own conversion, closing the
 //! third Arc C slice (`events_fanout.rs` was the first, #1317).
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::workers_entry::wire_ident;
 use crate::emitter::http_handler_method_name_ir;
@@ -302,7 +302,16 @@ pub(crate) fn emit_worker_compose(
     // functions it calls), so `compose` takes the request's and threads its
     // `waitUntil` into `deps.__exec`. From the checker's needs-context set.
     ctx_uses_send: bool,
+    // #2967: the commons this context `uses`, whose public constants can key a
+    // WebSocket `on open`'s transfer (`bynk_check::consts::visible_consts`).
+    uses: &[String],
 ) -> (TsProgram, bool) {
+    // #2967: the constants visible in this context, as the checker's
+    // `phase_workers_ws_open_key` classifies a transfer key against them.
+    let visible_consts = bynk_check::consts::visible_consts(table, uses, |u| unit_tables.get(u));
+    // #2967: a used commons' constant keying an `on open`'s transfer, imported
+    // into this module under an alias: alias → (owning commons, constant).
+    let mut const_imports: BTreeMap<String, (String, String)> = BTreeMap::new();
     // v0.15: cross-context capabilities this Worker uses (in handlers or in a
     // local provider's `given`) → `deps_key → consumed_context`. Their
     // providers are instantiated locally (model A1).
@@ -787,7 +796,8 @@ pub(crate) fn emit_worker_compose(
                         seam.as_ref(),
                         &local_agents,
                         &key_readers,
-                        &table.consts,
+                        &visible_consts,
+                        &mut const_imports,
                     ));
                 }
                 // v0.106 (slice 3b-iii): `on close` runs in the DO (`webSocketClose`),
@@ -991,6 +1001,31 @@ pub(crate) fn emit_worker_compose(
     }
     if let Some(li) = locale_import {
         program.push(li);
+    }
+    // #2967: `compose.ts` imports a used commons' constant from the commons
+    // itself, as the context's own modules do: `handlers.ts` imports it without
+    // re-exporting it. Aliased, so a constant named like a binding of this
+    // module (`Env`, `handlers`) cannot shadow it.
+    let mut by_owner: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    for (alias, (owner, name)) in &const_imports {
+        by_owner.entry(owner.as_str()).or_default().push(format!(
+            "{} as {alias}",
+            bynk_check::emitted_names::ts_ident(name)
+        ));
+    }
+    for (owner, names) in by_owner {
+        program.push(TsStmt::decl(
+            TsDecl::Import {
+                type_only: false,
+                names,
+                from: crate::emitter::cross_commons_import_specifier_for_path(
+                    &crate::project::worker_handlers_source_path(context),
+                    &crate::project::EmitProjectCtx::commons_path(owner),
+                    import_ext,
+                ),
+            },
+            None,
+        ));
     }
 
     // Env shape: one member per binding the Worker's `wrangler.toml`
@@ -1390,7 +1425,8 @@ fn emit_websocket_upgrade(
     seam: Option<&bynk_check::actors::BearerSeam>,
     local_agents: &HashSet<String>,
     key_readers: &HashSet<String>,
-    consts: &HashMap<String, bynk_syntax::ast::ConstDecl>,
+    consts: &HashMap<String, bynk_check::consts::VisibleConst<'_>>,
+    const_imports: &mut BTreeMap<String, (String, String)>,
 ) -> TsObjectEntry {
     use crate::emitter::websocket::{
         WsOpenKey, WsOpenShape, analyse_open_shape, classify_open_key,
@@ -1527,7 +1563,8 @@ fn emit_websocket_upgrade(
     // transfer (`Room(roomId)` → the `ROOM` namespace, keyed by `roomId`). The
     // shape constraint guarantees exactly one routable target, and #2959's key
     // constraint (`bynk.ws.open_transfer_key`) a key the edge can evaluate: a
-    // route param, a context `const` or a literal.
+    // route param, a `const` of the context or of a commons it `uses`, or a
+    // literal.
     let internal_error = |mut stmts: Vec<TsStmt>, params: Vec<TsParam>| {
         stmts.push(return_(Some(new_response(vec![
             str_lit("Internal Server Error"),
@@ -1653,11 +1690,20 @@ fn emit_websocket_upgrade(
             .get(name)
             .cloned()
             .unwrap_or_else(|| ident(wire_ident(name))),
-        // #2959: a constant is a function in `handlers.ts` (`emit_consts`).
-        WsOpenKey::Const(name) => call(
-            member(ident("handlers"), bynk_check::emitted_names::ts_ident(name)),
-            vec![],
-        ),
+        // #2959: a constant is a hoisted function (`emit_consts`). The
+        // context's own is exported from `handlers.ts`; #2967: a used
+        // commons' is imported from the commons, under an alias.
+        WsOpenKey::Const(name) => match consts.get(name).and_then(|c| c.owner) {
+            None => call(
+                member(ident("handlers"), bynk_check::emitted_names::ts_ident(name)),
+                vec![],
+            ),
+            Some(owner) => {
+                let alias = format!("__const_{}_{name}", owner.replace('.', "_"));
+                const_imports.insert(alias.clone(), (owner.to_string(), name.to_string()));
+                call(ident(alias), vec![])
+            }
+        },
         WsOpenKey::Literal(e) => match &e.kind {
             ExprKind::StrLit(v) => str_lit(v.clone()),
             ExprKind::IntLit { value, .. } => num_lit(value.to_string()),

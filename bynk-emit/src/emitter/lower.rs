@@ -3590,8 +3590,9 @@ fn lower_method_call(
         // constraint (`bynk.ws.open_transfer_shape`, D2) restricts it to a
         // request-derivable param ident — side-effect-free and equal to this
         // instance's own key — so dropping it is sound. #2959 widened the key to a
-        // context `const` or a literal (`bynk.ws.open_transfer_key`); both are
-        // pure and the edge routed the upgrade by the same value, so it still is.
+        // context `const` or a literal (`bynk.ws.open_transfer_key`), and #2967
+        // to a used commons' `const`; all are pure and the edge routed the
+        // upgrade by the same value, so it still is.
         if cx.ws_self_agent() == Some(name.name.as_str()) {
             cx.record_agent_call(&name.name, &method.name);
             let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
