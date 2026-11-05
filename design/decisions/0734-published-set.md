@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Record the published-set rule (publish only what an installed binary reaches; retired crates get a final onward-pointing release); `bynk-grammar` announces its final crates.io release
----
+# 0734 — Publish only what an installed binary reaches; retired crates point onward
 
-## ADR: published-set
-title: Publish only what an installed binary reaches; retired crates point onward
-summary: H-4 and H-5 of the crate-hygiene track; amends ADR 0099 and ADR 0100
+- **Status:** Accepted (v0.508.5)
 
 **Context.** The crate-hygiene track (#2775, `design/tracks/crate-hygiene.md`) found the published set wider than what installs. `bynk-grammar` is published at every release, first in the release order, though only `bynkc`'s integration tests use it. ADR 0099 held it up as the model leaf crate. Each such crate is public surface the project promises to keep, and removing one without a rule risks stranding or breaking downstream pins.
 

@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.508.5** | Record the published-set rule (publish only what an installed binary reaches; retired crates get a final onward-pointing release); `bynk-grammar` announces its final crates.io release |
 | **v0.508.4** | "A caller of a service whose context renames a consumed type (`consumes lib { Code as LibCode }`) can name and match on the returned value as the declared type" |
 | **v0.508.3** | "A `let` bound to a literal `RequestHeaders.of([...])` and sent as extra request headers is checked for `Authorization` (`bynk.test.extra_headers_authorization`), and the below-`system` extra-headers error points at the offending call" |
 | **v0.508.2** | Deferred list elements in a generic call argument now merge through function, effect, stream, query, connection and http-outcome types, so inference no longer depends on element order |
