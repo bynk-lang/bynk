@@ -293,6 +293,7 @@ dependencies = [
 name = "bynk-grammar"
 version = "0.508.8"
 dependencies = [
+ "serde",
  "serde_json",
 ]
 

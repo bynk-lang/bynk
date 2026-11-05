@@ -6,8 +6,8 @@
 //! Decision 2); `run_test` captures that stream and renders the single pinned
 //! **document** below. The document is built from `#[derive(Serialize)]` structs
 //! in **declaration order** — field order *is* the contract (the discipline
-//! `bynk/src/report.rs` calls out); we never use `serde_json::json!`, so the
-//! `preserve_order` feature some workspace crates enable can't reorder it.
+//! `bynk/src/report.rs` calls out); we never use `serde_json::json!`, so a
+//! `preserve_order` feature enabled elsewhere in a build can't reorder it.
 //!
 //! There are three terminal states, distinguished by the consumer on the
 //! presence/`kind` of `error`:
