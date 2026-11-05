@@ -2219,7 +2219,11 @@ the batch path paying for the incremental path on the deploy-critical route.
 
 **A typed expression IR between the checker and the string-emitting lowerer.**
 *Status:* the **declaration-level IR is adopted** (`bynk-ir`'s shapes, read through `bynk-lower`'s
-helpers — R6.13 at the level phase 6 retired it); the **expression-level IR is refused**.
+helpers — R6.13 at the level phase 6 retired it); the **expression-level IR is refused**. The adopted
+half grows as the **system model** (`design/tracks/crate-hygiene.md` §6; the
+system-model-scope-and-placement ADR): every tool that needs declaration-level facts reads them from
+the model, and `bynk-ir` plus `bynk-lower` become `bynk-model`. That growth doesn't touch this entry's
+claim or trigger, which stay as written.
 *Claim:* `bynk-emit/src/emitter/lower.rs` reads `bynk_syntax::ast` directly for expression,
 statement and body dispatch, and stays the single lowering path.
 *Cost avoided:* a second expression code generator brought to feature parity with the first — measured
@@ -2233,8 +2237,8 @@ miscompile of the kind T2.1 closed (hoisting, short-circuit) originating in AST 
 fire this; a desire for R6.13 purity alone does not.
 *Evidence:* the gated `unconsumed_ir_items` probe (`cargo xtask greenfield-status`), reading 0 and
 ratcheted so it can only fall; `emit_diagnostics`/`ts_writes` unchanged by the deletion.
-*Note:* refusing the expression IR is not refusing the IR — 19 `bynk-ir` items and 17 `bynk-lower`
-entry points stay, each with a reader outside both crates. It is not a refusal of tree-native emission either, which is
+*Note:* refusing the expression IR is not refusing the IR — 21 `bynk-ir` items and 20 `bynk-lower`
+items stay, each with a reader outside both crates. It is not a refusal of tree-native emission either, which is
 the other way to reach the same end state and was never the cutover's scope.
 *Tracked:* [#1542](https://github.com/accuser/bynk/issues/1542) (the IR cutover track, retired) —
 the measurements, the priced alternative and the deletion inventory are in its closing summary in
