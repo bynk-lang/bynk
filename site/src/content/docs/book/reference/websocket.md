@@ -115,7 +115,11 @@ API: a `Connection` stored in agent state **survives hibernation** and is restor
 when the agent is rehydrated — a platform-supplied guarantee the language relies on
 but does not implement. The hosting DO is resolved statically from the single
 connection transfer the `on open` makes; a zero/multiple/non-routable transfer
-shape is `bynk.ws.open_transfer_shape`.
+shape is `bynk.ws.open_transfer_shape`. The Worker addresses that DO before the
+`on open` body runs, so the transfer's key must be one it can evaluate on its own:
+a parameter of `on open`, a `const` of the context, or a literal
+(`Room(roomId)`, `Room(LOBBY)`, `Room("lobby")`). A key bound in the body or
+computed from the actor's identity is `bynk.ws.open_transfer_key`.
 
 ## Diagnostics
 
@@ -127,6 +131,7 @@ shape is `bynk.ws.open_transfer_shape`.
 | `bynk.held.consume_on_borrow` | a consuming op on a borrowed connection (e.g. in a broadcast closure) |
 | `bynk.types.held_not_comparable` | a `Connection` compared with `==` |
 | `bynk.ws.open_transfer_shape` | the `on open` does not transfer the connection to exactly one routable agent |
+| `bynk.ws.open_transfer_key` | on Workers, the transfer's key is not an `on open` parameter, a context `const` or a literal |
 | `bynk.target.websocket_workers_unsupported` | (historical) retired once the Workers wire path landed |
 
 ## Related

@@ -3737,6 +3737,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "On the Workers target, a WebSocket `on open` handler transfers its `connection` to an agent declared in a different file of the same context — the open is hosted in the agent's Durable Object, which is emitted from the agent's own file, so the upgrade would never be handled; the service and the agent must share a file.",
     ),
     d(
+        "bynk.ws.open_transfer_key",
+        "On the Workers target, the key of a WebSocket `on open` handler's connection transfer is not a route parameter, a context constant or a literal — the upgrade is routed to the hosting Durable Object before the body runs, so the edge must be able to evaluate the key on its own.",
+    ),
+    d(
         "bynk.ws.open_transfer_shape",
         "A WebSocket `on open` handler does not transfer its `connection` into exactly one agent, so the Workers upgrade has no single Durable Object to route to (real-time track slice 3b).",
     ),

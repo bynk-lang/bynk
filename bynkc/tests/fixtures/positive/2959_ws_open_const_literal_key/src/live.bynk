@@ -1,0 +1,28 @@
+context live
+
+// #2959: the edge routes a WebSocket upgrade to the Durable Object its `on open`
+// transfers the connection to, before the body runs, so it evaluates the
+// transfer's key itself. A context `const` key is `handlers.LOBBY()` there; it
+// used to be the bare name, which `compose.ts` does not bind.
+const LOBBY: String = "lobby"
+
+type Frame = { text: String }
+
+service feed from websocket(in: Frame, out: Frame) {
+  on open () -> Effect[()] by v: Visitor {
+    let _ <- Room(LOBBY).join(connection)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store opened: Cell[Option[String]]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(self.id, conn)
+    opened := Some(self.id)
+    ()
+  }
+}
