@@ -3045,26 +3045,50 @@ type UnusedEdge = (String, String, &'static str);
 /// A workspace member as `(directory label, manifest text, (relative path, contents) files)`.
 type UnusedDepsCrate = (String, String, Vec<(PathBuf, String)>);
 
+/// True for a member-relative path under a directory whose `.rs` text is not the
+/// crate's own code: build output, vendored JS, or test fixture inputs (a crate name
+/// inside a fixture string must not mask an unused edge).
+fn unused_deps_skips(rel: &Path) -> bool {
+    rel.components().any(|c| {
+        matches!(
+            c.as_os_str().to_str(),
+            Some("target" | "node_modules" | "fixtures")
+        )
+    })
+}
+
 /// Every unused edge under `root`, before [`UNUSED_DEPS_ALLOWED`] is applied.
+///
+/// Panics rather than reading `0` when it could not look: an unreadable root manifest,
+/// an empty or glob `members`, or a member manifest that cannot be read.
 fn unused_deps_raw(root: &Path) -> Vec<UnusedEdge> {
-    let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
+    let manifest = std::fs::read_to_string(root.join("Cargo.toml"))
+        .unwrap_or_else(|e| panic!("unused_deps: cannot read the root Cargo.toml: {e}"));
     let members = workspace_members(&manifest);
     let crates: Vec<UnusedDepsCrate> = members
         .iter()
-        .filter_map(|dir| {
-            let text = std::fs::read_to_string(root.join(dir).join("Cargo.toml")).ok()?;
-            Some((dir.clone(), text, rust_files_relative(&root.join(dir))))
+        .map(|dir| {
+            let path = root.join(dir).join("Cargo.toml");
+            let text = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("unused_deps: cannot read {}: {e}", path.display()));
+            let files = rust_files_relative(&root.join(dir))
+                .into_iter()
+                .filter(|(rel, _)| !unused_deps_skips(rel))
+                .collect();
+            (dir.clone(), text, files)
         })
         .collect();
     unused_deps_over(&manifest, &crates)
 }
 
-/// `[workspace] members` of a root manifest.
+/// `[workspace] members` of a root manifest. Panics on a manifest that does not parse,
+/// an empty `members`, or a glob entry (this probe lists members literally).
 fn workspace_members(manifest: &str) -> Vec<String> {
-    let Ok(doc) = manifest.parse::<toml::Table>() else {
-        return Vec::new();
-    };
-    doc.get("workspace")
+    let doc = manifest
+        .parse::<toml::Table>()
+        .unwrap_or_else(|e| panic!("unused_deps: the root Cargo.toml does not parse: {e}"));
+    let members: Vec<String> = doc
+        .get("workspace")
         .and_then(|w| w.get("members"))
         .and_then(|m| m.as_array())
         .map(|a| {
@@ -3072,7 +3096,15 @@ fn workspace_members(manifest: &str) -> Vec<String> {
                 .filter_map(|v| v.as_str().map(str::to_string))
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    assert!(
+        !members.is_empty(),
+        "unused_deps: the root Cargo.toml lists no [workspace] members"
+    );
+    if let Some(glob) = members.iter().find(|m| m.contains(['*', '?', '['])) {
+        panic!("unused_deps: workspace member `{glob}` is a glob; list members literally");
+    }
+    members
 }
 
 /// A manifest's dependency tables as `(key, kind, is_workspace_ref)`, covering the
@@ -3112,9 +3144,9 @@ fn unused_deps_over(root_manifest: &str, crates: &[UnusedDepsCrate]) -> Vec<Unus
     let mut out: Vec<UnusedEdge> = Vec::new();
     let mut referenced: BTreeSet<String> = BTreeSet::new();
     for (dir, manifest, files) in crates {
-        let Ok(doc) = manifest.parse::<toml::Table>() else {
-            continue;
-        };
+        let doc = manifest
+            .parse::<toml::Table>()
+            .unwrap_or_else(|e| panic!("unused_deps: {dir}/Cargo.toml does not parse: {e}"));
         let name = doc
             .get("package")
             .and_then(|p| p.get("name"))
@@ -3140,7 +3172,7 @@ fn unused_deps_over(root_manifest: &str, crates: &[UnusedDepsCrate]) -> Vec<Unus
                 let in_scope = match kind {
                     "dev" => true,
                     "build" => is_build,
-                    _ => !dev_only,
+                    _ => !dev_only && !is_build,
                 };
                 in_scope && mentions_ident(contents, &ident)
             });
@@ -5257,6 +5289,41 @@ commons app.demo {
 
     fn manifest(deps: &str) -> String {
         format!("[package]\nname = \"a\"\n{deps}")
+    }
+
+    #[test]
+    #[should_panic(expected = "a/Cargo.toml does not parse")]
+    fn unused_deps_panics_on_a_malformed_member_manifest() {
+        deps_over(ROOT, &[("a", "not toml [", &[])]);
+    }
+
+    #[test]
+    #[should_panic(expected = "lists no [workspace] members")]
+    fn unused_deps_panics_on_empty_members() {
+        workspace_members("[workspace]\nmembers = []\n");
+    }
+
+    #[test]
+    #[should_panic(expected = "is a glob")]
+    fn unused_deps_panics_on_a_glob_member() {
+        workspace_members("[workspace]\nmembers = [\"crates/*\"]\n");
+    }
+
+    #[test]
+    fn unused_deps_normal_dependency_is_not_used_by_the_build_script_alone() {
+        let m = manifest("[dependencies]\nx = \"1\"\n");
+        let r = deps_over(ROOT, &[("a", &m, &[("build.rs", "use x::f;")])]);
+        assert_eq!(r, vec!["a:x:".to_string()]);
+    }
+
+    #[test]
+    fn unused_deps_skips_target_node_modules_and_fixture_trees() {
+        for dir in ["target", "node_modules", "fixtures"] {
+            assert!(unused_deps_skips(
+                &Path::new("tests").join(dir).join("x.rs")
+            ));
+        }
+        assert!(!unused_deps_skips(Path::new("src/lib.rs")));
     }
 
     #[test]
