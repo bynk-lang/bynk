@@ -1,0 +1,28 @@
+context live
+
+uses rooms
+
+// #2969: `compose.ts` imports a used commons' constant from the file that
+// declares it, as `handlers.ts` does. It used to import it from the commons
+// path (`rooms.js`), which a commons split across files does not emit, so the
+// Worker failed `tsc`.
+type Frame = { text: String }
+
+service feed from websocket(in: Frame, out: Frame) {
+  on open () -> Effect[()] by v: Visitor {
+    let _ <- Room(LOBBY).join(connection)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store opened: Cell[Option[String]]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(self.id, conn)
+    opened := Some(label(self.id))
+    ()
+  }
+}
