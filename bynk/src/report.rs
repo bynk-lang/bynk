@@ -102,9 +102,9 @@ fn human(report: &Report) -> String {
 
 // The JSON surface is built from `#[derive(Serialize)]` structs (not the
 // `json!` macro): serde emits struct fields in declaration order regardless of
-// serde_json's `preserve_order` feature, which other workspace crates enable —
-// a map-based value would otherwise reorder under workspace feature unification
-// and break the golden. Field order here *is* the pinned contract.
+// serde_json's `preserve_order` feature (no workspace crate enables it now) —
+// a map-based value would otherwise reorder under feature unification and
+// break the golden. Field order here *is* the pinned contract.
 #[derive(serde::Serialize)]
 struct JsonReport<'a> {
     driver: &'a str,

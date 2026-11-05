@@ -408,9 +408,9 @@ pub fn document(
 }
 
 /// Rebuild `v` with every object's keys in sorted order. `serde_json`'s map is
-/// sorted unless some crate in the build enables `preserve_order` (the grammar
-/// tool does), and the document must not depend on which crates were built
-/// beside this one.
+/// key-sorted unless some crate in the build enables `preserve_order` (none in
+/// this workspace does), and the document must not depend on which crates
+/// were built beside this one.
 fn sorted(v: Value) -> Value {
     match v {
         Value::Object(m) => {

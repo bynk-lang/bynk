@@ -1,0 +1,6 @@
+[project]
+name = "helper-commons-type-in-stub"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
