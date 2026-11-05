@@ -37,6 +37,7 @@ function __bynkShow(v: unknown): string {
 
 
 const __fixture_fixtures_2fjwt_2dsecret_2etxt: string = "fixture-secret";
+const __fixture_fixtures_2foverride_2etxt: string = "live\n";
 const __fixture_fixtures_2fprocessor_2etxt: string = "fake";
 
 let __bynkClockNow = 0;
@@ -121,8 +122,9 @@ async function test_system__the_Worker_reads_a_fixture_from_the_suite_env() {
     const deps = __makeHarness();
     const secret: string = __fixture_fixtures_2fjwt_2dsecret_2etxt;
     const processor: string = __fixture_fixtures_2fprocessor_2etxt;
+    const override: string = __fixture_fixtures_2foverride_2etxt;
     const r = await __sysdrive_api_http_GET_processor(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "fake"))) { throw __bynkExpectFailure("tests/pay_system.bynk:14:10", 459, 474, "expect r is Ok(\"fake\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "fake"))) { throw __bynkExpectFailure("tests/pay_system.bynk:15:10", 503, 518, "expect r is Ok(\"fake\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -140,8 +142,9 @@ async function test_system__a_token_signed_with_the_fixture_secret_is_admitted()
     const deps = __makeHarness();
     const secret: string = __fixture_fixtures_2fjwt_2dsecret_2etxt;
     const processor: string = __fixture_fixtures_2fprocessor_2etxt;
+    const override: string = __fixture_fixtures_2foverride_2etxt;
     const r = await __sysdrive_api_http_GET_me(undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/pay_system.bynk:19:10", 598, 612, "expect r is Ok(\"ada\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/pay_system.bynk:20:10", 642, 656, "expect r is Ok(\"ada\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -159,8 +162,29 @@ async function test_system__a_case_env_gives_a_literal_over_the_fixture() {
     const deps = __makeHarness();
     const secret: string = __fixture_fixtures_2fjwt_2dsecret_2etxt;
     const processor: string = __fixture_fixtures_2fprocessor_2etxt;
+    const override: string = __fixture_fixtures_2foverride_2etxt;
     const r = await __sysdrive_api_http_GET_processor(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "live"))) { throw __bynkExpectFailure("tests/pay_system.bynk:25:10", 770, 785, "expect r is Ok(\"live\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "live"))) { throw __bynkExpectFailure("tests/pay_system.bynk:26:10", 814, 829, "expect r is Ok(\"live\")"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_system__a_case_env_overrides_with_another_fixture() {
+  try {
+    __bynkEnv = { AUTH_JWT_SECRET: __fixture_fixtures_2fjwt_2dsecret_2etxt, PAYMENTS_PROCESSOR: __fixture_fixtures_2foverride_2etxt };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const secret: string = __fixture_fixtures_2fjwt_2dsecret_2etxt;
+    const processor: string = __fixture_fixtures_2fprocessor_2etxt;
+    const override: string = __fixture_fixtures_2foverride_2etxt;
+    const r = await __sysdrive_api_http_GET_processor(undefined, "");
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "live\n"))) { throw __bynkExpectFailure("tests/pay_system.bynk:32:10", 987, 1004, "expect r is Ok(\"live\\n\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -184,7 +208,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["system: the Worker reads a fixture from the suite env", "system: a token signed with the fixture secret is admitted", "system: a case env gives a literal over the fixture"];
+export const __bynkCases: readonly string[] = ["system: the Worker reads a fixture from the suite env", "system: a token signed with the fixture secret is admitted", "system: a case env gives a literal over the fixture", "system: a case env overrides with another fixture"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -204,6 +228,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("system: a case env gives a literal over the fixture")) {
     const started = __bynkCaseNow();
     const r = { name: "system: a case env gives a literal over the fixture", ...(await test_system__a_case_env_gives_a_literal_over_the_fixture()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("system: a case env overrides with another fixture")) {
+    const started = __bynkCaseNow();
+    const r = { name: "system: a case env overrides with another fixture", ...(await test_system__a_case_env_overrides_with_another_fixture()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
