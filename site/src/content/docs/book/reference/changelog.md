@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.509**.
+written against **v0.510**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.0** | A multi-line string may carry a language tag, `"""sql` or `r"""regex`, so editors highlight its text as that language; the tag is not part of the value |
 | **v0.509.0** | A suite's or case's `env` entry may name a `fixture` of the same suite instead of a `String` literal (`APP_PRIVATE_KEY = appKey`), so a long test-only value such as a private key lives in one file under `fixtures/`; the text is verbatim, trailing newline included, and a use in `env` counts for `bynk.fixture.unused` (#2956) |
 | **v0.508.14** | "A match on a typed D1 read's `Err(Sql(e))` / `Err(Decode(e))` now narrows `e`, instead of failing `tsc` with TS2345" |
 | **v0.508.13** | "A Workers WebSocket `on open` keyed by a context `const` now builds, a literal key with a route parameter now reaches the instance the body addresses instead of one keyed by the parameter, and any other key is a compile error on Workers (`bynk.ws.open_transfer_key`)" |

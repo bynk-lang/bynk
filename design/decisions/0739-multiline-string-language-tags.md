@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A multi-line string may carry a language tag, `"""sql` or `r"""regex`, so editors highlight its text as that language; the tag is not part of the value
----
+# 0739 — A multi-line string literal may carry a language tag for editors
 
-## ADR: multiline-string-language-tags
-title: A multi-line string literal may carry a language tag for editors
-summary: `"""sql` / `r"""regex`; an open, value-neutral tag the lexer accepts and editors map (amends 0694)
+- **Status:** Accepted (v0.510)
 
 **Context.** Multi-line strings ([ADR 0694](0694-string-literal-forms.md)) are
 mostly used for inline SQL, because D1 statements must be literals
