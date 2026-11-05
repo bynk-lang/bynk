@@ -1,4 +1,4 @@
-# Install the Bynk toolchain (bynkc, bynk, bynkc-lsp) from a GitHub Release,
+# Install the Bynk toolchain (bynkc, bynk, bynk-lsp) from a GitHub Release,
 # without needing Rust or cargo.
 #
 #   irm https://github.com/bynk-lang/bynk/releases/latest/download/install.ps1 | iex
@@ -58,8 +58,13 @@ try {
 
     Expand-Archive (Join-Path $tmp "$stage.zip") -DestinationPath $tmp
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
-    foreach ($bin in 'bynkc', 'bynk', 'bynkc-lsp') {
-        Copy-Item (Join-Path $tmp "$stage\$bin.exe") (Join-Path $dest "$bin.exe") -Force
+    if (-not ((Test-Path (Join-Path $tmp "$stage\bynk-lsp.exe")) -or (Test-Path (Join-Path $tmp "$stage\bynkc-lsp.exe")))) { throw "The archive has no language server." }
+    foreach ($bin in 'bynkc', 'bynk', 'bynk-lsp', 'bynkc-lsp') {
+        $src = Join-Path $tmp "$stage\$bin.exe"
+        # A release before the rename ships only bynkc-lsp, and the overlap copy
+        # goes in E4b: either server name may be absent, but not both.
+        if (-not (Test-Path $src) -and $bin -like '*-lsp') { continue }
+        Copy-Item $src (Join-Path $dest "$bin.exe") -Force
     }
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
@@ -77,4 +82,4 @@ if ($env:BYNK_NO_MODIFY_PATH) {
     $env:Path = "$env:Path;$dest"
     Write-Host "Added $dest to your PATH (open a new terminal to pick it up)."
 }
-Write-Host "Installed bynkc, bynk and bynkc-lsp. Run 'bynk doctor' to check your setup."
+Write-Host "Installed bynkc, bynk and bynk-lsp (plus a bynkc-lsp copy for this release). Run 'bynk doctor' to check your setup."

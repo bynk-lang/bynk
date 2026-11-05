@@ -11,7 +11,7 @@ layout-significant trivia preserved.
 Formatting is fundamentally an AST walk, so this crate depends on the
 [`bynk-syntax`](https://crates.io/crates/bynk-syntax) leaf **only** — not the
 type checker or emitter. That keeps it small: downstream consumers (the
-[`bynkc-lsp`](https://crates.io/crates/bynk-lsp) language server and third-party
+[`bynk-lsp`](https://crates.io/crates/bynk-lsp) language server and third-party
 tools) get the formatter without pulling in the whole compiler. The
 [`bynkc`](https://crates.io/crates/bynkc) compiler's `bynkc fmt` command
 reaches it via `bynk-driver`, not a `bynkc::fmt` re-export.
@@ -43,7 +43,7 @@ bynk-std                   first-party sources and bindings, as data
 
 Each crate depends on its parent in the tree, plus any crates listed after
 its `+`. The front-ends sit on top: the `bynkc` and `bynk` CLIs over
-`bynk-driver`, the `bynkc-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
+`bynk-driver`, the `bynk-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
 the unpublished `bynk-wasm` playground module over `bynk-emit`, `bynk-strip`,
 and `bynk-ide`.
 
@@ -56,7 +56,7 @@ annotation printers to render types and signatures for hover.
 
 ```toml
 [dependencies]
-bynk-fmt = "0.508"
+bynk-fmt = "0.509"
 ```
 
 ```rust

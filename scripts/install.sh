@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the Bynk toolchain (bynkc, bynk, bynkc-lsp) from a GitHub Release,
+# Install the Bynk toolchain (bynkc, bynk, bynk-lsp) from a GitHub Release,
 # without needing Rust or cargo.
 #
 #   curl -fsSL https://github.com/bynk-lang/bynk/releases/latest/download/install.sh | sh
@@ -80,14 +80,23 @@ fi
 
 tar -xzf "$tmp/$stage.tar.gz" -C "$tmp"
 mkdir -p "$dest"
-for bin in bynkc bynk bynkc-lsp; do
+for bin in bynkc bynk bynk-lsp bynkc-lsp; do # bynkc-lsp: overlap copy, dropped in E4b
+  # A release before the rename ships only bynkc-lsp, and the overlap copy goes
+  # in E4b: either server name may be absent, but not both.
+  if [ ! -f "$tmp/$stage/$bin" ]; then
+    case "$bin" in
+      bynk-lsp | bynkc-lsp)
+        [ -f "$tmp/$stage/bynk-lsp" ] || [ -f "$tmp/$stage/bynkc-lsp" ] || die "the archive has no language server"
+        continue ;;
+    esac
+  fi
   # Install via a temp name + rename, so replacing a running binary is safe.
   cp "$tmp/$stage/$bin" "$dest/.$bin.new"
   chmod 755 "$dest/.$bin.new"
   mv -f "$dest/.$bin.new" "$dest/$bin"
 done
 
-say "Installed bynkc, bynk and bynkc-lsp to $dest"
+say "Installed bynkc, bynk and bynk-lsp (plus a bynkc-lsp copy for this release) to $dest"
 case ":$PATH:" in
   *":$dest:"*) say "Run 'bynk doctor' to check your setup." ;;
   *) say "Add it to your PATH, e.g.:  export PATH=\"$dest:\$PATH\""

@@ -90,12 +90,69 @@ commons d {
       (base_type)
       (block
         (string_literal
-          (string_interpolation
-            (identifier))
-          (escape_sequence))))
+          (string_body
+            (string_interpolation
+              (identifier))
+            (escape_sequence)))))
     (fn_decl
       (identifier)
       (base_type)
       (block
         (string_literal
-          (raw_string))))))
+          (raw_string
+            (raw_string_body)))))))
+
+==========================
+string — multi-line with a language tag (#2958)
+==========================
+
+commons d {
+	fn q(name: String) -> String {
+		"""sql  
+		SELECT id FROM t WHERE n = \(name)
+		"""
+	}
+	fn p() -> String {
+		r"""regex
+		^\d+$
+		"""
+	}
+	fn e() -> String {
+		"""my-lang_2
+		"""
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (base_type)
+      (block
+        (string_literal
+          (string_tag)
+          (string_body
+            (string_interpolation
+              (identifier))))))
+    (fn_decl
+      (identifier)
+      (base_type)
+      (block
+        (string_literal
+          (raw_string
+            (string_tag)
+            (raw_string_body)))))
+    (fn_decl
+      (identifier)
+      (base_type)
+      (block
+        (string_literal
+          (string_tag)
+          (string_body))))))

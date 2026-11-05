@@ -45,7 +45,7 @@ function crateMeta(dir) {
 }
 
 /** The rustdoc output dir for a crate: `<name>` underscored, or its bin name
- *  (a bin-only crate like bynk-lsp documents under its binary, bynkc-lsp). */
+ *  (a bin-only crate like bynk-lsp documents under its binary, bynk-lsp). */
 function docDirFor(meta) {
   const candidates = [meta.name, meta.bin].filter(Boolean).map((n) => n.replace(/-/g, "_"));
   return candidates.find((d) => fs.existsSync(path.join(apiDir, d, "index.html"))) ?? null;

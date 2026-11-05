@@ -1,7 +1,7 @@
 ---
 title: "`bynk-lsp`"
 ---
-The Bynk language server. The `bynk-lsp` crate builds the `bynkc-lsp` binary, a
+The Bynk language server, the `bynk-lsp` binary, a
 [tower-lsp](https://github.com/ebkalderon/tower-lsp) server that communicates
 over **stdio**. Editors talk to it; most users reach it through the
 [VS Code extension](/docs/tooling/vscode-bynk/) rather than directly. See the
@@ -102,10 +102,10 @@ From the workspace root:
 cargo build --release -p bynk-lsp
 ```
 
-The binary is `target/release/bynkc-lsp`. Put it on `PATH`, or point your editor
+The binary is `target/release/bynk-lsp`. Put it on `PATH`, or point your editor
 at it explicitly (in VS Code, the `bynk.executablePath` setting).
 
-`bynkc-lsp --version` prints the version and exits without entering the protocol
+`bynk-lsp --version` prints the version and exits without entering the protocol
 loop, so tooling (such as the VS Code status bar) can query it without the
 server blocking on stdin.
 

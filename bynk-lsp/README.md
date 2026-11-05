@@ -5,7 +5,7 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 The **Language Server for the [Bynk](https://github.com/bynk-lang/bynk)
-language**. The crate builds the `bynkc-lsp` binary, which any LSP-capable
+language**. The crate builds the `bynk-lsp` binary, which any LSP-capable
 editor can speak to for live diagnostics, navigation, and refactoring of `.bynk`
 projects.
 
@@ -52,18 +52,18 @@ cargo install bynk-lsp
 Or build from the workspace:
 
 ```sh
-cargo build --release -p bynk-lsp   # → target/release/bynkc-lsp
+cargo build --release -p bynk-lsp   # → target/release/bynk-lsp
 ```
 
-This produces the **`bynkc-lsp`** binary. Requires a stable Rust toolchain,
+This produces the **`bynk-lsp`** binary. Requires a stable Rust toolchain,
 2024 edition (MSRV 1.95).
 
 ## Use
 
-`bynkc-lsp` speaks LSP over stdio. Most users consume it through the
+`bynk-lsp` speaks LSP over stdio. Most users consume it through the
 [VS Code extension](https://github.com/bynk-lang/vscode-bynk),
 which bundles and launches it automatically. For other editors, point your LSP
-client at the `bynkc-lsp` binary and associate it with the `bynk` language /
+client at the `bynk-lsp` binary and associate it with the `bynk` language /
 `.bynk` files. See the
 [`bynk-lsp` tooling docs](https://bynk-lang.org/docs/tooling/bynk-lsp/) and
 [Set up editor support](https://bynk-lang.org/docs/editor-and-tooling/editor-support/).
@@ -71,7 +71,7 @@ client at the `bynkc-lsp` binary and associate it with the `bynk` language /
 The server discovers a project by walking up to the nearest `bynk.toml` (falling
 back to single-file mode if there is none). It logs to `~/.bynk-lsp.log` at
 `warn` by default; set `BYNK_LSP_LOG` (e.g. `BYNK_LSP_LOG=debug`) to raise the
-level. `bynkc-lsp --version` prints the version.
+level. `bynk-lsp --version` prints the version.
 
 ## License
 

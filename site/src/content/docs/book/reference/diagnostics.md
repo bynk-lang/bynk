@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **757** codes in total.
+There are **758** codes in total.
 
 ## Agents
 
@@ -261,7 +261,7 @@ There are **757** codes in total.
 | `bynk.lex.multiline_close_not_own_line` | A `"""` inside a multi-line string literal is not on a line of its own. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_in_hole` | A multi-line string literal appears inside an interpolation hole, which must close on its own line. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_indent` | A line of a multi-line string literal is indented less than its closing `"""`. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
-| `bynk.lex.multiline_open` | The opening `"""` of a multi-line string literal is not followed by a newline. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
+| `bynk.lex.multiline_open` | The opening `"""` of a multi-line string literal is not followed by a newline, or by a language tag (`"""sql`) and a newline. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.slash_doc` | A `///` doc comment first on its line; a Bynk doc is `--- text` or a `---` block (auto-fixable). |  | — |
 | `bynk.lex.unclosed_doc_block` | A documentation block is not closed. |  | — |
 | `bynk.lex.unexpected_character` | An unexpected character in the source. |  | — |
@@ -552,6 +552,7 @@ There are **757** codes in total.
 | `bynk.ws.message_frame_param` | A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii). |  | — |
 | `bynk.ws.open_given_unsupported` | A WebSocket `on open` handler declares `given` capabilities — unsupported at v1, since on Workers the handler runs inside the connection-hosting Durable Object, which has no composition root to supply them (real-time track slice 3b). |  | — |
 | `bynk.ws.open_transfer_cross_file` | On the Workers target, a WebSocket `on open` handler transfers its `connection` to an agent declared in a different file of the same context — the open is hosted in the agent's Durable Object, which is emitted from the agent's own file, so the upgrade would never be handled; the service and the agent must share a file. |  | — |
+| `bynk.ws.open_transfer_key` | On the Workers target, the key of a WebSocket `on open` handler's connection transfer is not a route parameter, a context constant or a literal — the upgrade is routed to the hosting Durable Object before the body runs, so the edge must be able to evaluate the key on its own. |  | — |
 | `bynk.ws.open_transfer_shape` | A WebSocket `on open` handler does not transfer its `connection` into exactly one agent, so the Workers upgrade has no single Durable Object to route to (real-time track slice 3b). |  | — |
 | `bynk.ws.route_param_mismatch` | A WebSocket `on message`/`on close` route parameter does not match the `on open` parameter at the same position — route values are recovered positionally from the connection, so they must be a type-compatible prefix of the `on open` parameters (real-time track slice 3b-iii). |  | — |
 
@@ -788,7 +789,7 @@ There are **757** codes in total.
 | `bynk.suite.duplicate_env` | An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.duplicate_fn` | A suite declares two helper `fn`s of the same name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.env_binding_clash` | A `system`-tier suite's or case's `env` names a binding a participant's Worker already declares (a Service Binding, KV namespace, or Durable Object namespace), or a key the test harness sets on it (a call-edge key, a `Foreign` caller's secret), so the entry would clash with it on the Worker's `env`. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
-| `bynk.suite.env_not_literal` | An `env { … }` entry's value is not a `String` literal; a Worker's variables and secrets are strings, given verbatim. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
+| `bynk.suite.env_not_literal` | An `env { … }` entry's value is neither a `String` literal nor a `fixture` the same suite declares; a Worker's variables and secrets are strings, given verbatim. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.fn_effectful` | A suite helper `fn` returns an `Effect`; suite helpers are pure. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.fn_method` | A suite helper `fn` is a method (`fn Type.name`); suite helpers are free functions. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.fn_name_clash` | A suite helper `fn` has the name of a declaration already in scope in the suite's cases. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |

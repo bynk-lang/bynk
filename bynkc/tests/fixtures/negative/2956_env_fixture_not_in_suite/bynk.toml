@@ -1,0 +1,6 @@
+[project]
+name = "2956-env-fixture-not-in-suite"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

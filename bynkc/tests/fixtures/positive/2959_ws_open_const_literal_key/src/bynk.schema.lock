@@ -1,0 +1,75 @@
+version = 2
+
+[events]
+
+[agents."board.Board"]
+version = 1
+floor = 1
+
+[[agents."board.Board".shapes]]
+version = 1
+additive = false
+
+[[agents."board.Board".shapes.fields]]
+name = "conns"
+kind = "Map"
+type = "String, <non-boundary>"
+refinement = "String, <non-boundary>"
+
+[[agents."board.Board".shapes.fields.paths]]
+path = "conns#0"
+type = "String"
+
+[[agents."board.Board".shapes.fields.paths]]
+path = "conns#1"
+type = "<non-boundary>"
+
+[[agents."board.Board".shapes.fields]]
+name = "opened"
+kind = "Cell"
+type = "Option[String]"
+refinement = "Option[String]"
+
+[[agents."board.Board".shapes.fields.paths]]
+path = "opened"
+type = "Option"
+
+[[agents."board.Board".shapes.fields.paths]]
+path = "opened?"
+type = "String"
+
+[agents."live.Room"]
+version = 1
+floor = 1
+
+[[agents."live.Room".shapes]]
+version = 1
+additive = false
+
+[[agents."live.Room".shapes.fields]]
+name = "conns"
+kind = "Map"
+type = "String, <non-boundary>"
+refinement = "String, <non-boundary>"
+
+[[agents."live.Room".shapes.fields.paths]]
+path = "conns#0"
+type = "String"
+
+[[agents."live.Room".shapes.fields.paths]]
+path = "conns#1"
+type = "<non-boundary>"
+
+[[agents."live.Room".shapes.fields]]
+name = "opened"
+kind = "Cell"
+type = "Option[String]"
+refinement = "Option[String]"
+
+[[agents."live.Room".shapes.fields.paths]]
+path = "opened"
+type = "Option"
+
+[[agents."live.Room".shapes.fields.paths]]
+path = "opened?"
+type = "String"

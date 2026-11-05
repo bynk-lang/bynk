@@ -330,6 +330,8 @@ pub fn describe_env_at(source: &str, offset: usize) -> Option<String> {
     let render = |entry: &EnvEntry, scope: &str| {
         let value = match &entry.value.kind {
             ExprKind::StrLit(v) => format!("{v:?}"),
+            // #2956: a fixture of the suite, by name.
+            ExprKind::Ident(id) => id.name.clone(),
             _ => "…".to_string(),
         };
         format!(

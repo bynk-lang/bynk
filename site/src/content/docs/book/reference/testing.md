@@ -950,7 +950,8 @@ It is visible to its own suite at every tier, and is never deployed. See
 
 A suite or case declares the variables and secrets its participants see with an
 **`env`** clause. Each entry is a name and a `String` literal, the shape a
-Worker's `env` holds:
+Worker's `env` holds, or the name of a [`fixture`](/book/reference/fixtures/)
+the same suite declares:
 
 ```bynk,fragment
 suite shop.orders as system {
@@ -991,8 +992,16 @@ suite shop.orders as system {
 - **Use throwaway values.** An `env` exists only in the test build, but it is
   still source: never paste a real secret into a test file.
 
+- **A fixture as a value.** `KEY = appKey` gives the text of the suite's
+  `fixture appKey`, so a long value such as a test-only private key lives in
+  one file under `fixtures/` instead of pasted into every suite that needs it.
+  The text is verbatim: a file's trailing newline is part of the value. Only a
+  fixture of the same suite can be named, in its own `env` or a case's. A
+  fixture used only in an `env` counts as used.
+
 A name given twice at one scope is `bynk.suite.duplicate_env`. A value that is
-not a `String` literal is `bynk.suite.env_not_literal`. At `system`, a name a
+neither a `String` literal nor a fixture of the suite is
+`bynk.suite.env_not_literal`. At `system`, a name a
 participant's Worker already binds (a Service Binding, KV namespace or Durable
 Object namespace), or a key the test harness sets there itself (a call edge's
 `BYNK_CALL_FROM_…`/`BYNK_CALL_TO_…` key, or a `Foreign` caller's secret), is

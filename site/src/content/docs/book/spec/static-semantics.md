@@ -1894,7 +1894,10 @@ connection-lifecycle handlers:
   under the held-resource linearity discipline
   ([§5.4.2](/book/spec/static-semantics/#542-held-resource-linearity-v0102)) — the canonical
   disposal being transfer into an agent. On the Workers target that transfer MUST
-  resolve to exactly one routable agent (`bynk.ws.open_transfer_shape`).
+  resolve to exactly one routable agent (`bynk.ws.open_transfer_shape`), keyed by
+  a parameter of `on open`, a constant of the context or a string, integer or
+  boolean literal, since the upgrade is routed before the body runs
+  (`bynk.ws.open_transfer_key`).
 - **`on message`** (v0.106) — an inbound frame arrived; its parameters are the
   route params plus the decoded frame of type `I`.
 - **`on close`** (v0.106) — the connection ended; the stored connection is
@@ -2440,7 +2443,8 @@ An `env { NAME = "value" … }` clause gives the variables and secrets a suite's
 participants see. It sets the environment and overrides no seam, so it is legal
 at every tier, `system` included.
 
-- **Values.** Each entry's value MUST be a `String` literal
+- **Values.** Each entry's value MUST be a `String` literal or the name of a
+  `fixture` the same suite declares, whose text it is, verbatim
   (`bynk.suite.env_not_literal`).
 - **Names.** A name MUST NOT be given twice at one scope: across a suite's own
   `env` clauses, or across one case's (`bynk.suite.duplicate_env`).

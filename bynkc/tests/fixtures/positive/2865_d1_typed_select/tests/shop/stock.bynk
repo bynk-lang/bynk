@@ -23,6 +23,8 @@ case "a stored value that disagrees with its field is a Decode error" {
 	let _ <- putWord.call("w")
 	let r <- loose.call()
 	expect r == "decode"
+	let one <- looseOne.call()
+	expect one == "decode"
 }
 
 case "a missing column is a Sql error" {

@@ -7,15 +7,15 @@
 //! layers over its suite's, name by name.
 //!
 //! The checks here are tier-independent: a name given twice at one scope
-//! (`bynk.suite.duplicate_env`) and a value that is not a `String` literal
-//! (`bynk.suite.env_not_literal`). The `system`-only binding clash
+//! (`bynk.suite.duplicate_env`) and a value that is neither a `String`
+//! literal nor a `fixture` of the same suite (`bynk.suite.env_not_literal`). The `system`-only binding clash
 //! (`bynk.suite.env_binding_clash`) needs each Worker's binding names, which
 //! the emitter computes, so it is [`check_env_binding_clash`], called from
 //! there with them.
 
 use std::collections::{BTreeMap, HashMap};
 
-use bynk_syntax::ast::{Case, EnvClause, ExprKind, SuiteDecl};
+use bynk_syntax::ast::{Case, EnvClause, Expr, ExprKind, FixtureDecl, SuiteDecl};
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
 
@@ -23,13 +23,42 @@ use bynk_syntax::span::Span;
 /// declaration: its own `env` clauses as one scope, and each case's as
 /// another.
 pub fn check_env_clauses(decl: &SuiteDecl, errors: &mut Vec<CompileError>) {
-    check_scope(&decl.envs, "suite", errors);
+    check_scope(decl, &decl.envs, "suite", errors);
     for case in &decl.cases {
-        check_scope(&case.envs, "case", errors);
+        check_scope(decl, &case.envs, "case", errors);
     }
 }
 
-fn check_scope(envs: &[EnvClause], scope: &str, errors: &mut Vec<CompileError>) {
+/// #2956: what an `env` entry's value is. A `fixture` of the same suite is a
+/// compile-time `String` constant, so it is as static as a literal; its text
+/// stays in the test module once, and the entry refers to it by path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EnvValue {
+    /// A `String` literal, verbatim.
+    Literal(String),
+    /// The suite's `fixture` of that normalised path.
+    Fixture(String),
+}
+
+/// The fixture of `decl` that `value` names, when it is a bare name of one.
+fn fixture_named<'a>(decl: &'a SuiteDecl, value: &Expr) -> Option<&'a FixtureDecl> {
+    let ExprKind::Ident(id) = &value.kind else {
+        return None;
+    };
+    decl.fixtures.iter().find(|f| f.name.name == id.name)
+}
+
+/// The [`EnvValue`] of one entry's value, or `None` when it is neither (already
+/// `bynk.suite.env_not_literal`).
+fn env_value(decl: &SuiteDecl, value: &Expr) -> Option<EnvValue> {
+    if let ExprKind::StrLit(v) = &value.kind {
+        return Some(EnvValue::Literal(v.clone()));
+    }
+    fixture_named(decl, value)
+        .map(|f| EnvValue::Fixture(bynk_project::assets::normalise_asset_path(&f.path)))
+}
+
+fn check_scope(decl: &SuiteDecl, envs: &[EnvClause], scope: &str, errors: &mut Vec<CompileError>) {
     let mut seen: HashMap<&str, Span> = HashMap::new();
     for entry in envs.iter().flat_map(|e| e.entries.iter()) {
         let name = entry.name.name.as_str();
@@ -48,34 +77,54 @@ fn check_scope(envs: &[EnvClause], scope: &str, errors: &mut Vec<CompileError>) 
         } else {
             seen.insert(name, entry.name.span);
         }
-        if !matches!(entry.value.kind, ExprKind::StrLit(_)) {
+        if env_value(decl, &entry.value).is_none() {
             errors.push(
                 CompileError::new(
                     "bynk.suite.env_not_literal",
                     entry.value.span,
-                    format!("the value of `{name}` in an `env` clause is not a `String` literal"),
+                    format!(
+                        "the value of `{name}` in an `env` clause is not a `String` literal or a fixture of this suite"
+                    ),
                 )
                 .with_note(
-                    "a Worker's variables and secrets are strings, so an `env` entry's value is written as one: `NAME = \"value\"`",
+                    "a Worker's variables and secrets are strings, so an `env` entry's value is written as one, `NAME = \"value\"`, or names a `fixture` this suite declares",
                 ),
             );
         }
     }
 }
 
-/// The variables and secrets `case` runs with: its suite's `env` entries,
-/// overlaid by the case's own, name by name. Only literal values are kept;
-/// a non-literal is already `bynk.suite.env_not_literal`.
-pub fn case_env(decl: &SuiteDecl, case: &Case) -> BTreeMap<String, String> {
+/// The variables and secrets `case` runs with, as written: its suite's `env`
+/// entries, overlaid by the case's own, name by name. Only a literal or a
+/// fixture of the suite is kept; anything else is already
+/// `bynk.suite.env_not_literal`.
+pub fn case_env_values(decl: &SuiteDecl, case: &Case) -> BTreeMap<String, EnvValue> {
     let mut env = BTreeMap::new();
     for envs in [&decl.envs, &case.envs] {
         for entry in envs.iter().flat_map(|e| e.entries.iter()) {
-            if let ExprKind::StrLit(v) = &entry.value.kind {
-                env.insert(entry.name.name.clone(), v.clone());
+            if let Some(v) = env_value(decl, &entry.value) {
+                env.insert(entry.name.name.clone(), v);
             }
         }
     }
     env
+}
+
+/// [`case_env_values`] with each fixture replaced by its text, from
+/// `fixtures` (each declared file's text by normalised path). A fixture whose
+/// text is not there was refused when it was read, so it is left out.
+pub fn case_env(
+    decl: &SuiteDecl,
+    case: &Case,
+    fixtures: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    case_env_values(decl, case)
+        .into_iter()
+        .filter_map(|(k, v)| match v {
+            EnvValue::Literal(s) => Some((k, s)),
+            EnvValue::Fixture(path) => fixtures.get(&path).map(|t| (k, t.clone())),
+        })
+        .collect()
 }
 
 /// Whether `decl` gives any `env` entry, at the suite or on a case.

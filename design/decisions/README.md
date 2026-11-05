@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0738](0738-suite-env-fixture-value.md) | **An `env` entry's value may be a fixture of the same suite** (v0.509) — Amends ADR 0524's literal-only values; the text is verbatim and stays in the test module once | Accepted (v0.509) |
+| [0737](0737-ws-open-transfer-key.md) | **A Workers WebSocket `on open` transfer is keyed by a route parameter, a constant or a literal** (v0.508.13) — What the edge can evaluate to route an upgrade before the body runs, and why other keys are rejected | Accepted (v0.508.13) |
+| [0736](0736-installables.md) | **bynk and bynk-lsp are the only release binaries; bynkc-lsp is retired** (v0.508.12) — One driver binary runs every command in-process; the language server is bynk-lsp | Accepted (v0.508.12) |
 | [0735](0735-system-model-scope-and-placement.md) | **The declaration-level IR becomes the system model, above the checker, with `bynk-lower` merged in as `bynk-model`** (v0.508.8) — The system model's scope, placement and name, its M-1 to M-4 requirements, and the M-1 domain clause | Accepted (v0.508.8) |
 | [0734](0734-published-set.md) | **Publish only what an installed binary reaches; retired crates point onward** (v0.508.5) — H-4 and H-5 of the crate-hygiene track; amends ADR 0099 and ADR 0100 | Accepted (v0.508.5) |
 | [0733](0733-system-extra-request-headers.md) | **A system case sends extra request headers by a trailing RequestHeaders argument** (v0.508) — Request headers reach a route with no `headers:` parameter only at system tier, as a trailing address argument | Accepted (v0.508) |

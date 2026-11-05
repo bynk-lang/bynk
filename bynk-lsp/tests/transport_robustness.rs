@@ -166,7 +166,7 @@ fn session(tag: &str, messages: &[&str]) -> Session {
     let home = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("lsp-{tag}"));
     let _ = std::fs::remove_dir_all(&home);
     std::fs::create_dir_all(&home).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_bynkc-lsp"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_bynk-lsp"))
         .env("HOME", &home)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

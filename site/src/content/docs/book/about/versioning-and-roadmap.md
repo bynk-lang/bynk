@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.508) rather than in large releases.
+steps (the book is written against v0.509) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -92,14 +92,14 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   to infer. It is a breaking change with a machine-applicable fix; see
   [Generics and bounds](/book/reference/generics/). Next: `Ord`, `Key` and
   `Codable` as further constraints, then static methods on generic types.
-- **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
+- **Editor tooling.** Deepening the `bynk-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its
   model views (sequence diagram, documentation, architecture map, wire
   contract) are now live: they refresh on edit, follow the cursor, and survive
   a reload.
   The extension runs in vscode.dev and github.dev from the WebAssembly
   compiler, with project-wide diagnostics, hover and completion
-  ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Full `bynkc-lsp` on
+  ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Full `bynk-lsp` on
   WebAssembly (navigation, rename, references) is a later follow-up.
 - **Packaging.** In progress: path, git and registry dependencies have
   shipped. A project can name itself as a package (`[package]`), another

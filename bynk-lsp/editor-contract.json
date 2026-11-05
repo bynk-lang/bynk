@@ -61,9 +61,9 @@
           "rows": [
             {
               "detail": "missing",
-              "label": "bynkc-lsp",
+              "label": "bynk-lsp",
               "level": "fail",
-              "remedy": "install bynkc-lsp (or download from releases)"
+              "remedy": "install bynk-lsp (or download from releases)"
             }
           ]
         }

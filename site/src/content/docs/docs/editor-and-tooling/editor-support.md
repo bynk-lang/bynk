@@ -7,7 +7,7 @@ your editor.
 ## VS Code
 
 The `vscode-bynk` extension provides syntax highlighting plus live language
-features backed by the `bynkc-lsp` language server.
+features backed by the `bynk-lsp` language server.
 
 Install it from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=bynk-lang.bynk-vscode), or from a terminal:
 
@@ -15,7 +15,7 @@ Install it from the [Visual Studio Marketplace](https://marketplace.visualstudio
 code --install-extension bynk-lang.bynk-vscode
 ```
 
-It uses the `bynkc-lsp` on your `PATH`, or downloads the matching release if
+It uses the `bynk-lsp` on your `PATH`, or downloads the matching release if
 there isn't one.
 
 To build both from source instead, for example to try unreleased changes:
@@ -26,7 +26,7 @@ To build both from source instead, for example to try unreleased changes:
 cargo build --release -p bynk-lsp
 ```
 
-This produces `target/release/bynkc-lsp`. Put it on your `PATH`, or point the
+This produces `target/release/bynk-lsp`. Put it on your `PATH`, or point the
 extension at it with the `bynk.executablePath` setting.
 
 **2. Install the extension** from the
@@ -99,7 +99,7 @@ current as you save (see `bynk.views.refresh`).
 The same extension runs in [vscode.dev](https://vscode.dev) and
 [github.dev](https://github.dev) with nothing to install: press <kbd>.</kbd> on a
 Bynk repository on GitHub. In the browser the language features come from the
-Bynk compiler built to WebAssembly rather than from `bynkc-lsp`: syntax
+Bynk compiler built to WebAssembly rather than from `bynk-lsp`: syntax
 highlighting, diagnostics, hover and completion. A folder with a `bynk.toml` is
 analysed as a whole project, and the status bar reads **Bynk (web)**. A file
 outside any project is analysed on its own (**Bynk (web, single-file)**), and
@@ -111,13 +111,20 @@ are desktop-only.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `bynk.executablePath` | `bynkc-lsp` | Path to the language-server binary. |
+| `bynk.executablePath` | `bynk-lsp` | Path to the language-server binary. |
 | `bynk.trace.server` | `off` | Trace LSP traffic (`off` / `messages` / `verbose`) in the "Bynk LSP" output channel. |
 | `bynk.views.refresh` | `onSave` | When the project sidebar and open model views refresh: `onSave`, `onType`, or `manual`. |
 
 ## Other editors
 
-Any editor with a generic LSP client can use `bynkc-lsp`. Syntax highlighting is
+> **Renamed from `bynkc-lsp`** — The server was called `bynkc-lsp` before the rename. This release still ships a
+> `bynkc-lsp` copy next to `bynk-lsp` (in the archives, the installers and the
+> dev-container feature), so an editor config that names the old binary keeps
+> working for one release. Change the command in your editor config from
+> `bynkc-lsp` to `bynk-lsp` (for example `cmd = { "bynk-lsp" }` in Neovim). The
+> `bynkc-lsp` copy is removed in the next release.
+
+Any editor with a generic LSP client can use `bynk-lsp`. Syntax highlighting is
 also available through the [`tree-sitter-bynk`](/docs/tooling/tree-sitter-bynk/)
 grammar. A TOML language server that reads JSON Schemas (taplo, in Zed, Helix
 and others) checks `bynk.toml` once the file names the schema; see

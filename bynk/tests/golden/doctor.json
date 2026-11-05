@@ -66,10 +66,10 @@
       "level": "note",
       "rows": [
         {
-          "label": "bynkc-lsp",
+          "label": "bynk-lsp",
           "level": "fail",
           "detail": "missing",
-          "remedy": "install bynkc-lsp (or download from releases)"
+          "remedy": "install bynk-lsp (or download from releases)"
         }
       ]
     }

@@ -1713,7 +1713,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.lex.multiline_open",
-        "The opening `\"\"\"` of a multi-line string literal is not followed by a newline.",
+        "The opening `\"\"\"` of a multi-line string literal is not followed by a newline, or by a language tag (`\"\"\"sql`) and a newline.",
         &["string_literal"],
     ),
     d(
@@ -2811,7 +2811,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.suite.env_not_literal",
-        "An `env { … }` entry's value is not a `String` literal; a Worker's variables and secrets are strings, given verbatim.",
+        "An `env { … }` entry's value is neither a `String` literal nor a `fixture` the same suite declares; a Worker's variables and secrets are strings, given verbatim.",
         &["env_clause"],
     ),
     dg(
@@ -3735,6 +3735,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.ws.open_transfer_cross_file",
         "On the Workers target, a WebSocket `on open` handler transfers its `connection` to an agent declared in a different file of the same context — the open is hosted in the agent's Durable Object, which is emitted from the agent's own file, so the upgrade would never be handled; the service and the agent must share a file.",
+    ),
+    d(
+        "bynk.ws.open_transfer_key",
+        "On the Workers target, the key of a WebSocket `on open` handler's connection transfer is not a route parameter, a context constant or a literal — the upgrade is routed to the hosting Durable Object before the body runs, so the edge must be able to evaluate the key on its own.",
     ),
     d(
         "bynk.ws.open_transfer_shape",

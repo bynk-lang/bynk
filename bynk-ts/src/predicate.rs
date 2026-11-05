@@ -78,20 +78,23 @@ pub fn pred_condition_and_message(pred: &PredKind, receiver: &str) -> (crate::Ts
     pred_condition_and_message_for(pred, receiver, None)
 }
 
-/// #2622: the condition a `Decimal` value must satisfy for `pred`, as inline
-/// TypeScript over the `{ coefficient, scale }` object (no runtime import).
-fn decimal_pred_condition(pred: &PredKind, recv: &str) -> Option<(String, String)> {
+/// #2622: the condition a `Decimal` value must satisfy for `pred`, over the
+/// `{ coefficient, scale }` object (no runtime import). #2955: built as a real
+/// [`TsExpr`] like every other arm (#1471), not `format!`-ed text; the explicit
+/// [`TsExpr::Paren`]s reproduce the pre-#2955 text byte for byte.
+fn decimal_pred_condition(pred: &PredKind, recv: &str) -> Option<(TsExpr, String)> {
+    let coefficient = || decimal_member(recv, "coefficient");
     match pred {
         PredKind::NonNegative => Some((
-            format!("({recv}).coefficient >= 0n"),
+            binary(TsBinaryOp::GreaterThanEq, coefficient(), bigint("0")),
             "must be non-negative".to_string(),
         )),
         PredKind::Positive => Some((
-            format!("({recv}).coefficient > 0n"),
+            binary(TsBinaryOp::GreaterThan, coefficient(), bigint("0")),
             "must be positive".to_string(),
         )),
         PredKind::InRangeD(a, b) => Some((
-            decimal_range_condition(recv, a, b),
+            decimal_range_expr(recv, a, b),
             format!(
                 "must be in range [{}, {}]",
                 bynk_syntax::decimal::render(&a.coef, a.scale),
@@ -102,21 +105,78 @@ fn decimal_pred_condition(pred: &PredKind, recv: &str) -> Option<(String, String
     }
 }
 
+fn binary(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
+    TsExpr::Binary {
+        op,
+        left: Box::new(left),
+        right: Box::new(right),
+    }
+}
+
+fn paren(e: TsExpr) -> TsExpr {
+    TsExpr::Paren(Box::new(e))
+}
+
+/// A `bigint` literal: `digits` plus the `n` suffix.
+fn bigint(digits: &str) -> TsExpr {
+    TsExpr::Lit(TsLit::Num(format!("{digits}n")))
+}
+
+/// `(recv).property`.
+fn decimal_member(recv: &str, property: &str) -> TsExpr {
+    TsExpr::Member {
+        object: Box::new(paren(TsExpr::Ident(recv.to_string()))),
+        property: property.to_string(),
+    }
+}
+
+/// `10n ** globalThis.BigInt(exponent)`.
+fn pow10(exponent: TsExpr) -> TsExpr {
+    binary(
+        TsBinaryOp::Exp,
+        bigint("10"),
+        TsExpr::Call {
+            callee: Box::new(TsExpr::Ident("globalThis.BigInt".to_string())),
+            args: vec![exponent],
+        },
+    )
+}
+
 /// `lo <= recv <= hi` over `Decimal` objects, comparing at a common scale with
 /// `bigint` arithmetic so the check needs no helper import.
+fn decimal_range_expr(
+    recv: &str,
+    lo: &bynk_syntax::ast::DecimalBound,
+    hi: &bynk_syntax::ast::DecimalBound,
+) -> TsExpr {
+    let bound = |op, b: &bynk_syntax::ast::DecimalBound| {
+        let scaled_recv = binary(
+            TsBinaryOp::Mul,
+            decimal_member(recv, "coefficient"),
+            pow10(TsExpr::Lit(TsLit::Num(b.scale.to_string()))),
+        );
+        let scaled_bound = binary(
+            TsBinaryOp::Mul,
+            paren(bigint(&decimal_signed_coef(&b.coef))),
+            pow10(decimal_member(recv, "scale")),
+        );
+        paren(binary(op, scaled_recv, scaled_bound))
+    };
+    paren(binary(
+        TsBinaryOp::And,
+        bound(TsBinaryOp::GreaterThanEq, lo),
+        bound(TsBinaryOp::LessThanEq, hi),
+    ))
+}
+
+/// The `Decimal` range check as printed text — for `bynk-emit`'s `lower.rs`, which still
+/// assembles its refinement guard from text.
 pub fn decimal_range_condition(
     recv: &str,
     lo: &bynk_syntax::ast::DecimalBound,
     hi: &bynk_syntax::ast::DecimalBound,
 ) -> String {
-    let bound = |op: &str, b: &bynk_syntax::ast::DecimalBound| {
-        let coef = decimal_signed_coef(&b.coef);
-        format!(
-            "(({recv}).coefficient * 10n ** globalThis.BigInt({}) {op} ({coef}n) * 10n ** globalThis.BigInt(({recv}).scale))",
-            b.scale
-        )
-    };
-    format!("({} && {})", bound(">=", lo), bound("<=", hi))
+    crate::print_expr(&decimal_range_expr(recv, lo, hi))
 }
 
 /// [`pred_condition_and_message`] knowing the receiver's base type: a
@@ -129,7 +189,7 @@ pub fn pred_condition_and_message_for(
     if (base == Some(BaseType::Decimal) || matches!(pred, PredKind::InRangeD(..)))
         && let Some((cond, msg)) = decimal_pred_condition(pred, receiver)
     {
-        return (TsExpr::Ident(cond), msg);
+        return (cond, msg);
     }
 
     let recv = || TsExpr::Ident(receiver.to_string());
@@ -239,7 +299,71 @@ pub fn pred_condition_and_message_for(
 
 #[cfg(test)]
 mod tests {
-    use super::decimal_signed_coef;
+    use super::{decimal_range_condition, decimal_signed_coef, pred_condition_and_message_for};
+    use bynk_syntax::ast::{BaseType, DecimalBound, PredKind};
+    use bynk_syntax::span::Span;
+
+    fn bound(coef: &str, scale: u32) -> DecimalBound {
+        DecimalBound {
+            coef: coef.to_string(),
+            scale,
+            lexeme: String::new(),
+            span: Span::new(0, 0),
+        }
+    }
+
+    /// #2955: the text the `Decimal` arms `format!`-ed before they became
+    /// `TsExpr` nodes — kept as the oracle so the node tree stays byte-identical.
+    fn legacy_range(recv: &str, lo: &DecimalBound, hi: &DecimalBound) -> String {
+        let bound = |op: &str, b: &DecimalBound| {
+            let coef = decimal_signed_coef(&b.coef);
+            format!(
+                "(({recv}).coefficient * 10n ** globalThis.BigInt({}) {op} ({coef}n) * 10n ** globalThis.BigInt(({recv}).scale))",
+                b.scale
+            )
+        };
+        format!("({} && {})", bound(">=", lo), bound("<=", hi))
+    }
+
+    fn decimal_cond(pred: &PredKind, recv: &str) -> String {
+        let (cond, _) = pred_condition_and_message_for(pred, recv, Some(BaseType::Decimal));
+        crate::print_expr(&cond)
+    }
+
+    #[test]
+    fn decimal_sign_predicates_print_the_legacy_text() {
+        for recv in ["value", "json", "__v", "json[\"amount\"]"] {
+            assert_eq!(
+                decimal_cond(&PredKind::NonNegative, recv),
+                format!("({recv}).coefficient >= 0n")
+            );
+            assert_eq!(
+                decimal_cond(&PredKind::Positive, recv),
+                format!("({recv}).coefficient > 0n")
+            );
+        }
+    }
+
+    #[test]
+    fn decimal_range_prints_the_legacy_text() {
+        let cases = [
+            (bound("0", 0), bound("100", 0)),
+            (bound("-12", 2), bound("007", 1)),
+            (bound("-0", 3), bound("-000", 0)),
+            (bound("-1999", 3), bound("25", 5)),
+        ];
+        for recv in ["value", "json", "__v"] {
+            for (lo, hi) in &cases {
+                let want = legacy_range(recv, lo, hi);
+                assert_eq!(decimal_range_condition(recv, lo, hi), want);
+                let pred = PredKind::InRangeD(lo.clone(), hi.clone());
+                assert_eq!(decimal_cond(&pred, recv), want);
+                // `InRangeD` takes the `Decimal` path even with no base given.
+                let (cond, _) = pred_condition_and_message_for(&pred, recv, None);
+                assert_eq!(crate::print_expr(&cond), want);
+            }
+        }
+    }
 
     #[test]
     fn decimal_coefficients_drop_leading_zeros_and_negative_zero() {

@@ -196,7 +196,11 @@ constant_name ::= /[A-Z][A-Za-z0-9_]*/
 number_literal ::= /[0-9]+(_[0-9]+)*/
 float_literal ::= /[0-9]+(_[0-9]+)*\.[0-9]+(_[0-9]+)*([eE][+-]?[0-9]+(_[0-9]+)*)?|[0-9]+(_[0-9]+)*[eE][+-]?[0-9]+(_[0-9]+)*/
 decimal_literal ::= /[0-9]+(_[0-9]+)*(\.[0-9]+(_[0-9]+)*)?d/
-string_literal ::= """ (/[^"\\\n]+/ | escape_sequence | string_interpolation)* """ | /"""\r?\n/ (/[^"\\]+/ | /"{1,2}[^"\\]/ | escape_sequence | string_interpolation)* """"" | raw_string
+string_literal ::= """ (/[^"\\\n]+/ | escape_sequence | string_interpolation)* """ | """"" multiline_opener_rest string_body? """"" | raw_string
+multiline_opener_rest ::= /\r?\n/ | string_tag /[ \t]*\r?\n/
+string_tag ::= /[a-z][a-z0-9_-]*/
+string_body ::= (/[^"\\]+/ | /"{1,2}[^"\\]/ | escape_sequence | string_interpolation)+
+raw_string ::= raw_string_line | raw_triple_open multiline_opener_rest raw_string_body? """""
 escape_sequence ::= /\\[ntr0"\\]/ | /\\u\{[0-9a-fA-F]{1,6}\}/
 string_interpolation ::= "\(" expression ")"
 boolean_literal ::= "true" | "false"
@@ -208,4 +212,4 @@ line_comment ::= "//" /[^\n]*/
 
 - **Word token:** `identifier`
 - **Ignored between tokens:** `/\s+/`, `doc_line`, `line_comment`, `doc_block`
-- **External tokens:** `doc_block`, `doc_line`, `raw_string`, `_type_app_open`, `_error_sentinel`
+- **External tokens:** `doc_block`, `doc_line`, `_raw_string_line`, `_raw_triple_open`, `raw_string_body`, `_type_app_open`, `_error_sentinel`

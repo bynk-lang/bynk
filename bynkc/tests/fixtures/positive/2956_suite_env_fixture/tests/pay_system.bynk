@@ -1,0 +1,34 @@
+suite shop.pay as system {
+	// #2956: at `system`, a fixture's text is put on the Worker's `env`, and a
+	// fixture naming the Bearer actor's secret is what the driver signs with.
+	fixture secret = "fixtures/jwt-secret.txt"
+	fixture processor = "fixtures/processor.txt"
+	fixture override = "fixtures/override.txt"
+
+	env {
+		AUTH_JWT_SECRET = secret
+		PAYMENTS_PROCESSOR = processor
+	}
+
+	case "system: the Worker reads a fixture from the suite env" {
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
+
+	case "system: a token signed with the fixture secret is admitted" {
+		let r <- api.GET("/me") by User("ada")
+		expect r is Ok("ada")
+	}
+
+	case "system: a case env gives a literal over the fixture" {
+		env { PAYMENTS_PROCESSOR = "live" }
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("live")
+	}
+
+	case "system: a case env overrides with another fixture" {
+		env { PAYMENTS_PROCESSOR = override }
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("live\n")
+	}
+}

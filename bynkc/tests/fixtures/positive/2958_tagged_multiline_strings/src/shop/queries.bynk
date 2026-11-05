@@ -1,0 +1,48 @@
+commons shop.queries {
+  // A language tag after the opening `"""` (#2958) names the body's language
+  // for the editor. It is not part of the value.
+  fn insert() -> String {
+    """sql
+    INSERT INTO deliveries (id, event) VALUES
+      ('a', 'push')
+    """
+  }
+
+  fn insertUntagged() -> String {
+    """
+    INSERT INTO deliveries (id, event) VALUES
+      ('a', 'push')
+    """
+  }
+
+  // Trailing spaces after the tag are allowed, and the tag may hold digits,
+  // `_` and `-`.
+  fn page(title: String) -> String {
+    """html-5   
+      <h1>\(title)</h1>
+      """
+  }
+
+  // A raw multi-line string takes a tag too, and still keeps its backslashes.
+  fn datePattern() -> String {
+    r"""regex
+    ^\d{4}-\d{2}-\d{2}$
+    """
+  }
+
+  // A tagged literal is still a literal where one is required.
+  fn isDate(text: String) -> Bool {
+    text.matchesRegex(
+      r"""regex
+      ^\d{4}-\d{2}-\d{2}$
+      """
+    )
+  }
+
+  // An unknown tag is a plain string.
+  fn notes() -> String {
+    """made_up_lang2
+    plain text
+    """
+  }
+}

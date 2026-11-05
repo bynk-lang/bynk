@@ -23,6 +23,9 @@ export function compose(env: Env) {
     async loose() {
       return handlers.loose.call(deps);
     },
+    async looseOne() {
+      return handlers.looseOne.call(deps);
+    },
     async missing() {
       return handlers.missing.call(deps);
     },

@@ -2,7 +2,7 @@
 title: "`vscode-bynk`"
 ---
 The Visual Studio Code extension for Bynk. It provides syntax highlighting plus
-the full language-server experience by launching [`bynkc-lsp`](/docs/tooling/bynk-lsp/). For
+the full language-server experience by launching [`bynk-lsp`](/docs/tooling/bynk-lsp/). For
 step-by-step setup, see the how-to
 [Set up editor support](/docs/editor-and-tooling/editor-support/); this page is the
 reference.
@@ -17,7 +17,7 @@ WebAssembly) for diagnostics, hover and completion across each project; see
 - Syntax highlighting (a TextMate grammar, mirrored from
   [`tree-sitter-bynk`](/docs/tooling/tree-sitter-bynk/)).
 - Live diagnostics, hover with type signatures and doc blocks, and
-  go-to-definition — all from the bundled `bynkc-lsp`.
+  go-to-definition — all from the bundled `bynk-lsp`.
 - Format-on-save via the shared formatter (honours `editor.formatOnSave`).
 - Status-bar items showing the project name and compiler version.
 - **Snippets** for every construct — type a prefix (`context`, `commons`,
@@ -363,11 +363,11 @@ The extension activates on opening a `.bynk` file or any workspace containing a
 ## In the browser
 
 In vscode.dev and github.dev the extension loads its `browser` entry point
-instead of launching `bynkc-lsp`.
+instead of launching `bynk-lsp`.
 
 - **Language features:** a web-worker language server over `bynk-wasm` (the
   compiler the playground runs) gives live diagnostics, hover and completion. It
-  analyses for the `cloudflare` platform, as `bynkc-lsp` does.
+  analyses for the `cloudflare` platform, as `bynk-lsp` does.
 - **Projects:** a workspace folder with a `bynk.toml` at its root is read
   through `vscode.workspace.fs` (the manifest and every `.bynk` file, skipping
   dot-directories, `node_modules`, `out` and `target`) and analysed as a whole
@@ -394,7 +394,7 @@ instead of launching `bynkc-lsp`.
   the sequence, documentation, architecture and wire-contract views,
   **Explain Diagnostic**, the `@bynk` chat participant, and the AI-agent tools
   other than `bynk_get_diagnostics` and `bynk_describe_symbol`. Semantic tokens, inlay hints, go-to-definition,
-  references, rename and signature help need `bynkc-lsp`. Their settings
+  references, rename and signature help need `bynk-lsp`. Their settings
   (`bynk.dev.*`, `bynk.views.*`, `bynk.viewsCodeLens`, `bynk.bynkPath`,
   `bynk.executablePath` and the rest) still appear in the Settings editor,
   because VS Code can't hide a setting per host, but they have no effect on the
@@ -416,7 +416,7 @@ npx vsce package        # produces a .vsix
 code --install-extension bynk-vscode-*.vsix
 ```
 
-The extension needs `bynkc-lsp` available — build it with
+The extension needs `bynk-lsp` available — build it with
 `cargo build --release -p bynk-lsp` and put it on `PATH`, or set
 `bynk.executablePath`.
 
@@ -424,7 +424,7 @@ The extension needs `bynkc-lsp` available — build it with
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `bynk.executablePath` | `bynkc-lsp` | Path to the language-server binary. |
+| `bynk.executablePath` | `bynk-lsp` | Path to the language-server binary. |
 | `bynk.compilerPath` | `bynkc` | Path to the `bynkc` compiler used by the `bynkc: check` build task. |
 | `bynk.trace.server` | `off` | Trace LSP traffic (`off` / `messages` / `verbose`) in the "Bynk LSP" output channel. |
 | `bynk.inlineDocRendering.enable` | `true` | Render doc comments in place with heading colour, bold, and italic. |
@@ -438,7 +438,7 @@ The extension needs `bynkc-lsp` available — build it with
 
 | Path | What it is |
 |---|---|
-| `src/extension.ts` | Entry point: resolves and launches `bynkc-lsp` over stdio. |
+| `src/extension.ts` | Entry point: resolves and launches `bynk-lsp` over stdio. |
 | `src/inlineDoc.ts` | Pure doc-comment Markdown tokenizer → heading/bold/italic ranges. |
 | `src/inlineDocRendering.ts` | Applies those ranges as in-editor decorations (the `inlineDoc.ts` consumer). |
 | `src/playgroundLink.ts`, `src/playgroundCommands.ts` | The playground deep link (the encoding and its size cap, pure) and the **Copy Playground Link** / **Open in Playground** commands, shared by both entry points. |

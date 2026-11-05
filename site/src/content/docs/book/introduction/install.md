@@ -10,7 +10,7 @@ a recent Rust toolchain, or, in a container, use the
 ## Download a release binary
 
 Each release has one archive per platform, holding the driver `bynk`, the
-compiler `bynkc` and the language server `bynkc-lsp`, all from the same
+compiler `bynkc` and the language server `bynk-lsp`, all from the same
 build:
 
 | Platform              | Archive                                         |
@@ -46,12 +46,12 @@ Put the three binaries on your `PATH`. On Linux and macOS, for example:
 
 ```sh
 install -m 0755 "bynk-$tag-$target"/bynk "bynk-$tag-$target"/bynkc \
-  "bynk-$tag-$target"/bynkc-lsp ~/.local/bin/
+  "bynk-$tag-$target"/bynk-lsp ~/.local/bin/
 bynk --version
 ```
 
 Any directory on your `PATH` works; the example assumes `~/.local/bin` is on
-it. On Windows, move `bynk.exe`, `bynkc.exe` and `bynkc-lsp.exe` into a folder
+it. On Windows, move `bynk.exe`, `bynkc.exe` and `bynk-lsp.exe` into a folder
 and add that folder to `Path`.
 
 ## Prerequisites for testing and deploying
@@ -91,10 +91,18 @@ See the [CLI reference](/docs/cli/) for every flag and exit code.
 
 ## Editor support
 
-`bynkc-lsp`, the language server, is in the release archive. Most users run it
+> **Renamed from `bynkc-lsp`** — The server was called `bynkc-lsp` before the rename. This release still ships a
+> `bynkc-lsp` copy next to `bynk-lsp` (in the archives, the installers and the
+> dev-container feature), so an editor config that names the old binary keeps
+> working for one release. Change the command in your editor config from
+> `bynkc-lsp` to `bynk-lsp` . The
+> `bynkc-lsp` copy is removed in the next release.
+
+
+`bynk-lsp`, the language server, is in the release archive. Most users run it
 through the VS Code extension rather than directly. Install it from the
 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=bynk-lang.bynk-vscode) (`bynk-lang.bynk-vscode`). It uses the
-`bynkc-lsp` on your `PATH`, or downloads the matching release if there isn't
+`bynk-lsp` on your `PATH`, or downloads the matching release if there isn't
 one. It does the same for `bynk` and `bynkc`, so with the extension you need no
 separate install or `cargo`: the downloaded tools go on the `PATH` of its
 integrated terminals. See [Set up editor support](/docs/editor-and-tooling/editor-support/).
@@ -133,12 +141,12 @@ installs the toolchain for you. Add it, with the official Node feature, to your
 }
 ```
 
-The feature installs `bynk`, `bynkc` and `bynkc-lsp` from one GitHub Release
+The feature installs `bynk`, `bynkc` and `bynk-lsp` from one GitHub Release
 (checked against that release's `SHA256SUMS`), then `wrangler@4` and
 TypeScript 7 with npm. In the finished container `bynk doctor --strict` is all
 green. The feature also lists the VS Code extension (`bynk-lang.bynk-vscode`),
 so VS Code installs it from the Marketplace into the container. It uses the
-`bynkc-lsp` on `PATH` instead of downloading one.
+`bynk-lsp` on `PATH` instead of downloading one.
 
 The feature's options:
 

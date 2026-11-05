@@ -1,7 +1,7 @@
 #!/bin/sh
 # Dev Container feature: the Bynk toolchain (#2103).
 #
-# Installs `bynk`, `bynkc` and `bynkc-lsp` from ONE GitHub Release of
+# Installs `bynk`, `bynkc` and `bynk-lsp` (plus a `bynkc-lsp` copy for one release) from ONE GitHub Release of
 # bynk-lang/bynk, so the driver, compiler and language server never skew,
 # verifying the archive against that release's SHA256SUMS before anything is
 # unpacked. Then, optionally, `wrangler@4` and `typescript@7` with npm.
@@ -105,8 +105,17 @@ log "checksum verified ($ASSET)"
 
 tar -xzf "$WORK/$ASSET" -C "$WORK"
 STAGE="$WORK/bynk-$TAG-$TARGET"
-for bin in bynk bynkc bynkc-lsp; do
-    [ -f "$STAGE/$bin" ] || die "$ASSET has no $bin"
+for bin in bynk bynkc bynk-lsp bynkc-lsp; do
+    # A release before the rename ships only bynkc-lsp, and the overlap copy goes
+    # in E4b: either server name may be absent, but not both.
+    if [ ! -f "$STAGE/$bin" ]; then
+        case "$bin" in
+            bynk-lsp | bynkc-lsp)
+                [ -f "$STAGE/bynk-lsp" ] || [ -f "$STAGE/bynkc-lsp" ] || die "$ASSET has no language server"
+                continue ;;
+        esac
+        die "$ASSET has no $bin"
+    fi
     install -m 0755 "$STAGE/$bin" "$BIN_DIR/$bin"
 done
 

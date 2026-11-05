@@ -581,7 +581,11 @@ mod tests {
         // #2858 (plain-JSON responses) added: json_policy, json_field (the
         // response-JSON service policy). Net +2.
         // #2890 (the `consumes_item` wrapper) added: consumes_item. Net +1.
-        assert_eq!(rules.len(), 192);
+        // #2958 (multi-line string language tags) added: _multiline_opener_rest,
+        // string_tag, string_body, and raw_string (now a rule over the external
+        // `_raw_string_line` / `_raw_triple_open` / `raw_string_body` tokens).
+        // Net +4.
+        assert_eq!(rules.len(), 196);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.
