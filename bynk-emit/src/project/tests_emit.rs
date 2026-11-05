@@ -5183,6 +5183,38 @@ fn emit_stub_class(
             2,
         );
         let mut taken: HashSet<String> = scope_names.iter().cloned().collect();
+        // #2947: a suite helper inlined ahead of a value (#2907) spells its
+        // signature's types unqualified, as in a case runner, so a method with
+        // one brings the `uses` commons' public names into scope the way
+        // `emit_test_scope_setup` does. A method without one is unchanged.
+        if clause_idxs.iter().any(|&i| !rp.clause_fns[i].is_empty()) {
+            for u in unit_uses.get(&owning_unit).into_iter().flatten() {
+                let Some(table) = unit_tables.get(u) else {
+                    continue;
+                };
+                let consts = table
+                    .consts
+                    .iter()
+                    .filter(|(_, d)| d.private.is_none())
+                    .map(|(n, _)| n);
+                let mut names: Vec<String> = public_types(table)
+                    .chain(public_fns(table))
+                    .chain(consts)
+                    .filter(|n| taken.insert((*n).clone()))
+                    .cloned()
+                    .collect();
+                if names.is_empty() {
+                    continue;
+                }
+                names.sort();
+                let types = aliased_types(table, |n| names.contains(n) && is_public_type(table, n));
+                crate::emitter::extend_printed_at(
+                    &mut body_text,
+                    emit_ns_destructure(&test_ns(u), &names, &types),
+                    2,
+                );
+            }
+        }
         for u in &adapters {
             // #2887: a type this target renames from `u` binds as its alias.
             let renames: HashMap<String, String> = unit_tables
