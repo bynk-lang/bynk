@@ -152,6 +152,40 @@ fn find_offset(text: &str, needle: &str) -> usize {
         .unwrap_or_else(|| panic!("`{needle}` not found in fixture"))
 }
 
+/// `serde_json::to_string_pretty`'s layout, with object keys sorted. A
+/// `serde_json::Map`'s iteration order depends on whether some crate in the
+/// build turns on `serde_json/preserve_order`, so the picked wire-contract
+/// fields are printed in an order that doesn't.
+fn sorted_pretty(v: &serde_json::Value, indent: usize) -> String {
+    let pad = |n: usize| "  ".repeat(n);
+    match v {
+        serde_json::Value::Object(map) if !map.is_empty() => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let body: Vec<String> = keys
+                .iter()
+                .map(|k| {
+                    format!(
+                        "{}{}: {}",
+                        pad(indent + 1),
+                        serde_json::to_string(k).unwrap(),
+                        sorted_pretty(&map[k.as_str()], indent + 1)
+                    )
+                })
+                .collect();
+            format!("{{\n{}\n{}}}", body.join(",\n"), pad(indent))
+        }
+        serde_json::Value::Array(items) if !items.is_empty() => {
+            let body: Vec<String> = items
+                .iter()
+                .map(|i| format!("{}{}", pad(indent + 1), sorted_pretty(i, indent + 1)))
+                .collect();
+            format!("[\n{}\n{}]", body.join(",\n"), pad(indent))
+        }
+        other => serde_json::to_string(other).unwrap(),
+    }
+}
+
 fn render() -> String {
     let root = setup_project(&[("kinds.bynk", KINDS_SRC)]);
     let sources =
@@ -229,7 +263,7 @@ fn render() -> String {
                     "handlerLine": json["handlerLine"],
                     "range": json["range"],
                 });
-                let s = serde_json::to_string_pretty(&pick).unwrap();
+                let s = sorted_pretty(&pick, 0);
                 writeln!(out, "{}", s.replace(&root_str, "<root>")).unwrap();
             }
             None => writeln!(out, "(none)").unwrap(),
