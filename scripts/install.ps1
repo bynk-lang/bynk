@@ -58,6 +58,7 @@ try {
 
     Expand-Archive (Join-Path $tmp "$stage.zip") -DestinationPath $tmp
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    if (-not ((Test-Path (Join-Path $tmp "$stage\bynk-lsp.exe")) -or (Test-Path (Join-Path $tmp "$stage\bynkc-lsp.exe")))) { throw "The archive has no language server." }
     foreach ($bin in 'bynkc', 'bynk', 'bynk-lsp', 'bynkc-lsp') {
         $src = Join-Path $tmp "$stage\$bin.exe"
         # A release before the rename ships only bynkc-lsp, and the overlap copy
