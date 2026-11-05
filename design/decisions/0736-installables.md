@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The language server binary is now `bynk-lsp` (was `bynkc-lsp`); this release also ships a `bynkc-lsp` copy, so change `cmd = "bynkc-lsp"` to `cmd = "bynk-lsp"` in editor configs
----
+# 0736 — bynk and bynk-lsp are the only release binaries; bynkc-lsp is retired
 
-## ADR: installables
-title: bynk and bynk-lsp are the only release binaries; bynkc-lsp is retired
-summary: One driver binary runs every command in-process; the language server is bynk-lsp
+- **Status:** Accepted (v0.508.12)
 
 **Context.** The release shipped `bynkc`, `bynk` and `bynkc-lsp`, with a
 `bynk`↔`bynkc` version-skew gate (ADR 0434) from the days when `bynk` shelled out

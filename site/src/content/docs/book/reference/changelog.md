@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.508.12** | The language server binary is now `bynk-lsp` (was `bynkc-lsp`); this release also ships a `bynkc-lsp` copy, so change `cmd = "bynkc-lsp"` to `cmd = "bynk-lsp"` in editor configs |
 | **v0.508.11** | Internal - the predicate-to-TypeScript helpers and the TypeScript string escaper move into `bynk-ts`; `bynk-lsp` no longer depends on `bynk-emit` |
 | **v0.508.10** | "A suite helper whose signature names a type from a `uses` commons no longer fails `tsc` (TS2304) when the suite has a `stub`" |
 | **v0.508.9** | "`bynk-grammar` keeps rule order itself, so `serde_json`'s `preserve_order` is off workspace-wide and the editor-contract key sort is gone" |
