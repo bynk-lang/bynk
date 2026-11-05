@@ -3030,13 +3030,7 @@ fn unused_deps(root: &Path) -> Probe {
 /// reason (`unused_deps_allowlist_entries_are_live` checks both), so a stale or
 /// unexplained entry fails. The label is a crate's name, or `[workspace]` for a
 /// `[workspace.dependencies]` entry.
-const UNUSED_DEPS_ALLOWED: &[(&str, &str, &str)] = &[(
-    "[workspace]",
-    "bynkc",
-    "no member depends on `bynkc`; its entry carries a stamped `version = \"…\"` line, and \
-     deleting it would conflict with every `chore(stamp)` commit. It goes with the `bynkc` \
-     retirement (track E3).",
-)];
+const UNUSED_DEPS_ALLOWED: &[(&str, &str, &str)] = &[];
 
 /// One declared edge with no use: `(crate label, dependency key, table kind)`.
 /// `kind` is `""` for `[dependencies]`, `"dev"` or `"build"`.

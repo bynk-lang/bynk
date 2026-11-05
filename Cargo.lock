@@ -415,8 +415,6 @@ dependencies = [
  "bynk-fmt",
  "bynk-ide",
  "bynk-project",
- "bynk-render",
- "bynk-strip",
  "bynk-syntax",
  "bynk-testkit",
  "bynk-ts",

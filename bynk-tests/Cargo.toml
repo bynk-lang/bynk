@@ -27,20 +27,18 @@ name = "bynkc-under-test"
 path = "src/bin/bynkc-under-test.rs"
 
 [dependencies]
-# What the corpus drives: `bynkc` and the crates it fronts.
+# What the corpus drives, and what the `bynkc-under-test` binary needs.
 bynkc.workspace = true
-bynk-syntax.workspace = true
-bynk-check.workspace = true
-bynk-emit.workspace = true
 bynk-driver.workspace = true
-bynk-strip.workspace = true
-bynk-render.workspace = true
 clap.workspace = true
 # The grammar renderer (`grammar` module) and the tests' JSON documents.
 serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+bynk-syntax.workspace = true
+bynk-check.workspace = true
+bynk-emit.workspace = true
 regex.workspace = true
 bynk-fmt.workspace = true
 which.workspace = true
