@@ -539,7 +539,28 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && needs.changes.outputs.test_os != '[]'
-    runs-on: ${{ matrix.os }}
+    # Self-hosted pilot: the Linux leg runs on the org's self-hosted Linux
+    # runner when the repo variable SELF_HOSTED_LINUX is 'true', and never for
+    # a fork PR (this repo is public, so a fork PR would run untrusted code on
+    # that machine), nor for a Dependabot PR (its branches live in this repo,
+    # so they pass the fork test, but they run unreviewed third-party build.rs
+    # and proc-macro code, and that machine's state persists into later runs
+    # on `main`). `matrix.os` stays `ubuntu-latest` either way: the
+    # workerd/TS7 conditions below and `changes`' `test_os`/`queue_passed` key
+    # off that string. The variable is the kill switch: a job aimed at an
+    # offline runner waits up to 24h in the queue (timeout-minutes does not
+    # count queue time), which would wedge `CI green` and the merge queue, so
+    # unset it rather than editing this line. Steps that differ use
+    # `runner.environment`.
+    runs-on: >-
+      ${{
+        matrix.os == 'ubuntu-latest'
+        && vars.SELF_HOSTED_LINUX == 'true'
+        && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        && github.event.pull_request.user.login != 'dependabot[bot]'
+        && fromJSON('["self-hosted","Linux","X64"]')
+        || matrix.os
+      }}
     timeout-minutes: 40
     strategy:
       fail-fast: ${{ github.event_name == 'merge_group' }}
@@ -548,11 +569,33 @@ jobs:
         # see the `test_os` output on the `changes` job.
         os: ${{ fromJSON(needs.changes.outputs.test_os) }}
     steps:
+      # On the self-hosted runner the workspace persists between jobs, and a
+      # warm `target/` is most of what that runner buys, so checkout's own
+      # `git clean -ffdx` is turned off there and the step after it cleans
+      # everything else. rust-cache is skipped there for the same reason: the
+      # target dir is already warm, and its saves would add GBs against the
+      # repo's 10 GB cache cap (see the header note).
+      #
+      # The clean step also removes the previous job's nextest report, so a run
+      # that fails before nextest writes one cannot upload a stale junit.xml,
+      # and wipes target/ outright once it passes 40 GB: nothing else evicts
+      # old dependency hashes or incremental dirs, and a full disk fails jobs.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          clean: ${{ runner.environment != 'self-hosted' }}
+      - name: Clean the workspace, keeping target/ (self-hosted)
+        if: runner.environment == 'self-hosted'
+        run: |
+          git clean -ffdx -e /target/
+          rm -rf target/nextest
+          if [ -d target ] && [ "$(du -s --block-size=1G target | cut -f1)" -gt 40 ]; then
+            echo "target/ is over 40 GB; wiping it (next build is cold)"
+            rm -rf target
+          fi
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # nextest runs one process pool across every test binary at once (the
