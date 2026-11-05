@@ -37,6 +37,17 @@ jobs:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Skip the stamp commit's push. It changes no code (version strings, the
+    # changelog, ADR files, the greenfield table — but it touches Cargo.toml and
+    # package.json, so the paths filter alone does not exclude it), and this
+    # analysis already ran on its parent. Identified as ci.yml identifies it:
+    # the `chore(stamp):` prefix AND the stamp App's bot author, so a
+    # squash-merged PR that merely carries that title is still analysed. No
+    # concurrency group here, so a skipped run displaces no real one.
+    if: >-
+      github.event_name != 'push'
+      || !startsWith(github.event.head_commit.message, 'chore(stamp):')
+      || github.event.head_commit.author.name != 'bynk-stamp[bot]'
     permissions:
       # Upload results to the code-scanning dashboard.
       security-events: write
