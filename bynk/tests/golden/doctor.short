@@ -1,4 +1,4 @@
 compile: ok
 test: ok
 deploy: warn (npm install -g wrangler@4, or clear a stale npx cache (~/.npm/_npx))
-editor: note (install bynkc-lsp (or download from releases))
+editor: note (install bynk-lsp (or download from releases))

@@ -245,10 +245,25 @@ fn everything_present_is_all_green_exit_zero() {
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
         .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()))
-        .path_tool("bynkc-lsp", "/usr/bin/bynkc-lsp", Some(v(9, 9, 9)));
+        .path_tool("bynk-lsp", "/usr/bin/bynk-lsp", Some(v(9, 9, 9)));
     let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
     assert!(report.is_all_ok());
     assert!(!report.exit_nonzero(&bare()));
+}
+
+/// Crate-hygiene E4a (overlap release): an install that still has the server under
+/// its previous name is accepted, and reported as `bynk-lsp`. Removed in E4b.
+#[test]
+fn a_legacy_named_language_server_satisfies_the_editor_check() {
+    let fake = Fake::default().path_tool("bynkc-lsp", "/usr/bin/bynkc-lsp", Some(v(9, 9, 9)));
+    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let editor = report
+        .capabilities
+        .iter()
+        .find(|c| c.capability == doctor::Capability::Editor)
+        .expect("editor capability");
+    assert_eq!(editor.rows[0].label, "bynk-lsp");
+    assert_eq!(editor.rows[0].level, doctor::Level::Ok);
 }
 
 /// #1732: wrangler is checked against `bynk_emit::WRANGLER_MIN`. Below it, its
@@ -312,7 +327,7 @@ fn wrangler_is_checked_against_the_compatibility_date_minimum() {
         let fake = Fake::default()
             .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
             .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
-            .path_tool("bynkc-lsp", "/usr/bin/bynkc-lsp", Some(v(9, 9, 9)))
+            .path_tool("bynk-lsp", "/usr/bin/bynk-lsp", Some(v(9, 9, 9)))
             .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler));
         doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare())
     };
