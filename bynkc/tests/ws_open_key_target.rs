@@ -35,10 +35,8 @@ agent Room {
 fn compile_categories(target: bynkc::BuildTarget) -> Result<(), Vec<String>> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!(
-        "bynk_ws_open_key_{}_{unique}",
-        std::process::id()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("bynk_ws_open_key_{}_{unique}", std::process::id()));
     let src = dir.join("src");
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("live.bynk"), LIVE).unwrap();

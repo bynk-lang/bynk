@@ -127,9 +127,9 @@ pub fn classify_open_key<'a>(
         }
         ExprKind::Ident(id) => {
             let name = id.name.as_str();
-            let rebound = open.body.statements.iter().any(|s| {
-                matches!(s, Statement::Let(l) | Statement::EffectLet(l) if l.name.name == name)
-            });
+            let rebound = open.body.statements.iter().any(
+                |s| matches!(s, Statement::Let(l) | Statement::EffectLet(l) if l.name.name == name),
+            );
             if rebound {
                 WsOpenKey::Other
             } else if open.params.iter().any(|p| p.name.name == name) {

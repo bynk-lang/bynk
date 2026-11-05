@@ -1392,7 +1392,9 @@ fn emit_websocket_upgrade(
     key_readers: &HashSet<String>,
     consts: &HashMap<String, bynk_syntax::ast::ConstDecl>,
 ) -> TsObjectEntry {
-    use crate::emitter::websocket::{WsOpenKey, WsOpenShape, analyse_open_shape, classify_open_key};
+    use crate::emitter::websocket::{
+        WsOpenKey, WsOpenShape, analyse_open_shape, classify_open_key,
+    };
     // The route params (e.g. `roomId`) ride as wrapper arguments — the entry
     // extracts them from the upgrade URL's query string and passes them through.
     // P7.2: `string`, not `unknown` — a first attempt used `unknown` (raw, not
@@ -1652,7 +1654,10 @@ fn emit_websocket_upgrade(
             .cloned()
             .unwrap_or_else(|| ident(wire_ident(name))),
         // #2959: a constant is a function in `handlers.ts` (`emit_consts`).
-        WsOpenKey::Const(name) => call(member(ident("handlers"), bynk_check::emitted_names::ts_ident(name)), vec![]),
+        WsOpenKey::Const(name) => call(
+            member(ident("handlers"), bynk_check::emitted_names::ts_ident(name)),
+            vec![],
+        ),
         WsOpenKey::Literal(e) => match &e.kind {
             ExprKind::StrLit(v) => str_lit(v.clone()),
             ExprKind::IntLit { value, .. } => num_lit(value.to_string()),
