@@ -327,7 +327,7 @@ pub struct ProjectOutput {
     /// #2695: the `on call(...)` handler of each of the project's own
     /// `service`s, described from the checker's resolved types, in unit then
     /// service order. Empty for a project with none.
-    pub entry_handlers: Vec<bynk_check::entry_signature::EntryHandler>,
+    pub entry_handlers: Vec<bynk_model::entry::EntryHandler>,
 }
 
 /// v0.67: a discovered test suite — one `test <target>` group (unit) or

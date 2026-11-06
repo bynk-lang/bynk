@@ -13,16 +13,20 @@ covers:
   reference
 - an actor's authentication seam, and an events subscription's pattern and
   shape
+- a service's entry handlers' signatures, described structurally for a host
+  such as the playground
 
 Every tool that needs these facts reads them here rather than re-deriving them
-from the syntax tree. Today those tools are the emitter and the editor's
-analysis (`bynk-ide`).
+from the syntax tree. Today those tools are the emitter, the editor's analysis
+(`bynk-ide`), `bynk openapi`, the smoke runner and the playground.
 
-It has two modules, both re-exported at the crate root:
+It has three modules, all re-exported at the crate root:
 - **`vocabulary`**: the model's items. This was the `bynk-ir` crate until the
   crate-hygiene track merged the two.
 - **`lower`**: the builder from a checked program to those items. This was the
   `bynk-lower` crate.
+- **`entry`**: the entry handlers' signatures. This was
+  `bynk_check::entry_signature` until crate-hygiene B3.
 
 This is distinct from `bynk_check::project_model`, which models units and
 manifests, not declarations.

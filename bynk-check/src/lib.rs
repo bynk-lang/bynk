@@ -42,7 +42,6 @@ pub mod d1_migrations;
 pub mod embeds;
 pub mod emitted_names;
 pub mod entailment;
-pub mod entry_signature;
 pub mod exec_plan;
 pub mod exports;
 pub mod expr_types;

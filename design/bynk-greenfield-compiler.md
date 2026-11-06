@@ -2237,8 +2237,9 @@ miscompile of the kind T2.1 closed (hoisting, short-circuit) originating in AST 
 fire this; a desire for R6.13 purity alone does not.
 *Evidence:* the gated `unconsumed_ir_items` probe (`cargo xtask greenfield-status`), reading 0 and
 ratcheted so it can only fall; `emit_diagnostics`/`ts_writes` unchanged by the deletion.
-*Note:* refusing the expression IR is not refusing the IR — 21 `bynk-ir` items and 20 `bynk-lower`
-items stay, each with a reader outside both crates. It is not a refusal of tree-native emission either, which is
+*Note:* refusing the expression IR is not refusing the IR — 21 vocabulary items (once `bynk-ir`),
+20 builder items (once `bynk-lower`) and 4 entry-signature items (once `bynk_check::entry_signature`,
+moved by crate-hygiene B3, #2999) stay in the system model, `bynk-model`, each with a reader outside it. It is not a refusal of tree-native emission either, which is
 the other way to reach the same end state and was never the cutover's scope.
 *Tracked:* [#1542](https://github.com/accuser/bynk/issues/1542) (the IR cutover track, retired) —
 the measurements, the priced alternative and the deletion inventory are in its closing summary in

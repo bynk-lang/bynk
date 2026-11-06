@@ -8,14 +8,20 @@
 //! resulting [`Ty`] is walked into an [`EntryShape`]; a named type's fields or
 //! variants come from its `TypeDecl` in the same table. Plain data: the
 //! consumer chooses the wire format (`bynk-wasm` renders JSON).
+//!
+//! Crate-hygiene B3 (#2999, DECISION C): this was `bynk_check::entry_signature`
+//! until the signatures became system-model items. It moved verbatim, so its
+//! syntax-tree reads (the `call` handler filter, `TypeBody`'s records and
+//! sums) are now the model builder's, which is where M-1 puts them. Rebuilding
+//! [`EntryShape`] over [`crate::TypeShape`] is an input to B4.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use bynk_syntax::ast::{HandlerKind, ServiceProtocol, TypeBody, TypeDecl, TypeRef};
 
-use crate::checker::{NamedKind, Ty, TyId, Types, resolve_type_ref};
-use crate::symbols::{UnitTable, combined_types_for};
+use bynk_check::checker::{NamedKind, Ty, TyId, Types, resolve_type_ref};
+use bynk_check::symbols::{UnitTable, combined_types_for};
 
 /// One `service`'s `on call(...)` handler.
 #[derive(Debug, Clone, PartialEq)]
