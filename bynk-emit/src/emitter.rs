@@ -2190,7 +2190,7 @@ fn unexported_type_names(
 
 /// #1932: the renames `rename_unexported_types` gives consumed context `c`'s
 /// types, as `original → renamed`, for the call site: a cross-context call
-/// names the codecs [`emit_consumed_context_helpers`] generates under the
+/// names the codecs `emit_consumed_context_helpers` generates under the
 /// same names. Computed once per consumed context, where the emitter's
 /// `CrossContextInfo` is assembled, from the inputs the generator uses.
 pub fn unexported_type_renames(
@@ -7025,7 +7025,7 @@ fn ts_array_elem(elem_ts: &str) -> String {
 /// `Ty::Named`, so within the unit a hidden name always means the imported
 /// type.
 ///
-/// Scoped per module, not threaded: [`ts_ty`] has ~45 callers and no module
+/// Scoped per module, not threaded: `ts_ty` has ~45 callers and no module
 /// context. [`type_renames::enter`] sets the spellings for this thread until its
 /// guard drops, and a module is lowered on one thread.
 pub mod type_renames {

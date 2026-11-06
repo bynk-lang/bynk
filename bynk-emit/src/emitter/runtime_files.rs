@@ -307,7 +307,7 @@ pub fn emit_all_runtime_modules() -> Vec<(PathBuf, String)> {
         .collect()
 }
 
-/// [`split_runtime_import`] as top-level statements, for producers building a
+/// `split_runtime_import` as top-level statements, for producers building a
 /// `TsProgram`.
 pub fn runtime_import_stmts(type_only: bool, names: &[String], from: &str) -> Vec<bynk_ts::TsStmt> {
     split_runtime_import(type_only, names, from)

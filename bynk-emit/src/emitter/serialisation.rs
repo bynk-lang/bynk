@@ -541,7 +541,7 @@ pub(crate) fn emit_helpers_for_owner(
 }
 
 /// Collects `decls` into real statements — the shared shape every caller of
-/// [`emit_helpers_for_owner`]/[`emit_generic_helpers`] (and their
+/// `emit_helpers_for_owner`/`emit_generic_helpers` (and their
 /// `_qualified` twins) collects into its own returned `Vec<TsStmt>`. Arc F
 /// slice 1 (#1451): consolidates what used to be ten separate `write!`-family
 /// call sites into this one; #1478 made it the one real implementation
@@ -559,7 +559,7 @@ pub fn decls_as_stmts(decls: Vec<TsDecl>) -> Vec<TsStmt> {
 
 /// As [`decls_as_stmts`], plus one *extra* forced trailing blank `TsStmt`
 /// when anything was collected — the shared `if emitted_any { ... }`
-/// trailer every [`emit_helpers_for_owner`]/[`emit_helpers_for_owner_
+/// trailer every `emit_helpers_for_owner`/[`emit_helpers_for_owner_
 /// qualified`] caller needs. Under the pre-#1486 flat-print regime this
 /// trailer's own blank stacked on top of `decls_as_stmts`'s own per-decl
 /// blank (one `TsStmt::blank` after every decl, including the last),
@@ -587,7 +587,7 @@ pub fn decls_as_stmts_block(decls: Vec<TsDecl>) -> Vec<TsStmt> {
     stmts
 }
 
-/// #661: as [`emit_helpers_for_owner`], but the caller supplies a type
+/// #661: as `emit_helpers_for_owner`, but the caller supplies a type
 /// `Qual`. With an empty qualifier this is the owner's own module (every
 /// type named bare, refined validation through `.of`). With a non-empty one it
 /// is a *consumer* generating its own view of another context's boundary
@@ -3882,7 +3882,7 @@ pub(crate) fn emit_generic_helpers(
     emit_generic_helpers_qualified(insts, types, &Qual::new(), ru)
 }
 
-/// #661: as [`emit_generic_helpers`], but the value-type positions of each
+/// #661: as `emit_generic_helpers`, but the value-type positions of each
 /// specialised helper are named through the type `Qual` — so a consumer's
 /// `deserialise_Result_AuthId_PaymentError` returns
 /// `Result<commerce_payment.AuthId, commerce_payment.PaymentError>` while its

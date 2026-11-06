@@ -1004,7 +1004,7 @@ pub(crate) fn emit_free_fn(
     emit_free_fn_in(f, commons, contracts, runtime_use, cross_context, true)
 }
 
-/// #2834: a suite-local helper `fn` — [`emit_free_fn`] without the `export`,
+/// #2834: a suite-local helper `fn` — `emit_free_fn` without the `export`,
 /// since it is declared inside a test runner and called from its body.
 pub fn emit_suite_fn(
     f: &FnDecl,
@@ -3899,7 +3899,7 @@ pub(crate) fn qualified_to_ns(q: &str) -> String {
 /// #1759: the identifier a generated **test** module imports a unit as
 /// (`import * as __ns_greet from …`). A test module destructures a unit's
 /// values out of this namespace (`const { greet } = __ns_greet;`), so the
-/// namespace can't take [`qualified_to_ns`]'s bare name: a context `greet`
+/// namespace can't take `qualified_to_ns`'s bare name: a context `greet`
 /// declaring `fn greet` would shadow its own import and read `greet` in its
 /// temporal dead zone. The reserved `__ns_` prefix can't be a user identifier.
 /// Every test-module namespace reference goes through this, in `tests_emit`

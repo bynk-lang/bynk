@@ -344,7 +344,7 @@ pub struct DiscoveredSuite {
     /// why. Empty for every other build.
     pub skipped: Vec<RemoteSkip>,
     /// #2138: under `--against dev`, the distinct `env` maps this suite's
-    /// cases run with ([`RemoteTests::dev`]). Empty for every other build.
+    /// cases run with (`RemoteTests::dev`). Empty for every other build.
     pub envs: Vec<BTreeMap<String, String>>,
 }
 
@@ -442,7 +442,7 @@ pub struct LocaleNegotiationArgs {
 pub enum ProviderNamespaces<'a> {
     /// The bundle's `compose.ts`: `{ns}`.
     Bundle,
-    /// No module: [`native_platforms_of_context`]'s walk for the *bare*
+    /// No module: `native_platforms_of_context`'s walk for the *bare*
     /// platform resources a context reaches (whether its Worker declares the
     /// `KV` namespace). As `Bundle`, except that a derived capability's
     /// instance (S4a, #1966) is not followed to its base: a named instance has
@@ -1017,7 +1017,7 @@ pub struct EmitProjectCtx {
     ///
     /// P6.18: each entry is a resolved [`FnSig`] (the declaring unit's own
     /// `params`/`return_ty`, already `TyId`-typed), not a raw `FnDecl` —
-    /// see [`build_emit_unit_ctx`]'s own doc comment for why.
+    /// see `build_emit_unit_ctx`'s own doc comment for why.
     pub imported_methods: HashMap<String, Vec<FnSig>>,
     /// Which conditional `runtime.ts` helpers this file's emission referenced.
     ///
