@@ -76,7 +76,7 @@ pub enum EntryShape {
     /// sum): named, not expanded again.
     Recursive(String),
     /// A named record or sum left unexpanded because it sits deeper than
-    /// `MAX_DEPTH` (6) nested records/sums (a wide DAG of non-recursive types
+    /// this module's `MAX_DEPTH` nested records/sums (a wide DAG of non-recursive types
     /// would otherwise grow exponentially).
     Named(String),
     /// Anything else (a generic record instantiation, a function, an effect),
