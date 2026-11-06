@@ -341,7 +341,10 @@ impl Smoke {
         let mut out = String::new();
         for suite in &mut self.suites {
             let path = suite.key.strip_prefix(root).unwrap_or(&suite.key);
-            out.push_str(&format!("// {}\n", path.display()));
+            // `/` on every platform, as every path the CLI shows is (#2999 PR 1:
+            // Windows printed `src\shop\api.smoke.bynk`).
+            let path = path.to_string_lossy().replace('\\', "/");
+            out.push_str(&format!("// {path}\n"));
             out.push_str(&suite.render());
             out.push('\n');
         }

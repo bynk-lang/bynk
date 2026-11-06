@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: The smoke runner's synthesised suites are pinned byte for byte, and the system model's B2–B3 decisions are recorded (crate-hygiene B2)
+changelog: `bynk test --smoke --print` heads each synthesised suite with a `/`-separated path on Windows too, as every other path the CLI shows is (it printed `src\shop\api.smoke.bynk`); the synthesised suites are pinned byte for byte, and the system model's B2–B3 decisions are recorded (crate-hygiene B2)
 ---
 
 ## ADR: system-model-b2-b3
