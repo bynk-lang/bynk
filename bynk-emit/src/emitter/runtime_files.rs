@@ -206,7 +206,7 @@ fn reached_module(specifier: &str) -> Option<(&str, &str)> {
 
 /// Every runtime module an emitted file's imports name, found in the
 /// specifiers it imports and in the `import … from` lines of its verbatim text.
-pub(crate) fn reached_in(program: &bynk_ts::TsProgram, out: &mut BTreeSet<(String, String)>) {
+pub fn reached_in(program: &bynk_ts::TsProgram, out: &mut BTreeSet<(String, String)>) {
     let mut note = |spec: &str| {
         if let Some((m, e)) = reached_module(spec) {
             out.insert((m.to_string(), e.to_string()));
@@ -231,7 +231,7 @@ pub(crate) fn reached_in(program: &bynk_ts::TsProgram, out: &mut BTreeSet<(Strin
 /// The files for `reached` (module, extension) pairs closed over the runtime
 /// modules' own imports. Type-only edges count: `tsc` over the emitted `.ts`
 /// needs the files, and one rule keeps the output deterministic.
-pub(crate) fn closure_files(reached: &BTreeSet<(String, String)>) -> Vec<(PathBuf, String)> {
+pub fn closure_files(reached: &BTreeSet<(String, String)>) -> Vec<(PathBuf, String)> {
     let mut files = Vec::new();
     for ext in reached
         .iter()
@@ -307,13 +307,9 @@ pub fn emit_all_runtime_modules() -> Vec<(PathBuf, String)> {
         .collect()
 }
 
-/// [`split_runtime_import`] as top-level statements, for producers building a
+/// `split_runtime_import` as top-level statements, for producers building a
 /// `TsProgram`.
-pub(crate) fn runtime_import_stmts(
-    type_only: bool,
-    names: &[String],
-    from: &str,
-) -> Vec<bynk_ts::TsStmt> {
+pub fn runtime_import_stmts(type_only: bool, names: &[String], from: &str) -> Vec<bynk_ts::TsStmt> {
     split_runtime_import(type_only, names, from)
         .into_iter()
         .map(|d| bynk_ts::TsStmt::decl(d, None))

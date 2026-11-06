@@ -17,6 +17,7 @@
 //! crate and re-exports its modules so its public API (`compile_project`,
 //! `ProjectOutput`, …) and the binary are untouched.
 
+pub mod emit_model;
 pub mod emitter;
 pub mod project;
 

@@ -79,7 +79,7 @@ impl TomlDocument {
 /// order. Always headed — the document's own root block is
 /// [`TomlDocument`]'s own field, not constructible as a `TomlBlock` (review
 /// of #1304, finding 3).
-pub(crate) struct TomlBlock {
+pub struct TomlBlock {
     header: TomlHeader,
     entries: Vec<TomlEntry>,
 }
