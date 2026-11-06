@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.14** | "comment_slots: stale KNOWN rules are judged on totals across shards, and each shard reads only its own pins" |
 | **v0.510.13** | Crate hygiene D1 PR 1 - the code generator's shared model moves out of `project.rs` into `bynk-emit`'s `emit_model` module, and the `emitter` helpers the orchestration layer uses become a public API (no output change) |
 | **v0.510.12** | "The bynk-tests corpus is grouped into integration/ and system/ tiers, with one nextest profile per tier and a probe that every test is in exactly one" |
 | **v0.510.11** | "The docs and index consistency checks (and the grammar-reference renderer) move from the integration corpus to xtask" |
