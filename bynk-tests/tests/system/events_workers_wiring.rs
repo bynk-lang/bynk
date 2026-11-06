@@ -12,7 +12,7 @@
 //! it does not itself `consumes` (the direction an ordinary `consumes` edge
 //! never wires).
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -130,13 +130,13 @@ fn workers_events_fanout_do_and_wrangler_wiring() {
     fs::write(proj.join("order.bynk"), SOURCE_ORDER).unwrap();
     fs::write(proj.join("notifications.bynk"), SOURCE_NOTIFICATIONS).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the events project to workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -312,13 +312,13 @@ fn workers_events_pattern_leaves_fanout_routing_unchanged() {
     )
     .unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the patterned events project to workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -441,13 +441,13 @@ fn workers_events_envelope_param_type_checks_and_leaves_fanout_unchanged() {
     )
     .unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the envelope-declaring events project to workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -590,13 +590,13 @@ fn workers_events_nested_payload_field_gets_a_transitive_codec() {
     fs::write(proj.join("order.bynk"), SOURCE_ORDER_NESTED).unwrap();
     fs::write(proj.join("notifications.bynk"), SOURCE_NOTIFICATIONS).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the nested-payload events project to workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
 

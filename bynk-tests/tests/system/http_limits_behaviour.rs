@@ -213,10 +213,11 @@ fn http_limits_contract_runs_on_workers_entry() {
     // Compile the limits fixture (workers) in-process.
     let fixture: PathBuf =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive/300_http_limits/src");
-    let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_single(fixture).target(bynkc::BuildTarget::Workers),
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(fixture)
+            .target(bynk_driver::project::BuildTarget::Workers),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the limits fixture must compile");
 
     let tmp =

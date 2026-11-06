@@ -162,10 +162,11 @@ fn websocket_chatroom_runs_on_bundle() {
     // Compile the chat-room fixture (bundle) in-process.
     let fixture: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/236_websocket_chatroom/src");
-    let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_single(fixture).target(bynkc::BuildTarget::Bundle),
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(fixture)
+            .target(bynk_driver::project::BuildTarget::Bundle),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the chat-room bundle fixture must compile");
 
     let tmp = std::env::temp_dir().join(format!("bynk-ws-behaviour-{}", std::process::id()));

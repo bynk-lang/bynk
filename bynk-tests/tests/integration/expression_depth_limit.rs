@@ -37,7 +37,7 @@ fn chain_within_the_limit_compiles() {
     // 64 folds sit exactly on the bound; a chain at or below it is a perfectly
     // valid program and must still compile.
     assert!(
-        bynkc::compile(&chain_source(64), "within.bynk").is_ok(),
+        bynk_emit::compile(&chain_source(64), "within.bynk").is_ok(),
         "a chain at the depth bound should compile",
     );
 }
@@ -45,7 +45,7 @@ fn chain_within_the_limit_compiles() {
 #[test]
 fn chain_one_past_the_limit_is_rejected() {
     // The trip point: one more term than `chain_within_the_limit_compiles`.
-    let errors = bynkc::compile(&chain_source(65), "edge.bynk")
+    let errors = bynk_emit::compile(&chain_source(65), "edge.bynk")
         .expect_err("a chain one past the bound must be rejected");
     assert!(is_too_deep(&errors), "got: {:?}", categories(&errors));
 }
@@ -54,7 +54,7 @@ fn chain_one_past_the_limit_is_rejected() {
 fn pathological_chain_is_rejected_not_crashed() {
     // The exact reproduction from #714: a chain far past the bound. The process
     // must survive (no stack overflow) and report the diagnostic.
-    let errors = bynkc::compile(&chain_source(20_000), "deep.bynk")
+    let errors = bynk_emit::compile(&chain_source(20_000), "deep.bynk")
         .expect_err("an over-deep chain must be rejected");
     assert!(is_too_deep(&errors), "got: {:?}", categories(&errors));
 }
@@ -68,7 +68,7 @@ fn postfix_receiver_spine_is_bounded() {
         ".a".repeat(5_000)
     );
     let errors =
-        bynkc::compile(&src, "postfix.bynk").expect_err("a long field spine must be rejected");
+        bynk_emit::compile(&src, "postfix.bynk").expect_err("a long field spine must be rejected");
     assert!(is_too_deep(&errors), "got: {:?}", categories(&errors));
 }
 
@@ -80,7 +80,8 @@ fn unary_run_is_bounded() {
         "commons demo.deep\nfn f() -> Bool {{\n  {}x\n}}\n",
         "!".repeat(5_000)
     );
-    let errors = bynkc::compile(&src, "unary.bynk").expect_err("a long unary run must be rejected");
+    let errors =
+        bynk_emit::compile(&src, "unary.bynk").expect_err("a long unary run must be rejected");
     assert!(is_too_deep(&errors), "got: {:?}", categories(&errors));
 }
 
@@ -112,14 +113,14 @@ fn chain_composes_with_nesting() {
                 ")".repeat(30)
             );
             assert!(
-                bynkc::compile(&alone, "a.bynk").is_ok(),
+                bynk_emit::compile(&alone, "a.bynk").is_ok(),
                 "the chain alone is valid"
             );
             assert!(
-                bynkc::compile(&parens_alone, "p.bynk").is_ok(),
+                bynk_emit::compile(&parens_alone, "p.bynk").is_ok(),
                 "the nesting alone is valid"
             );
-            let errors = bynkc::compile(&nested, "n.bynk")
+            let errors = bynk_emit::compile(&nested, "n.bynk")
                 .expect_err("chain + nesting together exceed the budget");
             assert!(is_too_deep(&errors), "got: {:?}", categories(&errors));
         })

@@ -154,12 +154,12 @@ fn float_boundary_codec_behaviour() {
     // Compile the workers Float-boundary fixture in-process.
     let fixture: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/207_workers_float_boundary/src");
-    let out = bynkc::compile_project(
+    let out = bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(fixture)
-            .target(bynkc::BuildTarget::Workers)
-            .platform(bynkc::Platform::Cloudflare),
+            .target(bynk_driver::project::BuildTarget::Workers)
+            .platform(bynk_check::firstparty::Platform::Cloudflare),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the Float-boundary fixture must compile");
 
     let tmp = std::env::temp_dir().join(format!("bynk-float-codec-{}", std::process::id()));

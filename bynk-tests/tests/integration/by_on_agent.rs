@@ -10,7 +10,8 @@
 
 use std::fs;
 
-use bynkc::{ProjectFailure, compile_project};
+use bynk_driver::project::ProjectFailure;
+use bynk_driver::project::compile_project;
 
 /// Compile `bynk` as a one-file `context shop` and return its diagnostic
 /// category codes (empty on success).

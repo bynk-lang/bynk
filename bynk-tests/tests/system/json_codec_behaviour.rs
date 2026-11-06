@@ -180,7 +180,7 @@ fn json_codec_behaviour() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/212_json_codec/input.bynk");
     let source = fs::read_to_string(&fixture).unwrap();
-    let ts = bynkc::compile(&source, "212_json_codec/input.bynk")
+    let ts = bynk_emit::compile(&source, "212_json_codec/input.bynk")
         .expect("the json-codec fixture must compile");
 
     let tmp = std::env::temp_dir().join(format!("bynk-json-codec-{}", std::process::id()));

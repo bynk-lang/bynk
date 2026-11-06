@@ -20,11 +20,11 @@ fn tmp(tag: &str) -> PathBuf {
 fn debug_meta(dir: &Path, suffix: &str) -> String {
     let opts = bynk_testkit::compile_options_split(
         dir.to_path_buf(),
-        bynkc::try_read_project_paths(dir).expect("well-formed fixture manifest"),
+        bynk_driver::project::try_read_project_paths(dir).expect("well-formed fixture manifest"),
     )
-    .target(bynkc::BuildTarget::Workers);
-    let out = bynkc::compile_project(&opts)
-        .map_err(bynkc::ProjectFailure::flatten)
+    .target(bynk_driver::project::BuildTarget::Workers);
+    let out = bynk_driver::project::compile_project(&opts)
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
         .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
     let main_path = out
         .artefacts
@@ -33,7 +33,7 @@ fn debug_meta(dir: &Path, suffix: &str) -> String {
         .find(|p| p.to_string_lossy().replace('\\', "/").ends_with(suffix))
         .unwrap_or_else(|| panic!("no output file ending {suffix:?}"))
         .clone();
-    let sidecar_path = bynkc::sibling_path(&main_path, "bynkdbg.json");
+    let sidecar_path = bynk_driver::project::sibling_path(&main_path, "bynkdbg.json");
     out.artefacts
         .docs
         .get(&sidecar_path)

@@ -230,11 +230,13 @@ fn edge_cache_contract_runs_on_workers_entry() {
     // allows the experimental `EdgeCache`.
     let fixture: PathBuf =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive/2414_edge_cache");
-    let paths = bynkc::try_read_project_paths(&fixture).expect("well-formed fixture manifest");
-    let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_split(fixture, paths).target(bynkc::BuildTarget::Workers),
+    let paths = bynk_driver::project::try_read_project_paths(&fixture)
+        .expect("well-formed fixture manifest");
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_split(fixture, paths)
+            .target(bynk_driver::project::BuildTarget::Workers),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the edge cache fixture must compile");
 
     let tmp = std::env::temp_dir().join(format!(

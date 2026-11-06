@@ -9,7 +9,7 @@
 /// type `ret`, returning the diagnostic category codes (empty on success).
 fn codes(ret: &str, body: &str) -> Vec<String> {
     let src = format!("commons demo\n\nfn f() -> {ret} {{\n  {body}\n}}\n");
-    match bynkc::compile(&src, "demo.bynk") {
+    match bynk_emit::compile(&src, "demo.bynk") {
         Ok(_) => Vec::new(),
         Err(e) => e.iter().map(|d| d.category.to_string()).collect(),
     }

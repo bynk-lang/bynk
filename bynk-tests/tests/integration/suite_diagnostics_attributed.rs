@@ -45,12 +45,14 @@ fn every_suite_diagnostic_is_attributed_to_its_file() {
     fs::write(root.join("src/demo/x.bynk"), COMMONS).unwrap();
     fs::write(root.join("tests/demo/x.bynk"), SUITE).unwrap();
 
-    let paths = bynkc::try_read_project_paths(&root).expect("well-formed manifest");
-    let failure =
-        match bynkc::compile_project(&bynk_testkit::compile_options_split(root.clone(), paths)) {
-            Ok(_) => panic!("the suite has errors; the build must fail"),
-            Err(f) => f,
-        };
+    let paths = bynk_driver::project::try_read_project_paths(&root).expect("well-formed manifest");
+    let failure = match bynk_driver::project::compile_project(&bynk_testkit::compile_options_split(
+        root.clone(),
+        paths,
+    )) {
+        Ok(_) => panic!("the suite has errors; the build must fail"),
+        Err(f) => f,
+    };
     let _ = fs::remove_dir_all(&root);
 
     assert!(

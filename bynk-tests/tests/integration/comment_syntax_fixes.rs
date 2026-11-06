@@ -75,7 +75,7 @@ fn each_legacy_form_is_fixed_by_its_suggestion() {
         let out = fixed(&src);
         assert_eq!(out, want, "{name}");
         assert!(errors(&out).is_empty(), "{name}: {:?}", errors(&out));
-        bynkc::compile(&out, "probe.bynk").unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        bynk_emit::compile(&out, "probe.bynk").unwrap_or_else(|e| panic!("{name}: {e:?}"));
     }
 }
 

@@ -72,18 +72,20 @@ fn hello_world_serves_on_workerd() {
     // Compile the example for Workers and strip to the JS artefact — the
     // form `wrangler dev` runs directly, no tsc in the loop (ADR 0137).
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/hello-world");
-    let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
-    let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_split(root, paths).target(bynkc::BuildTarget::Workers),
+    let paths =
+        bynk_driver::project::try_read_project_paths(&root).expect("well-formed fixture manifest");
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_split(root, paths)
+            .target(bynk_driver::project::BuildTarget::Workers),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("hello-world compiles for Workers");
-    let out = bynkc::strip_project_to_js(out).expect("hello-world strips to JS");
+    let out = bynk_driver::strip::strip_project_to_js(out).expect("hello-world strips to JS");
 
     let tmp = std::env::temp_dir().join(format!("bynk-workerd-smoke-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
-    bynkc::write_output(&out, &tmp).unwrap();
+    bynk_driver::write_output(&out, &tmp).unwrap();
 
     let worker_dir = tmp.join("workers/hello-web");
     assert!(
@@ -306,12 +308,12 @@ fn a_migrate_step_carries_state_written_by_an_earlier_build_on_workerd() {
         let dir = persist.join("lock-src");
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("smoke.bynk"), MIGRATE_SMOKE_V1).unwrap();
-        bynkc::compile_project(
+        bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_single(&dir)
-                .target(bynkc::BuildTarget::Workers)
-                .schema_registry(bynkc::SchemaLock::On { existing: None }),
+                .target(bynk_driver::project::BuildTarget::Workers)
+                .schema_registry(bynk_driver::project::SchemaLock::On { existing: None }),
         )
-        .map_err(bynkc::ProjectFailure::flatten)
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
         .expect("the first build compiles")
         .schema_lock
     };
@@ -365,12 +367,12 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
         let dir = persist.join("lock-src");
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("smoke.bynk"), MIGRATE_SMOKE_V1).unwrap();
-        bynkc::compile_project(
+        bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_single(&dir)
-                .target(bynkc::BuildTarget::Workers)
-                .schema_registry(bynkc::SchemaLock::On { existing: None }),
+                .target(bynk_driver::project::BuildTarget::Workers)
+                .schema_registry(bynk_driver::project::SchemaLock::On { existing: None }),
         )
-        .map_err(bynkc::ProjectFailure::flatten)
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
         .expect("the first build compiles")
         .schema_lock
     };
@@ -879,16 +881,16 @@ fn serve_smoke_with_args(
     // lock (a fresh one), so agents stamp and check the `__v` marker — the
     // agent-state round trip below then proves it survives workerd's own
     // storage.
-    let out = bynkc::compile_project(
+    let out = bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(src)
-            .target(bynkc::BuildTarget::Workers)
-            .schema_registry(bynkc::SchemaLock::On { existing: lock }),
+            .target(bynk_driver::project::BuildTarget::Workers)
+            .schema_registry(bynk_driver::project::SchemaLock::On { existing: lock }),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .unwrap_or_else(|e| panic!("the {tag} smoke compiles for Workers: {e:?}"));
-    let out = bynkc::strip_project_to_js(out).expect("the smoke strips to JS");
+    let out = bynk_driver::strip::strip_project_to_js(out).expect("the smoke strips to JS");
     let out_dir = tmp.join("out");
-    bynkc::write_output(&out, &out_dir).unwrap();
+    bynk_driver::write_output(&out, &out_dir).unwrap();
     let worker_dir = out_dir.join("workers/smoke");
     assert!(
         worker_dir.join("index.js").is_file() && worker_dir.join("wrangler.toml").is_file(),

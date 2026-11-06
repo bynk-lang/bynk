@@ -87,15 +87,15 @@ fn gen_line_of(ts: &str, needle: &str) -> usize {
 fn compile_file(dir: &Path, workers: bool, suffix: &str) -> (String, String) {
     let opts = bynk_testkit::compile_options_split(
         dir.to_path_buf(),
-        bynkc::try_read_project_paths(dir).expect("well-formed fixture manifest"),
+        bynk_driver::project::try_read_project_paths(dir).expect("well-formed fixture manifest"),
     );
     let opts = if workers {
-        opts.target(bynkc::BuildTarget::Workers)
+        opts.target(bynk_driver::project::BuildTarget::Workers)
     } else {
         opts
     };
-    let out = bynkc::compile_project(&opts)
-        .map_err(bynkc::ProjectFailure::flatten)
+    let out = bynk_driver::project::compile_project(&opts)
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
         .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
     let main_path = out
         .artefacts
@@ -108,7 +108,7 @@ fn compile_file(dir: &Path, workers: bool, suffix: &str) -> (String, String) {
     let map = out
         .artefacts
         .docs
-        .get(&bynkc::sibling_path(&main_path, "map"))
+        .get(&bynk_driver::project::sibling_path(&main_path, "map"))
         .unwrap_or_else(|| panic!("{suffix} carries no source map"))
         .text();
     (ts, map)

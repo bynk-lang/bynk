@@ -109,7 +109,7 @@ fn every_stamped_hash_matches_its_callees_constant() {
 /// Compile a two-context workers project and return the hash `a` stamps for
 /// `b.probe`, read out of the emitted caller.
 fn stamped_hash(b_body: &str, tag: &str) -> String {
-    use bynkc::BuildTarget;
+    use bynk_driver::project::BuildTarget;
     let tmp = std::env::temp_dir().join(format!("bynk-contract-nf-{}-{tag}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     // Flat layout (no `src/`), matching `cross_context_caller.rs`: the project
@@ -122,13 +122,13 @@ fn stamped_hash(b_body: &str, tag: &str) -> String {
         "context app.a\n\nconsumes app.b as B\n\nservice ask {\n  on call(x: String) -> Effect[Result[String, String]] {\n    let r <- B.probe(x)\n    r\n  }\n}\n",
     )
     .unwrap();
-    let out = bynkc::compile_project(
+    let out = bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     )
     .unwrap_or_else(|f| {
         panic!(
             "compile {tag}:\n{}",
-            bynkc::render_project_errors(&f.flatten())
+            bynk_render::render_project_errors(&f.flatten())
         )
     });
     let caller_text = out

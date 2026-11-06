@@ -5,7 +5,7 @@
 //! (`bynk_testkit::read_project_sources`, which walks the dependency's trees
 //! as `bynk-lsp`'s sweep does).
 
-use bynkc::Roots;
+use bynk_driver::project::Roots;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
@@ -71,7 +71,7 @@ fn the_build_and_the_editor_resolve_the_same_graph() {
         Some((code.to_string(), rest.to_string()))
     }));
 
-    let paths = bynkc::try_read_project_paths(&root).expect("the manifest reads");
+    let paths = bynk_driver::project::try_read_project_paths(&root).expect("the manifest reads");
     let sources =
         bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::Project(root.clone()));
     assert!(
@@ -86,7 +86,7 @@ fn the_build_and_the_editor_resolve_the_same_graph() {
             paths,
         },
         &sources,
-        &bynkc::SchemaLock::Off,
+        &bynk_driver::project::SchemaLock::Off,
     );
     let editor = package_diagnostics(
         analysis

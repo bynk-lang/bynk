@@ -409,6 +409,7 @@ dependencies = [
  "bynk-fmt",
  "bynk-ide",
  "bynk-project",
+ "bynk-render",
  "bynk-syntax",
  "bynk-testkit",
  "bynk-ts",

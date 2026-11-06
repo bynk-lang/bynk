@@ -171,7 +171,7 @@ fn header_line(body: &str) -> &str {
 /// errors reported are the `commons` attempt's unless the `context` one got
 /// further.
 fn compile_wrapped(body: &str, idx: usize) -> Result<(), String> {
-    let as_commons = bynkc::compile(&format!("commons doc\n\n{body}"), "doc.bynk")
+    let as_commons = bynk_emit::compile(&format!("commons doc\n\n{body}"), "doc.bynk")
         .map(|_| ())
         .map_err(|errs| {
             errs.iter()
@@ -277,15 +277,16 @@ fn compile_context(body: &str, idx: usize) -> Result<(), String> {
     fs::create_dir_all(file.parent().unwrap()).unwrap();
     fs::write(&file, body).unwrap();
 
-    let result = bynkc::compile_project(&bynk_testkit::compile_options_single(root.clone()))
-        .map_err(bynkc::ProjectFailure::flatten)
-        .map(|_| ())
-        .map_err(|errs| {
-            errs.iter()
-                .map(|e| format!("{}: {}", e.category, e.message))
-                .collect::<Vec<_>>()
-                .join("; ")
-        });
+    let result =
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_single(root.clone()))
+            .map_err(bynk_driver::project::ProjectFailure::flatten)
+            .map(|_| ())
+            .map_err(|errs| {
+                errs.iter()
+                    .map(|e| format!("{}: {}", e.category, e.message))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            });
     let _ = fs::remove_dir_all(&root);
     result
 }
@@ -340,7 +341,7 @@ fn every_doc_example_compiles() {
             continue;
         }
         let result: Result<(), String> = if first.starts_with("commons ") {
-            bynkc::compile(&b.body, &b.file)
+            bynk_emit::compile(&b.body, &b.file)
                 .map(|_| ())
                 .map_err(|errs| {
                     errs.iter()

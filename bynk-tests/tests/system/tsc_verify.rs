@@ -116,54 +116,54 @@ fn fixture_dirs(category: &str) -> Vec<PathBuf> {
     out
 }
 
-fn fixture_target(dir: &Path) -> bynkc::BuildTarget {
+fn fixture_target(dir: &Path) -> bynk_driver::project::BuildTarget {
     let marker = dir.join("target.txt");
     if let Ok(s) = fs::read_to_string(&marker)
         && s.trim() == "workers"
     {
-        return bynkc::BuildTarget::Workers;
+        return bynk_driver::project::BuildTarget::Workers;
     }
-    bynkc::BuildTarget::Bundle
+    bynk_driver::project::BuildTarget::Bundle
 }
 
 /// v0.18: read the deploy-platform marker from a fixture root, if present.
-fn fixture_platform(dir: &Path) -> bynkc::Platform {
+fn fixture_platform(dir: &Path) -> bynk_check::firstparty::Platform {
     let marker = dir.join("platform.txt");
     if let Ok(s) = fs::read_to_string(&marker) {
         match s.trim() {
-            "node" => return bynkc::Platform::Node,
-            "browser" => return bynkc::Platform::Browser,
+            "node" => return bynk_check::firstparty::Platform::Node,
+            "browser" => return bynk_check::firstparty::Platform::Browser,
             _ => {}
         }
     }
-    bynkc::Platform::Cloudflare
+    bynk_check::firstparty::Platform::Cloudflare
 }
 
 fn compile_fixture(
     fixture_root: &Path,
-    target: bynkc::BuildTarget,
-) -> Result<bynkc::ProjectOutput, Vec<bynkc::CompileError>> {
+    target: bynk_driver::project::BuildTarget,
+) -> Result<bynk_driver::project::ProjectOutput, Vec<bynk_syntax::CompileError>> {
     let bynk_toml = fixture_root.join("bynk.toml");
     if bynk_toml.exists() {
-        let paths =
-            bynkc::try_read_project_paths(fixture_root).expect("well-formed fixture manifest");
-        bynkc::compile_project(
+        let paths = bynk_driver::project::try_read_project_paths(fixture_root)
+            .expect("well-formed fixture manifest");
+        bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_split(fixture_root.to_path_buf(), paths).target(target),
         )
-        .map_err(bynkc::ProjectFailure::flatten)
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
     } else {
         let src_dir = fixture_root.join("src");
         let platform = fixture_platform(fixture_root);
-        bynkc::compile_project(
+        bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_single(src_dir)
                 .target(target)
                 .platform(platform),
         )
-        .map_err(bynkc::ProjectFailure::flatten)
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
     }
 }
 
-fn write_outputs(out: &bynkc::ProjectOutput, root: &Path) -> std::io::Result<()> {
+fn write_outputs(out: &bynk_driver::project::ProjectOutput, root: &Path) -> std::io::Result<()> {
     for (path, doc) in &out.artefacts.docs {
         let target = root.join(path);
         if let Some(parent) = target.parent() {
@@ -248,11 +248,11 @@ fn stage_single_file(dir: &Path, fixture_root: &Path) -> Result<bool, String> {
         )
     })?;
     let name = input.display().to_string();
-    let ts = bynkc::compile(&source, &name).map_err(|errors| {
+    let ts = bynk_emit::compile(&source, &name).map_err(|errors| {
         format!(
             "\n=== {} ===\nexpected compile success but got errors:\n{}",
             dir.display(),
-            bynkc::render_errors(&errors, &source, &name),
+            bynk_render::render_errors(&errors, &source, &name),
         )
     })?;
     let write = || -> std::io::Result<()> {
@@ -339,7 +339,7 @@ fn emitted_typescript_passes_tsc_strict() {
         let compiled = match compile_fixture(dir, target) {
             Ok(out) => out,
             Err(errors) => {
-                let rendered = bynkc::render_project_errors(&errors);
+                let rendered = bynk_render::render_project_errors(&errors);
                 failures.push(format!(
                     "\n=== {} ===\nexpected compile success but got errors:\n{}",
                     dir.display(),
@@ -503,7 +503,7 @@ fn emitted_typescript_has_no_verbatim_violations() {
             continue;
         };
         for (path, doc) in &compiled.artefacts.docs {
-            let bynkc::Document::Ts(program) = doc else {
+            let bynk_driver::project::Document::Ts(program) = doc else {
                 continue;
             };
             for (origin, text) in program.verbatim_content() {
@@ -569,7 +569,7 @@ fn context_brands_admit_commons_values_and_reject_other_contexts() {
     };
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/1704_context_brands_distinct");
-    let out = compile_fixture(&fixture, bynkc::BuildTarget::Bundle)
+    let out = compile_fixture(&fixture, bynk_driver::project::BuildTarget::Bundle)
         .unwrap_or_else(|e| panic!("fixture failed to compile: {e:?}"));
     let tmp = std::env::temp_dir().join(format!("bynk-brand-tsc-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
@@ -786,7 +786,7 @@ fn all_emitted_typescript_strips_under_node() {
             Err(errors) => failures.push(format!(
                 "\n=== {} ===\nexpected compile success but got errors:\n{}",
                 dir.display(),
-                bynkc::render_project_errors(&errors),
+                bynk_render::render_project_errors(&errors),
             )),
         }
     }
@@ -849,7 +849,7 @@ fn all_emitted_typescript_strips_under_node() {
 // In-browser track, slice 1 — the first-class JS artefact (ADR 0137).
 //
 // `bynkc compile --emit js` type-strips the emitted TypeScript to JavaScript via
-// `bynkc::strip_project_to_js` (oxc). These two tests guard that path: the first
+// `bynk_driver::strip::strip_project_to_js` (oxc). These two tests guard that path: the first
 // is pure-Rust and always runs (the strip must succeed on every fixture and yield
 // a JS-shaped tree); the second runs the emitted `.js` through `node --check` to
 // confirm it is valid, runnable ES module syntax with no TypeScript residue.
@@ -881,7 +881,7 @@ fn js_artefact_strips_every_fixture_to_js_shape() {
         let Ok(out) = compile_fixture(dir, target) else {
             continue;
         };
-        match bynkc::strip_project_to_js(out) {
+        match bynk_driver::strip::strip_project_to_js(out) {
             Ok(js_out) => {
                 checked += 1;
                 let mut js_count = 0;
@@ -949,7 +949,7 @@ fn emitted_javascript_is_valid_under_node() {
         let Ok(out) = compile_fixture(dir, target) else {
             continue;
         };
-        let js_out = match bynkc::strip_project_to_js(out) {
+        let js_out = match bynk_driver::strip::strip_project_to_js(out) {
             Ok(o) => o,
             Err(e) => {
                 failures.push(format!("{name}: strip failed: {e}"));

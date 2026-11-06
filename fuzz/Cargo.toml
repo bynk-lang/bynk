@@ -19,7 +19,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 bynk-syntax = { path = "../bynk-syntax" }
-bynkc = { path = "../bynkc" }
+bynk-emit = { path = "../bynk-emit" }
 
 [[bin]]
 name = "parse"

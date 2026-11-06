@@ -22,7 +22,7 @@
 //! into a failure (CI), matching every other toolchain-driving test in this
 //! suite.
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -202,13 +202,13 @@ fn bundle_events_envelope_is_minted_once_per_emission() {
     fs::write(proj.join("order.bynk"), SOURCE_ORDER).unwrap();
     fs::write(proj.join("notifications.bynk"), SOURCE_NOTIFICATIONS).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Bundle),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the events-envelope project to a bundle:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
 

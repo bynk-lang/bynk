@@ -140,22 +140,30 @@ fn a_workers_build_writes_the_hashed_file_and_headers() {
 
 /// The positive fixture `1883_asset_workers`, compiled in-process: what the
 /// e2e golden files cannot show (they compare documents, never `assets`).
-fn compile_fixture(target: bynkc::BuildTarget) -> bynkc::ProjectOutput {
+fn compile_fixture(
+    target: bynk_driver::project::BuildTarget,
+) -> bynk_driver::project::ProjectOutput {
     compile_named_fixture("1883_asset_workers", target)
 }
 
-fn compile_named_fixture(name: &str, target: bynkc::BuildTarget) -> bynkc::ProjectOutput {
+fn compile_named_fixture(
+    name: &str,
+    target: bynk_driver::project::BuildTarget,
+) -> bynk_driver::project::ProjectOutput {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive")
         .join(name);
-    let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
-    bynkc::compile_project(&bynk_testkit::compile_options_split(root, paths).target(target))
-        .unwrap_or_else(|f| panic!("compile failed: {} error(s)", f.errors.len()))
+    let paths =
+        bynk_driver::project::try_read_project_paths(&root).expect("well-formed fixture manifest");
+    bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_split(root, paths).target(target),
+    )
+    .unwrap_or_else(|f| panic!("compile failed: {} error(s)", f.errors.len()))
 }
 
 #[test]
 fn a_workers_build_ships_the_transitive_closure_reproducibly() {
-    let first = compile_fixture(bynkc::BuildTarget::Workers);
+    let first = compile_fixture(bynk_driver::project::BuildTarget::Workers);
     let keys: Vec<String> = first
         .artefacts
         .assets
@@ -182,7 +190,7 @@ fn a_workers_build_ships_the_transitive_closure_reproducibly() {
         "{keys:?}"
     );
 
-    let second = compile_fixture(bynkc::BuildTarget::Workers);
+    let second = compile_fixture(bynk_driver::project::BuildTarget::Workers);
     assert_eq!(
         first.artefacts.assets, second.artefacts.assets,
         "reproducible"
@@ -191,7 +199,7 @@ fn a_workers_build_ships_the_transitive_closure_reproducibly() {
 
 #[test]
 fn a_bundle_build_ships_no_files() {
-    let out = compile_fixture(bynkc::BuildTarget::Bundle);
+    let out = compile_fixture(bynk_driver::project::BuildTarget::Bundle);
     assert!(
         out.artefacts.assets.is_empty(),
         "only a Worker serves files"
@@ -211,7 +219,7 @@ fn a_deployable_bundle_build_warns_that_its_assets_are_not_served() {
     assert!(ok, "a Bundle build still succeeds, got:\n{out}");
     assert!(out.contains("bynk.asset.not_served"), "{out}");
 
-    let quiet = compile_fixture(bynkc::BuildTarget::Bundle);
+    let quiet = compile_fixture(bynk_driver::project::BuildTarget::Bundle);
     assert!(
         !quiet
             .warnings
@@ -230,7 +238,7 @@ fn a_deployable_bundle_build_warns_that_its_assets_are_not_served() {
 fn fixed_paths_stay_home_and_consumed_hashed_files_ship() {
     let out = compile_named_fixture(
         "1883_asset_fixed_paths_workers",
-        bynkc::BuildTarget::Workers,
+        bynk_driver::project::BuildTarget::Workers,
     );
     let keys = |worker: &str| -> Vec<String> {
         let prefix = format!("workers/{worker}/assets/");
@@ -285,12 +293,15 @@ fn recording_folder(
     (folder, reads)
 }
 
-fn fixture_options(folder: bynk_driver::project::assets::AssetFolder) -> bynkc::CompileOptions {
+fn fixture_options(
+    folder: bynk_driver::project::assets::AssetFolder,
+) -> bynk_driver::project::CompileOptions {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/1883_asset_workers");
-    let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
+    let paths =
+        bynk_driver::project::try_read_project_paths(&root).expect("well-formed fixture manifest");
     bynk_testkit::compile_options_split(root, paths)
-        .target(bynkc::BuildTarget::Workers)
+        .target(bynk_driver::project::BuildTarget::Workers)
         .asset_files(folder)
 }
 
@@ -302,11 +313,11 @@ fn a_build_reads_only_the_declared_files() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/1883_asset_workers");
     let (folder, reads) = recording_folder(&root, "assets/huge.bin");
-    let out = bynkc::compile_project(&fixture_options(folder))
+    let out = bynk_driver::project::compile_project(&fixture_options(folder))
         .unwrap_or_else(|f| panic!("compile failed: {} error(s)", f.errors.len()));
     assert_eq!(
         out.artefacts.assets,
-        compile_fixture(bynkc::BuildTarget::Workers)
+        compile_fixture(bynk_driver::project::BuildTarget::Workers)
             .artefacts
             .assets,
         "the undeclared file changes nothing"
@@ -339,7 +350,7 @@ fn an_unreadable_declared_file_is_reported() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/1883_asset_workers");
     let (folder, _) = recording_folder(&root, "assets/board.css");
-    let Err(failure) = bynkc::compile_project(&fixture_options(folder)) else {
+    let Err(failure) = bynk_driver::project::compile_project(&fixture_options(folder)) else {
         panic!("an unreadable declared file must fail the build");
     };
     let codes: Vec<_> = failure.errors.iter().map(|e| e.error.category).collect();
@@ -393,9 +404,9 @@ fn a_file_declared_twice_is_read_once() {
     .unwrap();
     let options = |refuse: &'static str| {
         let (folder, reads) = recording_folder(&dir, refuse);
-        let paths = bynkc::ProjectPaths::conventional(&dir);
+        let paths = bynk_driver::project::ProjectPaths::conventional(&dir);
         let options = bynk_testkit::compile_options_split(dir.clone(), paths)
-            .target(bynkc::BuildTarget::Workers)
+            .target(bynk_driver::project::BuildTarget::Workers)
             .asset_files(folder);
         (options, reads)
     };
@@ -409,7 +420,7 @@ fn a_file_declared_twice_is_read_once() {
     };
 
     let (opts, reads) = options("assets/huge.bin");
-    if let Err(f) = bynkc::compile_project(&opts) {
+    if let Err(f) = bynk_driver::project::compile_project(&opts) {
         panic!(
             "compile failed: {:?}",
             f.errors
@@ -421,7 +432,7 @@ fn a_file_declared_twice_is_read_once() {
     assert_eq!(board_reads(&reads), 1, "read once for two declarations");
 
     let (opts, reads) = options("assets/board.css");
-    let Err(failure) = bynkc::compile_project(&opts) else {
+    let Err(failure) = bynk_driver::project::compile_project(&opts) else {
         panic!("an unreadable declared file must fail the build");
     };
     assert_eq!(board_reads(&reads), 1, "a failed read is not retried");

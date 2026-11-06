@@ -35,13 +35,14 @@ fn example_root(name: &str) -> PathBuf {
 fn every_example_builds_for_workers() {
     for name in EXAMPLES {
         let root = example_root(name);
-        let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
+        let paths = bynk_driver::project::try_read_project_paths(&root)
+            .expect("well-formed fixture manifest");
         // Content-ownership track (#1086) slice 3: bynk-testkit's complete
         // sources map, proved here as one of the representative call sites,
         // instead of relying on bynk-emit's disk fallback.
-        bynkc::compile_project(
+        bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_split(root.clone(), paths)
-                .target(bynkc::BuildTarget::Workers),
+                .target(bynk_driver::project::BuildTarget::Workers),
         )
         .unwrap_or_else(|failure| {
             panic!(
@@ -59,9 +60,13 @@ fn every_example_builds_for_workers() {
 #[test]
 fn hello_world_builds_on_both_targets() {
     let root = example_root("hello-world");
-    let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
-    for target in [bynkc::BuildTarget::Bundle, bynkc::BuildTarget::Workers] {
-        let out = bynkc::compile_project(
+    let paths =
+        bynk_driver::project::try_read_project_paths(&root).expect("well-formed fixture manifest");
+    for target in [
+        bynk_driver::project::BuildTarget::Bundle,
+        bynk_driver::project::BuildTarget::Workers,
+    ] {
+        let out = bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_split(root.clone(), paths.clone()).target(target),
         )
         .unwrap_or_else(|failure| {
@@ -77,8 +82,9 @@ fn hello_world_builds_on_both_targets() {
         assert!(!out.artefacts.docs.is_empty());
     }
     // The workers build must produce the deployable Worker directory.
-    let workers = bynkc::compile_project(
-        &bynk_testkit::compile_options_split(root, paths).target(bynkc::BuildTarget::Workers),
+    let workers = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_split(root, paths)
+            .target(bynk_driver::project::BuildTarget::Workers),
     )
     .unwrap_or_else(|_| panic!("workers build failed"));
     for needed in [
@@ -127,13 +133,14 @@ fn every_example_output_passes_tsc_strict() {
         // build now emits none, and this pins that the whole output is
         // tsc-clean.
         let root_dir = example_root(name);
-        let paths = bynkc::try_read_project_paths(&root_dir).expect("well-formed example manifest");
-        let out = bynkc::compile_project(
+        let paths = bynk_driver::project::try_read_project_paths(&root_dir)
+            .expect("well-formed example manifest");
+        let out = bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_split(root_dir, paths)
-                .target(bynkc::BuildTarget::Workers),
+                .target(bynk_driver::project::BuildTarget::Workers),
         )
         .unwrap_or_else(|_| panic!("examples/{name} failed to compile"));
-        bynkc::write_output(&out, &root.join(name)).unwrap();
+        bynk_driver::write_output(&out, &root.join(name)).unwrap();
     }
     // One root tsconfig sweeps every staged example (`include: ["**/*.ts"]`);
     // all emitted imports are relative, so nothing resolves across subdirs.

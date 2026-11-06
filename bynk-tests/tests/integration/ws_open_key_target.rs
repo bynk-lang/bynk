@@ -64,11 +64,14 @@ agent Room {
 }
 ";
 
-fn compile_categories(target: bynkc::BuildTarget) -> Result<(), Vec<String>> {
+fn compile_categories(target: bynk_driver::project::BuildTarget) -> Result<(), Vec<String>> {
     compile_source_categories(LIVE, target)
 }
 
-fn compile_source_categories(source: &str, target: bynkc::BuildTarget) -> Result<(), Vec<String>> {
+fn compile_source_categories(
+    source: &str,
+    target: bynk_driver::project::BuildTarget,
+) -> Result<(), Vec<String>> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir =
@@ -76,25 +79,26 @@ fn compile_source_categories(source: &str, target: bynkc::BuildTarget) -> Result
     let src = dir.join("src");
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("live.bynk"), source).unwrap();
-    let result =
-        bynkc::compile_project(&bynk_testkit::compile_options_single(src.clone()).target(target))
-            .map(|_| ())
-            .map_err(|failure| {
-                bynkc::ProjectFailure::flatten(failure)
-                    .into_iter()
-                    .map(|e| e.category.to_string())
-                    .collect()
-            });
+    let result = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(src.clone()).target(target),
+    )
+    .map(|_| ())
+    .map_err(|failure| {
+        bynk_driver::project::ProjectFailure::flatten(failure)
+            .into_iter()
+            .map(|e| e.category.to_string())
+            .collect()
+    });
     let _ = std::fs::remove_dir_all(&dir);
     result
 }
 
 #[test]
 fn a_body_bound_open_key_compiles_on_bundle_and_is_rejected_on_workers() {
-    compile_categories(bynkc::BuildTarget::Bundle)
+    compile_categories(bynk_driver::project::BuildTarget::Bundle)
         .unwrap_or_else(|errs| panic!("the bundle target should accept the key: {errs:?}"));
 
-    let errs = compile_categories(bynkc::BuildTarget::Workers)
+    let errs = compile_categories(bynk_driver::project::BuildTarget::Workers)
         .expect_err("the Workers target should reject the key");
     assert_eq!(
         errs,
@@ -105,7 +109,7 @@ fn a_body_bound_open_key_compiles_on_bundle_and_is_rejected_on_workers() {
 
 #[test]
 fn a_par_bound_key_shadowing_a_route_param_is_rejected_on_workers() {
-    let errs = compile_source_categories(LIVE_PAR, bynkc::BuildTarget::Workers)
+    let errs = compile_source_categories(LIVE_PAR, bynk_driver::project::BuildTarget::Workers)
         .expect_err("the Workers target should reject the par-bound key");
     assert_eq!(
         errs,

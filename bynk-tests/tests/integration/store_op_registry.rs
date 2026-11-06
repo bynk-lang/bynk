@@ -23,7 +23,8 @@ use std::fs;
 use bynk_check::store_ops::{
     CELL_STORE_OPS, LOG_STORE_OPS, MAP_STORE_OPS, SET_STORE_OPS, StoreOp, ops_for,
 };
-use bynkc::{ProjectFailure, compile_project};
+use bynk_driver::project::ProjectFailure;
+use bynk_driver::project::compile_project;
 
 /// `(store field declaration, receiver name, ops)` — one `store` field per
 /// dispatched storage kind. `Cache` shares `MAP_STORE_OPS` and is covered by the

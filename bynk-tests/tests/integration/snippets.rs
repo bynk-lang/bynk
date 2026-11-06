@@ -30,7 +30,7 @@ fn every_snippet_compiles() {
     for file in &files {
         let source = fs::read_to_string(file).unwrap();
         let name = file.file_name().unwrap().to_string_lossy().to_string();
-        if let Err(errs) = bynkc::compile(&source, &name) {
+        if let Err(errs) = bynk_emit::compile(&source, &name) {
             let msg = errs
                 .iter()
                 .map(|e| format!("{}: {}", e.category, e.message))

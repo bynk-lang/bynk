@@ -39,7 +39,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 
 /// `(source, target, module, unbound names, issue)`. `source` is a fixture
 /// directory name or a [`repros`] name.
@@ -77,11 +77,11 @@ fn record(
     reports: &mut Reports,
     source: &str,
     target: BuildTarget,
-    out: &bynkc::ProjectOutput,
+    out: &bynk_driver::project::ProjectOutput,
 ) -> usize {
     let mut modules = 0;
     for (path, doc) in &out.artefacts.docs {
-        if let bynkc::Document::Ts(program) = doc {
+        if let bynk_driver::project::Document::Ts(program) = doc {
             modules += 1;
             let mut unbound = bynk_ts::unbound_names(program);
             unbound.extend(missing_members(path, program, &out.artefacts.docs));
@@ -110,7 +110,7 @@ fn record(
 fn missing_members(
     path: &Path,
     program: &bynk_ts::TsProgram,
-    docs: &BTreeMap<PathBuf, bynkc::Document>,
+    docs: &BTreeMap<PathBuf, bynk_driver::project::Document>,
 ) -> Vec<String> {
     bynk_ts::namespace_member_uses(program)
         .into_iter()
@@ -192,10 +192,10 @@ fn resolve(from_module: &Path, specifier: &str) -> Option<PathBuf> {
 /// TypeScript module.
 fn exports_of(
     path: &Path,
-    docs: &BTreeMap<PathBuf, bynkc::Document>,
+    docs: &BTreeMap<PathBuf, bynk_driver::project::Document>,
     depth: usize,
 ) -> Option<std::collections::BTreeSet<String>> {
-    let Some(bynkc::Document::Ts(program)) = docs.get(path) else {
+    let Some(bynk_driver::project::Document::Ts(program)) = docs.get(path) else {
         return None;
     };
     let exports = bynk_ts::module_exports(program);
@@ -225,14 +225,18 @@ const HOST_SUPPLIED: &[&str] = &[
 /// Compiles a project fixture for `target`. `None` for a [`HOST_SUPPLIED`]
 /// fixture's Workers build, refused only because a capability is left to the
 /// host.
-fn compile_project_fixture(dir: &Path, target: BuildTarget) -> Option<bynkc::ProjectOutput> {
+fn compile_project_fixture(
+    dir: &Path,
+    target: BuildTarget,
+) -> Option<bynk_driver::project::ProjectOutput> {
     let options = if dir.join("bynk.toml").exists() {
-        let paths = bynkc::try_read_project_paths(dir).expect("well-formed fixture manifest");
+        let paths = bynk_driver::project::try_read_project_paths(dir)
+            .expect("well-formed fixture manifest");
         bynk_testkit::compile_options_split(dir.to_path_buf(), paths)
     } else {
         bynk_testkit::compile_options_single(dir.join("src"))
     };
-    match bynkc::compile_project(&options.target(target)) {
+    match bynk_driver::project::compile_project(&options.target(target)) {
         Ok(out) => Some(out),
         Err(f) => {
             let errors = f.flatten();
@@ -249,7 +253,7 @@ fn compile_project_fixture(dir: &Path, target: BuildTarget) -> Option<bynkc::Pro
                 "{} must compile for {}:\n{}",
                 dir.display(),
                 target_name(target),
-                bynkc::render_project_errors(&errors)
+                bynk_render::render_project_errors(&errors)
             )
         }
     }

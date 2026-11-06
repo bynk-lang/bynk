@@ -16,7 +16,7 @@
 //! Both skip loudly without a toolchain; `BYNK_REQUIRE_TSC=1` turns the skip
 //! into a failure.
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -390,13 +390,13 @@ fn cross_context_caller_reads_live_id_and_fails_closed() {
     fs::write(proj.join("a.bynk"), SOURCE_A).unwrap();
     fs::write(proj.join("b.bynk"), SOURCE_B).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the cross-context project to Workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -483,13 +483,13 @@ fn bundle_cross_context_caller_reads_the_consuming_context_name() {
     fs::write(proj.join("b.bynk"), SOURCE_B).unwrap();
     fs::write(proj.join("d.bynk"), SOURCE_D).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Bundle),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the cross-context project to a bundle:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -551,13 +551,13 @@ fn cross_context_caller_side_codec_round_trips_a_user_payload() {
     fs::write(proj.join("a.bynk"), SOURCE_CODEC_A).unwrap();
     fs::write(proj.join("b.bynk"), SOURCE_CODEC_B).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the caller-side-codec project to Workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
 

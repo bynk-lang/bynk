@@ -186,7 +186,7 @@ fn mutated_corpus_never_panics_the_compiler() {
         }
         let mutant = mutate(&text, &mut rng);
         let result = catch_unwind(AssertUnwindSafe(|| {
-            let _ = bynkc::compile(&mutant, "fuzz-smoke.bynk");
+            let _ = bynk_emit::compile(&mutant, "fuzz-smoke.bynk");
         }));
         if result.is_err() {
             panic!(

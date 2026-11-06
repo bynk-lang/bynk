@@ -220,10 +220,11 @@ fn http_method_contract_runs_on_workers_entry() {
     // Compile the method-semantics fixture (workers) in-process.
     let fixture: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/297_http_method_semantics/src");
-    let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_single(fixture).target(bynkc::BuildTarget::Workers),
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(fixture)
+            .target(bynk_driver::project::BuildTarget::Workers),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the method-semantics fixture must compile");
 
     let tmp =

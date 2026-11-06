@@ -143,7 +143,7 @@ fn regex_refinement_alternation_is_anchored() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/301_refined_matches_alternation/input.bynk");
     let source = fs::read_to_string(&fixture).unwrap();
-    let ts = bynkc::compile(&source, "301_refined_matches_alternation/input.bynk")
+    let ts = bynk_emit::compile(&source, "301_refined_matches_alternation/input.bynk")
         .expect("the alternation fixture must compile");
 
     let tmp = std::env::temp_dir().join(format!("bynk-regex-refinement-{}", std::process::id()));
