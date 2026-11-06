@@ -61,8 +61,9 @@ try {
     if (-not ((Test-Path (Join-Path $tmp "$stage\bynk-lsp.exe")) -or (Test-Path (Join-Path $tmp "$stage\bynkc-lsp.exe")))) { throw "The archive has no language server." }
     foreach ($bin in 'bynkc', 'bynk', 'bynk-lsp', 'bynkc-lsp') {
         $src = Join-Path $tmp "$stage\$bin.exe"
-        # A release before the rename ships only bynkc-lsp, and the overlap copy
-        # goes in E4b: either server name may be absent, but not both.
+        # A release before the rename ships only bynkc-lsp, and a current one only
+        # bynk-lsp (a pinned older release is still installable): either server
+        # name may be absent, but not both.
         if (-not (Test-Path $src) -and $bin -like '*-lsp') { continue }
         Copy-Item $src (Join-Path $dest "$bin.exe") -Force
     }
@@ -82,4 +83,4 @@ if ($env:BYNK_NO_MODIFY_PATH) {
     $env:Path = "$env:Path;$dest"
     Write-Host "Added $dest to your PATH (open a new terminal to pick it up)."
 }
-Write-Host "Installed bynkc, bynk and bynk-lsp (plus a bynkc-lsp copy for this release). Run 'bynk doctor' to check your setup."
+Write-Host "Installed bynkc, bynk and bynk-lsp. Run 'bynk doctor' to check your setup."

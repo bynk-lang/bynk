@@ -80,9 +80,10 @@ fi
 
 tar -xzf "$tmp/$stage.tar.gz" -C "$tmp"
 mkdir -p "$dest"
-for bin in bynkc bynk bynk-lsp bynkc-lsp; do # bynkc-lsp: overlap copy, dropped in E4b
-  # A release before the rename ships only bynkc-lsp, and the overlap copy goes
-  # in E4b: either server name may be absent, but not both.
+for bin in bynkc bynk bynk-lsp bynkc-lsp; do
+  # A release before the rename ships only bynkc-lsp, and a current one only
+  # bynk-lsp (a pinned older release is still installable): either server name
+  # may be absent, but not both.
   if [ ! -f "$tmp/$stage/$bin" ]; then
     case "$bin" in
       bynk-lsp | bynkc-lsp)
@@ -96,7 +97,7 @@ for bin in bynkc bynk bynk-lsp bynkc-lsp; do # bynkc-lsp: overlap copy, dropped 
   mv -f "$dest/.$bin.new" "$dest/$bin"
 done
 
-say "Installed bynkc, bynk and bynk-lsp (plus a bynkc-lsp copy for this release) to $dest"
+say "Installed bynkc, bynk and bynk-lsp to $dest"
 case ":$PATH:" in
   *":$dest:"*) say "Run 'bynk doctor' to check your setup." ;;
   *) say "Add it to your PATH, e.g.:  export PATH=\"$dest:\$PATH\""

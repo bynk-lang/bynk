@@ -117,12 +117,11 @@ are desktop-only.
 
 ## Other editors
 
-> **Renamed from `bynkc-lsp`** — The server was called `bynkc-lsp` before the rename. This release still ships a
-> `bynkc-lsp` copy next to `bynk-lsp` (in the archives, the installers and the
-> dev-container feature), so an editor config that names the old binary keeps
-> working for one release. Change the command in your editor config from
-> `bynkc-lsp` to `bynk-lsp` (for example `cmd = { "bynk-lsp" }` in Neovim). The
-> `bynkc-lsp` copy is removed in the next release.
+> **Renamed from `bynkc-lsp`** — The server was called `bynkc-lsp` in earlier
+> releases, which also shipped a `bynkc-lsp` copy next to `bynk-lsp` so old
+> editor configs kept working. That copy is gone. If your editor config still
+> names `bynkc-lsp`, change the command to `bynk-lsp` (for example
+> `cmd = { "bynk-lsp" }` in Neovim).
 
 Any editor with a generic LSP client can use `bynk-lsp`. Syntax highlighting is
 also available through the [`tree-sitter-bynk`](/docs/tooling/tree-sitter-bynk/)
