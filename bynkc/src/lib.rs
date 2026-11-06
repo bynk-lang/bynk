@@ -58,7 +58,8 @@ pub use bynk_emit::{Compiled, NODE_MAJOR_FLOOR, compile, compile_with_warnings};
 // In-browser track (ADR 0137): strip-only TS→JS, re-exported so the CLI, the API,
 // and tests share one entry point. `strip_project_to_js` moved into `bynk-strip`
 // in slice 3 so the wasm entry can reuse it without depending on `bynkc`.
-pub use bynk_strip::{StripError, strip_project_to_js, strip_types};
+pub use bynk_driver::strip::{StripError, strip_project_to_js};
+pub use bynk_strip::strip_types;
 
 /// v0.24 (ADR 0052 rider) / ADR 0100: the project-failure flattening layer.
 /// #521: the implementation is shared with the `bynk` driver in

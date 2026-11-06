@@ -20,7 +20,7 @@ diagnostics, with **no filesystem and no `tsc`**:
 
 ```text
 source ─▶ bynk_emit::compile_in_memory  ─▶ ProjectOutput (TypeScript)
-       ─▶ bynk_strip::strip_project_to_js ─▶ ProjectOutput (JavaScript)
+       ─▶ bynk_driver::strip::strip_project_to_js ─▶ ProjectOutput (JavaScript)
        ─▶ { files: [{ path, kind, contents, map? }], diagnostics }
 ```
 

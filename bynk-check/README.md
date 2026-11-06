@@ -53,16 +53,16 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
     ├── bynk-ir            declaration-level IR
     │   └── bynk-lower     AST → IR helpers
     ├── bynk-emit          TS emission from a checked program + ts, ir, lower, project
-    │   ├── bynk-strip     TS → JS type-stripping              + ts
-    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, ir, lower
+    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, ir, lower, strip
     └── bynk-ide           non-bailing editor analysis         + project, fmt, ir, lower
 bynk-std                   first-party sources and bindings, as data
+bynk-strip                 TS → JS type-stripping (text level), on oxc alone
 ```
 
 Each crate depends on its parent in the tree, plus any crates listed after
 its `+`. The front-ends sit on top: the `bynkc` and `bynk` CLIs over
 `bynk-driver`, the `bynk-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
-the unpublished `bynk-wasm` playground module over `bynk-driver`, `bynk-strip`,
+the unpublished `bynk-wasm` playground module over `bynk-driver`
 and `bynk-ide`.
 
 The captured tables live here, with their producers; the IDE *queries* over them

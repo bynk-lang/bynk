@@ -7,7 +7,7 @@
 //!
 //! ```text
 //! source ─▶ bynk_emit::compile_in_memory (Bundle / Browser)  ─▶ ProjectOutput (TS)
-//!        ─▶ bynk_strip::strip_project_to_js                   ─▶ ProjectOutput (JS)
+//!        ─▶ bynk_driver::strip::strip_project_to_js                   ─▶ ProjectOutput (JS)
 //!        ─▶ { files: [{ path, kind, contents, map? }], diagnostics }
 //! ```
 //!
@@ -398,7 +398,7 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                 })
                 .collect();
             let only: std::collections::HashSet<PathBuf> = user_paths.keys().cloned().collect();
-            match bynk_strip::strip_project_to_js_mapped(out, &only) {
+            match bynk_driver::strip::strip_project_to_js_mapped(out, &only) {
                 Ok((js, mut maps)) => {
                     // The user program is the single in-memory source, so warnings
                     // resolve their line/col against it (the fallback).

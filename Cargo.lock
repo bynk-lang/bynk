@@ -257,6 +257,7 @@ dependencies = [
  "bynk-lower",
  "bynk-project",
  "bynk-render",
+ "bynk-strip",
  "bynk-syntax",
  "bynk-ts",
  "clap",
@@ -387,9 +388,6 @@ version = "0.510.14"
 name = "bynk-strip"
 version = "0.510.14"
 dependencies = [
- "bynk-driver",
- "bynk-emit",
- "bynk-ts",
  "oxc",
  "oxc_sourcemap",
 ]
@@ -448,7 +446,6 @@ dependencies = [
  "bynk-driver",
  "bynk-fmt",
  "bynk-ide",
- "bynk-strip",
  "bynk-syntax",
  "console_error_panic_hook",
  "oxc_sourcemap",
