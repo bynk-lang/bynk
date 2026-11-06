@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.10** | "The `bynkc/tests` corpus and `bynk-grammar` move into one unpublished `bynk-tests` crate; test commands become `-p bynk-tests --test it`" |
+| **v0.510.9** | "bynk-fmt's comment-slot corpus test runs as eight parallel shards instead of one" |
 | **v0.510.8** | Internal - a gated `unused_deps` probe in `greenfield-status` fails CI on a declared dependency with no use |
 | **v0.510.7** | Internal - drop three unused dependency edges (`bynk-emit` and `bynkc` on `serde`, `bynk-lsp` on `tracing-appender`) |
 | **v0.510.6** | "`bynk-grammar` becomes unpublished (`publish = false`, path-only workspace entry) and leaves both release workflows' crate lists" |
