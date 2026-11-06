@@ -99,27 +99,25 @@ one is a warning, not a pass: `npx --yes` *downloads* the package the first time
 you use it, so an environment that "works via npx" still pauses to fetch on first
 real use. `doctor` tells you the difference.
 
-### The in-process compiler (and the `BYNK_BYNKC` override)
+### The in-process compiler
 
 `bynk` **links the compiler in-process**, so compiling needs no separate `bynkc`
-binary — `compile` is always available, and there is no version to drift. Power
-users can still point `bynk` at an *external* compiler with the **`BYNK_BYNKC`**
-environment variable (e.g. to pin a specific version); only then does `doctor`
-resolve that binary and report **driver↔compiler skew** — a minor drift warns, a
-major drift is an error. With no override there is no second compiler to check.
+binary — `compile` is always available, and there is no version to drift. The
+`compiler` row always reads `in-process`. (The `BYNK_BYNKC` override that once
+pinned an external compiler is ignored; see [`BYNK_BYNKC` and version
+skew](/docs/bynk-cli/#bynk_bynkc-and-version-skew-retired).)
 
 ## Exit codes — for scripts and CI
 
 The exit code depends on **what you asked about**:
 
 - **Bare `bynk doctor`** is informational. It surveys everything but only fails
-  if the compile floor is broken — and with the in-process compiler that only
-  happens under a broken `BYNK_BYNKC` override — so a compile-only user exits `0`
-  even without Node or `wrangler`.
+  if the compile floor is broken — which, with the in-process compiler, cannot
+  happen — so a compile-only user exits `0` even without Node or `wrangler`.
 - **`bynk doctor --only <capability>`** gates on one capability. `bynk doctor
   --only deploy` exits non-zero on a machine that genuinely can't deploy.
 - **`bynk doctor --strict`** turns *every* warning — optional gaps, `npx`
-  provisionability, minor skew — into a failure. Use it for an all-green CI gate.
+  provisionability — into a failure. Use it for an all-green CI gate.
 
 ## Machine-readable output
 

@@ -11,18 +11,18 @@
 //!
 //! - [`probe`] — the portable detection primitive (presence + version +
 //!   provenance), backed by the `which` crate so it is not Unix-only.
-//! - [`compiler`] — locate `bynkc` (override → PATH → sibling-of-`bynk`) and
-//!   report driver↔compiler version skew.
+//! - [`compiler`] — the retired `BYNK_BYNKC` pin: a one-line warning that it is
+//!   ignored (#2998).
 //! - [`doctor`] — the capability model, the checks, and the exit-code contract.
 //! - [`report`] — render a [`doctor::Report`] as a human table, `--format
 //!   short`, or `--format json`.
 //! - [`new`] — scaffold a new project (offline file-writing; no toolchain).
 //! - [`dev`] — build a project and serve it locally with `wrangler dev`.
 //! - [`tail`] — stream a deployed Worker's logs with `.bynk` frames (#2546).
-//! - [`check`] / [`fmt`] — type-check / format in-process (v0.138, #487).
-//! - [`test`](mod@test) — delegate to the driver-resolved `bynkc` (v0.138, #487).
+//! - [`check`] / [`fmt`] / [`compile`] / [`test`](mod@test) — type-check, format,
+//!   compile and test in-process (v0.138, #487; #2998).
 //! - [`diagnostics`] — shared flatten-then-delegate rendering for in-process
-//!   compiles; [`shell`] — shelling the resolved `bynkc`.
+//!   compiles; [`shell`] — child-process exit statuses.
 //! - [`migrate`] — `bynk migrate status` and `sweep` (state-migrations S4).
 //! - [`sweep`] — stopping what `bynk dev`'s wranglers leave running (#1742).
 //! - `job` — on Windows, the job object that stops a wrangler's whole process
@@ -67,6 +67,5 @@ pub mod tail;
 pub mod test;
 pub mod workers;
 
-/// The driver's own version, from Cargo. Compared against the resolved
-/// `bynkc`'s version to detect skew ([`compiler::Skew`]).
+/// The driver's own version, from Cargo.
 pub const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");

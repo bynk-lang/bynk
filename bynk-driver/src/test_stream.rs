@@ -225,11 +225,64 @@ thread_local! {
 /// Run `f`, collecting what it prints through [`print_run`] instead of writing
 /// it to stdout (#2998): `bynk test` asks a project for its discovery document
 /// in-process, where it used to read a child's stdout.
+///
+/// Re-entrant and panic-safe: a drop guard restores whatever capture was in
+/// force before (none, or an outer `capture`'s buffer), also when `f` unwinds,
+/// so a panic cannot leave later output swallowed. The text printed inside an
+/// inner capture goes to the inner result only, not to the outer one.
 pub fn capture<R>(f: impl FnOnce() -> R) -> (R, String) {
-    CAPTURE.with(|c| *c.borrow_mut() = Some(String::new()));
+    struct Restore(Option<Option<String>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            if let Some(previous) = self.0.take() {
+                CAPTURE.with(|c| *c.borrow_mut() = previous);
+            }
+        }
+    }
+    let previous = CAPTURE.with(|c| c.borrow_mut().replace(String::new()));
+    let mut guard = Restore(Some(previous));
     let result = f();
     let text = CAPTURE.with(|c| c.borrow_mut().take()).unwrap_or_default();
+    if let Some(previous) = guard.0.take() {
+        CAPTURE.with(|c| *c.borrow_mut() = previous);
+    }
     (result, text)
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::*;
+
+    #[test]
+    fn captures_and_nests() {
+        let run = || crate::test_json::TestRun::runtime_error("x".to_string(), None);
+        let (((), outer_text), outer) = capture(|| {
+            let r = capture(|| print_run(false, &run()));
+            print_run(false, &run());
+            r
+        });
+        assert!(
+            outer_text.contains("\"x\""),
+            "inner capture holds its own output"
+        );
+        assert!(
+            outer.contains("\"x\""),
+            "outer holds what it printed itself"
+        );
+        assert_eq!(outer_text.matches("\"x\"").count(), 1);
+        assert_eq!(outer.matches("\"x\"").count(), 1);
+    }
+
+    #[test]
+    fn a_panic_does_not_leave_output_swallowed() {
+        let caught = std::panic::catch_unwind(|| capture(|| panic!("boom")));
+        assert!(caught.is_err());
+        // The buffer is gone, so printing goes to stdout again: a nested
+        // capture starts from "no capture", and finds nothing leaked in.
+        let ((), text) = capture(|| {});
+        assert_eq!(text, "");
+        CAPTURE.with(|c| assert!(c.borrow().is_none()));
+    }
 }
 
 /// A remote run's skipped case, as it goes into the stream: suite, case, reason.

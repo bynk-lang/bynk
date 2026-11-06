@@ -2,10 +2,10 @@
   "driver": "9.9.9",
   "compiler": {
     "resolved": true,
-    "path": "/opt/bynk/bin/bynkc",
+    "path": null,
     "version": "9.9.9",
-    "origin": "path",
-    "skew": "match"
+    "origin": "in-process",
+    "skew": null
   },
   "all_ok": false,
   "capabilities": [

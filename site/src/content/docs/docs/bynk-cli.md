@@ -481,8 +481,6 @@ bynk check --fix src/shop.bynk
   so they do not see each other's fixes: if a fix in one member changes
   something another depends on, the second member can be left with a new problem
   that `check` then reports, and `git checkout` undoes the run.
-- **Under `BYNK_BYNKC`** the flag is passed to the pinned `bynkc`, which must be
-  new enough to know it. [Version skew](#version-skew) names the gap.
 
 The exit code is that of the check that follows: success only if no error
 remains.
@@ -700,7 +698,6 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect]
 | `--print` | off | With `--smoke`, print the synthesised suites as `.bynk` source and run nothing. |
 | `--smoke-unsafe` | off | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). |
 | `--update-snapshots` | off | Record snapshots instead of comparing: write each `expect … matches snapshot` that has no stored snapshot, refresh the ones whose value changed, and delete the obsolete ones, in `snapshots/<suite file>.snap.json`. Without it a missing snapshot fails the case, a changed one fails with a diff, and an obsolete one is only reported. See [Snapshots](/book/reference/testing/#snapshots). Incompatible with `--against`, `--smoke`, `--coverage`, `--inspect` and `--no-run`. |
-| `--allow-skew` | off | No effect: `test` runs in-process, so there is no second compiler to skew against. Kept so existing invocations keep working. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
 passed, non-zero on a failing case, a `--case` or `--suite` value that selected
@@ -1518,40 +1515,26 @@ not a readable directory.
 
 ---
 
-## Which `bynkc`?
+## `BYNK_BYNKC` and version skew (retired)
 
-`bynk` locates the compiler it needs — for `test`, and for the `check`/`fmt`
-escape hatch below — in this order:
+Every `bynk` command runs the compiler **in-process**, so there is no separate
+`bynkc` to locate and nothing to drift from. Earlier releases looked for one
+(`BYNK_BYNKC`, then `bynkc` on `PATH`, then a sibling of `bynk`), compared its
+version with `bynk`'s, and warned or refused on a mismatch; all of that is gone.
 
-1. the **`BYNK_BYNKC`** environment variable, if set (an explicit pin);
-2. **`bynkc` on `PATH`**;
-3. a **`bynkc` sibling** of the running `bynk` binary (how a paired install ships).
+For one release the old switches are still accepted so existing setups keep
+working, and do nothing:
 
-`bynk compile` runs in-process and **ignores `BYNK_BYNKC`**: there is no second
-compiler to pin. That is transitional — a later release makes `check`, `fmt`,
-`dev` and `deploy` ignore it too, with a one-line warning for a release before
-it is dropped.
+- **`BYNK_BYNKC`** is ignored. If it is set to anything, `bynk` prints one line
+  to stderr saying so, and runs on its own compiler. Unset it. An editor
+  setting that pinned a compiler through it (such as `vscode-bynk`'s
+  `bynk.compilerPath`) no longer pins anything.
+- **`--allow-skew`** (on `bynk test` and `bynk compile`, hidden from `--help`)
+  and **`BYNK_ALLOW_SKEW`** are accepted and ignored.
 
-`bynk check` and `bynk fmt` run in-process and need none of this — **unless**
-`BYNK_BYNKC` is set, in which case they shell that pinned compiler so an
-externally-managed `bynkc` still governs the result. `bynk doctor` reports this
-resolution and any driver↔compiler version skew.
-
-### Version skew
-
-`bynk compile` never runs a separate `bynkc`, so it is not gated: it accepts
-`--allow-skew` and ignores it.
-
-When `bynk` is about to run a separate `bynkc` (`bynk test` always does, and
-`bynk check`, `fmt`, `dev` and `deploy` do under `BYNK_BYNKC`), it compares
-versions first, as `bynk doctor` does. A patch difference is ignored. A
-**minor** difference prints a warning (once per run, so a `bynk dev` session
-doesn't repeat it on every rebuild) and runs anyway. A **major** difference
-refuses to run, since the two don't share a contract. Pass `--allow-skew` to
-`bynk test`, or set `BYNK_ALLOW_SKEW=1` for any of these commands, to run anyway
-with a warning. The usual
-cause is a `cargo install bynkc` on `PATH` beside a different `bynk`. Align
-them, or pin one with `BYNK_BYNKC`.
+They are removed together with the `bynkc` alias. (`--accept-compatible-skew`
+on `bynk deploy` is unrelated: it concerns the contracts between deployed
+services, and is unchanged.)
 
 ---
 

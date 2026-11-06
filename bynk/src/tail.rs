@@ -15,7 +15,6 @@ use std::process::{ExitCode, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::compiler::Compiler;
 use crate::dev::forward_lines;
 use crate::logs::{Classifier, Rewriter};
 use crate::probe::{self, DetectOpts, Provenance, Toolbox};
@@ -64,12 +63,7 @@ fn tail_args(deployed: &str, extra: &[String]) -> Vec<String> {
 
 /// Compile, resolve the Worker's deployed name, and stream `wrangler tail`.
 /// Returns wrangler's exit code.
-pub fn run(
-    tb: &dyn Toolbox,
-    compiler: &Compiler,
-    project_root: &Path,
-    opts: &TailOptions,
-) -> ExitCode {
+pub fn run(tb: &dyn Toolbox, project_root: &Path, opts: &TailOptions) -> ExitCode {
     let probe = probe::detect(
         tb,
         "wrangler",
@@ -89,7 +83,7 @@ pub fn run(
         return ExitCode::FAILURE;
     }
     // `schema_registry` off: tailing must not touch `bynk.schema.lock`.
-    if !workers::compile_once(compiler, project_root, &build_dir, false) {
+    if !workers::compile_once(project_root, &build_dir, false) {
         return ExitCode::FAILURE;
     }
     let workers_dir = build_dir.join("workers");

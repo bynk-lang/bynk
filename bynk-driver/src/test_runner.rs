@@ -56,26 +56,9 @@ pub enum TestFormat {
     Ndjson,
 }
 
-impl TestFormat {
-    /// The `--format` token this maps to when `bynk test` shells a resolved
-    /// `bynkc` (`TestFormat::as_str` isn't `ValueEnum`-derived, since the
-    /// wire value and the token clap parses happen to coincide, but the two
-    /// concerns — "what did the user type" vs. "what do I forward" — are
-    /// worth keeping textually distinct call sites for).
-    pub fn as_bynkc_arg(self) -> &'static str {
-        match self {
-            TestFormat::Rich => "rich",
-            TestFormat::Json => "json",
-            TestFormat::Ndjson => "ndjson",
-        }
-    }
-}
-
 /// The `test` subcommand's flags — the one contract `bynkc test` and `bynk
 /// test` both `#[command(flatten)]` (review findings #40/#72/#20/#21
-/// remainder), replacing four independent hand-spellings (`bynkc::cli`,
-/// `bynk::cli`, `bynk::test::TestArgs`, and the argv-literal rebuild that
-/// turned the latter back into flags for the `bynkc` shell-out) with one.
+/// remainder), replacing independent hand-spellings in `bynkc::cli` and `bynk::cli`.
 /// Field docs here are the CLI help text for both commands' flags.
 #[derive(clap::Args, Debug, Clone)]
 pub struct TestArgs {

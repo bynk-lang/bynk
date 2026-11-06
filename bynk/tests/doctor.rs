@@ -1,14 +1,13 @@
 //! `bynk doctor` — the capability/exit-code matrix, the detection probe, and
 //! the pinned `--format short`/`json` goldens.
 //!
-//! Everything runs against a deterministic [`Fake`] toolbox and hand-built
-//! [`Compiler`] states, so the contract is exercised without depending on the
+//! Everything runs against a deterministic [`Fake`] toolbox, so the contract
+//! is exercised without depending on the
 //! host's tools. The goldens are blessed with `BYNK_BLESS=1`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use bynk::compiler::{Compiler, Origin, Skew};
 use bynk::doctor::{self, Capability, Context, DoctorOptions, Level};
 use bynk::probe::{self, DetectOpts, Provenance, Toolbox, Version};
 use bynk::report::{self, Format};
@@ -106,48 +105,6 @@ fn v(major: u32, minor: u32, patch: u32) -> Version {
     }
 }
 
-/// A `bynkc` resolved on PATH, with the given skew vs the driver.
-fn bynkc_ok(skew: Skew) -> Compiler {
-    Compiler {
-        path: Some(PathBuf::from("/opt/bynk/bin/bynkc")),
-        origin: Some(Origin::Path),
-        version: Some(v(9, 9, 9)),
-        skew: Some(skew),
-    }
-}
-
-/// A `BYNK_BYNKC` override at the given skew. Slice 7: the in-process compiler
-/// is always ok, so skew is only meaningful — and only reported — when the user
-/// points `bynk` at an external compiler via the override (ADR 0084, amended).
-fn bynkc_override(skew: Skew) -> Compiler {
-    Compiler {
-        path: Some(PathBuf::from("/opt/bynk/bin/bynkc")),
-        origin: Some(Origin::Override),
-        version: Some(v(9, 9, 9)),
-        skew: Some(skew),
-    }
-}
-
-/// A `BYNK_BYNKC` override that doesn't resolve — the only "broken compiler"
-/// state under the amended contract (a missing in-process compiler is impossible).
-fn bynkc_override_missing() -> Compiler {
-    Compiler {
-        path: None,
-        origin: Some(Origin::Override),
-        version: None,
-        skew: None,
-    }
-}
-
-fn bynkc_missing() -> Compiler {
-    Compiler {
-        path: None,
-        origin: None,
-        version: None,
-        skew: None,
-    }
-}
-
 fn ctx(in_repo: bool) -> Context {
     Context {
         project_root: None,
@@ -231,7 +188,7 @@ fn absent_with_no_npx_is_missing() {
 fn bare_compile_only_env_exits_zero_with_test_dev_flagged() {
     // Only bynkc; no node/tsc/tsx/wrangler.
     let fake = Fake::default();
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Compile).level, Level::Ok);
     assert_eq!(cap(&report, Capability::Test).level, Level::Fail);
     assert_eq!(cap(&report, Capability::Deploy).level, Level::Fail);
@@ -246,7 +203,7 @@ fn everything_present_is_all_green_exit_zero() {
         .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()))
         .path_tool("bynk-lsp", "/usr/bin/bynk-lsp", Some(v(9, 9, 9)));
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert!(report.is_all_ok());
     assert!(!report.exit_nonzero(&bare()));
 }
@@ -256,7 +213,7 @@ fn everything_present_is_all_green_exit_zero() {
 #[test]
 fn a_legacy_named_language_server_satisfies_the_editor_check() {
     let fake = Fake::default().path_tool("bynkc-lsp", "/usr/bin/bynkc-lsp", Some(v(9, 9, 9)));
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     let editor = report
         .capabilities
         .iter()
@@ -279,7 +236,7 @@ fn wrangler_is_checked_against_the_compatibility_date_minimum() {
     let date = bynk_emit::COMPATIBILITY_DATE;
     let deploy = |fake: Fake| {
         let fake = fake.path_tool("node", "/usr/bin/node", Some(node_at_floor()));
-        let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+        let report = doctor::diagnose(&fake, &ctx(false), &bare());
         let r = cap(&report, Capability::Deploy).clone();
         let row = r
             .rows
@@ -329,7 +286,7 @@ fn wrangler_is_checked_against_the_compatibility_date_minimum() {
             .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
             .path_tool("bynk-lsp", "/usr/bin/bynk-lsp", Some(v(9, 9, 9)))
             .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler));
-        doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare())
+        doctor::diagnose(&fake, &ctx(false), &bare())
     };
     assert!(
         !all_green_but(min).exit_nonzero(&strict),
@@ -357,7 +314,7 @@ fn wrangler_is_checked_against_the_compatibility_date_minimum() {
         project_root: Some(PathBuf::from("/proj")),
         ..ctx(false)
     };
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &in_project, &bare());
+    let report = doctor::diagnose(&fake, &in_project, &bare());
     assert_eq!(cap(&report, Capability::Deploy).level, Level::Warn);
     let row = cap(&report, Capability::Deploy)
         .rows
@@ -385,7 +342,7 @@ fn wrangler_is_checked_against_the_compatibility_date_minimum() {
 fn only_deploy_without_wrangler_exits_nonzero() {
     // No wrangler, no npx → truly cannot deploy.
     let fake = Fake::default().path_tool("node", "/usr/bin/node", Some(node_at_floor()));
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     let opts = DoctorOptions {
         only: Some(Capability::Deploy),
         strict: false,
@@ -404,7 +361,7 @@ fn strict_escalates_optional_only_gap() {
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
         .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()));
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Editor).level, Level::Fail); // displayed as "note"
     assert!(!report.exit_nonzero(&bare()));
     let strict = DoctorOptions {
@@ -422,46 +379,8 @@ fn in_process_compile_floor_is_always_ok() {
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
         .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)));
-    let report = doctor::diagnose(&fake, &bynkc_missing(), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Compile).level, Level::Ok);
-}
-
-#[test]
-fn broken_override_fails_even_bare() {
-    // A `BYNK_BYNKC` override that doesn't resolve is the one broken-compiler
-    // state left: the user explicitly asked for an external compiler and it
-    // isn't there. Fails even bare.
-    let fake = Fake::default()
-        .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
-        .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)));
-    let report = doctor::diagnose(&fake, &bynkc_override_missing(), &ctx(false), &bare());
-    assert_eq!(cap(&report, Capability::Compile).level, Level::Fail);
-    assert!(report.exit_nonzero(&bare()));
-}
-
-#[test]
-fn skew_is_reported_only_under_override() {
-    let fake = Fake::default();
-
-    // Slice 7: skew at a non-override origin is ignored — the in-process
-    // compiler can't drift against itself.
-    let path_major = doctor::diagnose(&fake, &bynkc_ok(Skew::Major), &ctx(false), &bare());
-    assert_eq!(cap(&path_major, Capability::Compile).level, Level::Ok);
-
-    // Under a `BYNK_BYNKC` override, skew is real and reported.
-    // Minor: bare exits 0 (warn), --strict fails.
-    let minor = doctor::diagnose(&fake, &bynkc_override(Skew::Minor), &ctx(false), &bare());
-    assert_eq!(cap(&minor, Capability::Compile).level, Level::Warn);
-    assert!(!minor.exit_nonzero(&bare()));
-    assert!(minor.exit_nonzero(&DoctorOptions {
-        only: None,
-        strict: true
-    }));
-
-    // Major: a contract mismatch — fails even bare.
-    let major = doctor::diagnose(&fake, &bynkc_override(Skew::Major), &ctx(false), &bare());
-    assert_eq!(cap(&major, Capability::Compile).level, Level::Fail);
-    assert!(major.exit_nonzero(&bare()));
 }
 
 #[test]
@@ -471,7 +390,7 @@ fn npx_provisionable_runner_is_warn_not_ok() {
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
         .with_npx();
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Test).level, Level::Warn);
     assert!(!report.exit_nonzero(&bare()));
     assert!(report.exit_nonzero(&DoctorOptions {
@@ -488,7 +407,7 @@ fn only_filter_scopes_probes() {
         only: Some(Capability::Test),
         strict: false,
     };
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &opts);
+    let report = doctor::diagnose(&fake, &ctx(false), &opts);
     let kinds: Vec<Capability> = report.capabilities.iter().map(|c| c.capability).collect();
     assert_eq!(kinds, vec![Capability::Compile, Capability::Test]);
 }
@@ -505,7 +424,7 @@ fn node_below_the_floor_warns() {
         .path_tool("node", "/usr/bin/node", Some(v(FLOOR - 2, 11, 0)))
         .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()));
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     for c in [Capability::Test, Capability::Deploy] {
         let r = cap(&report, c);
         assert_eq!(r.level, Level::Warn, "{c:?} with a below-floor node");
@@ -521,14 +440,14 @@ fn node_below_the_floor_warns() {
         .path_tool("node", "/usr/bin/node", Some(v(FLOOR, FLOOR_MINOR - 1, 9)))
         .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()));
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Test).level, Level::Warn);
     // At the floor, the same environment is all green.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
         .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
         .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()));
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Test).level, Level::Ok);
     assert_eq!(cap(&report, Capability::Deploy).level, Level::Ok);
 }
@@ -546,7 +465,7 @@ fn tsc_is_checked_against_the_verified_majors() {
         let fake = Fake::default()
             .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
             .path_tool("tsc", "/usr/bin/tsc", Some(tsc));
-        let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+        let report = doctor::diagnose(&fake, &ctx(false), &bare());
         let r = cap(&report, Capability::Test);
         let row = r
             .rows
@@ -594,14 +513,14 @@ fn tsc_is_checked_against_the_verified_majors() {
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
         .path_tool("tsc", "/usr/bin/tsc", Some(v(floor - 1, 9, 0)))
         .path_tool("tsx", "/usr/bin/tsx", Some(v(4, 19, 0)));
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Test).level, Level::Warn);
 
     // `tsx` alone: present, no TypeScript version to judge.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
         .path_tool("tsx", "/usr/bin/tsx", Some(v(4, 19, 0)));
-    let report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Test).level, Level::Ok);
 }
 
@@ -613,7 +532,7 @@ fn golden_report() -> doctor::Report {
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
         .path_tool("tsc", "/usr/bin/tsc", Some(v(5, 4, 2)))
         .with_npx(); // wrangler provisionable, not installed
-    let mut report = doctor::diagnose(&fake, &bynkc_ok(Skew::Match), &ctx(false), &bare());
+    let mut report = doctor::diagnose(&fake, &ctx(false), &bare());
     report.driver_version = "9.9.9".to_string();
     report
 }

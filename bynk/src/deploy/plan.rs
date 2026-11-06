@@ -444,7 +444,6 @@ pub(crate) fn secrets_file_passthrough_refusal(
 /// Run the slice-0 single-context deployment pipeline.
 pub fn run(
     tb: &dyn Toolbox,
-    compiler: &Compiler,
     project_root: &Path,
     node_floor: (u32, u32),
     opts: &DeployOptions,
@@ -470,7 +469,6 @@ pub fn run(
     };
     let report = doctor::diagnose(
         tb,
-        compiler,
         &Context {
             project_root: Some(project_root.to_path_buf()),
             in_repo: false,
@@ -488,7 +486,7 @@ pub fn run(
         eprintln!("bynk: could not prepare build directory: {e}");
         return ExitCode::FAILURE;
     }
-    if !workers::compile_once(compiler, project_root, &build_dir, true) {
+    if !workers::compile_once(project_root, &build_dir, true) {
         return ExitCode::FAILURE;
     }
     // Slice 2: every context, ordered — not the one context slice 0 demanded.
@@ -628,7 +626,7 @@ pub fn run(
                 }
                 // The build reads the lock, so the callee carries what was just
                 // recorded.
-                if !workers::compile_once(compiler, project_root, &build_dir, true) {
+                if !workers::compile_once(project_root, &build_dir, true) {
                     eprintln!(
                         "bynk: the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
                         bynk_driver::contracts_lock::lock_path(project_root).display()

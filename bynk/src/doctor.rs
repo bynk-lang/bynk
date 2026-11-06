@@ -15,7 +15,6 @@
 
 use std::path::PathBuf;
 
-use crate::compiler::{Compiler, Origin, Skew};
 use crate::probe::{self, DetectOpts, Probe, Provenance, Toolbox};
 
 /// A unit of work a user might want to do, and the tools it needs.
@@ -84,7 +83,6 @@ pub struct CapabilityReport {
 #[derive(Debug, Clone)]
 pub struct Report {
     pub driver_version: String,
-    pub compiler: Compiler,
     pub capabilities: Vec<CapabilityReport>,
 }
 
@@ -136,15 +134,10 @@ impl Report {
     }
 }
 
-/// Run the checks against a toolbox and a resolved compiler.
-pub fn diagnose(
-    tb: &dyn Toolbox,
-    compiler: &Compiler,
-    ctx: &Context,
-    opts: &DoctorOptions,
-) -> Report {
+/// Run the checks against a toolbox.
+pub fn diagnose(tb: &dyn Toolbox, ctx: &Context, opts: &DoctorOptions) -> Report {
     let root = ctx.project_root.as_deref();
-    let mut compile = compile_report(compiler);
+    let mut compile = compile_report();
     // #2240: a project with git dependencies needs `git` to fetch them.
     if root.is_some_and(has_git_dependencies) {
         compile.rows.push(detect_plain(
@@ -205,75 +198,24 @@ pub fn diagnose(
 
     Report {
         driver_version: crate::DRIVER_VERSION.to_string(),
-        compiler: compiler.clone(),
         capabilities,
     }
 }
 
-/// Compile/check/fmt. The compiler is **linked in-process** (slice 7 / ADR 0101),
-/// so it is always available and cannot skew against itself — the always-ok row.
-/// The external-`bynkc` resolution + skew check applies **only** under a
-/// `BYNK_BYNKC` override (`Origin::Override`), the one path on which a second,
-/// skewable compiler enters; with no override there is nothing external to check
-/// (amends ADR 0084).
-fn compile_report(compiler: &Compiler) -> CapabilityReport {
-    let mut rows = vec![Row {
-        label: "compiler".into(),
-        level: Level::Ok,
-        detail: "in-process".into(),
-        remedy: None,
-    }];
-
-    // Only when the user explicitly pointed `bynk` at an external compiler does a
-    // second binary — and thus skew — exist. Report it then, and only then.
-    if matches!(compiler.origin, Some(Origin::Override)) {
-        let ver = compiler
-            .version
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "unknown".into());
-        let row = match (&compiler.path, compiler.skew) {
-            (None, _) => Row {
-                label: "bynkc (override)".into(),
-                level: Level::Fail,
-                detail: "$BYNK_BYNKC set but not found".into(),
-                remedy: Some("fix BYNK_BYNKC, or unset it to use the in-process compiler".into()),
-            },
-            (Some(_), Some(Skew::Major)) => Row {
-                label: "bynkc (override)".into(),
-                level: Level::Fail,
-                detail: format!("{ver} — major skew vs driver"),
-                remedy: Some("align the override bynkc with bynk, or unset BYNK_BYNKC".into()),
-            },
-            (Some(_), Some(Skew::Minor)) => Row {
-                label: "bynkc (override)".into(),
-                level: Level::Warn,
-                detail: format!("{ver} — minor skew vs driver"),
-                remedy: Some("align the override bynkc with bynk, or unset BYNK_BYNKC".into()),
-            },
-            // Resolved but its version could not be read — the binary may not
-            // be a bynkc at all; don't render it as a clean Ok.
-            (Some(_), None) => Row {
-                label: "bynkc (override)".into(),
-                level: Level::Warn,
-                detail: "resolved, but its version could not be read".into(),
-                remedy: Some("check that BYNK_BYNKC points at a bynkc binary".into()),
-            },
-            (Some(_), _) => Row {
-                label: "bynkc (override)".into(),
-                level: Level::Ok,
-                detail: format!("{ver} (override)"),
-                remedy: None,
-            },
-        };
-        rows.push(row);
-    }
-
-    let level = rows.iter().map(|r| r.level).max().unwrap_or(Level::Ok);
+/// Compile/check/fmt/test. The compiler is **linked in-process** (ADR 0101), so it
+/// is always available and cannot skew against itself — the always-ok row. There
+/// is no external-`bynkc` resolution to report any more (#2998, ADR 0736).
+fn compile_report() -> CapabilityReport {
     CapabilityReport {
         capability: Capability::Compile,
         optional: false,
-        rows,
-        level,
+        rows: vec![Row {
+            label: "compiler".into(),
+            level: Level::Ok,
+            detail: "in-process".into(),
+            remedy: None,
+        }],
+        level: Level::Ok,
     }
 }
 

@@ -69,10 +69,10 @@
         }
       ],
       "compiler": {
-        "origin": "path",
-        "path": "/opt/bynk/bin/bynkc",
+        "origin": "in-process",
+        "path": null,
         "resolved": true,
-        "skew": "match",
+        "skew": null,
         "version": "9.9.9"
       },
       "driver": "9.9.9"

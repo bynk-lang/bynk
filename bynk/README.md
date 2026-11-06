@@ -67,9 +67,8 @@ cargo build --release -p bynk   # → target/release/bynk
 Requires a stable Rust toolchain, 2024 edition (MSRV 1.95). The compiler is
 linked in — `bynk dev` compiles a project in-process — so no separate `bynkc` is
 needed; `dev` and `deploy` additionally shell Node + `wrangler`, and `bynk new`
-needs neither (it only writes files). Power users can point `bynk` at an external
-compiler with `$BYNK_BYNKC` (e.g. to pin a version); `bynk doctor` reports that
-override and any driver↔compiler skew.
+needs neither (it only writes files). The old `$BYNK_BYNKC` pin is ignored (with a
+one-line warning), and there is no driver↔compiler skew left to report.
 
 ## Design
 
@@ -79,10 +78,9 @@ override and any driver↔compiler skew.
   self-contained
   ([ADR 0101](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0101-front-end-links-pipeline-binary-topology.md),
   building on [ADR 0083](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0083-bynk-driver-thin-orchestrator.md)).
-  A `$BYNK_BYNKC` override is kept as a power-user escape hatch.
 - **Single-concern modules** — one per command (`doctor`, `new`, `dev`,
-  `deploy`, `check`, `fmt`, `test`, `explain`), plus `compiler` (locate an
-  external `bynkc` and report driver↔compiler version skew), `workers` (the
+  `deploy`, `check`, `fmt`, `test`, `explain`), plus `compiler` (the
+  retired `BYNK_BYNKC` warning), `workers` (the
   in-process compile and `wrangler` plumbing `dev` and `deploy` share), and
   `report`. Tool detection (`probe`: presence + version + provenance, via the
   `which` crate) lives in `bynk-driver`, shared with `bynkc`.
