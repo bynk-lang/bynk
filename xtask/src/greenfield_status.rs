@@ -1359,9 +1359,14 @@ fn emit_diagnostics(root: &Path) -> Probe {
         ("bynk-check", "bynk-check/src"),
     ] {
         let mut naive: BTreeSet<String> = BTreeSet::new();
-        for (path, contents) in rust_files(&root.join(dir)) {
+        let src_dir = root.join(dir);
+        for (path, contents) in rust_files(&src_dir) {
             // Only the moved `project` module counts for the driver, not its other files.
-            if label == "bynk-driver" && !path.to_string_lossy().contains("src/project") {
+            // Compared component-wise on the path relative to `src/`, so neither the
+            // checkout's own location nor a lookalike such as `project_lock.rs` matters.
+            if label == "bynk-driver"
+                && !is_moved_project_file(path.strip_prefix(&src_dir).unwrap_or(&path))
+            {
                 continue;
             }
             for lit in bynk_dotted_literals(&contents) {
@@ -1748,6 +1753,12 @@ fn is_path_construction_line(line: &str) -> bool {
         || line.contains(".with_file_name(format!")
 }
 
+/// Is `rel` (relative to `bynk-driver/src`) the `project` module that moved there from
+/// `bynk-emit` (crate-hygiene D1, #2982): `project.rs` or anything under `project/`?
+fn is_moved_project_file(rel: &Path) -> bool {
+    rel == Path::new("project.rs") || rel.starts_with("project")
+}
+
 /// The code-generation family's source files, relative to the crate `src/` each lives
 /// in: all of `bynk-emit/src`, plus the orchestration that used to be `bynk-emit`'s
 /// `project` module and now lives at `bynk-driver/src/project{.rs,/}` (crate-hygiene D1,
@@ -1760,7 +1771,7 @@ fn codegen_family_files(root: &Path) -> Vec<(PathBuf, String)> {
     files.extend(
         rust_files_relative(&root.join("bynk-driver/src"))
             .into_iter()
-            .filter(|(p, _)| p == Path::new("project.rs") || p.starts_with("project")),
+            .filter(|(p, _)| is_moved_project_file(p)),
     );
     files
 }
@@ -5478,5 +5489,19 @@ commons app.demo {
                 "allowlisted {krate}:{dep} is no longer an unused edge; remove it"
             );
         }
+    }
+
+    /// The moved-`project` matcher is component-wise on the relative path: lookalikes
+    /// (`projects.rs`, `project_lock.rs`, `projects/x.rs`) are not the module.
+    #[test]
+    fn moved_project_file_matches_the_module_not_lookalikes() {
+        assert!(is_moved_project_file(Path::new("project.rs")));
+        assert!(is_moved_project_file(Path::new(
+            "project/tests_emit/harness.rs"
+        )));
+        assert!(!is_moved_project_file(Path::new("projects.rs")));
+        assert!(!is_moved_project_file(Path::new("project_lock.rs")));
+        assert!(!is_moved_project_file(Path::new("projects/x.rs")));
+        assert!(!is_moved_project_file(Path::new("test_runner.rs")));
     }
 }
