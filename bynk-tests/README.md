@@ -1,6 +1,6 @@
 # bynk-tests
 
-The Bynk integration-test corpus and the grammar-reference renderer.
+The Bynk integration-test corpus.
 
 > **Not a published crate.** `bynk-tests` is `publish = false` and kept off the
 > release workflows' crate list.
@@ -8,8 +8,8 @@ The Bynk integration-test corpus and the grammar-reference renderer.
 ## The corpus
 
 `tests/` is the compiler's integration suite: the `fixtures/` and `golden/`
-trees, the behaviour suites, and the drift guards for the generated reference
-pages. It is **one test binary**, `it` (see `tests/it.rs`), so cargo links the
+trees and the behaviour suites. (The docs and index consistency checks, and the
+grammar-reference renderer, are in `xtask/tests/docs_consistency`.) It is **one test binary**, `it` (see `tests/it.rs`), so cargo links the
 compiler once rather than once per file. Run a file's tests by its module name:
 
 ```sh
@@ -18,7 +18,7 @@ cargo nextest run -p bynk-tests --test it -E 'test(/^tsc_verify::/)'
 ```
 
 Regenerate a blessed reference page with `BYNK_BLESS=1`, for example
-`BYNK_BLESS=1 cargo test -p bynk-tests --test it grammar_reference::`.
+`BYNK_BLESS=1 cargo test -p xtask --test docs_consistency grammar_reference::`.
 
 Tests that start the compiler binary use `CARGO_BIN_EXE_bynkc-under-test`, a
 forwarding binary in this crate that `include!`s `bynkc`'s own `main.rs`

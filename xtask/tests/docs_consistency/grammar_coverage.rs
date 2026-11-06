@@ -70,7 +70,7 @@ fn all_rule_names() -> BTreeSet<String> {
 
 #[test]
 fn every_embeddable_rule_has_exactly_one_entry() {
-    let embeddable: BTreeSet<String> = bynk_tests::grammar::embeddable_rules(&grammar_json())
+    let embeddable: BTreeSet<String> = xtask::grammar::embeddable_rules(&grammar_json())
         .into_iter()
         .collect();
 
@@ -136,7 +136,7 @@ fn every_directive_arg_is_a_real_rule() {
 
 #[test]
 fn every_entry_has_a_matching_anchor() {
-    let embeddable: BTreeSet<String> = bynk_tests::grammar::embeddable_rules(&grammar_json())
+    let embeddable: BTreeSet<String> = xtask::grammar::embeddable_rules(&grammar_json())
         .into_iter()
         .collect();
     let md = grammar_md();
@@ -183,7 +183,7 @@ fn every_entry_has_a_matching_anchor() {
 /// #1669, the other 21 by #1780).
 #[test]
 fn every_embeddable_rule_is_in_the_spec() {
-    let embeddable: BTreeSet<String> = bynk_tests::grammar::embeddable_rules(&grammar_json())
+    let embeddable: BTreeSet<String> = xtask::grammar::embeddable_rules(&grammar_json())
         .into_iter()
         .collect();
     let mut files = Vec::new();

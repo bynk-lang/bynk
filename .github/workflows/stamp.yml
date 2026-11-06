@@ -126,9 +126,9 @@ jobs:
       - name: Validate the stamped tree
         if: steps.pending.outputs.any == 'true'
         run: |
-          cargo test --package bynk-tests --test it doc_version::
-          cargo test --package bynk-tests --test it decisions_index::
           cargo build --workspace --locked
+          # Includes the docs and index guards (`doc_version`, `decisions_index`, ...),
+          # which moved into xtask's `docs_consistency` binary (C4b, #2940).
           cargo test --package xtask
 
       # Only now — after every arbitrary-code step above — mint the App token.

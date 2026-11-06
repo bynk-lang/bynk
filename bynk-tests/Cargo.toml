@@ -6,13 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The Bynk integration-test corpus (fixtures, goldens and behaviour suites) and the grammar-reference renderer. Not a product crate: unpublished, kept off the release workflows' crate list."
+description = "The Bynk integration-test corpus (fixtures, goldens and behaviour suites). Not a product crate: unpublished, kept off the release workflows' crate list."
 # One integration-test binary, not one per file: see tests/it.rs. Linking ~130
 # test binaries, each the whole compiler, dominated the Windows CI build.
 autotests = false
-
-[lib]
-path = "src/lib.rs"
 
 [[test]]
 name = "it"
@@ -31,11 +28,11 @@ path = "src/bin/bynkc-under-test.rs"
 bynkc.workspace = true
 bynk-driver.workspace = true
 clap.workspace = true
-# The grammar renderer (`grammar` module) and the tests' JSON documents.
-serde.workspace = true
-serde_json.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
+# `xtask::site_page` (the generated-page transform `wire_reference` uses).
+xtask = { path = "../xtask" }
 bynk-syntax.workspace = true
 bynk-check.workspace = true
 bynk-emit.workspace = true

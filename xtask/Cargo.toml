@@ -19,6 +19,14 @@ schemars.workspace = true
 # #2096: `tests/manifest_schema.rs` parses the reference page's example manifest; A4
 # (#2976): the `unused_deps` probe parses the workspace's `Cargo.toml` files.
 toml.workspace = true
+# C4b (#2940): the docs-consistency checks (`tests/docs_consistency`) and the grammar
+# renderer they share (`grammar`).
+serde.workspace = true
+regex.workspace = true
+
+[dev-dependencies]
+# `cli_reference` renders the CLI page from `bynkc`'s own `clap` command.
+bynkc.workspace = true
 
 [lib]
 path = "src/lib.rs"
