@@ -3137,15 +3137,13 @@ fn build_output(
     // #2695: the entry handlers of the project's own contexts (first-party
     // injected units are the toolchain's, not the user's), described from the
     // checked symbol tables before they are moved into emission.
-    let entry_handlers: Vec<bynk_check::entry_signature::EntryHandler> = groups
+    let entry_handlers: Vec<bynk_model::entry::EntryHandler> = groups
         .iter()
         .filter(|(unit, idxs)| {
             kinds.get(*unit) == Some(&UnitKind::Context)
                 && idxs.iter().any(|i| !parsed[*i].is_synthetic())
         })
-        .flat_map(|(unit, _)| {
-            bynk_check::entry_signature::entry_handlers(unit, &unit_tables, &unit_uses)
-        })
+        .flat_map(|(unit, _)| bynk_model::entry::entry_handlers(unit, &unit_tables, &unit_uses))
         .collect();
     // The integration runnables follow the unit ones.
     let unit_count = runnable_tests.len();
@@ -5545,7 +5543,7 @@ mod tests {
 #[cfg(test)]
 mod entry_scope_tests {
     use super::*;
-    use bynk_check::entry_signature::{EntryHandler, EntryShape};
+    use bynk_model::entry::{EntryHandler, EntryShape};
 
     fn entries(files: &[(&str, &str)]) -> Vec<EntryHandler> {
         match compile_files_in_memory(files, BuildTarget::Bundle, Default::default(), false) {

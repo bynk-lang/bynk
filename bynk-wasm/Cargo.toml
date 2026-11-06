@@ -22,6 +22,9 @@ crate-type = ["cdylib", "rlib"]
 # strip (strip_project_to_js). bynk-check supplies the Platform axis.
 bynk-driver.workspace = true
 bynk-check.workspace = true
+# Crate-hygiene B3 (#2999): the entry handlers' signatures (`bynk_model::entry`)
+# the compile reports, read directly from the system model, not re-exported.
+bynk-model.workspace = true
 bynk-syntax.workspace = true
 # The pure completion logic (#808) — wasm-safe (no tower-lsp/tokio).
 bynk-ide.workspace = true

@@ -193,7 +193,7 @@ The rest of the toolchain needs these facts, and each consumer gets them its own
 |---|---|---|
 | `WireModel` (boundary types) | `bynk-check/src/wire.rs` | emitter codecs, `bynk_ide::wire_contract`, `bynk-lsp`, `bynk openapi`, `bynk mcp` |
 | `ArchModel` (contexts, `consumes`, bindings) | `bynk-ide/src/architecture.rs` | the VS Code architecture map (via `bynk-lsp`), `bynk mcp` |
-| `EntryHandler`/`EntryShape` (#2695) | `bynk-check/src/entry_signature.rs` | `bynk-emit` (`analyse_in_memory_project`), the playground via `bynk-wasm` |
+| `EntryHandler`/`EntryShape` (#2695) | `bynk-model/src/entry.rs` (B3, #2999; was `bynk-check/src/entry_signature.rs`) | the driver's `build_output`, carried in `bynk-emit`'s `ProjectOutput`, the playground via `bynk-wasm` |
 | `ContextSequenceInfo` | `bynk-check/src/analysis.rs` | `bynk_ide::sequence` |
 | Handler kinds, protocols, routes, shapes | `bynk-ir` | `bynk-emit` only |
 
