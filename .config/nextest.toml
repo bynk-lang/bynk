@@ -152,7 +152,7 @@ filter = 'binary_id(bynk-tests::it) & test(=tsc_verify::emitted_javascript_is_va
 priority = 60
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynk-fmt::comment_slots) & test(=a_comment_at_every_slot_is_kept_or_refused)'
+filter = 'binary_id(bynk-fmt::comment_slots)'
 priority = 50
 
 [[profile.default.overrides]]
