@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.23** | Crate hygiene E1 PR 3 - `bynk test` runs in-process through `bynk-driver` (no `bynkc` binary needed, no skew gate), including the workspace loop and `--suite`/`--case` discovery |
 | **v0.510.22** | The playground's entry-handler signatures are pinned byte for byte, and `bynk_check::entry_signature::MAX_DEPTH` is no longer public (crate-hygiene B3) |
 | **v0.510.21** | `bynk test --smoke --print` heads each synthesised suite with a `/`-separated path on Windows too, as every other path the CLI shows is (it printed `src\shop\api.smoke.bynk`); the synthesised suites are pinned byte for byte, and the system model's B2–B3 decisions are recorded (crate-hygiene B2) |
 | **v0.510.20** | Crate hygiene E1 PR 1 - the `compile` command body moves from `bynkc` into `bynk-driver` (`run_compile`), shared like `run_check` and `run_fmt` (no output change) |
