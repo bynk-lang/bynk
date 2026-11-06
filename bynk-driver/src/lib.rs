@@ -15,6 +15,7 @@ use bynk_fmt::{FormatOptions, IndentStyle, format_source};
 use bynk_render::LabelHome;
 use project::{CompileOptions, ProjectPathsError, try_read_project_paths_with};
 
+pub mod compile_cmd;
 pub mod contracts_lock;
 pub mod coverage;
 pub mod dev_run;
@@ -35,6 +36,7 @@ pub mod test_json;
 pub mod test_runner;
 pub mod test_stream;
 
+pub use compile_cmd::{CliPlatform, CliTarget, CompileArgs, EmitFormat, run_compile};
 pub use output::{write_document, write_modules, write_modules_for_node, write_output};
 
 /// Root a directory project the way every project command should (#46): a
