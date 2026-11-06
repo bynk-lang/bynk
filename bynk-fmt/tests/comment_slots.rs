@@ -405,7 +405,8 @@ fn stale_rules(rules: &[Rule], matched: &[usize]) -> Vec<String> {
 }
 
 /// With no defect open there is nothing to check; otherwise every shard is run
-/// once more to total the matches. (The cost is paid only while a rule exists.)
+/// to total the matches (counting only: no pin is read or written, so
+/// it cannot race a bless). (The cost is paid only while a rule exists.)
 #[test]
 fn known_rules_still_match() {
     if KNOWN.is_empty() {
@@ -413,7 +414,7 @@ fn known_rules_still_match() {
     }
     let mut total = vec![0usize; KNOWN.len()];
     for shard in 0..SHARDS {
-        for (t, m) in total.iter_mut().zip(check_shard(shard)) {
+        for (t, m) in total.iter_mut().zip(scan_shard(shard, false).matched) {
             *t += m;
         }
     }
@@ -439,9 +440,18 @@ fn a_known_rule_is_stale_only_when_no_shard_matches_it() {
     assert!(stale_rules(&rules, &total).is_empty());
 }
 
-/// Checks one shard; returns how often each [`KNOWN`] rule matched in it.
-fn check_shard(shard: usize) -> Vec<usize> {
-    let exhaustive = std::env::var_os("BYNK_FMT_EXHAUSTIVE").is_some();
+/// What a pass over one shard found.
+struct Scan {
+    /// How often each [`KNOWN`] rule matched.
+    matched: Vec<usize>,
+    /// Comments the formatter dropped, duplicated or mangled, no rule covering them.
+    failures: Vec<String>,
+    refused_by_fixture: BTreeMap<String, Refused>,
+    summary: String,
+}
+
+/// Walks one shard's fixtures. Touches no pin file.
+fn scan_shard(shard: usize, exhaustive: bool) -> Scan {
     let opts = FormatOptions::default();
     let mut counts: BTreeMap<(Outcome, Kind), usize> = BTreeMap::new();
     let mut refused_by_fixture: BTreeMap<String, Refused> = BTreeMap::new();
@@ -589,7 +599,24 @@ fn check_shard(shard: usize) -> Vec<usize> {
         }
     }
 
-    let summary = format!("{counts:?}");
+    Scan {
+        matched,
+        failures,
+        refused_by_fixture,
+        summary: format!("{counts:?}"),
+    }
+}
+
+/// Checks one shard: failures, then (by mode) the exhaustive report, the bless,
+/// or the pins.
+fn check_shard(shard: usize) {
+    let exhaustive = std::env::var_os("BYNK_FMT_EXHAUSTIVE").is_some();
+    let Scan {
+        failures,
+        refused_by_fixture,
+        summary,
+        ..
+    } = scan_shard(shard, exhaustive);
     assert!(
         failures.is_empty(),
         "{summary}\n\
@@ -598,7 +625,7 @@ fn check_shard(shard: usize) -> Vec<usize> {
     );
     if exhaustive {
         eprintln!("exhaustive run: {summary}");
-        return matched;
+        return;
     }
     if std::env::var_os("BYNK_BLESS").is_some() {
         bless_pins(&refused_by_fixture, shard);
@@ -606,7 +633,7 @@ fn check_shard(shard: usize) -> Vec<usize> {
             "blessed {} comment-slot pins (shard {shard})",
             refused_by_fixture.len()
         );
-        return matched;
+        return;
     }
     let pins = read_pins(Some(shard));
     let names: std::collections::BTreeSet<&String> =
@@ -631,5 +658,4 @@ fn check_shard(shard: usize) -> Vec<usize> {
          `BYNK_BLESS=1 cargo test -p bynk-fmt --test comment_slots` and review the diff.\n{summary}",
         moved.join("\n"),
     );
-    matched
 }
