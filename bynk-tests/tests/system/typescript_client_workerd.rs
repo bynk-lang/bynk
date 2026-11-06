@@ -24,8 +24,11 @@
 //! The same toolchain skip and `BYNK_REQUIRE_WORKERD` gate as the other
 //! workerd smokes.
 
+#[path = "../require/mod.rs"]
 mod require;
+#[path = "../tools/mod.rs"]
 mod tools;
+#[path = "../wrangler/mod.rs"]
 mod wrangler;
 
 use std::fs;

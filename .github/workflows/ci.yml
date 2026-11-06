@@ -677,6 +677,14 @@ jobs:
           # resolvable, and several `bynkc test` runner paths branch on exactly
           # that. Not worth the risk on the OS we just put on the PR gate.
           BYNK_REQUIRE_WORKERD: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
+      # C4b (#2940): every test is in exactly one tier (unit, integration,
+      # system; the `ci-*` profiles in .config/nextest.toml). Linux only: the
+      # partition is OS-independent. `--profile test` reuses the test build
+      # above (a plain `cargo run` would rebuild xtask's dependencies in the dev
+      # profile); the four `nextest list` calls run no test and take seconds.
+      - name: Test tier partition
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo run --locked --profile test -p xtask -- tier-probe
       # C4a (#2940): the ci profile's per-test durations (JUnit), kept so the
       # tier split is sized from real-runner numbers. Every leg, pass or fail.
       # Keep this ABOVE the TS7 re-run below: that run rewrites the same path
@@ -714,7 +722,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         # bynk-tests's integration tests are one binary (`it`, see bynk-tests/tests/it.rs);
         # each file's tests are prefixed with its stem.
-        run: cargo nextest run --locked --profile ci -p bynk-tests --test it -E 'test(/^(tsc_verify|examples|behaviour_fixtures)::/)'
+        run: cargo nextest run --locked --profile ci -p bynk-tests --test it -E 'test(/^system::(tsc_verify|examples|behaviour_fixtures)::/)'
         env:
           BYNK_REQUIRE_TSC: "1"
 

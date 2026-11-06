@@ -19,6 +19,7 @@
 //!   depend on). Under it, a missing Node, or one too old for
 //!   `stripTypeScriptTypes` (< 22.13), fails rather than skips.
 
+#[path = "../require/mod.rs"]
 mod require;
 
 use std::fs;

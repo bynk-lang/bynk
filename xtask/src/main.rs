@@ -12,6 +12,7 @@
 //!   checks itself against (reserved keywords, semantic-token legend);
 //!   `--check` fails when the committed snapshot is stale, `--tag T --out F`
 //!   writes the release asset.
+//! - `tier-probe` (C4b, #2940) fails when a test is in no test tier, or in two.
 //! - `ci` runs the gates CI runs, locally, in CI's own cheapest-first order —
 //!   `--fast` stops after the two that need no compile-and-link.
 
@@ -60,6 +61,23 @@ fn main() -> ExitCode {
             manifest_schema(args.iter().any(|a| a == "--check"))
         }
         Some("editor-contract") => editor_contract(&args[1..]),
+        Some("tier-probe") => {
+            if args.len() > 1 {
+                eprintln!("xtask tier-probe: takes no arguments");
+                usage();
+                return ExitCode::from(2);
+            }
+            match xtask::tiers::probe(&repo_root()) {
+                Ok(summary) => {
+                    println!("tier-probe: {summary}");
+                    ExitCode::SUCCESS
+                }
+                Err(problems) => {
+                    eprintln!("tier-probe failed:\n  {}", problems.join("\n  "));
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("ci") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--fast") {
                 eprintln!("xtask ci: unknown argument {bad:?}");
@@ -530,7 +548,7 @@ fn have_nextest(root: &Path) -> bool {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply]>"
+        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | tier-probe>"
     );
 }
 

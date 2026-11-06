@@ -18,7 +18,9 @@
 //! Skips loudly without `node`; `BYNK_REQUIRE_TSC=1` turns the skip into a
 //! failure, as the other Node-driven suites do.
 
+#[path = "../require/mod.rs"]
 mod require;
+#[path = "../tools/mod.rs"]
 mod tools;
 
 use std::fs;

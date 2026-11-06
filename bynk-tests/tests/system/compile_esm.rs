@@ -21,7 +21,9 @@
 //! Skips loudly without a TypeScript toolchain; `BYNK_REQUIRE_TSC=1` turns the
 //! skip into a failure (CI).
 
+#[path = "../require/mod.rs"]
 mod require;
+#[path = "../tools/mod.rs"]
 mod tools;
 
 use std::fs;

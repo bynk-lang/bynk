@@ -10,6 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[path = "../require/mod.rs"]
 mod require;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
