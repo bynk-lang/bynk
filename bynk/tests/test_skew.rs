@@ -68,62 +68,21 @@ fn driver() -> (u32, u32) {
     (it.next().unwrap(), it.next().unwrap())
 }
 
+/// #2998: `bynk test` runs in-process, so a skewed `bynkc` named by
+/// `BYNK_BYNKC` is neither consulted nor run, and nothing about it is reported.
 #[test]
-fn minor_skew_warns_and_still_runs() {
-    let (major, minor) = driver();
-    let bynkc = fake_bynkc("minor", &format!("{major}.{}.0", minor + 1));
-    let out = bynk_test(&bynkc, &[], false);
+fn test_never_runs_or_gates_on_a_second_compiler() {
+    let (major, _) = driver();
+    let bynkc = fake_bynkc("major-test", &format!("{}.0.0", major + 1));
+    let out = bynk_test(&bynkc, &["--no-run", "--format", "json"], false);
     let (stdout, stderr) = (
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr),
     );
     assert!(
-        stderr.contains("different minor version"),
-        "warns: {stderr}"
+        !stdout.contains("FAKE BYNKC RAN") && !stderr.contains("major version"),
+        "stdout: {stdout}\nstderr: {stderr}"
     );
-    assert!(
-        stdout.contains("FAKE BYNKC RAN: test"),
-        "delegates: {stdout}"
-    );
-    assert!(out.status.success(), "a minor skew does not fail the run");
-}
-
-#[test]
-fn major_skew_refuses_without_running() {
-    let (major, _) = driver();
-    let bynkc = fake_bynkc("major", &format!("{}.0.0", major + 1));
-    let out = bynk_test(&bynkc, &[], false);
-    let (stdout, stderr) = (
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr),
-    );
-    assert!(!out.status.success(), "a major skew fails");
-    assert!(
-        stderr.contains("different major version") && stderr.contains("Refusing"),
-        "explains: {stderr}"
-    );
-    assert!(
-        !stdout.contains("FAKE BYNKC RAN"),
-        "never delegates: {stdout}"
-    );
-}
-
-#[test]
-fn major_skew_runs_when_allowed() {
-    let (major, _) = driver();
-    let bynkc = fake_bynkc("major-allowed", &format!("{}.0.0", major + 1));
-    for (extra, env) in [(&["--allow-skew"][..], false), (&[][..], true)] {
-        let out = bynk_test(&bynkc, extra, env);
-        let (stdout, stderr) = (
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr),
-        );
-        assert!(stderr.contains("running it anyway"), "warns: {stderr}");
-        assert!(
-            stdout.contains("FAKE BYNKC RAN: test"),
-            "delegates: {stdout}"
-        );
-    }
 }
 
 /// `check` and `fmt` shell the override's `bynkc` too, so they are gated the

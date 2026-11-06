@@ -482,18 +482,15 @@ pub enum Command {
     /// Discovers and runs test declarations — the `bynkc test` behaviour
     /// through the driver (v0.138).
     ///
-    /// Delegates to the `bynkc` the driver resolves (`BYNK_BYNKC` → PATH →
-    /// sibling-of-`bynk`), so an editor or developer inherits the driver's
-    /// richer compiler resolution instead of locating `bynkc` themselves.
+    /// Runs in-process (no `bynkc` binary required), exactly as `bynkc test`.
     /// Requires `tsc` (with Node.js) or `tsx` on PATH, exactly as `bynkc test`.
     Test {
         #[command(flatten)]
         args: bynk_driver::test_runner::TestArgs,
         #[command(flatten)]
         lock: LockArgs,
-        /// Run even when the resolved `bynkc` is a different *major* version
-        /// from `bynk` (#1675). A minor skew only warns. Also settable as
-        /// `BYNK_ALLOW_SKEW=1`.
+        /// No effect: `test` runs in-process, so there is no second compiler
+        /// to skew against (#2998). Kept so existing invocations keep working.
         #[arg(long)]
         allow_skew: bool,
     },

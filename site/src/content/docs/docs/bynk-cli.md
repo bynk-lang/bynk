@@ -12,9 +12,8 @@ and direct use.
 The everyday commands — [`bynk check`](#bynk-check), [`bynk fmt`](#bynk-fmt), and
 [`bynk test`](#bynk-test) — mirror their `bynkc` counterparts exactly (same flags,
 same output, same exit codes), so the two are drop-in equivalent. `check` and
-`fmt` run the pipeline in-process; `test` delegates to the `bynkc` the driver
-resolves (see [Which `bynkc`?](#which-bynkc)), so an editor or developer inherits
-the driver's resolution instead of locating the compiler themselves.
+`fmt` and `test` run the pipeline in-process, so none of them needs a
+separately-installed `bynkc`.
 
 ```text
 bynk <command> [options]
@@ -672,13 +671,13 @@ canonical). Non-zero if a file could not be read/written, failed to parse, or
 ## `bynk test`
 
 Discover and run a project's test declarations — the same behaviour as
-[`bynkc test`](/docs/cli/#bynkc-test), through the driver. Unlike `check` and
-`fmt`, `test` **delegates** to the resolved `bynkc` (it orchestrates external
-`tsc`/`node` anyway), forwarding every flag verbatim. Requires `tsc` (with
+[`bynkc test`](/docs/cli/#bynkc-test), run **in-process** through the driver: no
+separately-installed `bynkc` is required. It still starts the external `tsc` and
+`node` for the runner (and `bynk dev` for `--against dev`). Requires `tsc` (with
 Node.js) or `tsx` on `PATH`, exactly as `bynkc test`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--allow-skew]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots]
 ```
 
 | Argument | Default | Meaning |
@@ -699,13 +698,11 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect]
 | `--print` | off | With `--smoke`, print the synthesised suites as `.bynk` source and run nothing. |
 | `--smoke-unsafe` | off | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). |
 | `--update-snapshots` | off | Record snapshots instead of comparing: write each `expect … matches snapshot` that has no stored snapshot, refresh the ones whose value changed, and delete the obsolete ones, in `snapshots/<suite file>.snap.json`. Without it a missing snapshot fails the case, a changed one fails with a diff, and an obsolete one is only reported. See [Snapshots](/book/reference/testing/#snapshots). Incompatible with `--against`, `--smoke`, `--coverage`, `--inspect` and `--no-run`. |
-| `--allow-skew` | off | Run even when the resolved `bynkc` is a different **major** version from `bynk` (see [skew](#version-skew)). Also settable as `BYNK_ALLOW_SKEW=1`. |
+| `--allow-skew` | off | No effect: `test` runs in-process, so there is no second compiler to skew against. Kept so existing invocations keep working. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
 passed, non-zero on a failing case, a `--case` or `--suite` value that selected
-nothing, a compile error, or a missing runner. It is
-also non-zero, without running anything, when the resolved `bynkc` is majorly
-skewed from `bynk` and skew isn't allowed.
+nothing, a compile error, or a missing runner.
 
 **At a workspace root** — `INPUT` naming a
 [workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces)
