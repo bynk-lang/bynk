@@ -276,7 +276,8 @@ fn workspace_lints(root: &Path) -> Probe {
 /// a bare `fs::`-style call site in it resolves to `std::fs` through its imports
 /// ([`production_std_fs_files`]) — a module-level `use std::fs;` in a parent module is
 /// visible to a child through `use super::*;` (module privacy is ancestor-scoped), so
-/// `bynk-emit/src/project/discovery.rs` reads and walks the filesystem while never
+/// `project/discovery.rs` (then in `bynk-emit/src`; since D1, #2982, in `bynk-driver/src`, where
+/// this probe no longer counts it) reads and walks the filesystem while never
 /// spelling `std::fs` itself. The literal text scan alone missed exactly that file,
 /// so a probe reading `bynk-emit=0` would have asserted R2.3 closed on a false
 /// premise (#1013).
