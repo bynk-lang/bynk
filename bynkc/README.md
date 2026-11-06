@@ -3,7 +3,7 @@
 > **Final release: `bynkc` is now [`bynk`](https://crates.io/crates/bynk).** The
 > separate compiler binary is retired: `bynk` runs every command in-process
 > (`bynk check`, `fmt`, `compile` and `test` take the same flags and print the same
-> output), and answers to the name `bynkc` for this one release. This is `bynkc`'s
+> output), and answers to the name `bynkc` during a short transition. This is `bynkc`'s
 > final crates.io release (crate-hygiene track
 > [#2775](https://github.com/bynk-lang/bynk/issues/2775), slice E3). It is not
 > yanked, and existing pins keep resolving. New installs use `cargo install bynk`.
@@ -12,7 +12,7 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 This crate is a few-line shim that calls into `bynk`, so `cargo install bynkc`
-still installs a working `bynkc` this once. It prints one line to stderr saying
+still installs a working `bynkc` during that transition. It prints one line to stderr saying
 the name is retired; nothing else about its output changes.
 
 ## What to change
@@ -27,7 +27,7 @@ the name is retired; nothing else about its output changes.
 | `BYNK_BYNKC=…` to pin a compiler | nothing: it is ignored (there is no second compiler) |
 
 The prebuilt release archives and the install scripts still carry a `bynkc` (a copy
-of `bynk`) for this release only, and the next release drops it.
+of `bynk`) during the transition only; a later release drops it.
 
 ## The library is gone
 

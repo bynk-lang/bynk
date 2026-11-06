@@ -6,7 +6,7 @@
 //! `bynk` parses `bynkc`'s four subcommands with their current flags, runs the
 //! same driver command bodies with `prog = "bynkc"` (so every message reads as it
 //! did), and prints one retirement notice on stderr. The alias, the shim crate
-//! and the asset go in the release after (E3-4).
+//! and the asset go in a later release (E3-4).
 //!
 //! The clap types live here (rather than in `main.rs`) so they are the single
 //! source of truth for both the alias and the generated CLI reference page
@@ -304,7 +304,7 @@ fn is_bynkc_name(arg0: &std::path::Path) -> bool {
 }
 
 /// The one-line stderr notice printed when `bynkc` runs a subcommand (Decision G).
-pub const RETIREMENT_NOTICE: &str = "bynkc: notice: `bynkc` is retired and will be removed in the next release; use `bynk` (the same commands, flags and output).";
+pub const RETIREMENT_NOTICE: &str = "bynkc: notice: `bynkc` is retired and will be removed in a future release; use `bynk` (the same commands, flags and output).";
 
 /// Run `bynkc`'s command line: parse it, print the notice, run the command.
 /// Called by `bynk`'s `main` when invoked as `bynkc`, and by the final `bynkc`
