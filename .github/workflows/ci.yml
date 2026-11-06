@@ -637,9 +637,9 @@ jobs:
       # The spec must stay in step with the tests' own; a drift guard
       # (bynk-tests/tests/wrangler/mod.rs) fails if it doesn't.
       #
-      # Not fatal off Linux, where the smokes are allowed to skip anyway. On
-      # Linux BYNK_REQUIRE_WORKERD makes wrangler mandatory, so a failure here
-      # is a real failure and going red now beats going red 180s later.
+      # Not fatal here: this step runs only off Linux (the Linux system tier is
+      # the `test-system` job, which pre-warms too and makes wrangler mandatory),
+      # and off Linux the smokes are allowed to skip anyway.
       - name: Pre-warm the npx cache for wrangler
         if: matrix.os != 'ubuntu-latest'
         run: npx -y wrangler@4 --version
@@ -674,26 +674,10 @@ jobs:
         run: cargo nextest run --workspace --locked --profile ci
         env:
           BYNK_REQUIRE_TSC: "1"
-          # The workerd smokes (#518) must actually run somewhere: required on
-          # Linux, permitted to skip on the other OSes if wrangler cannot boot.
-          #
-          # The `''` branch does not unset the variable — Actions exports it
-          # empty — so a workerd test must read "required" as *non-empty*, not
-          # merely present. That contract was got wrong twice (#965 fixed one
-          # guard; #971 fixed the identical guard in another test four days
-          # later, both only after the breakage had landed on `main`), because
-          # each test carried its own copy. It now has exactly one
-          # implementation: bynk-tests/tests/require/mod.rs, which is unit-tested on
-          # the empty case specifically. A new workerd test calls that, and the
-          # two halves of the contract cannot drift apart again.
-          #
-          # Deliberately NOT rewritten as a `shell: bash` conditional export.
-          # That would make the variable genuinely unset off Linux, but it would
-          # also run `cargo nextest` under Git Bash on windows-latest — a path
-          # this repo has never exercised, which reorders PATH and makes `which`
-          # resolvable, and several `bynkc test` runner paths branch on exactly
-          # that. Not worth the risk on the OS we just put on the PR gate.
-          BYNK_REQUIRE_WORKERD: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
+          # No BYNK_REQUIRE_WORKERD here: this step runs only off Linux, where the
+          # workerd smokes may skip if wrangler cannot boot. Linux requires them
+          # in the `test-system` job (see there, and bynk-tests/tests/require/mod.rs
+          # for the one implementation of the "non-empty means required" contract).
       # C4b (#2940): every test is in exactly one tier (unit, integration,
       # system; the `ci-*` profiles in .config/nextest.toml). Linux only: the
       # partition is OS-independent. `--profile test` reuses the test build

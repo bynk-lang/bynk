@@ -62,6 +62,8 @@ status=$?
 kill "$watcher_pid" 2>/dev/null
 wait "$watcher_pid" 2>/dev/null
 
+# If the sibling failed just as the command exited 0 the marker still wins: the
+# run is red either way, and the message names the cause.
 if [ -e "$marker" ]; then
   rm -f "$marker"
   echo "::error::stopped: the '$sibling' job failed, so this run is red regardless. Fix that job first."
