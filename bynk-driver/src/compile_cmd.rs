@@ -52,7 +52,7 @@ pub enum CliPlatform {
     /// Cloudflare Workers runtime (the default).
     #[default]
     Cloudflare,
-    /// Node.js runtime (v0.18).
+    /// Node.js (≥ 22) runtime (v0.18).
     Node,
     /// The browser — the `bynk` surface over Web APIs, for the in-browser
     /// REPL/playground (v0.108). `Bundle` topology only; `Fetch`/`Secrets` are

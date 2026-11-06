@@ -491,21 +491,23 @@ remains.
 
 ## `bynk compile`
 
-Compile a project to TypeScript in a directory — the project form of
-[`bynkc compile`](/docs/cli/#bynkc-compile), through the driver. Like `bynk
-test` it always delegates: it shells the `bynkc` the driver resolves (see
-[Which `bynkc`?](#which-bynkc)), so an editor inherits that resolution. It exists
-for the editor's **Show Compiled Output** view; for a build you deploy, use
-[`bynk dev`](#bynk-dev) or [`bynk deploy`](#bynk-deploy).
+Compile a project to TypeScript in a directory — [`bynkc compile`](/docs/cli/#bynkc-compile),
+run **in-process** through the driver: no separately-installed `bynkc` is
+required, and the output is the same. It also serves the editor's **Show
+Compiled Output** view; for a build you deploy, use [`bynk dev`](#bynk-dev) or
+[`bynk deploy`](#bynk-deploy).
 
 ```text
-bynk compile [INPUT] --output DIR [--sources-stdin] [--locked] [--offline] [--allow-skew]
+bynk compile [INPUT] --output DIR [--target bundle|workers] [--platform cloudflare|node|browser] [--emit ts|js] [--sources-stdin] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
 |---|---|---|
-| `INPUT` | `.` | A project root directory. |
-| `--output`, `-o` | | The output root. Each module is written under it with its source map beside it (`greet.ts` and `greet.ts.map`). |
+| `INPUT` | `.` | A project root directory, or one `.bynk` file. |
+| `--output`, `-o` | | The output root (the output file, for a single-file input). Each module is written under it with its source map beside it (`greet.ts` and `greet.ts.map`). |
+| `--target` | `bundle` | `bundle` builds one deployment unit; `workers` builds one Worker per context. |
+| `--platform` | `cloudflare` | The surface binding: `cloudflare`, `node`, or `browser` (`bundle` only). |
+| `--emit` | `ts` | `ts` writes typed TypeScript; `js` writes the same modules with types stripped. |
 | `--sources-stdin` | off | Compile unsaved buffers: read a JSON object `{ "<absolute path>": "<text>" }` from stdin and layer it over the project's sources, so the overlay wins over the files on disk. A `.bynk` path inside the project that the build did not read is added, as an unsaved new file; a path outside the project, or one that is not a `.bynk` file, is an error and nothing is built. |
 
 `--sources-stdin` makes the run a **preview build**: `bynk.schema.lock` is
@@ -1525,12 +1527,20 @@ escape hatch below — in this order:
 2. **`bynkc` on `PATH`**;
 3. a **`bynkc` sibling** of the running `bynk` binary (how a paired install ships).
 
+`bynk compile` runs in-process and **ignores `BYNK_BYNKC`**: there is no second
+compiler to pin. That is transitional — a later release makes `check`, `fmt`,
+`dev` and `deploy` ignore it too, with a one-line warning for a release before
+it is dropped.
+
 `bynk check` and `bynk fmt` run in-process and need none of this — **unless**
 `BYNK_BYNKC` is set, in which case they shell that pinned compiler so an
 externally-managed `bynkc` still governs the result. `bynk doctor` reports this
 resolution and any driver↔compiler version skew.
 
 ### Version skew
+
+`bynk compile` never runs a separate `bynkc`, so it is not gated: it accepts
+`--allow-skew` and ignores it.
 
 When `bynk` is about to run a separate `bynkc` (`bynk test` always does, and
 `bynk check`, `fmt`, `dev` and `deploy` do under `BYNK_BYNKC`), it compares
