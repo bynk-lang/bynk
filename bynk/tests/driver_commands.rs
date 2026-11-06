@@ -1410,8 +1410,15 @@ fn a_copy_named_bynkc_shows_bynkcs_usage_line() {
     let (dir, copy) = bynkc_copy("bynkc-copy-help");
     let (code, out, err) = run_in(&copy, &dir, &["--help"], None);
     assert_eq!(code, 0, "{err}");
+    // clap names the program in the usage line from argv[0], as the old `bynkc`
+    // binary's did (`#[command(name = "bynkc")]` without a `bin_name`), so on
+    // Windows it reads `bynkc.exe`. The test accepts both, and rejects `bynk`.
+    let usage = out
+        .lines()
+        .find(|l| l.starts_with("Usage: "))
+        .unwrap_or_default();
     assert!(
-        out.contains("Usage: bynkc "),
+        usage.starts_with("Usage: bynkc ") || usage.starts_with("Usage: bynkc.exe "),
         "bynkc's usage line, got:\n{out}"
     );
     assert!(
