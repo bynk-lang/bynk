@@ -36,9 +36,10 @@ struct Job {
     name: Option<String>,
     needs_changes: bool,
     uses_rust_cache: bool,
-    /// `runs-on` reads `needs.changes.outputs.linux_runner`, i.e. the job can
-    /// run on the self-hosted runners.
-    self_hosted: bool,
+    /// The `changes` output `runs-on` reads, when it is one of the self-hosted
+    /// ones (`linux_runner` or `linux_runner_extra`), i.e. the job can run on
+    /// the self-hosted runners.
+    runner: Option<&'static str>,
     /// Every line of the job, for the self-hosted step checks.
     lines: Vec<String>,
     condition: String,
@@ -71,7 +72,7 @@ fn jobs() -> Vec<Job> {
                 name: None,
                 needs_changes: false,
                 uses_rust_cache: false,
-                self_hosted: false,
+                runner: None,
                 lines: Vec::new(),
                 condition: String::new(),
             });
@@ -84,8 +85,14 @@ fn jobs() -> Vec<Job> {
             job.uses_rust_cache = true;
         }
         job.lines.push(line.to_string());
-        if line.starts_with("    runs-on:") && line.contains("needs.changes.outputs.linux_runner") {
-            job.self_hosted = true;
+        if line.starts_with("    runs-on:") {
+            job.runner = if line.contains("needs.changes.outputs.linux_runner_extra") {
+                Some("linux_runner_extra")
+            } else if line.contains("needs.changes.outputs.linux_runner") {
+                Some("linux_runner")
+            } else {
+                None
+            };
         }
         if in_if && line.starts_with("      ") {
             job.condition.push(' ');
@@ -215,36 +222,39 @@ fn rust_caches_names_every_job_that_saves_one_on_main() {
 }
 
 /// A job on the self-hosted runners skips rust-cache, so `main` never has its
-/// cache. The `queue` step must not wait for one (`SELF_HOSTED_CACHES`), or
-/// every push to `main` would read it as missing and run everything. The list
-/// must name exactly the jobs in `RUST_CACHES` that can run self-hosted.
+/// cache. The `queue` step must not wait for one (`SELF_HOSTED_CACHES`, built
+/// by the `runner` step), or every push to `main` would read it as missing and
+/// run everything. Each group's list must name exactly its jobs that use
+/// rust-cache (bar `drift`, which never runs on a push).
 #[test]
-fn self_hosted_caches_names_every_self_hosted_job_with_a_rust_cache() {
+fn self_hosted_caches_name_every_self_hosted_job_with_a_rust_cache() {
     let yaml = workflow();
-    let line = yaml
-        .lines()
-        .find_map(|l| l.trim().strip_prefix("SELF_HOSTED_CACHES: "))
-        .expect("ci.yml's `queue` step sets SELF_HOSTED_CACHES on one line");
-    let listed = line
-        .split('\'')
-        .nth(3)
-        .expect("SELF_HOSTED_CACHES is `${{ <cond> && '<list>' || '' }}`");
-    let mut listed_jobs: Vec<&str> = listed
-        .split_whitespace()
-        .map(|c| c.strip_suffix("-Linux").expect("`<job>-Linux`"))
-        .collect();
-    listed_jobs.sort_unstable();
-    let mut expected: Vec<String> = jobs()
-        .into_iter()
-        .filter(|j| j.self_hosted && j.uses_rust_cache && j.key != "drift")
-        .map(|j| j.key)
-        .collect();
-    expected.sort_unstable();
-    assert_eq!(
-        listed_jobs, expected,
-        "SELF_HOSTED_CACHES in ci.yml's `queue` step must name every job that \
-         uses Swatinem/rust-cache and can run on the self-hosted runners"
-    );
+    for (output, var) in [
+        ("linux_runner", "LINUX_RUNNER_CACHES"),
+        ("linux_runner_extra", "LINUX_RUNNER_EXTRA_CACHES"),
+    ] {
+        let listed = yaml
+            .lines()
+            .find_map(|l| l.trim().strip_prefix(&format!("{var}: \"")))
+            .and_then(|l| l.strip_suffix('"'))
+            .unwrap_or_else(|| panic!("ci.yml's `runner` step sets {var} on one line"));
+        let mut listed_jobs: Vec<&str> = listed
+            .split_whitespace()
+            .map(|c| c.strip_suffix("-Linux").expect("`<job>-Linux`"))
+            .collect();
+        listed_jobs.sort_unstable();
+        let mut expected: Vec<String> = jobs()
+            .into_iter()
+            .filter(|j| j.runner == Some(output) && j.uses_rust_cache && j.key != "drift")
+            .map(|j| j.key)
+            .collect();
+        expected.sort_unstable();
+        assert_eq!(
+            listed_jobs, expected,
+            "{var} on ci.yml's `runner` step must name every job that uses \
+             Swatinem/rust-cache and whose `runs-on` reads `{output}`"
+        );
+    }
 }
 
 /// A job that can run on the self-hosted runners must use the shared
@@ -254,9 +264,9 @@ fn self_hosted_caches_names_every_self_hosted_job_with_a_rust_cache() {
 /// runner relies on.
 #[test]
 fn every_self_hosted_job_keeps_target_warm() {
-    let jobs: Vec<Job> = jobs().into_iter().filter(|j| j.self_hosted).collect();
+    let jobs: Vec<Job> = jobs().into_iter().filter(|j| j.runner.is_some()).collect();
     assert!(
-        jobs.iter().any(|j| j.key == "test"),
+        jobs.iter().any(|j| j.key == "test" && j.runner == Some("linux_runner")),
         "the `test` job's Linux leg reads `linux_runner`"
     );
     for job in &jobs {
@@ -267,12 +277,12 @@ fn every_self_hosted_job_keeps_target_warm() {
             })
         };
         for step in ["self_hosted_checkout", "self_hosted_clean"] {
-            assert!(has(step), "`{}` reads `linux_runner` but lacks `{step}`", job.key);
+            assert!(has(step), "`{}` can run self-hosted but lacks `{step}`", job.key);
         }
         assert!(
             !job.lines.iter().any(|l| l.contains("uses: actions/checkout@")
                 && !l.trim_start().starts_with("uses:")),
-            "`{}` reads `linux_runner` but has its own `actions/checkout` step",
+            "`{}` can run self-hosted but has its own `actions/checkout` step",
             job.key
         );
         for (i, line) in job.lines.iter().enumerate() {

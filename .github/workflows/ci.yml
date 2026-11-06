@@ -116,9 +116,12 @@ jobs:
       installers: ${{ steps.filter.outputs.installers }}
       installer_scripts: ${{ steps.filter.outputs.installer_scripts }}
       all: ${{ steps.all.outputs.value }}
-      # `runs-on` for every Linux job that may use the org's self-hosted runners
+      # `runs-on` for the Linux jobs that may use the org's self-hosted runners
       # (see the `runner` step): a JSON label array or a JSON string.
+      # `linux_runner` is the `test` job's Linux leg; `linux_runner_extra` is
+      # the jobs that move only once the pool has room for them too.
       linux_runner: ${{ steps.runner.outputs.labels }}
+      linux_runner_extra: ${{ steps.runner.outputs.extra_labels }}
       # JSON array of the job names the merge queue's run passed on THIS commit,
       # so the push run on `main` need not repeat them. `[]` on every event but
       # `push`, and on any push the queue did not test (see the `queue` step).
@@ -164,6 +167,13 @@ jobs:
       # (timeout-minutes does not count queue time), which would wedge
       # `CI green` and the merge queue.
       #
+      # The variable SELF_HOSTED_LINUX_EXTRA ('true') also moves the jobs on
+      # `linux_runner_extra` (clippy, api-docs, node-floor, msrv, wasm, drift).
+      # It is separate because two runners are already kept busy by the `test`
+      # legs alone: with those jobs added, PR #2996's run had its Linux test
+      # leg wait 883s for a free runner, behind its own short jobs, and finish
+      # well after Windows. Turn it on only once the pool has more runners.
+      #
       # The Dependabot exclusion covers only the PR's own run:
       # `github.event.pull_request` is empty in `merge_group`, so a Dependabot
       # PR in the merge queue does run self-hosted. That holds only because a
@@ -180,13 +190,27 @@ jobs:
               && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
               && github.event.pull_request.user.login != 'dependabot[bot]'
             }}
+          EXTRA: ${{ vars.SELF_HOSTED_LINUX_EXTRA == 'true' }}
+          # The RUST_CACHES entries of each group's jobs, for the `queue` step:
+          # a job on the self-hosted runners keeps no Rust cache on `main`.
+          # xtask/tests/ci_queue_skip.rs keeps both lists in step with the jobs.
+          LINUX_RUNNER_CACHES: "test-Linux"
+          LINUX_RUNNER_EXTRA_CACHES: "clippy-Linux api-docs-Linux msrv-Linux wasm-Linux node-floor-Linux"
         run: |
+          self_hosted='["self-hosted","Linux","X64"]'
+          hosted='"ubuntu-latest"'
+          labels="$hosted" extra_labels="$hosted" caches=""
           if [ "$SELF_HOSTED" = true ]; then
-            echo 'labels=["self-hosted","Linux","X64"]' >> "$GITHUB_OUTPUT"
-          else
-            echo 'labels="ubuntu-latest"' >> "$GITHUB_OUTPUT"
+            labels="$self_hosted" caches="$LINUX_RUNNER_CACHES"
+            if [ "$EXTRA" = true ]; then
+              extra_labels="$self_hosted" caches="$caches $LINUX_RUNNER_EXTRA_CACHES"
+            fi
           fi
-          echo "self_hosted=$SELF_HOSTED" >> "$GITHUB_OUTPUT"
+          {
+            echo "labels=$labels"
+            echo "extra_labels=$extra_labels"
+            echo "caches=$caches"
+          } >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -371,9 +395,9 @@ jobs:
           # that a run of these jobs on a hosted runner (a fork or Dependabot
           # PR) finds no `main` cache and compiles cold. That is the accepted
           # trade: do not "fix" slow fork PRs by dropping this list. Turning
-          # SELF_HOSTED_LINUX off empties it, and the next push saves the caches.
-          # xtask/tests/ci_queue_skip.rs keeps this list in step with the jobs.
-          SELF_HOSTED_CACHES: ${{ steps.runner.outputs.self_hosted == 'true' && 'clippy-Linux api-docs-Linux test-Linux msrv-Linux wasm-Linux node-floor-Linux' || '' }}
+          # a variable off empties its part, and the next push saves the caches.
+          # The lists themselves are on the `runner` step.
+          SELF_HOSTED_CACHES: ${{ steps.runner.outputs.caches }}
           CACHE_KEYS: ${{ steps.filter.outputs.cache_keys }}
           # `<job>-<runner OS>` for every job that saves a Rust cache on `main`
           # (`drift` never runs on a push). rust-cache keys start
@@ -520,12 +544,12 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Lint (clippy -D warnings)')
-    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
       # The self-hosted checkout and clean steps (see `runner` on `changes`),
       # defined once here and aliased by every job whose `runs-on` uses
-      # `linux_runner`; xtask/tests/ci_queue_skip.rs enforces that. On the
+      # `linux_runner` or `linux_runner_extra`; xtask/tests/ci_queue_skip.rs enforces that. On the
       # self-hosted runners the workspace persists between jobs, and a warm
       # target/ is most of what they buy, so checkout's own `git clean -ffdx`
       # is off there (a plain checkout would delete target/ for the next job
@@ -573,7 +597,7 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'API docs (cargo doc)')
-    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
       - *self_hosted_checkout
@@ -777,7 +801,7 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Node floor (oldest supported Node)')
-    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 30
     steps:
       - *self_hosted_checkout
@@ -845,7 +869,7 @@ jobs:
     if: >-
       (needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'MSRV (cargo check on declared rust-version)')
-    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
       - *self_hosted_checkout
@@ -951,7 +975,7 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'wasm32 build (bynk-wasm)')
-    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
       - *self_hosted_checkout
@@ -1267,7 +1291,7 @@ jobs:
         || needs.changes.outputs.readmes == 'true')
       && needs.changes.outputs.rust != 'true'
       && needs.changes.outputs.all != 'true'
-    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
       - *self_hosted_checkout
