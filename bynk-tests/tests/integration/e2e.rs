@@ -278,7 +278,7 @@ fn positive_fixtures() {
                     check_expected_contains_absent(&dir, &actual, &mut failures);
                 }
                 Err(errors) => {
-                    let rendered = bynk_render::render_errors(&errors, &source, &name);
+                    let rendered = bynk_driver::render::render_errors(&errors, &source, &name);
                     failures.push(format!(
                         "\n=== {} ===\nexpected compile success but got errors:\n{}",
                         dir.display(),
@@ -413,7 +413,7 @@ fn positive_fixtures() {
                     check_expected_contains_absent(&dir, &haystack, &mut failures);
                 }
                 Err(failure) => {
-                    let rendered = bynk_render::render_project_errors(&failure.flatten());
+                    let rendered = bynk_driver::render::render_project_errors(&failure.flatten());
                     failures.push(format!(
                         "\n=== {} ===\nexpected compile success but got errors:\n{}",
                         dir.display(),
@@ -465,7 +465,7 @@ fn bless_positive_fixtures() {
                 panic!(
                     "bless: {} failed to compile:\n{}",
                     dir.display(),
-                    bynk_render::render_project_errors(&failure.flatten())
+                    bynk_driver::render::render_project_errors(&failure.flatten())
                 );
             }
         };

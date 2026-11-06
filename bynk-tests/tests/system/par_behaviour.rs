@@ -229,7 +229,7 @@ fn par_overlaps_effects_and_settles_all_in_source_order() {
             Ok(o) => o,
             Err(failure) => panic!(
                 "compile the par project:\n{}",
-                bynk_render::render_project_errors(&failure.flatten())
+                bynk_driver::render::render_project_errors(&failure.flatten())
             ),
         };
     let out = bynk_driver::strip::strip_project_to_js(out).expect("the par project strips to JS");

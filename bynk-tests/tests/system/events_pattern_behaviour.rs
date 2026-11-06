@@ -205,7 +205,7 @@ fn bundle_events_subscription_pattern_filters_delivery() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the events-pattern project to a bundle:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 

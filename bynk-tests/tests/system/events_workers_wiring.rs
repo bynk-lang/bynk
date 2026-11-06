@@ -136,7 +136,7 @@ fn workers_events_fanout_do_and_wrangler_wiring() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the events project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -318,7 +318,7 @@ fn workers_events_pattern_leaves_fanout_routing_unchanged() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the patterned events project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -447,7 +447,7 @@ fn workers_events_envelope_param_type_checks_and_leaves_fanout_unchanged() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the envelope-declaring events project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -596,7 +596,7 @@ fn workers_events_nested_payload_field_gets_a_transitive_codec() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the nested-payload events project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 

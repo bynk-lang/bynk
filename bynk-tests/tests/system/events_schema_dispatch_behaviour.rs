@@ -224,7 +224,7 @@ fn compile_and_run(
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the schema-dispatch project ({tag}):\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 

@@ -219,7 +219,7 @@ fn bundle_events_schema_version_reflects_the_declared_annotation_or_defaults_to_
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the schema-version project to a bundle:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 

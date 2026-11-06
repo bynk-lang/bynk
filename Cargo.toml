@@ -3,7 +3,6 @@ members = [
     "bynk-syntax",
     "bynk-std",
     "bynk-ts",
-    "bynk-render",
     "bynk-check",
     "bynk-model",
     "bynk-project",
@@ -72,7 +71,6 @@ wildcard_enum_match_arm = "warn"
 bynk-syntax = { path = "bynk-syntax", version = "0.510.34" }
 bynk-std = { path = "bynk-std", version = "0.510.34" }
 bynk-ts = { path = "bynk-ts", version = "0.510.34" }
-bynk-render = { path = "bynk-render", version = "0.510.34" }
 bynk-check = { path = "bynk-check", version = "0.510.34" }
 bynk-model = { path = "bynk-model", version = "0.510.34" }
 bynk-project = { path = "bynk-project", version = "0.510.34" }

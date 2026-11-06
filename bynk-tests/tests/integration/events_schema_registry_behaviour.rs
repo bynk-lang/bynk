@@ -130,7 +130,7 @@ fn schema_registry_baselines_bumps_and_blocks_non_additive_changes() {
     match bynk_driver::project::compile_project(&options) {
         Ok(_) => panic!("a field added without a default must not compile"),
         Err(failure) => {
-            let rendered = bynk_render::render_project_errors(&failure.flatten());
+            let rendered = bynk_driver::render::render_project_errors(&failure.flatten());
             assert!(
                 rendered.contains("bynk.event.non_additive_schema_change"),
                 "expected the non-additive-change diagnostic:\n{rendered}"
@@ -168,7 +168,7 @@ fn compile(tmp: &std::path::Path) -> bynk_driver::project::ProjectOutput {
         Ok(out) => out,
         Err(failure) => panic!(
             "compile the schema-registry project:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
     if let Some(content) = &out.schema_lock {

@@ -1,0 +1,18 @@
+---
+level: patch
+changelog: Crate hygiene D2-1 - the diagnostic renderers become `bynk-driver`'s `render` module and the `bynk-render` crate leaves the workspace and the release lists (its final release, which names `bynk-driver`, shipped earlier); no behaviour change
+---
+
+## ADR: render-module-guard
+title: Diagnostic rendering is a `bynk-driver` module, guarded by a test instead of the crate graph
+summary: Amends ADR 0100 - the "no render to emit edge" guarantee moves from `bynk-render`'s dependency list to a source-level guard test
+
+**Context.** ADR 0100 made rendering a separate crate, `bynk-render`, depending on `bynk-syntax` and `ariadne` only, so the `AttributedError` to `CompileError` flattening had to stay above it: a renderer that took a `ProjectFailure` would not compile, because `bynk-emit` was not a dependency. Once `bynkc` stopped being a library (crate-hygiene E3), `bynk-driver` was the crate's only production user, and ADR 0734 (H-4) already treated its published status as provisional. The crate's final release, naming `bynk-driver`, shipped before this change (H-5).
+
+**Decision.**
+- `bynk-render` becomes `bynk_driver::render`, public, unchanged in code. Its golden tests and fixtures move to `bynk-driver/tests/render_golden.rs` and `render_golden/`. The crate leaves the workspace and both release crate lists; it is not yanked.
+- The guarantee ADR 0100 got from the crate graph is now a test, `render::tests::render_names_only_syntax_and_ariadne`. It reads `render.rs`'s production source and fails when that file names a crate other than `bynk_syntax`, `ariadne` or `std`, or uses `crate::` or `super::` (inside `render`, `super` is the crate root), which would reach the rest of the driver. Its `offences` helper has cases it must flag and one it must pass. The flattening stays in `bynk-driver`'s `lib.rs`, above the module.
+- `bynk-fmt` drops its dev-dependency on the renderer. Its round-trip test keeps the `err.span.end <= src.len()` assertion. The "renders without panicking" half moves to `bynk-driver/tests/fmt_roundtrip_render.rs`. `bynk-fmt::roundtrip_error` is private and no valid source trips the guard, so that test builds the same `CompileError` (code `bynk.fmt.roundtrip`, default span) by hand instead of calling the formatter.
+- Amends ADR 0100: the invariant is unchanged; only its enforcement moves.
+
+**Consequences.** The guard is weaker than a crate boundary. It is a text scan of one file with known gaps: it does not strip block comments, so a `/* … */` line can raise a false offence; it truncates a line at any `//`, including one inside a string literal, so code after it is not scanned; it recognises only `bynk_…` crate names, so a non-`bynk_` crate used through an inline path (not a `use`) is missed; and it does not follow a type reached through a re-export in `bynk_syntax`. It also fails only when the tests run, not at compile time. In exchange the published set loses a crate and the layering diagram loses a node. The fmt-side rendering test no longer exercises the formatter's own constructor.

@@ -52,9 +52,11 @@ impl Project {
                 }
                 let warnings: Vec<bynk_syntax::CompileError> =
                     out.warnings.iter().map(|w| w.error.clone()).collect();
-                Ok(bynk_render::render_project_errors(&warnings))
+                Ok(bynk_driver::render::render_project_errors(&warnings))
             }
-            Err(failure) => Err(bynk_render::render_project_errors(&failure.flatten())),
+            Err(failure) => Err(bynk_driver::render::render_project_errors(
+                &failure.flatten(),
+            )),
         }
     }
 

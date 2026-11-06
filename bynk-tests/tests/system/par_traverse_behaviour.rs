@@ -239,7 +239,7 @@ fn par_traverse_family_settles_all_and_raises_in_input_order() {
             Ok(o) => o,
             Err(failure) => panic!(
                 "compile the project:\n{}",
-                bynk_render::render_project_errors(&failure.flatten())
+                bynk_driver::render::render_project_errors(&failure.flatten())
             ),
         };
     let out = bynk_driver::strip::strip_project_to_js(out).expect("the project strips to JS");

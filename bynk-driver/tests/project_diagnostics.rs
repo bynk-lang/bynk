@@ -91,7 +91,7 @@ fn a_consumes_cycle_renders_with_ariadne_source_context() {
     // Render exactly as `print_project_failure`'s rich branch does.
     let label = path.to_string_lossy().replace('\\', "/");
     let rendered =
-        bynk_render::render_errors_plain(std::slice::from_ref(&cycle.error), text, &label);
+        bynk_driver::render::render_errors_plain(std::slice::from_ref(&cycle.error), text, &label);
 
     // The ariadne report frames the source excerpt with `╭─[<file>:<line>:<col>]`;
     // the plain fallback (`[category] message`) never does.
@@ -154,8 +154,11 @@ fn a_cross_file_kind_conflict_renders_the_other_file_as_a_note() {
         .expect("the attributed file must have a snapshot");
 
     let label = path.to_string_lossy().replace('\\', "/");
-    let rendered =
-        bynk_render::render_errors_plain(std::slice::from_ref(&conflict.error), text, &label);
+    let rendered = bynk_driver::render::render_errors_plain(
+        std::slice::from_ref(&conflict.error),
+        text,
+        &label,
+    );
 
     // Rich source context for the primary span …
     assert!(

@@ -251,12 +251,12 @@ dependencies = [
 name = "bynk-driver"
 version = "0.510.34"
 dependencies = [
+ "ariadne",
  "bynk-check",
  "bynk-emit",
  "bynk-fmt",
  "bynk-model",
  "bynk-project",
- "bynk-render",
  "bynk-strip",
  "bynk-syntax",
  "bynk-ts",
@@ -285,7 +285,6 @@ dependencies = [
 name = "bynk-fmt"
 version = "0.510.34"
 dependencies = [
- "bynk-render",
  "bynk-syntax",
  "proptest",
  "schemars",
@@ -362,14 +361,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bynk-render"
-version = "0.510.34"
-dependencies = [
- "ariadne",
- "bynk-syntax",
-]
-
-[[package]]
 name = "bynk-std"
 version = "0.510.34"
 
@@ -410,7 +401,6 @@ dependencies = [
  "bynk-fmt",
  "bynk-ide",
  "bynk-project",
- "bynk-render",
  "bynk-syntax",
  "bynk-testkit",
  "bynk-ts",

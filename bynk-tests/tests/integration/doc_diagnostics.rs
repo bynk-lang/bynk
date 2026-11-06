@@ -91,7 +91,8 @@ fn diagnostic_transcripts_are_up_to_date() {
             Err(errors) => errors,
         };
 
-        let transcript = bynk_render::render_errors_plain(&errors, &source, &format!("{id}.bynk"));
+        let transcript =
+            bynk_driver::render::render_errors_plain(&errors, &source, &format!("{id}.bynk"));
         let txt = dir.join(format!("{id}.txt"));
 
         if bless {

@@ -36,7 +36,7 @@ Older `bynkc` releases also exposed a library (`bynkc::compile_project`,
 directly: [`bynk-driver`](https://crates.io/crates/bynk-driver) (project
 orchestration, `write_output`, the command bodies),
 [`bynk-emit`](https://crates.io/crates/bynk-emit) (`compile`),
-[`bynk-render`](https://crates.io/crates/bynk-render) (diagnostic rendering),
+`bynk-driver`'s `render` module (diagnostic rendering),
 [`bynk-check`](https://crates.io/crates/bynk-check) and
 [`bynk-syntax`](https://crates.io/crates/bynk-syntax).
 

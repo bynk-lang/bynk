@@ -29,7 +29,7 @@ fn compile(fixture: &str) -> bynk_driver::project::ProjectOutput {
     .unwrap_or_else(|errors| {
         panic!(
             "fixture `{fixture}` failed to compile:\n{}",
-            bynk_render::render_project_errors(&errors)
+            bynk_driver::render::render_project_errors(&errors)
         )
     })
 }

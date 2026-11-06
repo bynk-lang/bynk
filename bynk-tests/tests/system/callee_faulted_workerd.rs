@@ -151,7 +151,7 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the callee-faulted project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
     let out =

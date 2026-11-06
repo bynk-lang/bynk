@@ -1,6 +1,6 @@
 //! Ariadne-rendered golden tests (#520).
 //!
-//! `bynk-render` previously had no direct tests; every diagnostic-rendering
+//! `bynk-render` (now `bynk_driver::render`) previously had no direct tests; every diagnostic-rendering
 //! regression (misplaced underlines, dropped labels) surfaced only through
 //! humans. Each case renders a representative diagnostic with the colourless
 //! plain renderer (byte-stable across machines) and compares against a
@@ -8,12 +8,12 @@
 //!
 //! Regenerate after an intentional rendering change:
 //!
-//!     BYNK_BLESS=1 cargo test -p bynk-render --test golden
+//!     BYNK_BLESS=1 cargo test -p bynk-driver --test render_golden
 
 use std::fs;
 use std::path::PathBuf;
 
-use bynk_render::render_errors_plain;
+use bynk_driver::render::render_errors_plain;
 use bynk_syntax::CompileError;
 use bynk_syntax::span::Span;
 
@@ -76,7 +76,7 @@ fn cases() -> Vec<Case> {
 }
 
 fn golden_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/render_golden")
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn rendered_diagnostics_match_goldens() {
         let want = fs::read_to_string(&path).unwrap_or_else(|e| {
             panic!(
                 "could not read {} ({e}); regenerate with \
-                 BYNK_BLESS=1 cargo test -p bynk-render --test golden",
+                 BYNK_BLESS=1 cargo test -p bynk-driver --test render_golden",
                 path.display()
             )
         });

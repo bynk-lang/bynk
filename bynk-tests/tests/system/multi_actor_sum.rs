@@ -218,7 +218,7 @@ fn multi_actor_sum_resolves_first_wins_and_fails_closed() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the multi-actor sum project to Workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 

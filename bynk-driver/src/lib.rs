@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use bynk_fmt::{FormatOptions, IndentStyle, format_source};
-use bynk_render::LabelHome;
 use project::{CompileOptions, ProjectPathsError, try_read_project_paths_with};
+use render::LabelHome;
 
 pub mod compile_cmd;
 pub mod contracts_lock;
@@ -26,6 +26,7 @@ pub mod output;
 pub mod probe;
 pub mod project;
 pub mod remote;
+pub mod render;
 pub mod schema_lock;
 pub mod smoke;
 pub mod snapshots;
@@ -269,8 +270,8 @@ impl From<discovery::DiscoveryError> for ProjectOptionsError {
 ///
 /// This is the **flattening layer** (ADR 0100): it attributes each
 /// `AttributedError` to its file snapshot and delegates the actual rendering to
-/// [`bynk_render::print_errors`]. The `ProjectFailure → CompileError` flattening
-/// stays here, above `bynk-render`, so there is no `render → emit` edge.
+/// [`crate::render::print_errors`]. The `ProjectFailure → CompileError` flattening
+/// stays here, above the `render` module, so there is no `render → emit` edge.
 pub fn print_project_failure(failure: &project::ProjectFailure) {
     for ae in failure.errors.iter().filter(|ae| !is_hint(ae)) {
         match attributed_snapshot(ae, &failure.snapshots, &failure.display_root) {
@@ -332,7 +333,7 @@ pub fn print_project_warnings(
 /// [`print_project_warnings`]'s `--format short` analogue: one
 /// `path:line:col: warning[category]: message` line per warning, falling
 /// back to `warning[category]: message` when unattributed. Strictly one
-/// line per warning throughout (like [`bynk_render::render_errors_short`],
+/// line per warning throughout (like [`crate::render::render_errors_short`],
 /// this mirrors the VS Code problem-matcher's contract), so — unlike
 /// [`print_project_warnings`] — finding #47 doesn't reach this one.
 pub fn print_project_warnings_short(
@@ -342,14 +343,16 @@ pub fn print_project_warnings_short(
 ) {
     for w in warnings.iter().filter(|w| !is_hint(w)) {
         match attributed_snapshot(w, snapshots, display_root) {
-            Some((label, text)) => eprintln!("{}", bynk_render::short_line(&label, text, &w.error)),
+            Some((label, text)) => {
+                eprintln!("{}", crate::render::short_line(&label, text, &w.error))
+            }
             // Every entry in `warnings` is warning-severity by construction
             // (ADR 0117's own split), so `severity_word` here is always
             // "warning" — read off the shared helper (finding #48) rather
             // than hardcoding the string a second time.
             None => eprintln!(
                 "{}[{}]: {}",
-                bynk_render::severity_word(&w.error),
+                crate::render::severity_word(&w.error),
                 w.error.category,
                 w.error.message
             ),
@@ -415,7 +418,7 @@ fn print_attributed(
             (_, None) => LabelHome::Unavailable,
         })
         .collect();
-    bynk_render::print_error_in(&ae.error, text, label, &homes);
+    crate::render::print_error_in(&ae.error, text, label, &homes);
 }
 
 /// #1772: the path a diagnostic names, as a user would type it from the
@@ -469,7 +472,7 @@ fn shown(path: &Path) -> String {
     display_path(Path::new(""), path)
 }
 
-/// The project-failure analogue of [`bynk_render::print_errors_short`]: each
+/// The project-failure analogue of [`crate::render::print_errors_short`]: each
 /// attributed error is positioned against its file's snapshot; an unattributed
 /// (project-level) error falls back to `<severity>[<category>]: <message>`.
 pub fn print_project_failure_short(failure: &project::ProjectFailure) {
@@ -491,7 +494,7 @@ pub fn print_project_failure_short(failure: &project::ProjectFailure) {
 /// that re-parses every entry as a single diagnostic line.
 ///
 /// The flattening layer (ADR 0100): it delegates the per-error formatting to
-/// [`bynk_render::short_line`] / [`bynk_render::severity_word`], and the
+/// [`crate::render::short_line`] / [`crate::render::severity_word`], and the
 /// attribution lookup to the crate-private `attributed_snapshot` (finding #48).
 pub fn project_failure_short_lines(failure: &project::ProjectFailure) -> Vec<String> {
     failure
@@ -504,10 +507,10 @@ pub fn project_failure_short_lines(failure: &project::ProjectFailure) -> Vec<Str
 /// One error of `failure` as its single `--format short` line.
 fn failure_short_line(failure: &project::ProjectFailure, ae: &project::AttributedError) -> String {
     match attributed_snapshot(ae, &failure.snapshots, &failure.display_root) {
-        Some((label, text)) => bynk_render::short_line(&label, text, &ae.error),
+        Some((label, text)) => crate::render::short_line(&label, text, &ae.error),
         None => format!(
             "{}[{}]: {}",
-            bynk_render::severity_word(&ae.error),
+            crate::render::severity_word(&ae.error),
             ae.error.category,
             ae.error.message
         ),
@@ -518,7 +521,7 @@ fn failure_short_line(failure: &project::ProjectFailure, ae: &project::Attribute
 /// the same per-file ariadne context [`print_project_failure`] gives its own,
 /// errors-only list. Unlike that renderer, a `ProjectCheck`'s list can
 /// legitimately mix both severities — the unattributed fallback line names its
-/// actual severity ([`bynk_render::severity_word`]) rather than
+/// actual severity ([`crate::render::severity_word`]) rather than
 /// `print_project_failure`'s bare `[category]: message` (silently correct only
 /// because that list is errors-only by construction).
 pub fn print_project_check(check: &project::ProjectCheck) {
@@ -530,7 +533,7 @@ pub fn print_project_check(check: &project::ProjectCheck) {
             None => {
                 eprintln!(
                     "{}[{}]: {}",
-                    bynk_render::severity_word(&ae.error),
+                    crate::render::severity_word(&ae.error),
                     ae.error.category,
                     ae.error.message
                 );
@@ -554,10 +557,10 @@ pub fn project_check_short_lines(check: &project::ProjectCheck) -> Vec<String> {
         .filter(|ae| !is_hint(ae))
         .map(
             |ae| match attributed_snapshot(ae, &check.snapshots, &check.display_root) {
-                Some((label, text)) => bynk_render::short_line(&label, text, &ae.error),
+                Some((label, text)) => crate::render::short_line(&label, text, &ae.error),
                 None => format!(
                     "{}[{}]: {}",
-                    bynk_render::severity_word(&ae.error),
+                    crate::render::severity_word(&ae.error),
                     ae.error.category,
                     ae.error.message
                 ),
@@ -858,7 +861,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
                     }
                 }
                 Err(e) => {
-                    bynk_render::print_errors(&e.errors, &source, "<stdin>");
+                    crate::render::print_errors(&e.errors, &source, "<stdin>");
                     return ExitCode::FAILURE;
                 }
             }
@@ -893,7 +896,7 @@ pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
                 }
             }
             Err(e) => {
-                bynk_render::print_errors(&e.errors, &source, &filename);
+                crate::render::print_errors(&e.errors, &source, &filename);
                 had_error = true;
             }
         }
@@ -1165,21 +1168,21 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         let filename = shown(input);
         match bynk_emit::check_with_warnings(&source, &filename) {
             Ok(warnings) => {
-                let warnings = bynk_render::without_hints(&warnings);
+                let warnings = crate::render::without_hints(&warnings);
                 if !warnings.is_empty() {
                     if short {
-                        bynk_render::print_errors_short(&warnings, &source, &filename);
+                        crate::render::print_errors_short(&warnings, &source, &filename);
                     } else {
-                        bynk_render::print_errors(&warnings, &source, &filename);
+                        crate::render::print_errors(&warnings, &source, &filename);
                     }
                 }
                 true
             }
             Err(errors) => {
                 if short {
-                    bynk_render::print_errors_short(&errors, &source, &filename);
+                    crate::render::print_errors_short(&errors, &source, &filename);
                 } else {
-                    bynk_render::print_errors(&errors, &source, &filename);
+                    crate::render::print_errors(&errors, &source, &filename);
                 }
                 false
             }

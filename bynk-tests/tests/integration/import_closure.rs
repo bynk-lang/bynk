@@ -253,7 +253,7 @@ fn compile_project_fixture(
                 "{} must compile for {}:\n{}",
                 dir.display(),
                 target_name(target),
-                bynk_render::render_project_errors(&errors)
+                bynk_driver::render::render_project_errors(&errors)
             )
         }
     }

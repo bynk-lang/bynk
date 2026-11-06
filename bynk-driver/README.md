@@ -28,20 +28,18 @@ It holds:
 ## Where it sits
 
 This crate depends on [`bynk-emit`](https://crates.io/crates/bynk-emit),
-[`bynk-fmt`](https://crates.io/crates/bynk-fmt),
-[`bynk-render`](https://crates.io/crates/bynk-render), and
+[`bynk-fmt`](https://crates.io/crates/bynk-fmt), and
 [`bynk-ts`](https://crates.io/crates/bynk-ts):
 
 ```text
 bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 ├── bynk-project           project model: discovery, unit graph, paths
 ├── bynk-ts                the TypeScript tree and its printer
-├── bynk-render            diagnostic rendering
 ├── bynk-fmt               the formatter
 └── bynk-check             name resolution and type checking   + project, std, ts
     ├── bynk-model         the system model and its builder
     ├── bynk-emit          TS emission from a checked program + ts, model, project
-    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, model, strip
+    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, ts, model, strip
     └── bynk-ide           non-bailing editor analysis         + project, fmt, model
 bynk-std                   first-party sources and bindings, as data
 bynk-strip                 TS → JS type-stripping (text level), on oxc alone
