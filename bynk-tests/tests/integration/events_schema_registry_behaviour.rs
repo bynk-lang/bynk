@@ -148,7 +148,7 @@ fn schema_registry_baselines_bumps_and_blocks_non_additive_changes() {
 
 /// #1078: `bynk-emit` no longer reads `bynk.schema.lock` itself — pre-read it
 /// here exactly as `bynk-driver`'s two production wiring points
-/// (`bynk::workers::compile_once`, `bynkc::main::run_compile`) do.
+/// (`bynk::workers::compile_once`, the former `bynkc` binary) do.
 fn schema_lock_input(proj: &std::path::Path) -> SchemaLock {
     let existing = bynk_driver::schema_lock::read(proj)
         .expect("reading a scratch project's bynk.schema.lock must not fail");

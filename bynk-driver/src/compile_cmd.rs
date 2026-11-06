@@ -1,6 +1,6 @@
-//! The `compile` command body, shared by `bynkc compile` and `bynk compile`
-//! (D2/E1, #2998): before this, only `bynkc` had it, so `bynk compile` had to
-//! start a `bynkc` process. Parameterised by the program name that prefixes
+//! The `compile` command body, shared by `bynk compile` and `bynk compile`
+//! (D2/E1, #2998): before this, only `bynk` had it, so `bynk compile` had to
+//! start a `bynk` process. Parameterised by the program name that prefixes
 //! messages, like [`crate::run_check`] and [`crate::run_fmt`].
 
 use std::path::{Path, PathBuf};
@@ -84,7 +84,7 @@ pub struct CompileArgs {
     pub sources_stdin: bool,
 }
 
-/// Run `compile`. `prog` prefixes the messages (`"bynkc"` or `"bynk"`).
+/// Run `compile`. `prog` prefixes the messages (`"bynk"` or `"bynk"`).
 pub fn run_compile(prog: &str, args: CompileArgs) -> ExitCode {
     let CompileArgs {
         input,
@@ -133,10 +133,10 @@ fn compile_dir(
     let options: CompileOptions = match crate::try_project_options(input) {
         // Events track, slice 3c (#980): a real directory build reconciles
         // and writes `bynk.schema.lock` — the Cargo.lock model. Every
-        // other `compile_project` caller (in-memory builds, `bynkc/
+        // other `compile_project` caller (in-memory builds, `bynk/
         // tests/e2e.rs`'s in-place fixtures, the LSP) leaves this off.
         // #1821 (ADR 0147 D3): a build strips every `suite`; only
-        // `bynkc test` compiles them.
+        // `bynk test` compiles them.
         Ok(o) => o
             .target(target.into())
             .platform(platform.into())

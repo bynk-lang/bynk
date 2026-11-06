@@ -101,10 +101,10 @@ fn a_faulting_route_is_logged_by_pattern_and_answers_a_bare_500() {
         .arg(tmp.join("out"))
         .arg(&tmp)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     assert!(
         compiled.status.success(),
-        "bynkc compile failed:\n{}",
+        "bynk compile failed:\n{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
 

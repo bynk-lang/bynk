@@ -41,8 +41,8 @@ rate-limiter/
 ## Check and test
 
 ```sh
-bynkc check src
-bynkc test .
+bynk check src
+bynk test .
 ```
 
 ```text
@@ -56,7 +56,7 @@ window:
 
 The policy lives in `commons` so it is testable in isolation, with no clock at
 all. The `ratelimit` context consumes the platform `Clock`, which under
-`bynkc test` reads the epoch unless a case stubs it.
+`bynk test` reads the epoch unless a case stubs it.
 
 ## Run it
 

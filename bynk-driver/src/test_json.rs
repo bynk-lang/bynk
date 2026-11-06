@@ -1,4 +1,4 @@
-//! v0.59: the `bynkc test --format json` result model, plus the parser that
+//! v0.59: the `bynk test --format json` result model, plus the parser that
 //! folds the runner's NDJSON event stream into it.
 //!
 //! The generated `tests/main.ts` runner emits one JSON event per line when
@@ -13,13 +13,13 @@
 //! presence/`kind` of `error`:
 //! - **normal** — `suites` present, no `error` (may have `failed > 0`);
 //! - **compile** — the project never compiled: no `suites`, `error.kind ==
-//!   "compile"` carrying the `bynkc` diagnostic lines;
+//!   "compile"` carrying the `bynk` diagnostic lines;
 //! - **runtime** — the runner started then died before `run-end`: the observed
 //!   `suites` prefix *and* `error.kind == "runtime"` with the captured stderr.
 
 use serde::Serialize;
 
-/// The pinned `bynkc test --format json` document.
+/// The pinned `bynk test --format json` document.
 #[derive(Debug, PartialEq, Serialize)]
 pub struct TestRun {
     pub passed: u32,
@@ -252,7 +252,7 @@ pub struct TestError {
     pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
-    /// `bynkc` diagnostic lines (`path:line:col: severity[category]: message`),
+    /// `bynk` diagnostic lines (`path:line:col: severity[category]: message`),
     /// for `kind == "compile"`. Empty (and omitted) otherwise.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<String>,

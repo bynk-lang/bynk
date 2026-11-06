@@ -10,7 +10,7 @@
 //! content with the file's `(mtime, len)` stamp and only re-reads when the
 //! stamp moves, so an unchanged lock costs one `stat` per round. The
 //! `**/bynk.schema.lock` file watcher also clears the cache and schedules a
-//! round, so an edit to the lock (a `git checkout`, a `bynkc compile`) shows
+//! round, so an edit to the lock (a `git checkout`, a `bynk compile`) shows
 //! without waiting for the next keystroke, and an edit within one mtime tick
 //! is still seen.
 //!

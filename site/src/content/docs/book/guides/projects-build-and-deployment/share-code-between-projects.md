@@ -138,7 +138,7 @@ bynk check --locked --offline
 ```
 
 `--locked` fails if the lock would change; `--offline` fails if anything needs
-fetching. `bynkc` never fetches: a dependency missing from the store is one
+fetching. A dependency missing from the store is then one
 `bynk.package.not_fetched` error telling you to run `bynk fetch`.
 
 ## Dependencies only tests use

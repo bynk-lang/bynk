@@ -1,7 +1,7 @@
 //! The `[fmt]` section of a project's `bynk.toml`.
 //!
 //! One reader, two consumers (#972). The language server has read `[fmt]` for
-//! format-on-save since v0.3; the `bynkc fmt` / `bynk fmt` CLI did not, so a
+//! format-on-save since v0.3; the `bynk fmt` / `bynk fmt` CLI did not, so a
 //! project that set a style there had the editor and the command line disagree
 //! — and `bynk fmt --check` in CI gated on a style the editor never produced.
 //! Wiring the CLI to a *second* parser of the same section would have made that
@@ -92,7 +92,7 @@ struct RawManifest {
     feature = "schema",
     schemars(
         description = "Formatter settings, read by format-on-save in the editor and by \
-        `bynkc fmt` / `bynk fmt`, through one shared reader. A flag passed to `fmt` \
+        `bynk fmt` / `bynk fmt`, through one shared reader. A flag passed to `fmt` \
         overrides the key it names."
     )
 )]

@@ -1,7 +1,7 @@
-//! #2078: `bynkc check` and `bynkc test` reconcile events against the
+//! #2078: `bynk check` and `bynk test` reconcile events against the
 //! committed `bynk.schema.lock`, read-only. A non-additive event change fails
 //! both with `bynk.event.non_additive_schema_change`, the same diagnostic
-//! `bynkc compile` refuses it with, so a CI gate of format, check and test
+//! `bynk compile` refuses it with, so a CI gate of format, check and test
 //! catches it before deploy. An additive change passes and leaves the lock
 //! byte-identical (only a build records it), and a project with no lock is
 //! a fresh project: no error, and no lock is written.
@@ -95,11 +95,11 @@ impl Scratch {
     }
 
     /// Commit a lock for `SOURCE_V1` the way a project gets one: a real
-    /// `bynkc compile`. Returns its bytes.
+    /// `bynk compile`. Returns its bytes.
     fn commit_v1_lock(&self) -> Vec<u8> {
         self.write_source(SOURCE_V1);
         let out = self.0.join("out");
-        let (ok, text) = bynkc(&[
+        let (ok, text) = bynk(&[
             "compile".as_ref(),
             self.0.as_os_str(),
             "-o".as_ref(),
@@ -110,23 +110,23 @@ impl Scratch {
     }
 }
 
-/// Run `bynkc` with `args`, returning success and stdout + stderr.
-fn bynkc(args: &[&std::ffi::OsStr]) -> (bool, String) {
+/// Run `bynk` with `args`, returning success and stdout + stderr.
+fn bynk(args: &[&std::ffi::OsStr]) -> (bool, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), s)
 }
 
 fn check(root: &Path) -> (bool, String) {
-    bynkc(&["check".as_ref(), root.as_os_str()])
+    bynk(&["check".as_ref(), root.as_os_str()])
 }
 
 fn check_short(root: &Path) -> (bool, String) {
-    bynkc(&[
+    bynk(&[
         "check".as_ref(),
         "--format".as_ref(),
         "short".as_ref(),
@@ -135,11 +135,11 @@ fn check_short(root: &Path) -> (bool, String) {
 }
 
 fn test(root: &Path) -> (bool, String) {
-    bynkc(&["test".as_ref(), root.as_os_str()])
+    bynk(&["test".as_ref(), root.as_os_str()])
 }
 
 fn test_discover(root: &Path) -> (bool, String) {
-    bynkc(&[
+    bynk(&[
         "test".as_ref(),
         "--no-run".as_ref(),
         "--format".as_ref(),
@@ -160,22 +160,19 @@ fn a_non_additive_change_fails_check_and_test_and_leaves_the_lock_alone() {
         ("test", test(proj.root())),
         ("test --no-run --format json", test_discover(proj.root())),
     ] {
-        assert!(
-            !ok,
-            "`bynkc {what}` must fail a non-additive change:\n{out}"
-        );
+        assert!(!ok, "`bynk {what}` must fail a non-additive change:\n{out}");
         assert!(
             out.contains(CODE),
-            "`bynkc {what}` must report {CODE}:\n{out}"
+            "`bynk {what}` must report {CODE}:\n{out}"
         );
         assert!(
             out.contains("region"),
-            "`bynkc {what}` must name the added field:\n{out}"
+            "`bynk {what}` must name the added field:\n{out}"
         );
         assert_eq!(
             fs::read(proj.lock()).unwrap(),
             committed,
-            "`bynkc {what}` must not touch the committed lock"
+            "`bynk {what}` must not touch the committed lock"
         );
     }
 }
@@ -190,12 +187,12 @@ fn an_additive_change_passes_check_and_test_without_writing_the_lock() {
         ("check", check(proj.root())),
         ("test --no-run --format json", test_discover(proj.root())),
     ] {
-        assert!(ok, "`bynkc {what}` must pass an additive change:\n{out}");
-        assert!(!out.contains(CODE), "`bynkc {what}`:\n{out}");
+        assert!(ok, "`bynk {what}` must pass an additive change:\n{out}");
+        assert!(!out.contains(CODE), "`bynk {what}`:\n{out}");
         assert_eq!(
             fs::read(proj.lock()).unwrap(),
             committed,
-            "`bynkc {what}` must leave the lock byte-identical; only a build records the bump"
+            "`bynk {what}` must leave the lock byte-identical; only a build records the bump"
         );
     }
 }
@@ -209,10 +206,10 @@ fn no_lock_means_no_error_and_no_lock_written() {
         ("check", check(proj.root())),
         ("test --no-run --format json", test_discover(proj.root())),
     ] {
-        assert!(ok, "`bynkc {what}` with no lock must pass:\n{out}");
+        assert!(ok, "`bynk {what}` with no lock must pass:\n{out}");
         assert!(
             !proj.lock().exists(),
-            "`bynkc {what}` must not create bynk.schema.lock"
+            "`bynk {what}` must not create bynk.schema.lock"
         );
     }
 }
@@ -233,15 +230,15 @@ fn a_garbage_lock_fails_check_and_test_as_corrupt() {
         ("check", check(proj.root())),
         ("test --no-run --format json", test_discover(proj.root())),
     ] {
-        assert!(!ok, "`bynkc {what}` must fail a corrupt lock:\n{out}");
+        assert!(!ok, "`bynk {what}` must fail a corrupt lock:\n{out}");
         assert!(
             out.contains(CORRUPT),
-            "`bynkc {what}` must report {CORRUPT}:\n{out}"
+            "`bynk {what}` must report {CORRUPT}:\n{out}"
         );
         assert_eq!(
             fs::read(proj.lock()).unwrap(),
             garbage,
-            "`bynkc {what}` must not touch the corrupt lock"
+            "`bynk {what}` must not touch the corrupt lock"
         );
     }
 }
@@ -261,16 +258,16 @@ fn a_schema_annotation_the_lock_disagrees_with_fails_check_and_test() {
     ));
 
     for (what, (ok, out)) in [("check", check(proj.root())), ("test", test(proj.root()))] {
-        assert!(!ok, "`bynkc {what}` must fail the mismatch:\n{out}");
+        assert!(!ok, "`bynk {what}` must fail the mismatch:\n{out}");
         assert!(
             out.contains(MISMATCH),
-            "`bynkc {what}` must report {MISMATCH}:\n{out}"
+            "`bynk {what}` must report {MISMATCH}:\n{out}"
         );
         assert_eq!(fs::read(proj.lock()).unwrap(), committed);
     }
 }
 
-/// #2081 (a test gap from #2080's review): `bynkc test` emits the version the
+/// #2081 (a test gap from #2080's review): `bynk test` emits the version the
 /// registry computes, as a build does. After an additive change the lock
 /// still records schema 1 (test never writes it), but the reconciled version
 /// is 2, and that is what the emitted mint site carries.
@@ -281,7 +278,7 @@ fn test_emits_the_registry_computed_schema_version() {
     proj.write_source(SOURCE_V2_ADDITIVE);
     let out_dir = proj.root().join("test-out");
 
-    let (ok, out) = bynkc(&[
+    let (ok, out) = bynk(&[
         "test".as_ref(),
         "--no-run".as_ref(),
         "-o".as_ref(),
@@ -290,7 +287,7 @@ fn test_emits_the_registry_computed_schema_version() {
     ]);
     assert!(
         ok,
-        "`bynkc test --no-run` must pass an additive change:\n{out}"
+        "`bynk test --no-run` must pass an additive change:\n{out}"
     );
 
     let mut emitted = String::new();
@@ -316,6 +313,6 @@ fn test_emits_the_registry_computed_schema_version() {
     assert_eq!(
         fs::read(proj.lock()).unwrap(),
         committed,
-        "`bynkc test` must still not record the bump"
+        "`bynk test` must still not record the bump"
     );
 }

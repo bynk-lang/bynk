@@ -234,7 +234,7 @@ structural-mismatch error if its key is missing, exactly as before.
 
 Every build reconciles each event's field shape (names, types, which fields
 carry a default) against `bynk.schema.lock` — a file committed alongside
-`bynk.toml`, written automatically by `bynkc compile` and by `bynk dev`/`bynk
+`bynk.toml`, written automatically by `bynk compile` and by `bynk dev`/`bynk
 deploy`'s build step. You don't create or edit it by hand; its diff across a
 pull request *is* the human-readable record of how an event's schema evolved.
 
@@ -281,22 +281,22 @@ the same way you would `Cargo.lock`.
 
 ### Checking against the lock without writing it
 
-`bynkc check` and `bynkc test` (and `bynk check`/`bynk test`) reconcile against
+`bynk check` and `bynk test` (and `bynk check`/`bynk test`) reconcile against
 the committed `bynk.schema.lock` too, but **read-only**: a non-additive change
 fails them with the same `bynk.event.non_additive_schema_change` a build
 reports, so a CI gate of format, check and test (such as
 [`bynk-lang/bynk-ci`](https://github.com/bynk-lang/bynk-ci)) goes red on a
 breaking event change before anything deploys. They never write the lock: an
-additive change passes and leaves the file untouched, and only `bynkc compile`
+additive change passes and leaves the file untouched, and only `bynk compile`
 or `bynk dev`/`bynk deploy` records the bump, so run one of those before you
 commit. A project with no lock yet is a fresh project, and neither command
 complains or creates one.
 
 The editor does the same, also read-only: the language server reads the lock,
-re-reads it whenever it changes (a `git checkout`, or a `bynkc compile` that
+re-reads it whenever it changes (a `git checkout`, or a `bynk compile` that
 records a bump), and shows a non-additive change, a corrupt lock or a mismatched
 `@schema(N)` as a diagnostic at the top of `bynk.toml`, without waiting for you
-to run `bynkc check`. In VS Code, **Bynk: Show Contract Diff** lists every event
+to run `bynk check`. In VS Code, **Bynk: Show Contract Diff** lists every event
 and agent class that has changed since the lock, as compatible or breaking, under
 the same rules.
 

@@ -1,6 +1,6 @@
 //! Project-failure rendering for the driver.
 //!
-//! #521: the flattening layer (ADR 0100) is shared with `bynkc` in
+//! #521: the flattening layer (ADR 0100) is shared with `bynk` in
 //! [`bynk_driver`]; this module survives as re-exports under the driver's
 //! historical `render_*` names.
 

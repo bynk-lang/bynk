@@ -15,7 +15,7 @@
 //!   visible warning. Setting `BYNK_REQUIRE_TSC=1` enforces the strict CI
 //!   behaviour; otherwise an unavailable tsc prints a warning and passes.
 //! - #1671: the same switch governs the Node strip-types checks (ADR 0136's
-//!   strip-only invariant, which `bynkc test --inspect` and in-browser eval
+//!   strip-only invariant, which `bynk test --inspect` and in-browser eval
 //!   depend on). Under it, a missing Node, or one too old for
 //!   `stripTypeScriptTypes` (< 22.13), fails rather than skips.
 
@@ -713,7 +713,7 @@ fn run_strip_check(root: &Path) -> std::process::Output {
 }
 
 /// In-browser track, slice 0 — the **strip-only emission invariant** (ADR 0136):
-/// *every* `.ts` bynkc emits must be erasable by pure type-stripping, not just the
+/// *every* `.ts` bynk emits must be erasable by pure type-stripping, not just the
 /// embedded `runtime.ts` covered above. Node runs emitted `.ts` directly under
 /// `--experimental-strip-types` on the `--inspect` debug path (and the in-browser
 /// eval this track is built toward), which rejects non-erasable TS — parameter
@@ -848,7 +848,7 @@ fn all_emitted_typescript_strips_under_node() {
 // ---------------------------------------------------------------------------
 // In-browser track, slice 1 — the first-class JS artefact (ADR 0137).
 //
-// `bynkc compile --emit js` type-strips the emitted TypeScript to JavaScript via
+// `bynk compile --emit js` type-strips the emitted TypeScript to JavaScript via
 // `bynk_driver::strip::strip_project_to_js` (oxc). These two tests guard that path: the first
 // is pure-Rust and always runs (the strip must succeed on every fixture and yield
 // a JS-shaped tree); the second runs the emitted `.js` through `node --check` to

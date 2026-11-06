@@ -38,22 +38,10 @@ fn write(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
-/// The sibling `bynkc`, present only when the whole workspace was built.
-fn bynkc_sibling() -> Option<PathBuf> {
-    let p = bynk().parent().unwrap().join("bynkc");
-    p.exists().then_some(p)
-}
-
 /// Run `bynk <args>` in `cwd`, capturing (code, stdout, stderr).
 fn bynk_in(cwd: &Path, args: &[&str]) -> (i32, String, String) {
     let mut cmd = Command::new(bynk());
-    cmd.args(args).current_dir(cwd).env_remove("BYNK_BYNKC");
-    // `bynk test` runs a `bynkc`: the one built beside this `bynk`.
-    if args.first() == Some(&"test")
-        && let Some(bynkc) = bynkc_sibling()
-    {
-        cmd.env("BYNK_BYNKC", bynkc);
-    }
+    cmd.args(args).current_dir(cwd);
     let out = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -120,10 +108,6 @@ fn a_dependency_commons_is_reached_by_alias_and_runs() {
     );
     let (code, out) = short(&shop);
     assert_eq!(code, 0, "{out}");
-    if bynkc_sibling().is_none() {
-        eprintln!("skipping `bynk test`: sibling bynkc not built");
-        return;
-    }
     let (code, out, err) = bynk_in(&shop, &["test"]);
     assert_eq!(code, 0, "{out}{err}");
     assert!(out.contains("doubles through the dependency"), "{out}");
@@ -139,17 +123,14 @@ fn a_dependency_adapter_is_consumed_and_its_binding_vendored() {
     );
     let (code, out) = short(&shop);
     assert_eq!(code, 0, "{out}");
-    let bynkc = bynk().parent().unwrap().join("bynkc");
-    if !bynkc.exists() {
-        return;
-    }
+    let bynk_bin = bynk();
     let out_dir = shop.join("out");
-    let status = Command::new(&bynkc)
+    let status = Command::new(&bynk_bin)
         .args(["compile", ".", "-o"])
         .arg(&out_dir)
         .current_dir(&shop)
         .status()
-        .expect("spawn bynkc");
+        .expect("spawn bynk");
     assert!(status.success());
     for f in [
         "deps/acme-labs/money/tokens.ts",
@@ -298,16 +279,16 @@ fn tokens_requiring(root: &Path, range: &str) {
 
 const SESSIONS: &str = "context auth.sessions\n\nconsumes money.tokens\n\nservice login {\n  on call(secret: String) -> Effect[String] given money.tokens.Jwt {\n    let token <- money.tokens.Jwt.sign(\"u1\", secret)\n    token\n  }\n}\n";
 
-/// `bynkc compile .` of `dir` into `out`; the emitted `package.json`.
+/// `bynk compile .` of `dir` into `out`; the emitted `package.json`.
 fn compiled_package_json(dir: &Path, out: &Path) -> Option<String> {
-    let bynkc = bynkc_sibling()?;
-    let status = Command::new(&bynkc)
+    let bynk_bin = bynk();
+    let status = Command::new(&bynk_bin)
         .args(["compile", ".", "-o"])
         .arg(out)
         .current_dir(dir)
         .stdout(Stdio::null())
         .status()
-        .expect("spawn bynkc");
+        .expect("spawn bynk");
     assert!(status.success());
     Some(std::fs::read_to_string(out.join("package.json")).unwrap())
 }
@@ -428,10 +409,7 @@ fn a_dependency_adding_an_npm_requirement_changes_the_lock() {
 
 #[test]
 fn an_unused_dependency_changes_nothing_emitted() {
-    let bynkc = bynk().parent().unwrap().join("bynkc");
-    if !bynkc.exists() {
-        return;
-    }
+    let bynk_bin = bynk();
     let root = scratch("unused");
     let shop = money_workspace(&root, SHOP);
     write(
@@ -439,13 +417,13 @@ fn an_unused_dependency_changes_nothing_emitted() {
         "commons books\n\nfn twice(n: Int) -> Int {\n  n + n\n}\n",
     );
     let compile = |dir: &Path, out: &Path| {
-        let status = Command::new(&bynkc)
+        let status = Command::new(&bynk_bin)
             .args(["compile", ".", "-o"])
             .arg(out)
             .current_dir(dir)
             .stdout(Stdio::null())
             .status()
-            .expect("spawn bynkc");
+            .expect("spawn bynk");
         assert!(status.success());
     };
     let with = root.join("out-with");

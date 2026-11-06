@@ -232,7 +232,7 @@ pub fn parse_with_warnings(
                 "expected a `commons` declaration but found a `context` declaration",
             )
             .with_note(
-                "contexts must be compiled as part of a project — pass the source directory, e.g. `bynkc compile --target bundle --output out src`",
+                "contexts must be compiled as part of a project — pass the source directory, e.g. `bynk compile --target bundle --output out src`",
             ),
         ]),
         SourceUnit::Suite(t) => Err(vec![
@@ -242,7 +242,7 @@ pub fn parse_with_warnings(
                 "expected a `commons` declaration but found a `suite` declaration",
             )
             .with_note(
-                "tests must be compiled as part of a project — pass the source directory, e.g. `bynkc compile --target bundle --output out src`",
+                "tests must be compiled as part of a project — pass the source directory, e.g. `bynk compile --target bundle --output out src`",
             ),
         ]),
         SourceUnit::Adapter(a) => Err(vec![
@@ -252,7 +252,7 @@ pub fn parse_with_warnings(
                 "expected a `commons` declaration but found an `adapter` declaration",
             )
             .with_note(
-                "adapters must be compiled as part of a project — pass the source directory, e.g. `bynkc compile --target bundle --output out src`",
+                "adapters must be compiled as part of a project — pass the source directory, e.g. `bynk compile --target bundle --output out src`",
             ),
         ]),
     }

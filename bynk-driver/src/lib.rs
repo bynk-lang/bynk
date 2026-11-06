@@ -1,4 +1,4 @@
-//! bynk-driver — the shared front-end of the `bynkc` and `bynk` CLIs (#521).
+//! bynk-driver — the shared front-end of the `bynk` and `bynk` CLIs (#521).
 //!
 //! Both binaries expose `fmt` and `check` with identical semantics; before
 //! this crate each re-implemented the command bodies (and the project-failure
@@ -87,7 +87,7 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
 /// plainly exist on disk.
 ///
 /// #1890: project mode also reads `[workers] compatibility_flags` into the
-/// options, so every CLI build (`bynkc compile`, `bynk dev`/`deploy`, which
+/// options, so every CLI build (`bynk compile`, `bynk dev`/`deploy`, which
 /// all come through here) writes the project's flags into `wrangler.toml`.
 pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOptionsError> {
     // #1883, slice 1b: the `assets/` folder is listed once here, beside the
@@ -101,7 +101,7 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
     // P4b (#2608): the `migrations/` folder, listed the same way.
     let migration_files = discovery::list_migration_folder(input)?;
     // #2554: the older contracts each callee still accepts. Read here, with
-    // the manifest, so every CLI build (`bynkc compile`, `bynk dev`/`deploy`)
+    // the manifest, so every CLI build (`bynk compile`, `bynk dev`/`deploy`)
     // honours the lock without its own plumbing. An unreadable file is an
     // error, as for the schema lock: absent is the only "accepts nothing".
     let contracts_lock = contracts_lock::read(input).map_err(|e| {
@@ -486,8 +486,8 @@ pub fn print_project_failure_short(failure: &project::ProjectFailure) {
 /// The string form of [`print_project_failure_short`]: one `path:line:col:
 /// severity[category]: message` line per attributed error (an unattributed
 /// project-level error falls back to `severity[category]: message`). Backs both
-/// the printer above and the `bynkc test --format json` compile-error document,
-/// whose `diagnostics` the VS Code `bynkc` problem-matcher re-parses — each
+/// the printer above and the `bynk test --format json` compile-error document,
+/// whose `diagnostics` the VS Code `bynk` problem-matcher re-parses — each
 /// `Vec` entry is exactly one line by that contract, so unlike the other
 /// renderers in this file this one deliberately does *not* grow note/label
 /// continuation lines (finding #47): doing so would break a machine consumer
@@ -588,7 +588,7 @@ pub enum IndentKind {
     Spaces,
 }
 
-/// The `fmt` subcommand's arguments, flattened by both `bynkc::cli` and
+/// The `fmt` subcommand's arguments, flattened by
 /// `bynk::cli` so the two spell one contract rather than two copies of it (the
 /// [`test_runner::TestArgs`] pattern, findings #40/#72). Field docs here are
 /// the CLI help text for both commands' flags.
@@ -793,7 +793,7 @@ impl ManifestCache {
     }
 }
 
-/// The `fmt` command body shared by `bynkc fmt` and `bynk fmt`: each input is
+/// The `fmt` command body shared by `bynk fmt` and `bynk fmt`: each input is
 /// formatted and rewritten only when it changes; `--check` reports
 /// non-canonical files without writing; `-` reads stdin and writes the
 /// formatted result to stdout. `prog` prefixes messages (`bynk fmt: …`).
@@ -1039,7 +1039,7 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-/// The `check` command body shared by `bynkc check` and `bynk check`: a
+/// The `check` command body shared by `bynk check` and `bynk check`: a
 /// directory routes through [`project::check_project`] (finding #64 —
 /// non-bailing, so a structural error anywhere does not hide diagnostics
 /// elsewhere the way `compile_project`'s bail-fast `Mode::Build` would), a

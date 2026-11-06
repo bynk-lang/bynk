@@ -24,11 +24,6 @@ toml.workspace = true
 serde.workspace = true
 regex.workspace = true
 
-[dev-dependencies]
-# `cli_reference` renders the CLI page from `bynk`'s `bynkc` compatibility `clap` command.
-# Path-only: `bynk` is published last and `xtask` is not published.
-bynk = { path = "../bynk" }
-
 [lib]
 path = "src/lib.rs"
 

@@ -4,7 +4,7 @@
 //! Cannot mix BigInt and other types` the instant it meets a `number` literal.
 //! `positive_fixtures`/`tsc_verify` only diff golden text and type-check
 //! (`__vals: any[]`, so the bug is invisible to `tsc --strict`) — this proves
-//! the *runtime* fix: drives the real `bynkc test` CLI end to end (the same
+//! the *runtime* fix: drives the real `bynk test` CLI end to end (the same
 //! shape `property_behaviour.rs`/`contract_behaviour.rs` use) and asserts a
 //! clean pass, not merely that the generated text matches a golden file.
 
@@ -26,7 +26,7 @@ fn have_runner() -> bool {
     tool_exists("tsx") || (tool_exists("tsc") && tool_exists("node")) || tool_exists("npx")
 }
 
-/// Runs `bynkc test <fixture>` and returns combined stdout+stderr. Each fixture
+/// Runs `bynk test <fixture>` and returns combined stdout+stderr. Each fixture
 /// gets its own `out_dir` name — a shared parent would race the emitted `.js` a
 /// concurrent test's `tsc`/`node` run reads (same reason `property_behaviour.rs`/
 /// `contract_behaviour.rs` isolate their own runs).
@@ -42,7 +42,7 @@ fn run(fixture: &str, out_dir: &str) -> String {
         .arg("--output")
         .arg(&out_root)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     s
@@ -79,9 +79,9 @@ fn assert_clean_pass(output: &str, fixture: &str, expect_cases: &[&str]) {
 
 #[test]
 fn scalar_int_for_all_binding_participates_in_arithmetic_without_crashing() {
-    // `bynkc test`'s runner detection is Unix-only (it shells out to `which`).
+    // `bynk test`'s runner detection is Unix-only (it shells out to `which`).
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -102,7 +102,7 @@ fn scalar_int_for_all_binding_participates_in_arithmetic_without_crashing() {
 #[test]
 fn contract_attack_int_parameter_participates_in_requires_arithmetic_without_crashing() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {

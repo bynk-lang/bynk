@@ -58,7 +58,7 @@ pub(crate) fn read_named(project_root: &Path, file: &str) -> io::Result<Option<S
 /// `test` reconcile events against `bynk.schema.lock` (#2078). Nothing is
 /// written back: the caller drops `ProjectOutput::schema_lock` (and a
 /// `ProjectCheck` carries none), so a passing additive change leaves the lock
-/// byte-identical for `bynkc compile`, `bynk dev` or `bynk deploy` to record.
+/// byte-identical for `bynk compile`, `bynk dev` or `bynk deploy` to record.
 /// A missing lock is a fresh project, which baselines silently, exactly as a
 /// build treats it. A read failure is a message naming the file, for the
 /// caller to report.

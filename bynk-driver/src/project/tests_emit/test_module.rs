@@ -343,7 +343,7 @@ pub(super) fn emit_test_module(
     // v0.115: the target unit's contracted free functions the runner can attack
     // (each `ensures` is a generative check that is always on). Emitted only when
     // the contract guard is (the attack relies on the guard to assert `ensures`);
-    // `bynkc test` sets both, `bynkc compile` neither.
+    // `bynk test` sets both, `bynk compile` neither.
     let (attack_resolved, attack_fns) = if contracts {
         attackable_contracts(
             target_name,
@@ -1276,7 +1276,7 @@ pub(super) fn relative_import_for_test(target_dir: &Path) -> String {
 /// assigned explicitly rather than via TS parameter properties: parameter
 /// properties are a transform-only construct that Node's strip-only
 /// type-stripping rejects (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), and
-/// `bynkc test --inspect` runs this `.ts` directly under strip-only Node
+/// `bynk test --inspect` runs this `.ts` directly under strip-only Node
 /// (slice 2, ADR 0104). The explicit form is equivalent and strip-clean.
 pub(super) fn expectation_runtime_helpers() -> String {
     include_str!("../test_runtime/expectation.ts").to_string()

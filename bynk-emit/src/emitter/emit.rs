@@ -1011,7 +1011,7 @@ pub fn emit_suite_fn(
     commons: &TypedCommons,
     runtime_use: &RuntimeUse,
 ) -> Vec<bynk_ts::TsStmt> {
-    // A suite is only ever built for `bynkc test`, which guards every contract.
+    // A suite is only ever built for `bynk test`, which guards every contract.
     // A suite helper cannot declare `given`, so it has no capability types to name.
     let empty = bynk_check::resolver::CrossContextInfo::default();
     emit_free_fn_in(f, commons, true, runtime_use, &empty, false)
@@ -5069,8 +5069,8 @@ pub(crate) fn held_map_fields(a: &AgentDecl) -> Vec<(&Ident, &TypeRef)> {
 ///
 /// Tested at the `Types`/`TyId` level directly ([`held_frame_ty_tests`]),
 /// not through a full end-to-end fixture: a real `store x: Map[K,
-/// Option[Connection[F]]]` program certifies (`bynkc check` exits 0), but
-/// `bynkc compile` panics before reaching this function at all —
+/// Option[Connection[F]]]` program certifies (`bynk check` exits 0), but
+/// `bynk compile` panics before reaching this function at all —
 /// `bynk-check::wire::codec_suffix`'s `TypeRef::Connection(..) =>
 /// unreachable!(...)` arm, reached because whatever builds this project's
 /// wire/codec instantiation table walks every store field's value type
@@ -5896,7 +5896,7 @@ pub(crate) fn emit_agent(
     );
     state_interface.no_blank_before = a.documentation.is_some();
     stmts.push(state_interface);
-    // v0.9.2: per-agent state registry (bundle mode + `bynkc test`) and the
+    // v0.9.2: per-agent state registry (bundle mode + `bynk test`) and the
     // zero-value factory used to initialise a fresh key's state.
     //
     // Arc C, slice 20 (#1369): the second of step (9)'s own proposed 5-6

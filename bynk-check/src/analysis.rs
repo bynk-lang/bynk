@@ -335,7 +335,7 @@ pub fn analyse_project(
     schema_lock: &SchemaLock,
 ) -> ProjectAnalysis {
     // S3 (#1963): the project's `[unstable]` opt-in, read the way the build
-    // reads it, so the editor and `bynkc` agree about every file.
+    // reads it, so the editor and `bynk` agree about every file.
     let policy =
         crate::stability::StabilityPolicy::for_project(Some(roots.project_root()), overlay);
     analyse_project_with_policy(roots, overlay, policy, schema_lock)

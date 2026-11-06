@@ -35,8 +35,8 @@ link-shortener/
 ## Check and test
 
 ```sh
-bynkc check src
-bynkc test .
+bynk check src
+bynk test .
 ```
 
 ```text
@@ -50,7 +50,7 @@ codes:
 
 The `Slug`/`Url` boundary types and the `keyOf` helper live in `commons codes`,
 so they are unit-tested without a KV or `Random` binding. The handlers consume
-those platform capabilities; under `bynkc test` each is a deterministic test
+those platform capabilities; under `bynk test` each is a deterministic test
 double, so a handler test is possible too. Exercise them end to end under
 `bynk dev`, below.
 
@@ -84,7 +84,7 @@ curl -i localhost:8787/sitemap.xml
 *Under the hood,* `bynk dev` runs the manual recipe:
 
 ```sh
-bynkc compile src --output out --target workers
+bynk compile src --output out --target workers
 cd out/workers/links
 npx wrangler dev
 ```

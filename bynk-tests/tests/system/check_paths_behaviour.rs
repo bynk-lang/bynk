@@ -1,5 +1,5 @@
-//! #1772: `bynkc check` names a file by the path you'd type from the working
-//! directory, the same path `bynkc fmt` reports. It used to print the file's
+//! #1772: `bynk check` names a file by the path you'd type from the working
+//! directory, the same path `bynk fmt` reports. It used to print the file's
 //! identity path, relative to the input it was given, so neither the GitHub
 //! Actions matcher nor VS Code's (both resolving against the directory the
 //! command ran in) could open it.
@@ -23,14 +23,14 @@ fn layout(tag: &str) -> PathBuf {
     root
 }
 
-/// Run `bynkc <args>` in `cwd`; the combined stdout and stderr, colour off.
-fn bynkc(cwd: &Path, args: &[&str]) -> String {
+/// Run `bynk <args>` in `cwd`; the combined stdout and stderr, colour off.
+fn bynk(cwd: &Path, args: &[&str]) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .current_dir(cwd)
         .env("NO_COLOR", "1")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -59,13 +59,13 @@ const FROM_PARENT: &str = "test/fixtures/type-error/src/greeting.bynk:4:3";
 fn from_a_parent_directory_the_path_includes_the_input() {
     let root = layout("parent");
     for input in ["test/fixtures/type-error", "test/fixtures/type-error/src"] {
-        let short = bynkc(&root, &["check", "--format", "short", input]);
+        let short = bynk(&root, &["check", "--format", "short", input]);
         assert!(
             short.starts_with(&format!("{FROM_PARENT}: error[")),
             "`check --format short {input}` from the parent:\n{short}"
         );
     }
-    let rich = bynkc(&root, &["check", "test/fixtures/type-error"]);
+    let rich = bynk(&root, &["check", "test/fixtures/type-error"]);
     assert!(
         rich.contains(&format!("─[ {FROM_PARENT} ]")),
         "the rich header names the same path:\n{rich}"
@@ -76,12 +76,12 @@ fn from_a_parent_directory_the_path_includes_the_input() {
 fn from_inside_the_project_the_path_is_relative_to_it() {
     let root = layout("inside");
     let project = root.join("test/fixtures/type-error");
-    let short = bynkc(&project, &["check", "--format", "short", "src"]);
+    let short = bynk(&project, &["check", "--format", "short", "src"]);
     assert!(
         short.starts_with("src/greeting.bynk:4:3: error["),
         "`check --format short src` from inside:\n{short}"
     );
-    let dot = bynkc(&project, &["check", "--format", "short", "."]);
+    let dot = bynk(&project, &["check", "--format", "short", "."]);
     assert!(
         dot.starts_with("src/greeting.bynk:4:3: error["),
         "`check --format short .` from inside:\n{dot}"
@@ -98,8 +98,8 @@ fn fmt_and_check_agree_on_the_path() {
         "commons greeting\n\nfn  greet(name: String) -> Int {\n  name\n}\n",
     )
     .unwrap();
-    let fmt = bynkc(&root, &["fmt", "--check", "test/fixtures/type-error"]);
-    let check = bynkc(
+    let fmt = bynk(&root, &["fmt", "--check", "test/fixtures/type-error"]);
+    let check = bynk(
         &root,
         &["check", "--format", "short", "test/fixtures/type-error"],
     );
@@ -111,10 +111,10 @@ fn fmt_and_check_agree_on_the_path() {
     assert!(check.starts_with(&format!("{path}:")), "{check}");
 }
 
-/// A failing build under `bynkc test` reports the same path.
+/// A failing build under `bynk test` reports the same path.
 #[test]
 fn a_failing_test_build_names_the_path_as_typed() {
     let root = layout("test");
-    let out = bynkc(&root, &["test", "test/fixtures/type-error"]);
+    let out = bynk(&root, &["test", "test/fixtures/type-error"]);
     assert!(out.contains(FROM_PARENT), "{out}");
 }

@@ -1,5 +1,5 @@
 //! #1890: the `bynk.project.duplicate_compatibility_flag` warning, as the real
-//! `bynkc` CLI prints it. The fixture `1890_workers_compatibility_flags` has
+//! `bynk` CLI prints it. The fixture `1890_workers_compatibility_flags` has
 //! two contexts (so two Workers) and repeats one flag in `[workers]
 //! compatibility_flags`. Both `check` and `compile` must report the repeat,
 //! once for the build rather than once per Worker, attributed to the
@@ -19,18 +19,18 @@ fn fixture() -> PathBuf {
         .join("tests/fixtures/positive/1890_workers_compatibility_flags")
 }
 
-/// Run `bynkc` with `args`, returning success and stdout + stderr.
-fn bynkc(args: &[&std::ffi::OsStr]) -> (bool, String) {
+/// Run `bynk` with `args`, returning success and stdout + stderr.
+fn bynk(args: &[&std::ffi::OsStr]) -> (bool, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), s)
 }
 
-/// A scratch copy of the fixture: `bynkc compile` writes a schema lock into
+/// A scratch copy of the fixture: `bynk compile` writes a schema lock into
 /// the project it compiles, and the committed fixture must stay untouched.
 struct Scratch(PathBuf);
 
@@ -55,7 +55,7 @@ fn copy_dir(from: &Path, to: &Path) {
 
 #[test]
 fn check_reports_the_duplicate_once() {
-    let (ok, out) = bynkc(&["check".as_ref(), fixture().as_os_str()]);
+    let (ok, out) = bynk(&["check".as_ref(), fixture().as_os_str()]);
     assert!(ok, "a warning must not fail `check`:\n{out}");
     assert_eq!(
         out.matches(CODE).count(),
@@ -76,7 +76,7 @@ fn compile_reports_the_duplicate_once_against_bynk_toml() {
     let project = dir.0.join("project");
     copy_dir(&fixture(), &project);
     let output = dir.0.join("out");
-    let (ok, out) = bynkc(&[
+    let (ok, out) = bynk(&[
         "compile".as_ref(),
         project.as_os_str(),
         "--output".as_ref(),

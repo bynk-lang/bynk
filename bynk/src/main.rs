@@ -40,12 +40,6 @@ fn main() -> ExitCode {
 }
 
 fn run() -> ExitCode {
-    // #3013 (E3): run under the name `bynkc`, `bynk` answers as `bynkc` did.
-    if bynk::bynkc_compat::invoked_as_bynkc() {
-        return bynk::bynkc_compat::run();
-    }
-    // #2998: `BYNK_BYNKC` no longer pins a compiler; say so once.
-    bynk::compiler::warn_if_override_set();
     let cli =
         Cli::from_arg_matches(&bynk::cli::command().get_matches()).unwrap_or_else(|e| e.exit());
     match cli.command {
@@ -224,10 +218,6 @@ fn run() -> ExitCode {
             emit,
             sources_stdin,
             lock,
-            // #2998: `compile` runs in-process now, so there is no second
-            // compiler to skew against. Still accepted, so a pinned editor
-            // that passes it keeps working; removed with the `bynkc` alias.
-            allow_skew: _,
         } => {
             if !prepare(&input, lock.options()) {
                 return ExitCode::FAILURE;
@@ -242,12 +232,7 @@ fn run() -> ExitCode {
             })
         }
         Command::Fmt { args } => run_fmt(args),
-        Command::Test {
-            args,
-            // #2998: accepted and ignored, like `compile`'s (see above).
-            allow_skew: _,
-            lock,
-        } => {
+        Command::Test { args, lock } => {
             if !prepare(&args.input, lock.options()) {
                 return ExitCode::FAILURE;
             }
@@ -866,7 +851,7 @@ fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
         return ExitCode::FAILURE;
     }
     // #524: `dev` compiles and watches the whole `[paths]` layout from the
-    // project root — the same shape as `bynkc compile` — so no per-include
+    // project root — the same shape as `bynk compile` — so no per-include
     // root is selected here any more.
     dev::run(&tb, &project_root, bynk_emit::NODE_FLOOR, &opts)
 }
@@ -943,14 +928,14 @@ fn find_project_root(start: &Path) -> Option<PathBuf> {
 }
 
 /// Are we inside the Bynk source repo? Gates the contributor `build`
-/// capability. Identified by the workspace markers `bynkc/Cargo.toml` and
+/// capability. Identified by the workspace markers `bynk-driver/Cargo.toml` and
 /// `design/decisions` in some ancestor.
 fn in_bynk_repo(start: &Path) -> bool {
     let Ok(mut dir) = start.canonicalize() else {
         return false;
     };
     loop {
-        if dir.join("bynkc").join("Cargo.toml").is_file()
+        if dir.join("bynk-driver").join("Cargo.toml").is_file()
             && dir.join("design").join("decisions").is_dir()
         {
             return true;

@@ -119,7 +119,7 @@ store-success-output = false
 #                two filtersets below do not select.
 #   integration  `bynk-tests`' in-process pipeline tests and fixture corpus
 #                (the `integration::` modules of its one `it` binary).
-#   system       anything that starts the `bynkc`/`bynk` binary, `tsc`, `node`,
+#   system       anything that starts the `bynk` binary, `tsc`, `node`,
 #                `workerd` or `wrangler`: `bynk-tests`' `system::` modules, the
 #                `bynk` crate's CLI tests, and `xtask`'s `ci_command` (git).
 #

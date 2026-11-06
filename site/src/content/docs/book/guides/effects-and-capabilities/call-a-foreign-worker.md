@@ -82,7 +82,7 @@ The binding name joins the Worker's others under the duplicate check
 
 ## Test it
 
-Under `bynkc test` each instance has its own double, and it faults until its
+Under `bynk test` each instance has its own double, and it faults until its
 `send` is stubbed, because a test never reaches the Worker:
 
 ```bynk,fragment

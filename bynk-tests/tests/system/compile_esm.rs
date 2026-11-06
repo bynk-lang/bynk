@@ -1,4 +1,4 @@
-//! #2148: `bynkc compile` output is checked and built as ES modules by a plain
+//! #2148: `bynk compile` output is checked and built as ES modules by a plain
 //! `tsc -p out/tsconfig.json`, emit on, with no user `package.json` in scope.
 //!
 //! The emitted modules are ESM (`.js`-suffixed imports, `export`), and the
@@ -109,7 +109,7 @@ fn package_json_above(dir: &Path) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// `bynkc compile` the staged project, then run a plain emit-on
+/// `bynk compile` the staged project, then run a plain emit-on
 /// `tsc -p out/tsconfig.json`, exactly as a user building for deployment
 /// would: no `--noEmit`, no module overrides. `None` when the test skips.
 fn compile_then_tsc(what: &str, root: &Path) -> Option<Output> {
@@ -139,14 +139,14 @@ fn compile_then_tsc(what: &str, root: &Path) -> Option<Output> {
         .current_dir(root)
         .env("NO_COLOR", "1")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     assert!(
         compiled.status.success(),
-        "bynkc compile failed:\n{}",
+        "bynk compile failed:\n{}",
         output_text(&compiled)
     );
     let marker = fs::read_to_string(root.join("out/package.json"))
-        .expect("bynkc compile writes out/package.json");
+        .expect("bynk compile writes out/package.json");
     assert!(
         marker.contains("\"type\": \"module\""),
         "out/package.json does not declare ES modules:\n{marker}"

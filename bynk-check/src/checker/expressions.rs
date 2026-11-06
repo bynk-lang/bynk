@@ -3035,7 +3035,7 @@ pub(crate) fn check_record_spread(
 /// rebranded on emission (`emit_context_rebrands` in `bynk-emit`) — the
 /// rebrand re-exports the public name as a *type* alias, never a value, so
 /// the type's own variant constructors are not in scope there. Checking this
-/// in `bynk-check` catches what would otherwise be a clean `bynkc check`
+/// in `bynk-check` catches what would otherwise be a clean `bynk check`
 /// followed by a `tsc` failure (TS2693) on the emitted output. Called from
 /// every site that resolves to a runtime `SumType.Variant(...)` reference in
 /// the emitted output: explicit construction (a bare `Text(...)` or

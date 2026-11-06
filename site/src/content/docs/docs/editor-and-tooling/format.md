@@ -3,17 +3,17 @@ title: "Format your code with `bynk-fmt`"
 ---
 **Goal:** format Bynk source to the canonical style.
 
-Bynk's formatter is built into the compiler as `bynkc fmt`.
+Bynk's formatter is built into the compiler as `bynk fmt`.
 
 ## Format files in place
 
 ```sh
-bynkc fmt src/counters.bynk
-bynkc fmt src/*.bynk
-bynkc fmt .
+bynk fmt src/counters.bynk
+bynk fmt src/*.bynk
+bynk fmt .
 ```
 
-A directory formats the `.bynk` files `bynkc check` reads for it: a project
+A directory formats the `.bynk` files `bynk check` reads for it: a project
 root's `[paths] include` trees minus `exclude`, or any other directory walked
 recursively.
 
@@ -42,7 +42,7 @@ commons demo {
 Pass `-` to read from stdin and write to stdout — handy for editor integrations:
 
 ```sh
-cat src/counters.bynk | bynkc fmt -
+cat src/counters.bynk | bynk fmt -
 ```
 
 ## Check formatting in CI
@@ -51,7 +51,7 @@ cat src/counters.bynk | bynkc fmt -
 not already canonical:
 
 ```sh
-bynkc fmt --check src/*.bynk
+bynk fmt --check src/*.bynk
 ```
 
 ## Override the style for a run
@@ -61,9 +61,9 @@ or a narrower terminal genuinely calls for something else, four flags override
 the style for that invocation:
 
 ```sh
-bynkc fmt --indent spaces --indent-width 4 src/*.bynk
-bynkc fmt --max-line-width 120 src/*.bynk
-bynkc fmt --no-trailing-comma src/*.bynk
+bynk fmt --indent spaces --indent-width 4 src/*.bynk
+bynk fmt --max-line-width 120 src/*.bynk
+bynk fmt --no-trailing-comma src/*.bynk
 ```
 
 | Flag | Default | Effect |
@@ -97,7 +97,7 @@ resolution order is defaults → `[fmt]` → flags.
 non-default style has a CI gate that can actually pass:
 
 ```sh
-bynkc fmt --check src/*.bynk
+bynk fmt --check src/*.bynk
 ```
 
 To format to the canonical style whatever project you are standing in — a

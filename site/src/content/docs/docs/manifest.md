@@ -103,28 +103,28 @@ mirror-of = "bynk"          # fetch first-party packages through here
 key outside any table (including a table's own name given a plain value, such
 as `paths = "src"`), or an unknown key in any table but `[fmt]` is an error.
 In `[dependencies]`, `[dev-dependencies]` and `[registries]` the keys are
-names you choose, and each entry's own keys are checked the same way. `bynkc` and `bynk` report it, with the nearest name
+names you choose, and each entry's own keys are checked the same way. `bynk` reports it, with the nearest name
 when there is one, and build nothing. An unknown `[fmt]` key is reported by the
-formatter (`bynkc fmt`, `bynk fmt`), which owns that table, not by `check` or
+formatter (`bynk fmt`), which owns that table, not by `check` or
 `compile`:
 
 ```text
-bynkc: `bynk.toml` has no table named `[pahts]` — did you mean `[paths]`?
-bynkc: `[project]` has no key named `nmae` — did you mean `name`?
-bynkc: `[dependencies]` `fx` has no key named `verison` — did you mean `version`?
+bynk: `bynk.toml` has no table named `[pahts]` — did you mean `[paths]`?
+bynk: `[project]` has no key named `nmae` — did you mean `name`?
+bynk: `[dependencies]` `fx` has no key named `verison` — did you mean `version`?
 ```
 
 A table for a feature that is planned but not built (`[deploy]`) gets the same
 error, naming the issue that tracks the feature, so it can't read as working. The language server doesn't refuse
 a manifest: it reads the `[paths]`, `[fmt]` and `[lsp]` it needs and ignores
-the rest, so run `bynkc check` to see what is wrong with one.
+the rest, so run `bynk check` to see what is wrong with one.
 
 ## Editor support
 
 A JSON Schema for `bynk.toml` is published at
 [`https://bynk-lang.org/schemas/bynk.toml.json`](https://bynk-lang.org/schemas/bynk.toml.json).
 It describes every table and key on this page, with each key's type, default
-and allowed values, and it flags an unknown table or key the way `bynkc check`
+and allowed values, and it flags an unknown table or key the way `bynk check`
 does. The toolchain generates it from the same types that read the manifest
 (`cargo xtask manifest-schema`), and CI fails when the committed copy falls
 behind them, so it can't drift from what the compiler accepts.
@@ -402,7 +402,7 @@ not a source/test role split. Each path is resolved relative to the project root
 A conventional `src/`(+`tests/`) project and a flat project (`.bynk` at the root)
 both need no `[paths]` at all. Any other key is an error, including the legacy
 `src`/`tests` keys and `out`. The output directory comes from the command line
-(`bynkc compile -o`), not the manifest.
+(`bynk compile -o`), not the manifest.
 
 ### Path consistency
 
@@ -421,14 +421,14 @@ This code is described in the [diagnostic index](/book/reference/diagnostics/).
 ## `[fmt]`
 
 Formatter settings. Read by **both** format-on-save in the editor and the
-`bynkc fmt` / `bynk fmt` CLI, through one shared reader, so a section they can
+`bynk fmt` / `bynk fmt` CLI, through one shared reader, so a section they can
 both read is interpreted identically.
 
 They part company on a section that does **not** read: the CLI reports the
 error and formats nothing, while the language server falls back to the
 canonical style and keeps serving (it cannot refuse to run). So a manifest with
 a typo formats one way in the editor and fails on the command line — run
-`bynkc fmt` to see what is wrong with it.
+`bynk fmt` to see what is wrong with it.
 
 The CLI resolves options in three layers, each overriding the one before: the
 canonical defaults below, then this section, then the flags a run passes
@@ -466,7 +466,7 @@ Language-server settings, consumed by `bynk-lsp`. See the
 
 ## `[workers]`
 
-Settings for the Cloudflare Workers a Workers build emits (`bynkc compile
+Settings for the Cloudflare Workers a Workers build emits (`bynk compile
 --target workers`, `bynk dev`, `bynk deploy`). A bundle build emits no
 `wrangler.toml`, so the flags have no effect there, but the table is still
 checked, and the duplicate warning below still appears.
@@ -577,6 +577,6 @@ Without a `bynk.toml`, a single `.bynk` file compiles as a standalone unit (the
 way to start.
 
 Project features expect the manifest-driven layout above. In particular
-`bynkc test`, and the project-aware [`bynk` driver CLI](/docs/bynk-cli/)
+`bynk test`, and the project-aware [`bynk` driver CLI](/docs/bynk-cli/)
 commands — `bynk doctor`, `bynk new`, `bynk dev`, and `bynk deploy` — require a project (a
 `bynk.toml`, or a `src/` directory).

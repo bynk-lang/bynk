@@ -228,7 +228,7 @@ which "mock" is gone from the language. See [`stub`](/book/reference/testing/#st
 ### project vs legacy mode {#term-project-vs-legacy-mode}
 
 *Project mode* is a `bynk.toml`-driven directory layout (a `src`/`tests` split,
-`bynkc test`); *legacy mode* compiles a single `.bynk` file as a standalone unit,
+`bynk test`); *legacy mode* compiles a single `.bynk` file as a standalone unit,
 with no manifest. See [`bynk.toml` manifest](/docs/manifest/).
 
 ### package {#term-package}
@@ -257,8 +257,7 @@ builds exactly what it says. See [`bynk.lock`](/docs/manifest/#bynklock).
 ### store {#term-store}
 
 The per-user cache (`$BYNK_HOME/store`) holding each fetched git dependency's
-files, named by their checksum and read-only. Only `bynk` writes it; `bynkc`
-and the editor read it and never fetch.
+files, named by their checksum and read-only. Only `bynk` writes it; the editor reads it and never fetch.
 
 ### alias {#term-alias}
 

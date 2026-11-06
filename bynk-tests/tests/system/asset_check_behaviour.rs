@@ -1,11 +1,11 @@
 //! #1883: `asset` declarations through the real CLI.
 //!
-//! - A single file checks clean (`bynkc check page.bynk`), but its build is
+//! - A single file checks clean (`bynk check page.bynk`), but its build is
 //!   refused with `bynk.asset.needs_project`: it has no project root and
 //!   emits no Worker (review of #1903 for the check half).
 //! - A project checks clean when the file is in `assets/`, and reports
 //!   `bynk.asset.missing_file` when it is not.
-//! - `bynkc compile --target workers` writes the hashed file and `_headers`
+//! - `bynk compile --target workers` writes the hashed file and `_headers`
 //!   into the Worker's assets directory (slice 1b), read from the project's
 //!   `assets/` folder by the driver.
 //! - Only the files a declaration names are read: the folder is listed up
@@ -45,12 +45,12 @@ fn project(name: &str, with_file: bool) -> PathBuf {
     dir
 }
 
-fn bynkc(args: &[&str], path: &Path) -> (bool, String) {
+fn bynk(args: &[&str], path: &Path) -> (bool, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .arg(path)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), s)
@@ -62,21 +62,21 @@ fn a_single_file_with_an_asset_checks_clean_and_its_build_is_refused() {
     let file = dir.join("page.bynk");
     std::fs::write(&file, PAGE).unwrap();
 
-    let (ok, out) = bynkc(&["check"], &file);
-    assert!(ok, "`bynkc check` must pass, got:\n{out}");
+    let (ok, out) = bynk(&["check"], &file);
+    assert!(ok, "`bynk check` must pass, got:\n{out}");
 
     let ts = dir.join("page.ts");
-    let (ok, out) = bynkc(&["compile", "--output", ts.to_str().unwrap()], &file);
-    assert!(!ok, "`bynkc compile` must refuse the asset, got:\n{out}");
+    let (ok, out) = bynk(&["compile", "--output", ts.to_str().unwrap()], &file);
+    assert!(!ok, "`bynk compile` must refuse the asset, got:\n{out}");
     assert!(out.contains("bynk.asset.needs_project"), "{out}");
 }
 
 #[test]
 fn a_project_checks_clean_with_its_file_and_reports_a_missing_one() {
-    let (ok, out) = bynkc(&["check"], &project("asset-check-present", true));
-    assert!(ok, "`bynkc check` on a project must pass, got:\n{out}");
+    let (ok, out) = bynk(&["check"], &project("asset-check-present", true));
+    assert!(ok, "`bynk check` on a project must pass, got:\n{out}");
 
-    let (ok, out) = bynkc(&["check"], &project("asset-check-absent", false));
+    let (ok, out) = bynk(&["check"], &project("asset-check-absent", false));
     assert!(!ok, "a missing asset file must fail the check, got:\n{out}");
     assert!(out.contains("bynk.asset.missing_file"), "{out}");
 }
@@ -85,7 +85,7 @@ fn a_project_checks_clean_with_its_file_and_reports_a_missing_one() {
 fn a_workers_build_writes_the_hashed_file_and_headers() {
     let dir = project("asset-build-workers", true);
     let out_dir = dir.join("out");
-    let (ok, out) = bynkc(
+    let (ok, out) = bynk(
         &[
             "compile",
             "--target",
@@ -207,12 +207,12 @@ fn a_bundle_build_ships_no_files() {
 }
 
 /// Review of #1904: a deployable Bundle build ships no files, so it warns
-/// about each asset whose `.url` it emits; `bynkc test`'s Bundle build (with
+/// about each asset whose `.url` it emits; `bynk test`'s Bundle build (with
 /// tests) does not.
 #[test]
 fn a_deployable_bundle_build_warns_that_its_assets_are_not_served() {
     let dir = project("asset-build-bundle", true);
-    let (ok, out) = bynkc(
+    let (ok, out) = bynk(
         &["compile", "--output", dir.join("out").to_str().unwrap()],
         &dir,
     );
@@ -225,7 +225,7 @@ fn a_deployable_bundle_build_warns_that_its_assets_are_not_served() {
             .warnings
             .iter()
             .any(|w| w.error.category == "bynk.asset.not_served"),
-        "a build with tests (as `bynkc test` compiles) does not warn"
+        "a build with tests (as `bynk test` compiles) does not warn"
     );
 }
 
@@ -376,7 +376,7 @@ fn an_unreadable_undeclared_file_does_not_affect_the_cli_build() {
         return;
     }
     let out_dir = dir.join("out");
-    let (ok, out) = bynkc(
+    let (ok, out) = bynk(
         &[
             "compile",
             "--target",

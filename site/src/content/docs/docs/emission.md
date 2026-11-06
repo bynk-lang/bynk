@@ -16,7 +16,7 @@ governs the shared helpers.
 
 ## Targets
 
-`bynkc` emits one of two build targets, selected by `--target`.
+`bynk` emits one of two build targets, selected by `--target`.
 
 | Target | Flag | Layout | Cross-context calls |
 |---|---|---|---|
@@ -68,7 +68,7 @@ connection helpers. Its contract is normative — see
 [§7.4](/book/spec/runtime-library/) — so integrating code should import from it
 rather than reconstruct it.
 
-Alongside every emitted `.ts` module, `bynkc` writes two sidecars:
+Alongside every emitted `.ts` module, `bynk` writes two sidecars:
 
 - **`<file>.ts.map`** — a standard source map, with a `//# sourceMappingURL`
   trailer appended to the module. This is what maps a stack frame in the generated
@@ -80,7 +80,7 @@ Alongside every emitted `.ts` module, `bynkc` writes two sidecars:
 
 An emitted `tsconfig.json` pins `target: ES2022`, `module: NodeNext`, and
 `strict`, and an emitted `package.json` declares `"type": "module"`, so the
-output type-checks under the same settings `bynkc` assumes and builds as ES
+output type-checks under the same settings `bynk` assumes and builds as ES
 modules.
 
 ## Types
@@ -378,7 +378,7 @@ a Worker. The connection helpers (`acceptHibernatableConnection`, `resolveConnec
 ## Tests
 
 Tests emit a per-target test module plus an aggregating `tests/main.ts` runner.
-`bynkc test` compiles the project, type-checks it with `tsc`, and runs the aggregated
+`bynk test` compiles the project, type-checks it with `tsc`, and runs the aggregated
 suite with Node — so a test failure is either a Bynk assertion or a type error in the
 emitted output, both surfaced against the same source-mapped frames as production
 code.

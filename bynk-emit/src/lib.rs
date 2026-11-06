@@ -13,7 +13,7 @@
 //! `design/tracks/semantics-in-the-checker.md` §3.5, R10.1).
 //!
 //! Extracted from `bynkc` as slice 4 of the crate-decomposition track over
-//! `bynk-syntax` + `bynk-check`. Behaviour is unchanged; `bynkc` depends on this
+//! `bynk-syntax` + `bynk-check`. Behaviour is unchanged; `bynk` depends on this
 //! crate and re-exports its modules so its public API (`compile_project`,
 //! `ProjectOutput`, …) and the binary are untouched.
 
@@ -31,7 +31,7 @@ use bynk_syntax::{CompileError, lexer, parser};
 /// warning-discarding convenience over this.
 ///
 /// Lives in `bynk-emit` (slice 7 precedent, alongside [`NODE_MAJOR_FLOOR`]) so
-/// both `bynkc` and the `bynk` driver can compile a self-contained single-file
+/// both `bynk` and the `bynk` driver can compile a self-contained single-file
 /// commons in-process without depending on each other; `bynkc` re-exports it so
 /// `bynkc::compile_with_warnings` and `bynkc::Compiled` are unchanged.
 pub struct Compiled {
@@ -61,7 +61,7 @@ pub fn compile_with_warnings(source: &str, _filename: &str) -> Result<Compiled, 
 /// Check a single-file commons without building it: the same diagnostics as
 /// [`compile_with_warnings`], minus the build-only ones, and no emission.
 /// Returns the non-failing warnings on success. The single-file half of
-/// `bynk check` / `bynkc check` (`bynk_driver::run_check`); a directory goes
+/// `bynk check` / `bynk check` (`bynk_driver::run_check`); a directory goes
 /// through the project pipeline in `Mode::Check` instead.
 ///
 /// #1883, slice 1a (review of #1903): before this, `run_check` reused
@@ -177,7 +177,7 @@ fn check_single_file(
 /// definition (slice 7; was a `bynkc` const before the driver dropped that dep).
 ///
 /// #1674: 22, the oldest Node major still in support (18 reached end-of-life in
-/// April 2025, 20 in April 2026), and the one `bynkc test --inspect` needs. So
+/// April 2025, 20 in April 2026), and the one `bynk test --inspect` needs. So
 /// `bynk doctor`'s `ok` means the commands work, not merely that Node exists.
 /// The `--inspect` path checks its own minor floor (22.6 to run, 22.18 for
 /// source-mapped breakpoints) and says so when it isn't met.

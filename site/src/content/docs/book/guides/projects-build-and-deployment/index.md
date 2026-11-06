@@ -19,5 +19,4 @@ Workers.
 - [Adopt Bynk beside a TypeScript Worker](/book/guides/projects-build-and-deployment/adopt-beside-a-typescript-worker/)
 
 **See also:** [Reference — `bynk.toml` manifest](/docs/manifest/),
-[CLI (`bynkc`)](/docs/cli/), [CLI (`bynk`
-driver)](/docs/bynk-cli/), [Emission](/docs/emission/).
+[CLI (`bynk`)](/docs/bynk-cli/), [Emission](/docs/emission/).

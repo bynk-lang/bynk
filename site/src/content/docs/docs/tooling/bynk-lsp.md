@@ -178,14 +178,14 @@ forcing a whole-project round per keystroke grew slower with project size.
 ## Project discovery and performance
 
 The server resolves each file to its project by walking upward from the file to
-the nearest `bynk.toml` (the same attribution `bynkc` gives it) — so several
+the nearest `bynk.toml` (the same attribution `bynk` gives it) — so several
 projects across one window's workspace folders each analyse independently, and a
 file's workspace folder does not decide its project. Whether a file resolves to
 a project decides its feature set:
 
 - **In a project** — cross-file lookups, project-wide diagnostics,
   workspace symbols, rename, and the index-backed navigation features all apply.
-  The files analysed are **exactly the files `bynkc` compiles**: every tree in
+  The files analysed are **exactly the files `bynk` compiles**: every tree in
   the manifest's [`[paths] include`](/docs/manifest/), with `exclude` honoured,
   read through the compiler's own discovery. A conventional project needs no
   `[paths]` at all — `src/` and, when present, `tests/` are picked up; a flat

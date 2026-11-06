@@ -228,7 +228,7 @@ agent can be exercised end to end, and you can assert on accumulated state.
 ## Run it
 
 ```sh
-bynkc test .
+bynk test .
 ```
 
 ```text
@@ -241,7 +241,7 @@ system · checkout:
 2 passed, 0 failed.
 ```
 
-For a `system` suite, `bynkc test` compiles the inferred participants in workers
+For a `system` suite, `bynk test` compiles the inferred participants in workers
 mode under `out/workers/`, stands each one up as an in-process Worker, wires the
 bindings, type-checks everything with `tsc --strict`, and runs it on Node. No
 `wrangler` or `miniflare` is needed.

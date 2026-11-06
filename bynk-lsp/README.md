@@ -14,7 +14,7 @@ compiler's analysis libraries directly — [`bynk-ide`](https://crates.io/crates
 (diagnostics + project analysis), [`bynk-check`](https://crates.io/crates/bynk-check),
 [`bynk-syntax`](https://crates.io/crates/bynk-syntax), and the
 [`bynk-fmt`](https://crates.io/crates/bynk-fmt) formatter — not the whole
-compiler binary. So the editor sees exactly the diagnostics `bynkc check` would
+compiler binary. So the editor sees exactly the diagnostics `bynk check` would
 report, without linking the CLI it doesn't need.
 
 ## Capabilities

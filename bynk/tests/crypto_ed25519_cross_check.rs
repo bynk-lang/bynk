@@ -7,7 +7,7 @@
 //! document) and its public key is the 32 raw bytes, so this is also the check
 //! that the format the registry stores is the format `Crypto.importSigningKey` and
 //! `Crypto.importVerifyKey` take. The binding is the compiled Node one, run by
-//! `node`. Skips loudly without `node` or the `bynkc` binary;
+//! `node`. Skips loudly without `node`;
 //! `BYNK_REQUIRE_TSC=1` turns the skip into a failure, as the other
 //! Node-driven suites do.
 
@@ -18,13 +18,6 @@ use bynk::registry::protocol::{SigningKey, key_bytes, verify};
 use bynk_project::lock::{base64_decode, base64_encode};
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
-
-fn bynkc() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_bynk"))
-        .parent()
-        .unwrap()
-        .join(format!("bynkc{}", std::env::consts::EXE_SUFFIX))
-}
 
 fn required() -> bool {
     std::env::var(REQUIRE_ENV).is_ok_and(|v| !v.is_empty() && v != "0")
@@ -83,10 +76,6 @@ fn crypto_and_the_registry_verifier_agree_on_ed25519() {
         skip("`node` is not on PATH");
         return;
     }
-    if !bynkc().exists() {
-        skip("the `bynkc` binary is not built beside `bynk`");
-        return;
-    }
     let dir = scratch("crypto-cross-check");
     let project = dir.join("project");
     std::fs::create_dir_all(project.join("src/x")).unwrap();
@@ -97,12 +86,12 @@ fn crypto_and_the_registry_verifier_agree_on_ed25519() {
     .unwrap();
     std::fs::write(project.join("src/x/probe.bynk"), PROBE).unwrap();
     let out = dir.join("out");
-    let compiled = Command::new(bynkc())
+    let compiled = Command::new(env!("CARGO_BIN_EXE_bynk"))
         .args(["compile", "--platform", "node", "--emit", "js", "-o"])
         .arg(&out)
         .arg(&project)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     assert!(
         compiled.status.success(),
         "the probe project does not compile:\n{}",

@@ -4,7 +4,7 @@
 //! "previously declared here" — declared in `a_web.bynk` — was underlined in
 //! `z_more.bynk`'s snippet, at the same byte offsets.
 //!
-//! Drives the real `bynkc` CLI on a throwaway project: `check` renders through
+//! Drives the real `bynk` CLI on a throwaway project: `check` renders through
 //! the project-check printer and `compile` through the project-failure printer.
 
 use std::path::PathBuf;
@@ -56,7 +56,7 @@ fn run(subcommand: &str, project: &Scratch) -> String {
         .current_dir(&project.0)
         .env("NO_COLOR", "1")
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     assert!(
         !out.status.success(),
         "a duplicate service must fail `{subcommand}`"

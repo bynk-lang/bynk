@@ -5,7 +5,7 @@
 //! (resolver/checker/emitter). Slice 2 of the crate-decomposition track moved
 //! the implementation down here from `bynkc::fmt` and re-pointed it onto the
 //! `bynk-syntax` leaf, turning the former cosmetic façade into the home of the
-//! formatter itself. `bynkc`'s own `bynkc fmt` command reaches it via
+//! formatter itself. `bynk`'s own `bynk fmt` command reaches it via
 //! `bynk-driver::run_fmt` (R10.4 residue, #1048: `bynkc` no longer re-exports
 //! this crate as `bynkc::fmt`).
 
@@ -29,7 +29,7 @@ pub use fmt::annotation_to_string;
 pub use bynk_syntax::print::escape_string;
 
 // #972: the `[fmt]` section of a project's `bynk.toml`, layered under the CLI's
-// own flags by `bynkc fmt`/`bynk fmt` and read directly by `bynk-lsp` for
+// own flags by `bynk fmt`/`bynk fmt` and read directly by `bynk-lsp` for
 // format-on-save. One reader for one section — the two front-ends previously
 // had only the language server reading it at all, so a project that set a style
 // there saw the editor and the command line disagree.

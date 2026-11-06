@@ -1,6 +1,6 @@
 //! #2886: a context capability taking commons types (record, refinement, enum,
 //! nested in `List`/`Option`) must emit call-record types `tsc` accepts. Drives
-//! the real `bynkc test` CLI against `fixtures/behaviour/commons_type_in_capability`.
+//! the real `bynk test` CLI against `fixtures/behaviour/commons_type_in_capability`.
 //! Skips when no TypeScript runner is on `PATH`; `BYNK_REQUIRE_TSC` makes that a failure.
 
 use std::path::PathBuf;
@@ -25,7 +25,7 @@ fn have_runner() -> bool {
 #[test]
 fn commons_types_in_capability_ops_typecheck() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -46,7 +46,7 @@ fn commons_types_in_capability_ops_typecheck() {
         .arg("--output")
         .arg(&out_root)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let all = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

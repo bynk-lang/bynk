@@ -1,7 +1,7 @@
-//! #2273 behavioural tests for `bynkc test --case` (repeatable) and `--suite`:
+//! #2273 behavioural tests for `bynk test --case` (repeatable) and `--suite`:
 //! one process runs a chosen set of tests, a module stays one suite record, the
 //! two flags combine as "and" and their values as "or", and a value that selects
-//! nothing fails the run. Drives the real `bynkc test` CLI against a fixture of
+//! nothing fails the run. Drives the real `bynk test` CLI against a fixture of
 //! two suites that share one case name.
 //!
 //! Like the other toolchain-driving tests it skips loudly when no TypeScript
@@ -28,7 +28,7 @@ fn have_runner() -> bool {
 /// `false` (after saying why) when the test cannot run here.
 fn can_run() -> bool {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return false;
     }
     if !have_runner() {
@@ -62,7 +62,7 @@ impl Run {
     }
 }
 
-/// `bynkc test <fixture> <args…>`, each run with its own output parent: the
+/// `bynk test <fixture> <args…>`, each run with its own output parent: the
 /// runner derives the executed tree as a sibling of `--output`.
 fn run(out_dir: &str, args: &[&str]) -> Run {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -75,7 +75,7 @@ fn run(out_dir: &str, args: &[&str]) -> Run {
         .arg(&out_root)
         .args(args)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     Run {
         stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
@@ -289,7 +289,7 @@ fn a_selected_skipped_case_is_not_unmatched() {
             .arg(&out_root)
             .env("BYNK_TEST_FILTER", filter)
             .output()
-            .expect("run bynkc test")
+            .expect("run bynk test")
     };
 
     let told = with(r#"{"cases":["ghost"],"skipped":[{"suite":"demo.a","case":"ghost"}]}"#);

@@ -100,13 +100,13 @@ fn agent_version(lock: &str) -> &str {
     line.trim_start_matches("version = ")
 }
 
-/// `bynkc check <root>`, which reconciles against the lock read-only
+/// `bynk check <root>`, which reconciles against the lock read-only
 /// (ADR 0493). Returns whether it passed and its combined output.
 fn check(root: &Path) -> (bool, String) {
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["check".as_ref(), root.as_os_str()])
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), s)

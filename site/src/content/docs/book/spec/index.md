@@ -2,7 +2,7 @@
 title: The Bynk Language Specification
 ---
 The normative definition of Bynk: the language as accepted and compiled by
-`bynkc` at the **current version, v0.510**. It states what a conforming
+`bynk` at the **current version, v0.510**. It states what a conforming
 implementation must accept, what it must reject, and what a program means. Where
 the [grammar reference](/book/reference/grammar/) is a friendly, per-construct
 lookup for people writing Bynk, this is the complete, citable definition for
@@ -60,7 +60,7 @@ means.
   layout, and the build contract.
 - [§9 Diagnostics](/book/spec/diagnostics/) — the normative catalogue; the codes are the
   identifiers of the §5 rules.
-- [§10 Conformance & test corpus](/book/spec/conformance/) — the `bynkc` fixture corpus as
+- [§10 Conformance & test corpus](/book/spec/conformance/) — the `bynk` fixture corpus as
   the conformance suite.
 - [§11 Complete grammar](/book/spec/grammar-appendix/) — the complete generated grammar.
 - [Appendix A — Planned features](/book/spec/appendix-planned/) (post-MVP, non-normative).

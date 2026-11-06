@@ -29,11 +29,11 @@ one command. In order, it:
 
 1. **Locates the project** — walks up for `bynk.toml` and reads your `[paths]
    include`/`exclude` layout, so you can run it from any subdirectory.
-2. **Pre-flights** — checks that `bynkc`, Node, and `wrangler` are usable, with
+2. **Pre-flights** — checks that Node and `wrangler` are usable, with
    the same report (and fix-it lines) as [`bynk
    doctor`](/docs/editor-and-tooling/doctor/). A missing tool fails here, before
    anything is built.
-3. **Compiles** — the same project shape as `bynkc compile <project-root>
+3. **Compiles** — the same project shape as `bynk compile <project-root>
    --target workers`, into a managed build directory (see [The build
    directory](#the-build-directory) below).
 4. **Selects the workers** — every context, unless you narrow with
@@ -45,7 +45,7 @@ one command. In order, it:
    fails type-checking reports the errors and keeps serving the last good
    build — fix the file and save again.
 
-`bynkc` type-checks as part of compiling, so a type error stops you here with
+`bynk` type-checks as part of compiling, so a type error stops you here with
 the usual diagnostics — there is no separate `check` step to run.
 
 ## The build directory
@@ -54,7 +54,7 @@ the usual diagnostics — there is no separate `check` step to run.
 root — the same relationship `cargo`'s `target/` has to your source. It is
 created and gitignored automatically (a `.bynk/.gitignore` containing `*` is
 written on first build), so a `dev` run never dirties `git status` and you never
-edit your own ignore file. Your own `bynkc compile --output out` builds, if you
+edit your own ignore file. Your own `bynk compile --output out` builds, if you
 keep any, are left alone — `out/` stays yours.
 
 ## Multi-context projects

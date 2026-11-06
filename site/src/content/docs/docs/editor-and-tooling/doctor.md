@@ -4,11 +4,11 @@ title: "Check your environment with `bynk doctor`"
 **Goal:** find out whether your machine is ready to compile, test, and deploy
 Bynk — before you hit a broken command.
 
-Bynk has a Rust side (the `bynkc` compiler) and a Node side (`tsc`/`tsx` to run
+Bynk has a Rust side (the `bynk` compiler) and a Node side (`tsc`/`tsx` to run
 the emitted TypeScript, `wrangler` to deploy to Cloudflare). `bynk doctor`
 checks both in one go and prints the exact remedy for anything missing.
 
-> **Understand — the toolchain has two halves.** `bynkc` compiles Bynk to
+> **Understand — the toolchain has two halves.** `bynk` compiles Bynk to
 > TypeScript; that's pure and needs nothing but the compiler. *Running* the
 > output (`bynk test`) needs Node and a TypeScript runner; *deploying* needs
 > `wrangler`. `bynk doctor` groups its checks along exactly those lines, so you
@@ -56,7 +56,7 @@ compiler: in-process
 A `node` below the floor (Node **22.13**: 22 is the oldest major still in
 support, and 22.13 its first release to load `node:sqlite` without a flag) is
 reported as a warning, `v20.11.0 below floor (≥ 22.13)`, with the fix to install a
-newer one. `bynkc test --inspect` checks its own minor floor on top of that: Node
+newer one. `bynk test --inspect` checks its own minor floor on top of that: Node
 ≥ 22.6 to run, ≥ 22.18 for source-mapped breakpoints.
 
 An installed `wrangler` older than **4.107.0** is a warning too:
@@ -101,11 +101,9 @@ real use. `doctor` tells you the difference.
 
 ### The in-process compiler
 
-`bynk` **links the compiler in-process**, so compiling needs no separate `bynkc`
+`bynk` **links the compiler in-process**, so compiling needs no separate compiler
 binary — `compile` is always available, and there is no version to drift. The
-`compiler` row always reads `in-process`. (The `BYNK_BYNKC` override that once
-pinned an external compiler is ignored; see [`BYNK_BYNKC` and version
-skew](/docs/bynk-cli/#bynk_bynkc-and-version-skew-retired).)
+`compiler` row always reads `in-process`. (`bynkc`, which used to be a separate compiler binary, no longer exists; see [`bynkc` (removed)](/docs/bynk-cli/#bynkc-removed).)
 
 ## Exit codes — for scripts and CI
 

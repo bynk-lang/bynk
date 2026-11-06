@@ -473,7 +473,7 @@ export function run(env: { readonly B: { fetch(r: Request): Promise<Response> } 
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
-/// Fixture 1970's client, compiled by the `bynkc` binary after replacing
+/// Fixture 1970's client, compiled by the `bynk` binary after replacing
 /// `from` with `to` in its context.
 fn regenerate_1970_with(from: &str, to: &str) -> String {
     let src = fixtures().join("1970_typescript_client/src");
@@ -506,7 +506,7 @@ fn regenerate_1970_with(from: &str, to: &str) -> String {
         .arg(dir.join("out"))
         .arg(&proj)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     assert!(
         out.status.success(),
         "the changed fixture does not compile:\n{}",

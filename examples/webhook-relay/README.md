@@ -30,7 +30,7 @@ webhook-relay/
 
 ## Test
 
-Every step of the handler runs on a platform capability, and under `bynkc test`
+Every step of the handler runs on a platform capability, and under `bynk test`
 each one is a deterministic test double: `Secrets` holds no values, `Logger`
 records without printing, and `Fetch` never reaches the network. A case that
 forwards supplies the secret and the upstream's answer with `stub`, then
@@ -47,7 +47,7 @@ case "a configured target forwards the event and logs it" {
 ```
 
 ```sh
-bynkc test .
+bynk test .
 ```
 
 ```text

@@ -4,7 +4,7 @@
 //! fields have sensible defaults so an absent or minimal config is fine.
 //!
 //! `[fmt]` is **not** parsed here (#972). It is read by
-//! [`bynk_fmt::FmtConfig`], the same reader `bynkc fmt` / `bynk fmt` layer
+//! [`bynk_fmt::FmtConfig`], the same reader `bynk fmt` / `bynk fmt` layer
 //! their flags over, so the editor's format-on-save and the command line
 //! cannot drift apart on what a key means. This file owns only the mapping
 //! from that shared config into the server's own [`ProjectConfig`], alongside
@@ -62,7 +62,7 @@ fn default_diagnostics_debounce_ms() -> u64 {
 /// Slice A: this no longer carries a source root. It used to reduce `[paths]
 /// include` to a single `src_dir` string — dropping every root but the first
 /// and ignoring `exclude` — which made the LSP analyse a different project than
-/// `bynkc` compiles. The trees now come from the compiler's own discovery; what
+/// `bynk` compiles. The trees now come from the compiler's own discovery; what
 /// is left here is what the *server* owns: formatting and the diagnostics mode.
 #[derive(Debug, Clone)]
 pub struct ProjectConfig {

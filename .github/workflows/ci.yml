@@ -261,7 +261,7 @@ jobs:
               - 'site/src/content/docs/docs/manifest.md'
               - 'scripts/build-registry-core.sh'
               - 'scripts/registry-core-parity.mjs'
-              # bynkc's textmate_keywords test reads the site's copy of the
+              # the textmate_keywords test reads the site's copy of the
               # TextMate grammar (under site/, which `rust` does not cover).
               - 'site/src/grammars/bynk.tmLanguage.json'
             grammar:
@@ -335,7 +335,6 @@ jobs:
               - 'scripts/install.ps1'
               - 'scripts/check-installer-naming.sh'
               - 'bynk/Cargo.toml'
-              - 'bynkc/Cargo.toml'
               - 'bynk-lsp/Cargo.toml'
       # Collapse "neither a PR nor the merge queue" (push/schedule) and "a global
       # file changed" into one boolean the downstream `if:`s can OR against.
@@ -628,7 +627,7 @@ jobs:
     # as the first leg fails. The PR's own run is unaffected and still shows
     # every OS.
     #
-    # bynkc's suite reads the Book (site/src/content/docs/book/**) — the
+    # the test corpus reads the Book (site/src/content/docs/book/**) — the
     # doc_examples compile gate and the reference-page assertions — so the `rust`
     # filter includes the Book content; a content change can legitimately flip a test.
     name: Test suite (${{ matrix.os }})
@@ -675,7 +674,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
-      # `tsc` is needed by the tsc-verify stage and the `bynkc test` fixtures.
+      # `tsc` is needed by the tsc-verify stage and the `bynk test` fixtures.
       # Pinned to the verified floor, v5 (TYPESCRIPT_MAJOR_FLOOR): an unpinned
       # `typescript` could turn CI red on a new TS major with no repo change.
       # The verified current major, v7, runs as a second pass below (#1672).
@@ -708,9 +707,9 @@ jobs:
         run: npx -y wrangler@4 --version
         continue-on-error: true
       # `cargo nextest run --workspace` runs every crate's suite (no rustdoc
-      # doctests exist in the tree, so nextest loses nothing). bynkc's includes:
+      # doctests exist in the tree, so nextest loses nothing). the corpus's includes:
       #   - doc_examples        — the example-compilation gate (the Book)
-      #   - diagnostics_registry / keywords_reference / cli_reference / grammar_reference
+      #   - diagnostics_registry / keywords_reference / grammar_reference
       #     — assert the generated reference pages are up to date
       #   - the fixture suite and the tsc-strict verification stage
       # The other crates (bynk-fmt, bynk-lsp) contribute their own
@@ -837,7 +836,7 @@ jobs:
     # Scope: the two whole-corpus type-check suites, plus the behaviour fixtures
     # (#2146): tsc_verify type-checks with `--noEmit`, so it never sees an error
     # tsc reports only while emitting (a top-level name the module transform
-    # reserves), and `bynkc test` emits. The other behaviour suites, which also
+    # reserves), and `bynk test` emits. The other behaviour suites, which also
     # type-check before running, stay on v5.
     name: Type-check under TypeScript 7
     needs: changes
@@ -923,7 +922,7 @@ jobs:
       # BYNK_REQUIRE_TSC turns a skipped strip-types check into a failure, so a
       # floor too old for them cannot pass by skipping. `cargo test` rather than
       # nextest: a handful of tests, so the install step would cost more than it
-      # saves. bynkc's integration tests are one binary (`it`), selected by
+      # saves. the integration tests are one binary (`it`), selected by
       # their file's module prefix.
       - name: Type-stripping and inspect tests under the floor
         run: "cargo test -p bynk-tests --locked --test it -- tsc_verify:: debug_inspect::"
@@ -1618,12 +1617,11 @@ jobs:
           BYNK_INSTALL_DIR: ${{ runner.temp }}/b
         run: |
           sh scripts/install.sh
-          for bin in bynk bynkc; do test -x "$BYNK_INSTALL_DIR/$bin"; done
+          test -x "$BYNK_INSTALL_DIR/bynk"
           # The latest published release may predate the rename (bynkc-lsp only);
           # a release with the overlap ships both. Either name must be installed.
           test -x "$BYNK_INSTALL_DIR/bynk-lsp" || test -x "$BYNK_INSTALL_DIR/bynkc-lsp"
           "$BYNK_INSTALL_DIR/bynk" --version
-          "$BYNK_INSTALL_DIR/bynkc" --version
       - name: install.ps1
         if: runner.os == 'Windows'
         shell: pwsh
@@ -1633,15 +1631,11 @@ jobs:
           BYNK_NO_MODIFY_PATH: "1"
         run: |
           ./scripts/install.ps1
-          foreach ($bin in 'bynk', 'bynkc') {
-            if (-not (Test-Path "$env:BYNK_INSTALL_DIR\$bin.exe")) { throw "$bin.exe was not installed" }
-          }
+          if (-not (Test-Path "$env:BYNK_INSTALL_DIR\bynk.exe")) { throw "bynk.exe was not installed" }
           # The latest published release may predate the rename; either name will do.
           if (-not ((Test-Path "$env:BYNK_INSTALL_DIR\bynk-lsp.exe") -or (Test-Path "$env:BYNK_INSTALL_DIR\bynkc-lsp.exe"))) { throw "no language server was installed" }
           & "$env:BYNK_INSTALL_DIR\bynk.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "bynk --version failed" }
-          & "$env:BYNK_INSTALL_DIR\bynkc.exe" --version
-          if ($LASTEXITCODE -ne 0) { throw "bynkc --version failed" }
 
   # ---------------------------------------------------------------------------
   # Early signal, so a PR can be marked ready for review without waiting on the

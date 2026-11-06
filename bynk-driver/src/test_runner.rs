@@ -1,4 +1,4 @@
-//! `bynkc test` / `bynk test`'s shared command body (Wave 5 §5.4, findings
+//! `bynk test` / `bynk test`'s shared command body (Wave 5 §5.4, findings
 //! #40/#72/#20/#21 remainder): compile the project's test declarations, write
 //! them, and run them via `tsc → node` (falling back to `tsx`), folding the
 //! result into the pinned [`crate::test_json::TestRun`] document in
@@ -41,7 +41,7 @@ fn start_failure(path: &Path, e: &std::io::Error) -> String {
     )
 }
 
-/// `test --format` selector, shared by `bynkc test` and `bynk test` (review
+/// `test --format` selector, shared by `bynk test` and `bynk test` (review
 /// findings #40/#72): one enum both CLIs' `Test` subcommand uses, instead of
 /// two structurally-identical copies that must be hand-kept in sync.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, ValueEnum)]
@@ -56,9 +56,9 @@ pub enum TestFormat {
     Ndjson,
 }
 
-/// The `test` subcommand's flags — the one contract `bynkc test` and `bynk
+/// The `test` subcommand's flags — the one contract `bynk test` and `bynk
 /// test` both `#[command(flatten)]` (review findings #40/#72/#20/#21
-/// remainder), replacing independent hand-spellings in `bynkc::cli` and `bynk::cli`.
+/// remainder), replacing independent hand-spellings in each CLI.
 /// Field docs here are the CLI help text for both commands' flags.
 #[derive(clap::Args, Debug, Clone)]
 pub struct TestArgs {
@@ -181,12 +181,12 @@ pub struct TestArgs {
     pub update_snapshots: bool,
     /// Not a flag. The file holding a smoke run's declared response statuses
     /// (`smoke::DECLARED_ENV`), set by `bynk`, which computes the table with
-    /// `bynk-ide`; `bynkc` leaves it `None` and the runner reads the variable
+    /// `bynk-ide`; `bynk` leaves it `None` and the runner reads the variable
     /// from the environment as before (#2998, E1).
     #[arg(skip)]
     pub declared_statuses: Option<PathBuf>,
     /// Not a flag. The `bynk` binary that starts `bynk dev` for
-    /// `--against dev`, set by `bynk` itself (it is that binary). `bynkc` leaves
+    /// `--against dev`, set by `bynk` itself (it is that binary). `bynk` leaves
     /// it `None` and reads [`crate::remote::DEV_COMMAND_ENV`] as before.
     #[arg(skip)]
     pub dev_command: Option<PathBuf>,
@@ -264,7 +264,7 @@ fn normalise_seed(raw: &str) -> Option<String> {
 
 /// In `--format json` mode the deterministic surface is the document on stdout,
 /// so a `<program> test:` line on stderr is fine but must never reach stdout.
-/// `program` prefixes stderr messages (`"bynkc"` or `"bynk"`) so they read the
+/// `program` prefixes stderr messages (`"bynk"` or `"bynk"`) so they read the
 /// same as before the move.
 pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     let TestArgs {

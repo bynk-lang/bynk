@@ -1,4 +1,4 @@
-# Install the Bynk toolchain (bynkc, bynk, bynk-lsp) from a GitHub Release,
+# Install the Bynk toolchain (bynk, bynk-lsp) from a GitHub Release,
 # without needing Rust or cargo.
 #
 #   irm https://github.com/bynk-lang/bynk/releases/latest/download/install.ps1 | iex
@@ -21,7 +21,7 @@ $repo = 'bynk-lang/bynk'
 $base = "https://github.com/$repo/releases"
 $target = 'x86_64-pc-windows-msvc'
 if (-not [Environment]::Is64BitOperatingSystem) {
-    throw "No prebuilt Bynk binaries for 32-bit Windows; use 'cargo install bynkc bynk' instead."
+    throw "No prebuilt Bynk binaries for 32-bit Windows; use 'cargo install bynk' instead."
 }
 if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
     Write-Warning 'No native ARM64 build; installing the x64 binaries, which run under emulation.'
@@ -59,7 +59,7 @@ try {
     Expand-Archive (Join-Path $tmp "$stage.zip") -DestinationPath $tmp
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     if (-not ((Test-Path (Join-Path $tmp "$stage\bynk-lsp.exe")) -or (Test-Path (Join-Path $tmp "$stage\bynkc-lsp.exe")))) { throw "The archive has no language server." }
-    foreach ($bin in 'bynkc', 'bynk', 'bynk-lsp', 'bynkc-lsp') {
+    foreach ($bin in 'bynk', 'bynk-lsp', 'bynkc-lsp') {
         $src = Join-Path $tmp "$stage\$bin.exe"
         # A release before the rename ships only bynkc-lsp, and the overlap copy
         # goes in E4b: either server name may be absent, but not both.
@@ -82,4 +82,4 @@ if ($env:BYNK_NO_MODIFY_PATH) {
     $env:Path = "$env:Path;$dest"
     Write-Host "Added $dest to your PATH (open a new terminal to pick it up)."
 }
-Write-Host "Installed bynkc, bynk and bynk-lsp (plus a bynkc-lsp copy for this release). Run 'bynk doctor' to check your setup."
+Write-Host "Installed bynk and bynk-lsp (plus a bynkc-lsp copy for this release). Run 'bynk doctor' to check your setup."

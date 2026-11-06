@@ -192,10 +192,10 @@ fn compile(tmp: &Path, out: &str, args: &[&str]) {
         .arg(tmp.join(out))
         .arg(tmp)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     assert!(
         compiled.status.success(),
-        "bynkc compile {args:?} failed:\n{}",
+        "bynk compile {args:?} failed:\n{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
 }

@@ -6,7 +6,7 @@
 //! `--seed <hex>` reproduces the run byte-for-byte. A contract is a property
 //! that is always on; no `property` is written for it.
 //!
-//! Drives the real `bynkc test` CLI against a fixture project, so it exercises
+//! Drives the real `bynk test` CLI against a fixture project, so it exercises
 //! the dev/test guard, the generator/runner, and shrinking end to end. Like the
 //! other toolchain-driving tests it skips loudly when no TypeScript runner
 //! (`tsc`+`node` or `tsx`) is available; `BYNK_REQUIRE_TSC=1` turns the skip into
@@ -50,7 +50,7 @@ fn run_with_seed(seed: &str, out_dir: &str) -> String {
         .arg("--seed")
         .arg(seed)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     s
@@ -58,12 +58,12 @@ fn run_with_seed(seed: &str, out_dir: &str) -> String {
 
 #[test]
 fn failing_contract_is_caught_by_the_runner_with_seed_and_shrunk_counterexample() {
-    // `bynkc test`'s runner detection is Unix-only (it shells out to `which`), so
+    // `bynk test`'s runner detection is Unix-only (it shells out to `which`), so
     // the CLI cannot locate a runner on Windows and never runs the emitted tests.
     // This test drives that CLI end to end — skip on Windows. (The *emission* is
     // covered platform-independently by the golden fixture `244_contract_passes`.)
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
