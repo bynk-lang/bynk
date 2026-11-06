@@ -344,11 +344,9 @@ pub enum Command {
     },
     /// Compile a project to TypeScript.
     ///
-    /// The `bynkc compile` behaviour through the driver's compiler resolution
-    /// (#2471).
+    /// The `bynkc compile` behaviour, run in-process (#2471, #2998).
     ///
-    /// Delegates to the `bynkc` the driver resolves, like `bynk test`, so an
-    /// editor inherits that resolution. With `--sources-stdin` it compiles
+    /// Needs no `bynkc` binary: the compiler is linked in. With `--sources-stdin` it compiles
     /// unsaved editor buffers: a JSON object `{ "<absolute path>": "<text>" }`
     /// on stdin wins over the files on disk, and `bynk.schema.lock` is neither
     /// read nor written. What "Bynk: Show Compiled Output" runs.
@@ -359,14 +357,28 @@ pub enum Command {
         /// Output root directory.
         #[arg(short, long)]
         output: PathBuf,
+        /// Build target. `bundle` (default) produces a single deployment
+        /// unit; `workers` produces one Cloudflare Worker per context with
+        /// Service Binding plumbing.
+        #[arg(long, value_enum, default_value = "bundle")]
+        target: bynk_driver::CliTarget,
+        /// Deploy platform selecting the `bynk` surface binding: `cloudflare`
+        /// (default), `node`, or `browser` (`bundle` topology only).
+        #[arg(long, value_enum, default_value = "cloudflare")]
+        platform: bynk_driver::CliPlatform,
+        /// Artefact language. `ts` (default) writes typed TypeScript; `js`
+        /// writes the same modules with types stripped, runnable with no `tsc`
+        /// in the loop.
+        #[arg(long, value_enum, default_value = "ts")]
+        emit: bynk_driver::EmitFormat,
         /// Compile the unsaved buffers given as JSON on stdin (see above).
         #[arg(long)]
         sources_stdin: bool,
         #[command(flatten)]
         lock: LockArgs,
-        /// Run even when the resolved `bynkc` is a different *major* version
-        /// from `bynk` (#1675). A minor skew only warns. Also settable as
-        /// `BYNK_ALLOW_SKEW=1`.
+        /// No effect: `compile` runs in-process, so there is no second
+        /// compiler to skew against (#2998). Kept so existing invocations
+        /// keep working.
         #[arg(long)]
         allow_skew: bool,
     },

@@ -214,16 +214,27 @@ fn run() -> ExitCode {
         Command::Compile {
             input,
             output,
+            target,
+            platform,
+            emit,
             sources_stdin,
             lock,
-            allow_skew,
+            // #2998: `compile` runs in-process now, so there is no second
+            // compiler to skew against. Still accepted, so a pinned editor
+            // that passes it keeps working; removed with the `bynkc` alias.
+            allow_skew: _,
         } => {
             if !prepare(&input, lock.options()) {
                 return ExitCode::FAILURE;
             }
-            let tb = SystemToolbox;
-            let compiler = resolve_compiler(&tb);
-            compile::run(&compiler, input, output, sources_stdin, allow_skew)
+            compile::run(bynk_driver::CompileArgs {
+                input,
+                output,
+                target,
+                platform,
+                emit,
+                sources_stdin,
+            })
         }
         Command::Fmt { args } => run_fmt(args),
         Command::Test {

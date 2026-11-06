@@ -1179,3 +1179,64 @@ fn a_crlf_canonical_source_on_stdin_passes_check() {
     assert_eq!(code, 0, "stderr:\n{err}");
     assert!(out.is_empty(), "`--check` prints nothing on stdout: {out}");
 }
+
+// ---------------------------------------------------------------------------
+// bynk compile (#2998): in-process, equivalent to `bynkc compile`
+// ---------------------------------------------------------------------------
+
+/// `bynk compile` needs no `bynkc`: with an empty `PATH` and no override, and
+/// no sibling consulted, it still writes the project's modules.
+#[test]
+fn compile_runs_in_process_with_no_bynkc_available() {
+    let proj = scratch("compile-in-process");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let out = proj.join("out");
+    let status = Command::new(bynk())
+        .args(["compile", ".", "-o"])
+        .arg(&out)
+        .current_dir(&proj)
+        .env("PATH", "")
+        .env_remove("BYNK_BYNKC")
+        .output()
+        .expect("spawn");
+    assert!(
+        status.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(out.join("calc.ts").exists(), "the module is written");
+}
+
+/// `--emit js` is the flag E1 adds to `bynk compile`: the same files `bynkc`
+/// writes, as JavaScript.
+#[test]
+fn compile_emit_js_matches_bynkc_when_present() {
+    let Some(bynkc) = bynkc_sibling() else {
+        eprintln!("skipping: no sibling `bynkc`");
+        return;
+    };
+    let proj = scratch("compile-emit-js");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let (a, _, ea) = run_bynk_in(&proj, &["compile", ".", "-o", "out-bynk", "--emit", "js"]);
+    let (b, _, eb) = run_in(
+        &bynkc,
+        &proj,
+        &["compile", ".", "-o", "out-bynkc", "--emit", "js"],
+        None,
+    );
+    assert_eq!((a, b), (0, 0), "{ea}\n{eb}");
+    for name in ["calc.js", "package.json"] {
+        let x = std::fs::read(proj.join("out-bynk").join(name));
+        let y = std::fs::read(proj.join("out-bynkc").join(name));
+        assert!(x.is_ok(), "bynk wrote {name}");
+        assert_eq!(x.ok(), y.ok(), "{name} differs");
+    }
+}
