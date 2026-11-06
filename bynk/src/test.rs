@@ -1,53 +1,27 @@
 //! `bynk test` — discover and run a project's test declarations.
 //!
-//! Delegates to the `bynkc` the driver resolves (`BYNK_BYNKC` → PATH →
-//! sibling-of-`bynk`) and shells `bynkc test`, forwarding every flag verbatim
-//! (v0.138, #487). Unlike `check`/`fmt`, `test` delegates *always*, not only
-//! under an override: it orchestrates external `tsc`/`node`, so it is a
-//! subprocess regardless, and routing it through the driver's resolution is the
-//! whole point — an editor or developer inherits that resolution instead of
-//! locating `bynkc` themselves (the fix direction for #486). The trade-off (a
-//! `bynkc` binary must be present, and the driver↔compiler skew surface stays)
-//! is accepted; the driver at least resolves it more richly than any editor.
-//! #1675: and it acts on that skew before delegating — see
-//! [`crate::compiler::skew_gate`].
+//! Runs in-process (#2998, E1): the body is [`bynk_driver::test_runner::run_test`],
+//! the one `bynkc test` runs, so no `bynkc` binary is needed and no second
+//! compiler can skew from this one. What stays a child process is what always
+//! was: `tsc`/`node` for the runner, and the `bynk dev` that `--against dev`
+//! starts. This module adds what only `bynk` can supply: the workspace loop,
+//! the smoke run's declared-status table (walked by `bynk-ide`), and the path
+//! of this binary for `--against dev`.
 
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::ExitCode;
 
 use bynk_driver::test_filter::TestFilter;
 use bynk_driver::test_runner::TestArgs;
 
-use crate::compiler::{Compiler, SkewAsker, skew_gate};
+use crate::compiler::Compiler;
 
-/// Run `bynk test` by shelling the resolved `bynkc`. When no `bynkc` could be
-/// located, point the developer at `bynk doctor` rather than emitting a raw
-/// spawn error.
+/// Run `bynk test`.
 ///
-/// Wave 5 §5.4 (findings #40/#72): `args` is the one contract `bynkc test`
-/// and `bynk test` both flatten (`bynk_driver::test_runner::TestArgs`) —
-/// this function's whole body is re-spelling its fields back out as argv
-/// tokens for the shell-out, so a field added there needs no matching change
-/// here beyond this list.
-pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
-    let Some(bynkc) = compiler.path.as_deref() else {
-        eprintln!(
-            "bynk test: no `bynkc` compiler found (looked at $BYNK_BYNKC, PATH, and next to `bynk`)."
-        );
-        eprintln!("  Run `bynk doctor --only test` for the exact remedy.");
-        return ExitCode::FAILURE;
-    };
-    // #1675: `test` always runs a second compiler, so act on its skew from the
-    // driver: a minor skew warns, a major one refuses unless allowed.
-    let asker = SkewAsker {
-        command: Some("test"),
-        has_flag: true,
-    };
-    if !skew_gate(compiler, asker, allow_skew) {
-        return ExitCode::FAILURE;
-    }
-
+/// `_compiler` and `_allow_skew` are vestiges of the shelled `bynkc` (the lookup
+/// and ADR 0434's skew gate): nothing to resolve or skew against any more. They
+/// go with the lookup itself.
+pub fn run(_compiler: &Compiler, args: TestArgs, _allow_skew: bool) -> ExitCode {
     // #2207 (decision C): at a workspace root, test every member in order,
     // each under a header. Every member runs, and the run fails if any does.
     if let Some(workspace) = bynk_driver::workspace_at(&args.input) {
@@ -75,7 +49,7 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
         // here against every member's suites.
         let filter = TestFilter::new(&args.suite, &args.case);
         if !filter.is_empty()
-            && let Some(available) = discover_all(bynkc, &members)
+            && let Some(available) = bynk_driver::test_runner::discover_cases("bynk", &members)
         {
             let unmatched = filter.unmatched_in(&available);
             if !unmatched.is_empty() {
@@ -93,7 +67,7 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
                 partial_selection: !filter.is_empty(),
                 ..args.clone()
             };
-            failed |= run_one(bynkc, member_args) != ExitCode::SUCCESS;
+            failed |= run_one(member_args) != ExitCode::SUCCESS;
         }
         return if failed {
             ExitCode::FAILURE
@@ -101,7 +75,7 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
             ExitCode::SUCCESS
         };
     }
-    run_one(bynkc, args)
+    run_one(args)
 }
 
 /// Why `args` can't run across a workspace's members, if they can't: one JSON
@@ -121,114 +95,24 @@ fn workspace_refusal(args: &TestArgs) -> Option<&'static str> {
     }
 }
 
-/// Every (suite, case) the workspace's members declare, by discovery
-/// (`bynkc test --no-run --format json`), to judge a `--suite`/`--case` value
-/// against. `None` when any member does not compile or answers something else:
-/// the runs report that, and a value is not judged against a partial picture.
-fn discover_all(bynkc: &Path, members: &[PathBuf]) -> Option<Vec<(String, String)>> {
-    let mut available = Vec::new();
-    for member in members {
-        let out = Command::new(bynkc)
-            .arg("test")
-            .arg(member)
-            .args(["--no-run", "--format", "json"])
-            .output()
-            .ok()?;
-        let doc: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
-        if doc.get("error").is_some() {
-            return None;
-        }
-        for suite in doc.get("suites")?.as_array()? {
-            let name = suite.get("name")?.as_str()?;
-            for case in suite.get("cases")?.as_array()? {
-                available.push((name.to_string(), case.get("name")?.as_str()?.to_string()));
-            }
-        }
-    }
-    Some(available)
-}
-
-/// Shell `bynkc test` for one project.
-fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
+/// Run the suites of one project.
+fn run_one(mut args: TestArgs) -> ExitCode {
     let input = args.input.clone();
-    let mut argv: Vec<OsString> = vec!["test".into(), args.input.into_os_string()];
-    if let Some(output) = args.output {
-        argv.push("--output".into());
-        argv.push(output.into_os_string());
-    }
-    if args.no_run {
-        argv.push("--no-run".into());
-    }
-    argv.push("--format".into());
-    argv.push(args.format.as_bynkc_arg().into());
-    if args.inspect {
-        argv.push("--inspect".into());
-    }
-    if let Some(seed) = args.seed {
-        argv.push("--seed".into());
-        argv.push(seed.into());
-    }
-    if args.partial_selection {
-        argv.push("--partial-selection".into());
-    }
-    for suite in args.suite {
-        argv.push("--suite".into());
-        argv.push(suite.into());
-    }
-    for case in args.case {
-        argv.push("--case".into());
-        argv.push(case.into());
-    }
-    if args.coverage {
-        argv.push("--coverage".into());
-    }
-    // #2138: a run against a named target, or against a local `bynk dev`,
-    // which `bynkc` starts through this binary.
-    let starts_dev = args.against.as_deref() == Some(bynk_driver::remote::DEV);
-    if let Some(target) = args.against {
-        argv.push("--against".into());
-        argv.push(target.into());
-        // `--settle` has a default, so it is always set; it means something,
-        // and `bynkc` accepts it, only with `--against`.
-        if let Some(settle) = args.settle {
-            argv.push("--settle".into());
-            argv.push(settle.into());
-        }
-    }
-    if args.skip_unsupported {
-        argv.push("--skip-unsupported".into());
-    }
-    // #2658: a smoke run, which `bynkc` synthesises.
-    if args.smoke {
-        argv.push("--smoke".into());
-    }
-    if args.print {
-        argv.push("--print".into());
-    }
-    if args.smoke_unsafe {
-        argv.push("--smoke-unsafe".into());
-    }
-    // #2842: record snapshots rather than compare.
-    if args.update_snapshots {
-        argv.push("--update-snapshots".into());
-    }
-    // #2685: the statuses each route can answer, which a smoke case's answer is
-    // compared against. The walk is `bynk-ide`'s, so `bynk` makes it and hands
-    // `bynkc` the result; the table is only for a run that calls routes.
-    // It goes in a file, since a large project's table could exceed what an
-    // environment variable can hold (`E2BIG`).
-    let mut me = None;
-    let mut env: Vec<(&str, &std::ffi::OsStr)> = Vec::new();
-    if starts_dev {
-        let me = match std::env::current_exe() {
-            Ok(path) => me.insert(path),
+    // #2138: a run against a local `bynk dev` starts it through this binary.
+    if args.against.as_deref() == Some(bynk_driver::remote::DEV) {
+        match std::env::current_exe() {
+            Ok(path) => args.dev_command = Some(path),
             Err(e) => {
                 eprintln!("bynk test: could not find this `bynk` binary to start `bynk dev`: {e}");
                 return ExitCode::FAILURE;
             }
-        };
-        env.push((bynk_driver::remote::DEV_COMMAND_ENV, me.as_os_str()));
+        }
     }
+    // #2685: the statuses each route can answer, which a smoke case's answer is
+    // compared against. The walk is `bynk-ide`'s, so `bynk` makes it and hands
+    // the runner the result; the table is only for a run that calls routes.
+    // It goes in a file, since a large project's table could exceed what an
+    // environment variable can hold (`E2BIG`), and the runner reads a file.
     let declared_file = (args.smoke && !args.print).then(|| {
         let table = crate::openapi::declared_statuses(&input);
         let path = std::env::temp_dir().join(format!(
@@ -240,21 +124,18 @@ fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
         ));
         std::fs::write(&path, serde_json::to_string(&table).unwrap_or_default()).map(|()| path)
     });
-    let declared_file = match declared_file {
-        Some(Ok(path)) => Some(path),
+    match declared_file {
+        Some(Ok(path)) => args.declared_statuses = Some(path),
         Some(Err(e)) => {
             eprintln!(
                 "bynk test: could not write the smoke table, so undeclared statuses are not checked: {e}"
             );
-            None
         }
-        None => None,
-    };
-    if let Some(path) = &declared_file {
-        env.push((bynk_driver::smoke::DECLARED_ENV, path.as_os_str()));
+        None => {}
     }
-    let code = crate::shell::delegate_with_env(bynkc, argv, &env);
-    if let Some(path) = &declared_file {
+    let declared = args.declared_statuses.clone();
+    let code = bynk_driver::test_runner::run_test("bynk", args);
+    if let Some(path) = &declared {
         let _ = std::fs::remove_file(path);
     }
     code

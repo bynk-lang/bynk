@@ -1,0 +1,405 @@
+[
+  {
+    "params": [
+      {
+        "base": "Int",
+        "name": "i",
+        "refined": false,
+        "shape": {
+          "base": "Int",
+          "kind": "base"
+        },
+        "type": "Int"
+      },
+      {
+        "base": "String",
+        "name": "s",
+        "refined": false,
+        "shape": {
+          "base": "String",
+          "kind": "base"
+        },
+        "type": "String"
+      },
+      {
+        "base": "Bool",
+        "name": "b",
+        "refined": false,
+        "shape": {
+          "base": "Bool",
+          "kind": "base"
+        },
+        "type": "Bool"
+      },
+      {
+        "base": "Float",
+        "name": "f",
+        "refined": false,
+        "shape": {
+          "base": "Float",
+          "kind": "base"
+        },
+        "type": "Float"
+      },
+      {
+        "base": "Duration",
+        "name": "d",
+        "refined": false,
+        "shape": {
+          "base": "Duration",
+          "kind": "base"
+        },
+        "type": "Duration"
+      },
+      {
+        "base": "Instant",
+        "name": "t",
+        "refined": false,
+        "shape": {
+          "base": "Instant",
+          "kind": "base"
+        },
+        "type": "Instant"
+      },
+      {
+        "base": "Bytes",
+        "name": "y",
+        "refined": false,
+        "shape": {
+          "base": "Bytes",
+          "kind": "base"
+        },
+        "type": "Bytes"
+      },
+      {
+        "base": "Decimal",
+        "name": "m",
+        "refined": false,
+        "shape": {
+          "base": "Decimal",
+          "kind": "base"
+        },
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Effect[Int]",
+    "service": "bases",
+    "unit": "app.sig"
+  },
+  {
+    "params": [
+      {
+        "base": null,
+        "name": "l",
+        "refined": false,
+        "shape": {
+          "element": {
+            "fields": [
+              {
+                "name": "x",
+                "shape": {
+                  "base": "Int",
+                  "kind": "base"
+                }
+              },
+              {
+                "name": "y",
+                "shape": {
+                  "base": "Int",
+                  "kind": "base"
+                }
+              }
+            ],
+            "kind": "record",
+            "name": "Point"
+          },
+          "kind": "list"
+        },
+        "type": "List[Point]"
+      },
+      {
+        "base": null,
+        "name": "st",
+        "refined": false,
+        "shape": {
+          "element": {
+            "base": "Int",
+            "kind": "base"
+          },
+          "kind": "set"
+        },
+        "type": "Set[Int]"
+      },
+      {
+        "base": null,
+        "name": "o",
+        "refined": false,
+        "shape": {
+          "element": {
+            "base": "String",
+            "kind": "base"
+          },
+          "kind": "option"
+        },
+        "type": "Option[String]"
+      },
+      {
+        "base": null,
+        "name": "mp",
+        "refined": false,
+        "shape": {
+          "key": {
+            "base": "String",
+            "kind": "base"
+          },
+          "kind": "map",
+          "value": {
+            "base": "Int",
+            "kind": "base"
+          }
+        },
+        "type": "Map[String, Int]"
+      },
+      {
+        "base": null,
+        "name": "r",
+        "refined": false,
+        "shape": {
+          "err": {
+            "base": "String",
+            "kind": "base"
+          },
+          "kind": "result",
+          "ok": {
+            "base": "Int",
+            "kind": "base"
+          }
+        },
+        "type": "Result[Int, String]"
+      },
+      {
+        "base": null,
+        "name": "u",
+        "refined": false,
+        "shape": {
+          "kind": "unit"
+        },
+        "type": "()"
+      }
+    ],
+    "returns": "Effect[Result[(), String]]",
+    "service": "collections",
+    "unit": "app.sig"
+  },
+  {
+    "params": [
+      {
+        "base": "String",
+        "name": "tag",
+        "refined": true,
+        "shape": {
+          "base": "String",
+          "kind": "refined",
+          "name": "Slug"
+        },
+        "type": "Slug"
+      },
+      {
+        "base": "String",
+        "name": "tok",
+        "refined": false,
+        "shape": {
+          "base": "String",
+          "kind": "opaque",
+          "name": "Token"
+        },
+        "type": "Token"
+      },
+      {
+        "base": null,
+        "name": "p",
+        "refined": false,
+        "shape": {
+          "fields": [
+            {
+              "name": "x",
+              "shape": {
+                "base": "Int",
+                "kind": "base"
+              }
+            },
+            {
+              "name": "y",
+              "shape": {
+                "base": "Int",
+                "kind": "base"
+              }
+            }
+          ],
+          "kind": "record",
+          "name": "Point"
+        },
+        "type": "Point"
+      },
+      {
+        "base": null,
+        "name": "sh",
+        "refined": false,
+        "shape": {
+          "kind": "sum",
+          "name": "Shape",
+          "variants": [
+            {
+              "fields": [],
+              "name": "Dot"
+            },
+            {
+              "fields": [
+                {
+                  "name": "r",
+                  "shape": {
+                    "base": "Int",
+                    "kind": "base"
+                  }
+                }
+              ],
+              "name": "Circle"
+            },
+            {
+              "fields": [
+                {
+                  "name": "w",
+                  "shape": {
+                    "base": "Int",
+                    "kind": "base"
+                  }
+                },
+                {
+                  "name": "h",
+                  "shape": {
+                    "base": "Int",
+                    "kind": "base"
+                  }
+                }
+              ],
+              "name": "Rect"
+            }
+          ]
+        },
+        "type": "Shape"
+      },
+      {
+        "base": null,
+        "name": "node",
+        "refined": false,
+        "shape": {
+          "fields": [
+            {
+              "name": "label",
+              "shape": {
+                "base": "String",
+                "kind": "base"
+              }
+            },
+            {
+              "name": "next",
+              "shape": {
+                "element": {
+                  "kind": "recursive",
+                  "name": "Node"
+                },
+                "kind": "option"
+              }
+            }
+          ],
+          "kind": "record",
+          "name": "Node"
+        },
+        "type": "Node"
+      },
+      {
+        "base": null,
+        "name": "deep",
+        "refined": false,
+        "shape": {
+          "fields": [
+            {
+              "name": "a",
+              "shape": {
+                "fields": [
+                  {
+                    "name": "b",
+                    "shape": {
+                      "fields": [
+                        {
+                          "name": "c",
+                          "shape": {
+                            "fields": [
+                              {
+                                "name": "d",
+                                "shape": {
+                                  "fields": [
+                                    {
+                                      "name": "e",
+                                      "shape": {
+                                        "fields": [
+                                          {
+                                            "name": "f",
+                                            "shape": {
+                                              "kind": "named",
+                                              "name": "L7"
+                                            }
+                                          }
+                                        ],
+                                        "kind": "record",
+                                        "name": "L6"
+                                      }
+                                    }
+                                  ],
+                                  "kind": "record",
+                                  "name": "L5"
+                                }
+                              }
+                            ],
+                            "kind": "record",
+                            "name": "L4"
+                          }
+                        }
+                      ],
+                      "kind": "record",
+                      "name": "L3"
+                    }
+                  }
+                ],
+                "kind": "record",
+                "name": "L2"
+              }
+            }
+          ],
+          "kind": "record",
+          "name": "L1"
+        },
+        "type": "L1"
+      },
+      {
+        "base": null,
+        "name": "boxed",
+        "refined": false,
+        "shape": {
+          "display": "Box[Int]",
+          "kind": "other"
+        },
+        "type": "Box[Int]"
+      }
+    ],
+    "returns": "Effect[String]",
+    "service": "named",
+    "unit": "app.sig"
+  },
+  {
+    "params": [],
+    "returns": "Effect[()]",
+    "service": "zeta",
+    "unit": "app.sig"
+  }
+]
