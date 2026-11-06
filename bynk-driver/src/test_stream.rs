@@ -206,11 +206,30 @@ pub fn events_for(run: &TestRun) -> String {
 
 /// Print a document in `--format json`, or its events in `--format ndjson`.
 pub fn print_run(stream: bool, run: &TestRun) {
-    if stream {
-        print!("{}", events_for(run));
+    let text = if stream {
+        events_for(run)
     } else {
-        print!("{}", run.render());
-    }
+        run.render()
+    };
+    CAPTURE.with(|c| match c.borrow_mut().as_mut() {
+        Some(buf) => buf.push_str(&text),
+        None => print!("{text}"),
+    });
+}
+
+thread_local! {
+    /// Where [`print_run`] writes while [`capture`] is running, else stdout.
+    static CAPTURE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f`, collecting what it prints through [`print_run`] instead of writing
+/// it to stdout (#2998): `bynk test` asks a project for its discovery document
+/// in-process, where it used to read a child's stdout.
+pub fn capture<R>(f: impl FnOnce() -> R) -> (R, String) {
+    CAPTURE.with(|c| *c.borrow_mut() = Some(String::new()));
+    let result = f();
+    let text = CAPTURE.with(|c| c.borrow_mut().take()).unwrap_or_default();
+    (result, text)
 }
 
 /// A remote run's skipped case, as it goes into the stream: suite, case, reason.

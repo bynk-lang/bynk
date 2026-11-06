@@ -196,6 +196,67 @@ pub struct TestArgs {
     /// combined with `--against`, `--smoke`, `--coverage`, `--inspect` or `--no-run`.
     #[arg(long)]
     pub update_snapshots: bool,
+    /// Not a flag. The file holding a smoke run's declared response statuses
+    /// (`smoke::DECLARED_ENV`), set by `bynk`, which computes the table with
+    /// `bynk-ide`; `bynkc` leaves it `None` and the runner reads the variable
+    /// from the environment as before (#2998, E1).
+    #[arg(skip)]
+    pub declared_statuses: Option<PathBuf>,
+    /// Not a flag. The `bynk` binary that starts `bynk dev` for
+    /// `--against dev`, set by `bynk` itself (it is that binary). `bynkc` leaves
+    /// it `None` and reads [`crate::remote::DEV_COMMAND_ENV`] as before.
+    #[arg(skip)]
+    pub dev_command: Option<PathBuf>,
+}
+
+impl TestArgs {
+    /// The arguments of `test <input> --no-run --format json`: discovery only.
+    fn discovery(input: PathBuf) -> Self {
+        TestArgs {
+            input,
+            output: None,
+            no_run: true,
+            format: TestFormat::Json,
+            inspect: false,
+            seed: None,
+            case: Vec::new(),
+            suite: Vec::new(),
+            partial_selection: false,
+            coverage: false,
+            against: None,
+            skip_unsupported: false,
+            settle: None,
+            smoke: false,
+            print: false,
+            smoke_unsafe: false,
+            update_snapshots: false,
+            declared_statuses: None,
+            dev_command: None,
+        }
+    }
+}
+
+/// Every (suite, case) the projects at `members` declare, by discovery, to judge
+/// a `--suite`/`--case` value against. `None` when any member does not compile
+/// or answers something else: the runs report that, and a value is not judged
+/// against a partial picture.
+pub fn discover_cases(program: &str, members: &[PathBuf]) -> Option<Vec<(String, String)>> {
+    let mut available = Vec::new();
+    for member in members {
+        let (_, text) =
+            crate::test_stream::capture(|| run_test(program, TestArgs::discovery(member.clone())));
+        let doc: serde_json::Value = serde_json::from_str(&text).ok()?;
+        if doc.get("error").is_some() {
+            return None;
+        }
+        for suite in doc.get("suites")?.as_array()? {
+            let name = suite.get("name")?.as_str()?;
+            for case in suite.get("cases")?.as_array()? {
+                available.push((name.to_string(), case.get("name")?.as_str()?.to_string()));
+            }
+        }
+    }
+    Some(available)
 }
 
 /// Where `test` writes its output: `-o`, or `<input>/out`.
@@ -241,6 +302,8 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         print,
         smoke_unsafe,
         update_snapshots,
+        declared_statuses,
+        dev_command,
     } = args;
     // `json` is "machine-readable": the document or the stream. `stream` says
     // which; everything that prints a document goes through `print_run`.
@@ -308,7 +371,12 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             match crate::remote::resolve(
                 value,
                 &input,
-                |name| std::env::var(name).ok(),
+                |name| match &dev_command {
+                    Some(bynk) if name == crate::remote::DEV_COMMAND_ENV => {
+                        Some(bynk.to_string_lossy().into_owned())
+                    }
+                    _ => std::env::var(name).ok(),
+                },
                 "starts a local `bynk dev`, which only the `bynk` driver can do: run `bynk test --against dev`",
             ) {
                 Ok(crate::remote::Against::Run(run)) => {
@@ -832,6 +900,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             if smoke {
                 node_cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
             }
+            if let Some(file) = &declared_statuses {
+                node_cmd.env(crate::smoke::DECLARED_ENV, file);
+            }
             // #854: the coverage path owns the node launch (it sets
             // `NODE_V8_COVERAGE` and reads the result back), so it does not go
             // through `finish_runner`.
@@ -908,6 +979,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         cmd.arg(&main_ts);
         if smoke {
             cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
+        }
+        if let Some(file) = &declared_statuses {
+            cmd.env(crate::smoke::DECLARED_ENV, file);
         }
         match finish_runner(
             program,
