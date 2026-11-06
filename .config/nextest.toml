@@ -125,8 +125,11 @@ store-success-output = false
 #
 # `bynk`'s `compile_once_strips_suites`, `dev`, `doctor` and `new` call the
 # library in-process, so they stay in the unit tier. Each profile inherits `ci`,
-# so the retry/timeout policy is still decided once. CI runs the whole suite
-# under `ci` and (C4c) the tiers in order under these.
+# so the retry/timeout policy is still decided once. The Linux `test` job runs
+# `ci-lower` (unit + integration, one pool, so the long integration tests still
+# overlap the short unit ones) and the parallel `test-system` job runs
+# `ci-system` (C4c); the other OSes run the whole suite under `ci`. The probe
+# checks `ci-lower` is exactly unit + integration.
 [profile.ci-system]
 inherits = "ci"
 default-filter = '(binary_id(bynk-tests::it) & test(/^system::/)) | (binary_id(/^bynk::/) & not binary_id(/^bynk::(compile_once_strips_suites|dev|doctor|new)$/)) | binary_id(xtask::ci_command)'
@@ -138,6 +141,10 @@ default-filter = 'binary_id(bynk-tests::it) & test(/^integration::/)'
 [profile.ci-unit]
 inherits = "ci"
 default-filter = 'not (((binary_id(bynk-tests::it) & test(/^system::/)) | (binary_id(/^bynk::/) & not binary_id(/^bynk::(compile_once_strips_suites|dev|doctor|new)$/)) | binary_id(xtask::ci_command)) | (binary_id(bynk-tests::it) & test(/^integration::/)))'
+
+[profile.ci-lower]
+inherits = "ci"
+default-filter = 'not ((binary_id(bynk-tests::it) & test(/^system::/)) | (binary_id(/^bynk::/) & not binary_id(/^bynk::(compile_once_strips_suites|dev|doctor|new)$/)) | binary_id(xtask::ci_command))'
 
 [profile.default]
 # Local runs keep the default (0) retries so flakes surface immediately.

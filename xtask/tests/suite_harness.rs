@@ -164,3 +164,36 @@ fn every_ci_profile_job_outlasts_a_hung_test_and_its_retry() {
         "found only {seen} ci-profile jobs"
     );
 }
+
+/// C4c (#2940): the PR gate runs the Linux suite as two parallel jobs, one per
+/// profile, and every other OS (and the release gates) the whole suite. If a
+/// profile's job went missing, its tests would run nowhere.
+#[test]
+fn the_pr_gate_runs_the_linux_tiers_as_parallel_jobs() {
+    let yaml = workflow("ci.yml");
+    let lines = run_lines(&yaml);
+    for profile in ["ci-lower", "ci-system"] {
+        assert!(
+            lines.iter().any(
+                |l| l.contains("cargo nextest run --workspace --locked --profile")
+                    && l.ends_with(profile)
+            ),
+            "ci.yml must run `--profile {profile}` (the Linux tier split, C4c)"
+        );
+    }
+    let jobs = ci_profile_jobs(&yaml);
+    for job in ["test", "test-system", "test-ts7"] {
+        assert!(
+            jobs.iter().any(|(name, _)| name == job),
+            "ci.yml job `{job}` must run nextest under a `ci` profile"
+        );
+    }
+    // The system job must not wait for the unit job (a `needs:` edge would
+    // serialise them and slow the green path); it watches it instead.
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("scripts/ci/run-unless-sibling-fails.sh")),
+        "test-system must run under the sibling watcher"
+    );
+}

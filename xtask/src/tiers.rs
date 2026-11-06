@@ -21,6 +21,9 @@ use std::process::Command;
 /// The tiers, cheapest first: the order C4c runs them in.
 pub const TIERS: [&str; 3] = ["unit", "integration", "system"];
 
+/// The profile the Linux `test` job runs: everything but the system tier.
+pub const LOWER_PROFILE: &str = "ci-lower";
+
 /// The tests a profile selects in `cargo nextest list --message-format json`
 /// output, one `<binary-id> <test name>` string each. Anything that is not that document
 /// is an error, never an empty list.
@@ -103,6 +106,34 @@ pub fn check_partition(
     }
 }
 
+/// `lower` (the `ci-lower` profile) must be exactly the unit and integration
+/// tiers together: the Linux job that runs it then leaves nothing out and runs
+/// nothing twice with the system job.
+pub fn check_lower(
+    lower: &BTreeSet<String>,
+    unit: &BTreeSet<String>,
+    integration: &BTreeSet<String>,
+) -> Result<(), Vec<String>> {
+    let want: BTreeSet<&String> = unit.union(integration).collect();
+    let got: BTreeSet<&String> = lower.iter().collect();
+    let mut problems = Vec::new();
+    for t in want.difference(&got) {
+        problems.push(format!(
+            "{LOWER_PROFILE} omits the unit/integration test `{t}`"
+        ));
+    }
+    for t in got.difference(&want) {
+        problems.push(format!(
+            "{LOWER_PROFILE} selects `{t}`, which is not unit or integration"
+        ));
+    }
+    if problems.is_empty() {
+        Ok(())
+    } else {
+        Err(problems)
+    }
+}
+
 /// The static half: each tier profile exists in `nextest_toml`, inherits `ci`
 /// and has a non-empty `default-filter`.
 pub fn check_profiles(nextest_toml: &str) -> Result<(), Vec<String>> {
@@ -114,8 +145,11 @@ pub fn check_profiles(nextest_toml: &str) -> Result<(), Vec<String>> {
         .and_then(|p| p.as_table())
         .ok_or_else(|| vec![".config/nextest.toml has no [profile.*] tables".to_string()])?;
     let mut problems = Vec::new();
-    for tier in TIERS {
-        let name = format!("ci-{tier}");
+    let names = TIERS
+        .iter()
+        .map(|t| format!("ci-{t}"))
+        .chain([LOWER_PROFILE.to_string()]);
+    for name in names {
         let Some(profile) = profiles.get(&name).and_then(|p| p.as_table()) else {
             problems.push(format!("[profile.{name}] is missing"));
             continue;
@@ -174,6 +208,8 @@ pub fn probe(root: &Path) -> Result<String, Vec<String>> {
         ));
     }
     let sizes = check_partition(&all, &sets)?;
+    let lower = list(root, LOWER_PROFILE).map_err(|e| vec![e])?;
+    check_lower(&lower, &sets[0].1, &sets[1].1)?;
     let total: usize = sizes.iter().map(|(_, n)| n).sum();
     let parts: Vec<String> = sizes.iter().map(|(t, n)| format!("{t} {n}")).collect();
     Ok(format!(
