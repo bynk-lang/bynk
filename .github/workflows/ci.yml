@@ -333,7 +333,7 @@ jobs:
           # (`drift` never runs on a push). rust-cache keys start
           # `v0-rust-<job>-<os.type()>-`. xtask/tests/ci_queue_skip.rs keeps
           # this list in step with the jobs that use rust-cache.
-          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux node-floor-Linux"
+          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-system-Linux test-ts7-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux node-floor-Linux"
         run: |
           passed='[]'
           if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
@@ -637,12 +637,13 @@ jobs:
       # The spec must stay in step with the tests' own; a drift guard
       # (bynk-tests/tests/wrangler/mod.rs) fails if it doesn't.
       #
-      # Not fatal off Linux, where the smokes are allowed to skip anyway. On
-      # Linux BYNK_REQUIRE_WORKERD makes wrangler mandatory, so a failure here
-      # is a real failure and going red now beats going red 180s later.
+      # Not fatal here: this step runs only off Linux (the Linux system tier is
+      # the `test-system` job, which pre-warms too and makes wrangler mandatory),
+      # and off Linux the smokes are allowed to skip anyway.
       - name: Pre-warm the npx cache for wrangler
+        if: matrix.os != 'ubuntu-latest'
         run: npx -y wrangler@4 --version
-        continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+        continue-on-error: true
       # `cargo nextest run --workspace` runs every crate's suite (no rustdoc
       # doctests exist in the tree, so nextest loses nothing). bynkc's includes:
       #   - doc_examples        — the example-compilation gate (the Book)
@@ -653,30 +654,30 @@ jobs:
       # unit tests.
       # --locked: fail if Cargo.lock would change (no silent lockfile drift).
       # BYNK_REQUIRE_TSC makes a missing `tsc` a hard failure rather than a skip.
+      #
+      # C4c (#2940): on Linux this job runs only the unit and integration tiers
+      # (`ci-lower`); the system tier (everything that spawns `tsc`, `node`,
+      # `workerd`, `wrangler` or the `bynk` binary) runs in the parallel
+      # `test-system` job, and the TS7 re-run in `test-ts7`. A broken unit test
+      # now turns this job red in the unit tier's own time, without queueing
+      # behind the long system tests, and `test-system` stops itself
+      # (scripts/ci/run-unless-sibling-fails.sh). Windows and macOS keep the
+      # whole suite in this one job until a second parallel compile is measured
+      # to be no slower there (Decision E).
+      - name: Run tests (unit + integration tiers)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo nextest run --workspace --locked --profile ci-lower
+        env:
+          BYNK_REQUIRE_TSC: "1"
       - name: Run tests
+        if: matrix.os != 'ubuntu-latest'
         run: cargo nextest run --workspace --locked --profile ci
         env:
           BYNK_REQUIRE_TSC: "1"
-          # The workerd smokes (#518) must actually run somewhere: required on
-          # Linux, permitted to skip on the other OSes if wrangler cannot boot.
-          #
-          # The `''` branch does not unset the variable — Actions exports it
-          # empty — so a workerd test must read "required" as *non-empty*, not
-          # merely present. That contract was got wrong twice (#965 fixed one
-          # guard; #971 fixed the identical guard in another test four days
-          # later, both only after the breakage had landed on `main`), because
-          # each test carried its own copy. It now has exactly one
-          # implementation: bynk-tests/tests/require/mod.rs, which is unit-tested on
-          # the empty case specifically. A new workerd test calls that, and the
-          # two halves of the contract cannot drift apart again.
-          #
-          # Deliberately NOT rewritten as a `shell: bash` conditional export.
-          # That would make the variable genuinely unset off Linux, but it would
-          # also run `cargo nextest` under Git Bash on windows-latest — a path
-          # this repo has never exercised, which reorders PATH and makes `which`
-          # resolvable, and several `bynkc test` runner paths branch on exactly
-          # that. Not worth the risk on the OS we just put on the PR gate.
-          BYNK_REQUIRE_WORKERD: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
+          # No BYNK_REQUIRE_WORKERD here: this step runs only off Linux, where the
+          # workerd smokes may skip if wrangler cannot boot. Linux requires them
+          # in the `test-system` job (see there, and bynk-tests/tests/require/mod.rs
+          # for the one implementation of the "non-empty means required" contract).
       # C4b (#2940): every test is in exactly one tier (unit, integration,
       # system; the `ci-*` profiles in .config/nextest.toml). Linux only: the
       # partition is OS-independent. `--profile test` reuses the test build
@@ -687,30 +688,123 @@ jobs:
         run: cargo run --locked --profile test -p xtask -- tier-probe
       # C4a (#2940): the ci profile's per-test durations (JUnit), kept so the
       # tier split is sized from real-runner numbers. Every leg, pass or fail.
-      # Keep this ABOVE the TS7 re-run below: that run rewrites the same path
-      # with only its subset.
+      # The glob covers the `ci` profile and, on Linux, `ci-lower`.
       - name: Upload nextest JUnit
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: nextest-junit-${{ matrix.os }}
-          path: target/nextest/ci/junit.xml
+          path: target/nextest/*/junit.xml
           if-no-files-found: ignore
           retention-days: 30
-      # #1672: the emitted output is verified under both TypeScript majors it
-      # supports — the floor (v5, the main run above) and the current one users
-      # get from `npm install -g typescript` (v7, here). Linux only: the type-
-      # check is OS-independent, and the corpus takes seconds. The version check
-      # keeps a failed install from silently re-running the suite under v5.
-      # Scope: the two whole-corpus type-check suites, plus the behaviour
-      # fixtures (#2146): tsc_verify type-checks with `--noEmit`, so it never
-      # sees an error tsc reports only while emitting (a top-level name the
-      # module transform reserves), and `bynkc test` emits. That suite takes
-      # seconds under v7. The other behaviour suites, which also type-check
-      # before running, stay on v5 in CI (re-running them here would roughly
-      # double this leg's wall-clock).
+
+  test-system:
+    # C4c (#2940): the system tier (every test that starts `tsc`, `node`,
+    # `workerd`, `wrangler` or the `bynk` binary; ~85% of the suite's run time)
+    # in a job of its own, building for itself, in parallel with `test`'s unit and
+    # integration tiers. No `needs:` edge: that would serialise the two and put a
+    # full compile on the green path. Wall-clock is the max of the two jobs, not
+    # their sum. Linux only for now: Windows and macOS keep one job (Decision E).
+    #
+    # When `test` fails this job is pointless (the run is red regardless), but
+    # GitHub cannot cancel one job, so the test step runs under a watcher that
+    # stops nextest once `Test suite (ubuntu-latest)` has failed.
+    name: System tests (Linux)
+    needs: changes
+    # Only the Linux leg is split (see the `test` job's note), so this job is
+    # gated on the change filters alone: `test_os` names the legs of `test`.
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'System tests (Linux)')
+    # Always GitHub-hosted, even while `test`'s Linux leg is on the self-hosted
+    # pilot: a pool of one runner would run these jobs back to back (measured on
+    # #2989: `Test suite (ubuntu-latest)` started the second `System tests (Linux)`
+    # finished), which is slower than the single job they replace.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      # The watcher reads this run's jobs.
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
+        with:
+          tool: nextest@0.9
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "24"
+      - name: Install TypeScript
+        run: npm install -g typescript@5
+      # See the `test` job's note on why wrangler is provisioned once, serially,
+      # before the suite. Mandatory on Linux (BYNK_REQUIRE_WORKERD).
+      - name: Pre-warm the npx cache for wrangler
+        run: npx -y wrangler@4 --version
+      - name: Run tests (system tier)
+        run: >-
+          scripts/ci/run-unless-sibling-fails.sh "Test suite (ubuntu-latest)"
+          cargo nextest run --workspace --locked --profile ci-system
+        env:
+          BYNK_REQUIRE_TSC: "1"
+          BYNK_REQUIRE_WORKERD: "1"
+          GH_TOKEN: ${{ github.token }}
+      - name: Upload nextest JUnit
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: nextest-junit-system
+          path: target/nextest/*/junit.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+  test-ts7:
+    # #1672: the emitted output is verified under both TypeScript majors it
+    # supports: the floor (v5, the `test` and `test-system` jobs) and the current
+    # one users get from `npm install -g typescript` (v7, here). C4c (#2940)
+    # moved this out of the serial tail of `test` into a job of its own, in
+    # parallel (it was ~19% of the Linux critical path). Linux only: the
+    # type-check is OS-independent.
+    #
+    # Scope: the two whole-corpus type-check suites, plus the behaviour fixtures
+    # (#2146): tsc_verify type-checks with `--noEmit`, so it never sees an error
+    # tsc reports only while emitting (a top-level name the module transform
+    # reserves), and `bynkc test` emits. The other behaviour suites, which also
+    # type-check before running, stay on v5.
+    name: Type-check under TypeScript 7
+    needs: changes
+    # Only the Linux leg is split (see the `test` job's note), so this job is
+    # gated on the change filters alone: `test_os` names the legs of `test`.
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Type-check under TypeScript 7')
+    # Always GitHub-hosted, even while `test`'s Linux leg is on the self-hosted
+    # pilot: a pool of one runner would run these jobs back to back (measured on
+    # #2989: `Test suite (ubuntu-latest)` started the second `System tests (Linux)`
+    # finished), which is slower than the single job they replace.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
+        with:
+          tool: nextest@0.9
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "24"
+      # The version check keeps a failed install from silently running under v5.
       - name: Install TypeScript 7 (the tested major)
-        if: matrix.os == 'ubuntu-latest'
         run: |
           npm install -g typescript@7
           v="$(tsc --version 2>/dev/null || true)"
@@ -719,9 +813,8 @@ jobs:
             *) echo "::error::expected TypeScript 7, got: ${v:-no tsc on PATH}"; exit 1 ;;
           esac
       - name: Type-check emitted output under TypeScript 7
-        if: matrix.os == 'ubuntu-latest'
         # bynk-tests's integration tests are one binary (`it`, see bynk-tests/tests/it.rs);
-        # each file's tests are prefixed with its stem.
+        # each file's tests are prefixed with its tier and stem.
         run: cargo nextest run --locked --profile ci -p bynk-tests --test it -E 'test(/^system::(tsc_verify|examples|behaviour_fixtures)::/)'
         env:
           BYNK_REQUIRE_TSC: "1"
@@ -1681,6 +1774,8 @@ jobs:
       - clippy
       - api-docs
       - test
+      - test-system
+      - test-ts7
       - node-floor
       - msrv
       - wasm

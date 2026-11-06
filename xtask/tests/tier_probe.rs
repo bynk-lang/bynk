@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use xtask::tiers::{check_partition, check_profiles, parse_list};
+use xtask::tiers::{check_lower, check_partition, check_profiles, parse_list};
 
 fn set(items: &[&str]) -> BTreeSet<String> {
     items.iter().map(|s| s.to_string()).collect()
@@ -94,5 +94,25 @@ fn profile_check_flags_a_missing_inherits_or_filter() {
         "{err}"
     );
     assert!(err.contains("ci-system] is missing"), "{err}");
+    assert!(err.contains("ci-lower] is missing"), "{err}");
     assert!(check_profiles("garbage = = =").is_err());
+}
+
+#[test]
+fn the_lower_profile_must_be_exactly_unit_plus_integration() {
+    let unit = set(&["a t1"]);
+    let integration = set(&["a t2"]);
+    assert!(check_lower(&set(&["a t1", "a t2"]), &unit, &integration).is_ok());
+    // Drops a test: it would run in no job.
+    let err = check_lower(&set(&["a t1"]), &unit, &integration).unwrap_err();
+    assert!(
+        err[0].contains("omits") && err[0].contains("a t2"),
+        "{err:?}"
+    );
+    // Picks up a system test: it would run in both jobs.
+    let err = check_lower(&set(&["a t1", "a t2", "b t3"]), &unit, &integration).unwrap_err();
+    assert!(
+        err[0].contains("selects") && err[0].contains("b t3"),
+        "{err:?}"
+    );
 }

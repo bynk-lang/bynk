@@ -24,7 +24,9 @@ and the fixture corpus) and `tests/system/` (anything that starts the compiler
 binary, `tsc`, `node`, `workerd` or `wrangler`). A test's name starts with its
 tier, `system::tsc_verify::…`, and `.config/nextest.toml`'s `ci-unit`,
 `ci-integration` and `ci-system` profiles select by it. `cargo xtask tier-probe`
-fails when a test is in no tier or in two. See `tests/it.rs`.
+fails when a test is in no tier or in two. In CI the Linux `test` job runs unit +
+integration (`ci-lower`) and the parallel `test-system` job runs `ci-system`; locally,
+`cargo nextest run --profile ci-system` (or `ci-lower`) runs one half. See `tests/it.rs`.
 
 Regenerate a blessed reference page with `BYNK_BLESS=1`, for example
 `BYNK_BLESS=1 cargo test -p xtask --test docs_consistency grammar_reference::`.
