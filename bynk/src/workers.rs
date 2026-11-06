@@ -11,16 +11,12 @@ use std::process::Command;
 
 use bynk_driver::project::{BuildTarget, SchemaLock};
 
-use crate::compiler::Compiler;
 use crate::probe::Provenance;
 
-/// One compile of the project into `build_dir`, on the same rooting rule as
-/// `bynkc compile <project_root>` (#524, via [`bynk_driver::project_options`]).
-/// Default: in-process. Escape hatch: a `BYNK_BYNKC` override shells *that*
-/// binary instead — the only path on which a second, skewable compiler enters.
-/// #1675: its skew is acted on (minor warns, major refuses unless
-/// `BYNK_ALLOW_SKEW` is set), not only reported by `doctor`. Returns `false` on
-/// failure with the diagnostics already rendered.
+/// One compile of the project into `build_dir`, in-process, on the same rooting
+/// rule as `bynkc compile <project_root>` (#524, via
+/// [`bynk_driver::project_options`]). Returns `false` on failure with the
+/// diagnostics already rendered.
 ///
 /// `schema_registry` (#980): `true` for the real `bynk dev`/`bynk deploy`
 /// call sites — otherwise a deploy could ship a `schemaVersion` computed
@@ -31,42 +27,7 @@ use crate::probe::Provenance;
 /// **committed** repo fixture in place, the same hazard
 /// `bynk-tests/tests/e2e.rs`'s in-place fixtures have — an unconditional write
 /// would leave a real `bynk.schema.lock` in the tree on every test run.
-pub fn compile_once(
-    compiler: &Compiler,
-    project_root: &Path,
-    build_dir: &Path,
-    schema_registry: bool,
-) -> bool {
-    let used_override = matches!(compiler.origin, Some(crate::compiler::Origin::Override));
-    if let (true, Some(bynkc)) = (used_override, compiler.path.as_deref()) {
-        // #1675: the override is the one path on which `dev`/`deploy` run a
-        // second compiler, so its skew is acted on here, as `bynk test` does.
-        // This compile is shared by both commands, so the message says `bynk:`;
-        // neither takes `--allow-skew`, so only `BYNK_ALLOW_SKEW` is offered.
-        let asker = crate::compiler::SkewAsker {
-            command: None,
-            has_flag: false,
-        };
-        if !crate::compiler::skew_gate(compiler, asker, false) {
-            return false;
-        }
-        let status = Command::new(bynkc)
-            .arg("compile")
-            .arg(project_root)
-            .arg("--output")
-            .arg(build_dir)
-            .arg("--target")
-            .arg("workers")
-            .status();
-        return match status {
-            Ok(s) if s.success() => true,
-            Ok(_) => false,
-            Err(e) => {
-                eprintln!("bynk: could not run bynkc ({}): {e}", bynkc.display());
-                false
-            }
-        };
-    }
+pub fn compile_once(project_root: &Path, build_dir: &Path, schema_registry: bool) -> bool {
     // #1078: `bynk-emit` touches no disk for `bynk.schema.lock` — read its
     // current content here (verified-absent `None` for a fresh project) and
     // hand it in; write the reconciled content back after a clean compile.
@@ -123,8 +84,7 @@ pub fn compile_once(
         );
         return false;
     }
-    // ADR 0117: surface non-failing warnings — the `BYNK_BYNKC` override above
-    // already does, via the shelled `bynkc compile`'s own stdout/stderr.
+    // ADR 0117: surface non-failing warnings.
     crate::diagnostics::print_project_warnings(
         &output.warnings,
         &output.snapshots,

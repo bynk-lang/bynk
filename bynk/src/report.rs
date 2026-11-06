@@ -64,17 +64,7 @@ fn human(report: &Report) -> String {
     out.push_str(&header);
     out.push('\n');
     out.push_str(&format!("driver: bynk {}\n", report.driver_version));
-    // Slice 7: the compiler is linked in-process. Only a `BYNK_BYNKC` override
-    // points the driver at an external binary worth naming here.
-    match (report.compiler.origin, report.compiler.path.as_deref()) {
-        (Some(crate::compiler::Origin::Override), Some(path)) => {
-            out.push_str(&format!(
-                "compiler: bynkc at {} (override)\n",
-                path.display()
-            ));
-        }
-        _ => out.push_str("compiler: in-process\n"),
-    }
+    out.push_str("compiler: in-process\n");
     out.push('\n');
 
     for cap in &report.capabilities {
@@ -108,17 +98,17 @@ fn human(report: &Report) -> String {
 #[derive(serde::Serialize)]
 struct JsonReport<'a> {
     driver: &'a str,
-    compiler: JsonCompiler,
+    compiler: JsonCompiler<'a>,
     all_ok: bool,
     capabilities: Vec<JsonCap<'a>>,
 }
 
 #[derive(serde::Serialize)]
-struct JsonCompiler {
+struct JsonCompiler<'a> {
     resolved: bool,
     path: Option<String>,
-    version: Option<String>,
-    origin: Option<&'static str>,
+    version: &'a str,
+    origin: &'static str,
     skew: Option<&'static str>,
 }
 
@@ -139,15 +129,17 @@ struct JsonRow<'a> {
 }
 
 fn json(report: &Report) -> String {
-    let compiler = &report.compiler;
     let value = JsonReport {
         driver: &report.driver_version,
+        // #2998: the compiler is `bynk` itself. The keys are the ones editors
+        // already read (vscode-bynk's doctor view); `path` and `skew` are
+        // always null now, there being no second binary to point at or drift from.
         compiler: JsonCompiler {
-            resolved: compiler.is_resolved(),
-            path: compiler.path.as_ref().map(|p| p.display().to_string()),
-            version: compiler.version.map(|v| v.to_string()),
-            origin: compiler.origin.map(|o| o.token()),
-            skew: compiler.skew.map(|s| s.token()),
+            resolved: true,
+            path: None,
+            version: &report.driver_version,
+            origin: "in-process",
+            skew: None,
         },
         all_ok: report.is_all_ok(),
         capabilities: report

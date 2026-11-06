@@ -11,7 +11,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use bynk::compiler::{Compiler, Origin, Skew};
 use bynk::dev::{self, SelectError};
 use bynk::doctor::{self, Capability, Context, DoctorOptions};
 use bynk::probe::{Toolbox, Version};
@@ -70,17 +69,6 @@ fn v(major: u32, minor: u32, patch: u32) -> Version {
     }
 }
 
-/// A `bynkc` resolved on PATH at a fixed path/version, so the rendered report is
-/// stable across version bumps.
-fn bynkc_pinned() -> Compiler {
-    Compiler {
-        path: Some(PathBuf::from("/opt/bynk/bin/bynkc")),
-        origin: Some(Origin::Path),
-        version: Some(v(9, 9, 9)),
-        skew: Some(Skew::Match),
-    }
-}
-
 fn names(v: &[&str]) -> Vec<String> {
     v.iter().map(|s| s.to_string()).collect()
 }
@@ -128,7 +116,7 @@ fn golden_preflight_deploy_missing() {
         only: Some(Capability::Deploy),
         strict: false,
     };
-    let mut report = doctor::diagnose(&fake, &bynkc_pinned(), &ctx, &opts);
+    let mut report = doctor::diagnose(&fake, &ctx, &opts);
     report.driver_version = "9.9.9".to_string(); // pin, survives version bumps
 
     // Sanity: this environment really does gate `dev`.

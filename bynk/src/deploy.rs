@@ -30,7 +30,6 @@ use std::process::{ExitCode, Stdio};
 use bynk_check::contract_compat::{Compatibility, ServiceShape, check_call};
 use serde::{Deserialize, Serialize};
 
-use crate::compiler::Compiler;
 use crate::doctor::{self, Capability, Context, DoctorOptions, Report};
 use crate::probe::{self, DetectOpts, Provenance, Toolbox};
 use crate::report::{self, Format};

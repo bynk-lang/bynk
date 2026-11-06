@@ -6,13 +6,12 @@ use std::process::ExitCode;
 use bynk::check;
 use bynk::cli::{CheckFormatArg, Cli, Command};
 use bynk::compile;
-use bynk::compiler::{self, Compiler};
 use bynk::deploy::{self, DeployFormat, DeployOptions};
 use bynk::dev::{self, DevOptions};
 use bynk::doctor::{self, Context, DoctorOptions};
 use bynk::fmt;
 use bynk::new::{self, NewOptions};
-use bynk::probe::{SystemToolbox, Toolbox, Version};
+use bynk::probe::SystemToolbox;
 use bynk::registry::account;
 use bynk::report::{self, Format};
 use bynk::test;
@@ -41,6 +40,8 @@ fn main() -> ExitCode {
 }
 
 fn run() -> ExitCode {
+    // #2998: `BYNK_BYNKC` no longer pins a compiler; say so once.
+    bynk::compiler::warn_if_override_set();
     let cli =
         Cli::from_arg_matches(&bynk::cli::command().get_matches()).unwrap_or_else(|e| e.exit());
     match cli.command {
@@ -239,13 +240,14 @@ fn run() -> ExitCode {
         Command::Fmt { args } => run_fmt(args),
         Command::Test {
             args,
-            allow_skew,
+            // #2998: accepted and ignored, like `compile`'s (see above).
+            allow_skew: _,
             lock,
         } => {
             if !prepare(&args.input, lock.options()) {
                 return ExitCode::FAILURE;
             }
-            run_test(args, allow_skew)
+            run_test(args)
         }
         Command::Fetch { path, lock, format } => {
             if matches!(format, bynk::cli::DeployFormatArg::Json) {
@@ -826,29 +828,8 @@ fn run_conformance(opts: bynk::registry::conformance::Options, json: bool) -> Ex
     }
 }
 
-/// Locate the compiler the driver shells: `$BYNK_BYNKC` override, else `PATH`,
-/// else a sibling of this `bynk` binary. Shared by every subcommand.
-fn resolve_compiler(tb: &dyn Toolbox) -> Compiler {
-    let override_path = std::env::var_os("BYNK_BYNKC").map(PathBuf::from);
-    let bynk_bin_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(Path::to_path_buf));
-    let driver = Version::parse(bynk::DRIVER_VERSION).unwrap_or(Version {
-        major: 0,
-        minor: 0,
-        patch: 0,
-    });
-    compiler::resolve(
-        tb,
-        override_path.as_deref(),
-        bynk_bin_dir.as_deref(),
-        driver,
-    )
-}
-
 fn run_doctor(input: PathBuf, opts: DoctorOptions, format: Format) -> ExitCode {
     let tb = SystemToolbox;
-    let compiler = resolve_compiler(&tb);
 
     let project_root = find_project_root(&input);
     let ctx = Context {
@@ -857,7 +838,7 @@ fn run_doctor(input: PathBuf, opts: DoctorOptions, format: Format) -> ExitCode {
         node_floor: bynk_emit::NODE_FLOOR,
     };
 
-    let report = doctor::diagnose(&tb, &compiler, &ctx, &opts);
+    let report = doctor::diagnose(&tb, &ctx, &opts);
     print!("{}", report::render(&report, format));
 
     if report.exit_nonzero(&opts) {
@@ -869,7 +850,6 @@ fn run_doctor(input: PathBuf, opts: DoctorOptions, format: Format) -> ExitCode {
 
 fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
     let tb = SystemToolbox;
-    let compiler = resolve_compiler(&tb);
 
     let Some(project_root) = find_project_root(&path) else {
         eprintln!(
@@ -884,12 +864,11 @@ fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
     // #524: `dev` compiles and watches the whole `[paths]` layout from the
     // project root — the same shape as `bynkc compile` — so no per-include
     // root is selected here any more.
-    dev::run(&tb, &compiler, &project_root, bynk_emit::NODE_FLOOR, &opts)
+    dev::run(&tb, &project_root, bynk_emit::NODE_FLOOR, &opts)
 }
 
 fn run_tail(path: PathBuf, opts: bynk::tail::TailOptions) -> ExitCode {
     let tb = SystemToolbox;
-    let compiler = resolve_compiler(&tb);
     let Some(project_root) = find_project_root(&path) else {
         eprintln!(
             "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
@@ -900,12 +879,11 @@ fn run_tail(path: PathBuf, opts: bynk::tail::TailOptions) -> ExitCode {
     if refuse_workspace_root("tail", &project_root) {
         return ExitCode::FAILURE;
     }
-    bynk::tail::run(&tb, &compiler, &project_root, &opts)
+    bynk::tail::run(&tb, &project_root, &opts)
 }
 
 fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
     let tb = SystemToolbox;
-    let compiler = resolve_compiler(&tb);
     let Some(project_root) = find_project_root(&path) else {
         eprintln!(
             "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
@@ -916,31 +894,22 @@ fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
     if refuse_workspace_root("deploy", &project_root) {
         return ExitCode::FAILURE;
     }
-    deploy::run(&tb, &compiler, &project_root, bynk_emit::NODE_FLOOR, &opts)
+    deploy::run(&tb, &project_root, bynk_emit::NODE_FLOOR, &opts)
 }
 
-/// `bynk check` (#487): resolve `bynkc` (for the override escape hatch) and
-/// type-check in-process via the linked pipeline.
+/// `bynk check` (#487): type-check in-process via the linked pipeline.
 fn run_check(input: PathBuf, format: CheckFormatArg, fix: bool) -> ExitCode {
-    let tb = SystemToolbox;
-    let compiler = resolve_compiler(&tb);
-    check::run(&compiler, input, format, fix)
+    check::run(input, format, fix)
 }
 
-/// `bynk fmt` (#487): format in-process via `bynk-fmt`, or shell a pinned
-/// `bynkc` under a `BYNK_BYNKC` override.
+/// `bynk fmt` (#487): format in-process via `bynk-fmt`.
 fn run_fmt(args: bynk_driver::FmtArgs) -> ExitCode {
-    let tb = SystemToolbox;
-    let compiler = resolve_compiler(&tb);
-    fmt::run(&compiler, args)
+    fmt::run(args)
 }
 
-/// `bynk test` (#487): delegate to the driver-resolved `bynkc`, forwarding every
-/// flag verbatim.
-fn run_test(args: bynk_driver::test_runner::TestArgs, allow_skew: bool) -> ExitCode {
-    let tb = SystemToolbox;
-    let compiler = resolve_compiler(&tb);
-    test::run(&compiler, args, allow_skew)
+/// `bynk test` (#487, #2998): run the project's tests in-process.
+fn run_test(args: bynk_driver::test_runner::TestArgs) -> ExitCode {
+    test::run(args)
 }
 
 /// #2207 (decision C): `dev` and `deploy` run one project, and a workspace

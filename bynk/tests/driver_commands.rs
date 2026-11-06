@@ -537,18 +537,14 @@ fn fmt_style_overrides_match_bynkc_when_present() {
 }
 
 #[test]
-fn fmt_style_overrides_reach_a_pinned_bynkc() {
-    // Under `BYNK_BYNKC` the driver shells the pinned compiler; the style flags
-    // must be respelled onto that argv, or an override silently formats to the
-    // canonical style instead of the one asked for.
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built (the delegate path needs it)");
-        return;
-    };
-    let dir = scratch("fmt-override-delegated");
+fn fmt_style_overrides_are_honoured_in_process() {
+    // The style flags must reach the formatter, or a run silently formats to the
+    // canonical style instead of the one asked for. (They once had to be
+    // respelled onto the argv of a shelled `bynkc`; #2998 removed that path.)
+    let dir = scratch("fmt-style-overrides");
     let mut cmd = Command::new(bynk());
     cmd.args(["fmt", "--indent", "spaces", "--indent-width", "3", "-"])
-        .env("BYNK_BYNKC", &bynkc)
+        .env_remove("BYNK_BYNKC")
         .current_dir(&dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -568,12 +564,12 @@ fn fmt_style_overrides_reach_a_pinned_bynkc() {
     assert_eq!(
         out.status.code(),
         Some(0),
-        "delegated fmt should succeed; stderr:\n{}",
+        "fmt should succeed; stderr:\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
         stdout.contains("\n   fn r"),
-        "the 3-space override must reach the pinned bynkc, got:\n{stdout}"
+        "the 3-space override must reach the formatter, got:\n{stdout}"
     );
 }
 
@@ -884,18 +880,12 @@ fn the_manifest_layer_matches_bynkc_when_present() {
 }
 
 #[test]
-fn the_manifest_layer_survives_delegation_to_a_pinned_bynkc() {
-    // `bynk` forwards only the flags the run passed; the manifest lookup is the
-    // child's, done from the same working directory against the same paths. A
-    // resolved-and-forwarded default would override the project's own style.
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built (the delegate path needs it)");
-        return;
-    };
-    let dir = project_with_fmt("fmt-manifest-delegated", "[fmt]\nmax_line_width = 50\n");
+fn the_manifest_layer_reaches_the_in_process_formatter() {
+    // A resolved default must not override the project's own `[fmt]` style.
+    let dir = project_with_fmt("fmt-manifest-in-process", "[fmt]\nmax_line_width = 50\n");
     let mut cmd = Command::new(bynk());
     cmd.args(["fmt", "-"])
-        .env("BYNK_BYNKC", &bynkc)
+        .env_remove("BYNK_BYNKC")
         .current_dir(&dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -915,12 +905,12 @@ fn the_manifest_layer_survives_delegation_to_a_pinned_bynkc() {
     assert_eq!(
         out.status.code(),
         Some(0),
-        "delegated fmt should succeed; stderr:\n{}",
+        "fmt should succeed; stderr:\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
         stdout.contains("\n\t\t\tguestName,"),
-        "the project's 50-column budget must reach the pinned bynkc:\n{stdout}"
+        "the project's 50-column budget must reach the formatter:\n{stdout}"
     );
 }
 
@@ -1265,4 +1255,103 @@ fn compile_ignores_a_missing_bynk_bynkc_override() {
         String::from_utf8_lossy(&run.stderr)
     );
     assert!(out.join("calc.ts").exists(), "the module is written");
+}
+
+// ---------------------------------------------------------------------------
+// BYNK_BYNKC is retired (#2998, ADR 0736)
+// ---------------------------------------------------------------------------
+
+/// A `bynkc` stand-in that records that it ran.
+fn marker_bynkc(dir: &Path) -> (PathBuf, PathBuf) {
+    let ran = dir.join("ran");
+    let bin = dir.join("fake-bynkc");
+    write(
+        &bin,
+        &format!(
+            "#!/bin/sh\ntouch '{}'\necho FAKE BYNKC RAN\n",
+            ran.display()
+        ),
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    (bin, ran)
+}
+
+/// Every command runs in-process, so a `bynkc` named by `BYNK_BYNKC` is never
+/// run; the variable draws one warning, and the command succeeds on its own.
+#[cfg(unix)]
+#[test]
+fn bynk_bynkc_is_warned_about_once_and_never_run() {
+    let proj = scratch("retired-override");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let (fake, ran) = marker_bynkc(&proj);
+    for args in [
+        vec!["check", "."],
+        vec!["fmt", "src/calc.bynk"],
+        vec!["compile", ".", "-o", "out"],
+        vec!["test", ".", "--no-run", "--format", "json"],
+    ] {
+        let out = Command::new(bynk())
+            .args(&args)
+            .current_dir(&proj)
+            .env("BYNK_BYNKC", &fake)
+            .env("BYNK_ALLOW_SKEW", "1")
+            .output()
+            .expect("spawn");
+        let (stdout, stderr) = (
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        );
+        assert!(out.status.success(), "{args:?}: {stderr}");
+        assert_eq!(
+            stderr.matches("BYNK_BYNKC=").count(),
+            1,
+            "{args:?} warns exactly once: {stderr}"
+        );
+        assert!(stderr.contains("is ignored"), "{args:?}: {stderr}");
+        assert!(!stdout.contains("FAKE BYNKC RAN"), "{args:?}: {stdout}");
+    }
+    assert!(!ran.exists(), "the stand-in was never spawned");
+}
+
+/// The replacement for the skew tests: `bynk test` on a real project discovers
+/// its suites, with no `bynkc` involved, and `--allow-skew` is still accepted.
+#[test]
+fn test_discovers_the_projects_suites_in_process() {
+    let proj = scratch("test-discovers-suites");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/hello-world");
+    copy_dir(&fixture, &proj);
+    for extra in [&[][..], &["--allow-skew"][..]] {
+        let mut args = vec!["test", ".", "--no-run", "--format", "json"];
+        args.extend_from_slice(extra);
+        let (code, out, err) = run_bynk_in(&proj, &args);
+        assert_eq!(code, 0, "{err}");
+        let doc: serde_json::Value = serde_json::from_str(&out).expect("a JSON document");
+        let suites = doc["suites"].as_array().expect("`suites` is present");
+        assert!(!suites.is_empty(), "the example's suites are discovered");
+        assert!(
+            suites[0]["cases"][0]["outcome"] == "discovered",
+            "cases are listed without running: {out}"
+        );
+    }
+}
+
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.is_dir() {
+            copy_dir(&path, &to.join(entry.file_name()));
+        } else {
+            std::fs::copy(&path, to.join(entry.file_name())).unwrap();
+        }
+    }
 }

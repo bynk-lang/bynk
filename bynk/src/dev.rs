@@ -3,7 +3,7 @@
 //! Collapses the manual recipe (compile → `cd` into the generated worker dir →
 //! `wrangler dev`) into a single command (proposal v0.57). The orchestration is
 //! **pre-flight → compile → select → serve**, and almost every piece is reused:
-//! [`compiler::resolve`](crate::compiler) for `bynkc`, the doctor `Deploy`
+//! the in-process [`workers::compile_once`](crate::workers), the doctor `Deploy`
 //! capability for the Node + `wrangler` gate, and [`probe`] for locating
 //! `wrangler` with the same provenance ordering doctor reports.
 //!
@@ -29,7 +29,6 @@ use std::time::Duration;
 
 use bynk_driver::project::{ProjectPaths, try_read_project_paths};
 
-use crate::compiler::Compiler;
 use crate::doctor::{self, Capability, Context, DoctorOptions, Report};
 use crate::probe::{self, DetectOpts, Provenance, Toolbox};
 use crate::report::{self, Format};
@@ -417,7 +416,6 @@ pub struct Serving {
 /// hand-off, or a pre-flight/build failure code before serving.
 pub fn run(
     tb: &dyn Toolbox,
-    compiler: &Compiler,
     project_root: &Path,
     node_floor: (u32, u32),
     opts: &DevOptions,
@@ -454,7 +452,7 @@ pub fn run(
         only: Some(Capability::Deploy),
         strict: false,
     };
-    let report = doctor::diagnose(tb, compiler, &ctx, &preflight_opts);
+    let report = doctor::diagnose(tb, &ctx, &preflight_opts);
     if report.exit_nonzero(&preflight_opts) {
         eprint!("{}", preflight_failure_message(&report));
         return ExitCode::FAILURE;
@@ -473,7 +471,7 @@ pub fn run(
     // — the shared rooting rule over the full `[paths]` layout. `dev`
     // previously re-rooted on the first `include` entry only, silently
     // dropping further includes and the whole `exclude` list.
-    if !compile_once(compiler, project_root, &build_dir, true) {
+    if !compile_once(project_root, &build_dir, true) {
         return ExitCode::FAILURE;
     }
 
@@ -795,7 +793,7 @@ pub fn run(
             fingerprint = now;
             eprintln!("bynk dev: change detected — rebuilding…");
             emit(opts.format, &DevEvent::Rebuilding);
-            if compile_once(compiler, project_root, &build_dir, true) {
+            if compile_once(project_root, &build_dir, true) {
                 // Interop I5 (#1972): refresh the served copy from the
                 // rebuilt config. A binding added since start has no
                 // stand-in until `bynk dev` restarts.

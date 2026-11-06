@@ -5,18 +5,7 @@
 
 use std::path::PathBuf;
 
-use bynk::compiler::Compiler;
 use bynk::dev::compile_once;
-
-/// No `BYNK_BYNKC` override: the in-process `compile_project` path.
-fn in_process() -> Compiler {
-    Compiler {
-        path: None,
-        origin: None,
-        version: None,
-        skew: None,
-    }
-}
 
 #[test]
 fn the_dev_and_deploy_build_strips_every_suite() {
@@ -46,7 +35,7 @@ fn the_dev_and_deploy_build_strips_every_suite() {
 
     let build_dir = root.join("build");
     assert!(
-        compile_once(&in_process(), &root, &build_dir, false),
+        compile_once(&root, &build_dir, false),
         "the build succeeds without checking the broken suite"
     );
     assert!(

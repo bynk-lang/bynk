@@ -14,14 +14,8 @@ use std::process::ExitCode;
 use bynk_driver::test_filter::TestFilter;
 use bynk_driver::test_runner::TestArgs;
 
-use crate::compiler::Compiler;
-
 /// Run `bynk test`.
-///
-/// `_compiler` and `_allow_skew` are vestiges of the shelled `bynkc` (the lookup
-/// and ADR 0434's skew gate): nothing to resolve or skew against any more. They
-/// go with the lookup itself.
-pub fn run(_compiler: &Compiler, args: TestArgs, _allow_skew: bool) -> ExitCode {
+pub fn run(args: TestArgs) -> ExitCode {
     // #2207 (decision C): at a workspace root, test every member in order,
     // each under a header. Every member runs, and the run fails if any does.
     if let Some(workspace) = bynk_driver::workspace_at(&args.input) {

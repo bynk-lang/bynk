@@ -312,12 +312,10 @@ pub enum Command {
     },
     /// Type-check a file or project.
     ///
-    /// Writes no output — the `bynkc check` behaviour through the driver's
-    /// compiler resolution (v0.138).
+    /// Writes no output — the `bynkc check` behaviour through the driver
+    /// (v0.138).
     ///
-    /// Runs the compiler pipeline in-process (no `bynkc` binary required); with
-    /// `BYNK_BYNKC` set, the pinned compiler is shelled instead so an
-    /// externally-managed `bynkc` still governs the result.
+    /// Runs the compiler pipeline in-process (no `bynkc` binary required).
     Check {
         /// Input `.bynk` file or project root. Defaults to the current directory.
         #[arg(default_value = ".")]
@@ -381,7 +379,7 @@ pub enum Command {
         /// No effect: `compile` runs in-process, so there is no second
         /// compiler to skew against (#2998). Kept so existing invocations
         /// keep working.
-        #[arg(long)]
+        #[arg(long, hide = true)]
         allow_skew: bool,
     },
     /// Write an OpenAPI document for the project's HTTP services.
@@ -480,9 +478,7 @@ pub enum Command {
     /// Formats in place — the `bynkc fmt` behaviour through the driver
     /// (v0.138). Passing `-` reads from stdin and writes to stdout.
     ///
-    /// Runs the formatter in-process (no `bynkc` binary required); with
-    /// `BYNK_BYNKC` set, the pinned compiler is shelled instead — the style
-    /// flags are forwarded to it either way.
+    /// Runs the formatter in-process (no `bynkc` binary required).
     ///
     /// `--indent`, `--indent-width`, `--max-line-width` and
     /// `--no-trailing-comma` override the canonical style for this run; with
@@ -505,7 +501,7 @@ pub enum Command {
         lock: LockArgs,
         /// No effect: `test` runs in-process, so there is no second compiler
         /// to skew against (#2998). Kept so existing invocations keep working.
-        #[arg(long)]
+        #[arg(long, hide = true)]
         allow_skew: bool,
     },
     /// Fetch dependencies and write `bynk.lock`.
@@ -802,17 +798,6 @@ pub enum CheckFormatArg {
     /// One terse `path:line:col: severity[category]: message` line per
     /// diagnostic — for the VS Code problem-matcher, CI, and scripts.
     Short,
-}
-
-impl CheckFormatArg {
-    /// The `bynkc check --format` token this maps to when the pinned compiler
-    /// is shelled under `BYNK_BYNKC`.
-    pub fn as_bynkc_arg(self) -> &'static str {
-        match self {
-            CheckFormatArg::Rich => "rich",
-            CheckFormatArg::Short => "short",
-        }
-    }
 }
 
 /// `--only` selector. Mirrors [`Capability`] minus the internal distinctions.
