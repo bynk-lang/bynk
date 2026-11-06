@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The system model's placement is settled. It stays above `bynk-check`, the wire contract stays in `bynk-check` as the model's boundary half, and the editor's architecture map stays an editor view. Whether the model becomes a public interface is deferred past 1.0 (crate-hygiene B4)
----
+# 0742 — The system model stays above the checker, with the wire contract and the architecture map left where they are
 
-## ADR: system-model-b4
-title: The system model stays above the checker, with the wire contract and the architecture map left where they are
-summary: Slice B4 of the crate-hygiene track settles where the system model sits, where WireModel and ArchModel live, which AST matches stay under M-1's domain clause for good, and defers EntryShape-over-TypeShape and the public interface past 1.0
+- **Status:** Accepted (v0.510.29)
 
 **Context.** ADR 0735 placed `bynk-model` above `bynk-check` for slices B1–B3 and
 left two questions to B4:

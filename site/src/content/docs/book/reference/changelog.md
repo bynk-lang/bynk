@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.29** | The system model's placement is settled. It stays above `bynk-check`, the wire contract stays in `bynk-check` as the model's boundary half, and the editor's architecture map stays an editor view. Whether the model becomes a public interface is deferred past 1.0 (crate-hygiene B4) |
 | **v0.510.28** | Crate hygiene E1-E2 PR 4 - the `bynkc` lookup (`BYNK_BYNKC`, `PATH`, sibling) and ADR 0434's version-skew gate are retired; `BYNK_BYNKC` is ignored with a one-line warning, `--allow-skew` and `BYNK_ALLOW_SKEW` are accepted and ignored, and the `bynk doctor` compiler row is always in-process |
 | **v0.510.27** | `bynk openapi` and `bynk test --smoke` read handler kinds and HTTP methods from the system model instead of matching the syntax tree; their output is unchanged (crate-hygiene B2) |
 | **v0.510.26** | Crate hygiene E1 PR 2 - `bynk compile` runs in-process through `bynk-driver` (no `bynkc` binary needed), gains `--target`, `--platform` and `--emit`, and ignores `BYNK_BYNKC` and `--allow-skew` (the other commands follow in a later release) |
