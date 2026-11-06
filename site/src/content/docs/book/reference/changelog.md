@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.27** | `bynk openapi` and `bynk test --smoke` read handler kinds and HTTP methods from the system model instead of matching the syntax tree; their output is unchanged (crate-hygiene B2) |
 | **v0.510.26** | Crate hygiene E1 PR 2 - `bynk compile` runs in-process through `bynk-driver` (no `bynkc` binary needed), gains `--target`, `--platform` and `--emit`, and ignores `BYNK_BYNKC` and `--allow-skew` (the other commands follow in a later release) |
 | **v0.510.25** | The entry handlers' signatures become system-model items. `bynk_check::entry_signature` moves to `bynk_model::entry` (also re-exported at `bynk_model`'s root), with no re-export left in `bynk-check`. The playground's output is unchanged (crate-hygiene B3) |
 | **v0.510.24** | The token-bootstrap release workflow no longer calls `scripts/check-server-pin.sh`, which left with the VS Code extension, so it can first-publish a new crate again |
