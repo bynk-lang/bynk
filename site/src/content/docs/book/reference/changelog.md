@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.34** | Crate hygiene E3-3 - `bynkc` becomes a name the `bynk` executable answers to for one release (release archives, the loose `bynkc-<target>` asset and the `bynkc` crate's shim all run `bynk`), with a one-line retirement notice on stderr; the `bynkc` crate's final release points to `bynk` |
 | **v0.510.33** | Crate hygiene E3-2 - the test corpus drives `bynk` (through `bynk-under-test`) instead of a separate `bynkc` binary, ahead of `bynkc`'s retirement (no behaviour change) |
 | **v0.510.32** | The test-module emitter matches handler kinds through the system model's `IrHandlerKind` (via `lower_handler_kind_ir`) rather than the syntax tree's variants, and its protocol matches cite M-1's domain clause; emitted test modules are unchanged (crate-hygiene B4) |
 | **v0.510.31** | The `bynk-render` crate announces its final crates.io release; its renderers become the `bynk-driver` crate's `render` module (crate-hygiene D2) |
