@@ -449,13 +449,7 @@ dependencies = [
 name = "bynkc"
 version = "0.510.33"
 dependencies = [
- "bynk-check",
- "bynk-driver",
- "bynk-emit",
- "bynk-render",
- "bynk-strip",
- "bynk-syntax",
- "clap",
+ "bynk",
 ]
 
 [[package]]
@@ -2949,10 +2943,10 @@ checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 name = "xtask"
 version = "0.510.33"
 dependencies = [
+ "bynk",
  "bynk-fmt",
  "bynk-project",
  "bynk-syntax",
- "bynkc",
  "regex",
  "schemars",
  "serde",

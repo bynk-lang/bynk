@@ -2,7 +2,7 @@
 title: "CLI (`bynkc`)"
 ---
 <!-- GENERATED FILE — do not edit by hand.
-     Source: bynkc/src/cli.rs (`render_markdown`).
+     Source: bynk/src/bynkc_compat.rs (`render_markdown`).
      Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency cli_reference:: -->
 
 The Bynk compiler

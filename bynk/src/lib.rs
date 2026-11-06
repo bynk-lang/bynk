@@ -11,6 +11,8 @@
 //!
 //! - [`probe`] — the portable detection primitive (presence + version +
 //!   provenance), backed by the `which` crate so it is not Unix-only.
+//! - [`bynkc_compat`] — `bynkc` as a name this binary answers to, for one release
+//!   (#3013, E3).
 //! - [`compiler`] — the retired `BYNK_BYNKC` pin: a one-line warning that it is
 //!   ignored (#2998).
 //! - [`doctor`] — the capability model, the checks, and the exit-code contract.
@@ -30,6 +32,7 @@
 
 pub mod approve;
 pub mod book;
+pub mod bynkc_compat;
 pub mod check;
 pub mod cli;
 pub mod compile;
