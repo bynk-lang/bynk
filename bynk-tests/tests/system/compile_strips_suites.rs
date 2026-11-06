@@ -1,6 +1,6 @@
-//! #1821 (ADR 0147 D3): `bynkc compile` strips every `suite` — never
+//! #1821 (ADR 0147 D3): `bynk compile` strips every `suite` — never
 //! type-checked for the build, never emitted to the deployable — while
-//! `bynkc test` compiles and runs them. `compile` used to emit `out/tests/`, and
+//! `bynk test` compiles and runs them. `compile` used to emit `out/tests/`, and
 //! a project with a `system` suite then failed `tsc` on a bundle build (its
 //! test module imports the workers layout).
 
@@ -26,13 +26,13 @@ fn project(tag: &str, suite: &str) -> PathBuf {
     root
 }
 
-fn bynkc(cwd: &Path, args: &[&str]) -> (bool, String) {
+fn bynk(cwd: &Path, args: &[&str]) -> (bool, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .current_dir(cwd)
         .env("NO_COLOR", "1")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     (
         out.status.success(),
         format!(
@@ -51,7 +51,7 @@ fn compile_emits_no_suite() {
     );
     for target in ["bundle", "workers"] {
         let out = format!("out-{target}");
-        let (ok, text) = bynkc(&root, &["compile", "--target", target, "-o", &out, "."]);
+        let (ok, text) = bynk(&root, &["compile", "--target", target, "-o", &out, "."]);
         assert!(ok, "{target}: {text}");
         assert!(
             !root.join(&out).join("tests").exists(),
@@ -66,9 +66,9 @@ fn a_broken_suite_does_not_fail_compile_but_check_reports_it() {
         "broken",
         "suite shop.maths {\n  case \"x\" { expect nosuch(3) == 6 }\n}\n",
     );
-    let (ok, text) = bynkc(&root, &["compile", "-o", "out", "."]);
+    let (ok, text) = bynk(&root, &["compile", "-o", "out", "."]);
     assert!(ok, "the build never type-checks a suite: {text}");
-    let (ok, text) = bynkc(&root, &["check", "--format", "short", "."]);
+    let (ok, text) = bynk(&root, &["check", "--format", "short", "."]);
     assert!(!ok, "check still checks suites");
     assert!(text.contains("bynk.resolve.unknown_function"), "{text}");
 }
@@ -85,7 +85,7 @@ fn an_atomic_file_ships_its_unit_and_drops_its_suite() {
          suite shop.maths {\n  case \"doubles\" { expect double(3) == 6 }\n}\n",
     )
     .unwrap();
-    let (ok, text) = bynkc(&root, &["compile", "-o", "out", "."]);
+    let (ok, text) = bynk(&root, &["compile", "-o", "out", "."]);
     assert!(ok, "{text}");
     assert!(
         root.join("out/shop/maths.ts").exists(),
@@ -103,7 +103,7 @@ fn a_suite_that_does_not_parse_still_fails_compile() {
         "syntax",
         "suite shop.maths {\n  case \"x\" { expect double(\n}\n",
     );
-    let (ok, text) = bynkc(&root, &["compile", "-o", "out", "."]);
+    let (ok, text) = bynk(&root, &["compile", "-o", "out", "."]);
     assert!(!ok, "a malformed file fails the build: {text}");
     assert!(text.contains("bynk.parse."), "{text}");
 }
@@ -143,7 +143,7 @@ fn a_suite_helper_leaves_the_deployable_unchanged() {
     for target in ["bundle", "workers"] {
         let out = format!("out-{target}");
         for root in [&without, &with] {
-            let (ok, text) = bynkc(root, &["compile", "--target", target, "-o", &out, "."]);
+            let (ok, text) = bynk(root, &["compile", "--target", target, "-o", &out, "."]);
             assert!(ok, "{target}: {text}");
         }
         let (a, b) = (tree(&without.join(&out)), tree(&with.join(&out)));
@@ -179,7 +179,7 @@ fn a_suite_fixture_leaves_the_deployable_unchanged() {
     for target in ["bundle", "workers"] {
         let out = format!("out-{target}");
         for root in [&without, &with] {
-            let (ok, text) = bynkc(root, &["compile", "--target", target, "-o", &out, "."]);
+            let (ok, text) = bynk(root, &["compile", "--target", target, "-o", &out, "."]);
             assert!(ok, "{target}: {text}");
         }
         let (a, b) = (tree(&without.join(&out)), tree(&with.join(&out)));
@@ -212,14 +212,14 @@ fn a_fixture_over_four_mib_is_refused() {
     let root = project("fixture-cap", suite);
     std::fs::create_dir_all(root.join("fixtures")).unwrap();
     std::fs::write(root.join("fixtures/big.txt"), vec![b'a'; 4 * 1024 * 1024]).unwrap();
-    let (ok, text) = bynkc(&root, &["check", "--format", "short", "."]);
+    let (ok, text) = bynk(&root, &["check", "--format", "short", "."]);
     assert!(ok, "a fixture at the cap is read: {text}");
     std::fs::write(
         root.join("fixtures/big.txt"),
         vec![b'a'; 4 * 1024 * 1024 + 1],
     )
     .unwrap();
-    let (ok, text) = bynkc(&root, &["check", "--format", "short", "."]);
+    let (ok, text) = bynk(&root, &["check", "--format", "short", "."]);
     assert!(!ok, "{text}");
     assert!(text.contains("bynk.fixture.too_large"), "{text}");
 }
@@ -233,7 +233,7 @@ fn an_unused_fixture_is_a_warning() {
     );
     std::fs::create_dir_all(root.join("fixtures")).unwrap();
     std::fs::write(root.join("fixtures/note.txt"), "x").unwrap();
-    let (ok, text) = bynkc(&root, &["check", "--format", "short", "."]);
+    let (ok, text) = bynk(&root, &["check", "--format", "short", "."]);
     assert!(ok, "{text}");
     assert!(text.contains("bynk.fixture.unused"), "{text}");
 }

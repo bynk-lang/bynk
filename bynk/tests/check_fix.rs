@@ -1,4 +1,4 @@
-//! #2642: `bynk check --fix` / `bynkc check --fix` over the real binaries.
+//! #2642: `bynk check --fix` over the real binary.
 //!
 //! Pinned here:
 //!  - a fix that exposes a further fixable diagnostic converges in more than
@@ -6,7 +6,6 @@
 //!  - a fix that would introduce a diagnostic needing a human writes nothing
 //!    anywhere and exits non-zero;
 //!  - untouched files are not rewritten (mtime preserved);
-//!  - `bynkc check --fix` and the `BYNK_BYNKC` delegation do the same;
 //!  - a workspace root fixes every member.
 
 use std::path::{Path, PathBuf};
@@ -15,12 +14,6 @@ use std::time::SystemTime;
 
 fn bynk() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_bynk"))
-}
-
-/// The sibling `bynkc`, present only when the whole workspace was built.
-fn bynkc_sibling() -> Option<PathBuf> {
-    let p = bynk().parent().unwrap().join("bynkc");
-    p.exists().then_some(p)
 }
 
 fn scratch(name: &str) -> PathBuf {
@@ -58,7 +51,6 @@ fn run(bin: &Path, cwd: &Path, args: &[&str], env: &[(&str, &Path)]) -> (i32, St
     let mut cmd = Command::new(bin);
     cmd.args(args)
         .current_dir(cwd)
-        .env_remove("BYNK_BYNKC")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (k, v) in env {
@@ -275,39 +267,6 @@ fn a_cascade_converges_and_ends_clean() {
     assert_eq!(code, 0, "{err}");
     assert!(!err.contains("fixed:"), "{err}");
     assert!(!err.contains("bynk."), "no diagnostic remains: {err}");
-}
-
-#[test]
-fn bynkc_applies_the_same_fixes() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built");
-        return;
-    };
-    let root = cascade_project("bynkc");
-    let (code, err) = run(&bynkc, &root, &["check", "--fix", "."], &[]);
-    assert_eq!(code, 0, "{err}");
-    assert_eq!(
-        read(&root.join("src/app/relay.bynk")),
-        relay(" given Beta", " given Alpha, Beta")
-    );
-    assert!(err.contains("fixed: src/app/relay.bynk (2 edits)"), "{err}");
-}
-
-#[test]
-fn the_bynk_bynkc_override_forwards_fix() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built");
-        return;
-    };
-    let root = cascade_project("delegated");
-    let env = [("BYNK_BYNKC", bynkc.as_path())];
-    let (code, err) = run(&bynk(), &root, &["check", "--fix"], &env);
-    assert_eq!(code, 0, "{err}");
-    assert_eq!(
-        read(&root.join("src/app/relay.bynk")),
-        relay(" given Beta", " given Alpha, Beta")
-    );
-    assert!(err.contains("fixed: src/app/relay.bynk (2 edits)"), "{err}");
 }
 
 #[test]

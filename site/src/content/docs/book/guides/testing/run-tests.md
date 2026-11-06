@@ -4,13 +4,13 @@ title: Run your tests
 **Goal:** run a project's `suite` and `integration` blocks, read pass/fail, and —
 in your editor — click straight from a failing expectation to the line that failed.
 
-Once you've [written some tests](/book/guides/testing/write-tests/), run them with `bynkc test`:
+Once you've [written some tests](/book/guides/testing/write-tests/), run them with `bynk test`:
 
 ```sh
-bynkc test            # from the project root
+bynk test            # from the project root
 ```
 
-`bynkc test` compiles the project (every generated `tests/*.test.ts` module
+`bynk test` compiles the project (every generated `tests/*.test.ts` module
 included), then runs the aggregated runner under Node — type-checking as it goes,
 so a type error stops you with the usual diagnostics. It also checks every event
 against the committed `bynk.schema.lock`, without writing it, so a breaking event
@@ -53,11 +53,11 @@ commerce.money › more discount, never a higher price
   property failed after 41 cases (seed 0x5f3a)
   shrunk counterexample:  p = 100, a = 10, b = 20
   expect discount(p, b) <= discount(p, a)
-  reproduce: bynkc test commerce/money.bynk --seed 0x5f3a
+  reproduce: bynk test commerce/money.bynk --seed 0x5f3a
 ```
 
 Each run draws a **fresh random seed**, printed only on failure. Thread it back
-with `bynkc test --seed <hex>` (e.g. `--seed 0x5f3a`) to make the run reproduce
+with `bynk test --seed <hex>` (e.g. `--seed 0x5f3a`) to make the run reproduce
 byte-for-byte — the same generated inputs, the same shrink, every time. This is
 what the reproduce line pastes for you, so a flaky-looking property becomes a
 deterministic one you can debug.
@@ -83,7 +83,7 @@ For CI and tooling, `--format json` emits a single, stable JSON **document**
 instead of the human lines:
 
 ```sh
-bynkc test --format json
+bynk test --format json
 ```
 
 ```jsonc
@@ -136,7 +136,7 @@ case's duration.
 attributed to your `.bynk` source** — not the generated TypeScript:
 
 ```sh
-bynkc test --coverage
+bynk test --coverage
 ```
 
 ```text
@@ -197,14 +197,14 @@ every executable line. (`covered` is the count.)
 
 The [VS Code extension](/docs/editor-and-tooling/editor-support/) consumes that
 JSON surface directly. Open the **Testing** view (the beaker icon): the tree
-populates by **discovery** — `bynkc test --no-run --format json` lists your
+populates by **discovery** — `bynk test --no-run --format json` lists your
 suites and cases without running them, so each test links to its `.bynk` line
 before you run anything (use the Refresh control to re-discover after edits).
 Run from the tree, or invoke **Bynk: Run Tests** from the command palette;
 results then show inline, a failing expectation links to its `.bynk` line, and a
 compile failure lands in the Problems panel exactly as
-[`bynkc check`](/docs/cli/) does. The extension resolves `bynkc` the
-same way the check task does — the `bynk.compilerPath` setting, else `bynkc` on
+[`bynk check`](/docs/bynk-cli/) does. The extension resolves `bynk` the
+same way the other tasks do — the `bynk.bynkPath` setting, else `bynk` on
 `PATH`.
 
 A [doc example](/book/reference/testing/#doc-examples-run) marked `bynk test` is a
@@ -231,4 +231,4 @@ The Run profile's **Watch** toggle reruns the watched tests when a `.bynk` file 
 
 - [Write tests and stub collaborators](/book/guides/testing/write-tests/) — the `suite` block, `expect`, and `stub`.
 - [Test tiers](/book/guides/testing/integration/) — the `as <tier>` dial and a `system` flow over the real wire.
-- Reference: [CLI (`bynkc`)](/docs/cli/) — every `bynkc test` flag and exit code.
+- Reference: [CLI (`bynk`)](/docs/bynk-cli/) — every `bynk test` flag and exit code.

@@ -4,7 +4,7 @@
 //! v0.58): it writes a **complete, runnable** single-context HTTP service that
 //! `bynk dev` serves unmodified. Unlike `dev`, `new` shells nothing, compiles
 //! nothing, and reads no network — it is pure, offline file-writing, so it
-//! works before `bynkc`, Node, or `wrangler` are installed (D4).
+//! works before `bynk`, Node, or `wrangler` are installed (D4).
 //!
 //! The starter, manifest, `.gitignore` and `.gitattributes` are **embedded**
 //! via `include_str!` (the first-party precedent, ADR 0086): each template carries a

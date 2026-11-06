@@ -1,6 +1,6 @@
 ---
 title: Developer Documentation
-description: Operating the Bynk toolchain — the bynkc compiler and bynk driver, the bynk.toml manifest, TypeScript emission, and editor tooling — kept distinct from the language reference.
+description: Operating the Bynk toolchain — the bynk compiler and driver, the bynk.toml manifest, TypeScript emission, and editor tooling — kept distinct from the language reference.
 ---
 
 import { CardGrid, LinkCard } from "@astrojs/starlight/components";
@@ -20,8 +20,7 @@ operating the tools that act on that language.
 ## Command-line tools
 
 <CardGrid>
-  <LinkCard title="bynkc — the compiler" href="/docs/cli/" description="The compiler invoked directly and in CI: compile, check, fmt, and test, with their flags, exit codes, and diagnostics." />
-  <LinkCard title="bynk — the driver" href="/docs/bynk-cli/" description="The developer front-end that orchestrates the compiler and the Node toolchain: doctor, new, and dev." />
+  <LinkCard title="bynk — the CLI" href="/docs/bynk-cli/" description="The compiler and developer front-end: compile, check, fmt, test, and the Node toolchain commands (doctor, new, dev, deploy)." />
 </CardGrid>
 
 ## Project & output
@@ -58,5 +57,5 @@ the toolchain, for contributors and embedders. Most users compile Bynk through t
 CLIs rather than depending on these crates directly.
 
 <CardGrid>
-  <LinkCard title="Crate API docs" href="/docs/api/" description="rustdoc for every workspace crate: bynkc, bynk, the compiler pipeline libraries, and the tooling crates." />
+  <LinkCard title="Crate API docs" href="/docs/api/" description="rustdoc for every workspace crate: bynk, the compiler pipeline libraries, and the tooling crates." />
 </CardGrid>

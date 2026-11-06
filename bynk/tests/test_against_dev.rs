@@ -9,8 +9,7 @@
 //! is left: each one's readiness file is gone, and nothing in its process
 //! group survives.
 //!
-//! Skipped without `node` and `wrangler`/`npx`, or without the sibling
-//! `bynkc` binary; a non-empty `BYNK_REQUIRE_WORKERD` turns the skip into a
+//! Skipped without `node` and `wrangler`/`npx`; a non-empty `BYNK_REQUIRE_WORKERD` turns the skip into a
 //! failure.
 
 #![cfg(unix)]
@@ -54,13 +53,9 @@ fn copy_dir(from: &Path, to: &Path) {
 #[test]
 fn system_suites_run_against_a_local_bynk_dev_one_per_env() {
     let bynk = PathBuf::from(env!("CARGO_BIN_EXE_bynk"));
-    let bynkc = bynk.with_file_name("bynkc");
     if (!have("node") || !(have("wrangler") || have("npx")))
         && skip("`node`, and `wrangler` or `npx`, are not available")
     {
-        return;
-    }
-    if !bynkc.exists() && skip("the `bynkc` binary is not built beside `bynk`") {
         return;
     }
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -76,8 +71,7 @@ fn system_suites_run_against_a_local_bynk_dev_one_per_env() {
         .arg(&proj)
         .arg("--output")
         .arg(&out)
-        .args(["--format", "json", "--against", "dev", "--allow-skew"])
-        .env("BYNK_BYNKC", &bynkc)
+        .args(["--format", "json", "--against", "dev"])
         .output()
         .expect("run bynk test --against dev");
     let stdout = String::from_utf8_lossy(&o.stdout);

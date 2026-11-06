@@ -1,7 +1,7 @@
-//! v0.127 behavioural test for `bynkc test --case <name>` (editor-currency slice
+//! v0.127 behavioural test for `bynk test --case <name>` (editor-currency slice
 //! 6). The per-case run filter behind the editor's `▷ Run Test` lens: with
 //! `--case` set, only cases whose name matches execute — not merely reported,
-//! executed. This drives the real `bynkc test` CLI against a two-case fixture and
+//! executed. This drives the real `bynk test` CLI against a two-case fixture and
 //! asserts the sibling case does not run.
 //!
 //! Like the other toolchain-driving tests it skips loudly when no TypeScript
@@ -23,7 +23,7 @@ fn tool_exists(name: &str) -> bool {
 }
 
 /// A TypeScript runner is available if either `tsx` or (`tsc` + `node`) is on
-/// PATH — the same fallback chain `bynkc test` itself walks.
+/// PATH — the same fallback chain `bynk test` itself walks.
 fn have_runner() -> bool {
     tool_exists("tsx") || (tool_exists("tsc") && tool_exists("node")) || tool_exists("npx")
 }
@@ -32,7 +32,7 @@ fn fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/case_filter")
 }
 
-/// Run `bynkc test <fixture>` with optional `--case <name>` and return combined
+/// Run `bynk test <fixture>` with optional `--case <name>` and return combined
 /// stdout+stderr.
 fn run(case: Option<&str>, out_dir: &str) -> String {
     // Each run gets its own parent dir: the runner derives the executed
@@ -50,7 +50,7 @@ fn run(case: Option<&str>, out_dir: &str) -> String {
     if let Some(name) = case {
         cmd.arg("--case").arg(name);
     }
-    let out = cmd.output().expect("run bynkc test");
+    let out = cmd.output().expect("run bynk test");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     s
@@ -58,10 +58,10 @@ fn run(case: Option<&str>, out_dir: &str) -> String {
 
 #[test]
 fn case_filter_runs_only_the_named_case() {
-    // `bynkc test`'s runner detection is Unix-only (it shells out to `which`), so
+    // `bynk test`'s runner detection is Unix-only (it shells out to `which`), so
     // this end-to-end test is meaningful only where the CLI can locate a runner.
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {

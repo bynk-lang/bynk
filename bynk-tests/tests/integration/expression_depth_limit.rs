@@ -6,7 +6,7 @@
 //! and the postfix receiver spine (`a.b.c…`, `f()?.g()…`). A flat `1 + 1 + … + 1`
 //! or a long `x.a.a.a…` produces an arbitrarily deep tree that overflows every
 //! recursive consumer downstream (the checker's `type_of`, the formatter, the
-//! emitter, and the AST's own recursive `Drop`). A `bynkc check` on a 20 000-term
+//! emitter, and the AST's own recursive `Drop`). A `bynk check` on a 20 000-term
 //! chain used to abort with `fatal runtime error: stack overflow` (exit 134).
 //!
 //! The fix counts every such fold against the same nesting budget the parser

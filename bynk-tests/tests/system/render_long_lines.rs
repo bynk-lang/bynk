@@ -1,4 +1,4 @@
-//! #1666: `bynkc check` on a file with a megabyte line. The report used to
+//! #1666: `bynk check` on a file with a megabyte line. The report used to
 //! cost time and output in proportion to the line (seconds, and five ANSI
 //! escapes a character, even with stderr piped to a file); now the line is cut
 //! to a window around the label, and colour is off when stderr isn't a
@@ -24,7 +24,7 @@ fn a_megabyte_line_renders_small_fast_and_uncoloured_when_piped() {
         .env_remove("FORCE_COLOR")
         .env_remove("CLICOLOR_FORCE")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     let took = started.elapsed();
     let stderr = String::from_utf8_lossy(&out.stderr);
 
@@ -64,7 +64,7 @@ fn force_color_colours_a_piped_report() {
         .env_remove("CLICOLOR_FORCE")
         .env("FORCE_COLOR", "1")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     let stderr = String::from_utf8_lossy(&out.stderr);
 
     assert!(!out.status.success(), "the file has a parse error");

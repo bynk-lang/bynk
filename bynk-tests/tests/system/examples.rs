@@ -127,7 +127,7 @@ fn every_example_output_passes_tsc_strict() {
     std::fs::create_dir_all(&root).unwrap();
     for name in EXAMPLES.iter().filter(|n| !KNOWN_TSC_RED.contains(n)) {
         // #1655: the example's *project form* (`bynk.toml`, `src/` and
-        // `tests/`), exactly what `bynkc compile <example> --target workers`
+        // `tests/`), exactly what `bynk compile <example> --target workers`
         // produces. This gate compiled `src/` alone, so it missed a workers
         // build writing test modules that imported the bundle layout; a workers
         // build now emits none, and this pins that the whole output is

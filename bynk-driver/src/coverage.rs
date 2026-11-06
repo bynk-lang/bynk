@@ -1,4 +1,4 @@
-//! `bynkc test --coverage` — remap V8 line coverage onto `.bynk` source.
+//! `bynk test --coverage` — remap V8 line coverage onto `.bynk` source.
 //!
 //! The test runner already owns the two artefacts a coverage tool needs and a
 //! user cannot reconstruct: it launches the `node` process that executes the

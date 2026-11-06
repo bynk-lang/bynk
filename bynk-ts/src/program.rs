@@ -49,7 +49,7 @@ impl TsProgram {
     /// false positive for *this* check, whose whole point is the opaque
     /// escape hatch specifically. `TsStmtKind` is `pub(crate)`, so only code
     /// inside this crate can walk it directly; this method is the public
-    /// surface a caller outside `bynk-ts` (`bynkc`'s own
+    /// surface a caller outside `bynk-ts` (`bynk`'s own
     /// `tests/tsc_verify.rs`) uses instead.
     ///
     /// Every container is walked exhaustively (`match`, no wildcard arm) so

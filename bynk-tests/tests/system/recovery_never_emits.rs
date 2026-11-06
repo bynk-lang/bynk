@@ -2,7 +2,7 @@
 //! (a recovering parse), so partial programs flow further than they did. None
 //! of that may reach emission: a program with any error-severity diagnostic
 //! still produces no output, from `compile`, `compile_project`, or
-//! `bynkc test`.
+//! `bynk test`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -55,7 +55,7 @@ fn project_compile_refuses_a_partial_program() {
 }
 
 #[test]
-fn bynkc_test_runs_nothing_for_a_partial_program() {
+fn bynk_test_runs_nothing_for_a_partial_program() {
     for (name, source) in [
         ("test-resolve", RESOLVE_ERROR),
         ("test-syntax", SYNTAX_ERROR),
@@ -68,9 +68,9 @@ fn bynkc_test_runs_nothing_for_a_partial_program() {
             .arg("--output")
             .arg(&out_dir)
             .output()
-            .expect("run bynkc test");
+            .expect("run bynk test");
         let stdout = String::from_utf8_lossy(&out.stdout);
-        assert!(!out.status.success(), "{name}: `bynkc test` must fail");
+        assert!(!out.status.success(), "{name}: `bynk test` must fail");
         assert!(
             !stdout.contains("passed"),
             "{name}: no case may run:\n{stdout}"
@@ -82,7 +82,7 @@ fn bynkc_test_runs_nothing_for_a_partial_program() {
 /// #1710: a file the strict parse rejects now has its surviving declarations
 /// checked on the project path. That must not let any of the project reach
 /// emission: a clean sibling unit next to a broken file is still refused, by
-/// `compile_project` and by `bynkc test` (which runs no case and writes
+/// `compile_project` and by `bynk test` (which runs no case and writes
 /// nothing). The clean sibling alone compiles, so a refusal is the broken
 /// file's doing.
 #[test]
@@ -132,9 +132,9 @@ fn a_clean_sibling_of_a_partially_parsed_file_is_not_emitted() {
         .arg("--output")
         .arg(&out_dir)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(!out.status.success(), "`bynkc test` must fail");
+    assert!(!out.status.success(), "`bynk test` must fail");
     assert!(!stdout.contains("passed"), "no case may run:\n{stdout}");
     assert!(!out_dir.exists(), "nothing may be emitted");
 }

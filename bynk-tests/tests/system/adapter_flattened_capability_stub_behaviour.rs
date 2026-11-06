@@ -7,7 +7,7 @@
 //! `makeTestDeps()`, so the stub class was generated but never instantiated —
 //! `deps.Locale` was `undefined` and the test threw at runtime instead of
 //! exercising the stub) that no check in the suite could catch. This drives
-//! the real `bynkc test` CLI against fixture 807 so a regression of that class
+//! the real `bynk test` CLI against fixture 807 so a regression of that class
 //! fails CI, not just a manual re-run.
 //!
 //! Like the other toolchain-driving tests it skips loudly when no TypeScript
@@ -49,7 +49,7 @@ fn run(fixture_src: &PathBuf, out_dir: &str) -> String {
         .arg("--output")
         .arg(&out_root)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     s
@@ -57,16 +57,16 @@ fn run(fixture_src: &PathBuf, out_dir: &str) -> String {
 
 // One `#[test]` running both fixtures sequentially, matching the sibling
 // toolchain-driving files (`case_filter.rs`, `contract_behaviour.rs`, …),
-// each of which has exactly one `#[test]` — concurrent `bynkc test`
+// each of which has exactly one `#[test]` — concurrent `bynk test`
 // invocations from the same binary race each other (observed: interleaved
 // stdout from two runs, unrelated to this fix), so this repo's convention is
 // one CLI-driving `#[test]` per file rather than chasing that down here.
 #[test]
 fn adapter_flattened_capability_stubs_actually_run() {
-    // `bynkc test`'s runner detection is Unix-only, like the sibling
+    // `bynk test`'s runner detection is Unix-only, like the sibling
     // toolchain-driving tests.
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {

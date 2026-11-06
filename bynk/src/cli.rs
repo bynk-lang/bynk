@@ -1,9 +1,8 @@
 //! The `bynk` driver command-line interface.
 //!
 //! The developer front-end: `doctor` / `new` / `dev`, plus the everyday
-//! `check` / `fmt` / `test` (v0.138, #487). `check` and `fmt` run the linked
-//! pipeline in-process; `test` delegates to the driver-resolved `bynkc`. The
-//! flag surfaces mirror `bynkc`'s so the two are drop-in equivalent.
+//! `check` / `fmt` / `test` (v0.138, #487). `check`, `compile`, `fmt` and `test` run the
+//! linked pipeline in-process.
 
 use std::path::PathBuf;
 
@@ -88,7 +87,7 @@ pub enum Command {
     /// exact remedy for anything missing.
     ///
     /// Bare `bynk doctor` is informational: it surveys every capability and
-    /// exits 0 unless `bynkc` itself is unusable. `--only <capability>` gates on
+    /// exits 0 unless the compiler itself is unusable. `--only <capability>` gates on
     /// one capability (exits non-zero if its tools are missing); `--strict`
     /// turns every warning into a failure, for CI.
     Doctor {
@@ -298,7 +297,7 @@ pub enum Command {
     ///
     /// Writes a `bynk.toml`, a `.gitignore`, and `src/<name>.bynk` into a new
     /// directory. Pure offline file-writing — it shells nothing and needs no
-    /// toolchain, so you can run it before `bynkc`, Node, or `wrangler` are
+    /// toolchain, so you can run it before Node or `wrangler` are
     /// installed. The project name defaults to the target directory's final
     /// component; `--name` overrides it and must be a legal Bynk identifier.
     New {
@@ -312,10 +311,10 @@ pub enum Command {
     },
     /// Type-check a file or project.
     ///
-    /// Writes no output — the `bynkc check` behaviour through the driver
+    /// Writes no output — the `bynk check` behaviour through the driver
     /// (v0.138).
     ///
-    /// Runs the compiler pipeline in-process (no `bynkc` binary required).
+    /// Runs the compiler pipeline in-process.
     Check {
         /// Input `.bynk` file or project root. Defaults to the current directory.
         #[arg(default_value = ".")]
@@ -342,10 +341,9 @@ pub enum Command {
     },
     /// Compile a project to TypeScript.
     ///
-    /// The `bynkc compile` behaviour, run in-process (#2471, #2998).
+    /// The `bynk compile` behaviour, run in-process (#2471, #2998).
     ///
-    /// Needs no `bynkc` binary: the compiler is linked in, so `BYNK_BYNKC` is
-    /// ignored here. With `--sources-stdin` it compiles unsaved editor buffers:
+    /// The compiler is linked in. With `--sources-stdin` it compiles unsaved editor buffers:
     /// a JSON object `{ "<absolute path>": "<text>" }`
     /// on stdin wins over the files on disk, and `bynk.schema.lock` is neither
     /// read nor written. What "Bynk: Show Compiled Output" runs.
@@ -376,11 +374,6 @@ pub enum Command {
         sources_stdin: bool,
         #[command(flatten)]
         lock: LockArgs,
-        /// No effect: `compile` runs in-process, so there is no second
-        /// compiler to skew against (#2998). Kept so existing invocations
-        /// keep working.
-        #[arg(long, hide = true)]
-        allow_skew: bool,
     },
     /// Write an OpenAPI document for the project's HTTP services.
     ///
@@ -475,10 +468,10 @@ pub enum Command {
     },
     /// Format `.bynk` source files.
     ///
-    /// Formats in place — the `bynkc fmt` behaviour through the driver
+    /// Formats in place — the `bynk fmt` behaviour through the driver
     /// (v0.138). Passing `-` reads from stdin and writes to stdout.
     ///
-    /// Runs the formatter in-process (no `bynkc` binary required).
+    /// Runs the formatter in-process.
     ///
     /// `--indent`, `--indent-width`, `--max-line-width` and
     /// `--no-trailing-comma` override the canonical style for this run; with
@@ -489,20 +482,15 @@ pub enum Command {
     },
     /// Run the project's tests.
     ///
-    /// Discovers and runs test declarations — the `bynkc test` behaviour
+    /// Discovers and runs test declarations — the `bynk test` behaviour
     /// through the driver (v0.138).
     ///
-    /// Runs in-process (no `bynkc` binary required), exactly as `bynkc test`.
-    /// Requires `tsc` (with Node.js) or `tsx` on PATH, exactly as `bynkc test`.
+    /// Runs in-process. Requires `tsc` (with Node.js) or `tsx` on PATH.
     Test {
         #[command(flatten)]
         args: bynk_driver::test_runner::TestArgs,
         #[command(flatten)]
         lock: LockArgs,
-        /// No effect: `test` runs in-process, so there is no second compiler
-        /// to skew against (#2998). Kept so existing invocations keep working.
-        #[arg(long, hide = true)]
-        allow_skew: bool,
     },
     /// Fetch dependencies and write `bynk.lock`.
     ///
@@ -788,8 +776,7 @@ pub enum MigrateCommand {
     },
 }
 
-/// `bynk check --format` selector, mirroring `bynkc`'s `DiagFormat` (rich/short)
-/// so the two commands are drop-in equivalent.
+/// `bynk check --format` selector (rich/short).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, ValueEnum)]
 pub enum CheckFormatArg {
     /// Ariadne rendering with full source context (the default).
@@ -803,7 +790,7 @@ pub enum CheckFormatArg {
 /// `--only` selector. Mirrors [`Capability`] minus the internal distinctions.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum CapabilityArg {
-    /// `bynkc` compile / check / fmt.
+    /// Compile / check / fmt.
     Compile,
     /// `bynk test` — Node + tsc|tsx.
     Test,

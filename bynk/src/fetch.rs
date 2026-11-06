@@ -21,7 +21,7 @@
 //! and no URL or revision that looks like an option. Bynk passes no
 //! credentials: a private repository works through the user's git setup.
 //!
-//! The compile never fetches: `bynkc`, the language server and the
+//! The compile never fetches: `bynk`, the language server and the
 //! playground read the lock and the store ([`bynk_driver::project`]'s graph
 //! resolution reports `not_fetched` for a missing entry).
 

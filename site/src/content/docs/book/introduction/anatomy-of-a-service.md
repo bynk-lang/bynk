@@ -55,7 +55,7 @@ service api from http {
 }
 ```
 
-That is the whole program. Compiling it with `bynkc` produces TypeScript you can
+That is the whole program. Compiling it with `bynk` produces TypeScript you can
 read and deploy to Cloudflare Workers.
 
 ## What each part is

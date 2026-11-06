@@ -34,7 +34,7 @@ details) so a maintainer can reach out.
 
 Please include, where possible:
 
-- The affected component (e.g. the `bynkc` compiler, an emitted Workers
+- The affected component (e.g. the `bynk` compiler, an emitted Workers
   artifact, the `bynk-lsp` language server, or the VS Code extension).
 - A description of the issue and its impact.
 - Steps to reproduce, or a proof-of-concept.

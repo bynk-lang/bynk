@@ -4,7 +4,7 @@
 //! seed, and a shrunk counterexample with a copy-paste reproduce line — and
 //! `--seed <hex>` reproduces the run byte-for-byte.
 //!
-//! Drives the real `bynkc test` CLI against a fixture project, so it exercises
+//! Drives the real `bynk test` CLI against a fixture project, so it exercises
 //! the `--seed` threading, the generator/runner, and shrinking end to end. Like
 //! the other toolchain-driving tests it skips loudly when no TypeScript runner
 //! (`tsc`+`node` or `tsx`) is available; `BYNK_REQUIRE_TSC=1` turns the skip
@@ -25,7 +25,7 @@ fn tool_exists(name: &str) -> bool {
 }
 
 /// A TypeScript runner is available if either `tsx` or (`tsc` + `node`) is on
-/// PATH — the same fallback chain `bynkc test` itself walks.
+/// PATH — the same fallback chain `bynk test` itself walks.
 fn have_runner() -> bool {
     tool_exists("tsx") || (tool_exists("tsc") && tool_exists("node")) || tool_exists("npx")
 }
@@ -34,7 +34,7 @@ fn fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/property_fail")
 }
 
-/// Run `bynkc test <fixture> --seed <seed>` and return combined stdout+stderr.
+/// Run `bynk test <fixture> --seed <seed>` and return combined stdout+stderr.
 fn run_with_seed(seed: &str, out_dir: &str) -> String {
     // Emit under the target tmpdir so no build artifacts land in the source tree.
     // Each run gets its own parent dir: the runner derives the executed
@@ -52,7 +52,7 @@ fn run_with_seed(seed: &str, out_dir: &str) -> String {
         .arg("--seed")
         .arg(seed)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     s
@@ -60,13 +60,13 @@ fn run_with_seed(seed: &str, out_dir: &str) -> String {
 
 #[test]
 fn failing_property_reports_seed_and_shrunk_counterexample() {
-    // `bynkc test`'s runner detection is Unix-only (it shells out to `which`), so
+    // `bynk test`'s runner detection is Unix-only (it shells out to `which`), so
     // the CLI cannot locate `tsc`/`node`/`tsx` on Windows and never runs the
     // emitted tests. This test drives that CLI end to end, so it is meaningful
     // only where the CLI can run a runner — skip on Windows. (The *emission* is
     // covered platform-independently by the golden fixture `243_property_passes`.)
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -122,7 +122,7 @@ fn mixed_fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/property_seed_mixed")
 }
 
-/// `bynkc test <fixture> --format json --seed <seed> [--case <name>]` and its
+/// `bynk test <fixture> --format json --seed <seed> [--case <name>]` and its
 /// parsed document.
 fn json_run(out_dir: &str, seed: &str, case: Option<&str>) -> serde_json::Value {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -137,7 +137,7 @@ fn json_run(out_dir: &str, seed: &str, case: Option<&str>) -> serde_json::Value 
     if let Some(case) = case {
         cmd.args(["--case", case]);
     }
-    let out = cmd.output().expect("run bynkc test");
+    let out = cmd.output().expect("run bynk test");
     serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
         panic!(
             "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
@@ -164,7 +164,7 @@ fn case_named<'a>(doc: &'a serde_json::Value, name: &str) -> &'a serde_json::Val
 #[test]
 fn a_failed_property_reports_its_seed_and_counterexample_as_data() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -217,7 +217,7 @@ fn a_failed_property_reports_its_seed_and_counterexample_as_data() {
 #[test]
 fn a_project_mixing_property_and_plain_modules_type_checks() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -238,7 +238,7 @@ fn a_project_mixing_property_and_plain_modules_type_checks() {
         .arg(&out_root)
         .args(["--format", "json", "--seed", "0x5f3a"])
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
         panic!(
             "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
@@ -267,7 +267,7 @@ fn invariant_fail_fixture() -> PathBuf {
 #[test]
 fn a_violated_invariant_shrinks_and_a_failed_expect_reports_its_position() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -288,7 +288,7 @@ fn a_violated_invariant_shrinks_and_a_failed_expect_reports_its_position() {
         .arg(&out_root)
         .args(["--format", "json", "--seed", "0x5f3a"])
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
         panic!(
             "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",

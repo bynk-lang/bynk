@@ -90,7 +90,7 @@
     },
     "fmt": {
       "additionalProperties": false,
-      "description": "Formatter settings, read by format-on-save in the editor and by `bynkc fmt` / `bynk fmt`, through one shared reader. A flag passed to `fmt` overrides the key it names.",
+      "description": "Formatter settings, read by format-on-save in the editor and by `bynk fmt` / `bynk fmt`, through one shared reader. A flag passed to `fmt` overrides the key it names.",
       "properties": {
         "indent": {
           "default": "tab",
@@ -377,7 +377,7 @@
     },
     "workers": {
       "additionalProperties": false,
-      "description": "Settings for the Cloudflare Workers a Workers build emits (`bynkc compile\n--target workers`, `bynk dev`, `bynk deploy`).",
+      "description": "Settings for the Cloudflare Workers a Workers build emits (`bynk compile\n--target workers`, `bynk dev`, `bynk deploy`).",
       "properties": {
         "compatibility_flags": {
           "default": [],

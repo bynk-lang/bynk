@@ -40,7 +40,7 @@ fn the_build_and_the_editor_refuse_the_same_exports() {
         .args(["check", "--format", "short"])
         .arg(&root)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     let out = format!(
         "{}{}",
         String::from_utf8_lossy(&checked.stdout),
@@ -101,7 +101,7 @@ fn the_build_and_the_editor_refuse_the_same_exports() {
         .args(["check", "--format", "short"])
         .arg(&root)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     assert!(
         checked.status.success(),
         "{}",

@@ -6,7 +6,7 @@ import starlightLinksValidator from "starlight-links-validator";
 // Bynk highlighting is a TextMate grammar (scopeName: source.bynk), which Shiki
 // consumes directly. This is a copy of the VS Code extension's grammar
 // (bynk-lang/vscode-bynk, syntaxes/bynk.tmLanguage.json), kept here so the site
-// builds without the extension's repository. bynkc's `textmate_keywords` test
+// builds without the extension's repository. the `textmate_keywords` test
 // holds it to the reserved keywords; refresh it from the extension when its
 // grammar changes.
 import bynkGrammar from "./src/grammars/bynk.tmLanguage.json" with { type: "json" };
@@ -27,6 +27,8 @@ const includeBase = fileURLToPath(new URL("./src", import.meta.url));
 // https://astro.build/config
 export default defineConfig({
   site: "https://bynk-lang.org",
+  // `/docs/cli/` was the `bynkc` page (removed in E3-4); the `bynk` page holds its content.
+  redirects: { "/docs/cli": "/docs/bynk-cli/" },
   markdown: {
     remarkPlugins: [[remarkBynkDirectives, { includeBase }]],
     rehypePlugins: [[rehypeMermaid, { strategy: "inline-svg" }]],
@@ -100,8 +102,7 @@ export default defineConfig({
             {
               label: "Command-line tools",
               items: [
-                { label: "CLI (bynkc)", link: "/docs/cli/" },
-                { label: "CLI (bynk driver)", link: "/docs/bynk-cli/" },
+                { label: "CLI (bynk)", link: "/docs/bynk-cli/" },
               ],
             },
             {

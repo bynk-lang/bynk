@@ -5,7 +5,7 @@
 //! The project is `fixtures/smoke`: one route that answers a 500, one whose
 //! path parameter is a `Matches` type `Val` cannot fabricate, and a suite of
 //! the project's own that must not run. The runs need `node` (and, against
-//! `dev`, `wrangler` or `npx`) and the sibling `bynkc` binary; without them a
+//! `dev`, `wrangler` or `npx`); without them a
 //! test is skipped, and a non-empty `BYNK_REQUIRE_WORKERD` makes the `dev`
 //! skip a failure.
 
@@ -38,25 +38,19 @@ fn copy_dir(from: &Path, to: &Path) {
 struct Project {
     dir: PathBuf,
     bynk: PathBuf,
-    bynkc: PathBuf,
 }
 
 impl Project {
-    /// A fresh copy of the fixture, or `None` when `bynkc` is not built.
+    /// A fresh copy of the fixture.
     fn new(name: &str) -> Option<Self> {
         let bynk = PathBuf::from(env!("CARGO_BIN_EXE_bynk"));
-        let bynkc = bynk.with_file_name("bynkc");
-        if !bynkc.exists() {
-            eprintln!("skipping: the `bynkc` binary is not built beside `bynk`");
-            return None;
-        }
         let dir = std::env::temp_dir().join(format!("bynk-smoke-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         copy_dir(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/smoke"),
             &dir.join("proj"),
         );
-        Some(Project { dir, bynk, bynkc })
+        Some(Project { dir, bynk })
     }
 
     fn test(&self, args: &[&str]) -> Output {
@@ -66,8 +60,6 @@ impl Project {
             .arg("--output")
             .arg(self.dir.join("out"))
             .args(args)
-            .arg("--allow-skew")
-            .env("BYNK_BYNKC", &self.bynkc)
             .output()
             .expect("run bynk test")
     }

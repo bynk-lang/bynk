@@ -60,14 +60,10 @@ fn run(name: &str, cwd: &Path, home: &Path, args: &[&str], env: &[(&str, &str)])
     cmd.args(args)
         .current_dir(cwd)
         .env("BYNK_HOME", home)
-        .env_remove("BYNK_BYNKC")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (k, v) in env {
         cmd.env(k, v);
-    }
-    if name == "bynk" && args.first() == Some(&"test") && bin("bynkc").exists() {
-        cmd.env("BYNK_BYNKC", bin("bynkc"));
     }
     let out = cmd.output().expect("spawn");
     (
@@ -210,13 +206,9 @@ fn a_registry_package_is_selected_verified_locked_and_run() {
     );
     let (code, out) = bynk(&app, &home, &["check", "--locked", "--offline"]);
     assert_eq!(code, 0, "{out}");
-    if bin("bynkc").exists() {
-        let (code, out) = run("bynkc", &app, &home, &["check", "."], &[]);
-        assert_eq!(code, 0, "{out}");
-        let (code, out) = bynk(&app, &home, &["test"]);
-        assert_eq!(code, 0, "{out}");
-        assert!(out.contains("through the registry"), "{out}");
-    }
+    let (code, out) = bynk(&app, &home, &["test"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("through the registry"), "{out}");
 }
 
 #[test]

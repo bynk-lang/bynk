@@ -204,7 +204,7 @@ service api from http {
 ```
 
 ```sh
-bynkc compile . --output out --target workers
+bynk compile . --output out --target workers
 ```
 
 ## What you have done

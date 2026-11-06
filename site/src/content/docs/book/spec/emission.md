@@ -666,7 +666,7 @@ appears.
 Each test unit emits a per-target test module; an aggregating runner
 (`tests/main.ts`) collects the module results. An `assert`
 ([§5.9](/book/spec/static-semantics/#59-testing-constructs)) lowers to a runtime check
-that throws on failure, which the runner records as a failing case. `bynkc test`
+that throws on failure, which the runner records as a failing case. `bynk test`
 emits these modules, compiles them with `tsc`, and runs the aggregated runner on
 Node ([§8.4](/book/spec/compilation-model/#84-build-pipeline--conformance-to-typescript)).
 
@@ -685,11 +685,11 @@ Node ([§8.4](/book/spec/compilation-model/#84-build-pipeline--conformance-to-ty
 
 A contracted pure function (`requires`/`ensures`, [§5.4.1a](/book/spec/static-semantics/#541a-function-contracts-v0115))
 emits behind a **build-profile switch** (ADR 0150). In the **dev/test** profile
-(`bynkc test`, `--inspect`) the function is wrapped by a call-site guard: each
+(`bynk test`, `--inspect`) the function is wrapped by a call-site guard: each
 `requires` is checked on entry and each `ensures` on exit (over the bound
 `result`), throwing a contract failure that names the clause and the offending
 arguments/`result`. The guard is emitted once around the definition (O(1) in code
-size), not at each call site. In the **release** profile (`bynkc compile`) the
+size), not at each call site. In the **release** profile (`bynk compile`) the
 guard is stripped entirely — the emitted function is identical to an uncontracted
 one, so contracts add no production cost or behaviour. The runner attack
 ([§7.4.10](/book/spec/runtime-library/#7410-generative-properties-and-contracts-v0114-v0115))
@@ -741,7 +741,7 @@ default** ([§5.9d](/book/spec/static-semantics/#59d-test-double-provision--stub
     [§7.4.12](/book/spec/runtime-library/#7412-the-stub-clause-v0118)).
 
 Provision is resolved once per case; the stub, the cursor, and the match table are
-emitted only under `bynkc test`. A module with no `suite` emits byte-for-byte
+emitted only under `bynk test`. A module with no `suite` emits byte-for-byte
 unchanged.
 
 A **fault claim** `expect <call> faults` lowers to an async IIFE inside the

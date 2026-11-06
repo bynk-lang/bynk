@@ -5,7 +5,7 @@
 //! and a shrunk **sequence** with a copy-paste reproduce line — and `--seed <hex>`
 //! reproduces the run byte-for-byte.
 //!
-//! Drives the real `bynkc test` CLI against a fixture project, so it exercises the
+//! Drives the real `bynk test` CLI against a fixture project, so it exercises the
 //! `--seed` threading, the driver, the runner, and sequence shrinking end to end.
 //! Like the other toolchain-driving tests it skips loudly when no TypeScript
 //! runner (`tsc`+`node` or `tsx`) is available; `BYNK_REQUIRE_TSC=1` turns the skip
@@ -26,7 +26,7 @@ fn tool_exists(name: &str) -> bool {
 }
 
 /// A TypeScript runner is available if either `tsx` or (`tsc` + `node`) is on
-/// PATH — the same fallback chain `bynkc test` itself walks.
+/// PATH — the same fallback chain `bynk test` itself walks.
 fn have_runner() -> bool {
     tool_exists("tsx") || (tool_exists("tsc") && tool_exists("node")) || tool_exists("npx")
 }
@@ -35,7 +35,7 @@ fn fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/history_fail")
 }
 
-/// Run `bynkc test <fixture> --seed <seed>` and return combined stdout+stderr.
+/// Run `bynk test <fixture> --seed <seed>` and return combined stdout+stderr.
 fn run_with_seed(seed: &str, out_dir: &str) -> String {
     // Each run gets its own parent dir: the runner derives the executed
     // `out-js` tree as a *sibling* of `--output`, so a shared parent (e.g. two
@@ -52,7 +52,7 @@ fn run_with_seed(seed: &str, out_dir: &str) -> String {
         .arg("--seed")
         .arg(seed)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     s
@@ -60,11 +60,11 @@ fn run_with_seed(seed: &str, out_dir: &str) -> String {
 
 #[test]
 fn failing_history_property_reports_seed_and_shrunk_sequence() {
-    // `bynkc test`'s runner detection is Unix-only (it shells out to `which`), so
+    // `bynk test`'s runner detection is Unix-only (it shells out to `which`), so
     // the CLI cannot locate a runner on Windows and never runs the emitted tests.
     // The emission is covered platform-independently by `248_history_property`.
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -125,7 +125,7 @@ fn failing_history_property_reports_seed_and_shrunk_sequence() {
 #[test]
 fn a_failed_history_property_reports_its_seed_and_sequence_as_data() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -145,7 +145,7 @@ fn a_failed_history_property_reports_its_seed_and_sequence_as_data() {
         .arg(&out_root)
         .args(["--format", "json", "--seed", "0x5f3a"])
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("a JSON document");
     let failed = doc["suites"]
         .as_array()

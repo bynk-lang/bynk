@@ -21,7 +21,7 @@ use crate::project::{RemoteSkip, TestTarget};
 pub const DEV: &str = "dev";
 
 /// Internal: the `bynk` binary that can start `bynk dev`, set by `bynk test
-/// --against dev` for the `bynkc` it delegates to. Without it, `bynkc test
+/// --against dev` for the `bynk` it delegates to. Without it, `bynk test
 /// --against dev` is refused.
 pub const DEV_COMMAND_ENV: &str = "BYNK_DEV_COMMAND";
 

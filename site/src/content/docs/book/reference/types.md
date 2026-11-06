@@ -614,7 +614,7 @@ Evaluating either is a fault, like a division by zero or an invariant violation:
 the handler faults, an agent's state does not commit, and the response is the
 existing fault response. The logged fault carries the kind (`Unreachable` or
 `Todo`), the message and the `path:line:col` of the call. A test observes one
-with `expect <call> faults`. `todo` compiles but warns, so `bynkc check
+with `expect <call> faults`. `todo` compiles but warns, so `bynk check
 --deny-warnings` keeps unfinished code out of CI.
 
 They are not keywords: a `fn` or binding of the same name shadows them. There is

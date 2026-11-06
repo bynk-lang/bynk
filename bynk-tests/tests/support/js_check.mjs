@@ -1,6 +1,6 @@
 // Validate that every `.js` file under a root is syntactically valid (parsed as
 // an ES module) — the verification side of the in-browser track's first-class JS
-// artefact (slice 1, ADR 0137). `bynkc compile --emit js` type-strips the emitted
+// artefact (slice 1, ADR 0137). `bynk compile --emit js` type-strips the emitted
 // TypeScript via oxc; this confirms the result is runnable JavaScript with no
 // residual TypeScript syntax (a surviving annotation would fail `node --check`).
 //

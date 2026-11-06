@@ -22,10 +22,10 @@ suite counters {
 Run the suite:
 
 ```sh
-bynkc test .
+bynk test .
 ```
 
-`bynkc test` compiles the project, type-checks it with `tsc`, and runs it with
+`bynk test` compiles the project, type-checks it with `tsc`, and runs it with
 Node, so both must be on your path. `expect` is valid only inside a `case`. It
 takes the same `Bool` predicate an `invariant` does (`is`, `implies`, the
 operators, pure methods) — one predicate surface across code and tests — and a

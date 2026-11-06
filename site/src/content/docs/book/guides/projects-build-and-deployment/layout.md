@@ -33,7 +33,7 @@ suite quantities {
 ```
 
 When you build, the `suite` is **stripped** — never type-checked for the build,
-never emitted to the deployable — while `bynkc test` compiles and runs it. There
+never emitted to the deployable — while `bynk test` compiles and runs it. There
 is no `.test.bynk` suffix: every file is just `.bynk`, and the `suite` keyword is
 what marks a test.
 
@@ -68,9 +68,9 @@ requirement — it names its target, so it is legal in any file.
 ## Build and test
 
 ```sh
-bynkc compile . --output out      # compile the project (suites stripped)
-bynkc test .                      # compile and run the tests
-bynkc check .                     # type-check only
+bynk compile . --output out      # compile the project (suites stripped)
+bynk test .                      # compile and run the tests
+bynk check .                     # type-check only
 ```
 
 ## Workspaces

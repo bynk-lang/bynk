@@ -15,7 +15,7 @@ What it shows:
 - **`Query[T]` reads over the map** — `all` is `sortBy(seq).collect()`, `pending`
   is `filter(…).sortBy(…).collect()`, and `pendingCount` is a storage aggregate
   (`filter(…).count()`) that never materialises the list.
-- **Tests with no harness** — `bynkc test .` constructs the agent by key, calls
+- **Tests with no harness** — `bynk test .` constructs the agent by key, calls
   its handlers, and asserts on the scalar results (the aggregate `pendingCount`,
   the created item, the `Result`).
 
@@ -33,8 +33,8 @@ todo/
 ## Check and test
 
 ```sh
-bynkc check src
-bynkc test .
+bynk check src
+bynk test .
 ```
 
 ```text

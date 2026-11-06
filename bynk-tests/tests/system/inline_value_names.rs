@@ -165,7 +165,7 @@ fn a_suite_let_named_like_a_scaffold_binding_is_left_out() {
         .current_dir(&root)
         .env("NO_COLOR", "1")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     assert!(
         out.status.success(),
         "{}",

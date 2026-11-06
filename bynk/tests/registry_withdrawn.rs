@@ -54,7 +54,6 @@ fn bynk(cwd: &Path, home: &Path, args: &[&str], env: &[(&str, &str)]) -> (i32, S
         .env("BYNK_HOME", home)
         .env("XDG_CONFIG_HOME", home.join("config"))
         .env_remove("BYNK_REGISTRY_ACME_INTERNAL_TOKEN")
-        .env_remove("BYNK_BYNKC")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (k, v) in env {

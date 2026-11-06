@@ -1,4 +1,4 @@
-//! #2461: `bynkc test` type-checks the fenced `bynk` examples in doc comments.
+//! #2461: `bynk test` type-checks the fenced `bynk` examples in doc comments.
 //! A broken example fails the run with a diagnostic at the offending line of
 //! the fence; an `ignore` fence, a fence in another language, and a one-line
 //! doc are left alone. A passing example costs the run nothing: the fixture
@@ -50,7 +50,7 @@ fn project(tag: &str, unit: &str) -> PathBuf {
     root
 }
 
-fn bynkc_test(root: &PathBuf, format: &str) -> (bool, String) {
+fn bynk_test(root: &PathBuf, format: &str) -> (bool, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test", "--no-run", "--format", format])
         .arg(root)
@@ -58,7 +58,7 @@ fn bynkc_test(root: &PathBuf, format: &str) -> (bool, String) {
         .arg(root.join("out"))
         .env("NO_COLOR", "1")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -70,7 +70,7 @@ fn bynkc_test(root: &PathBuf, format: &str) -> (bool, String) {
 #[test]
 fn a_broken_example_fails_the_run_at_the_fence() {
     let root = project("broken", UNIT);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(!ok, "a broken example must fail the run: {text}");
     assert!(
         text.contains("bynk.types.let_annotation_mismatch"),
@@ -88,7 +88,7 @@ fn a_broken_example_fails_the_run_at_the_fence() {
 fn a_correct_example_passes_and_is_not_a_case() {
     let unit = UNIT.replace("let x: Int = \"oops\"", "let x: Int = 4");
     let root = project("fixed", &unit);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(ok, "{text}");
     assert!(
         !text.contains("doc example"),
@@ -106,12 +106,12 @@ fn a_declaration_fence_is_checked_as_declarations() {
             "```bynk\nfn doubled(n: Int) -> Int { double(n) }\n```\n\n```ts",
         );
     let ok_root = project("items-ok", &unit);
-    let (ok, text) = bynkc_test(&ok_root, "json");
+    let (ok, text) = bynk_test(&ok_root, "json");
     assert!(ok, "{text}");
 
     let broken = unit.replace("{ double(n) }", "{ double(n) + \"x\" }");
     let root = project("items-broken", &broken);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(!ok, "{text}");
     assert!(text.contains("bynk.types.type_mismatch"), "{text}");
     // The `fn doubled` line is line 14 of the file, inside the fence.
@@ -122,7 +122,7 @@ fn a_declaration_fence_is_checked_as_declarations() {
 fn a_fence_that_is_neither_statements_nor_declarations_is_a_parse_error_at_the_fence() {
     let unit = UNIT.replace("let x: Int = \"oops\"", "this is nonsense (");
     let root = project("nonsense", &unit);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(!ok, "{text}");
     assert!(text.contains("bynk.parse."), "{text}");
     // The fence is lines 4-7; the parse error is reported inside it.
@@ -143,13 +143,13 @@ fn a_declaration_fence_in_a_context_is_checked_and_may_redeclare_what_it_documen
     // The fence shows `type Order` on `type Order`, and uses it.
     let shop = "---\n```bynk\ntype Order = { cents: Int }\n\nfn total(o: Order) -> Int { o.cents }\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n";
     let root = context_project("context-ok", shop);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(ok, "{text}");
 
     // A broken line in the fence fails at that line of the real file.
     let broken = shop.replace("o.cents }", "o.cents + \"x\" }");
     let root = context_project("context-broken", &broken);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(!ok, "{text}");
     assert!(text.contains("bynk.types.type_mismatch"), "{text}");
     assert!(text.contains("shop.bynk:5:"), "{text}");
@@ -159,7 +159,7 @@ fn a_declaration_fence_in_a_context_is_checked_and_may_redeclare_what_it_documen
 fn a_context_fence_is_checked_against_the_rest_of_the_context() {
     let shop = "---\n```bynk\nfn total(o: Order) -> Int { o.cents }\n```\n\n```bynk\nlet x: Int = \"oops\"\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n";
     let root = context_project("context-rest", shop);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(!ok, "{text}");
     // Only the statement fence is reported; `Order` resolves in the copy.
     assert!(text.contains("shop.bynk:7:"), "{text}");
@@ -170,13 +170,13 @@ fn a_context_fence_is_checked_against_the_rest_of_the_context() {
 fn a_context_fence_may_start_with_a_uses() {
     let shop = "---\n```bynk\nuses demo.calc\n\nfn twice(o: Order) -> Int { double(o.cents) }\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n";
     let root = context_project("context-uses", shop);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(ok, "{text}");
 
     // An unresolved `uses` in the fence is reported at its fence line.
     let broken = shop.replace("uses demo.calc", "uses demo.nope");
     let root = context_project("context-uses-broken", &broken);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(!ok, "{text}");
     assert!(text.contains("shop.bynk:3:"), "{text}");
 }
@@ -185,12 +185,12 @@ fn a_context_fence_may_start_with_a_uses() {
 fn a_brace_form_context_fence_is_checked() {
     let shop = "---\n```bynk\nfn total(o: Order) -> Int { o.cents }\n```\n---\ncontext demo.shop {\n  type Order = { cents: Int }\n}\n";
     let root = context_project("context-brace", shop);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(ok, "{text}");
 
     let broken = shop.replace("o.cents }", "o.cents + \"x\" }");
     let root = context_project("context-brace-broken", &broken);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(!ok, "{text}");
     assert!(text.contains("shop.bynk:3:"), "{text}");
 }
@@ -201,7 +201,7 @@ fn a_replacement_that_breaks_other_items_is_not_the_examples_error() {
     // is not reported, as only diagnostics inside the fence count.
     let shop = "---\n```bynk\ntype Order = { cents: Int, tag: String }\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n\nfn describe(o: Order) -> Int { o.cents }\n\nfn make() -> Order { Order { cents: 1 } }\n";
     let root = context_project("context-replace", shop);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(ok, "{text}");
 }
 
@@ -209,7 +209,7 @@ fn a_replacement_that_breaks_other_items_is_not_the_examples_error() {
 /// does: skipped on Windows, and where no `tsc` and `node` are on the path.
 fn can_run() -> bool {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return false;
     }
     let on_path = |name: &str| {
@@ -231,7 +231,7 @@ fn run_json(root: &PathBuf) -> serde_json::Value {
         .arg(root.join("out"))
         .env("NO_COLOR", "1")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
         panic!(
             "no JSON document ({e}): {}{}",
@@ -317,7 +317,7 @@ fn discovery_lists_a_test_fence_at_its_fence() {
         .replace("let x: Int = \"oops\"", "let x: Int = 4")
         .replace("```bynk\nlet x", "```bynk test\nlet x");
     let root = project("discover", &unit);
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(ok, "{text}");
     let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
     let case = doc["suites"][0]["cases"]
@@ -341,7 +341,7 @@ fn the_text_output_names_the_fence_too() {
         .arg(root.join("out"))
         .env("NO_COLOR", "1")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     let text = String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success(), "{text}");
     assert!(
@@ -360,7 +360,7 @@ fn an_explicit_paths_layout_checks_examples_too() {
         "[project]\nname = \"p\"\n\n[paths]\ninclude = [\"src\"]\n",
     )
     .unwrap();
-    let (ok, text) = bynkc_test(&root, "json");
+    let (ok, text) = bynk_test(&root, "json");
     assert!(!ok, "{text}");
     assert!(text.contains("calc.bynk:5:"), "{text}");
 }
@@ -392,7 +392,7 @@ fn double(n: Int) -> Int {
         .arg(root.join("out"))
         .env("NO_COLOR", "1")
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

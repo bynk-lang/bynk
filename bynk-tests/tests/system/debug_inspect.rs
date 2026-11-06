@@ -82,7 +82,7 @@ fn breakpoint_in_bynk_binds_and_pauses_under_node_inspector() {
     .unwrap();
 
     // Compile the debug build (`.ts` specifiers) and write it with maps — exactly
-    // what `bynkc test --inspect` writes before launching Node.
+    // what `bynk test --inspect` writes before launching Node.
     let out_root = dir.join("out");
     let opts = bynk_testkit::compile_options_split(
         dir.clone(),

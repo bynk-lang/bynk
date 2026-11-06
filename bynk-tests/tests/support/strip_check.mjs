@@ -1,6 +1,6 @@
 // Strip-only verification harness for the in-browser track — the strip-only
 // emission invariant (ADR 0136). Given a root directory, EVERY `.ts` file under
-// it must be erasable by pure type-stripping: that is what lets bynkc's emitted
+// it must be erasable by pure type-stripping: that is what lets bynk's emitted
 // output run under Node `--experimental-strip-types` (the `--inspect` debug path)
 // and, ultimately, in the browser with no transpiler in the loop.
 //

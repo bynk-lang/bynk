@@ -1,4 +1,4 @@
-//! v0.132: `bynkc test` resolves a multi-file commons by emitting an aggregating
+//! v0.132: `bynk test` resolves a multi-file commons by emitting an aggregating
 //! `out/<name>.ts` barrel (`export *` from each of the commons' files) so the test
 //! module's `import * as ns from "./<name>.js"` resolves for the directory layout
 //! exactly as it does for a single file. See the v0.132 proposal / ADR.

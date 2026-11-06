@@ -113,7 +113,7 @@ impl TestFilter {
         }
     }
 
-    /// The filter as the arguments that select it again, for a child `bynkc test`.
+    /// The filter as the arguments that select it again, for a child `bynk test`.
     pub fn args(&self) -> Vec<String> {
         let mut args = Vec::new();
         for suite in &self.suites {
@@ -127,7 +127,7 @@ impl TestFilter {
         args
     }
 
-    /// Hand the filter to the runner `cmd` launches. `program` (`bynkc` or
+    /// Hand the filter to the runner `cmd` launches. `program` (`bynk` or
     /// `bynk`) is carried so a rich run, whose output the driver cannot read,
     /// names the same program in its error as a JSON run does.
     pub fn apply(&self, program: &str, cmd: &mut ProcCommand) {
@@ -219,7 +219,7 @@ mod tests {
         let filter = TestFilter::new(&strings(&["a"]), &[]).with_skipped([("a", "x"), ("b", "y")]);
         assert_eq!(filter.skipped, vec![("a".to_string(), "x".to_string())]);
         let mut cmd = ProcCommand::new("node");
-        filter.apply("bynkc", &mut cmd);
+        filter.apply("bynk", &mut cmd);
         let value = cmd
             .get_envs()
             .find(|(k, _)| *k == FILTER_ENV)
@@ -242,7 +242,7 @@ mod tests {
     fn sets_the_environment_only_when_a_filter_was_given() {
         let envs = |filter: &TestFilter| {
             let mut cmd = ProcCommand::new("node");
-            filter.apply("bynkc", &mut cmd);
+            filter.apply("bynk", &mut cmd);
             cmd.get_envs()
                 .find(|(k, _)| *k == FILTER_ENV)
                 .and_then(|(_, v)| v.map(|v| v.to_string_lossy().into_owned()))
@@ -252,7 +252,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&value).unwrap();
         assert_eq!(
             parsed,
-            json!({"program": "bynkc", "suites": ["s"], "cases": ["a \"b\""]})
+            json!({"program": "bynk", "suites": ["s"], "cases": ["a \"b\""]})
         );
     }
 }

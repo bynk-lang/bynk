@@ -100,7 +100,7 @@ pub const SERVED_PREFIX: &str = "/_assets/";
 /// deployable Bundle build: a Bundle ships no Worker and so no files, yet each
 /// module still carries its asset's `.url`, which would 404 wherever the
 /// output is served. A warning, not an error, because a Bundle build is also
-/// how `bynkc test` compiles; the caller raises it only for a build without
+/// how `bynk test` compiles; the caller raises it only for a build without
 /// tests (review of #1904). A helper here keeps `bynk-emit`'s `project.rs`
 /// free of syntax-tree types (the `ast_importers` probe).
 pub fn bundle_not_served_warnings(items: &[CommonsItem]) -> Vec<CompileError> {
@@ -634,7 +634,7 @@ pub fn needs_project_error(a: &AssetDecl) -> CompileError {
         ),
     )
     .with_note(
-        "an asset is served beside a Worker, so it needs a project build (`bynk dev`, `bynkc compile <project dir>`) with the file in the project's `assets/` folder",
+        "an asset is served beside a Worker, so it needs a project build (`bynk dev`, `bynk compile <project dir>`) with the file in the project's `assets/` folder",
     )
 }
 

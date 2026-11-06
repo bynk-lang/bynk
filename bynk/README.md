@@ -5,10 +5,9 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 The **Bynk developer front-end** — the `bynk` driver. It **links the compiler
-pipeline in-process** and orchestrates the Node toolchain; `bynk` is to
-[`bynkc`](https://crates.io/crates/bynkc) what `cargo` is to `rustc`. A fresh
+pipeline in-process** and orchestrates the Node toolchain. A fresh
 `cargo install bynk` is self-contained: it compiles, scaffolds, and serves
-projects with no separately-installed `bynkc`. Environment orchestration — *is
+projects with nothing else installed. Environment orchestration — *is
 my machine ready?*, *scaffold me a project*, *build and serve it locally*, *ship
 it* — is the driver's job.
 
@@ -32,11 +31,11 @@ bynk deploy       # provision Cloudflare resources and deploy every Worker
 |---|---|
 | `bynk doctor` | Survey the toolchain grouped by capability (compile · test · dev/deploy · editor · build-from-source), reporting presence + version + provenance, and print the exact remedy for anything missing. |
 | `bynk new <path>` | Scaffold a complete, runnable single-context HTTP service (`bynk.toml`, `.gitignore`, `src/<name>.bynk`) that `bynk dev` serves unmodified. Pure offline file-writing — no toolchain required. |
-| `bynk dev` | Build the project and serve it locally with `wrangler dev` in local mode (Miniflare), rebuilding on save — every context served, Service Bindings wired (`--context` narrows it). One step in place of the manual `bynkc compile` + `cd` + `wrangler dev` recipe. No provisioning needed. |
+| `bynk dev` | Build the project and serve it locally with `wrangler dev` in local mode (Miniflare), rebuilding on save — every context served, Service Bindings wired (`--context` narrows it). One step in place of the manual `bynk compile` + `cd` + `wrangler dev` recipe. No provisioning needed. |
 | `bynk deploy` | Provision each context's Cloudflare resources and deploy its Worker, in Service-Binding dependency order. Cloudflare ids live in the committed `bynk.deploy.lock`; `--dry-run` prints the plan, `--env` targets an environment. |
 
-Alongside the arc, the everyday compiler commands run through the driver with
-`bynkc`'s exact semantics (the command bodies are shared, in `bynk-driver`):
+Alongside the arc, the everyday compiler commands run in-process (the command
+bodies are in `bynk-driver`):
 
 | Command | What it does |
 |---|---|
@@ -65,25 +64,23 @@ cargo build --release -p bynk   # → target/release/bynk
 ```
 
 Requires a stable Rust toolchain, 2024 edition (MSRV 1.95). The compiler is
-linked in — `bynk dev` compiles a project in-process — so no separate `bynkc` is
+linked in — `bynk dev` compiles a project in-process — so no separate compiler is
 needed; `dev` and `deploy` additionally shell Node + `wrangler`, and `bynk new`
-needs neither (it only writes files). The old `$BYNK_BYNKC` pin is ignored (with a
-one-line warning), and there is no driver↔compiler skew left to report.
+needs neither (it only writes files).
 
 ## Design
 
 - **Links the pipeline** — the driver links the compiler library crates
   (`bynk-driver` / `bynk-emit` / `bynk-syntax` / `bynk-fmt`) and
-  compiles in-process, rather than shelling the `bynkc` binary, so it is
+  compiles in-process, rather than shelling a separate compiler binary, so it is
   self-contained
   ([ADR 0101](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0101-front-end-links-pipeline-binary-topology.md),
   building on [ADR 0083](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0083-bynk-driver-thin-orchestrator.md)).
 - **Single-concern modules** — one per command (`doctor`, `new`, `dev`,
-  `deploy`, `check`, `fmt`, `test`, `explain`), plus `compiler` (the
-  retired `BYNK_BYNKC` warning), `workers` (the
+  `deploy`, `check`, `fmt`, `test`, `explain`), plus `workers` (the
   in-process compile and `wrangler` plumbing `dev` and `deploy` share), and
   `report`. Tool detection (`probe`: presence + version + provenance, via the
-  `which` crate) lives in `bynk-driver`, shared with `bynkc`.
+  `which` crate) lives in `bynk-driver`.
 - **Deterministic surface** — the human-facing output of each command is pinned
   by goldens in `tests/` (blessed with `BYNK_BLESS=1 cargo test -p bynk`), and
   `new`'s embedded starter template is compile-tested so the scaffold can't rot.

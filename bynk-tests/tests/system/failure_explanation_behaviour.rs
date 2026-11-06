@@ -26,7 +26,7 @@ fn tool_exists(name: &str) -> bool {
 
 fn can_run() -> bool {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return false;
     }
     if !(tool_exists("tsx") || (tool_exists("tsc") && tool_exists("node")) || tool_exists("npx")) {
@@ -70,7 +70,7 @@ fn run_once(fixture: &str) -> serde_json::Value {
         .arg(&out_root)
         .args(["--format", "json", "--seed", "0x5f3a"])
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
         panic!(
             "stdout is one JSON document: {e}\nstdout: {}\nstderr: {}",

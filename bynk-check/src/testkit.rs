@@ -4,7 +4,7 @@
 //! [`analyse`] runs a small multi-unit project through the real
 //! [`analyse_project`] pipeline — discovery, parse, group, `uses`/`consumes`
 //! resolution, checking, test suites — and hands back an [`Analysed`] to
-//! assert on. It is the unit-level alternative to a `bynkc` fixture directory:
+//! assert on. It is the unit-level alternative to a `bynk` fixture directory:
 //! the program is a few string literals next to the test, and the assertion
 //! is on what the checker decided (a diagnostic, the type of an expression,
 //! the declaration a name resolved to) rather than on emitted text.

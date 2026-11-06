@@ -3856,7 +3856,7 @@ pub fn render_markdown() -> String {
     out.push_str("# Diagnostic index\n\n");
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
-         Source: bynkc/src/diagnostics.rs (`render_markdown`).\n     \
+         Source: bynk-syntax/src/diagnostics.rs (`render_markdown`).\n     \
          Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry:: -->\n\n",
     );
     out.push_str(
@@ -3934,7 +3934,7 @@ pub fn render_grammar_semantics_json() -> String {
     map.insert(
         "_generated".to_string(),
         serde_json::Value::String(
-            "Generated from the grammar_symbol field of bynkc/src/diagnostics.rs. \
+            "Generated from the grammar_symbol field of bynk-syntax/src/diagnostics.rs. \
              Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p \
              xtask --test docs_consistency diagnostics_registry::"
                 .to_string(),

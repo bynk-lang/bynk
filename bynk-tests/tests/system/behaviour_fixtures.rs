@@ -35,19 +35,19 @@
 //! opt-in and reviewable.
 //!
 //! **The run.** Each marked fixture is copied to a scratch directory first,
-//! because `bynkc test` compiles and may write into its input tree (an events
+//! because `bynk test` compiles and may write into its input tree (an events
 //! project writes `bynk.schema.lock`). The copy is then driven through the real
-//! CLI with `bynkc test <root> --output <tmp> --format json`, and the pinned
+//! CLI with `bynk test <root> --output <tmp> --format json`, and the pinned
 //! JSON document (`bynk_driver::test_json::TestRun`) is compared against the
 //! marker. `<root>` is the fixture directory when it has a `bynk.toml`, and its
 //! `src/` otherwise: the same rule `adapter_flattened_capability_stub_behaviour.rs`
 //! uses.
 //!
-//! The run must report **at least one case**. `bynkc test` exits 0 with "no test
+//! The run must report **at least one case**. `bynk test` exits 0 with "no test
 //! declarations found" on a project with no suites, so an empty run would
 //! otherwise pass as green.
 //!
-//! **Target.** Bundle only, because `bynkc test` has no `--target` flag. A
+//! **Target.** Bundle only, because `bynk test` has no `--target` flag. A
 //! fixture with `target.txt = workers` still runs its suites as bundle.
 //!
 //! **Gating.** Like the other toolchain-driving behavioural tests, this skips on
@@ -142,7 +142,7 @@ struct CaseOutcome {
     passed: bool,
 }
 
-/// Compare a `bynkc test --format json` document against the marker. Returns
+/// Compare a `bynk test --format json` document against the marker. Returns
 /// every discrepancy, not just the first, so one CI run shows the whole picture.
 fn compare(doc: &serde_json::Value, expected: &Expected) -> Vec<String> {
     let mut problems = Vec::new();
@@ -162,9 +162,8 @@ fn compare(doc: &serde_json::Value, expected: &Expected) -> Vec<String> {
         }
     }
     if cases.is_empty() {
-        problems.push(
-            "the run reported no cases (`bynkc test` exits 0 when it finds none)".to_string(),
-        );
+        problems
+            .push("the run reported no cases (`bynk test` exits 0 when it finds none)".to_string());
         return problems;
     }
     // A `fail <case>` line names a case by name alone, so names must be unique
@@ -230,7 +229,7 @@ fn tool_exists(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// The same fallback chain `bynkc test` walks: `tsx`, or `tsc` + `node`, or `npx`.
+/// The same fallback chain `bynk test` walks: `tsx`, or `tsc` + `node`, or `npx`.
 fn have_runner() -> bool {
     tool_exists("tsx") || (tool_exists("tsc") && tool_exists("node")) || tool_exists("npx")
 }
@@ -249,7 +248,7 @@ fn marked_fixtures() -> Vec<PathBuf> {
 
 /// Copy a fixture (everything except its `expected/` goldens) into `dest`, so the
 /// run never writes into the source tree. Marker files such as `expected_run.txt`
-/// and `target.txt` come along too; `bynkc test` ignores them.
+/// and `target.txt` come along too; `bynk test` ignores them.
 fn copy_fixture(src: &Path, dest: &Path) {
     fs::create_dir_all(dest).expect("create scratch fixture dir");
     for entry in fs::read_dir(src).expect("read fixture dir").flatten() {
@@ -298,13 +297,13 @@ fn run_fixture(fixture: &Path, scratch: &Path) -> Vec<String> {
         .arg("--format")
         .arg("json")
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let stdout = String::from_utf8_lossy(&out.stdout);
     let doc: serde_json::Value = match serde_json::from_str(&stdout) {
         Ok(d) => d,
         Err(e) => {
             return vec![format!(
-                "`bynkc test --format json` did not print a JSON document ({e}).\nstdout:\n{stdout}\nstderr:\n{}",
+                "`bynk test --format json` did not print a JSON document ({e}).\nstdout:\n{stdout}\nstderr:\n{}",
                 String::from_utf8_lossy(&out.stderr)
             )];
         }
@@ -315,7 +314,7 @@ fn run_fixture(fixture: &Path, scratch: &Path) -> Vec<String> {
 #[test]
 fn marked_positive_fixtures_behave_as_expected() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -429,7 +428,7 @@ for f in $FILES; do sed -i.bak 's/{needle}/void 0/' "$f"; done
         .arg("--format")
         .arg("json")
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let stdout = String::from_utf8_lossy(&out.stdout);
     let doc: serde_json::Value = serde_json::from_str(&stdout).unwrap_or_else(|e| {
         panic!(

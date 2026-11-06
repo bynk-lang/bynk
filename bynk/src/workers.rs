@@ -14,13 +14,13 @@ use bynk_driver::project::{BuildTarget, SchemaLock};
 use crate::probe::Provenance;
 
 /// One compile of the project into `build_dir`, in-process, on the same rooting
-/// rule as `bynkc compile <project_root>` (#524, via
+/// rule as `bynk compile <project_root>` (#524, via
 /// [`bynk_driver::project_options`]). Returns `false` on failure with the
 /// diagnostics already rendered.
 ///
 /// `schema_registry` (#980): `true` for the real `bynk dev`/`bynk deploy`
 /// call sites — otherwise a deploy could ship a `schemaVersion` computed
-/// purely from `@schema(N)` annotations, diverging from what `bynkc compile`
+/// purely from `@schema(N)` annotations, diverging from what `bynk compile`
 /// would have shipped for the same source (the write is a no-op when the
 /// tree is already up to date). `false` for
 /// `compile_once_warnings_behaviour.rs`, the only other caller: it compiles a
@@ -59,7 +59,7 @@ pub fn compile_once(project_root: &Path, build_dir: &Path, schema_registry: bool
     let output = match bynk_driver::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => {
-            // Render with full source context, exactly as the shelled `bynkc
+            // Render with full source context, exactly as the shelled `bynk
             // compile` did — the front-end's flatten-then-delegate (ADR 0100),
             // shared with `bynk check` (see `crate::diagnostics`).
             crate::diagnostics::render_project_failure(&failure);

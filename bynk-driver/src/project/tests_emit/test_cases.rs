@@ -672,7 +672,7 @@ pub(super) fn emit_test_case_function(
 /// Emitted once per test module that declares a `property`, alongside the
 /// expectation helpers. `__bynkSeed` is the run's root seed (from
 /// `BYNK_TEST_SEED`, else random), from which each property derives its seed via
-/// `__bynkMix`, so `bynkc test --seed <hex>` reproduces a run byte-for-byte.
+/// `__bynkMix`, so `bynk test --seed <hex>` reproduces a run byte-for-byte.
 /// v0.117: emit a TypeScript `type` alias for each observed capability
 /// operation's call record (`type __Cap_op_Call = { param: T, … }`), so a
 /// `trace(Cap.op)` list — whose elements are these records — type-checks under

@@ -104,7 +104,7 @@ pub fn needs_project_error(e: &EmbedDecl) -> CompileError {
         ),
     )
     .with_note(
-        "an embed reads a file from the project's `embeds/` folder, so it needs a project build (`bynk dev`, `bynkc compile <project dir>`)",
+        "an embed reads a file from the project's `embeds/` folder, so it needs a project build (`bynk dev`, `bynk compile <project dir>`)",
     )
 }
 

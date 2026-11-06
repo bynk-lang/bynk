@@ -1,6 +1,6 @@
 //! #2471: an in-memory overlay of unsaved editor buffers for a build.
 //!
-//! `bynkc compile --sources-stdin` reads a JSON object `{ "<absolute path>":
+//! `bynk compile --sources-stdin` reads a JSON object `{ "<absolute path>":
 //! "<text>" }` from stdin and layers it over the sources the build reads from
 //! disk, so an editor can compile what is on screen without saving it. The
 //! overlay is the `CompileOptions::sources` map `compile_project` already

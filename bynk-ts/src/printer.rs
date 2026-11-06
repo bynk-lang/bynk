@@ -6459,7 +6459,7 @@ mod tests {
     /// Arc C, slice 21 (#1371): `TsClassMethod.private` — pins both the
     /// keyword itself and its render-*before*-`async` ordering directly,
     /// the same precedent `TsClassField.private` already has (its own
-    /// direct test, not left to transitive `bynkc` fixture coverage alone)
+    /// direct test, not left to transitive `bynk` fixture coverage alone)
     /// — review of #1372 caught this one still missing for the sibling
     /// field.
     #[test]

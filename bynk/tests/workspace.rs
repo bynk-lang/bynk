@@ -19,12 +19,6 @@ fn bynk() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_bynk"))
 }
 
-/// The sibling `bynkc`, present only when the whole workspace was built.
-fn bynkc_sibling() -> Option<PathBuf> {
-    let p = bynk().parent().unwrap().join("bynkc");
-    p.exists().then_some(p)
-}
-
 fn scratch(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("workspace")
@@ -44,7 +38,6 @@ fn run(bin: &Path, cwd: &Path, args: &[&str], env: &[(&str, &Path)]) -> (i32, St
     let mut cmd = Command::new(bin);
     cmd.args(args)
         .current_dir(cwd)
-        .env_remove("BYNK_BYNKC")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (k, v) in env {
@@ -264,13 +257,8 @@ fn dev_and_deploy_refuse_at_a_workspace_root() {
 
 #[test]
 fn test_runs_across_members_under_headers() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built");
-        return;
-    };
     let root = shop("test");
-    let env = [("BYNK_BYNKC", bynkc.as_path())];
-    let (code, out, err) = run(&bynk(), &root, &["test", "--no-run"], &env);
+    let (code, out, err) = run(&bynk(), &root, &["test", "--no-run"], &[]);
     assert_eq!(code, 1, "fx and money don't compile:\n{out}\n{err}");
     let headers: Vec<&str> = out.lines().filter(|l| l.starts_with("── ")).collect();
     assert_eq!(
@@ -282,7 +270,7 @@ fn test_runs_across_members_under_headers() {
         ],
         "{out}"
     );
-    let (code, _, err) = run(&bynk(), &root, &["test", "--format", "json"], &env);
+    let (code, _, err) = run(&bynk(), &root, &["test", "--format", "json"], &[]);
     assert_eq!(code, 1);
     assert!(
         err.contains(
@@ -290,7 +278,7 @@ fn test_runs_across_members_under_headers() {
         ),
         "{err}"
     );
-    let (code, _, err) = run(&bynk(), &root, &["test", "--format", "ndjson"], &env);
+    let (code, _, err) = run(&bynk(), &root, &["test", "--format", "ndjson"], &[]);
     assert_eq!(code, 1);
     assert!(
         err.contains(
@@ -331,10 +319,6 @@ fn have_test_runner() -> bool {
 /// judged against all the members' suites, not against each member alone.
 #[test]
 fn test_filters_are_judged_across_the_members() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built");
-        return;
-    };
     if cfg!(windows) || !have_test_runner() {
         eprintln!("skipping: needs a TypeScript runner on a Unix host");
         return;
@@ -346,10 +330,9 @@ fn test_filters_are_judged_across_the_members() {
     );
     tested_member(&root, "a");
     tested_member(&root, "b");
-    let env = [("BYNK_BYNKC", bynkc.as_path())];
 
     // A suite in one member: the other member runs nothing, and the run passes.
-    let (code, out, err) = run(&bynk(), &root, &["test", "--suite", "a"], &env);
+    let (code, out, err) = run(&bynk(), &root, &["test", "--suite", "a"], &[]);
     assert_eq!(code, 0, "{out}\n{err}");
     assert!(out.contains("✓ case-a") && !out.contains("case-b"), "{out}");
 
@@ -358,7 +341,7 @@ fn test_filters_are_judged_across_the_members() {
         &bynk(),
         &root,
         &["test", "--case", "case-b", "--case", "case-a"],
-        &env,
+        &[],
     );
     assert_eq!(code, 0, "{out}\n{err}");
     assert!(
@@ -367,7 +350,7 @@ fn test_filters_are_judged_across_the_members() {
     );
 
     // A value no member has fails the run before any member runs.
-    let (code, out, err) = run(&bynk(), &root, &["test", "--case", "typo"], &env);
+    let (code, out, err) = run(&bynk(), &root, &["test", "--case", "typo"], &[]);
     assert_eq!(code, 1);
     assert!(
         err.contains("bynk test: no case matched --case \"typo\""),
@@ -380,23 +363,8 @@ fn test_filters_are_judged_across_the_members() {
         &bynk(),
         &root,
         &["test", "--suite", "a", "--case", "case-b"],
-        &env,
+        &[],
     );
     assert_eq!(code, 1);
     assert!(err.contains("no case matched --case \"case-b\""), "{err}");
-}
-
-#[test]
-fn bynkc_refuses_to_build_a_workspace_root() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built");
-        return;
-    };
-    let root = shop("bynkc-compile");
-    let (code, _, err) = run(&bynkc, &root, &["compile", ".", "-o", "out"], &[]);
-    assert_eq!(code, 1);
-    assert!(
-        err.contains("this is a workspace root, not a project"),
-        "{err}"
-    );
 }
