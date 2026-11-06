@@ -21,7 +21,6 @@ crate-type = ["cdylib", "rlib"]
 # The compile pipeline + its in-memory entry (compile_in_memory) and the TS→JS
 # strip (strip_project_to_js). bynk-check supplies the Platform axis.
 bynk-driver.workspace = true
-bynk-strip.workspace = true
 bynk-check.workspace = true
 bynk-syntax.workspace = true
 # The pure completion logic (#808) — wasm-safe (no tower-lsp/tokio).

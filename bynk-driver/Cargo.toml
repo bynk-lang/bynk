@@ -21,6 +21,7 @@ bynk-lower.workspace = true
 bynk-fmt.workspace = true
 bynk-project.workspace = true
 bynk-render.workspace = true
+bynk-strip.workspace = true
 # `doc_examples` lexes and parses a unit to find its doc comments (#2461).
 bynk-syntax.workspace = true
 # P7.6 (#1309): `write_output`'s real write boundary prints `Document::Ts`

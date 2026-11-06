@@ -11,13 +11,6 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-# The emitter's output types (`ProjectOutput`/`CompiledFile`) — `strip_project_to_js`
-# rewrites a compiled project to a JS artefact. No cycle: `bynk-emit` does not depend
-# on `bynk-strip`, so the LSP (via `bynk-ide` → `bynk-emit`) never pulls oxc.
-bynk-emit.workspace = true
-# P7.6 (#1309): `strip_project_to_js` prints a `Document::Ts` through the one
-# printer that owns a character (R7.3) before stripping its types.
-bynk-ts.workspace = true
 # A pure-Rust TS parser + type-erasing transform + codegen — no Node/tsc in the
 # loop and wasm-safe (the wasm toolchain slice compiles this path to wasm32).
 oxc = { version = "0.146", features = ["semantic", "transformer", "codegen"] }
@@ -25,6 +18,3 @@ oxc = { version = "0.146", features = ["semantic", "transformer", "codegen"] }
 # TS-to-JS map. Already in the tree (oxc_codegen's `sourcemap`); wasm-safe.
 oxc_sourcemap = "8"
 
-[dev-dependencies]
-# The strip tests compile a project to strip it (D1 PR 4 moves them to the driver).
-bynk-driver = { path = "../bynk-driver" }

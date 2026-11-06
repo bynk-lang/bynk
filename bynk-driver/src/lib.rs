@@ -29,6 +29,7 @@ pub mod schema_lock;
 pub mod smoke;
 pub mod snapshots;
 pub mod source_overlay;
+pub mod strip;
 pub mod test_filter;
 pub mod test_json;
 pub mod test_runner;

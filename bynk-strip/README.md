@@ -15,9 +15,8 @@ pure type-stripping, never a type-directed lowering (no parameter properties,
 behaviour: it only deletes type syntax, it never has to rewrite semantics.
 
 - `strip_types` — strip one TypeScript source string to JavaScript.
-- `strip_project_to_js` — rewrite a compiled `bynk-emit` project to a JS
-  artefact: each `.ts` module is stripped and renamed to `.js`, the
-  `tsconfig.json` is dropped, and every other file passes through unchanged.
+- `strip_types_mapped` — the same, also composing the module's Bynk-to-JavaScript
+  source map from the emitter's Bynk-to-TypeScript one.
 - `StripError` — a strip failure; for valid emitter output it should never
   occur, so it signals an emitter or toolchain bug rather than user error.
 
@@ -30,8 +29,11 @@ unused, and only `import type` / `type` specifiers are elided.
 
 ## Where it sits
 
-`bynk-strip` sits above [`bynk-emit`](https://crates.io/crates/bynk-emit),
-turning its `ProjectOutput` into a JS artefact:
+`bynk-strip` is a leaf: it depends on `oxc` alone, so it builds alongside the checker.
+[`bynk-driver`](https://crates.io/crates/bynk-driver) calls it to turn a compiled
+project into a JS artefact (`bynk_driver::strip::strip_project_to_js`: each `.ts` module
+is stripped and renamed to `.js`, the `tsconfig.json` is dropped, and every other file
+passes through unchanged):
 
 ```text
 bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
@@ -43,21 +45,21 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
     ├── bynk-ir            declaration-level IR
     │   └── bynk-lower     AST → IR helpers
     ├── bynk-emit          TS emission from a checked program + ts, ir, lower, project
-    │   ├── bynk-strip     TS → JS type-stripping              + ts
-    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, ir, lower
+    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, ir, lower, strip
     └── bynk-ide           non-bailing editor analysis         + project, fmt, ir, lower
 bynk-std                   first-party sources and bindings, as data
+bynk-strip                 TS → JS type-stripping (text level), on oxc alone
 ```
 
 Each crate depends on its parent in the tree, plus any crates listed after
 its `+`. The front-ends sit on top: the `bynkc` and `bynk` CLIs over
 `bynk-driver`, the `bynk-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
-the unpublished `bynk-wasm` playground module over `bynk-driver`, `bynk-strip`,
+the unpublished `bynk-wasm` playground module over `bynk-driver`
 and `bynk-ide`.
 
-The dependency runs one way only — `bynk-emit` does not depend on `bynk-strip`,
-and the language server's analysis layer (`bynk-ide`) depends on neither — so
-`bynk-lsp` never pulls in `oxc`.
+The dependency runs one way only — `bynk-strip` depends on no other Bynk crate, and the
+language server's analysis layer (`bynk-ide`) does not depend on it — so `bynk-lsp` never
+pulls in `oxc`.
 
 ## Use
 
