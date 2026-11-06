@@ -24,7 +24,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
 | `diagnostic_coverage` | yes | unasserted=8 (asserted 750/758) |
-| `model_readers_beyond_emit` | yes | 3 (bynk-ir::IrHandlerKind, bynk-ir::IrHttpMethod, bynk-lower::lower_handler_kind_ir) |
+| `model_readers_beyond_emit` | yes | 3 (bynk-model::IrHandlerKind, bynk-model::IrHttpMethod, bynk-model::lower_handler_kind_ir) |
 | `unused_deps` | yes | 0 |
 | `wildcard_arms` | no (trend) | 356 |
 | `keep_in_sync` | no (trend) | 202 |
