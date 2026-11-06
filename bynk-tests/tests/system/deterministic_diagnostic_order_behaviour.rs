@@ -21,7 +21,7 @@ fn fixture() -> PathBuf {
 }
 
 fn run_once() -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("check")
         .arg(fixture())
         .arg("--format")

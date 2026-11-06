@@ -352,7 +352,7 @@ fn the_single_file_compile_does_not_print_the_hint() {
     std::fs::create_dir_all(&dir).unwrap();
     let input = dir.join("steps.bynk");
     std::fs::write(&input, commons(READ)).unwrap();
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("compile")
         .arg(&input)
         .arg("-o")
@@ -376,7 +376,7 @@ fn a_failed_project_build_does_not_print_the_hint() {
         commons(&format!("{READ}\n\nfn broken() -> Int {{ \"nope\" }}")),
     )
     .unwrap();
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("compile")
         .arg(dir.join("src"))
         .arg("-o")

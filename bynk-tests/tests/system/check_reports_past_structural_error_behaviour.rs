@@ -19,7 +19,7 @@ use std::process::Command;
 fn check_reports_a_test_body_error_past_an_earlier_structural_error() {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/behaviour/check_reports_past_structural_error");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("check")
         .arg(&fixture)
         .output()

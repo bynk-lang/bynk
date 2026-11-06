@@ -51,7 +51,7 @@ fn project(tag: &str, unit: &str) -> PathBuf {
 }
 
 fn bynkc_test(root: &PathBuf, format: &str) -> (bool, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test", "--no-run", "--format", format])
         .arg(root)
         .arg("--output")
@@ -224,7 +224,7 @@ fn can_run() -> bool {
 }
 
 fn run_json(root: &PathBuf) -> serde_json::Value {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test", "--format", "json"])
         .arg(root)
         .arg("--output")
@@ -334,7 +334,7 @@ fn discovery_lists_a_test_fence_at_its_fence() {
 #[test]
 fn the_text_output_names_the_fence_too() {
     let root = project("text", UNIT);
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(&root)
         .arg("--output")
@@ -385,7 +385,7 @@ fn double(n: Int) -> Int {
 }
 ";
     let root = project("human", unit);
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(&root)
         .arg("--output")

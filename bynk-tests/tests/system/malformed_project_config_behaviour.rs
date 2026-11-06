@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn check(fixture: &str) -> (bool, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("check")
         .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(fixture))
         .output()
@@ -68,10 +68,11 @@ fn an_unknown_table_fails_loudly_instead_of_being_silently_ignored() {
 fn declared_dependencies_are_refused_until_they_can_be_resolved() {
     let (ok, out) = check("tests/fixtures/behaviour/declared_dependencies");
     assert!(!ok, "expected failure, but the build succeeded:\n{out}");
+    // `bynk` resolves dependencies before it checks (`bynk fetch`), so the refusal
+    // is the resolver's: the same cause, worded for the registry layer.
     assert!(
-        out.contains(
-            "this project's dependency `money` is in the organisation `acme`, which no registry serves — the first-party registry isn't live yet"
-        ),
+        out.contains("bynk.registry.unavailable")
+            && out.contains("the first-party registry isn't live yet"),
         "got:\n{out}"
     );
 }

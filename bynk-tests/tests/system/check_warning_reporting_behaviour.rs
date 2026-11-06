@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn run_check(path: &str, extra_args: &[&str]) -> (bool, String) {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"));
     cmd.arg("check")
         .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path));
     cmd.args(extra_args);

@@ -78,7 +78,7 @@ fn every_example_test_suite_passes() {
         // executed `out-js` tree as a sibling of `--output`.
         let output = scratch.join(name.as_ref()).join("out");
         let _ = std::fs::remove_dir_all(scratch.join(name.as_ref()));
-        let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+        let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
             .arg("test")
             .arg(example)
             .arg("--output")

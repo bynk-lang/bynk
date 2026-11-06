@@ -134,7 +134,7 @@ fn compile_then_tsc(what: &str, root: &Path) -> Option<Output> {
         return None;
     }
 
-    let compiled = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let compiled = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["compile", "-o", "out", "."])
         .current_dir(root)
         .env("NO_COLOR", "1")

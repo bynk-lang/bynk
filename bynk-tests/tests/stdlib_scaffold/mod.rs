@@ -98,7 +98,7 @@ pub fn compile(platform: Platform, dir: &Path, js: bool) -> PathBuf {
     fs::write(project.join("src/stdlib/scaffold.bynk"), source(platform)).unwrap();
 
     let out = project.join(if js { "out-js" } else { "out-ts" });
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"));
     cmd.arg("compile");
     match platform {
         // The Workers target, so the platform adapter's binding is emitted the

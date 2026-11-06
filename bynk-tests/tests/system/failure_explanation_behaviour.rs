@@ -63,7 +63,7 @@ fn run_once(fixture: &str) -> serde_json::Value {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(fixture.replace('_', "-"))
         .join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(project)
         .arg("--output")

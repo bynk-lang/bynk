@@ -41,7 +41,7 @@ fn project(name: &str, range: &str) -> PathBuf {
 }
 
 fn compile(dir: &Path) -> (bool, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["compile", "src", "-o", "out"])
         .current_dir(dir)
         .output()

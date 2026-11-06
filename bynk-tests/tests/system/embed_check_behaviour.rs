@@ -36,7 +36,7 @@ fn project(name: &str) -> PathBuf {
 }
 
 fn bynkc(args: &[&str], path: &Path) -> (bool, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .arg(path)
         .output()

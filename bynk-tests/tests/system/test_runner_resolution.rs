@@ -56,7 +56,7 @@ fn an_npm_installed_tsc_shim_runs_the_suite() {
     }
     let project = scratch("runner-windows-shim").join("project");
     one_case_project(&project);
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test", "."])
         .current_dir(&project)
         .output()
@@ -85,7 +85,7 @@ fn run_with_unstartable_tsc(tag: &str, extra: &[&str]) -> (PathBuf, std::process
     let tsc = bin.join("tsc");
     std::fs::write(&tsc, "#!/nonexistent/bynk-test-interpreter\n").unwrap();
     std::fs::set_permissions(&tsc, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .args(extra)
         .arg(".")

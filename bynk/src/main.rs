@@ -1,4 +1,4 @@
-//! `bynk` — the Bynk driver binary. See the crate docs in `lib.rs`.
+// `bynk` — the Bynk driver binary. See the crate docs in `lib.rs`.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

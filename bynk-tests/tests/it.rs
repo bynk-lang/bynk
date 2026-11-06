@@ -14,7 +14,7 @@
 //!
 //! - **`integration/`**: in-process pipeline tests and the fixture corpus. No
 //!   external process.
-//! - **`system/`**: anything that starts the `bynkc` binary, `tsc`, `node`,
+//! - **`system/`**: anything that starts the `bynk` binary, `tsc`, `node`,
 //!   `workerd` or `wrangler`.
 //!
 //! (The *unit* tier is the other crates' own tests and `xtask`'s file checks:

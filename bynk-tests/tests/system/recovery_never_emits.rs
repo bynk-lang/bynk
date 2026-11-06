@@ -62,7 +62,7 @@ fn bynkc_test_runs_nothing_for_a_partial_program() {
     ] {
         let root = project(name, source);
         let out_dir = root.join("out");
-        let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+        let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
             .arg("test")
             .arg(&root)
             .arg("--output")
@@ -126,7 +126,7 @@ fn a_clean_sibling_of_a_partially_parsed_file_is_not_emitted() {
     );
 
     let out_dir = root.join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(&root)
         .arg("--output")

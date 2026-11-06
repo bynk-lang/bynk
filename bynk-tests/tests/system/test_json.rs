@@ -205,7 +205,7 @@ fn discovery_lists_cases_without_running() {
     // (single-tree), mirroring the other fixture-driven CLI tests.
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/106_context_test_multiple_cases/src");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test"])
         .arg(&fixture)
         .args(["--no-run", "--format", "json"])
@@ -259,7 +259,7 @@ fn discovery_lists_cases_without_running() {
 fn discovery_lists_integration_suites() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/171_integration_two_context_service/src");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test"])
         .arg(&fixture)
         .args(["--no-run", "--format", "json"])
@@ -298,7 +298,7 @@ fn discovery_lists_integration_suites() {
 fn discovery_reports_each_cases_own_tier() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/291_platform_test_doubles");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test"])
         .arg(&fixture)
         .args(["--no-run", "--format", "json"])
@@ -336,7 +336,7 @@ fn discovery_reports_each_cases_own_tier() {
 fn discovery_marks_generative_cases() {
     let fixture =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/property_seed");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test"])
         .arg(&fixture)
         .args(["--no-run", "--format", "json"])

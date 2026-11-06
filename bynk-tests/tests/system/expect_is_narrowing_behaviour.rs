@@ -38,7 +38,7 @@ fn match_after_expect_is_type_checks() {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("expect_is_narrowing-out")
         .join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(fixture())
         .arg("--output")

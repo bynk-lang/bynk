@@ -290,7 +290,7 @@ fn run_fixture(fixture: &Path, scratch: &Path) -> Vec<String> {
     // `out-js` tree as a *sibling* of `--output` (see `property_behaviour.rs`).
     let output = scratch.join(name).join("run").join("out");
 
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(&input)
         .arg("--output")
@@ -420,7 +420,7 @@ for f in $FILES; do sed -i.bak 's/{needle}/void 0/' "$f"; done
         bin.display(),
         std::env::var("PATH").unwrap_or_default()
     );
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .env("PATH", path)
         .arg("test")
         .arg(&copy)

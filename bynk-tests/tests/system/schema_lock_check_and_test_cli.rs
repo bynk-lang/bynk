@@ -112,7 +112,7 @@ impl Scratch {
 
 /// Run `bynkc` with `args`, returning success and stdout + stderr.
 fn bynkc(args: &[&std::ffi::OsStr]) -> (bool, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .output()
         .expect("run bynkc");

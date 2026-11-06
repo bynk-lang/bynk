@@ -47,7 +47,7 @@ fn run_coverage_case(name: &str, out_dir: &str, json: bool, case: Option<&str>) 
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(out_dir)
         .join("out");
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"));
     cmd.arg("test")
         .arg(fixture(name))
         .arg("--output")
@@ -198,7 +198,7 @@ fn coverage_rejects_inspect_and_no_run() {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cov-guard/out");
 
     // `--coverage --inspect` — the two run models are exclusive.
-    let inspect = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let inspect = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test"])
         .arg(fixture("coverage_partial"))
         .arg("--output")
@@ -215,7 +215,7 @@ fn coverage_rejects_inspect_and_no_run() {
 
     // `--coverage --no-run` — there is no run to measure. A distinct early-return
     // with its own message, so exercise it separately.
-    let no_run = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let no_run = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test"])
         .arg(fixture("coverage_partial"))
         .arg("--output")

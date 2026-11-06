@@ -58,7 +58,7 @@ fn observation_sugar_and_trace_agree_at_runtime() {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("observation-out")
         .join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(fixture())
         .arg("--output")

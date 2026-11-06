@@ -96,7 +96,7 @@ fn a_faulting_route_is_logged_by_pattern_and_answers_a_bare_500() {
     fs::write(tmp.join("src/shop/api.bynk"), CONTEXT).unwrap();
     fs::write(tmp.join("driver.mjs"), DRIVER).unwrap();
 
-    let compiled = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let compiled = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["compile", "--target", "workers", "--emit", "js", "-o"])
         .arg(tmp.join("out"))
         .arg(&tmp)

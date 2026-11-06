@@ -65,7 +65,7 @@ impl Run {
 }
 
 fn test(project: &Path, args: &[&str]) -> Run {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(project)
         .arg("--output")
