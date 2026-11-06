@@ -1498,9 +1498,9 @@ pub(super) fn block_uses_run_id(block: &Block) -> bool {
         bynk_syntax::ast::statement_exprs(s, &mut exprs);
     }
     for e in exprs {
-        bynk_ir::walk_exprs(e, &mut check);
+        bynk_model::walk_exprs(e, &mut check);
     }
-    bynk_ir::walk_exprs(&block.tail, &mut check);
+    bynk_model::walk_exprs(&block.tail, &mut check);
     found
 }
 
@@ -1519,7 +1519,7 @@ pub(super) fn block_uses_advance(b: &Block) -> bool {
     exprs.push(&b.tail);
     let mut found = false;
     for e in exprs {
-        bynk_ir::walk_exprs(e, &mut |x: &Expr| {
+        bynk_model::walk_exprs(e, &mut |x: &Expr| {
             found |= match &x.kind {
                 ExprKind::Block(inner) => block_uses_advance(inner),
                 ExprKind::If {

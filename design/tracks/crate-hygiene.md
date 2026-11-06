@@ -109,7 +109,8 @@ boundaries, and several gated probes are defined by path or by crate:
 | `fs_below_driver` | 0 | files touching `std::fs` below the driver | moving `project` to the driver. Its `std::fs` uses sit in `project.rs`'s trailing test block, so they leave the counted set. |
 | `emit_diagnostics` | `bynk-emit=14/19` | distinct `"bynk.*"` literals per crate `src/` | moving `project` to the driver. `project.rs` holds most of `bynk-emit`'s. |
 | `ide_emit_edge` | absent | a `bynk-ide` → `bynk-emit` edge | must stay absent. §6 S1 adds `bynk-ide` → `bynk-lower`, which is allowed. |
-| `unconsumed_ir_items` | 0 | public items of `bynk-ir`, owners `bynk-ir`/`bynk-lower` | renaming or folding the crate (§6) |
+| `unconsumed_ir_items` | 0 | public items of `bynk-model`, owner `bynk-model` (B1 re-pointed it from `bynk-ir`, owners `bynk-ir`/`bynk-lower`) | re-pointed by B1's rename |
+| `model_readers_beyond_emit` | 3 | public items of `bynk-model` read outside `bynk-model` and `bynk-emit` (added by B1; may only rise) | B2, B3 (rising) |
 
 **Governing rules:**
 - A slice that moves a probe re-points or re-stamps it (`cargo xtask greenfield-status --apply`)

@@ -1,10 +1,11 @@
-//! `bynk-lower`: the AST-analysis helpers `bynk-emit` reads resolved
+//! `bynk_model::lower` (the `bynk-lower` crate until crate-hygiene B1, #2939): the
+//! model's builder, the AST-analysis helpers `bynk-emit` reads resolved
 //! declaration-level facts through — handler kinds and `given` clauses,
 //! service protocols, store-field shapes, capability op and attached-method
 //! signatures, route cache/limit annotations, event-subscriber shapes, and
 //! the store-write walk behind `emit_agent`'s implicit-commit decision. Each
 //! takes a checked program (or its `TypedCommons`) and a syntax-tree node
-//! and returns a `bynk_ir` value; none lowers an expression body.
+//! and returns a [`crate::vocabulary`] value; none lowers an expression body.
 //!
 //! **Reachability, corrected twice and now settled (Slice D0 of `#1542`,
 //! the IR cutover, closing summary in `design/archive/retired-tracks.md`).** Through the crate carve (Arc D,
@@ -64,7 +65,7 @@ use bynk_syntax::ast::{
     TypeBody, TypeDecl, TypeRef, expr_children,
 };
 
-use bynk_ir::{
+use crate::vocabulary::{
     ActorSeamIr, CacheIr, CapRefIr, ConstVal, EventPatternIr, EventPatternValueIr,
     EventSubscriberShape, FnSig, IrHandlerKind, IrHttpMethod, OpSig, ProtocolIr, StoreFieldIr,
     StoreKindIr, TypeShape,
@@ -143,7 +144,7 @@ pub type HandlerSignatureIr = (Vec<(String, TyId)>, Vec<String>, TyId, bool);
 /// into it (`bynk_emit::emitter::is_effectful_return`) — the `Ast → Ir` boundary
 /// running backwards, an `Ir`-side lowering function reaching into the
 /// `emitter` module it should only ever be called *from*. `emit.rs` and
-/// friends now call `bynk_lower::is_effectful_return` instead (relocated
+/// friends now call `bynk_model::is_effectful_return` instead (relocated
 /// again at the P7.12 crate carve — `emitter`/`ir::lower` are now separate
 /// crates, `bynk-emit`/`bynk-lower` respectively).
 pub fn is_effectful_return(r: &TypeRef) -> bool {
@@ -596,19 +597,21 @@ pub fn lower_protocol_ir_from_commons(
             pattern: pattern.as_ref().map(lower_event_pattern_ir),
             schema_dispatch: schema_dispatch.as_ref().map(|d| match &d.pattern {
                 bynk_syntax::ast::SchemaVersionPattern::Literal(v) => {
-                    bynk_ir::SchemaVersionIr::Exact(*v)
+                    crate::vocabulary::SchemaVersionIr::Exact(*v)
                 }
                 bynk_syntax::ast::SchemaVersionPattern::Range(r) => {
-                    bynk_ir::SchemaVersionIr::Range { lo: r.lo, hi: r.hi }
+                    crate::vocabulary::SchemaVersionIr::Range { lo: r.lo, hi: r.hi }
                 }
-                bynk_syntax::ast::SchemaVersionPattern::Wildcard => bynk_ir::SchemaVersionIr::Any,
+                bynk_syntax::ast::SchemaVersionPattern::Wildcard => {
+                    crate::vocabulary::SchemaVersionIr::Any
+                }
             }),
         },
     }
 }
 
 /// #1228: a GET handler's own `@cache(maxAge:, scope:)` freshness policy —
-/// [`bynk_ir::CacheIr`]'s own doc comment has the full grounding for why
+/// [`crate::vocabulary::CacheIr`]'s own doc comment has the full grounding for why
 /// this is a standalone per-route reader. Field-for-
 /// field the same extraction `emitter/workers_entry.rs`'s own (now
 /// superseded) `cache_policy_for` did: only a `GET` yields a policy;
@@ -678,7 +681,7 @@ pub fn lower_route_limit_ir(h: &Handler) -> Option<i64> {
 }
 
 /// Every `from Events(E)` service in `program`'s own unit, captured as an
-/// [`bynk_ir::EventSubscriberShape`] keyed by service name — see that
+/// [`crate::vocabulary::EventSubscriberShape`] keyed by service name — see that
 /// struct's own doc comment for why this is captured now rather than
 /// re-derived cross-unit at compose time (P6.47, `#1254`).
 ///
@@ -783,7 +786,7 @@ pub fn capability_op_sig_from_commons(
 }
 
 /// P6.12 (#1173): lower one capability operation's own signature into a real
-/// [`bynk_ir::OpSig`] — the reference's own capability-item sketch
+/// [`crate::vocabulary::OpSig`] — the reference's own capability-item sketch
 /// names this type (`ops: Vec<OpSig>`) but never defines it. Resolves
 /// `params`/`return_ty` in the scope `op.type_params` names, the same
 /// per-op rigid-variable seeding `context_checks::build_capability_op_info`
@@ -865,7 +868,7 @@ fn lower_op_sig_ir_from_commons(op: &CapabilityOp, commons: &TypedCommons) -> Op
     }
 }
 
-/// P6.18: [`bynk_ir::FnSig`]'s own constructor — a `fn`'s own resolved
+/// P6.18: [`crate::vocabulary::FnSig`]'s own constructor — a `fn`'s own resolved
 /// signature, for a call site holding only that fn's *declaring* unit's own
 /// combined types (`bynk_check::symbols::combined_types_for`'s return shape),
 /// never a `CheckedProgram`. The one real call site
@@ -1045,7 +1048,7 @@ pub fn lower_actor_seam_ir(handler: &Handler, actors: &HashMap<String, ActorDecl
 }
 
 /// P6.14 (#1174, review of #1186): adapt one `given` entry into a real
-/// [`bynk_ir::CapRefIr`] — [`CapRefIr`]'s own doc comment has the full
+/// [`crate::vocabulary::CapRefIr`] — [`CapRefIr`]'s own doc comment has the full
 /// grounding for the `QualifiedName -> String` flattening and for why a
 /// `Some` prefix is preserved unresolved.
 pub fn lower_cap_ref_ir(cap_ref: &CapRef) -> CapRefIr {

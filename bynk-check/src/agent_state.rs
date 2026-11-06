@@ -116,7 +116,7 @@ pub struct Edge {
     pub violations: Vec<Violation>,
     /// #2197: whether this edge's handler commits — the emitter wraps a
     /// handler in the commit that runs `transition`s only when it writes some
-    /// store field (`bynk_lower::body_writes_state`); a handler that doesn't
+    /// store field (`bynk_model::body_writes_state`); a handler that doesn't
     /// can violate none.
     pub commits: bool,
 }
@@ -404,7 +404,7 @@ fn machine(
 ///   `old = S, new = T`.
 /// - An unchanged path is `S → S`, but only in a handler that commits — the
 ///   emitter wraps a handler in the commit (where transitions are checked)
-///   only when it writes some store field (`bynk_lower::body_writes_state`).
+///   only when it writes some store field (`bynk_model::body_writes_state`).
 /// - A computed write is checked against every target: all violating is
 ///   [`Certainty::Known`], some is [`Certainty::Possible`].
 /// - Only start states the agent can be in after a commit count (#2219): a
@@ -471,7 +471,7 @@ fn overlay(
 
 /// Whether `handler` commits: whether its body writes any of `agent`'s store
 /// fields anywhere, the emitter's condition for wrapping it in the commit that
-/// checks `transition`s. This recomputes `bynk_lower::body_writes_state`
+/// checks `transition`s. This recomputes `bynk_model::body_writes_state`
 /// syntactically; `bynk-lower`'s tests pin the two together (#2220).
 pub fn handler_commits(agent: &AgentDecl, handler: &Handler) -> bool {
     handler_commits_in(handler, &store_kinds(agent))

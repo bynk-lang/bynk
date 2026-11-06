@@ -781,8 +781,8 @@ pub fn emit_worker_entry(
             // `h.kind` a second time. `HttpRoute::method` is `IrHttpMethod`
             // (un-deferred from Q7's original "stays AST until phase 7's
             // printer" — phase 7 shipped, see the front-loading ADR).
-            if let bynk_ir::IrHandlerKind::Http { method, path } =
-                bynk_lower::lower_handler_kind_ir(&h.kind)
+            if let bynk_model::IrHandlerKind::Http { method, path } =
+                bynk_model::lower_handler_kind_ir(&h.kind)
             {
                 let query_fields = query_field_specs(h, &path, visible_types);
                 http_routes.push(HttpRoute {
@@ -803,7 +803,7 @@ pub fn emit_worker_entry(
                     sum: bynk_check::actors::sum_members_for(h, &table.actors).is_some(),
                     // v0.140 (ADR 0163): the handler's `@cache` freshness policy, if
                     // any — lowered to a `Cache-Control` on this GET's responses.
-                    cache: bynk_lower::lower_route_cache_ir(h),
+                    cache: bynk_model::lower_route_cache_ir(h),
                     edge_cache,
                     vary_locale: edge_cache && needs_locale_request,
                     // v0.142 (ADR 0165): the route's effective request-body ceiling
@@ -856,7 +856,7 @@ pub fn emit_worker_entry(
     // built `Response` body through the runtime's `headResponse`.
     let has_get_route = http_routes
         .iter()
-        .any(|r| r.method == bynk_ir::IrHttpMethod::Get);
+        .any(|r| r.method == bynk_model::IrHttpMethod::Get);
 
     // v0.10a: collect cron handlers across all services, carrying the per-service
     // declaration index (the method-name key) and sorting by schedule expression
@@ -869,8 +869,8 @@ pub fn emit_worker_entry(
             // P6.31: dispatches on `IrHandlerKind`; `expr` is a plain `String`
             // in both, so no AST re-derivation is needed here (unlike the
             // `Http` arm above).
-            if let bynk_ir::IrHandlerKind::Cron { expr } =
-                bynk_lower::lower_handler_kind_ir(&h.kind)
+            if let bynk_model::IrHandlerKind::Cron { expr } =
+                bynk_model::lower_handler_kind_ir(&h.kind)
             {
                 cron_routes.push(CronRoute {
                     service: (*sname).clone(),
@@ -896,8 +896,8 @@ pub fn emit_worker_entry(
             // function has no `TypedCommons` in scope, the same constraint
             // P6.30 found in `emit_worker_compose`.
             if matches!(
-                bynk_lower::lower_handler_kind_ir(&h.kind),
-                bynk_ir::IrHandlerKind::Message
+                bynk_model::lower_handler_kind_ir(&h.kind),
+                bynk_model::IrHandlerKind::Message
             ) {
                 // v0.44: the bound queue name lives on the service header
                 // (`from queue("name")`), not on the handler.
@@ -926,8 +926,8 @@ pub fn emit_worker_entry(
         let service = table.services.get(*sname).unwrap();
         for h in &service.handlers {
             if matches!(
-                bynk_lower::lower_handler_kind_ir(&h.kind),
-                bynk_ir::IrHandlerKind::Open
+                bynk_model::lower_handler_kind_ir(&h.kind),
+                bynk_model::IrHandlerKind::Open
             ) {
                 ws_open_routes.push((*sname, h));
             }
@@ -942,8 +942,8 @@ pub fn emit_worker_entry(
         table.services.get(*sname).is_some_and(|s| {
             s.handlers.iter().any(|h| {
                 matches!(
-                    bynk_lower::lower_handler_kind_ir(&h.kind),
-                    bynk_ir::IrHandlerKind::Event
+                    bynk_model::lower_handler_kind_ir(&h.kind),
+                    bynk_model::IrHandlerKind::Event
                 )
             })
         })
@@ -1000,7 +1000,7 @@ pub fn emit_worker_entry(
     if edge_cache {
         if http_routes
             .iter()
-            .any(|r| r.method == bynk_ir::IrHttpMethod::Get && r.cache.is_none())
+            .any(|r| r.method == bynk_model::IrHttpMethod::Get && r.cache.is_none())
         {
             imports.push("__noStore".to_string());
         }
@@ -1205,8 +1205,8 @@ pub fn emit_worker_entry(
         let service = table.services.get(*sname).unwrap();
         let Some(h) = service.handlers.iter().find(|h| {
             matches!(
-                bynk_lower::lower_handler_kind_ir(&h.kind),
-                bynk_ir::IrHandlerKind::Call
+                bynk_model::lower_handler_kind_ir(&h.kind),
+                bynk_model::IrHandlerKind::Call
             )
         }) else {
             continue;
@@ -1433,8 +1433,8 @@ pub fn emit_worker_entry(
             table.services.get(**sname).is_some_and(|s| {
                 s.handlers.iter().any(|h| {
                     matches!(
-                        bynk_lower::lower_handler_kind_ir(&h.kind),
-                        bynk_ir::IrHandlerKind::Event
+                        bynk_model::lower_handler_kind_ir(&h.kind),
+                        bynk_model::IrHandlerKind::Event
                     )
                 })
             })
@@ -1506,8 +1506,8 @@ pub fn emit_worker_entry(
                 .iter()
                 .find(|h| {
                     matches!(
-                        bynk_lower::lower_handler_kind_ir(&h.kind),
-                        bynk_ir::IrHandlerKind::Event
+                        bynk_model::lower_handler_kind_ir(&h.kind),
+                        bynk_model::IrHandlerKind::Event
                     )
                 })
                 .expect("event_services filtered to services with an Event handler");
@@ -2203,7 +2203,7 @@ struct CorsService {
 /// plus `OPTIONS` always. The `BTreeSet` yields a stable alphabetical order
 /// (`DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT`) — so `Allow: GET, HEAD,
 /// OPTIONS` and `Allow: OPTIONS, POST` read as the proposal specifies.
-fn derive_allowed_methods(methods: impl Iterator<Item = bynk_ir::IrHttpMethod>) -> Vec<String> {
+fn derive_allowed_methods(methods: impl Iterator<Item = bynk_model::IrHttpMethod>) -> Vec<String> {
     let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut has_get = false;
     for m in methods {
@@ -2438,7 +2438,7 @@ fn build_security_services(
 #[derive(Debug, Clone)]
 struct HttpRoute {
     service: String,
-    method: bynk_ir::IrHttpMethod,
+    method: bynk_model::IrHttpMethod,
     path: String,
     handler: Handler,
     /// v0.47: the handler's `by` clause names a Bearer actor, so its surface
@@ -2461,7 +2461,7 @@ struct HttpRoute {
     /// `Some` only for a `GET` carrying a well-formed `@cache`; drives the
     /// `applyCache` `Cache-Control` stamp. The conditional `ETag`/`304` half is
     /// automatic for every eligible GET and needs no policy.
-    cache: Option<bynk_ir::CacheIr>,
+    cache: Option<bynk_model::CacheIr>,
     /// L7 (#2414, Decision C): the context declares an `EdgeCache` instance,
     /// so its Worker is served through Workers Cache: a `@cache` route stamps
     /// its freshness on a `2xx` alone (`applyEdgeCache`), and a `GET` without
@@ -2578,7 +2578,7 @@ pub fn table_has_plain_json(table: &UnitTable) -> bool {
 /// or misplaced `@limit`/`limits`, so a bad/absent value here simply yields no
 /// cap. Only a body-taking method can carry a cap — a `@limit` on a GET/DELETE is
 /// a checker error, so it never reaches a live route here. The route-annotation
-/// half is `bynk-emit::ir`'s own [`bynk_lower::lower_route_limit_ir`]
+/// half is `bynk-emit::ir`'s own [`bynk_model::lower_route_limit_ir`]
 /// (#1228); only the service-wide fallback composition stays here.
 fn effective_max_body(service_limits: Option<&LimitsPolicy>, h: &Handler) -> Option<i64> {
     h.limit_max_body()
@@ -2676,7 +2676,7 @@ fn emit_http_route_dispatch(
     // v0.139 (ADR 0162 D3): a `GET` route also answers `HEAD` — the guard widens
     // so the `GET` handler runs, then the built response's body is stripped
     // below. Other methods match exactly.
-    let method_guard = if route.method == bynk_ir::IrHttpMethod::Get {
+    let method_guard = if route.method == bynk_model::IrHttpMethod::Get {
         or_expr(
             strict_eq(ident("method"), str_lit("GET")),
             strict_eq(ident("method"), str_lit("HEAD")),
@@ -3163,7 +3163,7 @@ fn emit_http_route_dispatch(
     // (`notModifiedIfMatch`) — composed innermost-first so CORS still stamps the
     // `304`. Non-`GET`/unsafe methods are byte-for-byte unchanged: no validator, no
     // conditional, no freshness (DECISION B).
-    let response_expr = if route.method == bynk_ir::IrHttpMethod::Get {
+    let response_expr = if route.method == bynk_model::IrHttpMethod::Get {
         let base = call(
             ident("__httpResultToResponse"),
             vec![
@@ -3237,7 +3237,7 @@ fn emit_http_route_dispatch(
     // and headers with an empty body — the handler ran, so the headers are the
     // real ones a `GET` would produce; `headResponse` discards the body without
     // reading it (a `Streaming` body is never drained).
-    if route.method == bynk_ir::IrHttpMethod::Get {
+    if route.method == bynk_model::IrHttpMethod::Get {
         guarded.push(const_("__response", build_expr));
         guarded.push(return_(Some(cond_expr(
             strict_eq(ident("method"), str_lit("HEAD")),
@@ -3611,7 +3611,7 @@ fn serialise_call(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExpr {
 mod tests {
     use super::*;
     use crate::testkit::emit_workers;
-    use bynk_ir::IrHttpMethod;
+    use bynk_model::IrHttpMethod;
 
     /// #2136: the test build of a context a `system` suite drives stores each
     /// cron run's `Result` on the execution context; the deployable build

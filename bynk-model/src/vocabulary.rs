@@ -1,4 +1,4 @@
-//! `bynk-ir`: the resolved *declaration-level* vocabulary `bynk-emit` reads
+//! `bynk_model::vocabulary` (the `bynk-ir` crate until crate-hygiene B1, #2939): the resolved *declaration-level* vocabulary `bynk-emit` reads
 //! through `bynk-lower`'s AST-analysis helpers, instead of re-deriving the
 //! same facts from `bynk_syntax::ast` a second time.
 //!
@@ -18,12 +18,13 @@
 //! live here rather than in the emitter because they were written to be
 //! shared with `bynk-lower`, and `bynk-emit` is the consumer that remains).
 //!
-//! **Every `pub` item here has a reader outside both `bynk-ir` and
-//! `bynk-lower`**, and the gated `unconsumed_ir_items` probe
-//! (`cargo xtask greenfield-status`) fails CI if one ever does not — the
-//! two crates do not get to vouch for each other, since a `bynk-ir` type
-//! constructed only by a `bynk-lower` helper nobody calls is exactly the
-//! shape phase 6 shipped.
+//! **Every `pub` item here has a reader outside `bynk-model`**, and the gated
+//! `unconsumed_ir_items` probe (`cargo xtask greenfield-status`) fails CI if one
+//! ever does not. The builder ([`crate::lower`]) can't vouch for this
+//! vocabulary, because both sit inside the one excluded crate. A type
+//! constructed only by a builder function nobody calls is exactly the shape
+//! phase 6 shipped. (Until B1 these were two crates, `bynk-ir` and `bynk-lower`,
+//! and the probe's two-owner rule kept either from vouching for the other.)
 //!
 //! **What this crate is not, and was.** Phase 6 of
 //! `design/bynk-compiler-trajectory.md` (`the-ir.md`, #1137) built here a
@@ -101,7 +102,7 @@ pub struct CapRefIr {
 }
 
 /// A capability op's resolved signature (P6.12, [DECISION A], #1173) —
-/// `bynk_lower::lower_capability_ops_ir`'s per-op return value, read by
+/// `bynk_model::lower_capability_ops_ir`'s per-op return value, read by
 /// `emit_capability` (`bynk-emit/src/emitter/emit.rs`). The reference's own
 /// sketch named `ops: Vec<OpSig>` (`bynk-greenfield-compiler.md:1134`)
 /// without defining the type; this is that shape, adapted from
@@ -112,12 +113,12 @@ pub struct CapRefIr {
 /// (`bynk-check/src/checker.rs`) — a bare rigid-variable name, not a
 /// `TypeParam` AST node, since nothing here re-derives bounds a capability
 /// op's own `[T, …]` list never carries in the first place (#926).
-/// `bynk_lower::lower_op_sig_ir` resolves `params`/`return_ty` in the scope
+/// `bynk_model::lower_op_sig_ir` resolves `params`/`return_ty` in the scope
 /// `type_params` names, mirroring `context_checks::build_capability_op_info`'s
 /// own `vars` treatment (`bynk-check/src/context_checks.rs`) so a generic
 /// op's own `T` survives as `Ty::Var("T")` rather than collapsing to
 /// `Ty::Unit`. On a genuinely unresolvable name a `params`/`return_ty` entry
-/// *is* `Ty::Unit`, deliberately — see `bynk_lower::lower_op_sig_ir`'s own doc
+/// *is* `Ty::Unit`, deliberately — see `bynk_model::lower_op_sig_ir`'s own doc
 /// comment for why that mirrors the checker's own fallback rather than
 /// panicking.
 #[derive(Debug, Clone)]
@@ -137,7 +138,7 @@ pub struct OpSig {
 /// the [`OpSig`]-shaped value a *foreign* unit's attached method needs when
 /// only its signature will ever be rendered (`emit_attached_methods`'
 /// delegating forward at `bynk_emit::emitter::emit::emit_forwarded_methods`),
-/// never its body (P6.18). `bynk_lower::lower_attached_fn_sig_ir_from_types`
+/// never its body (P6.18). `bynk_model::lower_attached_fn_sig_ir_from_types`
 /// resolves `params`/`return_ty` in the scope the method's own `[T, …]` list
 /// names (mirroring `OpSig`'s identical `type_params` treatment) — a
 /// genuinely unresolvable name degrades to `Ty::Unit`, deliberately, the
@@ -155,7 +156,7 @@ pub struct FnSig {
 }
 
 /// P6.11's real `ProtocolIr` ([DECISION A], #1171) — one variant per
-/// `bynk_syntax::ast::ServiceProtocol` variant, `bynk_lower::lower_protocol_ir`'s
+/// `bynk_syntax::ast::ServiceProtocol` variant, `bynk_model::lower_protocol_ir`'s
 /// own return value. The reference's own sketch specifies only two of the
 /// six: `Events { event, pattern, schema_dispatch }`
 /// (`bynk-greenfield-compiler.md:1881`) and `WebSocket { in_ty, out_ty }`
@@ -181,7 +182,7 @@ pub enum ProtocolIr {
         name: String,
     },
     /// `from websocket(in: …, out: …)` — the two frame types, resolved
-    /// (each through the `Ty::Unit` fallback `bynk_lower::lower_protocol_ir`
+    /// (each through the `Ty::Unit` fallback `bynk_model::lower_protocol_ir`
     /// documents, since the checker itself does not reject an unresolvable
     /// frame type).
     WebSocket {
@@ -221,7 +222,7 @@ pub enum SchemaVersionIr {
 /// so a *different* unit's own composition root can later decide whether its
 /// subscriber to this service wants the event envelope forwarded, without
 /// re-walking this unit's raw `UnitTable`. Pure syntax, zero `TyId`
-/// dependency. Produced by `bynk_lower::lower_event_subscriber_shapes_ir`, sized
+/// dependency. Produced by `bynk_model::lower_event_subscriber_shapes_ir`, sized
 /// like #1187's own `unit_callees` (#1202) accumulator.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct EventSubscriberShape {
@@ -265,7 +266,7 @@ pub enum EventPatternValueIr {
 /// A GET handler's own `@cache(maxAge:, scope:)` freshness policy (#1228),
 /// interpreted — raw `{name, value: Expr}` annotation pairs mean nothing on
 /// their own, so the seconds and the scope are resolved here once.
-/// Handler-scoped, not service-scoped: `bynk_lower::lower_route_cache_ir` is
+/// Handler-scoped, not service-scoped: `bynk_model::lower_route_cache_ir` is
 /// a standalone per-route reader, wired directly into
 /// `emitter/workers_entry.rs`'s own route construction — the same live,
 /// standalone-consumer shape `lower_protocol_ir`/`lower_handler_given_ir`/
@@ -289,7 +290,7 @@ pub struct CacheIr {
 }
 
 /// A declared type's own resolved structure (Part 6.6, #1161) —
-/// `bynk_lower::lower_type_shape_ir`'s return value. Covers the AST's
+/// `bynk_model::lower_type_shape_ir`'s return value. Covers the AST's
 /// four `TypeBody` variants (`Refined`/`Record`/`Sum`/`Opaque`) with the
 /// reference's own three ([DECISION A]): `Opaque` unifies into `Refined`
 /// via its own `opaque: bool` field, mirroring `emitter/emit.rs`'s own
@@ -329,7 +330,7 @@ pub enum TypeShape {
 }
 
 /// An agent `store` field's storage shape (`design/bynk-greenfield-compiler.md`
-/// §6.6, R6.14, #1163) — `bynk_lower::lower_store_field_shape_ir`'s return
+/// §6.6, R6.14, #1163) — `bynk_model::lower_store_field_shape_ir`'s return
 /// value, read by `emit_agent`'s state section. Mirrors
 /// `checker::StoreField`'s own five-kind dispatch
 /// (`bynk-check/src/checker.rs`) in shape, but is persistent IR data, not
@@ -351,7 +352,7 @@ pub struct StoreFieldIr {
     /// ([DECISION C]), no sort ([DECISION E]). Deduplicated: the checker
     /// validates each `by:` argument independently with no duplicate check
     /// (`validate_indexed_keys`), so `@indexed(by: k, by: k)` certifies —
-    /// `bynk_lower::lower_store_field_shape_ir` guards against it, mirroring the
+    /// `bynk_model::lower_store_field_shape_ir` guards against it, mirroring the
     /// shipped emitter's own `store_map_indexes` dedup. Empty for every kind
     /// but `Map`, the only kind `@indexed` attaches to (`ANNOTATIONS`'s own
     /// registry, `bynk-check/src/context_checks.rs`). Each key is the
@@ -392,7 +393,7 @@ pub enum StoreKindIr {
 /// `bynk_syntax::ast`/`TypeRef`/`Expr`: every field is `String`/`bool`/
 /// `i64`/`Option`/`Vec` (or, for `BearerSeam::authorization`,
 /// `ClaimPredicate`, itself a plain recursive `String`/`Box` enum). Built by
-/// `bynk_lower::lower_actor_seam_ir`, which tries the five resolvers in the one
+/// `bynk_model::lower_actor_seam_ir`, which tries the five resolvers in the one
 /// priority order that actually matters — `sum_members_for` first, since
 /// it's the only resolver whose result can otherwise collide with
 /// `bearer_seam_for`'s (a sum's own first peer can itself be Bearer-schemed;
@@ -435,7 +436,7 @@ pub enum ActorSeamIr {
 /// field-for-field copy, not a re-export. Every field (`HttpMethod`, a
 /// route `path: String`, a cron `expr: String`) is already fully resolved
 /// at parse time; nothing here ever needed `TyId`/`CheckedProgram`, so
-/// `bynk_lower::lower_handler_kind_ir` is a pure, unconditional conversion —
+/// `bynk_model::lower_handler_kind_ir` is a pure, unconditional conversion —
 /// unlike almost everything else in this module, it carries no ADR 0334
 /// totality story because it can never fail to resolve.
 ///

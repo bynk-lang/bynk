@@ -57,9 +57,9 @@ use bynk_check::builtin_names::types::*;
 use bynk_check::checker::{CheckedProgram, ExprId, NamedKind, Ty, TyId, TypedCommons, Types};
 use bynk_check::project_model::BuildTarget;
 use bynk_check::symbols::UnitTable;
-use bynk_ir::TypeShape;
-use bynk_ir::{block_uses_emit, walk_block_exprs};
-use bynk_lower::{
+use bynk_model::TypeShape;
+use bynk_model::{block_uses_emit, walk_block_exprs};
+use bynk_model::{
     lower_capability_ops_ir, lower_protocol_ir, lower_service_handler_signature_ir,
     lower_store_field_shape_ir, lower_type_shape_ir,
 };
@@ -1911,8 +1911,8 @@ fn emit_consumed_context_helpers(
         let CommonsItem::Service(svc) = item else {
             continue;
         };
-        let bynk_ir::ProtocolIr::Events { event, .. } =
-            bynk_lower::lower_protocol_ir(&svc.protocol, program)
+        let bynk_model::ProtocolIr::Events { event, .. } =
+            bynk_model::lower_protocol_ir(&svc.protocol, program)
         else {
             continue;
         };
@@ -3422,8 +3422,8 @@ fn emit_cross_context_namespace_imports(
             .iter()
             .filter_map(|item| match item {
                 CommonsItem::Service(s) => {
-                    let bynk_ir::ProtocolIr::Events { event, .. } =
-                        bynk_lower::lower_protocol_ir_from_commons(&s.protocol, commons)
+                    let bynk_model::ProtocolIr::Events { event, .. } =
+                        bynk_model::lower_protocol_ir_from_commons(&s.protocol, commons)
                     else {
                         return None;
                     };
@@ -3589,8 +3589,8 @@ fn emit_project_imports(
         .iter()
         .filter_map(|item| match item {
             CommonsItem::Service(s) => {
-                let bynk_ir::ProtocolIr::Events { event, .. } =
-                    bynk_lower::lower_protocol_ir_from_commons(&s.protocol, commons)
+                let bynk_model::ProtocolIr::Events { event, .. } =
+                    bynk_model::lower_protocol_ir_from_commons(&s.protocol, commons)
                 else {
                     return None;
                 };
@@ -3887,8 +3887,8 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         let has_http = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Service(s) => s.handlers.iter().any(|h| {
                 matches!(
-                    bynk_lower::lower_handler_kind_ir(&h.kind),
-                    bynk_ir::IrHandlerKind::Http { .. }
+                    bynk_model::lower_handler_kind_ir(&h.kind),
+                    bynk_model::IrHandlerKind::Http { .. }
                 )
             }),
             _ => false,
@@ -3903,12 +3903,12 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         let has_queue = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Service(s) => {
                 !matches!(
-                    bynk_lower::lower_protocol_ir_from_commons(&s.protocol, commons),
-                    bynk_ir::ProtocolIr::WebSocket { .. }
+                    bynk_model::lower_protocol_ir_from_commons(&s.protocol, commons),
+                    bynk_model::ProtocolIr::WebSocket { .. }
                 ) && s.handlers.iter().any(|h| {
                     matches!(
-                        bynk_lower::lower_handler_kind_ir(&h.kind),
-                        bynk_ir::IrHandlerKind::Message
+                        bynk_model::lower_handler_kind_ir(&h.kind),
+                        bynk_model::IrHandlerKind::Message
                     )
                 })
             }
@@ -4068,8 +4068,8 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         let hosts_ws_open = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Service(s) => s.handlers.iter().any(|h| {
                 matches!(
-                    bynk_lower::lower_handler_kind_ir(&h.kind),
-                    bynk_ir::IrHandlerKind::Open
+                    bynk_model::lower_handler_kind_ir(&h.kind),
+                    bynk_model::IrHandlerKind::Open
                 )
             }),
             _ => false,
@@ -4085,12 +4085,12 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         let hosts_ws_inbound = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Service(s) => {
                 matches!(
-                    bynk_lower::lower_protocol_ir_from_commons(&s.protocol, commons),
-                    bynk_ir::ProtocolIr::WebSocket { .. }
+                    bynk_model::lower_protocol_ir_from_commons(&s.protocol, commons),
+                    bynk_model::ProtocolIr::WebSocket { .. }
                 ) && s.handlers.iter().any(|h| {
                     matches!(
-                        bynk_lower::lower_handler_kind_ir(&h.kind),
-                        bynk_ir::IrHandlerKind::Message | bynk_ir::IrHandlerKind::Close
+                        bynk_model::lower_handler_kind_ir(&h.kind),
+                        bynk_model::IrHandlerKind::Message | bynk_model::IrHandlerKind::Close
                     )
                 })
             }
@@ -4554,7 +4554,7 @@ pub(crate) struct ModuleCtx<'a> {
     /// #527: agent → method → the method's `given` caps (mirrors
     /// [`crate::emit_model::EmitProjectCtx::agent_method_givens`]). Consulted by
     /// the agent-call lowering to record capability requirements.
-    agent_method_givens: HashMap<String, HashMap<String, Vec<bynk_ir::CapRefIr>>>,
+    agent_method_givens: HashMap<String, HashMap<String, Vec<bynk_model::CapRefIr>>>,
     /// Events slice 3b (#978): each locally-declared event's resolved
     /// `@schema(N)` version (mirrors
     /// [`crate::emit_model::EmitProjectCtx::event_schema_versions`]). Default-
@@ -4654,7 +4654,7 @@ pub(crate) struct HandlerShared {
     /// #527: capabilities required by agent methods this body calls, keyed by
     /// deps key. After body lowering these widen the handler's deps *type* to
     /// match the runtime value compose builds (which always carried them).
-    agent_given_caps_used: std::collections::BTreeMap<String, bynk_ir::CapRefIr>,
+    agent_given_caps_used: std::collections::BTreeMap<String, bynk_model::CapRefIr>,
 }
 
 impl Default for HandlerShared {
@@ -4840,7 +4840,7 @@ pub(crate) enum BodyMode {
         /// lookup here. P6.37 (design/tracks/the-ir.md §6a): `IrHandlerKind`
         /// (P6.24a's own pure, unconditional mirror), not the raw AST
         /// `HandlerKind` this field used to store.
-        test_service_handlers: HashMap<String, Vec<bynk_ir::IrHandlerKind>>,
+        test_service_handlers: HashMap<String, Vec<bynk_model::IrHandlerKind>>,
         /// I3 (#1971), #2020: the `(service, key)` handlers that bind an actor
         /// sum, whose `deps.who` a call-site principal builds. `key` is
         /// `"call"` for an `on call` handler and the emitted method name
@@ -5395,7 +5395,7 @@ impl<'a> LowerCtx<'a> {
     /// #527: capabilities required by agent methods this body calls.
     pub(crate) fn agent_given_caps_used(
         &self,
-    ) -> Option<&std::collections::BTreeMap<String, bynk_ir::CapRefIr>> {
+    ) -> Option<&std::collections::BTreeMap<String, bynk_model::CapRefIr>> {
         self.handler().map(|h| &h.agent_given_caps_used)
     }
 
@@ -5660,7 +5660,7 @@ impl<'a> LowerCtx<'a> {
     }
 
     /// v0.182 (#664): the ordered handler kinds of the test service `name`.
-    pub(crate) fn test_service_handlers(&self, name: &str) -> Option<&[bynk_ir::IrHandlerKind]> {
+    pub(crate) fn test_service_handlers(&self, name: &str) -> Option<&[bynk_model::IrHandlerKind]> {
         match &self.mode {
             BodyMode::TestCase {
                 test_service_handlers,

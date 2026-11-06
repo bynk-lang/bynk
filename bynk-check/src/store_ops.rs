@@ -30,7 +30,7 @@ pub struct StoreOp {
     pub signature: &'static str,
     /// #2194: `true` for a write (`put`, `append`, `update`, …), `false` for a
     /// read or a lazy query root. The one source for "does this op write
-    /// state" — read by `bynk_lower::body_writes_state` (commit detection) and
+    /// state" — read by `bynk_model::body_writes_state` (commit detection) and
     /// by the IDE's sequence diagram (state-write notes).
     pub mutates: bool,
 }

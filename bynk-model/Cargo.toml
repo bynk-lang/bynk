@@ -1,12 +1,12 @@
 [package]
-name = "bynk-lower"
+name = "bynk-model"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "The helpers that build the Bynk emitter's declaration-level IR (bynk-ir) from a checked program. Final crates.io release; superseded by bynk-model."
-keywords = ["compiler", "dsl", "ir", "language"]
+description = "The Bynk system model: the resolved, declaration-level description of a program (protocols, handler kinds, type shapes, store fields, signatures), and its builder from a checked program."
+keywords = ["compiler", "dsl", "model", "language"]
 categories = ["compilers"]
 
 [lib]
@@ -15,7 +15,6 @@ path = "src/lib.rs"
 [dependencies]
 bynk-syntax.workspace = true
 bynk-check.workspace = true
-bynk-ir.workspace = true
 
 [dev-dependencies]
 bynk-project.workspace = true

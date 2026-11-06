@@ -507,7 +507,7 @@ pub fn emit_worker_compose(
     let sum_reads_capped = table.services.values().any(|svc| {
         svc.handlers.iter().any(|h| {
             bynk_check::actors::sum_members_for(h, &table.actors).is_some()
-                && bynk_lower::lower_route_limit_ir(h)
+                && bynk_model::lower_route_limit_ir(h)
                     .or(svc.limits.as_ref().and_then(|p| p.max_body()))
                     .is_some()
                 && (h.params.iter().any(|p| p.name.name == "body")
@@ -526,8 +526,8 @@ pub fn emit_worker_compose(
     let has_ws_open = table.services.values().any(|s| {
         s.handlers.iter().any(|h| {
             matches!(
-                bynk_lower::lower_handler_kind_ir(&h.kind),
-                bynk_ir::IrHandlerKind::Open
+                bynk_model::lower_handler_kind_ir(&h.kind),
+                bynk_model::IrHandlerKind::Open
             )
         })
     });
@@ -710,11 +710,11 @@ pub fn emit_worker_compose(
             // `h.kind` — un-deferred from Q7's original "wrapper signatures
             // stay AST-typed until phase 7's printer" (phase 7 shipped; see
             // the front-loading ADR).
-            match bynk_lower::lower_handler_kind_ir(&h.kind) {
-                bynk_ir::IrHandlerKind::Call => {
+            match bynk_model::lower_handler_kind_ir(&h.kind) {
+                bynk_model::IrHandlerKind::Call => {
                     return_entries.push(emit_call_wrapper(sname, h, &table.actors));
                 }
-                bynk_ir::IrHandlerKind::Http { method, path } => {
+                bynk_model::IrHandlerKind::Http { method, path } => {
                     // v0.151: a single-actor `Oidc` handler gets the JWKS
                     // verification wrapper. v0.52: a multi-actor sum handler gets
                     // the first-wins resolution wrapper; otherwise the
@@ -733,12 +733,12 @@ pub fn emit_worker_compose(
                     // path with `None`, exactly like the old fallthrough
                     // (`bearer_seam_for` also misses on a `Caller` handler, since
                     // `Caller` is a prelude actor, not a key of `table.actors`).
-                    match bynk_lower::lower_actor_seam_ir(h, &table.actors) {
-                        bynk_ir::ActorSeamIr::Oidc(oidc) => {
+                    match bynk_model::lower_actor_seam_ir(h, &table.actors) {
+                        bynk_model::ActorSeamIr::Oidc(oidc) => {
                             return_entries
                                 .push(emit_http_oidc_wrapper(sname, h, method, &path, &oidc));
                         }
-                        bynk_ir::ActorSeamIr::Sum(members) => {
+                        bynk_model::ActorSeamIr::Sum(members) => {
                             return_entries.push(emit_http_sum_wrapper(
                                 sname,
                                 h,
@@ -749,7 +749,7 @@ pub fn emit_worker_compose(
                                 &runtime_use,
                             ));
                         }
-                        bynk_ir::ActorSeamIr::Bearer(seam) => {
+                        bynk_model::ActorSeamIr::Bearer(seam) => {
                             return_entries.push(emit_http_wrapper(
                                 sname,
                                 h,
@@ -758,18 +758,18 @@ pub fn emit_worker_compose(
                                 Some(&seam),
                             ));
                         }
-                        bynk_ir::ActorSeamIr::Caller(_)
-                        | bynk_ir::ActorSeamIr::CallSum(_)
-                        | bynk_ir::ActorSeamIr::None => {
+                        bynk_model::ActorSeamIr::Caller(_)
+                        | bynk_model::ActorSeamIr::CallSum(_)
+                        | bynk_model::ActorSeamIr::None => {
                             return_entries.push(emit_http_wrapper(sname, h, method, &path, None));
                         }
                     }
                 }
-                bynk_ir::IrHandlerKind::Cron { .. } => {
+                bynk_model::IrHandlerKind::Cron { .. } => {
                     return_entries.push(emit_cron_wrapper(sname, cron_idx, h));
                     cron_idx += 1;
                 }
-                bynk_ir::IrHandlerKind::Message => {
+                bynk_model::IrHandlerKind::Message => {
                     // v0.106 (slice 3b-iii): a `from websocket` `on message` is an
                     // *inbound* handler that runs in the connection-hosting Durable
                     // Object (`webSocketMessage`), not at the edge — no compose
@@ -784,7 +784,7 @@ pub fn emit_worker_compose(
                     return_entries.push(emit_queue_wrapper(sname, queue_idx, h));
                     queue_idx += 1;
                 }
-                bynk_ir::IrHandlerKind::Open => {
+                bynk_model::IrHandlerKind::Open => {
                     let seam = bynk_check::actors::bearer_seam_for(h, &table.actors);
                     let local_agents: HashSet<String> = table.agents.keys().cloned().collect();
                     // #1818: hosting agents that read their key are forwarded it.
@@ -806,7 +806,7 @@ pub fn emit_worker_compose(
                 }
                 // v0.106 (slice 3b-iii): `on close` runs in the DO (`webSocketClose`),
                 // not at the edge — no compose wrapper.
-                bynk_ir::IrHandlerKind::Close => {}
+                bynk_model::IrHandlerKind::Close => {}
                 // Events track, slice 0 (spine #936): unlike the WS
                 // lifecycle handlers above, an `on event` handler's body
                 // *does* need a compose-surface wrapper — it is reached from
@@ -815,12 +815,12 @@ pub fn emit_worker_compose(
                 // this context's edge traffic, and not HTTP-routable, hence
                 // no route table entry — just a plain wrapper like `on
                 // call`'s).
-                bynk_ir::IrHandlerKind::Event => {
+                bynk_model::IrHandlerKind::Event => {
                     return_entries.push(emit_event_wrapper(sname, h, &service.protocol));
                 }
                 // #2341 (decision C): the router calls `rejected_<svc>(why)`
                 // to render a rejection of one of this service's requests.
-                bynk_ir::IrHandlerKind::Rejected => {
+                bynk_model::IrHandlerKind::Rejected => {
                     return_entries.push(emit_rejected_wrapper(sname));
                 }
             }
@@ -1118,19 +1118,19 @@ fn worker_cross_caps(
         None
     }
     let mut out = std::collections::BTreeMap::new();
-    let mut givens: Vec<bynk_ir::CapRefIr> = Vec::new();
+    let mut givens: Vec<bynk_model::CapRefIr> = Vec::new();
     for s in table.services.values() {
         for h in &s.handlers {
-            givens.extend(bynk_lower::lower_handler_given_ir(h));
+            givens.extend(bynk_model::lower_handler_given_ir(h));
         }
     }
     for a in table.agents.values() {
         for h in &a.handlers {
-            givens.extend(bynk_lower::lower_handler_given_ir(h));
+            givens.extend(bynk_model::lower_handler_given_ir(h));
         }
     }
     for p in table.providers.values() {
-        givens.extend(bynk_lower::lower_provider_given_ir(p));
+        givens.extend(bynk_model::lower_provider_given_ir(p));
     }
     for c in &givens {
         // Events track, slice 0 (spine #936): `Events.emit` is
@@ -1825,7 +1825,7 @@ fn emit_websocket_upgrade(
 fn emit_http_wrapper(
     sname: &str,
     h: &Handler,
-    method: bynk_ir::IrHttpMethod,
+    method: bynk_model::IrHttpMethod,
     path: &str,
     seam: Option<&bynk_check::actors::BearerSeam>,
 ) -> TsObjectEntry {
@@ -1997,7 +1997,7 @@ fn emit_http_wrapper(
 fn emit_http_oidc_wrapper(
     sname: &str,
     h: &Handler,
-    method: bynk_ir::IrHttpMethod,
+    method: bynk_model::IrHttpMethod,
     path: &str,
     seam: &bynk_check::actors::OidcSeam,
 ) -> TsObjectEntry {
@@ -2157,7 +2157,7 @@ fn emit_secret_lookup(var: &str, secret: &str) -> TsStmt {
 fn emit_http_sum_wrapper(
     sname: &str,
     h: &Handler,
-    method: bynk_ir::IrHttpMethod,
+    method: bynk_model::IrHttpMethod,
     path: &str,
     members: &[bynk_check::actors::SumMember],
     service_cap: Option<i64>,
@@ -2201,7 +2201,7 @@ fn emit_http_sum_wrapper(
     // `Content-Length` fast-reject stays the cheap first check); a `@raw` route
     // keeps the octets as received for the members to verify and the handler to
     // take, and is always capped.
-    let cap = bynk_lower::lower_route_limit_ir(h)
+    let cap = bynk_model::lower_route_limit_ir(h)
         .or(service_cap)
         .filter(|_| needs_raw);
     let raw = has_body && h.raw_content_type().is_some();

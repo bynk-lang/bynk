@@ -21,11 +21,10 @@ toml_edit.workspace = true
 bynk-syntax.workspace = true
 bynk-ts.workspace = true
 bynk-check.workspace = true
-# P7.d1 (Arc D): the typed IR and its lowering pass, carved out of this crate
-# (ADR 0332's deferred split, triggered by bynk-ts as a second IR consumer,
-# ADR 0385).
-bynk-ir.workspace = true
-bynk-lower.workspace = true
+# The system model (crate-hygiene B1, #2939): the declaration-level vocabulary
+# and its builder. They were carved out of this crate at P7.d1 as `bynk-ir` and
+# `bynk-lower` (ADR 0332's deferred split, ADR 0385), and merged as `bynk-model`.
+bynk-model.workspace = true
 # P4.0 (#1113): the project model (discovery, graph, paths, consistency,
 # schema-registry read/write) — this crate now depends on it rather than
 # owning it directly.

@@ -437,9 +437,9 @@ pub(super) fn block_uses_observation(block: &Block) -> bool {
         bynk_syntax::ast::statement_exprs(s, &mut exprs);
     }
     for e in exprs {
-        bynk_ir::walk_exprs(e, &mut check);
+        bynk_model::walk_exprs(e, &mut check);
     }
-    bynk_ir::walk_exprs(&block.tail, &mut check);
+    bynk_model::walk_exprs(&block.tail, &mut check);
     found
 }
 
@@ -450,7 +450,7 @@ pub(super) fn block_uses_observation(block: &Block) -> bool {
 /// into `bynk.test.service_no_call_handler` instead of a silent runtime crash.
 pub(super) fn target_service_handler_kinds(
     table: Option<&UnitTable>,
-) -> HashMap<String, Vec<bynk_ir::IrHandlerKind>> {
+) -> HashMap<String, Vec<bynk_model::IrHandlerKind>> {
     let Some(t) = table else {
         return HashMap::new();
     };
@@ -461,7 +461,7 @@ pub(super) fn target_service_handler_kinds(
                 name.clone(),
                 decl.handlers
                     .iter()
-                    .map(|h| bynk_lower::lower_handler_kind_ir(&h.kind))
+                    .map(|h| bynk_model::lower_handler_kind_ir(&h.kind))
                     .collect(),
             )
         })
@@ -472,7 +472,7 @@ pub(super) fn target_service_handler_kinds(
 /// `deps.who` a call-site principal builds: an `on call` sum (`by who: Caller
 /// | Legacy`), keyed `(service, "call")`, and an http sum (`by who: User |
 /// Visitor`), keyed `(service, <emitted method name>)`. Mirrors the order
-/// `bynk_lower::lower_actor_seam_ir` resolves a handler's seam in.
+/// `bynk_model::lower_actor_seam_ir` resolves a handler's seam in.
 pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String, String)> {
     let Some(t) = table else {
         return HashSet::new();
@@ -480,14 +480,14 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
     let mut out = HashSet::new();
     for (name, decl) in &t.services {
         for h in &decl.handlers {
-            let key = match bynk_lower::lower_handler_kind_ir(&h.kind) {
-                bynk_ir::IrHandlerKind::Call
+            let key = match bynk_model::lower_handler_kind_ir(&h.kind) {
+                bynk_model::IrHandlerKind::Call
                     if bynk_check::actors::call_admission_for(h, &t.actors)
                         .is_some_and(|a| a.sum.is_some()) =>
                 {
                     "call".to_string()
                 }
-                bynk_ir::IrHandlerKind::Http { method, path }
+                bynk_model::IrHandlerKind::Http { method, path }
                     if bynk_check::actors::sum_members_for(h, &t.actors).is_some() =>
                 {
                     bynk_emit::emitter::http_handler_method_name_ir(method, &path)
@@ -500,8 +500,8 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
         // identity (`deps` carries no `identity` field), so an in-process call
         // must not pass one; recorded under a `nobinder:` key.
         for h in &decl.handlers {
-            if let bynk_ir::IrHandlerKind::Http { method, path } =
-                bynk_lower::lower_handler_kind_ir(&h.kind)
+            if let bynk_model::IrHandlerKind::Http { method, path } =
+                bynk_model::lower_handler_kind_ir(&h.kind)
                 && (bynk_check::actors::bearer_seam_for(h, &t.actors)
                     .is_some_and(|s| s.binder.is_none())
                     || bynk_check::actors::oidc_seam_for(h, &t.actors)
@@ -519,8 +519,8 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
         // #2380 (L5): an `Oidc` route that binds its actor, recorded under an
         // `oidc:` key, so an in-process call gives it `deps.claims`.
         for h in &decl.handlers {
-            if let bynk_ir::IrHandlerKind::Http { method, path } =
-                bynk_lower::lower_handler_kind_ir(&h.kind)
+            if let bynk_model::IrHandlerKind::Http { method, path } =
+                bynk_model::lower_handler_kind_ir(&h.kind)
                 && bynk_check::actors::oidc_seam_for(h, &t.actors)
                     .is_some_and(|s| s.binder.is_some())
             {

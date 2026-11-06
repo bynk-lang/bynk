@@ -5124,7 +5124,7 @@ fn sum_member_example(name: &str, ctx: &Ctx) -> String {
 
 /// #1978: whether an `on call` handler binds the prelude `Caller`'s identity
 /// (`by c: Caller`), so its emitted `deps` requires `identity`. This mirrors
-/// `bynk_lower::lower_actor_seam_ir`, which resolves a sum `by` clause
+/// `bynk_model::lower_actor_seam_ir`, which resolves a sum `by` clause
 /// (`by who: Caller | …`) as a sum (`deps.who`) before it consults
 /// [`crate::actors::caller_binder_for`]; hence the `!is_sum()` that
 /// `caller_binder_for` alone does not need.

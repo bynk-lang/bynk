@@ -42,11 +42,10 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 ├── bynk-render            diagnostic rendering
 ├── bynk-fmt               the formatter
 └── bynk-check             name resolution and type checking   + project, std, ts
-    ├── bynk-ir            declaration-level IR
-    │   └── bynk-lower     AST → IR helpers
-    ├── bynk-emit          TS emission from a checked program + ts, ir, lower, project
-    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, ir, lower, strip
-    └── bynk-ide           non-bailing editor analysis         + project, fmt, ir, lower
+    ├── bynk-model         the system model and its builder
+    ├── bynk-emit          TS emission from a checked program + ts, model, project
+    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, model, strip
+    └── bynk-ide           non-bailing editor analysis         + project, fmt, model
 bynk-std                   first-party sources and bindings, as data
 bynk-strip                 TS → JS type-stripping (text level), on oxc alone
 ```
