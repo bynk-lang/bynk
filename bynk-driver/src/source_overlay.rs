@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use bynk_emit::project::CompileOptions;
+use crate::project::CompileOptions;
 
 /// Why an overlay could not be applied.
 #[derive(Debug, PartialEq, Eq)]

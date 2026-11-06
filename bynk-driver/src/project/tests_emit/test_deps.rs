@@ -4,8 +4,8 @@
 
 use super::*;
 // #1759: every namespace a test module imports, from one definition.
-use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::test_suites::{self, ResolvedStub};
+use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt, TsType};
 
 /// #1479: returns the real [`TsStmt`] itself (was pre-printed `String`) — the
@@ -305,7 +305,7 @@ pub(super) fn emit_test_deps(
                 name: "events".to_string(),
                 ty: Some(TsType::named_with_args(
                     "globalThis.Array",
-                    vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
+                    vec![TsType::named(bynk_emit::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
                 )),
                 optional: false,
             }],
@@ -445,7 +445,7 @@ pub(super) fn platform_or_placeholder(owner: &str, cap: &str) -> TopDep {
 /// checked. `type_names` (a subset of `value_names`) gets the alias;
 /// `value_names` is unconditionally destructured with no cast.
 /// #1479: returns real [`TsStmt`]s (was `out: &mut String`) — every caller
-/// now appends via `crate::emitter::extend_printed_at(out, stmts, 2)`, the
+/// now appends via `bynk_emit::emitter::extend_printed_at(out, stmts, 2)`, the
 /// same depth-2 this scaffold body's own statements always printed at.
 /// #1703: each type name carries its type parameters, so a generic type's
 /// alias is generic too (`type Box<A> = ns.Box<A>;`). A bare alias of a generic
@@ -714,7 +714,7 @@ pub(super) fn extend_hidden_destructures(
             continue;
         };
         let type_names = aliased_types(table, |n| names.contains(n));
-        crate::emitter::extend_printed_at(
+        bynk_emit::emitter::extend_printed_at(
             out,
             emit_ns_destructure(&test_ns(owner), names, &type_names),
             2,

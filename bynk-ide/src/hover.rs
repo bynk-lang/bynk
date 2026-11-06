@@ -142,7 +142,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             );
             // #855: a resolved `Service` symbol (the declaration's own name,
             // or a cross-context/test-service call site — both record this
-            // kind, see `bynk-emit/src/project/symbols.rs`) gets its wire
+            // kind, see `bynk-check/src/symbols.rs`) gets its wire
             // contract appended after everything `describe_symbol` already
             // rendered. This changes only the *tail* of what rung 1 already
             // returns `Some` for — never whether it answers.

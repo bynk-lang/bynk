@@ -278,7 +278,7 @@ fn every_emitted_module_binds_every_name_it_uses() {
             }
         } else {
             let source = fs::read_to_string(dir.join("input.bynk")).expect("input.bynk");
-            let out = bynk_emit::project::compile_in_memory(
+            let out = bynk_driver::project::compile_in_memory(
                 &source,
                 BuildTarget::Bundle,
                 Default::default(),

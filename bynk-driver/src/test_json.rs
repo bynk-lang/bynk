@@ -356,7 +356,7 @@ impl TestRun {
         self
     }
 
-    pub fn with_tiers(mut self, discovered: &[bynk_emit::project::DiscoveredSuite]) -> Self {
+    pub fn with_tiers(mut self, discovered: &[crate::project::DiscoveredSuite]) -> Self {
         for suite in self.suites.iter_mut().flatten() {
             let Some(known) = discovered.iter().find(|d| d.name == suite.name) else {
                 continue;
@@ -769,13 +769,13 @@ mod tests {
     fn known(
         suite: &str,
         cases: &[(&str, Option<&'static str>)],
-    ) -> bynk_emit::project::DiscoveredSuite {
-        bynk_emit::project::DiscoveredSuite {
+    ) -> crate::project::DiscoveredSuite {
+        crate::project::DiscoveredSuite {
             name: suite.to_string(),
             kind: "unit",
             cases: cases
                 .iter()
-                .map(|(name, tier)| bynk_emit::project::DiscoveredCase {
+                .map(|(name, tier)| crate::project::DiscoveredCase {
                     name: (*name).to_string(),
                     location: None,
                     tier: *tier,
@@ -969,18 +969,18 @@ mod tests {
 
     #[test]
     fn a_doc_example_case_is_marked_and_no_other_is() {
-        let table = vec![bynk_emit::project::DiscoveredSuite {
+        let table = vec![crate::project::DiscoveredSuite {
             name: "demo.m".to_string(),
             kind: "unit",
             cases: vec![
-                bynk_emit::project::DiscoveredCase {
+                crate::project::DiscoveredCase {
                     name: "doc example m.bynk:4".to_string(),
                     location: None,
                     tier: Some("unit"),
                     generative: None,
                     doc: true,
                 },
-                bynk_emit::project::DiscoveredCase {
+                crate::project::DiscoveredCase {
                     name: "real".to_string(),
                     location: None,
                     tier: Some("unit"),

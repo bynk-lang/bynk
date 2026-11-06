@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use bynk_emit::project;
+use bynk_driver::project;
 
 /// A throwaway on-disk project, removed on drop (including on panic).
 struct Scratch(PathBuf);

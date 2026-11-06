@@ -8,7 +8,7 @@
 //!
 //! P5.5 (`design/tracks/semantics-in-the-checker.md` §6, §9): relocated here
 //! from `bynk-emit/src/emitter/secrets.rs` — a real, `CompileError::new`-
-//! constructed diagnostic, previously raised only from `bynk-emit::project`'s
+//! constructed diagnostic, previously raised only from `bynk-driver::project`'s
 //! `run_checks`, and (per that call site's own now-stale comment) never
 //! reachable from [`crate::analysis::analyse_project`] at all, since
 //! `bynk-check` cannot depend on `bynk-emit`. §9 named this an open risk

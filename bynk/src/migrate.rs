@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::ExitCode;
 
-use bynk_emit::project::AgentVersions;
+use bynk_driver::project::AgentVersions;
 use bynk_project::schema_registry::SchemaRegistry;
 use serde::Serialize;
 
@@ -196,8 +196,8 @@ fn status_report(root: &Path) -> Result<Vec<ClassStatus>, String> {
     })?;
     let lock = bynk_project::schema_registry::parse(existing.as_deref(), root)?;
     let options = bynk_driver::try_project_options(root).map_err(|e| e.to_string())?;
-    let options = options.schema_registry(bynk_emit::project::SchemaLock::On { existing });
-    let check = bynk_emit::project::check_project(&options);
+    let options = options.schema_registry(bynk_driver::project::SchemaLock::On { existing });
+    let check = bynk_driver::project::check_project(&options);
     if check.has_errors() {
         bynk_driver::print_project_check_short(&check);
         return Err("the project has errors; fix them first (`bynk check`)".to_string());
@@ -382,7 +382,7 @@ fn confirm(yes: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bynk_emit::project::MigrationStep;
+    use bynk_driver::project::MigrationStep;
     use bynk_project::schema_registry::{AgentEntry, AgentShape};
 
     fn entry(version: i64, floor: i64, additive: &[bool]) -> AgentEntry {

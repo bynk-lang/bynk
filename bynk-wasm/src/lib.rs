@@ -30,7 +30,7 @@ use bynk_check::entry_signature::{EntryHandler, EntryShape};
 use bynk_check::expr_types::type_at_offset;
 use bynk_check::firstparty::Platform;
 use bynk_check::locals::{LocalBinding, locals_at};
-use bynk_emit::project::{
+use bynk_driver::project::{
     AttributedError, BuildTarget, InMemoryAnalysis, analyse_in_memory, analyse_in_memory_project,
     analyse_in_memory_with_types, compile_in_memory, slash_key,
 };
@@ -411,7 +411,7 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                         .artefacts
                         .docs
                         .into_iter()
-                        .filter(|(_, doc)| !matches!(doc, bynk_emit::project::Document::Json(_)))
+                        .filter(|(_, doc)| !matches!(doc, bynk_driver::project::Document::Json(_)))
                         .map(|(path, doc)| {
                             let kind = if user_paths.contains_key(&path) {
                                 FileKind::User
@@ -732,7 +732,7 @@ pub fn complete_to_json(source: &str, offset: usize, platform: Platform) -> Stri
 // for the VS Code web extension, which loads the workspace through
 // `vscode.workspace.fs`. A project is a map of project-relative paths to text
 // (`bynk.toml` and every `.bynk` file; see
-// `bynk_emit::project::analyse_in_memory_project`), sent as the JSON object
+// `bynk_driver::project::analyse_in_memory_project`), sent as the JSON object
 // `{ "<path>": "<text>", … }`.
 
 /// Parse a project's `{ path: text }` JSON. Malformed JSON is an empty project.

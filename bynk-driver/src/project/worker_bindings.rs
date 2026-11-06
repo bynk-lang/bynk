@@ -16,8 +16,8 @@ use super::{
     BuildTarget, ErrorSink, ParsedFile, UnitKind, UnitTable, native_platforms_of_context,
     unit_table_uses_emit,
 };
-use crate::emitter::agent_cross_context_targets;
-use crate::emitter::wrangler::{BindingSource, WorkerBinding, worker_bindings};
+use bynk_emit::emitter::agent_cross_context_targets;
+use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding, worker_bindings};
 
 /// v0.19 (decision 0025): each context whose in-process closure reaches a
 /// platform-native unit, with those platforms. Drives env threading (bundle)

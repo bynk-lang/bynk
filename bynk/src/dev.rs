@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
-use bynk_emit::project::{ProjectPaths, try_read_project_paths};
+use bynk_driver::project::{ProjectPaths, try_read_project_paths};
 
 use crate::compiler::Compiler;
 use crate::doctor::{self, Capability, Context, DoctorOptions, Report};
@@ -1136,27 +1136,27 @@ fn watch_fingerprint(project_root: &Path) -> u64 {
             record(p, &mut entries)
         });
     }
-    if let Ok(assets) = bynk_emit::project::assets::list_asset_files(project_root) {
+    if let Ok(assets) = bynk_driver::project::assets::list_asset_files(project_root) {
         for rel in assets {
             record(&project_root.join(rel), &mut entries);
         }
     }
     // #2387, slice 2: and every file in `embeds/`, so editing a template
     // rebuilds the code that embeds it.
-    if let Ok(embeds) = bynk_emit::project::assets::list_embed_files(project_root) {
+    if let Ok(embeds) = bynk_driver::project::assets::list_embed_files(project_root) {
         for rel in embeds {
             record(&project_root.join(rel), &mut entries);
         }
     }
     // #2841: and every file in `fixtures/`, so editing a suite's fixture
     // re-runs the tests that read it.
-    if let Ok(fixtures) = bynk_emit::project::assets::list_fixture_files(project_root) {
+    if let Ok(fixtures) = bynk_driver::project::assets::list_fixture_files(project_root) {
         for rel in fixtures {
             record(&project_root.join(rel), &mut entries);
         }
     }
     // P4b (#2608): and every D1 migration, so a new one is applied.
-    if let Ok(migrations) = bynk_emit::project::assets::list_migration_files(project_root) {
+    if let Ok(migrations) = bynk_driver::project::assets::list_migration_files(project_root) {
         for rel in migrations {
             record(&project_root.join(rel), &mut entries);
         }

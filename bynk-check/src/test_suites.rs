@@ -137,7 +137,7 @@ pub struct ResolvedStub {
 /// name detection, `stub`-clause resolution, and case/property body
 /// type-checking. Formerly Phases 2-4 of `bynk-emit`'s own `process_tests`;
 /// Phase 5 (TypeScript emission) stays in
-/// `bynk-emit::project::tests_emit::process_tests`, which calls this
+/// `bynk-driver::project::tests_emit::process_tests`, which calls this
 /// function for its checking half and then emits only for the targets this
 /// returns — every target this function resolves, has no duplicate case
 /// names, and whose bodies type-check clean is exactly "ready for
@@ -544,7 +544,7 @@ pub fn infer_harness_participants(
 /// detection, the harness-root cross-context view, and per-case body
 /// type-checking (including the `Wire`/`by Nobody` tier gates). Formerly the
 /// pre-emission logic of `bynk-emit`'s own `process_integration_tests`;
-/// emission stays in `bynk-emit::project::tests_emit::process_integration_tests`,
+/// emission stays in `bynk-driver::project::tests_emit::process_integration_tests`,
 /// which calls this function for its checking half and then emits only for
 /// the groups this returns. Unlike [`phase_test_bodies`]'s `ResolvedStub`
 /// map, the only thing worth handing back here is the harness's

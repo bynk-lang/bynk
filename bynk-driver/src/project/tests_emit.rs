@@ -22,7 +22,7 @@
 //! doc comment for the full accounting).
 
 use super::*;
-use crate::emitter::wrangler::WorkerBinding;
+use bynk_emit::emitter::wrangler::WorkerBinding;
 // #1759: every namespace a test module imports, from one definition.
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::D1Migrations;

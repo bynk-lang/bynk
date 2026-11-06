@@ -35,12 +35,12 @@ pub(crate) const MANIFEST_VERSION: u32 = 1;
 /// dependency then service.
 #[derive(Default)]
 pub struct Shapes {
-    pub(crate) provides: BTreeMap<String, String>,
-    pub(crate) expects: BTreeMap<String, BTreeMap<String, String>>,
+    pub provides: BTreeMap<String, String>,
+    pub expects: BTreeMap<String, BTreeMap<String, String>>,
     /// #2554: service to the older contract hashes it also accepts, from the
     /// contracts lock. The driver holds a live caller's recorded hash against
     /// these before it lets a compatible skew through.
-    pub(crate) accepts: BTreeMap<String, Vec<String>>,
+    pub accepts: BTreeMap<String, Vec<String>>,
 }
 
 /// Render a context's contract manifest: what it **provides**, and what it
@@ -230,8 +230,8 @@ mod tests {
 
     // ---- #2554: the contracts lock --------------------------------------
 
-    use crate::project::{BuildTarget, ProjectOutput, compile_files_in_memory_locked};
     use bynk_check::contract_compat::ServiceShape;
+    use bynk_driver::project::{BuildTarget, ProjectOutput, compile_files_in_memory_locked};
     use bynk_project::contracts_lock::{self, ContractsLock};
 
     fn shop(receipt: &str) -> String {

@@ -154,7 +154,7 @@ fn a_workers_assets_dir_is_written_byte_for_byte_and_pruned_regardless_of_extens
             })
     };
 
-    let assets = bynk_emit::project::worker_assets_dir("only");
+    let assets = bynk_driver::project::worker_assets_dir("only");
     let css = assets.join("_assets/board.3f9c2a.css");
     let png = assets.join("_assets/icon.9b1d4e.png");
     let headers = assets.join("_headers");

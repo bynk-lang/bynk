@@ -5,7 +5,7 @@
 //!
 //! Every helper here walks a project exactly the way production code already
 //! does — `bynk_ide::discover_files` for `diagnose_project*`-style callers,
-//! the same `bynk_emit::project::Roots` a `CompileOptions` will itself
+//! the same `bynk_driver::project::Roots` a `CompileOptions` will itself
 //! compile for `compile_options_*` — and reads every file into a complete
 //! sources map, instead of reimplementing the walk. There is no second
 //! resolution to drift from the first: a test built on these helpers cannot
@@ -79,14 +79,14 @@ fn manifest_overlay(roots: &bynk_ide::AnalysisRoots) -> HashMap<PathBuf, String>
 
 /// `CompileOptions::single(root)`, with every source pre-read — the direct
 /// replacement for its reliance on `bynk-emit`'s disk fallback.
-pub fn compile_options_single(root: impl Into<PathBuf>) -> bynk_emit::project::CompileOptions {
+pub fn compile_options_single(root: impl Into<PathBuf>) -> bynk_driver::project::CompileOptions {
     let root = root.into();
     let sources = read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
     let assets = list_assets(&root);
     let embeds = list_embeds(&root);
     let fixtures = list_fixtures(&root);
     let migrations = list_migrations(&root);
-    bynk_emit::project::CompileOptions::single(root)
+    bynk_driver::project::CompileOptions::single(root)
         .sources(sources)
         .asset_files(assets)
         .embed_files(embeds)
@@ -101,19 +101,19 @@ pub fn compile_options_single(root: impl Into<PathBuf>) -> bynk_emit::project::C
 /// disagree.
 pub fn compile_options_split(
     project_root: impl Into<PathBuf>,
-    paths: bynk_emit::project::ProjectPaths,
-) -> bynk_emit::project::CompileOptions {
+    paths: bynk_driver::project::ProjectPaths,
+) -> bynk_driver::project::CompileOptions {
     let project_root = project_root.into();
-    let roots = bynk_emit::project::Roots::Split {
+    let roots = bynk_driver::project::Roots::Split {
         project_root: project_root.clone(),
         paths: paths.clone(),
     };
-    let sources = read_all(bynk_emit::project::discover_project_files(&roots));
+    let sources = read_all(bynk_driver::project::discover_project_files(&roots));
     let assets = list_assets(&project_root);
     let embeds = list_embeds(&project_root);
     let fixtures = list_fixtures(&project_root);
     let migrations = list_migrations(&project_root);
-    bynk_emit::project::CompileOptions::split(project_root, paths)
+    bynk_driver::project::CompileOptions::split(project_root, paths)
         .sources(sources)
         .asset_files(assets)
         .embed_files(embeds)
@@ -123,26 +123,26 @@ pub fn compile_options_split(
 
 /// #1883, slice 1b: the project's `assets/` folder, as the driver lists it
 /// for a real build — so a fixture's `assets/` reaches the compiler.
-fn list_assets(project_root: &std::path::Path) -> bynk_emit::project::assets::AssetFolder {
-    bynk_emit::project::assets::AssetFolder::on_disk(project_root)
+fn list_assets(project_root: &std::path::Path) -> bynk_driver::project::assets::AssetFolder {
+    bynk_driver::project::assets::AssetFolder::on_disk(project_root)
         .unwrap_or_else(|e| panic!("list `{}/assets`: {e}", project_root.display()))
 }
 
 /// P4b (#2608): the project's `migrations/` folder, listed the same way.
-fn list_migrations(project_root: &std::path::Path) -> bynk_emit::project::assets::AssetFolder {
-    bynk_emit::project::assets::AssetFolder::migrations_on_disk(project_root)
+fn list_migrations(project_root: &std::path::Path) -> bynk_driver::project::assets::AssetFolder {
+    bynk_driver::project::assets::AssetFolder::migrations_on_disk(project_root)
         .unwrap_or_else(|e| panic!("list `{}/migrations`: {e}", project_root.display()))
 }
 
 /// #2387, slice 2: the project's `embeds/` folder, listed the same way.
 /// #2841: the project's `fixtures/` folder, as the driver lists it.
-fn list_fixtures(project_root: &std::path::Path) -> bynk_emit::project::assets::FixtureFolder {
-    bynk_emit::project::assets::AssetFolder::fixtures_on_disk(project_root)
+fn list_fixtures(project_root: &std::path::Path) -> bynk_driver::project::assets::FixtureFolder {
+    bynk_driver::project::assets::AssetFolder::fixtures_on_disk(project_root)
         .unwrap_or_else(|e| panic!("list `{}/fixtures`: {e}", project_root.display()))
 }
 
-fn list_embeds(project_root: &std::path::Path) -> bynk_emit::project::assets::EmbedFolder {
-    bynk_emit::project::assets::AssetFolder::embeds_on_disk(project_root)
+fn list_embeds(project_root: &std::path::Path) -> bynk_driver::project::assets::EmbedFolder {
+    bynk_driver::project::assets::AssetFolder::embeds_on_disk(project_root)
         .unwrap_or_else(|e| panic!("list `{}/embeds`: {e}", project_root.display()))
 }
 

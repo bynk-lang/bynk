@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use bynk_emit::project::{RemoteSkip, TestTarget};
+use crate::project::{RemoteSkip, TestTarget};
 
 /// The reserved `--against` value that starts a local `bynk dev`.
 pub const DEV: &str = "dev";
@@ -297,7 +297,7 @@ pub fn resolve(
     if looks_like_url(value) {
         return Err(Refusal::BareUrl(value.to_string()));
     }
-    let targets = bynk_emit::project::try_read_test_targets(project_root)
+    let targets = crate::project::try_read_test_targets(project_root)
         .map_err(|e| Refusal::Manifest(e.to_string()))?;
     let Some(target) = targets.get(value) else {
         return Err(Refusal::Unknown {

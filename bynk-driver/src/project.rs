@@ -24,7 +24,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
-use crate::emitter;
 use bynk_check::check_pipeline::{self, prepare_unit_check_ctx};
 use bynk_check::checker;
 use bynk_check::checker::{ExprId, TyId, Types};
@@ -39,6 +38,7 @@ use bynk_check::project_model::{
 };
 use bynk_check::requirements::RequirementSink;
 use bynk_check::resolver::{self, MethodTable as ResolverMethodTable, ResolvedCommons};
+use bynk_emit::emitter;
 use bynk_ir::CapRefIr;
 use bynk_ir::EventSubscriberShape;
 use bynk_ir::FnSig;
@@ -75,14 +75,15 @@ mod schema_registry;
 mod tests_emit;
 mod worker_bindings;
 
-pub(crate) use crate::emit_model::StagedFile;
-use crate::emit_model::*;
-pub use crate::emit_model::{
+use bynk_check::symbols::*;
+pub(crate) use bynk_emit::emit_model::StagedFile;
+use bynk_emit::emit_model::*;
+pub use bynk_emit::emit_model::{
     Artefacts, DiscoveredCase, DiscoveredSuite, Document, ImportExt, ProjectOutput, RemoteSkip,
     TestLocation, WORKER_ASSETS_DIR, is_worker_asset_path, is_worker_migration_path,
-    node_wasm_shim, wasm_shim_path, worker_assets_dir,
+    node_wasm_shim, sibling_path, wasm_shim_path, worker_assets_dir,
 };
-use bynk_check::symbols::*;
+use bynk_emit::emit_model::{WASM_MODULES_DTS, worker_reaches_wasm_module, workers_wasm_shim};
 use bynk_project::discovery::*;
 use bynk_project::paths::*;
 use diagnostics::*;
@@ -175,7 +176,7 @@ pub struct CompileOptions {
     /// #1890: the project's extra Cloudflare compatibility flags, from
     /// `bynk.toml`'s `[workers] compatibility_flags`, in manifest order.
     /// A Workers build writes them into every `wrangler.toml` after
-    /// [`crate::DEFAULT_COMPATIBILITY_FLAGS`]; a duplicate is dropped with a
+    /// [`bynk_emit::DEFAULT_COMPATIBILITY_FLAGS`]; a duplicate is dropped with a
     /// `bynk.project.duplicate_compatibility_flag` warning. Empty by default:
     /// `bynk-driver`'s `project_options`/`try_project_options` read the
     /// manifest and set it, as does `bynk-tests/tests/e2e.rs` for a fixture.
@@ -705,8 +706,8 @@ pub fn compile_in_memory(
 /// unit with its suite, without a fixture directory; reach it through
 /// `crate::testkit`. `tests` keeps the suites, as `bynkc test` does; off is
 /// the deployable build `bynkc compile` makes.
-#[cfg(test)]
-pub(crate) fn compile_files_in_memory(
+#[doc(hidden)] // test support: `bynk-emit`'s tests drive the pipeline through it
+pub fn compile_files_in_memory(
     files: &[(&str, &str)],
     target: BuildTarget,
     platform: Platform,
@@ -717,8 +718,8 @@ pub(crate) fn compile_files_in_memory(
 
 /// [`compile_files_in_memory`] as a remote test build (#2138,
 /// [`CompileOptions::remote_tests`]).
-#[cfg(test)]
-pub(crate) fn compile_files_in_memory_remote(
+#[doc(hidden)] // test support: `bynk-emit`'s tests drive the pipeline through it
+pub fn compile_files_in_memory_remote(
     files: &[(&str, &str)],
     target: BuildTarget,
     platform: Platform,
@@ -731,8 +732,8 @@ pub(crate) fn compile_files_in_memory_remote(
 
 /// [`compile_files_in_memory_remote`] with a pre-read `bynk.contracts.lock`
 /// (#2554, [`CompileOptions::contracts_lock`]).
-#[cfg(test)]
-pub(crate) fn compile_files_in_memory_locked(
+#[doc(hidden)] // test support: `bynk-emit`'s tests drive the pipeline through it
+pub fn compile_files_in_memory_locked(
     files: &[(&str, &str)],
     target: BuildTarget,
     platform: Platform,
@@ -1114,11 +1115,11 @@ fn in_memory_logical_path(source: &str) -> PathBuf {
 /// a snapshot, so renderers print that path (or none) rather than a source
 /// excerpt, and the message names `bynk.toml` itself.
 fn compatibility_flag_warnings(extra: &[String]) -> Vec<AttributedError> {
-    let (_, duplicates) = crate::compatibility_flags(extra);
+    let (_, duplicates) = bynk_emit::compatibility_flags(extra);
     duplicates
         .into_iter()
         .map(|flag| {
-            let default = crate::DEFAULT_COMPATIBILITY_FLAGS.contains(&flag.as_str());
+            let default = bynk_emit::DEFAULT_COMPATIBILITY_FLAGS.contains(&flag.as_str());
             bynk_project::duplicate_compatibility_flag_warning(
                 &flag,
                 default,
@@ -1160,7 +1161,7 @@ fn finish_build(
             });
         }
     };
-    let (flags, _) = crate::compatibility_flags(compatibility_flags);
+    let (flags, _) = bynk_emit::compatibility_flags(compatibility_flags);
     let flag_warnings = compatibility_flag_warnings(compatibility_flags);
     match run {
         RunChecks::Bailed {
@@ -1260,11 +1261,11 @@ fn finish_build(
 /// its `CallerId` identity (ADR 0092); in bundle mode the compose root supplies
 /// that name to `__makeSurface`, mirroring the `X-Bynk-Caller` header a Worker
 /// reads at its entry. Delegates to the *same*
-/// [`any_service_binds_caller`](crate::emitter::any_service_binds_caller) the
+/// [`any_service_binds_caller`](bynk_emit::emitter::any_service_binds_caller) the
 /// emitter's `emit_make_surface` calls, so the compose root and the surface can
 /// never disagree on which providers take the extra `__caller` argument.
 fn context_binds_caller(table: &UnitTable) -> bool {
-    crate::emitter::any_service_binds_caller(table.services.values(), &table.actors)
+    bynk_emit::emitter::any_service_binds_caller(table.services.values(), &table.actors)
 }
 
 // P4.1 (#1115): `record_analyse_types` relocated to
@@ -3067,16 +3068,6 @@ fn run_checks(
     }
 }
 
-/// `<name>.<suffix>`, matching `bynk-driver::output.rs`'s own sibling-name
-/// derivation for `.map`/`.bynkdbg.json` files exactly (P7.6, #1309).
-pub fn sibling_path(output_path: &Path, suffix: &str) -> PathBuf {
-    let name = output_path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    output_path.with_file_name(format!("{name}.{suffix}"))
-}
-
 /// Build-success tail (region 3): emit the composition/worker/runtime files
 /// and assemble the final `ProjectOutput`. Reached only on build mode with a
 /// clean error sink. Moved verbatim from the old pipeline; only the locals it
@@ -4084,7 +4075,7 @@ fn plan_agent_given_deps(
     for u in &referenced {
         let ns = u.replace('.', "_");
         if let Some(b) = adapter_bindings.get(u) {
-            let module = crate::emitter::ts_specifier(&b.output_path.with_extension("js"));
+            let module = bynk_emit::emitter::ts_specifier(&b.output_path.with_extension("js"));
             imports.push(format!(
                 "import * as {ns}__binding from \"{up}../../{module}\";"
             ));
@@ -4425,7 +4416,7 @@ fn emit_composition_root(
                     name: "events".to_string(),
                     ty: Some(TsType::named_with_args(
                         "globalThis.Array",
-                        vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
+                        vec![TsType::named(bynk_emit::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
                     )),
                     optional: false,
                 }],
@@ -4443,7 +4434,7 @@ fn emit_composition_root(
         if table.services.values().any(|s| {
             s.handlers
                 .iter()
-                .any(|h| crate::emitter::call_handler_needs_exec(&table.exec_plan, h))
+                .any(|h| bynk_emit::emitter::call_handler_needs_exec(&table.exec_plan, h))
         }) {
             deps_entries.push((
                 "__exec".to_string(),
@@ -4640,7 +4631,7 @@ mod tests {
     /// from `SERVED_PREFIX`; this pins that they still agree.
     #[test]
     fn the_headers_glob_covers_every_served_path() {
-        let headers = crate::emitter::wrangler::asset_headers();
+        let headers = bynk_emit::emitter::wrangler::asset_headers();
         let glob = headers.lines().next().expect("a path line");
         let prefix = glob.strip_suffix('*').expect("a prefix glob");
         for source in ["assets/board.css", "assets/css/a.min.js", "assets/LICENSE"] {

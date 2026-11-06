@@ -8,7 +8,7 @@ use bynk_syntax::error::CompileError;
 // the new `bynk-check`-native analysis entry point that also needs to build
 // one. Re-exported here so `crate::project::{ProjectAnalysis, ...}` (this
 // module's own `pub use` chain, `project.rs:80`) — and every downstream
-// caller, including `bynk-ide`'s `bynk_emit::project::ProjectAnalysis`
+// caller, including `bynk-ide`'s `crate::project::ProjectAnalysis`
 // import — keeps resolving unchanged. `Mode`/`ErrorSink`/`ProjectFailure`
 // below are unaffected: `Mode` and `ProjectFailure` are pipeline-driving
 // facts specific to `bynk-emit`'s own `run_checks` callers

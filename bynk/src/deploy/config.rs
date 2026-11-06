@@ -636,7 +636,7 @@ pub(crate) fn served_assets(worker_dir: &Path) -> BTreeSet<String> {
     }
     let mut out = BTreeSet::new();
     walk(
-        &worker_dir.join(bynk_emit::project::WORKER_ASSETS_DIR),
+        &worker_dir.join(bynk_driver::project::WORKER_ASSETS_DIR),
         "/",
         &mut out,
     );

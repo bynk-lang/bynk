@@ -63,10 +63,10 @@ pub(crate) fn read_named(project_root: &Path, file: &str) -> io::Result<Option<S
 /// build treats it. A read failure is a message naming the file, for the
 /// caller to report.
 ///
-/// [`SchemaLock::On`]: bynk_emit::project::SchemaLock::On
-pub fn read_only(project_root: &Path) -> Result<bynk_emit::project::SchemaLock, String> {
+/// [`SchemaLock::On`]: crate::project::SchemaLock::On
+pub fn read_only(project_root: &Path) -> Result<crate::project::SchemaLock, String> {
     read(project_root)
-        .map(|existing| bynk_emit::project::SchemaLock::On { existing })
+        .map(|existing| crate::project::SchemaLock::On { existing })
         .map_err(|e| format!("could not read {}: {e}", lock_path(project_root).display()))
 }
 

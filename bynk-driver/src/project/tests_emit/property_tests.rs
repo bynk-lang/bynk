@@ -3,11 +3,11 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use crate::emitter::RuntimeUse;
+use bynk_emit::emitter::RuntimeUse;
 // #1759: every namespace a test module imports, from one definition.
-use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::test_suites::{self};
+use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_syntax::ast::{
     BaseType, BinOp, Block, Expr, ExprKind, FnDecl, FnName, Ident, PropertyDecl, TypeRef,
 };

@@ -1,13 +1,13 @@
 //! P4.2 (#1122), [DECISION E]: pins the six diagnostics categories that go
 //! silently missing from the LSP's project analysis the moment `bynk-ide`
-//! repoints off `bynk_emit::project::analyse_project_with` onto
+//! repoints off `bynk_driver::project::analyse_project_with` onto
 //! `bynk_check::analysis::analyse_project` — the entry point P4.1 (#1115)
 //! built, which is diagnostically faithful to `run_checks`'s `Mode::Analyse`
 //! arm **minus** the categories this file pins (see
 //! `bynk_check::analysis`'s own module doc comment for the full accounting).
 //!
 //! Each fixture below is copied from a real `bynk-tests/tests/fixtures/negative`
-//! case that the CLI (`bynk_emit::project::compile_project`) rejects with
+//! case that the CLI (`bynk_driver::project::compile_project`) rejects with
 //! the named category — so each one is a *known-real* violation, not a
 //! guess at one. This crate cannot depend on `bynk-emit` at all (R10.2,
 //! enforced on `bynk-ide` at the manifest level, and mirrored here by

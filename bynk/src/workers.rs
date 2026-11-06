@@ -9,7 +9,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use bynk_emit::project::{BuildTarget, SchemaLock};
+use bynk_driver::project::{BuildTarget, SchemaLock};
 
 use crate::compiler::Compiler;
 use crate::probe::Provenance;
@@ -95,7 +95,7 @@ pub fn compile_once(
             return false;
         }
     };
-    let output = match bynk_emit::project::compile_project(&options) {
+    let output = match bynk_driver::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => {
             // Render with full source context, exactly as the shelled `bynkc

@@ -19,7 +19,6 @@
 
 pub mod emit_model;
 pub mod emitter;
-pub mod project;
 
 #[cfg(test)]
 pub(crate) mod testkit;
@@ -43,7 +42,7 @@ pub struct Compiled {
 /// Compile a single Bynk source string to a TypeScript string.
 ///
 /// Parses the input as a self-contained, single-file commons with no `uses`
-/// against other commons. Use [`project::compile_project`] for multi-file
+/// against other commons. Use `bynk_driver::project::compile_project` for multi-file
 /// projects or for any source that declares `uses`. `filename` is used only for
 /// diagnostic rendering.
 pub fn compile(source: &str, filename: &str) -> Result<String, Vec<CompileError>> {

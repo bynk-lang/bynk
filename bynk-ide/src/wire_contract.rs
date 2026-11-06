@@ -18,7 +18,7 @@
 //! `types` table is `contract_types_for(unit, …)` — *this* unit's own type
 //! namespace: own declarations, its `uses` targets', and (#2073) the types of
 //! the contexts it consumes, which its own signatures may name — the exact
-//! table `own_contract_hashes` (`bynk-emit/src/project.rs`) hashes a
+//! table `own_contract_hashes` (`bynk-driver/src/project.rs`) hashes a
 //! service's contract through. Every name resolvable through it is this
 //! unit's *own* view of its boundary, so the peek reports
 //! `Provenance::Owned` throughout, a borrowed consumed type included. A
@@ -81,7 +81,7 @@ pub enum Envelope {
 }
 
 /// The canonical form + hash of an `on call` handler's contract — the same
-/// projection `bynk-emit/src/project.rs`'s `own_contract_hashes` builds, so
+/// projection `bynk-driver/src/project.rs`'s `own_contract_hashes` builds, so
 /// the hash this peek shows is provably the hash the emitted
 /// `X-Bynk-Contract` constant stamps.
 #[derive(Debug, Clone)]
@@ -358,7 +358,7 @@ fn envelope_for(handler: &Handler, types: &HashMap<String, std::sync::Arc<TypeDe
 }
 
 /// The same `CrossContextService` projection `own_contract_hashes`
-/// (`bynk-emit/src/project.rs`) builds, canonicalised through the same
+/// (`bynk-driver/src/project.rs`) builds, canonicalised through the same
 /// `info.types` table — so the hash this peek shows is provably the hash
 /// the emitted `X-Bynk-Contract` constant stamps.
 fn contract_form(

@@ -196,7 +196,7 @@ fn compile(
     name: &str,
     source: &str,
     lock: Option<String>,
-) -> bynk_emit::project::ProjectOutput {
+) -> bynk_driver::project::ProjectOutput {
     let root = tmp.join(name);
     fs::create_dir_all(root.join("app")).unwrap();
     fs::write(root.join("app/b.bynk"), source).unwrap();
@@ -212,7 +212,7 @@ fn compile(
     }
 }
 
-fn manifest(out: &bynk_emit::project::ProjectOutput) -> serde_json::Value {
+fn manifest(out: &bynk_driver::project::ProjectOutput) -> serde_json::Value {
     let doc = out
         .artefacts
         .docs
@@ -224,7 +224,7 @@ fn manifest(out: &bynk_emit::project::ProjectOutput) -> serde_json::Value {
     serde_json::from_str(&doc).unwrap()
 }
 
-fn provides(out: &bynk_emit::project::ProjectOutput) -> (String, String) {
+fn provides(out: &bynk_driver::project::ProjectOutput) -> (String, String) {
     let m = manifest(out);
     (
         m["provides"]["issue"].as_str().unwrap().to_string(),

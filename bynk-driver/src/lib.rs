@@ -11,9 +11,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use bynk_emit::project::{self, CompileOptions, ProjectPathsError, try_read_project_paths_with};
 use bynk_fmt::{FormatOptions, IndentStyle, format_source};
 use bynk_render::LabelHome;
+use project::{CompileOptions, ProjectPathsError, try_read_project_paths_with};
 
 pub mod contracts_lock;
 pub mod coverage;
@@ -23,6 +23,7 @@ pub mod doc_examples;
 pub mod fix;
 pub mod output;
 pub mod probe;
+pub mod project;
 pub mod remote;
 pub mod schema_lock;
 pub mod smoke;

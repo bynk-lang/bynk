@@ -48,7 +48,7 @@ impl TomlDocument {
         }
     }
 
-    pub(crate) fn push_block(&mut self, block: TomlBlock) {
+    pub fn push_block(&mut self, block: TomlBlock) {
         self.blocks.push(block);
     }
 

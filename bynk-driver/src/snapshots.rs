@@ -6,7 +6,7 @@
 //! file, its counts and (when the file changes) the text to write, and
 //! [`SnapshotRun::settle`] writes or deletes the files. A `snapshots/` file no
 //! suite takes a snapshot into any more is obsolete as a whole; the build says
-//! which files are live ([`bynk_emit::project::ProjectOutput::snapshot_files`]).
+//! which files are live ([`crate::project::ProjectOutput::snapshot_files`]).
 
 // A human-format run's report is one marked stdout line, taken out of the output;
 // a line of test output that starts with the same marker is hidden too (the real

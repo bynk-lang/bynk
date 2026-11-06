@@ -501,7 +501,7 @@ pub fn emit_wrangler_toml(
 /// namespace are both `KV`); names are never adjusted to avoid that, because
 /// deployed Workers depend on them. Two members with one name would also be
 /// invalid TypeScript in `Env`, so the duplicate check must run first.
-pub(crate) fn worker_bindings(
+pub fn worker_bindings(
     // The context's agents (`UnitTable::agents`' keys), in any order.
     agents: &[String],
     consumes: &[String],

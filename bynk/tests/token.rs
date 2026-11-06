@@ -190,7 +190,7 @@ fn the_signer_is_byte_identical_to_the_test_runtimes() {
     // signs, at a pinned `exp`, must equal `bynk::token::mint`'s output.
     let dir = scratch("vector");
     let signer = std::fs::read_to_string(
-        manifest_dir().join("../bynk-emit/src/emitter/test_runtime/jwt_signer.ts"),
+        manifest_dir().join("../bynk-driver/src/project/test_runtime/jwt_signer.ts"),
     )
     .unwrap();
     let script = format!(

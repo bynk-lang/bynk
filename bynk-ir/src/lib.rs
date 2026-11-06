@@ -87,7 +87,7 @@ pub enum ConstVal {
 /// under this module's usual "no arena, bare name" substitution:
 /// `context: Option<QualifiedName>` flattens to `Option<String>` via
 /// `QualifiedName::joined()` (the same `.`-joined form
-/// `resolve_consume_prefix` — `bynk-emit/src/project.rs` — already
+/// `resolve_consume_prefix` — `bynk-driver/src/project.rs` — already
 /// resolves against `consumes`/aliases), and `name: Ident` flattens to
 /// `String`, mirroring every other bare-name identity field in this module.
 /// Deliberately **not** resolved further here: which context a `Some`

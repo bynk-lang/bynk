@@ -30,3 +30,11 @@ bynk-lower.workspace = true
 # schema-registry read/write) — this crate now depends on it rather than
 # owning it directly.
 bynk-project.workspace = true
+
+[dev-dependencies]
+# D1 (#2982): the emitter's in-crate tests drive the whole pipeline (`testkit`), and the
+# pipeline lives in the driver now. A path-only dev-dependency is stripped on publish and
+# the cycle is a dev-dependency cycle only, so the normal build graph is unchanged. The
+# tests see the driver's own copy of this crate, so `testkit` hands back only strings and
+# the driver's output types, never this crate's.
+bynk-driver = { path = "../bynk-driver" }

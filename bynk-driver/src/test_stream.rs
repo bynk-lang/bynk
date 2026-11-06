@@ -219,7 +219,7 @@ pub type Skipped = (String, String, String);
 /// What the stream knows about the run besides the runner's own events.
 pub struct StreamContext<'a> {
     /// The compile's case table, for each case's tier.
-    pub discovered: &'a [bynk_emit::project::DiscoveredSuite],
+    pub discovered: &'a [crate::project::DiscoveredSuite],
     /// The cases a remote run skipped, which the runner never saw.
     pub skipped: Vec<Skipped>,
     /// `remote:<target>` under `--against`.
@@ -555,10 +555,10 @@ mod tests {
 
     #[test]
     fn the_runners_events_become_the_streams_with_tiers() {
-        let discovered = [bynk_emit::project::DiscoveredSuite {
+        let discovered = [crate::project::DiscoveredSuite {
             name: "demo.m".to_string(),
             kind: "unit",
-            cases: vec![bynk_emit::project::DiscoveredCase {
+            cases: vec![crate::project::DiscoveredCase {
                 name: "one".to_string(),
                 location: None,
                 tier: Some("unit"),

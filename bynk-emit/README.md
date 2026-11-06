@@ -43,9 +43,9 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 └── bynk-check             name resolution and type checking   + project, std, ts
     ├── bynk-ir            declaration-level IR
     │   └── bynk-lower     AST → IR helpers
-    ├── bynk-emit          build sequencing, TS emission       + ts, ir, lower, project
+    ├── bynk-emit          TS emission from a checked program + ts, ir, lower, project
     │   ├── bynk-strip     TS → JS type-stripping              + ts
-    │   └── bynk-driver    shared CLI command bodies           + fmt, project, render, ts
+    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, ir, lower
     └── bynk-ide           non-bailing editor analysis         + project, fmt, ir, lower
 bynk-std                   first-party sources and bindings, as data
 ```
@@ -53,7 +53,7 @@ bynk-std                   first-party sources and bindings, as data
 Each crate depends on its parent in the tree, plus any crates listed after
 its `+`. The front-ends sit on top: the `bynkc` and `bynk` CLIs over
 `bynk-driver`, the `bynk-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
-the unpublished `bynk-wasm` playground module over `bynk-emit`, `bynk-strip`,
+the unpublished `bynk-wasm` playground module over `bynk-driver`, `bynk-strip`,
 and `bynk-ide`.
 
 Most users compile Bynk through the [`bynkc`](https://crates.io/crates/bynkc) /
@@ -68,7 +68,7 @@ bynk-emit = "0.510"
 ```
 
 ```rust
-use bynk_emit::project::{compile_project, CompileOptions, BuildTarget};
+use bynk_driver::project::{compile_project, CompileOptions, BuildTarget};
 
 // `sources` maps every `.bynk` file under `root` (by canonical path) to its text.
 let options = CompileOptions::single(root).sources(sources).target(BuildTarget::Workers);

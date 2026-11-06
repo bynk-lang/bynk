@@ -4475,7 +4475,7 @@ pub fn phase_platform_lock(
 /// Gated on the Workers target because the whole consequence is about `bynk
 /// deploy`'s plan, which no other target produces; warning a bundle project
 /// about a deploy plan it will never produce would be noise. Relocated from
-/// `bynk-emit::project::run_checks` — that call site's own comment claimed
+/// `bynk-driver::project::run_checks` — that call site's own comment claimed
 /// this "reaches the editor" via `bynk check`/the LSP, which was true only
 /// while the LSP still called `run_checks`'s `Mode::Analyse` arm; P4.2
 /// repointed `bynk-ide` at [`crate::analysis::analyse_project`] instead, and

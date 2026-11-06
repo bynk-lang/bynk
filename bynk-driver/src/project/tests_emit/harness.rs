@@ -3,13 +3,13 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use crate::emitter::wrangler::{BindingSource, WorkerBinding};
+use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding};
 // #1759: every namespace a test module imports, from one definition.
-use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, d1_database_name};
 use bynk_check::test_suites::{self};
 use bynk_check::wire_format;
+use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_syntax::ast::{
     BaseType, Block, Commons, CommonsForm, Expr, ExprKind, FnDecl, FnName, Ident, PropertyDecl,
     QualifiedName, Trivia, TypeBody, TypeDecl, TypeRef,
@@ -118,7 +118,7 @@ pub(super) fn emit_integration_harness<'a>(
         {
             body.push(TsStmt::assign(
                 member(ident(env.clone()), &key),
-                str_lit(crate::LOCAL_CALL_KEY),
+                str_lit(bynk_emit::LOCAL_CALL_KEY),
                 None,
             ));
         }
@@ -217,13 +217,13 @@ pub(super) fn emit_integration_harness<'a>(
     {
         body.push(TsStmt::assign(
             member(ident("rootEnv"), &key),
-            str_lit(crate::LOCAL_CALL_KEY),
+            str_lit(bynk_emit::LOCAL_CALL_KEY),
             None,
         ));
     }
     for p in participants {
         let ns = test_ns(p);
-        let binding = crate::emitter::wrangler::service_binding(p).name;
+        let binding = bynk_emit::emitter::wrangler::service_binding(p).name;
         body.push(TsStmt::assign(
             member(ident("rootEnv"), binding),
             service_binding_forward(&format!("worker_{ns}"), &format!("env_{ns}"), sends(p)),
@@ -266,7 +266,7 @@ pub(super) fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
         "function __buildHarness() {\n  const rootEnv: { [binding: string]: __ServiceBinding } = {};\n",
     );
     for p in participants {
-        let binding = crate::emitter::wrangler::service_binding(p).name;
+        let binding = bynk_emit::emitter::wrangler::service_binding(p).name;
         let worker = worker_dir_name(p);
         text.push_str(&format!(
             "  rootEnv.{binding} = __bynkRemoteBinding({worker:?});\n"
@@ -275,15 +275,9 @@ pub(super) fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
     text.push_str("  return { env: rootEnv };\n}\n");
     text.push_str("let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {\n  return (__bynkHarness ??= __buildHarness());\n}\n");
     vec![
-        TsStmt::raw(
-            include_str!("../../emitter/test_runtime/remote.ts").to_string(),
-            None,
-        ),
+        TsStmt::raw(include_str!("../test_runtime/remote.ts").to_string(), None),
         // #2138 (track §3.6): the `--settle` retry the case bodies use.
-        TsStmt::raw(
-            include_str!("../../emitter/test_runtime/settle.ts").to_string(),
-            None,
-        ),
+        TsStmt::raw(include_str!("../test_runtime/settle.ts").to_string(), None),
         TsStmt::raw(text, None),
     ]
 }
@@ -496,7 +490,7 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                 bynk_ir::IrHandlerKind::Http { method, path }
                     if bynk_check::actors::sum_members_for(h, &t.actors).is_some() =>
                 {
-                    crate::emitter::http_handler_method_name_ir(method, &path)
+                    bynk_emit::emitter::http_handler_method_name_ir(method, &path)
                 }
                 _ => continue,
             };
@@ -517,7 +511,7 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                     name.clone(),
                     format!(
                         "nobinder:{}",
-                        crate::emitter::http_handler_method_name_ir(method, &path)
+                        bynk_emit::emitter::http_handler_method_name_ir(method, &path)
                     ),
                 ));
             }
@@ -534,7 +528,7 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                     name.clone(),
                     format!(
                         "oidc:{}",
-                        crate::emitter::http_handler_method_name_ir(method, &path)
+                        bynk_emit::emitter::http_handler_method_name_ir(method, &path)
                     ),
                 ));
             }

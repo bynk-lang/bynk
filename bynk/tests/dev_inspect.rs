@@ -120,11 +120,11 @@ fn workerd_breakpoint_in_bynk_handler_binds_and_pauses() {
     let build = dir.join("build");
     let opts = bynk_testkit::compile_options_split(
         dir.clone(),
-        bynk_emit::project::try_read_project_paths(&dir).expect("well-formed fixture manifest"),
+        bynk_driver::project::try_read_project_paths(&dir).expect("well-formed fixture manifest"),
     )
-    .target(bynk_emit::project::BuildTarget::Workers);
-    let out = bynk_emit::project::compile_project(&opts)
-        .map_err(bynk_emit::project::ProjectFailure::flatten)
+    .target(bynk_driver::project::BuildTarget::Workers);
+    let out = bynk_driver::project::compile_project(&opts)
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
         .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
     bynk_driver::write_output(&out, &build).unwrap();
     let worker_dir = build.join("workers").join("svc");
