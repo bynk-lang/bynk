@@ -205,7 +205,7 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "bynk"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-driver",
@@ -237,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-check"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-project",
  "bynk-std",
@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-driver"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-emit",
@@ -269,7 +269,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-emit"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-driver",
@@ -284,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-fmt"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-render",
  "bynk-syntax",
@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-ide"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-fmt",
@@ -310,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-ir"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-syntax",
@@ -318,7 +318,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-lower"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-ir",
@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-lsp"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-driver",
@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-project"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-syntax",
  "schemars",
@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-registry-core"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-project",
  "serde_json",
@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-render"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "ariadne",
  "bynk-syntax",
@@ -382,11 +382,11 @@ dependencies = [
 
 [[package]]
 name = "bynk-std"
-version = "0.510.14"
+version = "0.510.15"
 
 [[package]]
 name = "bynk-strip"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "oxc",
  "oxc_sourcemap",
@@ -394,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-syntax"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "ariadne",
  "logos",
@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-testkit"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-driver",
  "bynk-emit",
@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "bynk-tests"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-driver",
@@ -433,14 +433,14 @@ dependencies = [
 
 [[package]]
 name = "bynk-ts"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-syntax",
 ]
 
 [[package]]
 name = "bynk-wasm"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-driver",
@@ -456,7 +456,7 @@ dependencies = [
 
 [[package]]
 name = "bynkc"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-check",
  "bynk-driver",
@@ -2650,7 +2650,7 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-bynk"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-syntax",
  "cc",
@@ -2956,7 +2956,7 @@ checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 
 [[package]]
 name = "xtask"
-version = "0.510.14"
+version = "0.510.15"
 dependencies = [
  "bynk-fmt",
  "bynk-project",
