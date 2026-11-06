@@ -40,6 +40,7 @@ use bynk_ide::wire_contract::{
     wire_contract_for_service,
 };
 use bynk_ide::{AnalysisRoots, ContextBoundaryInfo, ProjectDiagnostics, SchemaLock};
+use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
 use bynk_syntax::ast::{
     BaseType, Handler, HttpVariantPayload, JsonOptions, PredKind, ServiceDecl, ServiceProtocol,
     TypeDecl, TypeRef, effective_json_options, http_variant,
@@ -170,11 +171,14 @@ pub fn declared_statuses(root: &Path) -> BTreeMap<String, Vec<u16>> {
         }
         let expr_types = unit_expr_types(&analysis, unit);
         for svc in ctx.services.values() {
+            // M-1's domain clause (ADR 0735, #2999 DECISION A): the project is
+            // certified, but `ProjectDiagnostics` carries no `TypedCommons`, so this
+            // consumer doesn't hold `bynk_model::lower_protocol_ir`'s input.
             if !matches!(svc.protocol, ServiceProtocol::Http) {
                 continue;
             }
             for h in &svc.handlers {
-                if !matches!(h.kind, bynk_syntax::ast::HandlerKind::Http { .. }) {
+                if !matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Http { .. }) {
                     continue;
                 }
                 let Some(model) = wire_contract_for_service(
@@ -284,6 +288,8 @@ pub fn document(
             continue;
         }
         for svc in ctx.services.values() {
+            // M-1's domain clause (ADR 0735, #2999 DECISION A): no `TypedCommons`
+            // here to lower the protocol from (see `declared_statuses`).
             if matches!(svc.protocol, ServiceProtocol::Http) {
                 all.push(Selected {
                     unit,
@@ -319,7 +325,7 @@ pub fn document(
     for sel in &selected {
         let expr_types = unit_expr_types(analysis, sel.unit);
         for h in &sel.service.handlers {
-            if !matches!(h.kind, bynk_syntax::ast::HandlerKind::Http { .. }) {
+            if !matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Http { .. }) {
                 continue;
             }
             if let Some(m) = wire_contract_for_service(

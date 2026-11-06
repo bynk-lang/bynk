@@ -28,9 +28,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::project::AttributedError;
+use bynk_model::{IrHandlerKind, IrHttpMethod, lower_handler_kind_ir};
 use bynk_syntax::ast::{
-    ActorDecl, CommonsItem, Context, Handler, HandlerKind, HttpMethod, ServiceDecl,
-    ServiceProtocol, SourceUnit,
+    ActorDecl, CommonsItem, Context, Handler, ServiceDecl, ServiceProtocol, SourceUnit,
 };
 use bynk_syntax::lexer::tokenize;
 use bynk_syntax::parser::parse_unit_with_recovery;
@@ -183,6 +183,9 @@ impl Smoke {
             .items
             .iter()
             .filter_map(|item| match item {
+                // M-1's domain clause (ADR 0735, #2999 DECISION B): `collect` reads a
+                // recovering parse before `settle` checks the project, so it holds no
+                // `TypedCommons` for `bynk_model::lower_protocol_ir_from_commons`.
                 CommonsItem::Service(s) if matches!(s.protocol, ServiceProtocol::Http) => Some(s),
                 _ => None,
             })
@@ -210,9 +213,10 @@ impl Smoke {
             let renders_rejections = service
                 .handlers
                 .iter()
-                .any(|h| matches!(h.kind, HandlerKind::Rejected));
+                .any(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Rejected));
             for handler in &service.handlers {
-                let HandlerKind::Http { method, path } = &handler.kind else {
+                let IrHandlerKind::Http { method, path } = lower_handler_kind_ir(&handler.kind)
+                else {
                     continue;
                 };
                 self.routes += 1;
@@ -224,13 +228,13 @@ impl Smoke {
                 let route = Route {
                     label: route,
                     service: &service.name.name,
-                    method: *method,
-                    path,
+                    method,
+                    path: path.clone(),
                     handler,
                     source,
                     renders_rejections,
                 };
-                if methods == Methods::SafeOnly && *method != HttpMethod::Get {
+                if methods == Methods::SafeOnly && method != IrHttpMethod::Get {
                     self.skipped.push(Skip {
                         suite: name.clone(),
                         case: route.case_name("answers"),
@@ -586,8 +590,8 @@ fn principal(
 struct Route<'a> {
     label: String,
     service: &'a str,
-    method: HttpMethod,
-    path: &'a str,
+    method: IrHttpMethod,
+    path: String,
     handler: &'a Handler,
     source: &'a str,
     renders_rejections: bool,

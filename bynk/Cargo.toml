@@ -45,6 +45,9 @@ bynk-syntax.workspace = true
 # `bynk-check` for the wire-contract IR and the index it renders.
 bynk-ide.workspace = true
 bynk-check.workspace = true
+# Crate-hygiene B2 (#2999): `bynk openapi` reads handler kinds from the system
+# model (`lower_handler_kind_ir`), not by matching the AST (M-1).
+bynk-model.workspace = true
 bynk-fmt.workspace = true
 clap.workspace = true
 which.workspace = true
