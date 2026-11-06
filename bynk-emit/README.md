@@ -30,8 +30,8 @@ job (`bynk-driver::write_output`), not this crate's.
 `bynk-emit` turns a checked program into output, over
 [`bynk-check`](https://crates.io/crates/bynk-check),
 [`bynk-project`](https://crates.io/crates/bynk-project), the
-[`bynk-ir`](https://crates.io/crates/bynk-ir) /
-[`bynk-lower`](https://crates.io/crates/bynk-lower) pair, and
+[`bynk-model`](https://crates.io/crates/bynk-model) (the system model and its
+builder), and
 [`bynk-ts`](https://crates.io/crates/bynk-ts)'s tree:
 
 ```text
@@ -41,11 +41,10 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 ├── bynk-render            diagnostic rendering
 ├── bynk-fmt               the formatter
 └── bynk-check             name resolution and type checking   + project, std, ts
-    ├── bynk-ir            declaration-level IR
-    │   └── bynk-lower     AST → IR helpers
-    ├── bynk-emit          TS emission from a checked program + ts, ir, lower, project
-    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, ir, lower, strip
-    └── bynk-ide           non-bailing editor analysis         + project, fmt, ir, lower
+    ├── bynk-model         the system model and its builder
+    ├── bynk-emit          TS emission from a checked program + ts, model, project
+    │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, render, ts, model, strip
+    └── bynk-ide           non-bailing editor analysis         + project, fmt, model
 bynk-std                   first-party sources and bindings, as data
 bynk-strip                 TS → JS type-stripping (text level), on oxc alone
 ```

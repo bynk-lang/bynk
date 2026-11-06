@@ -20,11 +20,11 @@ use bynk_syntax::ast::{
     ServiceDecl, StoreField, TypeBody, TypeDecl, TypeParam, TypeRef,
 };
 
-use bynk_ir::{
+use bynk_model::{
     ActorSeamIr, FnSig, IrHandlerKind, IrHttpMethod, OpSig, ProtocolIr, SchemaVersionIr,
     StoreFieldIr, StoreKindIr, TypeShape,
 };
-use bynk_lower::{
+use bynk_model::{
     HandlerSignatureIr, body_writes_state, is_effectful_return, lower_actor_seam_ir,
     lower_handler_kind_ir, lower_protocol_ir_from_commons,
 };
@@ -1052,8 +1052,8 @@ fn emit_free_fn_in(
 
     let empty = bynk_check::resolver::CrossContextInfo::default();
     let body_smb = RefCell::new(SourceMapBuilder::new());
-    let given_ir: Vec<bynk_ir::CapRefIr> =
-        f.given.iter().map(bynk_lower::lower_cap_ref_ir).collect();
+    let given_ir: Vec<bynk_model::CapRefIr> =
+        f.given.iter().map(bynk_model::lower_cap_ref_ir).collect();
     let mut cx = if given_ir.is_empty() {
         LowerCtx::new(
             ModuleCtx::new(commons, &empty, runtime_use),
@@ -1655,7 +1655,7 @@ pub(crate) fn topo_order_providers(
         }
         visited.insert(node.to_string());
         if let Some(p) = providers.get(node) {
-            let given = bynk_lower::lower_provider_given_ir(p);
+            let given = bynk_model::lower_provider_given_ir(p);
             let mut deps: Vec<&str> = given
                 .iter()
                 .filter(|d| d.context.is_none())
@@ -2347,8 +2347,8 @@ pub(crate) fn emit_messages_bundle(
 // -- v0.5 emission --
 
 /// P6.x (#1193, slice 3 of #1187): reads each op's resolved
-/// `params`/`return_ty` off `ops` ([`bynk_ir::OpSig`], from
-/// `bynk_lower::lower_capability_ops_ir`) through `ts_ty`, instead of
+/// `params`/`return_ty` off `ops` ([`bynk_model::OpSig`], from
+/// `bynk_model::lower_capability_ops_ir`) through `ts_ty`, instead of
 /// walking `CapabilityOp::params`/`return_type` `TypeRef`s through
 /// `ts_type_ref` directly. `c` is still needed alongside `ops` — an `OpSig`
 /// carries neither `c.documentation`/`op.documentation` nor the `Arc` back
@@ -2740,7 +2740,7 @@ pub(crate) fn emit_provider(
     // `deps_ty` further below) — previously recomputed independently at each
     // site from the same `p.given`, three calls into the same pure function
     // for the same answer.
-    let given_ir = bynk_lower::lower_provider_given_ir(p);
+    let given_ir = bynk_model::lower_provider_given_ir(p);
     // #2355: a provider whose ops construct a local agent hands `this.deps` to
     // the agent's methods, so it takes a `deps` even with no `given`; on
     // `workers` that `deps` also carries the Worker's `env`, which the agent
@@ -3124,7 +3124,7 @@ pub(crate) fn emit_service(
         // Bearer/Oidc/Caller thread their identity through `deps.identity`,
         // a sum threads the resolved-actor tagged union through `deps.who`
         // (the body `match`es it). `lower_actor_seam_ir`'s own doc comment
-        // (`bynk_ir::ActorSeamIr`) has the full grounding for why sum is
+        // (`bynk_model::ActorSeamIr`) has the full grounding for why sum is
         // tried first (it can otherwise collide with Bearer) and why the
         // other three are mutually exclusive by construction.
         let seam = lower_actor_seam_ir(handler, &ctx.actors);
@@ -3156,7 +3156,7 @@ pub(crate) fn emit_service(
             module,
             BodyMode::ServiceHandler {
                 handler: HandlerShared {
-                    capabilities: bynk_lower::lower_handler_given_ir(handler)
+                    capabilities: bynk_model::lower_handler_given_ir(handler)
                         .into_iter()
                         .map(|c| c.name)
                         .collect::<HashSet<_>>(),
@@ -3253,7 +3253,7 @@ pub(crate) fn emit_service(
         // the seam-minted `identity` — but only when a binder captures it
         // (v0.50: a binder-less Bearer handler verifies but mints no identity).
         let mut deps_members = build_deps_object_ty_with_surface(
-            &effective_given(&bynk_lower::lower_handler_given_ir(handler), &cx),
+            &effective_given(&bynk_model::lower_handler_given_ir(handler), &cx),
             &cx,
             &ctx.cross_context,
             ctx.target,
@@ -3370,7 +3370,7 @@ pub(crate) fn emit_service(
         // `Events` rides the same path since it's declared as an ordinary
         // `given Events` on the agent handler.
         let needs_events_dispatch = cx.is_first_party_events()
-            && (bynk_ir::block_uses_emit(&handler.body, &commons.callees)
+            && (bynk_model::block_uses_emit(&handler.body, &commons.callees)
                 || cx
                     .agent_given_caps_used()
                     .is_some_and(|m| m.contains_key("Events")));
@@ -3412,7 +3412,7 @@ pub(crate) fn emit_service(
         // `__eventsDispatch` to an agent it calls has nothing of its own to
         // buffer or flush, so it keeps byte-identical output, mirroring
         // `__exec`'s gate on `block_uses_send`.
-        let body_emits_directly = bynk_ir::block_uses_emit(&handler.body, &commons.callees);
+        let body_emits_directly = bynk_model::block_uses_emit(&handler.body, &commons.callees);
         // #1361: the whole method body — the events-IIFE wrapper (if any)
         // and `body_out` — is captured as ONE opaque `TsStmtKind::Raw` blob,
         // the `emit_provider` precedent (#1359) exactly; the events-IIFE
@@ -3504,7 +3504,7 @@ pub(crate) fn emit_service(
 /// honest-opaque representation `workers_env_ty`'s own `ServiceBinding`/
 /// `DurableObjectNamespace` entries already use for library-provided names.
 fn cap_ref_ty(
-    c: &bynk_ir::CapRefIr,
+    c: &bynk_model::CapRefIr,
     info: &bynk_check::resolver::CrossContextInfo,
 ) -> bynk_ts::TsType {
     match c.context.as_deref().and_then(|p| info.resolve_prefix(p)) {
@@ -3530,11 +3530,11 @@ pub(crate) fn commons_uses_emit(commons: &TypedCommons) -> bool {
         CommonsItem::Service(s) => s
             .handlers
             .iter()
-            .any(|h| bynk_ir::block_uses_emit(&h.body, &commons.callees)),
+            .any(|h| bynk_model::block_uses_emit(&h.body, &commons.callees)),
         CommonsItem::Agent(a) => a
             .handlers
             .iter()
-            .any(|h| bynk_ir::block_uses_emit(&h.body, &commons.callees)),
+            .any(|h| bynk_model::block_uses_emit(&h.body, &commons.callees)),
         _ => false,
     })
 }
@@ -3560,7 +3560,7 @@ pub(crate) fn cross_context_caps_used(
             CommonsItem::Agent(a) => a.handlers.as_slice(),
             _ => &[],
         })
-        .map(bynk_lower::lower_handler_given_ir)
+        .map(bynk_model::lower_handler_given_ir)
         .chain(std::iter::once(sibling_agent_givens(commons, ctx)));
     for given in givens {
         for c in given {
@@ -3597,7 +3597,7 @@ pub(crate) fn cross_context_cap_namespaces(
 ) -> std::collections::BTreeSet<String> {
     let info = &ctx.cross_context;
     let mut out = std::collections::BTreeSet::new();
-    let mut collect = |given: Vec<bynk_ir::CapRefIr>| {
+    let mut collect = |given: Vec<bynk_model::CapRefIr>| {
         for c in given {
             if let Some(prefix) = &c.context
                 && let Some(consumed) = info.resolve_prefix(prefix)
@@ -3617,14 +3617,14 @@ pub(crate) fn cross_context_cap_namespaces(
             CommonsItem::Service(s) => s
                 .handlers
                 .iter()
-                .for_each(|h| collect(bynk_lower::lower_handler_given_ir(h))),
+                .for_each(|h| collect(bynk_model::lower_handler_given_ir(h))),
             CommonsItem::Agent(a) => a
                 .handlers
                 .iter()
-                .for_each(|h| collect(bynk_lower::lower_handler_given_ir(h))),
-            CommonsItem::Provider(p) => collect(bynk_lower::lower_provider_given_ir(p)),
+                .for_each(|h| collect(bynk_model::lower_handler_given_ir(h))),
+            CommonsItem::Provider(p) => collect(bynk_model::lower_provider_given_ir(p)),
             // #2912: a function's `given` names its capability in `deps` too.
-            CommonsItem::Fn(f) => collect(bynk_lower::lower_fn_given_ir(f)),
+            CommonsItem::Fn(f) => collect(bynk_model::lower_fn_given_ir(f)),
             _ => {}
         }
     }
@@ -3650,7 +3650,7 @@ pub(crate) fn cross_context_cap_namespaces(
 /// to that agent (`effective_given`), so its `deps` name them although no
 /// declaration in this file does. Empty unless the context is split across
 /// files: an agent this file declares is walked with the file's own items.
-fn sibling_agent_givens(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ir::CapRefIr> {
+fn sibling_agent_givens(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_model::CapRefIr> {
     let declared_here: HashSet<&str> = commons
         .commons
         .items
@@ -3690,7 +3690,10 @@ fn sibling_agent_givens(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<byn
 /// into the runtime deps value, so this widening only brings the deps *type*
 /// in line with the value; without it, forwarding `deps` to an agent method
 /// with `given` failed `tsc --strict` (and under-documented the dependency).
-fn effective_given(declared: &[bynk_ir::CapRefIr], cx: &LowerCtx<'_>) -> Vec<bynk_ir::CapRefIr> {
+fn effective_given(
+    declared: &[bynk_model::CapRefIr],
+    cx: &LowerCtx<'_>,
+) -> Vec<bynk_model::CapRefIr> {
     let mut out = declared.to_vec();
     let have: HashSet<String> = declared.iter().map(|c| c.name.clone()).collect();
     for (key, cap) in cx.agent_given_caps_used().into_iter().flatten() {
@@ -3726,7 +3729,7 @@ fn effective_given(declared: &[bynk_ir::CapRefIr], cx: &LowerCtx<'_>) -> Vec<byn
 /// directly, with no `TsType::Object` match arm (and no panic path for the
 /// "found something else" case that can't actually happen) in between.
 fn build_deps_object_ty_with_surface(
-    given: &[bynk_ir::CapRefIr],
+    given: &[bynk_model::CapRefIr],
     cx: &LowerCtx<'_>,
     cross_context: &bynk_check::resolver::CrossContextInfo,
     target: BuildTarget,
@@ -5258,7 +5261,7 @@ fn history_variant_tag(handler: &str) -> String {
 pub(crate) fn agent_reads_key(a: &AgentDecl) -> bool {
     a.handlers.iter().any(|h| {
         let mut found = false;
-        bynk_ir::walk_block_exprs(&h.body, &mut |e| {
+        bynk_model::walk_block_exprs(&h.body, &mut |e| {
             if let ExprKind::FieldAccess { receiver, field } = &e.kind
                 && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "self")
                 && field.name == a.key_name.name
@@ -6559,7 +6562,7 @@ pub(crate) fn emit_agent(
     let agent_uses_emit = a
         .handlers
         .iter()
-        .any(|h| bynk_ir::block_uses_emit(&h.body, &commons.callees));
+        .any(|h| bynk_model::block_uses_emit(&h.body, &commons.callees));
     // #1960: likewise `deps.env` itself — its Service Bindings and DO
     // namespaces are dead plain objects once the caller's deps cross the
     // wire, so an agent whose handlers call a consumed context's service or
@@ -6567,7 +6570,7 @@ pub(crate) fn emit_agent(
     let agent_reaches_env = ctx.target == BuildTarget::Workers
         && a.handlers
             .iter()
-            .any(|h| bynk_ir::block_reaches_worker_env(&h.body, &commons.callees));
+            .any(|h| bynk_model::block_reaches_worker_env(&h.body, &commons.callees));
     let needs_env_ctor = given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env;
     if needs_env_ctor {
         writeln!(out, "  private __env: unknown;").unwrap();
@@ -7120,7 +7123,7 @@ pub(crate) fn emit_agent(
         // A store handler that performs any `:=` wraps its body in a closure so an
         // implicit commit runs at handler end on every (success) return path.
         // #1196/R6.5: write detection reads the checker's own resolved
-        // `Callee::Store` classification (`bynk_lower::body_writes_state`)
+        // `Callee::Store` classification (`bynk_model::body_writes_state`)
         // rather than matching a bare-identifier receiver name against this
         // agent's own field-name sets — a locally-shadowed field name (a
         // handler param, say) can no longer false-positive into an
@@ -7170,7 +7173,7 @@ pub(crate) fn emit_agent(
             module,
             BodyMode::AgentHandler {
                 handler: HandlerShared {
-                    capabilities: bynk_lower::lower_handler_given_ir(h)
+                    capabilities: bynk_model::lower_handler_given_ir(h)
                         .into_iter()
                         .map(|c| c.name)
                         .collect::<HashSet<_>>(),
@@ -7217,7 +7220,7 @@ pub(crate) fn emit_agent(
             Some(&h.return_type),
         );
         let mut deps_members = build_deps_object_ty_with_surface(
-            &effective_given(&bynk_lower::lower_handler_given_ir(h), &cx),
+            &effective_given(&bynk_model::lower_handler_given_ir(h), &cx),
             &cx,
             &ctx.cross_context,
             ctx.target,
@@ -7227,7 +7230,7 @@ pub(crate) fn emit_agent(
         // that calls another local agent method which itself emits, gets
         // the same compose-supplied `__eventsDispatch` callback.
         let needs_events_dispatch = cx.is_first_party_events()
-            && (bynk_ir::block_uses_emit(&h.body, &commons.callees)
+            && (bynk_model::block_uses_emit(&h.body, &commons.callees)
                 || cx
                     .agent_given_caps_used()
                     .is_some_and(|m| m.contains_key("Events")));
@@ -7282,7 +7285,7 @@ pub(crate) fn emit_agent(
         // `print_class_method` as one fragment, which can no longer be
         // interleaved with direct `writeln!`s into `out` the way the
         // pre-conversion code was.
-        let body_emits_directly = bynk_ir::block_uses_emit(&h.body, &commons.callees);
+        let body_emits_directly = bynk_model::block_uses_emit(&h.body, &commons.callees);
         let events_decl = format!(
             "    const __events: globalThis.Array<{}> = [];",
             crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
@@ -8261,7 +8264,7 @@ fn emit_ws_do_method(
         module,
         BodyMode::WsDoMethod {
             handler: HandlerShared {
-                capabilities: bynk_lower::lower_handler_given_ir(h)
+                capabilities: bynk_model::lower_handler_given_ir(h)
                     .into_iter()
                     .map(|c| c.name)
                     .collect::<HashSet<_>>(),
@@ -8296,7 +8299,7 @@ fn emit_ws_do_method(
         Some(&h.return_type),
     );
     let mut deps_members = build_deps_object_ty_with_surface(
-        &effective_given(&bynk_lower::lower_handler_given_ir(h), &cx),
+        &effective_given(&bynk_model::lower_handler_given_ir(h), &cx),
         &cx,
         &ctx.cross_context,
         ctx.target,

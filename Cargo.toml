@@ -5,8 +5,7 @@ members = [
     "bynk-ts",
     "bynk-render",
     "bynk-check",
-    "bynk-ir",
-    "bynk-lower",
+    "bynk-model",
     "bynk-project",
     "bynk-registry-core",
     "bynk-emit",
@@ -75,8 +74,7 @@ bynk-std = { path = "bynk-std", version = "0.510.18" }
 bynk-ts = { path = "bynk-ts", version = "0.510.18" }
 bynk-render = { path = "bynk-render", version = "0.510.18" }
 bynk-check = { path = "bynk-check", version = "0.510.18" }
-bynk-ir = { path = "bynk-ir", version = "0.510.18" }
-bynk-lower = { path = "bynk-lower", version = "0.510.18" }
+bynk-model = { path = "bynk-model", version = "0.510.18" }
 bynk-project = { path = "bynk-project", version = "0.510.18" }
 bynk-registry-core = { path = "bynk-registry-core", version = "0.510.18" }
 bynk-emit = { path = "bynk-emit", version = "0.510.18" }

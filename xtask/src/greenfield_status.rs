@@ -2374,7 +2374,15 @@ fn any_real_code_line(files: &[(PathBuf, String)], needle: &str) -> bool {
 ///
 /// **What counts as a consumer.** A non-comment line, outside any `#[cfg(test)]
 /// mod` range ([`test_mod_ranges`]), in a workspace crate's `src/` that is
-/// **neither owner crate**, containing the item's name as a whole word. The
+/// **not the owner**, containing the item's name as a whole word.
+///
+/// **Re-pointed by crate-hygiene B1 (#2939).** `bynk-ir` and `bynk-lower` merged
+/// into one crate, `bynk-model` (the system-model ADR, track §6 Q2), so the
+/// owner is now that one crate and the scan covers both of its modules. The rule
+/// is exactly as strict as before: the builder (`bynk_model::lower`) still can't
+/// vouch for the vocabulary, because both sit inside the excluded crate. The
+/// reading didn't move (0). Before the merge, the rule was the two-owner one
+/// below. The
 /// two owners do not vouch for each other, on purpose (review of this slice's
 /// own PR, #1581): run against pre-D0 `main` with only the owning crate
 /// excluded, every one of phase 6's twenty-one unconsumed `bynk-ir` types
@@ -2395,7 +2403,7 @@ fn any_real_code_line(files: &[(PathBuf, String)], needle: &str) -> bool {
 /// only through its owner (which is what gets counted), and `pub use`/`pub
 /// mod` re-export rather than declare.
 fn unconsumed_ir_items(root: &Path) -> Probe {
-    let owners = ["bynk-ir", "bynk-lower"];
+    let owners = ["bynk-model"];
     let mut owner_files = Vec::new();
     for owner in owners {
         for (path, contents) in rust_files_relative(&root.join(owner).join("src")) {
@@ -2420,9 +2428,11 @@ fn unconsumed_ir_items(root: &Path) -> Probe {
 
 /// Crate-hygiene track §6.2 M-3, added by slice B1 (#2939), with the
 /// system-model ADR. It counts the system model's items (the column-zero `pub`
-/// items of `bynk-ir` and `bynk-lower`, the same set [`unconsumed_ir_items`]
-/// scans) that have a production reader in a workspace crate other than the
-/// two owners **and `bynk-emit`**.
+/// items of `bynk-model`, the same set [`unconsumed_ir_items`] scans) that have
+/// a production reader in a workspace crate other than `bynk-model` **and
+/// `bynk-emit`**. Re-pointed by B1's rename from the two crates `bynk-ir` and
+/// `bynk-lower` to `bynk-model`: the count didn't move, but each item's owner
+/// prefix in the reading changed.
 ///
 /// [`unconsumed_ir_items`] asks whether every item has *a* reader. This asks how
 /// far the model reaches past the emitter, which was its only consumer until
@@ -2442,7 +2452,7 @@ fn unconsumed_ir_items(root: &Path) -> Probe {
 /// unrelated item in another crate over-counts, which errs toward a higher
 /// reading and never blocks a PR.
 fn model_readers_beyond_emit(root: &Path) -> Probe {
-    let owners = ["bynk-ir", "bynk-lower"];
+    let owners = ["bynk-model"];
     let mut owner_files = Vec::new();
     for owner in owners {
         for (path, contents) in rust_files_relative(&root.join(owner).join("src")) {
@@ -2458,7 +2468,7 @@ fn model_readers_beyond_emit(root: &Path) -> Probe {
                 && (path == Path::new("project.rs") || path.starts_with("project")))
         })
         .collect();
-    let excluded = ["bynk-ir", "bynk-lower", "bynk-emit"];
+    let excluded = ["bynk-model", "bynk-emit"];
     let (read, _) = pub_items_by_readership(&owners, &excluded, &owner_files, &consumer_files);
     Probe {
         name: "model_readers_beyond_emit",
@@ -3810,7 +3820,7 @@ mod tests {
             (
                 "bynk-emit",
                 "a.rs",
-                "fn f(x: bynk_ir::Used) { helper(); }\n",
+                "fn f(x: bynk_model::Used) { helper(); }\n",
             ),
         ]);
         assert_eq!(
@@ -3905,7 +3915,7 @@ mod tests {
             (
                 "bynk-emit",
                 "a.rs",
-                "fn f() -> Shape { bynk_lower::shape() }\n",
+                "fn f() -> Shape { bynk_model::shape() }\n",
             ),
         ]);
         assert_eq!(
@@ -3940,12 +3950,12 @@ mod tests {
             (
                 "bynk-emit",
                 "a.rs",
-                "fn f(s: Shape) -> Kind { bynk_lower::lower_kind() }\n",
+                "fn f(s: Shape) -> Kind { bynk_model::lower_kind() }\n",
             ),
             (
                 "bynk-ide",
                 "b.rs",
-                "// Shape is mentioned only in a comment\nfn g() -> bynk_ir::Kind { bynk_lower::lower_kind() }\n",
+                "// Shape is mentioned only in a comment\nfn g() -> bynk_model::Kind { bynk_model::lower_kind() }\n",
             ),
         ]);
         let excluded = ["bynk-ir", "bynk-lower", "bynk-emit"];
@@ -3957,6 +3967,54 @@ mod tests {
         assert_eq!(reading, "2 (bynk-ir::Kind, bynk-lower::lower_kind)");
         assert_eq!(model_readers_count(&reading), Some(2));
         assert_eq!(model_readers_count("0"), Some(0));
+    }
+
+    /// Review of #2954: the production shape since B1 (3b). One owner crate,
+    /// `bynk-model`, holds both the vocabulary and the builder as modules. An
+    /// item read only by the same crate's `lower.rs` is still unconsumed, and an
+    /// item read only by `bynk-emit` is consumed but not read beyond the emitter.
+    #[test]
+    fn a_single_owner_with_two_modules_does_not_vouch_for_itself() {
+        let owners = files(&[
+            (
+                "bynk-model",
+                "vocabulary.rs",
+                "pub struct IrExpr;\npub struct Shape;\npub enum IrHandlerKind {}\n",
+            ),
+            (
+                "bynk-model",
+                "lower.rs",
+                "pub fn lower_expr_ir() -> IrExpr { IrExpr }\n",
+            ),
+        ]);
+        let mut consumers = owners.clone();
+        consumers.extend(files(&[
+            (
+                "bynk-emit",
+                "a.rs",
+                "fn f(s: Shape) { bynk_model::lower_expr_ir(); }\n",
+            ),
+            ("bynk-ide", "b.rs", "fn g(k: IrHandlerKind) {}\n"),
+        ]));
+        assert_eq!(
+            unconsumed_pub_items(&["bynk-model"], &owners, &consumers),
+            vec!["bynk-model::IrExpr"]
+        );
+        let (read, unread) = pub_items_by_readership(
+            &["bynk-model"],
+            &["bynk-model", "bynk-emit"],
+            &owners,
+            &consumers,
+        );
+        assert_eq!(read, vec!["bynk-model::IrHandlerKind"]);
+        assert_eq!(
+            unread,
+            vec![
+                "bynk-model::IrExpr",
+                "bynk-model::Shape",
+                "bynk-model::lower_expr_ir"
+            ]
+        );
     }
 
     /// One item declared in two files of the same crate (a split module) is

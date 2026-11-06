@@ -217,10 +217,10 @@ pub fn sequence_model(
 /// The handler's request descriptor — its method + path (`GET /check/:client`),
 /// method name, or lifecycle kind. Labels the initial actor→entry message, and
 /// (when there is no actor) the entry box's own discriminator suffix. Read from
-/// the system model's [`bynk_ir::IrHandlerKind`] (M-1, crate-hygiene B1, #2939).
+/// the system model's [`bynk_model::IrHandlerKind`] (M-1, crate-hygiene B1, #2939).
 fn discriminator(handler: &Handler) -> String {
-    use bynk_ir::IrHandlerKind;
-    match bynk_lower::lower_handler_kind_ir(&handler.kind) {
+    use bynk_model::IrHandlerKind;
+    match bynk_model::lower_handler_kind_ir(&handler.kind) {
         IrHandlerKind::Call => match handler.method_name.as_ref() {
             Some(m) => m.name.clone(),
             None => "call".to_string(),

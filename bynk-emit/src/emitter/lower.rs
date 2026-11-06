@@ -13,8 +13,8 @@ use bynk_syntax::ast::{
     PatternBindingKind, PredKind, Refinement, Statement, TypeBody, TypeDecl, TypeRef, UnaryOp,
 };
 
-use bynk_ir::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
-use bynk_lower::is_effectful_return;
+use bynk_model::is_effectful_return;
+use bynk_model::{ConstVal, EventPatternIr, EventPatternValueIr, IrHttpMethod};
 
 use super::*;
 
@@ -72,7 +72,7 @@ pub fn lower_test_case_body(
     typed: &mut TypedCommons,
     cross_context: &bynk_check::resolver::CrossContextInfo,
     test_services: HashSet<String>,
-    test_service_handlers: HashMap<String, Vec<bynk_ir::IrHandlerKind>>,
+    test_service_handlers: HashMap<String, Vec<bynk_model::IrHandlerKind>>,
     sum_handlers: HashSet<(String, String)>,
     test_agents: HashSet<String>,
     settle_sends: bool,
@@ -286,7 +286,7 @@ fn settle_kind(
         bynk_syntax::ast::statement_exprs(stmt, &mut exprs);
         let mut found = false;
         for e in exprs {
-            bynk_ir::walk_exprs(e, &mut |x: &bynk_syntax::ast::Expr| {
+            bynk_model::walk_exprs(e, &mut |x: &bynk_syntax::ast::Expr| {
                 if Some(x.id) != skip && safety(x) == Some(false) {
                     found = true;
                 }
@@ -1735,13 +1735,13 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
 /// declarations in scope (v0.117). Used to destructure a recorded call's
 /// arguments for a `with` predicate and to build `trace(Cap.op)` records.
 /// P6.29 (design/tracks/the-ir.md §6a): the declaration lookup itself now reads
-/// `bynk_lower::capability_op_sig_from_commons` — still a by-name walk
+/// `bynk_model::capability_op_sig_from_commons` — still a by-name walk
 /// under the hood (nothing IR-native replaces "find the op named `op` on the
 /// capability named `cap`"), but relocated to `ir/lower.rs` (excluded from
 /// `ast_importers` — the `Ast → Ir` lowering pass's own job), so this file no
 /// longer spells `bynk_syntax::ast::CommonsItem` itself.
 fn cap_op_param_names(cx: &LowerCtx, cap: &str, op: &str) -> Vec<String> {
-    bynk_lower::capability_op_sig_from_commons(cx.commons(), cap, op)
+    bynk_model::capability_op_sig_from_commons(cx.commons(), cap, op)
         .map(|sig| sig.params.into_iter().map(|(name, _)| name).collect())
         .unwrap_or_default()
 }
@@ -3497,7 +3497,7 @@ fn lower_method_call(
             {
                 let mut idx = 0usize;
                 for h in handlers {
-                    if let bynk_ir::IrHandlerKind::Cron { expr: e } = h {
+                    if let bynk_model::IrHandlerKind::Cron { expr: e } = h {
                         if e == expr {
                             break;
                         }
@@ -3513,7 +3513,7 @@ fn lower_method_call(
             if method.name == "message"
                 && handlers
                     .iter()
-                    .any(|h| matches!(h, bynk_ir::IrHandlerKind::Message))
+                    .any(|h| matches!(h, bynk_model::IrHandlerKind::Message))
             {
                 // A `from queue` service binds exactly one queue and declares one
                 // `on message` handler, so the position index is 0.
@@ -3532,7 +3532,7 @@ fn lower_method_call(
             if method.name == "event"
                 && handlers
                     .iter()
-                    .any(|h| matches!(h, bynk_ir::IrHandlerKind::Event))
+                    .any(|h| matches!(h, bynk_model::IrHandlerKind::Event))
             {
                 cx.runtime_use().note_test_event_service(&id.name);
                 let payload = args
@@ -8068,7 +8068,7 @@ fn build_match_iife(
     out.push_str("((__d) => {\n");
     // ADR 0169: nested/guarded matches lower to an if-chain (which emits its own
     // per-arm bodies and trailing `throw`); flat/unguarded matches keep the switch.
-    if bynk_ir::match_needs_if_chain(arms) {
+    if bynk_model::match_needs_if_chain(arms) {
         emit_match_if_chain(&mut out, "__d", disc_ty, arms, cx, INDENT_STEP * 2, false);
     } else {
         for _ in 0..(INDENT_STEP * 2) {
@@ -8190,7 +8190,7 @@ fn emit_match_tail(
     }
     // ADR 0169: nested/guarded matches lower to an if-chain; flat/unguarded
     // matches keep the `switch`.
-    if bynk_ir::match_needs_if_chain(arms) {
+    if bynk_model::match_needs_if_chain(arms) {
         emit_match_if_chain(out, &disc, &disc_ty, arms, cx, indent, async_tail);
         return;
     }
@@ -8560,8 +8560,8 @@ fn pattern_match_tests(
 
 /// #1187's slice 5 (the `Service` emitter cutover): the JS boolean guard for
 /// a `from Events(E { field: value, .. })` subscription filter, AND-joining
-/// one test per listed field — reads [`bynk_ir::EventPatternIr`] (already
-/// resolved by [`bynk_lower::lower_protocol_ir`]) rather than the raw
+/// one test per listed field — reads [`bynk_model::EventPatternIr`] (already
+/// resolved by [`bynk_model::lower_protocol_ir`]) rather than the raw
 /// AST `EventPattern`; [`EventPatternValueIr`]'s own doc comment already
 /// named this function as its sole intended consumer, never wired up until
 /// now (the AST-driven original this replaces produced byte-identical guard

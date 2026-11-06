@@ -45,7 +45,7 @@ use bynk_syntax::span::{FileId, Span};
 const HTTP_RESULT: &str = bynk_check::builtin_names::types::HTTP_RESULT;
 
 /// Which protocol hosts the hovered handler: the system model's own
-/// [`bynk_ir::IrHandlerKind`], read through `bynk_lower::lower_handler_kind_ir`.
+/// [`bynk_model::IrHandlerKind`], read through `bynk_model::lower_handler_kind_ir`.
 ///
 /// This was an IDE-local mirror of `HandlerKind` until crate-hygiene B1 (#2939).
 /// It was kept separate "so a future field this peek needs is a local
@@ -54,9 +54,9 @@ const HTTP_RESULT: &str = bynk_check::builtin_names::types::HTTP_RESULT;
 ///
 /// The re-export keeps the old name, so `bynk-lsp` and `bynk openapi` name the
 /// model's type without a dependency edge of their own.
-pub use bynk_ir::IrHandlerKind as BoundaryKind;
-/// [`BoundaryKind::Http`]'s method: the model's [`bynk_ir::IrHttpMethod`].
-pub use bynk_ir::IrHttpMethod;
+pub use bynk_model::IrHandlerKind as BoundaryKind;
+/// [`BoundaryKind::Http`]'s method: the model's [`bynk_model::IrHttpMethod`].
+pub use bynk_model::IrHttpMethod;
 
 /// The request shape a handler's caller sends. **Three cases, not two** —
 /// `bynk-emit/src/emitter/workers_entry.rs`'s `h.params.len() == 1` branch is
@@ -290,11 +290,11 @@ pub fn wire_contract_for_service(
         .collect();
 
     let envelope = envelope_for(handler, &info.types);
-    let kind = bynk_lower::lower_handler_kind_ir(&handler.kind);
+    let kind = bynk_model::lower_handler_kind_ir(&handler.kind);
 
     let no_cross_context = if context_count <= 1 {
         Some(NoCrossContextReason::SingleContext)
-    } else if kind != bynk_ir::IrHandlerKind::Call {
+    } else if kind != bynk_model::IrHandlerKind::Call {
         Some(NoCrossContextReason::NotACallHandler)
     } else {
         None

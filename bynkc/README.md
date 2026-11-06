@@ -31,9 +31,9 @@ resolve — but not a crate's whole module tree, e.g. `bynk_syntax::ast` stays
   discovery, the unit dependency graph, and path resolution.
 - [`bynk-check`](https://crates.io/crates/bynk-check) — name resolution, type
   checking, the kernel/builtin registries, first-party sources, and actors.
-- [`bynk-ir`](https://crates.io/crates/bynk-ir) /
-  [`bynk-lower`](https://crates.io/crates/bynk-lower) — the declaration-level
-  facts the emitter reads, and the helpers that build them.
+- [`bynk-model`](https://crates.io/crates/bynk-model) — the system model: the
+  declaration-level facts the emitter and the editor read, and the builder that
+  makes them.
 - [`bynk-ts`](https://crates.io/crates/bynk-ts) — the TypeScript tree and its
   printer.
 - [`bynk-emit`](https://crates.io/crates/bynk-emit) — build orchestration

@@ -16,8 +16,7 @@ homepage.workspace = true
 # builds locally but has no version and fails `cargo publish`.
 bynk-check.workspace = true
 bynk-emit.workspace = true
-bynk-ir.workspace = true
-bynk-lower.workspace = true
+bynk-model.workspace = true
 bynk-fmt.workspace = true
 bynk-project.workspace = true
 bynk-render.workspace = true

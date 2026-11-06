@@ -1259,7 +1259,7 @@ pub fn constraint_token_spans(source: &str) -> Vec<Span> {
 }
 
 /// The `Cache-Control` value a well-formed `@cache` emits. It is the same
-/// reading `bynk_lower::lower_route_cache_ir` makes, but taken per annotation
+/// reading `bynk_model::lower_route_cache_ir` makes, but taken per annotation
 /// over a parse, so it stays on the AST under M-1's domain clause (the
 /// system-model ADR, crate-hygiene B1, #2939).
 ///
@@ -2945,11 +2945,11 @@ fn limits_summary(limits: &LimitsPolicy) -> String {
 }
 
 /// v0.123 (slice 2): the `on …` line for a handler — its route/protocol shape.
-/// Read from the system model's [`bynk_ir::IrHandlerKind`] (M-1, crate-hygiene
-/// B1, #2939), which `bynk_lower::lower_handler_kind_ir` builds from any parse.
+/// Read from the system model's [`bynk_model::IrHandlerKind`] (M-1, crate-hygiene
+/// B1, #2939), which `bynk_model::lower_handler_kind_ir` builds from any parse.
 pub(crate) fn handler_line(h: &Handler) -> String {
-    use bynk_ir::IrHandlerKind;
-    match bynk_lower::lower_handler_kind_ir(&h.kind) {
+    use bynk_model::IrHandlerKind;
+    match bynk_model::lower_handler_kind_ir(&h.kind) {
         IrHandlerKind::Call => "on call".to_string(),
         IrHandlerKind::Http { method, path } => format!("on {}(\"{}\")", method.as_str(), path),
         IrHandlerKind::Cron { expr } => format!("on schedule(\"{expr}\")"),

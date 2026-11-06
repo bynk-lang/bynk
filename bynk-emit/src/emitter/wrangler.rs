@@ -201,7 +201,7 @@ impl ClassTombstones {
 /// service's queue-binding protocol directly, straight off the syntax tree —
 /// this file's entire raw-syntax footprint, per #1191's own grounding.
 /// Relocating just these two matches removed `wrangler.rs` from the
-/// `ast_importers` probe outright — no `bynk_ir` equivalent exists to route
+/// `ast_importers` probe outright — no `bynk_model` equivalent exists to route
 /// through instead: nothing builds a project-wide service IR at the call site
 /// (#1191's Framing), and after #1542's Slice D2 nothing builds one anywhere.
 ///

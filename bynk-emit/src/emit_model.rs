@@ -18,9 +18,9 @@ use bynk_check::project_model::BuildTarget;
 use bynk_check::project_model::{AdapterBinding, Visibility, resolve_consume_prefix};
 use bynk_check::resolver::{self};
 use bynk_check::symbols::*;
-use bynk_ir::CapRefIr;
-use bynk_ir::FnSig;
-use bynk_lower::lower_provider_given_ir;
+use bynk_model::CapRefIr;
+use bynk_model::FnSig;
+use bynk_model::lower_provider_given_ir;
 use bynk_project::discovery::*;
 use bynk_project::paths::*;
 use bynk_project::{AttributedError, UnitKind};
@@ -622,7 +622,7 @@ pub fn instantiate_provider_ts_expr(
         return new_call_ts_expr(&bodied_ns, cap, vec![]);
     };
     // Build the by-name deps object from the provider's `given`, if any.
-    // #1187's Provider given/deps-wiring slice: reads bynk_ir's own CapRefIr
+    // #1187's Provider given/deps-wiring slice: reads bynk_model's own CapRefIr
     // (lower_provider_given_ir — a standalone reader of the `given` clause,
     // never a full provider IR; see that function's own doc comment) instead
     // of walking the raw AST CapRef directly.

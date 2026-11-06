@@ -253,8 +253,7 @@ dependencies = [
  "bynk-check",
  "bynk-emit",
  "bynk-fmt",
- "bynk-ir",
- "bynk-lower",
+ "bynk-model",
  "bynk-project",
  "bynk-render",
  "bynk-strip",
@@ -273,8 +272,7 @@ version = "0.510.18"
 dependencies = [
  "bynk-check",
  "bynk-driver",
- "bynk-ir",
- "bynk-lower",
+ "bynk-model",
  "bynk-project",
  "bynk-syntax",
  "bynk-ts",
@@ -300,30 +298,11 @@ version = "0.510.18"
 dependencies = [
  "bynk-check",
  "bynk-fmt",
- "bynk-ir",
- "bynk-lower",
+ "bynk-model",
  "bynk-project",
  "bynk-syntax",
  "serde_json",
  "url",
-]
-
-[[package]]
-name = "bynk-ir"
-version = "0.510.18"
-dependencies = [
- "bynk-check",
- "bynk-syntax",
-]
-
-[[package]]
-name = "bynk-lower"
-version = "0.510.18"
-dependencies = [
- "bynk-check",
- "bynk-ir",
- "bynk-project",
- "bynk-syntax",
 ]
 
 [[package]]
@@ -349,6 +328,15 @@ dependencies = [
  "tower-lsp",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "bynk-model"
+version = "0.510.18"
+dependencies = [
+ "bynk-check",
+ "bynk-project",
+ "bynk-syntax",
 ]
 
 [[package]]

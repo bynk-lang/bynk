@@ -415,9 +415,9 @@ pub(super) fn emit_system_http_support(
                 continue;
             };
             declared.insert((sname.clone(), method.as_str().to_string(), path.clone()));
-            let bynk_ir::IrHandlerKind::Http {
+            let bynk_model::IrHandlerKind::Http {
                 method: ir_method, ..
-            } = bynk_lower::lower_handler_kind_ir(&h.kind)
+            } = bynk_model::lower_handler_kind_ir(&h.kind)
             else {
                 unreachable!("h.kind already matched HandlerKind::Http above")
             };

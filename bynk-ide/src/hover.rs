@@ -729,8 +729,8 @@ fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
         };
         s.handlers.iter().find(|h| {
             matches!(
-                bynk_lower::lower_handler_kind_ir(&h.kind),
-                bynk_ir::IrHandlerKind::Http { .. }
+                bynk_model::lower_handler_kind_ir(&h.kind),
+                bynk_model::IrHandlerKind::Http { .. }
             ) && h.span.start <= a.offset
                 && a.offset < h.span.end
         })
