@@ -2,7 +2,7 @@
 //! and diagrams against the files they describe (C4b, #2940).
 //!
 //! None of these is a compiler test. They read the repository's Markdown, JSON
-//! and manifests, and need no compiled pipeline, so they live in `xtask` (whose
+//! and manifests, and need no compiled test corpus, so they live in `xtask` (whose
 //! `drift` CI job runs them when only a drift input changed) instead of the
 //! integration corpus. One binary, not eleven: linking dominates a test crate's
 //! cost (see `bynk-tests/tests/it.rs`).
