@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Diagnostic rendering for the Bynk compiler: ariadne human output and the short line form, shared by both CLIs."
+description = "Final release: superseded by bynk-driver (its `render` module). Diagnostic rendering for the Bynk compiler: ariadne human output and the short line form."
 keywords = ["compiler", "dsl", "diagnostics", "language"]
 categories = ["compilers", "command-line-interface"]
 
