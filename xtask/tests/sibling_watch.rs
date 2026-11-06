@@ -1,6 +1,6 @@
 //! C4c (#2940, Decision B): `scripts/ci/run-unless-sibling-fails.sh` stops its
 //! command when the sibling job has failed, and otherwise passes the command's
-//! own exit status through. A stub `gh` stands in for the jobs API.
+//! own exit status through. A stub `node` stands in for the jobs API.
 #![cfg(unix)]
 
 use std::os::unix::fs::PermissionsExt;
@@ -12,7 +12,7 @@ fn script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../scripts/ci/run-unless-sibling-fails.sh")
 }
 
-/// Runs the watcher around `cmd` with a `gh` that answers `sibling_failed`.
+/// Runs the watcher around `cmd` with a `node` that answers `sibling_failed`.
 fn run(sibling_failed: bool, cmd: &[&str]) -> (i32, String, Duration) {
     let dir = std::env::temp_dir().join(format!(
         "bynk-sibling-watch-{}-{sibling_failed}-{}",
@@ -20,9 +20,10 @@ fn run(sibling_failed: bool, cmd: &[&str]) -> (i32, String, Duration) {
         cmd.join("_").replace('/', "")
     ));
     std::fs::create_dir_all(&dir).unwrap();
-    let gh = dir.join("gh");
-    std::fs::write(&gh, format!("#!/bin/sh\necho {sibling_failed}\n")).unwrap();
-    std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // A stub `node` that answers like the jobs lookup would.
+    let node = dir.join("node");
+    std::fs::write(&node, format!("#!/bin/sh\necho {sibling_failed}\n")).unwrap();
+    std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o755)).unwrap();
     let path = format!("{}:{}", dir.display(), std::env::var("PATH").unwrap());
     let start = Instant::now();
     let out = Command::new("bash")
