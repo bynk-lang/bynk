@@ -1499,10 +1499,20 @@ fn ide_emit_edge(root: &Path) -> Probe {
 /// named exclusions remain.
 const AST_IMPORTER_EXCEPTIONS: &[&str] = &["project/tests_emit.rs", "emitter/serialisation.rs"];
 
-/// Is `rel_path` (relative to `bynk-emit/src`) one of [`AST_IMPORTER_EXCEPTIONS`]?
+/// The directory `project/tests_emit.rs` was split into (crate-hygiene D1, #2982, PR 2).
+/// The exception above names the whole family: the split gave it ten child files that
+/// import the AST for exactly the reason the parent did, so the exclusion follows the
+/// path rather than the one file name (a re-pointing; the probe's reading is unchanged).
+const AST_IMPORTER_EXCEPTION_DIRS: &[&str] = &["project/tests_emit/"];
+
+/// Is `rel_path` (relative to `bynk-emit/src`) one of [`AST_IMPORTER_EXCEPTIONS`], or
+/// under one of [`AST_IMPORTER_EXCEPTION_DIRS`]?
 fn is_named_ast_importer(rel_path: &Path) -> bool {
     let rel = rel_path.to_string_lossy().replace('\\', "/");
     AST_IMPORTER_EXCEPTIONS.contains(&rel.as_str())
+        || AST_IMPORTER_EXCEPTION_DIRS
+            .iter()
+            .any(|d| rel.starts_with(d))
 }
 
 /// Is `contents` a module (not a nested block) that glob-imports its parent —
