@@ -1421,7 +1421,7 @@ fn ide_emit_edge(root: &Path) -> Probe {
 /// #1187's own closing scoping pass adds one more, on different grounds than the
 /// `ir.rs`/`ir/lower.rs` pair above: `project/tests_emit.rs` was deliberately *not*
 /// added alongside `project.rs` when this list was first cut (the
-/// `ast_importer_exclusion_is_named_not_prefixed` test below used to assert exactly
+/// `ast_importer_exclusion_is_named_except_for_the_split_directory` test below used to assert exactly
 /// that) — #1187's own scoping pass found new evidence changing that: its test/suite
 /// case bodies call `emitter::lower_block_to_async_body`/`lower_test_case_body`/
 /// `lower_integration_case_body` directly (the Q7-settled body-rendering pass —
@@ -3585,10 +3585,26 @@ mod tests {
     /// real work. (`ir.rs`/`ir/lower.rs`, the lowering pass's own former `Ast → Ir`
     /// exclusion, left this list at Arc D's P7.12 crate carve — they left
     /// `bynk-emit/src` entirely, not merely this list.)
+    ///
+    /// **Crate-hygiene D1 (#2982, PR 2) carves one exception to "named, not prefixed":**
+    /// `project/tests_emit.rs` was split into ten children, and [`AST_IMPORTER_EXCEPTION_DIRS`]
+    /// excludes that one directory by prefix (with its trailing `/`, so a lookalike such as
+    /// `project/tests_emitter.rs` is still counted). It is the only prefix rule, and it goes
+    /// away with the files when `project` leaves `bynk-emit` (PR 3).
     #[test]
-    fn ast_importer_exclusion_is_named_not_prefixed() {
+    fn ast_importer_exclusion_is_named_except_for_the_split_directory() {
         assert!(is_named_ast_importer(Path::new("project/tests_emit.rs")));
         assert!(is_named_ast_importer(Path::new("emitter/serialisation.rs")));
+        // The split directory is excluded by prefix; lookalikes are not.
+        assert!(is_named_ast_importer(Path::new(
+            "project/tests_emit/harness.rs"
+        )));
+        assert!(!is_named_ast_importer(Path::new(
+            "project/tests_emit_extra.rs"
+        )));
+        assert!(!is_named_ast_importer(Path::new(
+            "project/tests_emitter.rs"
+        )));
         assert!(!is_named_ast_importer(Path::new("project.rs")));
         assert!(!is_named_ast_importer(Path::new("emitter.rs")));
         assert!(!is_named_ast_importer(Path::new("emitter/lower.rs")));
@@ -3614,6 +3630,20 @@ mod tests {
                 contents.contains("bynk_syntax::ast"),
                 "AST_IMPORTER_EXCEPTIONS entry {rel:?} no longer imports bynk_syntax::ast \
                  — it excludes nothing and should be removed"
+            );
+        }
+        // The directory exceptions fail loud too: each must exist and hold at least
+        // one `.rs` file that still imports the AST.
+        for rel in AST_IMPORTER_EXCEPTION_DIRS {
+            let files = rust_files(&dir.join(rel));
+            assert!(
+                !files.is_empty(),
+                "AST_IMPORTER_EXCEPTION_DIRS entry {rel:?} does not exist or holds no .rs files"
+            );
+            assert!(
+                files.iter().any(|(_, c)| c.contains("bynk_syntax::ast")),
+                "AST_IMPORTER_EXCEPTION_DIRS entry {rel:?} no longer has a file importing \
+                 bynk_syntax::ast — it excludes nothing and should be removed"
             );
         }
     }
