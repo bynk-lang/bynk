@@ -10,8 +10,6 @@ use std::path::PathBuf;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 
-use crate::BuildTarget;
-
 #[derive(Parser, Debug)]
 #[command(name = "bynkc", version, about = "The Bynk compiler", long_about = None)]
 pub struct Cli {
@@ -42,63 +40,10 @@ pub use bynk_driver::test_runner::{TestArgs, TestFormat};
 /// keep in step as formatting options are added.
 pub use bynk_driver::{FmtArgs, IndentKind};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-pub enum CliTarget {
-    /// Single-bundle output (the default). Cross-context calls compile to
-    /// direct function invocation.
-    Bundle,
-    /// One Cloudflare Worker per context. Cross-context calls go over
-    /// Service Bindings using a JSON wire format.
-    Workers,
-}
-
-impl From<CliTarget> for BuildTarget {
-    fn from(t: CliTarget) -> Self {
-        match t {
-            CliTarget::Bundle => BuildTarget::Bundle,
-            CliTarget::Workers => BuildTarget::Workers,
-        }
-    }
-}
-
-/// v0.108 (in-browser track, slice 1): the emitted artefact language. `ts` (the
-/// default and primary output) writes the typed TypeScript modules; `js` writes
-/// the same modules with their types stripped — an *emit-then-strip* JavaScript
-/// artefact (ADR 0137) runnable with no `tsc` in the loop. Orthogonal to
-/// `--target` (topology) and `--platform` (binding).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, ValueEnum)]
-pub enum EmitFormat {
-    /// TypeScript modules (the default, primary artefact).
-    #[default]
-    Ts,
-    /// JavaScript modules, types stripped (no `tsc` dependency).
-    Js,
-}
-
-/// v0.17: the deploy platform that selects the `bynk` surface binding. Distinct
-/// from [`CliTarget`] (the emit topology). v0.18 adds `node`.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, ValueEnum)]
-pub enum CliPlatform {
-    /// Cloudflare Workers runtime (the default).
-    #[default]
-    Cloudflare,
-    /// Node.js (≥ [`NODE_MAJOR_FLOOR`](crate::NODE_MAJOR_FLOOR)) runtime (v0.18).
-    Node,
-    /// The browser — the `bynk` surface over Web APIs, for the in-browser
-    /// REPL/playground (v0.108). `Bundle` topology only; `Fetch`/`Secrets` are
-    /// withheld (see ADR 0138).
-    Browser,
-}
-
-impl From<CliPlatform> for crate::Platform {
-    fn from(p: CliPlatform) -> Self {
-        match p {
-            CliPlatform::Cloudflare => crate::Platform::Cloudflare,
-            CliPlatform::Node => crate::Platform::Node,
-            CliPlatform::Browser => crate::Platform::Browser,
-        }
-    }
-}
+/// The `compile` subcommand's enums, shared with `bynk compile` (#2998): they live
+/// in `bynk-driver` next to the command body, and are re-exported here so
+/// `bynkc::cli::{CliTarget, CliPlatform, EmitFormat}` paths resolve unchanged.
+pub use bynk_driver::{CliPlatform, CliTarget, EmitFormat};
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
