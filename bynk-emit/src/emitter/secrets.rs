@@ -43,7 +43,7 @@ use bynk_project::json_string;
 use bynk_check::actors::SumMemberSeam;
 use bynk_check::secrets::SecretReads;
 
-use crate::project::UnitTable;
+use bynk_check::symbols::UnitTable;
 
 /// The file the driver reads, beside each Worker's `wrangler.toml`.
 pub const SECRETS_MANIFEST: &str = "bynk-secrets.json";
@@ -133,7 +133,7 @@ pub(crate) fn foreign_callers(table: &UnitTable) -> Vec<bynk_check::actors::Fore
 /// case no pass can see (#1976) — is [`bynk_check::secrets::worker_secret_reads`].
 /// `run_checks` raises the warnings, via
 /// `bynk_check::project_model::phase_secrets_computed_name`, per file.
-pub(crate) fn secret_reads(
+pub fn secret_reads(
     context: &str,
     unit_tables: &std::collections::HashMap<String, UnitTable>,
     unit_consumes: &std::collections::HashMap<String, Vec<String>>,
@@ -159,7 +159,7 @@ pub(crate) fn secret_reads(
 /// non-empty `declared` — would have stayed silent for a context that reads
 /// secrets but declares none, which is exactly the context this file now exists
 /// to describe.
-pub(crate) fn emit_secrets_manifest(table: &UnitTable, reads: &SecretReads) -> Option<String> {
+pub fn emit_secrets_manifest(table: &UnitTable, reads: &SecretReads) -> Option<String> {
     render(&declared_secrets(table), reads, &foreign_callers(table))
 }
 

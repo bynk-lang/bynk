@@ -13,7 +13,7 @@
 
 use crate::emitter::http_handler_method_name_ir;
 use crate::emitter::ts_ident;
-use crate::project::UnitTable;
+use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{BaseType, Handler, LimitsPolicy, ServiceProtocol, TypeRef};
 
 use crate::emitter::RuntimeUse;
@@ -651,7 +651,7 @@ fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_worker_entry(
+pub fn emit_worker_entry(
     context: &str,
     table: &UnitTable,
     // v0.177 (#643): this context's own contract hash per `on call` service.
@@ -2562,7 +2562,7 @@ fn query_field_specs(
 
 /// #2858: whether any `from http` route in `table` writes plain JSON, so the
 /// generated `Option` encoders carry the plain branch.
-pub(crate) fn table_has_plain_json(table: &UnitTable) -> bool {
+pub fn table_has_plain_json(table: &UnitTable) -> bool {
     table.services.values().any(|svc| {
         svc.handlers.iter().any(|h| {
             bynk_syntax::ast::effective_json_options(svc.json.as_ref(), h)
@@ -3624,7 +3624,7 @@ mod tests {
         let with_suite = [("ops/jobs.bynk", JOBS), ("tests/jobs.bynk", SUITE)];
         let test_build = crate::testkit::emit_project_with_tests(
             &with_suite,
-            crate::project::BuildTarget::Workers,
+            bynk_check::project_model::BuildTarget::Workers,
             true,
         );
         assert!(
@@ -3634,7 +3634,7 @@ mod tests {
         );
         let deploy = crate::testkit::emit_project_with_tests(
             &with_suite,
-            crate::project::BuildTarget::Workers,
+            bynk_check::project_model::BuildTarget::Workers,
             false,
         );
         let bare = emit_workers(&[("ops/jobs.bynk", JOBS)]);
@@ -3650,7 +3650,7 @@ mod tests {
         const HOLDS: &str = "context ck.holds\n\nconsumes bynk { Clock }\n\nagent Hold {\n\tkey id: String\n\tstore n: Cell[Int]\n\n\ton call at() -> Effect[Instant] given Clock {\n\t\tClock.now()\n\t}\n}\n\nservice api from http {\n\ton GET(\"/now\") () -> Effect[HttpResult[Bool]] by Visitor given Clock {\n\t\tlet t <- Clock.now()\n\t\tlet a <- Hold(\"h\").at()\n\t\tOk(t == a)\n\t}\n}\n";
         const SUITE: &str = "suite ck.holds as system {\n\tcase \"now\" {\n\t\tadvance Clock by 1.minutes\n\t\tlet r <- api.GET(\"/now\") by Visitor\n\t\texpect r is Ok(true)\n\t}\n}\n";
         let with_suite = [("ck/holds.bynk", HOLDS), ("tests/holds.bynk", SUITE)];
-        let target = crate::project::BuildTarget::Workers;
+        let target = bynk_check::project_model::BuildTarget::Workers;
         let test_build = crate::testkit::emit_project_with_tests(&with_suite, target, true);
         let deploy = crate::testkit::emit_project_with_tests(&with_suite, target, false);
         let bare = emit_workers(&[("ck/holds.bynk", HOLDS)]);

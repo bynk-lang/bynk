@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use crate::project::EmitProjectCtx;
+use crate::emit_model::EmitProjectCtx;
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons, Types};
 use bynk_syntax::ast::{
@@ -1006,7 +1006,7 @@ pub(crate) fn emit_free_fn(
 
 /// #2834: a suite-local helper `fn` — [`emit_free_fn`] without the `export`,
 /// since it is declared inside a test runner and called from its body.
-pub(crate) fn emit_suite_fn(
+pub fn emit_suite_fn(
     f: &FnDecl,
     commons: &TypedCommons,
     runtime_use: &RuntimeUse,
@@ -1513,7 +1513,7 @@ fn compute() -> Effect[Int] {
 /// once its last production caller converted to this `IrHttpMethod` version,
 /// which every call site now holds already-resolved (`IrHandlerKind::Http`'s
 /// own payload) rather than re-deriving from `HandlerKind::Http`.
-pub(crate) fn http_handler_method_name_ir(method: IrHttpMethod, path: &str) -> String {
+pub fn http_handler_method_name_ir(method: IrHttpMethod, path: &str) -> String {
     http_handler_method_name_from_str(method.as_str(), path)
 }
 
@@ -1538,7 +1538,7 @@ fn http_handler_method_name_from_str(method: &str, path: &str) -> String {
 /// functions the emitter uses (so the keys match the emitted function names);
 /// serialised as a JSON object (manual, like the source map — no serde). Returns
 /// `None` when the unit declares no handlers.
-pub(crate) fn collect_handler_labels(commons: &TypedCommons) -> Option<String> {
+pub fn collect_handler_labels(commons: &TypedCommons) -> Option<String> {
     let mut entries: Vec<(String, String)> = Vec::new();
     for item in &commons.commons.items {
         match item {
@@ -1632,7 +1632,7 @@ fn handler_op_label(name: &str, params: &[Param]) -> String {
 /// each emission site (the `handlers` method, the `compose` surface wrapper,
 /// and the `scheduled` dispatcher) by walking handlers in the same order, so it
 /// is collision-free and stable without encoding the schedule expression.
-pub(crate) fn cron_handler_method_name(service: &str, index: usize) -> String {
+pub fn cron_handler_method_name(service: &str, index: usize) -> String {
     format!("cron_{service}_{index}")
 }
 
@@ -1684,7 +1684,7 @@ pub(crate) fn topo_order_providers(
 /// identically at the `handlers` method, the `compose` surface wrapper, and the
 /// `queue` dispatcher (queue names are unique context-wide, but the index keeps
 /// the key identifier-safe without sanitising the name).
-pub(crate) fn queue_handler_method_name(service: &str, index: usize) -> String {
+pub fn queue_handler_method_name(service: &str, index: usize) -> String {
     format!("queue_{service}_{index}")
 }
 
@@ -2585,7 +2585,7 @@ capability Clock {
 "#;
         let out = match crate::project::compile_in_memory(
             src,
-            crate::project::BuildTarget::Bundle,
+            bynk_check::project_model::BuildTarget::Bundle,
             Default::default(),
         ) {
             Ok(out) => out,
@@ -3904,13 +3904,13 @@ pub(crate) fn qualified_to_ns(q: &str) -> String {
 /// temporal dead zone. The reserved `__ns_` prefix can't be a user identifier.
 /// Every test-module namespace reference goes through this, in `tests_emit`
 /// and in lowering that runs `in_test_scaffold()`.
-pub(crate) fn test_scaffold_ns(q: &str) -> String {
+pub fn test_scaffold_ns(q: &str) -> String {
     format!("__ns_{}", qualified_to_ns(q))
 }
 
 /// The PascalCase name a context uses for its generated `Deps` interface:
 /// `shortener.links` → `ShortenerLinks`.
-pub(crate) fn context_pascal(name: &str) -> String {
+pub fn context_pascal(name: &str) -> String {
     name.split('.')
         .map(|seg| {
             let mut chars = seg.chars();
@@ -4065,7 +4065,7 @@ fn emit_context_deps_interface(
 /// `__caller` parameter) and the compose root (which passes the name) — so the
 /// two can never disagree on which providers thread a caller. `caller_binder_for`
 /// self-guards `HandlerKind::Call`, so no kind filter is needed or wanted here.
-pub(crate) fn any_service_binds_caller<'a>(
+pub fn any_service_binds_caller<'a>(
     services: impl IntoIterator<Item = &'a ServiceDecl>,
     actors: &HashMap<String, ActorDecl>,
 ) -> bool {
@@ -9469,7 +9469,7 @@ type PaymentError = enum { Declined, InsufficientFunds }
     fn event_type_emits_through_the_project_pipelines_event_mirror_loop() {
         let out = crate::project::compile_in_memory(
             "context demo {\n  event Notified = { id: String }\n}\n",
-            crate::project::BuildTarget::Bundle,
+            bynk_check::project_model::BuildTarget::Bundle,
             Default::default(),
         )
         .unwrap_or_else(|_| panic!("event-in-context fixture should compile"));
@@ -9552,7 +9552,7 @@ context demo {
     fn emit_store_context(src: &str) -> String {
         let out = crate::project::compile_in_memory(
             src,
-            crate::project::BuildTarget::Bundle,
+            bynk_check::project_model::BuildTarget::Bundle,
             Default::default(),
         )
         .unwrap_or_else(|_| panic!("capability fixture should compile:\n{src}"));

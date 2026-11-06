@@ -157,7 +157,7 @@ fn client_services(
 /// The client for `ctx_name`, or `None` when no foreign caller may call any of
 /// its services. `own_types` is the context's own type namespace
 /// (`combined_types_for`), the table its contract hashes are computed in.
-pub(crate) fn emit_client(
+pub fn emit_client(
     ctx_name: &str,
     table: &UnitTable,
     own_types: &HashMap<String, Arc<TypeDecl>>,

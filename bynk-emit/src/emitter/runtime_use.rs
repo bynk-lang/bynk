@@ -88,7 +88,7 @@ use bynk_check::checker::TyId;
 /// One instance per emitted module (it lives on that module's emission context),
 /// so flags never leak between files.
 #[derive(Default)]
-pub(crate) struct RuntimeUse {
+pub struct RuntimeUse {
     bytes: Cell<bool>,
     /// #2016: the module references the `Bytes` operation helpers (`concat`,
     /// `compare`, hex, base64url), a group apart from `bytes` so a module that

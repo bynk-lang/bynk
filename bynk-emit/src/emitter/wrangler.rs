@@ -5,8 +5,8 @@
 //! Object bindings + `exports` entries are declared for every agent.
 
 use crate::emitter::toml_doc::{TomlBlock, TomlDocument, TomlEntry, TomlValue};
-use crate::project::worker_dir_name;
-pub(crate) use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+pub use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+use bynk_project::worker_dir_name;
 
 /// Compile-time pinned compatibility date. Cloudflare uses this to lock
 /// Workers runtime behaviour. When to bump it, and the gate a bump must pass,
@@ -90,7 +90,7 @@ pub use bynk_check::firstparty::KV_BINDING_NAME;
 
 /// #1883, slice 1b: the `[assets]` block for a Worker that ships static files.
 /// `directory` is the Worker's own assets directory
-/// ([`crate::project::WORKER_ASSETS_DIR`]), beside — never containing — its
+/// ([`crate::emit_model::WORKER_ASSETS_DIR`]), beside — never containing — its
 /// compiled code. The three routing settings are set explicitly rather than
 /// inherited (#1883 [DECISION C], checked against the wrangler reference):
 ///
@@ -101,13 +101,13 @@ pub use bynk_check::firstparty::KV_BINDING_NAME;
 /// - `html_handling = "none"`: an asset is served only at its exact path (the
 ///   default would also serve `foo.html` at `/foo`), so the route-conflict
 ///   check can compare paths exactly.
-pub(crate) fn assets_block() -> TomlBlock {
+pub fn assets_block() -> TomlBlock {
     TomlBlock::table(
         "assets",
         vec![
             TomlEntry::kv(
                 "directory",
-                TomlValue::str(format!("./{}", crate::project::WORKER_ASSETS_DIR)),
+                TomlValue::str(format!("./{}", crate::emit_model::WORKER_ASSETS_DIR)),
             ),
             TomlEntry::kv("run_worker_first", TomlValue::Bool(false)),
             TomlEntry::kv("not_found_handling", TomlValue::str("none")),
@@ -122,7 +122,7 @@ pub(crate) fn assets_block() -> TomlBlock {
 /// Worker, and stores what the Worker sends as RFC 9111 allows: which is why
 /// such a Worker sends `no-store` on every response but a `@cache` route's
 /// `2xx` (`workers_entry`). A Worker without an instance gets no stanza.
-pub(crate) fn edge_cache_block() -> TomlBlock {
+pub fn edge_cache_block() -> TomlBlock {
     TomlBlock::table(
         "cache",
         vec![TomlEntry::kv("enabled", TomlValue::Bool(true))],
@@ -135,7 +135,7 @@ pub(crate) fn edge_cache_block() -> TomlBlock {
 /// default rules already say this; stating it keeps the dependency visible and
 /// stops it changing under us. `fallthrough = true` leaves the other default
 /// rules in force.
-pub(crate) fn wasm_rule_block() -> TomlBlock {
+pub fn wasm_rule_block() -> TomlBlock {
     TomlBlock::array_table(
         "rules",
         vec![
@@ -152,7 +152,7 @@ pub(crate) fn wasm_rule_block() -> TomlBlock {
 /// be cached for a year. Without it the platform's default is `max-age=0,
 /// must-revalidate`. The glob is built from the prefix, so the two cannot
 /// drift (review of #1904).
-pub(crate) fn asset_headers() -> String {
+pub fn asset_headers() -> String {
     format!(
         "{}*\n  Cache-Control: public, max-age=31536000, immutable\n",
         bynk_check::assets::SERVED_PREFIX
@@ -162,7 +162,7 @@ pub(crate) fn asset_headers() -> String {
 /// State-migrations S3 (#2248): one context's agent class renames
 /// (`(old, new)`) and removals, as `exports` tombstones.
 #[derive(Debug, Default)]
-pub(crate) struct ClassTombstones {
+pub struct ClassTombstones {
     pub renamed: Vec<(String, String)>,
     pub deleted: Vec<String>,
 }
@@ -171,7 +171,7 @@ impl ClassTombstones {
     /// From the context's declarations: each agent's `replaces`, and each
     /// `removed agent`, skipping an old name still declared live (the checker
     /// already refuses that).
-    pub(crate) fn of(table: &bynk_check::symbols::UnitTable) -> Self {
+    pub fn of(table: &bynk_check::symbols::UnitTable) -> Self {
         let mut renamed: Vec<(String, String)> = table
             .agents
             .values()
@@ -213,7 +213,7 @@ impl ClassTombstones {
 /// below is escaped unconditionally by the printer now, not selectively by
 /// this function (`emitter/toml_doc.rs`'s own module doc has the reasoning).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_wrangler_toml(
+pub fn emit_wrangler_toml(
     context: &str,
     // #1944: every binding this Worker declares, [`worker_bindings`]' list —
     // the same one its `Env` interface and the duplicate check read.
@@ -635,7 +635,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
 // `pub(crate)` exactly when something outside this file reads its name.
 
 /// The Service Binding to context `target`'s Worker.
-pub(crate) fn service_binding(target: &str) -> WorkerBinding {
+pub fn service_binding(target: &str) -> WorkerBinding {
     WorkerBinding {
         name: consumed_binding_name(target),
         source: BindingSource::Service {

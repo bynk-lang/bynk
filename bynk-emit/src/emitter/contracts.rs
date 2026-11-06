@@ -34,7 +34,7 @@ pub(crate) const MANIFEST_VERSION: u32 = 1;
 /// each hash the manifest records: `provides` by service, `expects` by
 /// dependency then service.
 #[derive(Default)]
-pub(crate) struct Shapes {
+pub struct Shapes {
     pub(crate) provides: BTreeMap<String, String>,
     pub(crate) expects: BTreeMap<String, BTreeMap<String, String>>,
     /// #2554: service to the older contract hashes it also accepts, from the
@@ -73,7 +73,7 @@ pub(crate) struct Shapes {
 /// that would break it (`design/archive/retired-tracks.md`, interop track D3, Q6). Additive
 /// within version 1, and absent when empty, so every manifest of a context
 /// with no foreign caller is byte-identical to before.
-pub(crate) fn emit_contracts_manifest(
+pub fn emit_contracts_manifest(
     provides: &BTreeMap<String, String>,
     expects: &BTreeMap<String, BTreeMap<String, String>>,
     foreign: &BTreeMap<String, BTreeMap<String, String>>,

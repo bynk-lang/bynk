@@ -13,6 +13,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::workers_entry::wire_ident;
+use crate::emit_model::{ImportExt, LocaleNegotiationArgs};
 use crate::emitter::http_handler_method_name_ir;
 use crate::emitter::wrangler::{
     BindingSource, WorkerBinding, agent_binding, binding_ts_type, events_fanout_binding,
@@ -20,8 +21,8 @@ use crate::emitter::wrangler::{
 use crate::emitter::{
     BOUNDARY_CODEC_RUNTIME_IMPORTS, BYTES_RUNTIME_IMPORTS, JSON_CODEC_RUNTIME_IMPORTS, RuntimeUse,
 };
-use crate::project::{ImportExt, LocaleNegotiationArgs, UnitTable};
 use bynk_check::symbols::MessageBundleInfo;
+use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{ActorDecl, ExprKind, Handler, ServiceProtocol, TypeRef};
 use bynk_ts::{
     TsArrowBody, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsProgram, TsStmt,
@@ -261,7 +262,7 @@ fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn emit_worker_compose(
+pub fn emit_worker_compose(
     context: &str,
     table: &UnitTable,
     consumes: &[String],
@@ -332,7 +333,7 @@ pub(crate) fn emit_worker_compose(
         && let Some(bundle) = locale_bundle
     {
         let import = crate::emitter::cross_commons_import_specifier_for_path(
-            &crate::project::worker_handlers_source_path(context),
+            &bynk_project::worker_handlers_source_path(context),
             &bundle.source_path,
             import_ext,
         );
@@ -366,14 +367,14 @@ pub(crate) fn emit_worker_compose(
         // #1321: the `TsExpr`-returning twin of `instantiate_provider_expr`
         // (`project.rs`'s own Decision-B-style addition) — see its own doc
         // for why the `String` version stays untouched.
-        let expr = crate::project::instantiate_provider_ts_expr(
+        let expr = crate::emit_model::instantiate_provider_ts_expr(
             cctx,
             key,
             unit_tables,
             unit_consumes,
             unit_consumes_aliases,
             unit_flattened,
-            crate::project::ProviderNamespaces::Workers { harness_clock },
+            crate::emit_model::ProviderNamespaces::Workers { harness_clock },
             Some("env"),
             locale_negotiation_args.as_ref(),
             &mut referenced_units,
@@ -386,14 +387,14 @@ pub(crate) fn emit_worker_compose(
     let mut derived_keys: Vec<String> = table.derived.keys().cloned().collect();
     derived_keys.sort();
     for cap in &derived_keys {
-        let expr = crate::project::instantiate_provider_ts_expr(
+        let expr = crate::emit_model::instantiate_provider_ts_expr(
             context,
             cap,
             unit_tables,
             unit_consumes,
             unit_consumes_aliases,
             unit_flattened,
-            crate::project::ProviderNamespaces::Workers { harness_clock },
+            crate::emit_model::ProviderNamespaces::Workers { harness_clock },
             Some("env"),
             locale_negotiation_args.as_ref(),
             &mut referenced_units,
@@ -991,7 +992,7 @@ pub(crate) fn emit_worker_compose(
                 None,
             ));
         } else {
-            let dir = crate::project::worker_dir_name(cctx);
+            let dir = bynk_project::worker_dir_name(cctx);
             program.push(TsStmt::decl(
                 TsDecl::ImportNamespace {
                     type_only: false,
@@ -1017,7 +1018,7 @@ pub(crate) fn emit_worker_compose(
             .get(owner)
             .and_then(|paths| paths.get(name))
             .cloned()
-            .unwrap_or_else(|| crate::project::EmitProjectCtx::commons_path(owner));
+            .unwrap_or_else(|| crate::emit_model::EmitProjectCtx::commons_path(owner));
         by_module.entry(module).or_default().push(format!(
             "{} as {alias}",
             bynk_check::emitted_names::ts_ident(name)
@@ -1029,7 +1030,7 @@ pub(crate) fn emit_worker_compose(
                 type_only: false,
                 names,
                 from: crate::emitter::cross_commons_import_specifier_for_path(
-                    &crate::project::worker_handlers_source_path(context),
+                    &bynk_project::worker_handlers_source_path(context),
                     &module,
                     import_ext,
                 ),

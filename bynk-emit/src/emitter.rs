@@ -2,6 +2,23 @@
 //!
 //! Walks the typed AST and writes a single TypeScript module.
 //!
+//! # Public API of the code generator
+//!
+//! Crate-hygiene D1 (#2982): the orchestration layer (`project`, which moves
+//! to `bynk-driver`) drives this module, so the helpers it calls are a
+//! deliberate public API rather than `pub(crate)` internals: the
+//! `emit_*` entry points (`emit_project`, `emit_worker_entry`,
+//! `emit_worker_compose`, `emit_wrangler_toml`, `emit_secrets_manifest`,
+//! `emit_events_fanout_do`, `emit_tsconfig`), the specifier and name helpers
+//! (`ts_specifier`, `ts_ident`, `ts_type_ref`, `cross_commons_import_specifier_for_path`),
+//! the table walkers (`walk_unit_table_bodies`, `block_uses_emit`,
+//! `any_service_binds_caller`, `table_has_plain_json`, …), the runtime-import
+//! constants and `runtime_files` / `runtime_use` / `type_renames`, and the
+//! `wrangler`, `client`, `contracts`, `secrets`, `serialisation` and `emit`
+//! submodules' items the orchestrator consumes. The shared output and context
+//! model lives in [`crate::emit_model`]. Anything not reachable from a path
+//! the orchestrator uses stays `pub(crate)`.
+//!
 //! v0.2 lowering rules:
 //! - Refined-base types: branded type alias + constructor object with
 //!   `of`/`unsafe` (+ any user-declared methods).
@@ -30,7 +47,7 @@ use bynk_ts::{
     pred_condition_and_message, pred_condition_and_message_for,
 };
 
-use crate::project::{BuildTarget, EmitProjectCtx, ImportExt, UnitKind, UnitTable};
+use crate::emit_model::{EmitProjectCtx, ImportExt};
 use bynk_check::builtin_names::map_query;
 use bynk_check::builtin_names::methods::{
     FOLD_EFF, FOR_EACH, PAR_TRAVERSE, PAR_TRAVERSE_ALL, PAR_TRAVERSE_TRY, RAW, TRAVERSE_ALL,
@@ -38,12 +55,15 @@ use bynk_check::builtin_names::methods::{
 };
 use bynk_check::builtin_names::types::*;
 use bynk_check::checker::{CheckedProgram, ExprId, NamedKind, Ty, TyId, TypedCommons, Types};
+use bynk_check::project_model::BuildTarget;
+use bynk_check::symbols::UnitTable;
 use bynk_ir::TypeShape;
 use bynk_ir::{block_uses_emit, walk_block_exprs};
 use bynk_lower::{
     lower_capability_ops_ir, lower_protocol_ir, lower_service_handler_signature_ir,
     lower_store_field_shape_ir, lower_type_shape_ir,
 };
+use bynk_project::UnitKind;
 use bynk_syntax::ast::{
     AgentDecl, BaseType, BinOp, Block, CommonsItem, Expr, ExprKind, FnDecl, FnName, Ident,
     InterpPart, MatchBody, MessagesDecl, ObservationMatcher, Param, Pattern, PredKind, ServiceDecl,
@@ -54,33 +74,33 @@ pub mod client;
 pub mod contracts;
 pub(crate) mod events_fanout;
 pub mod secrets;
-pub(crate) mod serialisation;
+pub mod serialisation;
 pub mod toml_doc;
 pub(crate) mod workers;
 pub(crate) mod workers_entry;
 pub mod wrangler;
 
-pub(crate) use events_fanout::emit_events_fanout_do;
-pub(crate) use secrets::emit_secrets_manifest;
+pub use events_fanout::emit_events_fanout_do;
+pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
-pub(crate) use workers::emit_worker_compose;
-pub(crate) use workers_entry::{emit_worker_entry, table_has_plain_json};
-pub(crate) use wrangler::{ClassTombstones, emit_wrangler_toml};
+pub use workers::emit_worker_compose;
+pub use workers_entry::{emit_worker_entry, table_has_plain_json};
+pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod cmp;
 mod codec;
 mod lower;
 pub(crate) mod runtime_use;
 pub(crate) use lower::*;
-pub(crate) use runtime_use::RuntimeUse;
-pub(crate) mod emit;
+pub use runtime_use::RuntimeUse;
+pub mod emit;
 pub(crate) use bynk_check::icu::{self, *};
 pub(crate) use bynk_check::websocket;
 pub(crate) use emit::*;
 
 const INDENT_STEP: usize = 2;
 
-pub(crate) mod runtime_files;
+pub mod runtime_files;
 /// ADR 0615 (#2426): the runtime as one source per `@bynk/runtime` module. A
 /// BUILD OUTPUT, not a hand-edited file: `bynk-emit/runtime/scripts/bundle.mjs`
 /// writes `runtime/<module>.ts` and this table from the focused modules in
@@ -109,7 +129,7 @@ pub use runtime_files::{RUNTIME_DIR, emit_all_runtime_modules, rewrite_runtime_i
 /// object's shape at the receiving `/_bynk/event/` route, not this outer
 /// wire wrapper. Keep its field list in sync with the `envelope: { ... }`
 /// portion of this shape by hand; nothing generates either from the other.
-pub(crate) const EVENTS_WIRE_EVENT_TS_TYPE: &str = "{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }";
+pub const EVENTS_WIRE_EVENT_TS_TYPE: &str = "{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }";
 
 /// Emit the contents of `out/tsconfig.json`. The CLI uses `tsc -p` against
 /// this when running `bynkc test`; users can also drive `tsc` against it
@@ -166,7 +186,7 @@ const TSCONFIG_JSON: &str = r#"{
 /// Compute the runtime import specifier for a module at `from_source`. For a
 /// file at `commerce/payment.ts` the runtime sits two levels up, so this
 /// returns `../runtime.js`; for a top-level file it returns `./runtime.js`.
-pub(crate) fn runtime_import_for(from_source: &Path, ext: ImportExt) -> String {
+pub fn runtime_import_for(from_source: &Path, ext: ImportExt) -> String {
     let depth = from_source
         .parent()
         .map(|p| {
@@ -192,7 +212,7 @@ pub(crate) fn runtime_import_for(from_source: &Path, ext: ImportExt) -> String {
 /// callers, `emit`/`emit_project` converted off this (#1486) to a real
 /// `Vec<TsStmt>`/`TsProgram` collected and printed once via `bynk_ts::print`
 /// instead.
-pub(crate) fn extend_printed_at(out: &mut String, stmts: Vec<bynk_ts::TsStmt>, depth: usize) {
+pub fn extend_printed_at(out: &mut String, stmts: Vec<bynk_ts::TsStmt>, depth: usize) {
     for stmt in stmts {
         out.push_str(&bynk_ts::print_stmt(&stmt, depth));
     }
@@ -305,12 +325,12 @@ fn type_shape_for(t: &TypeDecl, program: &CheckedProgram) -> TypeShape {
 /// involves contexts or cross-unit imports, so most fields default to empty.
 fn single_file_ctx() -> EmitProjectCtx {
     EmitProjectCtx {
-        import_ext: crate::project::ImportExt::Js,
+        import_ext: crate::emit_model::ImportExt::Js,
         contracts: false,
         source_path: PathBuf::new(),
         identity_path: String::new(),
         commons_name: String::new(),
-        file_decl_index: crate::project::FileDeclIndex {
+        file_decl_index: bynk_check::symbols::FileDeclIndex {
             types: HashMap::new(),
             fns: HashMap::new(),
             methods: HashMap::new(),
@@ -354,7 +374,7 @@ fn single_file_ctx() -> EmitProjectCtx {
 /// each recorded span to a `(line, col)` and embed `sourcesContent`. Returns the
 /// generated TS and the serialised source-map v3 JSON (`None` when nothing
 /// mapped — e.g. a unit whose items all came from sibling files).
-pub(crate) fn emit_project(
+pub fn emit_project(
     program: &CheckedProgram,
     ctx: &EmitProjectCtx,
     source_text: &str,
@@ -446,7 +466,7 @@ pub(crate) fn emit_project(
     // (`record_name_ref`); the bundler drops one nothing references.
     for item in &commons.commons.items {
         if let CommonsItem::Embed(e) = item {
-            let key = crate::project::assets::normalise_asset_path(&e.path);
+            let key = bynk_project::assets::normalise_asset_path(&e.path);
             let text = ctx.embed_text.get(&key).cloned().unwrap_or_else(|| {
                 panic!(
                     "bynk internal error: embed `{}` reached emission without its text",
@@ -782,7 +802,7 @@ pub(crate) fn emit_project(
 /// execution context (`deps.__exec`) it forwards to the handler. The set is the
 /// checker's ([`bynk_check::exec_plan::ExecPlan`]), computed from what it
 /// resolved rather than by walking the syntax for method names.
-pub(crate) fn call_handler_needs_exec(
+pub fn call_handler_needs_exec(
     plan: &bynk_check::exec_plan::ExecPlan,
     h: &bynk_syntax::ast::Handler,
 ) -> bool {
@@ -824,7 +844,7 @@ pub(crate) fn walk_unit_table_bodies(table: &UnitTable, f: &mut impl FnMut(&Expr
 /// the Worker must bind them. Syntactic because a file's `handlers.ts` is
 /// emitted before the unit's other files are checked; it over-counts only a
 /// local that shadows a consumed alias, which costs an unused binding.
-pub(crate) fn agent_cross_context_targets(
+pub fn agent_cross_context_targets(
     table: &UnitTable,
     resolve: impl Fn(&str) -> Option<String>,
 ) -> std::collections::BTreeSet<String> {
@@ -1015,7 +1035,7 @@ fn file_mentions_connection(commons: &TypedCommons) -> bool {
 /// descendant of `emitter`) needs this same conversion, once, right before
 /// `collect_codec_closure` — the one remaining consumer still genuinely
 /// `TypeRef`-driven.
-pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
+pub fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
     let sp = bynk_syntax::span::Span::new(0, 0);
     Some(match &*tys.get(t) {
         Ty::Base(b) => TypeRef::Base(*b, sp),
@@ -2173,7 +2193,7 @@ fn unexported_type_names(
 /// names the codecs [`emit_consumed_context_helpers`] generates under the
 /// same names. Computed once per consumed context, where the emitter's
 /// `CrossContextInfo` is assembled, from the inputs the generator uses.
-pub(crate) fn unexported_type_renames(
+pub fn unexported_type_renames(
     c: &str,
     types_table: &HashMap<String, Arc<TypeDecl>>,
     exports: Option<&HashMap<String, bynk_syntax::ast::Visibility>>,
@@ -3497,7 +3517,7 @@ fn emit_cross_context_namespace_imports(
                     p
                 } else {
                     match ctx.target {
-                        BuildTarget::Workers => crate::project::worker_handlers_source_path(q),
+                        BuildTarget::Workers => bynk_project::worker_handlers_source_path(q),
                         BuildTarget::Bundle => {
                             let mut p = EmitProjectCtx::commons_path(q);
                             p.set_extension("bynk");
@@ -3770,7 +3790,7 @@ fn sibling_import_specifier(from_source: &Path, to_source: &Path, ext: ImportExt
 /// slashes**. `Path::display()` uses the platform separator, and on Windows
 /// that emitted `import ... from "./commerce\orders.js"` — broken ESM
 /// output, caught by the first CI matrix run on windows-latest.
-pub(crate) fn ts_specifier(p: &Path) -> String {
+pub fn ts_specifier(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/")
 }
 
@@ -3778,7 +3798,7 @@ pub(crate) fn ts_specifier(p: &Path) -> String {
 /// specific source file in another commons. `target_source` is the project-
 /// relative path of the target `.bynk` file. The result is suitable for
 /// `import { ... } from "..."` in NodeNext/strict TypeScript.
-pub(crate) fn cross_commons_import_specifier_for_path(
+pub fn cross_commons_import_specifier_for_path(
     from_source: &Path,
     target_source: &Path,
     ext: ImportExt,
@@ -4369,57 +4389,57 @@ fn write_header_single(
 /// v0.110 (ADR 0142): the `Bytes` runtime helpers, appended to a module's
 /// import list when the emitted body references them. `bytesEqual` backs `==`;
 /// the base64/UTF-8 helpers back the kernel and codec.
-pub(crate) const BYTES_RUNTIME_IMPORTS: &str =
+pub const BYTES_RUNTIME_IMPORTS: &str =
     ", __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8";
 
 /// #2341 (L4): the `RequestHeaders` constructor a test builds headers with.
-pub(crate) const REQUEST_HEADERS_RUNTIME_IMPORTS: &str = ", __requestHeaders";
+pub const REQUEST_HEADERS_RUNTIME_IMPORTS: &str = ", __requestHeaders";
 /// #2854: the `RequestQuery` constructor a test builds a raw query view with.
-pub(crate) const REQUEST_QUERY_RUNTIME_IMPORTS: &str = ", __requestQuery";
+pub const REQUEST_QUERY_RUNTIME_IMPORTS: &str = ", __requestQuery";
 /// #2854: the typed-query serialiser a mixed typed+`Wire` system call and a typed
 /// query driver turn a record's wire form into a query string with.
-pub(crate) const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";
+pub const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";
 /// #2854: the key suffix under which a route's typed `query` (position and
 /// declared type) sits in the same per-route map as its body param.
-pub(crate) const QUERY_ROUTE_SUFFIX: &str = "?query";
+pub const QUERY_ROUTE_SUFFIX: &str = "?query";
 /// #2910: marks a route whose system drivers take a case's extra request
 /// headers in a `__extraHeaders` slot (a route that declares no `headers:`).
-pub(crate) const EXTRA_HEADERS_ROUTE_SUFFIX: &str = "?extra-headers";
+pub const EXTRA_HEADERS_ROUTE_SUFFIX: &str = "?extra-headers";
 
 /// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
 /// appended only when the body calls one.
-pub(crate) const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkInstantFromIso";
+pub const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkInstantFromIso";
 
 /// #2867: the `IsoDate` predicate's check, appended only when a refinement check uses it.
-pub(crate) const ISO_DATE_RUNTIME_IMPORTS: &str = ", __bynkIsIsoDate";
+pub const ISO_DATE_RUNTIME_IMPORTS: &str = ", __bynkIsIsoDate";
 
 /// #2640: the join a `par { … }` block awaits, appended only when a body has one.
-pub(crate) const SETTLE_ALL_RUNTIME_IMPORTS: &str = ", __bynkSettleAll";
+pub const SETTLE_ALL_RUNTIME_IMPORTS: &str = ", __bynkSettleAll";
 /// #2683: the `within` race.
-pub(crate) const WITHIN_RUNTIME_IMPORTS: &str = ", __bynkWithin";
+pub const WITHIN_RUNTIME_IMPORTS: &str = ", __bynkWithin";
 
 /// #2711: the `race` helper.
-pub(crate) const RACE_RUNTIME_IMPORTS: &str = ", __bynkRace";
+pub const RACE_RUNTIME_IMPORTS: &str = ", __bynkRace";
 
 /// #2620: the deliberate-fault helper behind `unreachable`/`todo`.
-pub(crate) const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
+pub const FAULT_RUNTIME_IMPORTS: &str = ", __fault";
 
 /// K2 (#2594): the percent-encoding helpers (`percentEncode`,
 /// `percentDecode`), appended only when the body calls one.
-pub(crate) const URL_OPS_RUNTIME_IMPORTS: &str = ", __bynkPercentEncode, __bynkPercentDecode";
+pub const URL_OPS_RUNTIME_IMPORTS: &str = ", __bynkPercentEncode, __bynkPercentDecode";
 
 /// #2016: the `Bytes` operation helpers (`concat`, `compare`, hex, base64url),
 /// appended only when the body calls one, so a module that merely builds or
 /// compares `Bytes` keeps the [`BYTES_RUNTIME_IMPORTS`] list it had.
-pub(crate) const BYTES_OPS_RUNTIME_IMPORTS: &str = ", __bynkBytesConcat, __bynkBytesCompare, __bynkBytesToHex, __bynkBytesFromHex, __bynkBytesToBase64Url, __bynkBytesFromBase64Url";
+pub const BYTES_OPS_RUNTIME_IMPORTS: &str = ", __bynkBytesConcat, __bynkBytesCompare, __bynkBytesToHex, __bynkBytesFromHex, __bynkBytesToBase64Url, __bynkBytesFromBase64Url";
 
 /// #1652 (runtime-semantics track §3.1): the structural-equality walker,
 /// appended to a module's import list when `==`/`!=` on a non-primitive,
 /// non-`Bytes` operand lowered to it (`lower_bin_op`).
-pub(crate) const EQ_RUNTIME_IMPORTS: &str = ", __bynkEq";
+pub const EQ_RUNTIME_IMPORTS: &str = ", __bynkEq";
 
 /// #1657: the `Int` domain traps (`bynk-emit/runtime/src/int.ts`).
-pub(crate) const INT_RUNTIME_IMPORTS: &str = ", __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, \
+pub const INT_RUNTIME_IMPORTS: &str = ", __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, \
      __bynkIntAnd, __bynkIntOr, __bynkIntXor, __bynkIntAndNot, __bynkIntShl, __bynkIntShr";
 
 /// message-bundles slice 3 (#878, Decision G): the ICU-formatting runtime
@@ -4443,8 +4463,7 @@ const MESSAGES_RUNTIME_IMPORTS: &str = ", __selectPluralArm, __formatIcuNumber, 
 /// retired this doc's own `inject_runtime_imports`, the pre-conversion
 /// post-print-text-splice mechanism both are the tree-level successor to)
 /// makes it free wherever it is already imported.
-pub(crate) const BOUNDARY_CODEC_RUNTIME_IMPORTS: &str =
-    ", Ok, Err, type Result, type __BoundaryError";
+pub const BOUNDARY_CODEC_RUNTIME_IMPORTS: &str = ", Ok, Err, type Result, type __BoundaryError";
 
 /// #914: the names the `Json.decode[T]` wrapper puts in the module — its own
 /// `Result<T, JsonError>` signature and the `JsonValue` it parses into
@@ -4470,7 +4489,7 @@ pub(crate) const BOUNDARY_CODEC_RUNTIME_IMPORTS: &str =
 /// caller's consumed-boundary types (#661). See
 /// `918_json_decode_in_test_case` (base type, delegation-free) and
 /// `919_json_decode_named_record_in_test_case` (named record, delegating).
-pub(crate) const JSON_CODEC_RUNTIME_IMPORTS: &str =
+pub const JSON_CODEC_RUNTIME_IMPORTS: &str =
     ", Ok, Err, type Result, type __JsonValue, type JsonError";
 
 /// Emit the commons-level doc block (if any) at the current position.
@@ -4496,7 +4515,7 @@ fn agent_registry_name(agent: &str) -> String {
 }
 
 /// The exported agent-construction factory name for an agent class.
-pub(crate) fn agent_factory_name(agent: &str) -> String {
+pub fn agent_factory_name(agent: &str) -> String {
     format!("__make{agent}")
 }
 
@@ -4533,12 +4552,12 @@ pub(crate) struct ModuleCtx<'a> {
     /// `callService(...)` instead of `deps.surface.<key>.<method>(...)`.
     target: BuildTarget,
     /// #527: agent → method → the method's `given` caps (mirrors
-    /// [`crate::project::EmitProjectCtx::agent_method_givens`]). Consulted by
+    /// [`crate::emit_model::EmitProjectCtx::agent_method_givens`]). Consulted by
     /// the agent-call lowering to record capability requirements.
     agent_method_givens: HashMap<String, HashMap<String, Vec<bynk_ir::CapRefIr>>>,
     /// Events slice 3b (#978): each locally-declared event's resolved
     /// `@schema(N)` version (mirrors
-    /// [`crate::project::EmitProjectCtx::event_schema_versions`]). Default-
+    /// [`crate::emit_model::EmitProjectCtx::event_schema_versions`]). Default-
     /// empty like `agent_method_givens`, not a required constructor
     /// parameter like `runtime_use` — a miss here degrades to `schemaVersion:
     /// 1`, exactly every event's behaviour before this map existed, not a
@@ -4559,9 +4578,9 @@ pub(crate) struct ModuleCtx<'a> {
     /// call is genuinely first-party before scoping its key, not a same-named
     /// capability some other adapter or context happens to declare.
     in_bynk_unit: bool,
-    /// #1961: [`crate::project::EmitProjectCtx::agent_called_contexts`].
+    /// #1961: [`crate::emit_model::EmitProjectCtx::agent_called_contexts`].
     agent_called_contexts: Vec<String>,
-    /// #2045: [`crate::project::EmitProjectCtx::consumed_context_types`]. A
+    /// #2045: [`crate::emit_model::EmitProjectCtx::consumed_context_types`]. A
     /// variant of one of these sums is built inline, not through the callee's
     /// companion object, so the callee's module is never a value import.
     consumed_context_types: HashSet<String>,
@@ -6360,7 +6379,7 @@ pub(crate) fn unchecked_construct(name: &str, value: &str, is_opaque: bool) -> S
 /// which is exactly the type the pre-0182 `T.unsafe(value)` already produced here
 /// (`T` being `any`) and erases to the raw value at runtime — without
 /// reintroducing a callable refined `.unsafe`.
-pub(crate) fn unchecked_construct_test(name: &str, value: &str, is_opaque: bool) -> String {
+pub fn unchecked_construct_test(name: &str, value: &str, is_opaque: bool) -> String {
     if is_opaque {
         format!("{name}.unsafe({value})")
     } else {
@@ -6401,7 +6420,7 @@ pub(crate) fn decimal_ts_literal(coef: &str, scale: u32) -> String {
     )
 }
 
-pub(crate) fn ts_type_ref(r: &TypeRef) -> String {
+pub fn ts_type_ref(r: &TypeRef) -> String {
     ts_type_ref_with(r, None)
 }
 
@@ -6461,7 +6480,7 @@ pub(crate) fn ts_type_ref_qualified_ts_type(
 /// qualified_multi` had no other production caller left, so it was deleted
 /// rather than kept as dead code, with its own direct unit test rerouted
 /// through `bynk_ts::print_type` instead.
-pub(crate) fn ts_type_ref_qualified_multi_ts_type(
+pub fn ts_type_ref_qualified_multi_ts_type(
     r: &TypeRef,
     type_ns: &HashMap<String, String>,
 ) -> TsType {
@@ -7009,7 +7028,7 @@ fn ts_array_elem(elem_ts: &str) -> String {
 /// Scoped per module, not threaded: [`ts_ty`] has ~45 callers and no module
 /// context. [`type_renames::enter`] sets the spellings for this thread until its
 /// guard drops, and a module is lowered on one thread.
-pub(crate) mod type_renames {
+pub mod type_renames {
     use std::cell::RefCell;
     use std::collections::HashMap;
 
@@ -7018,7 +7037,7 @@ pub(crate) mod type_renames {
     }
 
     /// Restores the spellings in force before [`enter`] when it drops.
-    pub(crate) struct Guard(HashMap<String, String>);
+    pub struct Guard(HashMap<String, String>);
 
     impl Drop for Guard {
         fn drop(&mut self) {
@@ -7030,7 +7049,7 @@ pub(crate) mod type_renames {
     /// Spell each type in `spellings` (name → TypeScript text) until the
     /// returned guard drops.
     #[must_use]
-    pub(crate) fn enter(spellings: HashMap<String, String>) -> Guard {
+    pub fn enter(spellings: HashMap<String, String>) -> Guard {
         Guard(SPELLINGS.with(|s| std::mem::replace(&mut *s.borrow_mut(), spellings)))
     }
 
@@ -7400,11 +7419,11 @@ pub(crate) fn payload_prop(field: &str) -> String {
 /// The TypeScript spelling of a user identifier in a *binding or reference*
 /// position. Defined in `bynk_check::emitted_names` so the language server's
 /// inline values (#2476) name the same variable the emitter declares.
-pub(crate) use bynk_check::emitted_names::ts_ident;
+pub use bynk_check::emitted_names::ts_ident;
 
 /// The one TypeScript string-literal escaper lives in `bynk_ts` (crate-hygiene A2);
 /// the emitter keeps its historical name for it.
-pub(crate) use bynk_ts::escape_ts_literal as escape_ts_string;
+pub use bynk_ts::escape_ts_literal as escape_ts_string;
 
 #[allow(dead_code)]
 fn _unused_hashmap(_h: HashMap<String, ()>) {}
@@ -7646,10 +7665,10 @@ mod runtime_tests {
     #[test]
     fn workers_dir_name_replaces_dots_with_dashes() {
         assert_eq!(
-            crate::project::worker_dir_name("commerce.payment"),
+            bynk_project::worker_dir_name("commerce.payment"),
             "commerce-payment"
         );
-        assert_eq!(crate::project::worker_dir_name("a.b.c"), "a-b-c");
+        assert_eq!(bynk_project::worker_dir_name("a.b.c"), "a-b-c");
     }
 
     // Refactor track: characterisation pin for the canonical `escape_ts_string`.
@@ -7955,7 +7974,7 @@ mod guard_import_tests {
                     "commons d.app\n\nuses d.lim\n\nfn g(n: Int) -> Int {\n  match n {\n    k if k > lim() => 1\n    _ => 0\n  }\n}\n",
                 ),
             ],
-            crate::project::BuildTarget::Bundle,
+            bynk_check::project_model::BuildTarget::Bundle,
         );
         let app = out.text("d/app.ts");
         assert!(

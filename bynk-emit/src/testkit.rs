@@ -40,7 +40,7 @@ pub(crate) fn emit_bundle(body: &str) -> String {
     let src = format!("commons app.bundle\n\nuses bynk.locale\nuses bynk.locale.types\n\n{body}");
     let out = match crate::project::compile_in_memory(
         &src,
-        crate::project::BuildTarget::Bundle,
+        bynk_check::project_model::BuildTarget::Bundle,
         Default::default(),
     ) {
         Ok(out) => out,
@@ -64,7 +64,10 @@ pub(crate) fn emit_bundle(body: &str) -> String {
 /// let out = emit_project(&[("demo/shop.bynk", SHOP)], BuildTarget::Workers);
 /// assert!(out.text("workers/demo/shop.ts").contains("export class"));
 /// ```
-pub(crate) fn emit_project(files: &[(&str, &str)], target: crate::project::BuildTarget) -> Emitted {
+pub(crate) fn emit_project(
+    files: &[(&str, &str)],
+    target: bynk_check::project_model::BuildTarget,
+) -> Emitted {
     emit_project_with_tests(files, target, true)
 }
 
@@ -72,7 +75,7 @@ pub(crate) fn emit_project(files: &[(&str, &str)], target: crate::project::Build
 /// deployable build (`bynkc compile`, `bynk deploy`).
 pub(crate) fn emit_project_with_tests(
     files: &[(&str, &str)],
-    target: crate::project::BuildTarget,
+    target: bynk_check::project_model::BuildTarget,
     tests: bool,
 ) -> Emitted {
     match crate::project::compile_files_in_memory(files, target, Default::default(), tests) {
@@ -97,7 +100,7 @@ pub(crate) fn emit_project_with_tests(
 
 /// [`emit_project`] for the Workers target.
 pub(crate) fn emit_workers(files: &[(&str, &str)]) -> Emitted {
-    emit_project(files, crate::project::BuildTarget::Workers)
+    emit_project(files, bynk_check::project_model::BuildTarget::Workers)
 }
 
 /// A compiled project's documents, by output path. Keyed by `PathBuf`, so a
@@ -142,7 +145,7 @@ mod tests {
         let suite = "suite demo.math\n\ncase \"doubles\" {\n  expect double(2) == 4\n}\n";
         let out = emit_project(
             &[("demo/math.bynk", MATH), ("tests/math.bynk", suite)],
-            crate::project::BuildTarget::Bundle,
+            bynk_check::project_model::BuildTarget::Bundle,
         );
         assert!(out.text("tests/demo_math.test.ts").contains("doubles"));
     }
@@ -155,7 +158,7 @@ mod tests {
                 "demo/math.bynk",
                 "commons demo.math\n\nfn f() -> Int { \"x\" }\n",
             )],
-            crate::project::BuildTarget::Bundle,
+            bynk_check::project_model::BuildTarget::Bundle,
         );
     }
 }

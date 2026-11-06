@@ -553,7 +553,7 @@ pub(crate) fn emit_helpers_for_owner(
 /// so the printer's automatic top-level spacing policy already supplies
 /// exactly one blank between every adjacent pair (and after the last one,
 /// before whatever follows) once a real caller prints through it.
-pub(crate) fn decls_as_stmts(decls: Vec<TsDecl>) -> Vec<TsStmt> {
+pub fn decls_as_stmts(decls: Vec<TsDecl>) -> Vec<TsStmt> {
     decls.into_iter().map(|d| TsStmt::decl(d, None)).collect()
 }
 
@@ -576,7 +576,7 @@ pub(crate) fn decls_as_stmts(decls: Vec<TsDecl>) -> Vec<TsStmt> {
 /// blank), leaving exactly one blank line from this statement's own
 /// render plus the policy's own ordinary blank before whatever follows —
 /// two lines total, matching the pre-#1486 text exactly.
-pub(crate) fn decls_as_stmts_block(decls: Vec<TsDecl>) -> Vec<TsStmt> {
+pub fn decls_as_stmts_block(decls: Vec<TsDecl>) -> Vec<TsStmt> {
     let emitted_any = !decls.is_empty();
     let mut stmts = decls_as_stmts(decls);
     if emitted_any {
@@ -594,7 +594,7 @@ pub(crate) fn decls_as_stmts_block(decls: Vec<TsDecl>) -> Vec<TsStmt> {
 /// types: the qualified names reach through the `import type * as <ns>` alias,
 /// and refined validation inlines (transparent) or casts structurally (opaque)
 /// because the owner's `.of` is not importable.
-pub(crate) fn emit_helpers_for_owner_qualified(
+pub fn emit_helpers_for_owner_qualified(
     type_names: &[String],
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     _owner_qualified: &str,
@@ -2698,7 +2698,7 @@ fn serialise_field_expr_wire(
 // names so call sites here and elsewhere in `bynk-emit` keep compiling
 // unchanged.
 pub(crate) use bynk_check::wire::codec_suffix as inner_ts_name;
-pub(crate) use bynk_check::wire::collect_codec_closure;
+pub use bynk_check::wire::collect_codec_closure;
 
 /// Constrained generics slice 2: whether a `Map` key / `Set` element declared as
 /// `t` is a JS primitive, so a plain `Map`/`Set` compares it by value. Every
@@ -2727,7 +2727,7 @@ pub(crate) fn serialise_expr(t: &TypeRef, value: &str, ru: &RuntimeUse) -> TsExp
 /// (which dropped `List`/`Map` to a bare `as JsonValue` cast) and
 /// `workers_entry.rs`'s `serialise_call` (which did the same to `Bytes`, the
 /// asymmetry that forced `bynk.types.bytes_at_workers_boundary`).
-pub(crate) fn serialise_expr_via(t: &TypeRef, value: &str, ns: &str, ru: &RuntimeUse) -> TsExpr {
+pub fn serialise_expr_via(t: &TypeRef, value: &str, ns: &str, ru: &RuntimeUse) -> TsExpr {
     serialise_field_expr_via(t, value, ns, ru)
 }
 
@@ -2735,7 +2735,7 @@ pub(crate) fn serialise_expr_via(t: &TypeRef, value: &str, ns: &str, ru: &Runtim
 /// `callService`'s `deserialiseResult` parameter. The inline arms become a
 /// lambda rather than the unvalidated `((j: any) => ({ tag: "Ok", value: j }))`
 /// identity the caller path used to fall back to.
-pub(crate) fn deserialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
+pub fn deserialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
     match strip_effect(t) {
         TypeRef::Named(id) => ident(format!("{ns}__deserialise_{}", id.name)),
         t @ (TypeRef::Result(..)
@@ -3894,7 +3894,7 @@ pub(crate) fn emit_generic_helpers(
 /// no `out: &mut String` parameter. The boundary-collect step
 /// ([`decls_as_stmts`]) now happens once, at the caller, instead of inline in
 /// each of this function's six match arms.
-pub(crate) fn emit_generic_helpers_qualified(
+pub fn emit_generic_helpers_qualified(
     insts: &[GenericInst],
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     qual: &Qual,
@@ -4882,7 +4882,10 @@ mod lenient_option_decode_tests {
     }
 
     fn emitted() -> String {
-        let out = emit_project(&[("d/opt.bynk", SRC)], crate::project::BuildTarget::Bundle);
+        let out = emit_project(
+            &[("d/opt.bynk", SRC)],
+            bynk_check::project_model::BuildTarget::Bundle,
+        );
         out.text("d/opt.ts").to_string()
     }
 
