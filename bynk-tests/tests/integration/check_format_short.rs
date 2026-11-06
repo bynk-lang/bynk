@@ -9,7 +9,7 @@ const SRC: &str = "commons demo\n\nfn f() -> Int {\n  \"x\"\n}\n";
 #[test]
 fn short_format_lines_match_the_problem_matcher_shape() {
     let errors = bynk_emit::compile(SRC, "demo.bynk").expect_err("source has a type error");
-    let out = bynk_render::render_errors_short(&errors, SRC, "demo.bynk");
+    let out = bynk_driver::render::render_errors_short(&errors, SRC, "demo.bynk");
 
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(
@@ -44,7 +44,7 @@ fn short_format_lines_match_the_problem_matcher_shape() {
 #[test]
 fn short_format_positions_are_one_indexed() {
     let errors = bynk_emit::compile(SRC, "demo.bynk").expect_err("type error");
-    let out = bynk_render::render_errors_short(&errors, SRC, "demo.bynk");
+    let out = bynk_driver::render::render_errors_short(&errors, SRC, "demo.bynk");
     // The bad expression `"x"` is on line 4. The first diagnostic points at it.
     let first = out.lines().next().unwrap();
     assert!(

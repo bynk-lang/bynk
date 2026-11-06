@@ -128,7 +128,7 @@ fn stamped_hash(b_body: &str, tag: &str) -> String {
     .unwrap_or_else(|f| {
         panic!(
             "compile {tag}:\n{}",
-            bynk_render::render_project_errors(&f.flatten())
+            bynk_driver::render::render_project_errors(&f.flatten())
         )
     });
     let caller_text = out

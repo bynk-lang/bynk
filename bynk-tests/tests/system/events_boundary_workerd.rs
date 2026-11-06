@@ -296,7 +296,7 @@ fn events_boundary_rejects_malformed_payload_and_envelope_on_workerd() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the boundary-validation project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
     let out = bynk_driver::strip::strip_project_to_js(out).expect("boundary project strips to JS");
@@ -496,7 +496,7 @@ fn events_boundary_field_default_cross_context_on_workerd() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the cross-context field-default project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
     let out =

@@ -3,17 +3,18 @@
 //! The presentation layer over [`bynk_syntax::CompileError`]: ariadne human
 //! output and the `short`/`json`-feeding line forms. Every renderer takes
 //! `&[CompileError]` + `source` + `filename` — it is agnostic about *where* the
-//! errors came from. Both CLI front-ends adopt it so they render identically
-//! (ADR 0100).
+//! errors came from, so both CLI front-ends render identically (ADR 0100).
 //!
-//! **Invariant (ADR 0100):** this crate depends on `bynk-syntax` **only** (plus
-//! `ariadne`). It must never see `AttributedError`/`ProjectFailure` (which live
-//! in `bynk-emit`): the `AttributedError → CompileError` flattening stays *above*
-//! render, in the front-end, so there is no `render → emit` cycle. A function
-//! here taking a `ProjectFailure` would not even compile — the dependency isn't
-//! present, by design.
+//! **Invariant (ADR 0100, as amended by D2):** this module names `bynk_syntax`
+//! and `ariadne` only (plus `std`). It must never see
+//! `AttributedError`/`ProjectFailure` (which live in `bynk-emit`): the
+//! `AttributedError → CompileError` flattening stays *above* render, in the
+//! driver's `lib.rs`. This was once the crate graph's guarantee (`bynk-render`
+//! depended on `bynk-syntax` only); inside `bynk-driver` the guard test
+//! `render_names_only_syntax_and_ariadne` (this file's `tests`) enforces it.
 //!
-//! Extracted from `bynkc` as slice 6 of the crate-decomposition track.
+//! Extracted from `bynkc` as slice 6 of the crate-decomposition track; merged
+//! into `bynk-driver` by crate-hygiene slice D2.
 
 use std::path::Path;
 
@@ -546,6 +547,67 @@ pub fn render_project_errors(errors: &[CompileError]) -> String {
 mod tests {
     use super::*;
     use bynk_syntax::span::Span;
+
+    /// The guard that replaced ADR 0100's crate boundary (D2, Decision H).
+    ///
+    /// `bynk-render` once could not see `AttributedError`/`ProjectFailure`
+    /// because its `Cargo.toml` did not list `bynk-emit`. Inside `bynk-driver`
+    /// the compiler would accept such a use, so this test reads the module's own
+    /// production source (everything before this `tests` module) and fails when
+    /// it names any crate other than `bynk_syntax`, `ariadne` or `std`, or
+    /// reaches into the rest of the driver with `crate::`.
+    #[test]
+    fn render_names_only_syntax_and_ariadne() {
+        const ALLOWED: [&str; 3] = ["bynk_syntax", "ariadne", "std"];
+        let source = include_str!("render.rs");
+        let production = source
+            .split("\n#[cfg(test)]\nmod tests")
+            .next()
+            .expect("split always yields a first piece");
+        assert!(
+            production.len() < source.len(),
+            "the guard could not find this file's test module, so it would scan the tests too"
+        );
+        let mut offences = Vec::new();
+        for (n, line) in production.lines().enumerate() {
+            let code = line.split("//").next().unwrap_or("").trim();
+            if code.is_empty() {
+                continue;
+            }
+            if code.contains("crate::") {
+                offences.push(format!(
+                    "line {}: `crate::` reaches the rest of the driver: {code}",
+                    n + 1
+                ));
+            }
+            // Every `bynk_…` identifier must be `bynk_syntax`.
+            let mut rest = code;
+            while let Some(i) = rest.find("bynk_") {
+                let word: String = rest[i..]
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if !ALLOWED.contains(&word.as_str()) {
+                    offences.push(format!("line {}: names `{word}`: {code}", n + 1));
+                }
+                rest = &rest[i + word.len().max(1)..];
+            }
+            // Every `use` must start at an allowed root (or this module's own `super`/`self`).
+            let import = code.strip_prefix("pub ").unwrap_or(code);
+            if let Some(path) = import.strip_prefix("use ") {
+                let root = path.split("::").next().unwrap_or("").trim();
+                if !ALLOWED.contains(&root) && !["super", "self"].contains(&root) {
+                    offences.push(format!("line {}: `use` of `{root}`: {code}", n + 1));
+                }
+            }
+        }
+        assert!(
+            offences.is_empty(),
+            "ADR 0100 (amended by D2): render may name only bynk_syntax, ariadne and std — \
+             the AttributedError → CompileError flattening stays above it:\n{}",
+            offences.join("\n")
+        );
+    }
 
     /// #2838: a hint is worded `hint`, and a terminal drops it.
     #[test]

@@ -430,7 +430,7 @@ fn per_publisher_fifo_on_workerd() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the fifo-ordering project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
     let out =

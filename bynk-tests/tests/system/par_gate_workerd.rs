@@ -320,7 +320,7 @@ fn a_par_join_in_an_agent_handler_adds_no_interleaving() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the par gate project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
     let out =

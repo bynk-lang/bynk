@@ -396,7 +396,7 @@ fn cross_context_caller_reads_live_id_and_fails_closed() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the cross-context project to Workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -489,7 +489,7 @@ fn bundle_cross_context_caller_reads_the_consuming_context_name() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the cross-context project to a bundle:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 
@@ -557,7 +557,7 @@ fn cross_context_caller_side_codec_round_trips_a_user_payload() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the caller-side-codec project to Workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 

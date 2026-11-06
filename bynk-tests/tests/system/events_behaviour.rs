@@ -255,7 +255,7 @@ fn bundle_events_publish_subscribe_and_abort_suppresses_delivery() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the events project to a bundle:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 

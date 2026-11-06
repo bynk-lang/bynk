@@ -208,7 +208,7 @@ fn bundle_events_envelope_is_minted_once_per_emission() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the events-envelope project to a bundle:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 

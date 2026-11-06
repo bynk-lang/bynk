@@ -242,14 +242,14 @@ fn compile_file(prog: &str, input: &Path, output: &Path, emit: EmitFormat) -> Ex
             }
             // ADR 0117: render non-failing warnings with source context.
             // #2838: a hint is for the editor, not the terminal.
-            let warnings = bynk_render::without_hints(&compiled.warnings);
+            let warnings = crate::render::without_hints(&compiled.warnings);
             if !warnings.is_empty() {
-                bynk_render::print_errors(&warnings, &source, &filename);
+                crate::render::print_errors(&warnings, &source, &filename);
             }
             ExitCode::SUCCESS
         }
         Err(errors) => {
-            bynk_render::print_errors(&errors, &source, &filename);
+            crate::render::print_errors(&errors, &source, &filename);
             ExitCode::FAILURE
         }
     }

@@ -252,7 +252,7 @@ fn stage_single_file(dir: &Path, fixture_root: &Path) -> Result<bool, String> {
         format!(
             "\n=== {} ===\nexpected compile success but got errors:\n{}",
             dir.display(),
-            bynk_render::render_errors(&errors, &source, &name),
+            bynk_driver::render::render_errors(&errors, &source, &name),
         )
     })?;
     let write = || -> std::io::Result<()> {
@@ -339,7 +339,7 @@ fn emitted_typescript_passes_tsc_strict() {
         let compiled = match compile_fixture(dir, target) {
             Ok(out) => out,
             Err(errors) => {
-                let rendered = bynk_render::render_project_errors(&errors);
+                let rendered = bynk_driver::render::render_project_errors(&errors);
                 failures.push(format!(
                     "\n=== {} ===\nexpected compile success but got errors:\n{}",
                     dir.display(),
@@ -786,7 +786,7 @@ fn all_emitted_typescript_strips_under_node() {
             Err(errors) => failures.push(format!(
                 "\n=== {} ===\nexpected compile success but got errors:\n{}",
                 dir.display(),
-                bynk_render::render_project_errors(&errors),
+                bynk_driver::render::render_project_errors(&errors),
             )),
         }
     }

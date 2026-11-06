@@ -30,7 +30,6 @@ const LIBRARY_CRATES: &[&str] = &[
     "bynk-syntax",
     "bynk-project",
     "bynk-ts",
-    "bynk-render",
     "bynk-fmt",
     "bynk-check",
     "bynk-model",

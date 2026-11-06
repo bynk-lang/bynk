@@ -12,8 +12,8 @@
 //! machinery is not visible here, and never will be: a function taking one
 //! would not compile, the dependency isn't present, by design). `cargo tree
 //! -p bynk-ts` shows `bynk-syntax` and nothing else. Matches the same
-//! load-bearing shape `bynk-render`'s own module doc states for itself
-//! (`bynk-render/src/lib.rs`).
+//! load-bearing shape `bynk_driver::render`'s own module doc states for itself
+//! (`bynk-driver/src/render.rs`).
 //!
 //! **What exists here today (P7.5, #1307 → P7.8, #1313).** The reference's
 //! own §7.1 sketch names four tree enums (`TsStmt`/`TsExpr`/`TsType`/

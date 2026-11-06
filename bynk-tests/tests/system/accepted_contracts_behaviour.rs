@@ -207,7 +207,7 @@ fn compile(
         Ok(out) => out,
         Err(failure) => panic!(
             "compile {name}:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     }
 }

@@ -159,7 +159,7 @@ fn compile(fixture: &str, tag: &str) -> Compiled {
     .unwrap_or_else(|e| {
         panic!(
             "{fixture} must compile:\n{}",
-            bynk_render::render_project_errors(&e)
+            bynk_driver::render::render_project_errors(&e)
         )
     });
     Compiled { tmp, out }

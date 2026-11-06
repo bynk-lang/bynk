@@ -353,7 +353,7 @@ fn within_times_out_hands_the_abandoned_effect_on_and_clears_its_timer() {
             Ok(o) => o,
             Err(failure) => panic!(
                 "compile the within project:\n{}",
-                bynk_render::render_project_errors(&failure.flatten())
+                bynk_driver::render::render_project_errors(&failure.flatten())
             ),
         };
     let out =

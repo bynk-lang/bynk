@@ -4111,23 +4111,6 @@ mod tests {
     }
 
     #[test]
-    fn roundtrip_error_renders_against_source_without_panicking() {
-        // The guard's error is rendered against the *source* (`run_fmt` calls
-        // `print_errors(&e.errors, &source, …)`). ariadne uses a primary span
-        // unconditionally, so a span outside the source buffer misplaces the
-        // caret or panics — exactly in the formatter-bug path this guard must
-        // handle gracefully. Render the real diagnostic against a short source
-        // and assert it produces output without panicking.
-        let err = roundtrip_error("the formatter produced output that no longer parses");
-        let source = "commons x {}";
-        let rendered = bynk_render::render_errors(std::slice::from_ref(&err), source, "<test>");
-        assert!(
-            rendered.contains("bynk.fmt.roundtrip"),
-            "diagnostic did not render: {rendered}"
-        );
-    }
-
-    #[test]
     fn unchanged_files_without_comments_format_identically() {
         let src = "commons x { type T = Int where NonNegative }";
         let out = fmt(src);

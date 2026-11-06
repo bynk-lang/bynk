@@ -196,7 +196,7 @@ fn refinement_actor_enforces_401_403_allow_trichotomy() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the refinement project to Workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
 

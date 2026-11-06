@@ -69,7 +69,7 @@ fn compile_example(dir: &Path) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the wire-format example to Workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
     let run_dir = dir.join("run");

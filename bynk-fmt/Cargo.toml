@@ -30,6 +30,3 @@ schema = ["dep:schemars"]
 
 [dev-dependencies]
 proptest.workspace = true
-# Used only to prove the round-trip guard's diagnostic renders without panicking
-# (#735) — the presentation layer is not a runtime dependency of the formatter.
-bynk-render.workspace = true

@@ -170,7 +170,7 @@ fn an_aliased_context_service_runs_across_workers() {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the aliased-service project to workers:\n{}",
-            bynk_render::render_project_errors(&failure.flatten())
+            bynk_driver::render::render_project_errors(&failure.flatten())
         ),
     };
     let out =
