@@ -70,7 +70,7 @@ pub enum EntryShape {
     /// sum): named, not expanded again.
     Recursive(String),
     /// A named record or sum left unexpanded because it sits deeper than
-    /// [`MAX_DEPTH`] nested records/sums (a wide DAG of non-recursive types
+    /// `MAX_DEPTH` (6) nested records/sums (a wide DAG of non-recursive types
     /// would otherwise grow exponentially).
     Named(String),
     /// Anything else (a generic record instantiation, a function, an effect),
@@ -80,7 +80,7 @@ pub enum EntryShape {
 
 /// How many records/sums may nest before a further one is reported as
 /// [`EntryShape::Named`] instead of expanded.
-pub const MAX_DEPTH: usize = 6;
+pub(crate) const MAX_DEPTH: usize = 6;
 
 type Scope = HashMap<String, Arc<TypeDecl>>;
 
