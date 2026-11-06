@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Crate hygiene D2-1 - the diagnostic renderers become `bynk-driver`'s `render` module and the `bynk-render` crate leaves the workspace and the release lists (its final release, which names `bynk-driver`, shipped earlier); no behaviour change
----
+# 0743 — Diagnostic rendering is a `bynk-driver` module, guarded by a test instead of the crate graph
 
-## ADR: render-module-guard
-title: Diagnostic rendering is a `bynk-driver` module, guarded by a test instead of the crate graph
-summary: Amends ADR 0100 - the "no render to emit edge" guarantee moves from `bynk-render`'s dependency list to a source-level guard test
+- **Status:** Accepted (v0.510.35)
 
 **Context.** ADR 0100 made rendering a separate crate, `bynk-render`, depending on `bynk-syntax` and `ariadne` only, so the `AttributedError` to `CompileError` flattening had to stay above it: a renderer that took a `ProjectFailure` would not compile, because `bynk-emit` was not a dependency. Once `bynkc` stopped being a library (crate-hygiene E3), `bynk-driver` was the crate's only production user, and ADR 0734 (H-4) already treated its published status as provisional. The crate's final release, naming `bynk-driver`, shipped before this change (H-5).
 
