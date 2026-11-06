@@ -3090,16 +3090,23 @@ const UNUSED_DEPS_ALLOWED: &[(&str, &str, &str)] = &[
     (
         "bynk-tests",
         "bynk-driver",
-        "used by bynkc/src/main.rs, which bynk-tests/src/bin/bynkc-under-test.rs includes via \
-         include!, so no identifier appears in this crate's source. Goes with the `bynkc` \
-         retirement (track E3).",
+        "used by bynk/src/main.rs, which bynk-tests/src/bin/bynk-under-test.rs includes via \
+         include!, so no identifier appears in this crate's source. Goes with the \
+         `bynk-under-test` binary if the corpus stops spawning `bynk`.",
+    ),
+    (
+        "bynk-tests",
+        "bynk-emit",
+        "used by bynk/src/main.rs, which bynk-tests/src/bin/bynk-under-test.rs includes via \
+         include!, so no identifier appears in this crate's source. Goes with the \
+         `bynk-under-test` binary if the corpus stops spawning `bynk`.",
     ),
     (
         "bynk-tests",
         "clap",
-        "used by bynkc/src/main.rs, which bynk-tests/src/bin/bynkc-under-test.rs includes via \
-         include!, so no identifier appears in this crate's source. Goes with the `bynkc` \
-         retirement (track E3).",
+        "used by bynk/src/main.rs, which bynk-tests/src/bin/bynk-under-test.rs includes via \
+         include!, so no identifier appears in this crate's source. Goes with the \
+         `bynk-under-test` binary if the corpus stops spawning `bynk`.",
     ),
 ];
 

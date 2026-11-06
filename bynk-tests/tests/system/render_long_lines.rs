@@ -17,7 +17,7 @@ fn a_megabyte_line_renders_small_fast_and_uncoloured_when_piped() {
     std::fs::write(&file, format!("commons c\n{}\n", "a".repeat(1_000_000))).unwrap();
 
     let started = Instant::now();
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("check")
         .arg(&file)
         .env_remove("NO_COLOR")
@@ -57,7 +57,7 @@ fn force_color_colours_a_piped_report() {
     let file = dir.join("bad.bynk");
     std::fs::write(&file, "commons c\n???\n").unwrap();
 
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("check")
         .arg(&file)
         .env_remove("NO_COLOR")

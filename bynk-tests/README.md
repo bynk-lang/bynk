@@ -31,10 +31,11 @@ integration (`ci-lower`) and the parallel `test-system` job runs `ci-system`; lo
 Regenerate a blessed reference page with `BYNK_BLESS=1`, for example
 `BYNK_BLESS=1 cargo test -p xtask --test docs_consistency grammar_reference::`.
 
-Tests that start the compiler binary use `CARGO_BIN_EXE_bynkc-under-test`, a
-forwarding binary in this crate that `include!`s `bynkc`'s own `main.rs`
-(Cargo only sets `CARGO_BIN_EXE_*` for a package's own binaries). It goes away
-when `bynkc` becomes an alias of `bynk`.
+Tests that start the compiler binary use `CARGO_BIN_EXE_bynk-under-test`, a
+forwarding binary in this crate that `include!`s `bynk`'s own `main.rs`
+(Cargo only sets `CARGO_BIN_EXE_*` for a package's own binaries). They drive
+`bynk test`, `check`, `compile` and `fmt`; the separate `bynkc` binary they
+once drove is retired (track E3).
 
 ## The grammar renderer
 

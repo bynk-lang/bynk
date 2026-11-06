@@ -25,7 +25,7 @@ fn layout(tag: &str) -> PathBuf {
 
 /// Run `bynkc <args>` in `cwd`; the combined stdout and stderr, colour off.
 fn bynkc(cwd: &Path, args: &[&str]) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .current_dir(cwd)
         .env("NO_COLOR", "1")

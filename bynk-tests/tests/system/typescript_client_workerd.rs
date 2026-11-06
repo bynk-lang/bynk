@@ -186,7 +186,7 @@ impl Drop for Wranglers {
 }
 
 fn compile(proj: &Path, out: &Path, emit: &str) {
-    let compiled = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let compiled = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["compile", "--target", "workers", "--emit", emit, "-o"])
         .arg(out)
         .arg(proj)

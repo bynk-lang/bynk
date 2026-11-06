@@ -403,6 +403,7 @@ dependencies = [
 name = "bynk-tests"
 version = "0.510.28"
 dependencies = [
+ "bynk",
  "bynk-check",
  "bynk-driver",
  "bynk-emit",
@@ -413,7 +414,6 @@ dependencies = [
  "bynk-syntax",
  "bynk-testkit",
  "bynk-ts",
- "bynkc",
  "clap",
  "regex",
  "serde_json",

@@ -47,7 +47,7 @@ fn run(out_dir: &str, extra: &[&str]) -> std::process::Output {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(out_dir)
         .join("out");
-    Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(fixture())
         .arg("--output")

@@ -54,7 +54,7 @@ fn the_build_and_the_editor_resolve_the_same_graph() {
         "commons pricing\n\nuses money.currency\nuses money.rounding\n\nfn total(n: Int) -> Int {\n  n\n}\n",
     );
 
-    let checked = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let checked = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["check", "--format", "short"])
         .arg(&root)
         .output()

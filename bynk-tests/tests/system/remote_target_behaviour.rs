@@ -285,7 +285,7 @@ fn bynkc_test(
     extra: &[&str],
     env: &[(&str, &str)],
 ) -> (bool, String, String) {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"));
     cmd.arg("test")
         .arg(proj)
         .arg("--output")
@@ -474,7 +474,9 @@ fn system_suites_run_against_a_named_target() {
 
 #[test]
 fn unsafe_targets_are_refused_before_any_request() {
-    // No runner is needed: each refusal happens before the build.
+    // No runner is needed: each refusal happens before the build. (`--against dev`
+    // was refused here when this drove `bynkc`, which cannot start `bynk dev`; `bynk`
+    // starts it, and `bynk/tests/test_against_dev.rs` covers that.)
     let dir = scratch("refuse");
     let manifest = "[test.targets.prod]\nurl.shop-api = \"http://127.0.0.1:9\"\nproduction = true\n\n[test.targets.preview]\nurl.shop-api = \"http://127.0.0.1:9\"\nsecrets = [\"AUTH_SECRET\"]\n";
     let proj = project(&dir, &[SUITE], manifest);
@@ -492,7 +494,6 @@ fn unsafe_targets_are_refused_before_any_request() {
             vec!["--against", "preview"],
             "needs the secret `AUTH_SECRET`",
         ),
-        (vec!["--against", "dev"], "run `bynk test --against dev`"),
     ] {
         let (ok, stdout, stderr) = bynkc_test(&proj, &dir.join("out"), &args, &[]);
         assert!(!ok, "{args:?} is refused");

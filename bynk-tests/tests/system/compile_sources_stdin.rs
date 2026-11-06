@@ -20,7 +20,7 @@ fn project(tag: &str) -> PathBuf {
 
 /// Run `bynkc compile <root> -o <out> --sources-stdin` feeding `stdin`.
 fn compile(root: &Path, out: &Path, stdin: &str) -> (bool, String) {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("compile")
         .arg(root)
         .arg("-o")

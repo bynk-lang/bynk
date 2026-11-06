@@ -44,7 +44,7 @@ fn run_with_seed(seed: &str, out_dir: &str) -> String {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(out_dir)
         .join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(fixture())
         .arg("--output")
@@ -128,7 +128,7 @@ fn json_run(out_dir: &str, seed: &str, case: Option<&str>) -> serde_json::Value 
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(out_dir)
         .join("out");
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"));
     cmd.arg("test")
         .arg(seed_fixture())
         .arg("--output")
@@ -231,7 +231,7 @@ fn a_project_mixing_property_and_plain_modules_type_checks() {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("out-mixed")
         .join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(mixed_fixture())
         .arg("--output")
@@ -281,7 +281,7 @@ fn a_violated_invariant_shrinks_and_a_failed_expect_reports_its_position() {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("out-invariant")
         .join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(invariant_fail_fixture())
         .arg("--output")

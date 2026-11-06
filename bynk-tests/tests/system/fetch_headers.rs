@@ -185,7 +185,7 @@ fn spec(tmp: &Path, path: &Path) -> String {
 }
 
 fn compile(tmp: &Path, out: &str, args: &[&str]) {
-    let compiled = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let compiled = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("compile")
         .args(args)
         .args(["--emit", "js", "-o"])

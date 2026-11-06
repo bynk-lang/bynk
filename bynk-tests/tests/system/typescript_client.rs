@@ -501,7 +501,7 @@ fn regenerate_1970_with(from: &str, to: &str) -> String {
         "fixture 1970 no longer declares {from:?}"
     );
     fs::write(proj.join("src/shop/ledger.bynk"), ledger.replace(from, to)).unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["compile", "--target", "workers", "-o"])
         .arg(dir.join("out"))
         .arg(&proj)

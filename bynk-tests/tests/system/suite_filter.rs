@@ -68,7 +68,7 @@ fn run(out_dir: &str, args: &[&str]) -> Run {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(out_dir)
         .join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(fixture())
         .arg("--output")
@@ -210,7 +210,7 @@ fn a_value_that_selects_nothing_fails_the_run_after_its_output() {
     assert_eq!(r.doc()["passed"], 1, "the usual document is still printed");
     assert!(
         r.stderr
-            .contains("bynkc test: no case matched --case \"typo\""),
+            .contains("bynk test: no case matched --case \"typo\""),
         "{}",
         r.stderr
     );
@@ -233,7 +233,7 @@ fn a_value_that_selects_nothing_fails_the_run_after_its_output() {
     assert!(r.stdout.contains("1 passed, 0 failed."), "{}", r.stdout);
     assert!(
         r.stderr
-            .contains("bynkc test: no case matched --case \"typo\""),
+            .contains("bynk test: no case matched --case \"typo\""),
         "{}",
         r.stderr
     );
@@ -282,7 +282,7 @@ fn a_selected_skipped_case_is_not_unmatched() {
         .join("sf-skipped")
         .join("out");
     let with = |filter: &str| {
-        Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+        Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
             .arg("test")
             .arg(fixture())
             .arg("--output")

@@ -27,7 +27,7 @@ fn contracts_survive_the_integration_workers_recompile() {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("integration-contracts-out")
         .join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(fixture())
         .arg("--output")

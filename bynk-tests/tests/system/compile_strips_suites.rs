@@ -27,7 +27,7 @@ fn project(tag: &str, suite: &str) -> PathBuf {
 }
 
 fn bynkc(cwd: &Path, args: &[&str]) -> (bool, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .current_dir(cwd)
         .env("NO_COLOR", "1")

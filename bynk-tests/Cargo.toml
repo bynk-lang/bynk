@@ -16,17 +16,20 @@ name = "it"
 path = "tests/it.rs"
 
 # `CARGO_BIN_EXE_<name>` is set only for the package's own binaries, so the
-# corpus can't see `bynkc`'s. This forwards to `bynkc`'s own `main.rs` (an
+# corpus can't see `bynk`'s. This forwards to `bynk`'s own `main.rs` (an
 # `include!`, so it cannot drift) under a name that doesn't collide with
-# `target/<profile>/bynkc`. E3 retires `bynkc`; this goes with it.
+# `target/<profile>/bynk`. The corpus drives `bynk test`/`check`/`compile`/`fmt`
+# (E3 retired the separate `bynkc` binary it used to drive).
 [[bin]]
-name = "bynkc-under-test"
-path = "src/bin/bynkc-under-test.rs"
+name = "bynk-under-test"
+path = "src/bin/bynk-under-test.rs"
 
 [dependencies]
-# What the corpus drives, and what the `bynkc-under-test` binary needs.
-bynkc.workspace = true
+# What the corpus drives, and what the `bynk-under-test` binary needs.
+# Path-only: `bynk` is the last crate published and `bynk-tests` is not published.
+bynk = { path = "../bynk" }
 bynk-driver.workspace = true
+bynk-emit.workspace = true
 clap.workspace = true
 
 [dev-dependencies]
@@ -35,7 +38,6 @@ serde_json.workspace = true
 xtask = { path = "../xtask" }
 bynk-syntax.workspace = true
 bynk-check.workspace = true
-bynk-emit.workspace = true
 regex.workspace = true
 bynk-fmt.workspace = true
 which.workspace = true

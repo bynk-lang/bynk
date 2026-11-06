@@ -40,7 +40,7 @@ fn commons_types_in_capability_ops_typecheck() {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("commons-type-in-capability")
         .join("out");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(&fixture)
         .arg("--output")

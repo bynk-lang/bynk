@@ -41,7 +41,7 @@ fn the_build_and_the_editor_report_the_same_unstable_diagnostics() {
 
     // The build: `bynkc check`, which reads `bynk.toml` from disk. `short`
     // prints `path:line:col: severity[code]: message`, one per line.
-    let checked = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let checked = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["check", "--format", "short"])
         .arg(&root)
         .output()

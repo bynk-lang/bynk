@@ -245,7 +245,7 @@ fn run_smoke_with(
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, content).unwrap();
     }
-    let compiled = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let compiled = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["compile", "--target", "workers", "--emit", "js", "-o"])
         .arg(tmp.join("out"))
         .arg(tmp.join("proj"))

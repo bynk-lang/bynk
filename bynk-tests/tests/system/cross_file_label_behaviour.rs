@@ -47,7 +47,7 @@ fn duplicate_service_project(tag: &str) -> Scratch {
 }
 
 fn run(subcommand: &str, project: &Scratch) -> String {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"));
     cmd.arg(subcommand).arg(&project.0);
     if subcommand == "compile" {
         cmd.arg("--output").arg(project.0.join("out"));

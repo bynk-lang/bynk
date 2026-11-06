@@ -42,7 +42,7 @@ fn run(case: Option<&str>, out_dir: &str) -> String {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(out_dir)
         .join("out");
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"));
     cmd.arg("test")
         .arg(fixture())
         .arg("--output")

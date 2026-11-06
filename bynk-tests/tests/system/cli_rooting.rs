@@ -11,7 +11,7 @@ fn fixture() -> PathBuf {
 }
 
 fn bynkc() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
 }
 
 /// `bynkc check <project-root>` honours `bynk.toml`/`src` and succeeds — the

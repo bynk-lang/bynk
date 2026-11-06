@@ -36,7 +36,7 @@ fn the_build_and_the_editor_refuse_the_same_exports() {
     fs::write(root.join("src/currency.bynk"), CURRENCY).unwrap();
     fs::write(root.join("src/shop/checkout.bynk"), CONTEXT).unwrap();
 
-    let checked = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let checked = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["check", "--format", "short"])
         .arg(&root)
         .output()
@@ -97,7 +97,7 @@ fn the_build_and_the_editor_refuse_the_same_exports() {
         "[package]\nname = \"acme/money\"\nexports = [\"money\", \"currency\"]\n",
     )
     .unwrap();
-    let checked = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let checked = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["check", "--format", "short"])
         .arg(&root)
         .output()

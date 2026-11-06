@@ -160,7 +160,7 @@ fn suite_project(tag: &str) -> PathBuf {
 #[test]
 fn a_suite_let_named_like_a_scaffold_binding_is_left_out() {
     let root = suite_project("scaffold");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynkc-under-test"))
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(["test", "--no-run", "."])
         .current_dir(&root)
         .env("NO_COLOR", "1")
