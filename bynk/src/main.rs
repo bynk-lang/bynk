@@ -935,7 +935,7 @@ fn run_test(args: bynk_driver::test_runner::TestArgs, allow_skew: bool) -> ExitC
 /// #2207 (decision C): `dev` and `deploy` run one project, and a workspace
 /// root isn't one. Says so and returns `true` when `root` is a workspace root.
 fn refuse_workspace_root(command: &str, root: &Path) -> bool {
-    if !bynk_emit::project::is_workspace_root(root) {
+    if !bynk_driver::project::is_workspace_root(root) {
         return false;
     }
     eprintln!(

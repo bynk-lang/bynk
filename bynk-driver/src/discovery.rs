@@ -45,7 +45,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use bynk_emit::project::Roots;
+use crate::project::Roots;
 
 /// An I/O failure while walking a project tree for `.bynk` files, or reading
 /// one found there.
@@ -81,18 +81,16 @@ impl std::error::Error for DiscoveryError {
 }
 
 /// #1883, slice 1b: the project's `assets/` folder, listed
-/// ([`bynk_emit::project::assets::AssetFolder::on_disk`]) for
+/// ([`crate::project::assets::AssetFolder::on_disk`]) for
 /// `CompileOptions::asset_files`. No file's bytes are read here: the build
 /// reads only the files a declaration names. A missing folder is empty; an
 /// unlistable one is a [`DiscoveryError`] naming the folder.
 pub fn list_asset_folder(
     project_root: &Path,
-) -> Result<bynk_emit::project::assets::AssetFolder, DiscoveryError> {
-    bynk_emit::project::assets::AssetFolder::on_disk(project_root).map_err(|source| {
-        DiscoveryError {
-            path: project_root.join(bynk_emit::project::assets::PROJECT_ASSETS_DIR),
-            source,
-        }
+) -> Result<crate::project::assets::AssetFolder, DiscoveryError> {
+    crate::project::assets::AssetFolder::on_disk(project_root).map_err(|source| DiscoveryError {
+        path: project_root.join(crate::project::assets::PROJECT_ASSETS_DIR),
+        source,
     })
 }
 
@@ -100,10 +98,10 @@ pub fn list_asset_folder(
 /// [`list_asset_folder`] lists `assets/`, for `CompileOptions::embed_files`.
 pub fn list_embed_folder(
     project_root: &Path,
-) -> Result<bynk_emit::project::assets::EmbedFolder, DiscoveryError> {
-    bynk_emit::project::assets::AssetFolder::embeds_on_disk(project_root).map_err(|source| {
+) -> Result<crate::project::assets::EmbedFolder, DiscoveryError> {
+    crate::project::assets::AssetFolder::embeds_on_disk(project_root).map_err(|source| {
         DiscoveryError {
-            path: project_root.join(bynk_emit::project::assets::PROJECT_EMBEDS_DIR),
+            path: project_root.join(crate::project::assets::PROJECT_EMBEDS_DIR),
             source,
         }
     })
@@ -113,10 +111,10 @@ pub fn list_embed_folder(
 /// lists `assets/`, for `CompileOptions::fixture_files`.
 pub fn list_fixture_folder(
     project_root: &Path,
-) -> Result<bynk_emit::project::assets::FixtureFolder, DiscoveryError> {
-    bynk_emit::project::assets::AssetFolder::fixtures_on_disk(project_root).map_err(|source| {
+) -> Result<crate::project::assets::FixtureFolder, DiscoveryError> {
+    crate::project::assets::AssetFolder::fixtures_on_disk(project_root).map_err(|source| {
         DiscoveryError {
-            path: project_root.join(bynk_emit::project::assets::PROJECT_FIXTURES_DIR),
+            path: project_root.join(crate::project::assets::PROJECT_FIXTURES_DIR),
             source,
         }
     })
@@ -126,10 +124,10 @@ pub fn list_fixture_folder(
 /// [`list_asset_folder`] lists `assets/`, for `CompileOptions::migration_files`.
 pub fn list_migration_folder(
     project_root: &Path,
-) -> Result<bynk_emit::project::assets::AssetFolder, DiscoveryError> {
-    bynk_emit::project::assets::AssetFolder::migrations_on_disk(project_root).map_err(|source| {
+) -> Result<crate::project::assets::AssetFolder, DiscoveryError> {
+    crate::project::assets::AssetFolder::migrations_on_disk(project_root).map_err(|source| {
         DiscoveryError {
-            path: project_root.join(bynk_emit::project::assets::PROJECT_MIGRATIONS_DIR),
+            path: project_root.join(crate::project::assets::PROJECT_MIGRATIONS_DIR),
             source,
         }
     })
@@ -233,7 +231,7 @@ pub fn sources_for_roots(roots: &Roots) -> Result<HashMap<PathBuf, String>, Disc
     // computes them, so its partitioning finds every dependency file a home.
     if let Roots::Split { project_root, .. } = roots {
         trees.extend(
-            bynk_emit::project::dependency_trees(project_root, &HashMap::new())
+            crate::project::dependency_trees(project_root, &HashMap::new())
                 .into_iter()
                 .map(|(root, _)| root),
         );
@@ -244,7 +242,7 @@ pub fn sources_for_roots(roots: &Roots) -> Result<HashMap<PathBuf, String>, Disc
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bynk_emit::project::{ProjectPaths, try_read_project_paths};
+    use crate::project::{ProjectPaths, try_read_project_paths};
     use std::fs;
 
     /// A throwaway on-disk directory tree, removed on drop (including on

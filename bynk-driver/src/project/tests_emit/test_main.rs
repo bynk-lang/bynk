@@ -316,7 +316,7 @@ pub(super) fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
     body.push(TsStmt::return_stmt(Some(ident("results")), None));
     let names = entries
         .iter()
-        .map(|(name, _)| format!("\"{}\"", crate::emitter::escape_ts_string(name)))
+        .map(|(name, _)| format!("\"{}\"", bynk_emit::emitter::escape_ts_string(name)))
         .collect::<Vec<_>>()
         .join(", ");
     vec![

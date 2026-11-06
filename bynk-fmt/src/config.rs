@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn other_manifest_sections_are_left_to_their_own_readers() {
-        // `[paths]` belongs to `bynk-emit::project`; reading `[fmt]` must not
+        // `[paths]` belongs to `bynk-driver::project`; reading `[fmt]` must not
         // reject a manifest for carrying it.
         let cfg = FmtConfig::from_manifest_str(
             "[project]\nname = \"x\"\n\n[paths]\ninclude = [\"src\"]\n\n[lsp]\ndiagnostics_mode = \"live\"\n\n[fmt]\ntrailing_comma = false\n",

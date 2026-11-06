@@ -3,9 +3,9 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use crate::emitter::RuntimeUse;
+use bynk_emit::emitter::RuntimeUse;
 // #1759: every namespace a test module imports, from one definition.
-use crate::emitter::emit::test_scaffold_ns as test_ns;
+use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt,
     TsType, TsTypeMember,
@@ -108,7 +108,7 @@ pub(super) fn names_ident(src: &str, name: &str) -> bool {
 /// duplicate — same reason that one and `emitter/workers_entry.rs`'s own copy
 /// don't share a single implementation (each doc comment explains why for its
 /// own file): folds `extra`'s comma-separated bindings (e.g.
-/// [`crate::emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS`]) into `names` directly,
+/// [`bynk_emit::emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS`]) into `names` directly,
 /// skipping anything already present under the same "strip an optional `type
 /// ` prefix, compare bare names" dedup rule. `emit_test_module`/
 /// `emit_integration_module`'s own runtime-import statement is now a real
@@ -358,7 +358,7 @@ pub(super) fn emit_system_http_support(
         };
     };
     let ns = test_ns(target);
-    let binding = crate::emitter::wrangler::service_binding(target).name;
+    let binding = bynk_emit::emitter::wrangler::service_binding(target).name;
     let type_ns = format!("{ns}.");
 
     let mut routes: Vec<TsStmt> = Vec::new();
@@ -421,7 +421,7 @@ pub(super) fn emit_system_http_support(
             else {
                 unreachable!("h.kind already matched HandlerKind::Http above")
             };
-            let key = crate::emitter::http_handler_method_name_ir(ir_method, path);
+            let key = bynk_emit::emitter::http_handler_method_name_ir(ir_method, path);
             // Split the handler's params into path params (matching `:name` in
             // the pattern, in order) and the optional body (the remaining param).
             let path_params: Vec<&str> = path
@@ -456,9 +456,9 @@ pub(super) fn emit_system_http_support(
                     name: "__extraHeaders".to_string(),
                     ty: Some(TsType::named(format!(
                         "{} | undefined",
-                        crate::emitter::ts_type_ref(&bynk_syntax::ast::TypeRef::RequestHeaders(
-                            Default::default()
-                        ))
+                        bynk_emit::emitter::ts_type_ref(
+                            &bynk_syntax::ast::TypeRef::RequestHeaders(Default::default())
+                        )
                     ))),
                     optional: false,
                 }
@@ -478,7 +478,7 @@ pub(super) fn emit_system_http_support(
             // the raw drivers append (a `Wire("?…")` text, or a `RequestQuery`).
             let (typed_query, raw_query) = match h.params.iter().find(|p| is_query(p)) {
                 Some(p) => {
-                    let var = crate::emitter::ts_ident(&p.name.name);
+                    let var = bynk_emit::emitter::ts_ident(&p.name.name);
                     match &p.type_ref {
                         bynk_syntax::ast::TypeRef::RequestQuery(_) => {
                             runtime_use.note_request_query_search();
@@ -488,7 +488,7 @@ pub(super) fn emit_system_http_support(
                         record => {
                             runtime_use.note_query_string();
                             let ser = bynk_ts::print_expr(
-                                &crate::emitter::serialisation::serialise_expr_via(
+                                &bynk_emit::emitter::serialisation::serialise_expr_via(
                                     record,
                                     &var,
                                     &type_ns,
@@ -539,7 +539,7 @@ pub(super) fn emit_system_http_support(
                 for seg in path.split('/').filter(|x| !x.is_empty()) {
                     s.push('/');
                     if let Some(name) = seg.strip_prefix(':') {
-                        s.push_str(&format!("${{{}}}", crate::emitter::ts_ident(name)));
+                        s.push_str(&format!("${{{}}}", bynk_emit::emitter::ts_ident(name)));
                     } else {
                         s.push_str(seg);
                     }
@@ -680,7 +680,7 @@ pub(super) fn emit_system_http_support(
                     let stmt = TsStmt::const_stmt(
                         TsBindingName::Ident("__body".to_string()),
                         None,
-                        ident(crate::emitter::ts_ident(&p.name.name)),
+                        ident(bynk_emit::emitter::ts_ident(&p.name.name)),
                         None,
                     );
                     (Some(stmt), "body: __body as BufferSource, ")
@@ -692,13 +692,14 @@ pub(super) fn emit_system_http_support(
                     // slice's scope), so it prints at the boundary
                     // (`bynk_ts::print_expr`), the same treatment
                     // `lower.rs`'s own call sites use.
-                    let ser =
-                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                    let ser = bynk_ts::print_expr(
+                        &bynk_emit::emitter::serialisation::serialise_expr_via(
                             &p.type_ref,
-                            &crate::emitter::ts_ident(&p.name.name),
+                            &bynk_emit::emitter::ts_ident(&p.name.name),
                             &type_ns,
                             runtime_use,
-                        ));
+                        ),
+                    );
                     let stmt = TsStmt::const_stmt(
                         TsBindingName::Ident("__body".to_string()),
                         None,
@@ -717,7 +718,7 @@ pub(super) fn emit_system_http_support(
                 // #1435 (Arc E slice 1): boundary-print, same treatment as
                 // `ser` above.
                 Some(inner) => {
-                    bynk_ts::print_expr(&crate::emitter::serialisation::deserialise_ref_via(
+                    bynk_ts::print_expr(&bynk_emit::emitter::serialisation::deserialise_ref_via(
                         inner,
                         &type_ns,
                         runtime_use,
@@ -730,7 +731,7 @@ pub(super) fn emit_system_http_support(
                 .params
                 .iter()
                 .map(|p| TsParam {
-                    name: crate::emitter::ts_ident(&p.name.name),
+                    name: bynk_emit::emitter::ts_ident(&p.name.name),
                     ty: Some(TsType::named(driver_param_ty(&p.type_ref, &ns))),
                     optional: false,
                 })
@@ -740,7 +741,7 @@ pub(super) fn emit_system_http_support(
                 .params
                 .iter()
                 .map(|p| TsParam {
-                    name: crate::emitter::ts_ident(&p.name.name),
+                    name: bynk_emit::emitter::ts_ident(&p.name.name),
                     ty: Some(TsType::named(
                         if is_headers(&p)
                             || matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestQuery(_))
@@ -781,7 +782,7 @@ pub(super) fn emit_system_http_support(
             // #2135: the bytes a signing driver signs: what it sends.
             let typed_body = if body_arg.is_some() { "__body" } else { "\"\"" };
             let raw_body = match body_ps.first() {
-                Some(p) => crate::emitter::ts_ident(&p.name.name),
+                Some(p) => bynk_emit::emitter::ts_ident(&p.name.name),
                 None => "\"\"".to_string(),
             };
             // #2685: the typed driver names its route to the decoder, which a
@@ -822,7 +823,7 @@ pub(super) fn emit_system_http_support(
             // argument, so its raw driver would be dead code.
             if !h.params.is_empty() {
                 let raw_body_init = match body_ps.first() {
-                    Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
+                    Some(p) => format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name)),
                     None => String::new(),
                 };
                 // The `Wire` text is text, so a raw route is sent it as `text/plain`:
@@ -894,7 +895,7 @@ pub(super) fn emit_system_http_support(
             // drivers: a `Wire`-eligible slot and a Bearer-secured route.
             if !h.params.is_empty() && secured {
                 let raw_body_init = match body_ps.first() {
-                    Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
+                    Some(p) => format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name)),
                     None => String::new(),
                 };
                 let rawnoauth_options = ident(format!(
@@ -949,7 +950,7 @@ pub(super) fn emit_system_http_support(
                     if !h.params.is_empty() {
                         let raw_body_init = match body_ps.first() {
                             Some(p) => {
-                                format!("body: {}, ", crate::emitter::ts_ident(&p.name.name))
+                                format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name))
                             }
                             None => String::new(),
                         };
@@ -990,7 +991,8 @@ pub(super) fn emit_system_http_support(
                     "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {raw_body_init}}}",
                     method = method.as_str(),
                     raw_body_init = match body_ps.first() {
-                        Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
+                        Some(p) =>
+                            format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name)),
                         None => String::new(),
                     },
                 ));
@@ -1158,7 +1160,7 @@ pub(super) fn emit_system_http_support(
     let mut code = vec![TsStmt::raw(jwt_signer_runtime_helpers(), None)];
     if signs_hmac {
         let mut signer = TsStmt::raw(
-            include_str!("../../emitter/test_runtime/hmac_signer.ts").to_string(),
+            include_str!("../test_runtime/hmac_signer.ts").to_string(),
             None,
         );
         signer.no_blank_before = true;
@@ -1279,7 +1281,7 @@ pub(super) fn emit_system_job_support(
                         continue;
                     };
                     let idx = exprs.len();
-                    let key = crate::emitter::cron_handler_method_name(sname, idx);
+                    let key = bynk_emit::emitter::cron_handler_method_name(sname, idx);
                     let (params, at) = match h.params.first() {
                         Some(p) => (
                             format!("at: {}", driver_param_ty(&p.type_ref, &ns)),
@@ -1308,14 +1310,15 @@ pub(super) fn emit_system_job_support(
                 let Some(p) = h.params.first() else {
                     continue;
                 };
-                let key = crate::emitter::queue_handler_method_name(sname, 0);
-                let param = crate::emitter::ts_ident(&p.name.name);
-                let body = bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
-                    &p.type_ref,
-                    &param,
-                    &type_ns,
-                    runtime_use,
-                ));
+                let key = bynk_emit::emitter::queue_handler_method_name(sname, 0);
+                let param = bynk_emit::emitter::ts_ident(&p.name.name);
+                let body =
+                    bynk_ts::print_expr(&bynk_emit::emitter::serialisation::serialise_expr_via(
+                        &p.type_ref,
+                        &param,
+                        &type_ns,
+                        runtime_use,
+                    ));
                 let exec_arg = if target_sends { ", exec" } else { "" };
                 drivers.push(TsStmt::raw(
                     format!(
@@ -1332,7 +1335,7 @@ pub(super) fn emit_system_job_support(
     let mut code = Vec::new();
     if !drivers.is_empty() {
         code.push(TsStmt::raw(
-            include_str!("../../emitter/test_runtime/jobs.ts").to_string(),
+            include_str!("../test_runtime/jobs.ts").to_string(),
             None,
         ));
         code.extend(drivers);
@@ -1353,7 +1356,7 @@ pub(super) fn driver_param_ty(t: &bynk_syntax::ast::TypeRef, _ns: &str) -> Strin
         // (Slice A), so the driver forwards the value to the namespace's
         // `serialise_*`. Primitives stay precise.
         TypeRef::Named(_) => "any".to_string(),
-        other => crate::emitter::ts_type_ref(other),
+        other => bynk_emit::emitter::ts_type_ref(other),
     }
 }
 
@@ -1428,19 +1431,19 @@ pub(super) fn service_binding_forward(worker_ident: &str, env_ident: &str, sends
 
 /// Interop I5 (#1972): a Service Binding standing in for a foreign Worker in
 /// the integration harness, answering every request with
-/// [`crate::emitter::wrangler::foreign_service_double_body`]'s 503, as the
+/// [`bynk_emit::emitter::wrangler::foreign_service_double_body`]'s 503, as the
 /// double `bynk dev` binds by default does. A case that needs another answer
 /// stubs the instance's `send`.
 pub(super) fn foreign_service_double(binding: &str, worker: &str) -> TsExpr {
     let response = TsExpr::New {
         callee: Box::new(ident("globalThis.Response")),
         args: vec![
-            str_lit(crate::emitter::wrangler::foreign_service_double_body(
+            str_lit(bynk_emit::emitter::wrangler::foreign_service_double_body(
                 binding, worker,
             )),
             TsExpr::object(vec![(
                 "status".to_string(),
-                num_lit(crate::emitter::wrangler::FOREIGN_SERVICE_DOUBLE_STATUS.to_string()),
+                num_lit(bynk_emit::emitter::wrangler::FOREIGN_SERVICE_DOUBLE_STATUS.to_string()),
             )]),
         ],
     };

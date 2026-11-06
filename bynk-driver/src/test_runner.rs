@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, ExitCode, Stdio};
 
-use bynk_emit::project::{BuildTarget, ImportExt, ProjectOutput};
+use crate::project::{BuildTarget, ImportExt, ProjectOutput};
 use clap::ValueEnum;
 
 use crate::probe::{DetectOpts, SystemToolbox};
@@ -420,7 +420,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         };
         // #2138: a remote run emits only the `system` suites, driven at
         // the target's URLs.
-        let o = o.remote_tests(remote.as_ref().map(|run| bynk_emit::project::RemoteTests {
+        let o = o.remote_tests(remote.as_ref().map(|run| crate::project::RemoteTests {
             skip_unsupported,
             vars: run.vars.clone(),
             secrets: run.secrets.clone(),
@@ -436,7 +436,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // #2658: a smoke run builds the synthesised suites in place of the
     // project's own. Against a named target only `GET` routes are called
     // unless `--smoke-unsafe`; in process and against `dev` every route is.
-    let mut smoke_skips: Vec<(String, bynk_emit::project::RemoteSkip)> = Vec::new();
+    let mut smoke_skips: Vec<(String, crate::project::RemoteSkip)> = Vec::new();
     let options = if smoke {
         let methods = match remote.as_ref() {
             Some(run) if run.dev_env.is_none() && !smoke_unsafe => crate::smoke::Methods::SafeOnly,
@@ -458,7 +458,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     } else {
         options
     };
-    let out = match bynk_emit::project::compile_project(&options) {
+    let out = match crate::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => {
             if json {
@@ -490,7 +490,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             let mut errors = Vec::new();
             let mut checked = None;
             if docs.has_base() {
-                let check = bynk_emit::project::check_project(
+                let check = crate::project::check_project(
                     &options.clone().sources(docs.check_overlay(sources)),
                 );
                 errors.extend(docs.remap(check.errors));
@@ -499,7 +499,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             // A declaration fence in a context is checked in a copy of it,
             // one project check per layer of copies.
             for layer in 0..docs.layer_count() {
-                let check = bynk_emit::project::check_project(
+                let check = crate::project::check_project(
                     &options.clone().sources(docs.layer_overlay(layer, sources)),
                 );
                 errors.extend(docs.remap_layer(layer, check.errors));
@@ -507,7 +507,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             }
             let (snapshots, display_root) = checked.expect("a check ran");
             if !errors.is_empty() {
-                let failure = bynk_emit::project::ProjectFailure {
+                let failure = crate::project::ProjectFailure {
                     errors,
                     snapshots,
                     display_root,
@@ -523,7 +523,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 return ExitCode::FAILURE;
             }
             if docs.has_runnable() {
-                out = match bynk_emit::project::compile_project(
+                out = match crate::project::compile_project(
                     &options.clone().sources(docs.run_overlay(sources)),
                 ) {
                     Ok(out) => out,
@@ -637,7 +637,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         // so this second compile keeps `contracts(true)` and, under `--inspect`,
         // `import_ext(Ts)` — a from-scratch rebuild silently dropped both.
         let workers_out =
-            bynk_emit::project::compile_project(&options.clone().target(BuildTarget::Workers));
+            crate::project::compile_project(&options.clone().target(BuildTarget::Workers));
         let workers_out = match workers_out {
             Ok(o) => o,
             Err(failure) => {
@@ -1048,8 +1048,8 @@ fn finish_runner(
     filter: &crate::test_filter::TestFilter,
     remote: Option<&crate::remote::RemoteRun>,
     // #2658: an in-process smoke run's skips (a remote run's are on `remote`).
-    local_skips: &[(String, bynk_emit::project::RemoteSkip)],
-    discovered: &[bynk_emit::project::DiscoveredSuite],
+    local_skips: &[(String, crate::project::RemoteSkip)],
+    discovered: &[crate::project::DiscoveredSuite],
     aliases: &[(String, String)],
     // #2842: the project's snapshots, when the run reports them.
     snapshots: Option<&crate::snapshots::SnapshotRun>,
@@ -1069,7 +1069,7 @@ fn finish_runner(
     }
     // The skipped cases the filter selects are not in the build, so the runner
     // is told they exist, and the document lists only those.
-    let selected_skips: Vec<&(String, bynk_emit::project::RemoteSkip)> = remote
+    let selected_skips: Vec<&(String, crate::project::RemoteSkip)> = remote
         .map_or(local_skips, |run| run.skipped.as_slice())
         .iter()
         .filter(|(suite, skip)| filter.selects(suite, &skip.case))
@@ -1289,7 +1289,7 @@ fn run_with_coverage(
     out_js_root: &Path,
     out_root: &Path,
     source_root: &Path,
-    discovered: &[bynk_emit::project::DiscoveredSuite],
+    discovered: &[crate::project::DiscoveredSuite],
 ) -> ExitCode {
     // A scratch dir beside the build output; cleared first so a prior run's JSON
     // never leaks in. `NODE_V8_COVERAGE` writes one file per process on exit.

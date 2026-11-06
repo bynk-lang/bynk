@@ -27,7 +27,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use bynk_emit::project::AttributedError;
+use crate::project::AttributedError;
 use bynk_syntax::ast::{
     ActorDecl, CommonsItem, Context, Handler, HandlerKind, HttpMethod, ServiceDecl,
     ServiceProtocol, SourceUnit,
@@ -37,7 +37,7 @@ use bynk_syntax::parser::parse_unit_with_recovery;
 
 /// The tail of a synthesised suite's file name: `<stem>.smoke.bynk` beside the
 /// context's `<stem>.bynk`.
-pub const SYNTHETIC_SUFFIX: &str = bynk_emit::project::SMOKE_SUITE_SUFFIX;
+pub const SYNTHETIC_SUFFIX: &str = crate::project::SMOKE_SUITE_SUFFIX;
 
 /// Every case a smoke suite holds is named with this prefix, so it cannot
 /// collide with a case the author wrote.
@@ -377,7 +377,7 @@ pub const UNDECLARED_STATUS_CODE: &str = "bynk.test.smoke_undeclared_status";
 /// A smoke run ready to build: the options with the synthesised suites in place
 /// of the project's own, and the skips to report.
 pub struct Prepared {
-    pub options: bynk_emit::project::CompileOptions,
+    pub options: crate::project::CompileOptions,
     pub smoke: Smoke,
 }
 
@@ -387,7 +387,7 @@ pub struct Prepared {
 /// been printed and the exit code is returned.
 pub fn prepare(
     program: &str,
-    options: bynk_emit::project::CompileOptions,
+    options: crate::project::CompileOptions,
     methods: Methods,
     json: bool,
     stream: bool,
@@ -409,7 +409,7 @@ pub fn prepare(
     };
     let mut smoke = Smoke::collect(&sources, methods);
     let check = |overlay: HashMap<PathBuf, String>| {
-        bynk_emit::project::check_project(&options.clone().sources(overlay)).errors
+        crate::project::check_project(&options.clone().sources(overlay)).errors
     };
     let overlay = match smoke.settle(&sources, check) {
         Ok(overlay) => overlay,
@@ -423,10 +423,9 @@ pub fn prepare(
                     ),
                 ),
             };
-            let check = bynk_emit::project::check_project(
-                &options.clone().sources(smoke.overlay(&sources)),
-            );
-            let failure = bynk_emit::project::ProjectFailure {
+            let check =
+                crate::project::check_project(&options.clone().sources(smoke.overlay(&sources)));
+            let failure = crate::project::ProjectFailure {
                 errors,
                 snapshots: check.snapshots,
                 display_root: check.display_root,
@@ -475,13 +474,13 @@ pub fn prepare(
 
 impl Smoke {
     /// The skips as `(suite, skip)` pairs, the shape a remote run's take.
-    pub fn remote_skips(&self) -> Vec<(String, bynk_emit::project::RemoteSkip)> {
+    pub fn remote_skips(&self) -> Vec<(String, crate::project::RemoteSkip)> {
         self.skipped
             .iter()
             .map(|s| {
                 (
                     s.suite.clone(),
-                    bynk_emit::project::RemoteSkip {
+                    crate::project::RemoteSkip {
                         case: s.case.clone(),
                         code: s.code.clone(),
                         reason: s.reason.clone(),

@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use bynk_emit::project::{
+use crate::project::{
     Document, ProjectOutput, is_worker_asset_path, is_worker_migration_path, sibling_path,
 };
 
@@ -22,7 +22,7 @@ use bynk_emit::project::{
 /// `.map`/`.json`/`.toml` file already on disk that no longer corresponds to
 /// anything in `out.artefacts.docs` is deleted — as is any file at all under
 /// a Worker's compiler-owned assets directory (#1883, slice 0;
-/// [`bynk_emit::project::WORKER_ASSETS_DIR`]) that is not in
+/// [`crate::project::WORKER_ASSETS_DIR`]) that is not in
 /// `out.artefacts.assets` — along with any directory
 /// that becomes empty as a result — otherwise a deleted `.bynk` unit's
 /// emitted `.ts` lingers on disk, still type-checked by the emitted
@@ -65,7 +65,7 @@ pub fn write_modules(modules: &BTreeMap<PathBuf, Vec<u8>>, dir: &Path) -> std::i
 
 /// #2321: for a run on Node (`bynk test`), write the modules and overwrite each
 /// one's Workers loader shim with the Node form
-/// ([`bynk_emit::project::node_wasm_shim`]), which inlines the module. Call it
+/// ([`crate::project::node_wasm_shim`]), which inlines the module. Call it
 /// after every document write, since a later write of `docs` restores the
 /// Workers form.
 pub fn write_modules_for_node(
@@ -75,8 +75,8 @@ pub fn write_modules_for_node(
     write_modules(modules, dir)?;
     for (path, bytes) in modules {
         std::fs::write(
-            dir.join(bynk_emit::project::wasm_shim_path(path)),
-            bynk_emit::project::node_wasm_shim(bytes),
+            dir.join(crate::project::wasm_shim_path(path)),
+            crate::project::node_wasm_shim(bytes),
         )?;
     }
     Ok(())
@@ -84,14 +84,14 @@ pub fn write_modules_for_node(
 
 /// #1883, slice 0: write one static asset's bytes under `dir`, verbatim. The
 /// binary-safe counterpart of [`write_document`] — an asset is not a
-/// [`Document`] (see `bynk_emit::project::Artefacts::assets` for why), so it
+/// [`Document`] (see `crate::project::Artefacts::assets` for why), so it
 /// gets no printer, no source-map trailer and no text conversion.
 ///
 /// Every asset must lie under a Worker's compiler-owned assets directory
 /// ([`is_worker_asset_path`]): that is the only place reconciliation prunes
 /// files of any extension, so an asset written anywhere else would linger
 /// after it stopped being produced. Producers build the path through
-/// `bynk_emit::project::worker_assets_dir`; this assertion makes bypassing it
+/// `crate::project::worker_assets_dir`; this assertion makes bypassing it
 /// a test failure rather than a silent leak.
 fn write_asset(path: &Path, bytes: &[u8], dir: &Path) -> std::io::Result<()> {
     debug_assert!(
@@ -117,7 +117,7 @@ fn write_asset(path: &Path, bytes: &[u8], dir: &Path) -> std::io::Result<()> {
 /// (R7.3); its own `Printed::source_map` is discarded, not written — the
 /// real map, when one exists, is already present in `docs` as its own
 /// `SourceMap` entry at this path's `.map` sibling ([`sibling_path`]), split
-/// out at construction (`bynk-emit::project::build_output`'s own tail).
+/// out at construction (`bynk-driver::project::build_output`'s own tail).
 /// That sibling's presence, not `Printed::source_map`, is what decides
 /// whether the `.ts`/`.js` file gets a `//# sourceMappingURL=` trailer — the
 /// trailer lives only on the on-disk artefact, not on `docs`' own in-memory
@@ -173,7 +173,7 @@ pub fn write_document(
 
 /// The project-relative paths [`write_output`] will have written once this
 /// `ProjectOutput` lands on disk — exactly `out.artefacts.docs`'s own keys
-/// (`bynk-emit::project::build_output`'s own tail already splits every
+/// (`bynk-driver::project::build_output`'s own tail already splits every
 /// `.map`/`.bynkdbg.json` sidecar into its own entry there, Decision C), plus
 /// `out.artefacts.assets`'s (#1883, slice 0) and `out.artefacts.modules`' (#2321).
 fn expected_output_paths(out: &ProjectOutput) -> std::collections::HashSet<PathBuf> {

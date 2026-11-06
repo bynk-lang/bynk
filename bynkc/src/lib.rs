@@ -47,7 +47,7 @@ pub use bynk_check::firstparty::Platform;
 // The Node floor moved to `bynk-emit` (slice 7) so the `bynk` driver can read it
 // without depending on the `bynkc` crate. Re-export it so `bynkc::NODE_MAJOR_FLOOR`
 // and the `cli.rs` doc-links resolve unchanged.
-pub use bynk_emit::project::{
+pub use bynk_driver::project::{
     Artefacts, AttributedError, BuildTarget, CompileOptions, DiscoveredCase, DiscoveredSuite,
     Document, ImportExt, ProjectFailure, ProjectOutput, ProjectPaths, ProjectPathsError, Roots,
     SchemaLock, TestLocation, compile_project, sibling_path, try_read_project_paths,

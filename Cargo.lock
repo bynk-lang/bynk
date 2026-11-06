@@ -250,8 +250,11 @@ dependencies = [
 name = "bynk-driver"
 version = "0.510.11"
 dependencies = [
+ "bynk-check",
  "bynk-emit",
  "bynk-fmt",
+ "bynk-ir",
+ "bynk-lower",
  "bynk-project",
  "bynk-render",
  "bynk-syntax",
@@ -259,6 +262,7 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
+ "toml",
  "which",
 ]
 
@@ -267,6 +271,7 @@ name = "bynk-emit"
 version = "0.510.11"
 dependencies = [
  "bynk-check",
+ "bynk-driver",
  "bynk-ir",
  "bynk-lower",
  "bynk-project",
@@ -382,6 +387,7 @@ version = "0.510.11"
 name = "bynk-strip"
 version = "0.510.11"
 dependencies = [
+ "bynk-driver",
  "bynk-emit",
  "bynk-ts",
  "oxc",
@@ -401,6 +407,7 @@ dependencies = [
 name = "bynk-testkit"
 version = "0.510.11"
 dependencies = [
+ "bynk-driver",
  "bynk-emit",
  "bynk-ide",
 ]
@@ -438,7 +445,7 @@ name = "bynk-wasm"
 version = "0.510.11"
 dependencies = [
  "bynk-check",
- "bynk-emit",
+ "bynk-driver",
  "bynk-fmt",
  "bynk-ide",
  "bynk-strip",

@@ -3,12 +3,12 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use crate::emitter::RuntimeUse;
+use bynk_emit::emitter::RuntimeUse;
 // #1759: every namespace a test module imports, from one definition.
-use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::{D1Migrations, d1_database_name};
 use bynk_check::test_suites::{self, ResolvedStub};
+use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_syntax::ast::{
     Block, CommonsItem, Expr, ExprKind, FnName, StubClause, StubRhs, TypeRef, Visibility,
 };
@@ -774,7 +774,7 @@ pub(super) fn emit_test_module(
     let json_codec_roots: Vec<TypeRef> = runtime_use
         .take_json_codec_roots()
         .into_iter()
-        .filter_map(|ty| crate::emitter::ty_to_type_ref(ty, tys))
+        .filter_map(|ty| bynk_emit::emitter::ty_to_type_ref(ty, tys))
         .collect();
     if !json_codec_roots.is_empty() {
         let synthetic = synthetic_typed_commons_for_target(
@@ -785,7 +785,7 @@ pub(super) fn emit_test_module(
             hidden,
             tys,
         );
-        let (codec_names, codec_insts) = crate::emitter::serialisation::collect_codec_closure(
+        let (codec_names, codec_insts) = bynk_emit::emitter::serialisation::collect_codec_closure(
             &json_codec_roots,
             &synthetic.types,
         );
@@ -796,8 +796,8 @@ pub(super) fn emit_test_module(
             runtime_use.note_json_codec();
             runtime_use.note_boundary_codec();
             let qual = runtime_use.json_codec_qual();
-            stmts.extend(crate::emitter::serialisation::decls_as_stmts_block(
-                crate::emitter::serialisation::emit_helpers_for_owner_qualified(
+            stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts_block(
+                bynk_emit::emitter::serialisation::emit_helpers_for_owner_qualified(
                     &codec_names,
                     &synthetic.types,
                     target_name,
@@ -805,8 +805,8 @@ pub(super) fn emit_test_module(
                     &runtime_use,
                 ),
             ));
-            stmts.extend(crate::emitter::serialisation::decls_as_stmts(
-                crate::emitter::serialisation::emit_generic_helpers_qualified(
+            stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts(
+                bynk_emit::emitter::serialisation::emit_generic_helpers_qualified(
                     &codec_insts,
                     &synthetic.types,
                     &qual,
@@ -1279,7 +1279,7 @@ pub(super) fn relative_import_for_test(target_dir: &Path) -> String {
 /// `bynkc test --inspect` runs this `.ts` directly under strip-only Node
 /// (slice 2, ADR 0104). The explicit form is equivalent and strip-clean.
 pub(super) fn expectation_runtime_helpers() -> String {
-    include_str!("../../emitter/test_runtime/expectation.ts").to_string()
+    include_str!("../test_runtime/expectation.ts").to_string()
 }
 
 /// #2842: the snapshots each of the module's suite files takes, keyed by the
@@ -1322,7 +1322,7 @@ pub(super) fn snapshot_harness(
     keys: &BTreeMap<String, Vec<(String, String)>>,
     stored: Option<&BTreeMap<String, String>>,
 ) -> String {
-    let mut out = include_str!("../../emitter/test_runtime/snapshot.ts").to_string();
+    let mut out = include_str!("../test_runtime/snapshot.ts").to_string();
     out.push_str("const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {\n");
     for (file, pairs) in keys {
         let text = stored
@@ -1423,7 +1423,7 @@ pub(super) fn event_delivery_helpers(
                     counts = true;
                     format!(
                         "envelope ?? {{ eventId: `test-event-${{++__bynkEventSeq}}`, publisherId: \"{}\", emittedAt: 0, schemaVersion: {version} }}",
-                        crate::emitter::escape_ts_string(owner)
+                        bynk_emit::emitter::escape_ts_string(owner)
                     )
                 }
                 None => "envelope".to_string(),
@@ -1451,14 +1451,14 @@ pub(super) fn event_delivery_helpers(
 /// awaits them after an addressed handler call, so a case's expectations see
 /// the sends' effects. Source lives at `emitter/test_runtime/send.ts`.
 pub(super) fn send_runtime_helpers() -> String {
-    include_str!("../../emitter/test_runtime/send.ts").to_string()
+    include_str!("../test_runtime/send.ts").to_string()
 }
 
 /// #2137: the harness clock — `__bynkClockNow`, which `advance Clock by`
 /// moves (`__bynkAdvanceClock`, refusing a negative at run time), and the
 /// `Clock` that reads it. Source lives at `emitter/test_runtime/clock.ts`.
 pub(super) fn clock_runtime_helpers() -> String {
-    include_str!("../../emitter/test_runtime/clock.ts").to_string()
+    include_str!("../test_runtime/clock.ts").to_string()
 }
 
 /// #2683: the harness clock on virtual time — the same `__bynkClockNow` and
@@ -1467,7 +1467,7 @@ pub(super) fn clock_runtime_helpers() -> String {
 /// stub waits, the in-flight count, and the auto-advance that drives a case's
 /// addressed calls. Source lives at `emitter/test_runtime/virtual_time.ts`.
 pub(super) fn virtual_time_runtime_helpers() -> String {
-    include_str!("../../emitter/test_runtime/virtual_time.ts").to_string()
+    include_str!("../test_runtime/virtual_time.ts").to_string()
 }
 
 /// #2138: `__bynkRunId`, the value `run.id` reads. A remote build's `system`
@@ -1476,7 +1476,7 @@ pub(super) fn virtual_time_runtime_helpers() -> String {
 /// (an `--against` run's unit suites share its process environment).
 pub(super) fn run_id_helper(remote: bool) -> String {
     if remote {
-        include_str!("../../emitter/test_runtime/run_id.ts").to_string()
+        include_str!("../test_runtime/run_id.ts").to_string()
     } else {
         "const __bynkRunId: string = \"local\";\n".to_string()
     }
@@ -1630,7 +1630,7 @@ pub(super) fn target_uses_emit(
 /// treatment `expectation_runtime_helpers`/`stub_runtime_helpers` above
 /// already get, rather than a raw Rust string literal with `\`-continuations.
 pub(super) fn jwt_signer_runtime_helpers() -> String {
-    include_str!("../../emitter/test_runtime/jwt_signer.ts").to_string()
+    include_str!("../test_runtime/jwt_signer.ts").to_string()
 }
 
 #[cfg(test)]

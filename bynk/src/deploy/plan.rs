@@ -563,14 +563,14 @@ pub fn run(
         let mut skews = contract_skews(
             &manifest.expects,
             &lock,
-            bynk_emit::project::worker_dir_name,
+            bynk_driver::project::worker_dir_name,
             &opts.environment,
         );
         classify_contract_skews(
             &mut skews,
             &manifest.expects_shapes,
             &lock,
-            bynk_emit::project::worker_dir_name,
+            bynk_driver::project::worker_dir_name,
             &opts.environment,
         );
         if !skews.is_empty() {
@@ -588,7 +588,7 @@ pub fn run(
             worker,
             &manifest.provides,
             &lock,
-            bynk_emit::project::worker_dir_name,
+            bynk_driver::project::worker_dir_name,
             &opts.environment,
         );
         classify_callee_skews(
@@ -649,7 +649,7 @@ pub fn run(
                     worker,
                     &manifest.provides,
                     &lock,
-                    bynk_emit::project::worker_dir_name,
+                    bynk_driver::project::worker_dir_name,
                     &opts.environment,
                 );
                 classify_callee_skews(
@@ -1451,7 +1451,7 @@ pub(crate) fn unused_accepted(
 ) -> Vec<(String, String, String)> {
     let mut out = Vec::new();
     for (context, services) in contracts.contexts() {
-        if bynk_emit::project::worker_dir_name(context) != worker {
+        if bynk_driver::project::worker_dir_name(context) != worker {
             continue;
         }
         for (service, shapes) in services {

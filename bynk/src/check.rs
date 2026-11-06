@@ -1,7 +1,7 @@
 //! `bynk check` — type-check a `.bynk` file or project without writing output.
 //!
 //! Runs the linked pipeline in-process (v0.138, #487): a directory routes
-//! through [`bynk_emit::project::compile_project`], a single file through
+//! through [`bynk_driver::project::compile_project`], a single file through
 //! [`bynk_emit::compile_with_warnings`] — exactly `bynkc check`'s two branches, so the
 //! output is identical. The escape hatch matches `bynk dev`: when the driver
 //! resolved `bynkc` via a `BYNK_BYNKC` override, the pinned compiler is shelled

@@ -597,7 +597,7 @@ pub fn discover_bynk_files(
 /// P4.2 (#1122, Decision B): moved here from `bynk-emit/src/project.rs` — its
 /// body called only `bynk-project`-local functions already, with no
 /// `bynk-emit`-specific state. `bynk-emit` re-exports it at its existing
-/// `bynk_emit::project::discover_project_files` path so `read_disk_sources`
+/// `bynk_driver::project::discover_project_files` path so `read_disk_sources`
 /// and `bynk-testkit` need no edit; `bynk-ide` calls this path directly.
 pub fn discover_project_files(roots: &Roots) -> Vec<PathBuf> {
     let mut trees = roots.trees();

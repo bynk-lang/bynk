@@ -263,10 +263,10 @@ fn recording_folder(
     root: &Path,
     refuse: &'static str,
 ) -> (
-    bynk_emit::project::assets::AssetFolder,
+    bynk_driver::project::assets::AssetFolder,
     std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 ) {
-    use bynk_emit::project::assets::AssetFolder;
+    use bynk_driver::project::assets::AssetFolder;
     let disk = AssetFolder::on_disk(root).unwrap();
     let mut files = disk.files().clone();
     files.insert("assets/huge.bin".to_string());
@@ -285,7 +285,7 @@ fn recording_folder(
     (folder, reads)
 }
 
-fn fixture_options(folder: bynk_emit::project::assets::AssetFolder) -> bynkc::CompileOptions {
+fn fixture_options(folder: bynk_driver::project::assets::AssetFolder) -> bynkc::CompileOptions {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/1883_asset_workers");
     let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");

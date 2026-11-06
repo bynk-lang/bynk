@@ -3,7 +3,7 @@
 //! analogue of `bynk-emit`'s `ProjectAnalysis` — without ever emitting.
 //!
 //! `bynk-ide` is repointed at [`analyse_project`] as of P4.2 (#1122) —
-//! `bynk_emit::project::analyse_project_with` was no longer reachable from
+//! `bynk_driver::project::analyse_project_with` was no longer reachable from
 //! `bynk-ide` from that point on (it had no `bynk-emit` dependency left).
 //! This entry point is what every real caller uses; #1541 deleted
 //! `analyse_project_with` and its single-tree wrapper `analyse_project`
@@ -75,7 +75,7 @@
 //!    [`analyse_project`] right after the per-unit compose/check loop (the
 //!    same relative point `run_checks` calls the originals, unconditionally —
 //!    unlike categories 2-6, neither is gated on a clean error sink), while
-//!    emission itself stays in `bynk-emit::project::tests_emit`, which now
+//!    emission itself stays in `bynk-driver::project::tests_emit`, which now
 //!    calls the relocated checking phase too rather than duplicating it. Both
 //!    functions still take `&mut RefSink`, so every binding edge inside a
 //!    `.bynk` suite file is populated here again too — go-to-definition
@@ -168,7 +168,7 @@ pub struct ContextBoundaryInfo {
 /// snapshot (positions must convert against the text that was analysed, not
 /// a newer buffer) plus the attributed diagnostics. Moved verbatim (Decision
 /// C, #1115) from `bynk-emit/src/project/diagnostics.rs`; `bynk-emit`
-/// re-exports this type at its old path (`bynk_emit::project::ProjectAnalysis`)
+/// re-exports this type at its old path (`bynk_driver::project::ProjectAnalysis`)
 /// so `bynk-ide`'s existing destructuring needs no field-by-field rewrite.
 pub struct ProjectAnalysis {
     /// `(project-relative source path, analysed text)` for every file read,

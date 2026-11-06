@@ -22,14 +22,14 @@
 //! credentials: a private repository works through the user's git setup.
 //!
 //! The compile never fetches: `bynkc`, the language server and the
-//! playground read the lock and the store ([`bynk_emit::project`]'s graph
+//! playground read the lock and the store ([`bynk_driver::project`]'s graph
 //! resolution reports `not_fetched` for a missing entry).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use bynk_emit::project::{is_workspace_root, load_workspace};
+use bynk_driver::project::{is_workspace_root, load_workspace};
 use sha2::{Digest, Sha256};
 
 use bynk_project::lock::{

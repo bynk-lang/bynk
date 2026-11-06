@@ -3,11 +3,11 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use crate::emitter::RuntimeUse;
+use bynk_emit::emitter::RuntimeUse;
 // #1759: every namespace a test module imports, from one definition.
-use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::test_suites::{self, ResolvedStub, StubScope};
+use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_syntax::ast::{Case, FnName};
 use bynk_ts::{
     SourceMapBuilder, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsStmt, TsType,
@@ -196,13 +196,13 @@ pub(super) fn emit_test_scope_setup(
         // v0.9.2: bring each agent's construction factory into scope so a test
         // body's `AgentName(key)` lowers to `__makeAgentName(key)`.
         for agent in table.agents.keys() {
-            names.push(crate::emitter::agent_factory_name(agent));
+            names.push(bynk_emit::emitter::agent_factory_name(agent));
         }
         names.sort();
         names.dedup();
         let type_names = aliased_types(table, |_| true);
         bound.extend(names.iter().cloned());
-        crate::emitter::extend_printed_at(
+        bynk_emit::emitter::extend_printed_at(
             out,
             emit_ns_destructure(&target_ns, &names, &type_names),
             2,
@@ -215,7 +215,11 @@ pub(super) fn emit_test_scope_setup(
         used_commons_destructures(target_name, unit_tables, unit_uses, &mut seen_assets)
     {
         bound.extend(names.iter().cloned());
-        crate::emitter::extend_printed_at(out, emit_ns_destructure(&ns, &names, &type_names), 2);
+        bynk_emit::emitter::extend_printed_at(
+            out,
+            emit_ns_destructure(&ns, &names, &type_names),
+            2,
+        );
     }
     // #1814: the types the target's view reaches but does not import, from
     // their owning commons (imported by `emit_test_module`).
@@ -257,7 +261,7 @@ pub(super) fn emit_test_scope_setup(
                     .cloned()
                     .collect();
                 bound.extend(declared.iter().cloned());
-                crate::emitter::extend_printed_at(
+                bynk_emit::emitter::extend_printed_at(
                     out,
                     emit_ns_destructure_renamed(&ns, &names, &types, &renames, &declared),
                     2,
@@ -275,7 +279,7 @@ pub(super) fn emit_test_scope_setup(
                 hashed.sort();
                 bound.extend(hashed.iter().cloned());
                 if !hashed.is_empty() {
-                    crate::emitter::extend_printed_at(
+                    bynk_emit::emitter::extend_printed_at(
                         out,
                         emit_ns_destructure(&ns, &hashed, &[]),
                         2,
@@ -676,7 +680,7 @@ pub(super) fn emit_test_case_function(
 /// [`checker::call_record_type_name`]. Ordered by capability then operation for
 /// deterministic output.
 /// #1479: returns real [`TsStmt`]s (was `String`) — its one caller now
-/// appends via `crate::emitter::extend_printed_at(out, stmts, 0)`, the same
+/// appends via `bynk_emit::emitter::extend_printed_at(out, stmts, 0)`, the same
 /// depth-0 top-level shape these type aliases always printed at.
 pub(super) fn observation_call_record_types(
     target_name: &str,
@@ -775,11 +779,11 @@ pub(super) fn observation_call_record_types(
 /// index into the per-case trace `__obs`. Emitted once per module that observes.
 /// Finding #17: source lives at `emitter/test_runtime/observation.ts`.
 pub(super) fn observation_runtime_helpers() -> String {
-    include_str!("../../emitter/test_runtime/observation.ts").to_string()
+    include_str!("../test_runtime/observation.ts").to_string()
 }
 
 pub(super) fn property_runtime_helpers() -> String {
-    include_str!("../../emitter/test_runtime/property.ts").to_string()
+    include_str!("../test_runtime/property.ts").to_string()
 }
 
 /// v0.119 (testing track slice 7, ADR 0155): the history-property runtime, emitted
@@ -791,5 +795,5 @@ pub(super) fn property_runtime_helpers() -> String {
 /// each reduction so the counterexample stays reachable) then shrinks the surviving
 /// arguments — reporting the seed, the shrunk sequence, and a reproduce line.
 pub(super) fn history_runtime_helpers() -> String {
-    include_str!("../../emitter/test_runtime/history.ts").to_string()
+    include_str!("../test_runtime/history.ts").to_string()
 }

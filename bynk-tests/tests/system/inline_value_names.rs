@@ -58,9 +58,9 @@ fn analyse(
 }
 
 fn emitted_ts(src: &str) -> String {
-    let out = bynk_emit::project::compile_in_memory(
+    let out = bynk_driver::project::compile_in_memory(
         src,
-        bynk_emit::project::BuildTarget::Bundle,
+        bynk_driver::project::BuildTarget::Bundle,
         Default::default(),
     )
     .unwrap_or_else(|_| panic!("fixture should compile:\n{src}"));

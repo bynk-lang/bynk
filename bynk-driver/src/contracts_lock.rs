@@ -6,7 +6,7 @@
 //! `bynk_project::contracts_lock`; a build only reads the file, and `bynk
 //! deploy --accept-compatible-skew` is what writes it.
 //!
-//! [`CompileOptions::contracts_lock`]: bynk_emit::project::CompileOptions::contracts_lock
+//! [`CompileOptions::contracts_lock`]: crate::project::CompileOptions::contracts_lock
 
 use std::io;
 use std::path::{Path, PathBuf};

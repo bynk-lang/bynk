@@ -34,7 +34,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use bynk_emit::project::AttributedError;
+use crate::project::AttributedError;
 use bynk_syntax::ast::{CommonsForm, Context, SourceUnit};
 use bynk_syntax::lexer::{TokenKind, doc_block_body_range, tokenize};
 use bynk_syntax::parser::parse_unit_with_recovery;
@@ -762,7 +762,7 @@ impl DocExamples {
         for (i, (span, _)) in ae.error.labels.iter_mut().enumerate() {
             if matches!(
                 ae.label_files.get(i),
-                None | Some(bynk_emit::project::LabelFile::Primary)
+                None | Some(crate::project::LabelFile::Primary)
             ) {
                 *span = map(*span);
             }

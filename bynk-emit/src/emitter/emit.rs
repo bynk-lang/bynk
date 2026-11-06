@@ -2583,7 +2583,7 @@ capability Clock {
   fn now[T](unit: T) -> T
 }
 "#;
-        let out = match crate::project::compile_in_memory(
+        let out = match bynk_driver::project::compile_in_memory(
             src,
             bynk_check::project_model::BuildTarget::Bundle,
             Default::default(),
@@ -9467,7 +9467,7 @@ type PaymentError = enum { Declined, InsufficientFunds }
     /// `project::compile_in_memory` directly with a context source instead.
     #[test]
     fn event_type_emits_through_the_project_pipelines_event_mirror_loop() {
-        let out = crate::project::compile_in_memory(
+        let out = bynk_driver::project::compile_in_memory(
             "context demo {\n  event Notified = { id: String }\n}\n",
             bynk_check::project_model::BuildTarget::Bundle,
             Default::default(),
@@ -9550,7 +9550,7 @@ context demo {
 "#;
 
     fn emit_store_context(src: &str) -> String {
-        let out = crate::project::compile_in_memory(
+        let out = bynk_driver::project::compile_in_memory(
             src,
             bynk_check::project_model::BuildTarget::Bundle,
             Default::default(),

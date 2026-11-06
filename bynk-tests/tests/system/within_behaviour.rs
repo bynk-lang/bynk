@@ -14,7 +14,7 @@
 //! - **a lambda written in the handler** closes over its `deps`.
 //!
 //! A second test runs the harness's own virtual-time runtime
-//! (`emitter/test_runtime/virtual_time.ts`) the same way, to pin what a Bynk
+//! (`project/test_runtime/virtual_time.ts`) the same way, to pin what a Bynk
 //! case cannot reach: a real provider call is not timed out by auto-advance,
 //! `advance Clock by` fires the timers that fall due, and a tie goes to the
 //! effect.
@@ -385,7 +385,7 @@ fn the_virtual_time_runtime_advances_only_virtual_time() {
     let tmp = std::env::temp_dir().join(format!("bynk-virtual-time-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
-    let runtime = include_str!("../../../bynk-emit/src/emitter/test_runtime/virtual_time.ts");
+    let runtime = include_str!("../../../bynk-driver/src/project/test_runtime/virtual_time.ts");
     // The real helper, reading the harness timers from `exec.timers`.
     fs::write(
         tmp.join("result.ts"),

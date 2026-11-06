@@ -3,13 +3,13 @@
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
 use super::*;
-use crate::emitter::RuntimeUse;
-use crate::emitter::wrangler::{BindingSource, WorkerBinding};
+use bynk_emit::emitter::RuntimeUse;
+use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding};
 // #1759: every namespace a test module imports, from one definition.
-use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::D1Migrations;
 use bynk_check::test_suites::{self};
+use bynk_emit::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_ts::{SourceMapBuilder, TsDecl, TsExpr, TsProgram, TsStmt};
 use std::sync::Arc;
 
@@ -478,7 +478,7 @@ pub(super) fn emit_integration_module(
         case_out.push_str("  try {\n");
         if with_env {
             let entries = env_entries(&input.env_values);
-            crate::emitter::extend_printed_at(
+            bynk_emit::emitter::extend_printed_at(
                 &mut case_out,
                 vec![TsStmt::assign(
                     ident("__bynkEnv"),
@@ -516,7 +516,7 @@ pub(super) fn emit_integration_module(
                 names.dedup();
                 let type_names = aliased_types(table, |n| is_public_type(table, n));
                 harness_bound.extend(names.iter().cloned());
-                crate::emitter::extend_printed_at(
+                bynk_emit::emitter::extend_printed_at(
                     &mut case_out,
                     emit_ns_destructure(&ns, &names, &type_names),
                     2,
@@ -528,7 +528,7 @@ pub(super) fn emit_integration_module(
         // #1883, slice 3: the assets a case may name, from their owners.
         for (owner, names) in &asset_owners {
             harness_bound.extend(names.iter().cloned());
-            crate::emitter::extend_printed_at(
+            bynk_emit::emitter::extend_printed_at(
                 &mut case_out,
                 emit_ns_destructure(&test_ns(owner), names, &[]),
                 2,
@@ -632,7 +632,7 @@ pub(super) fn emit_integration_module(
                 continue;
             };
             let type_names = aliased_types(t, |n| named.contains(n));
-            crate::emitter::extend_printed_at(
+            bynk_emit::emitter::extend_printed_at(
                 &mut case_out,
                 emit_ns_destructure(&test_ns(p), &named, &type_names),
                 2,

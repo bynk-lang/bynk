@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
-use bynk_emit::project::{BuildTarget, RemoteTests};
+use crate::project::{BuildTarget, RemoteTests};
 
 use crate::remote::{DEV, DEV_ENV_ENV, DEV_SECRETS_ENV, DEV_URLS_ENV, is_loopback_http};
 use crate::test_json::TestRun;
@@ -190,7 +190,7 @@ fn plan(program: &str, args: &DevRunArgs) -> Result<Plan, Planned> {
     } else {
         options
     };
-    let out = match bynk_emit::project::compile_project(&options) {
+    let out = match crate::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => {
             if args.json {

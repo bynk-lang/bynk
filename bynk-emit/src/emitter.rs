@@ -91,12 +91,12 @@ mod cmp;
 mod codec;
 mod lower;
 pub(crate) mod runtime_use;
-pub(crate) use lower::*;
+pub use lower::*;
 pub use runtime_use::RuntimeUse;
 pub mod emit;
 pub(crate) use bynk_check::icu::{self, *};
 pub(crate) use bynk_check::websocket;
-pub(crate) use emit::*;
+pub use emit::*;
 
 const INDENT_STEP: usize = 2;
 
@@ -6448,11 +6448,7 @@ pub fn ts_type_ref(r: &TypeRef) -> String {
 /// Not a new structural walk — `ts_type_ref_to_ts_type` (below) already
 /// builds a real `TsType` from every `TypeRef` variant; this function is
 /// that same build, just with the qualifying closure threaded through.
-pub(crate) fn ts_type_ref_qualified_ts_type(
-    r: &TypeRef,
-    scope: &HashSet<String>,
-    ns: &str,
-) -> TsType {
+pub fn ts_type_ref_qualified_ts_type(r: &TypeRef, scope: &HashSet<String>, ns: &str) -> TsType {
     ts_type_ref_to_ts_type(
         r,
         Some(&|name| scope.contains(name).then(|| ns.to_string())),

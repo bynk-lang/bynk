@@ -149,10 +149,10 @@ fn starter_renders_compiles_and_is_fmt_clean() {
     fs::write(root.join(format!("{name}.bynk")), &rendered).unwrap();
 
     let result =
-        bynk_emit::project::compile_project(&bynk_testkit::compile_options_single(root.clone()))
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_single(root.clone()))
             .map(|_| ())
             .map_err(|f| {
-                bynk_emit::project::ProjectFailure::flatten(f)
+                bynk_driver::project::ProjectFailure::flatten(f)
                     .iter()
                     .map(|e| format!("{}: {}", e.category, e.message))
                     .collect::<Vec<_>>()
@@ -174,7 +174,7 @@ fn scaffolded_manifest_paths_are_read_by_the_tools() {
     fs::create_dir_all(dir.join("tests")).unwrap();
     let manifest = new::render(include_str!("../src/templates/bynk.toml"), "demo");
     fs::write(dir.join("bynk.toml"), manifest).unwrap();
-    let paths = bynk_emit::project::try_read_project_paths(&dir)
+    let paths = bynk_driver::project::try_read_project_paths(&dir)
         .expect("the scaffolded manifest must be well-formed TOML");
     assert_eq!(
         paths.include,

@@ -12,7 +12,7 @@
 //! [`emit_workers`] compile several in-memory files — a context with the
 //! contexts it consumes, or a unit with its `tests/` suite — and return every
 //! emitted document by output path. No disk access: the files ride in the
-//! overlay, as for [`crate::project::compile_in_memory`], so this module stays
+//! overlay, as for [`bynk_driver::project::compile_in_memory`], so this module stays
 //! clear of `fs_below_driver`.
 //!
 //! ```ignore
@@ -34,11 +34,11 @@ pub(crate) fn emit_source(src: &str) -> String {
 ///
 /// A bundle needing `uses bynk.locale` can't go through [`emit_source`] — the
 /// single-file path rejects `uses` by construction — so this drives
-/// [`crate::project::compile_in_memory`] instead and picks the user's own
+/// [`bynk_driver::project::compile_in_memory`] instead and picks the user's own
 /// unit out of the returned module graph.
 pub(crate) fn emit_bundle(body: &str) -> String {
     let src = format!("commons app.bundle\n\nuses bynk.locale\nuses bynk.locale.types\n\n{body}");
-    let out = match crate::project::compile_in_memory(
+    let out = match bynk_driver::project::compile_in_memory(
         &src,
         bynk_check::project_model::BuildTarget::Bundle,
         Default::default(),
@@ -78,7 +78,7 @@ pub(crate) fn emit_project_with_tests(
     target: bynk_check::project_model::BuildTarget,
     tests: bool,
 ) -> Emitted {
-    match crate::project::compile_files_in_memory(files, target, Default::default(), tests) {
+    match bynk_driver::project::compile_files_in_memory(files, target, Default::default(), tests) {
         Ok(out) => Emitted {
             docs: out
                 .artefacts

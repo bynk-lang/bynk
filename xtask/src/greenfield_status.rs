@@ -1227,9 +1227,10 @@ fn brace_delta(line: &str, mut state: BraceScanState) -> (i32, BraceScanState) {
 
 // --- Gated probe 3: options_sources --------------------------------------
 
-/// R2.3. `CompileOptions` (in `bynk-emit/src/project.rs`) has a `sources` field.
+/// R2.3. `CompileOptions` (in `bynk-driver/src/project.rs`; it was `bynk-emit/src/project.rs`
+/// until crate-hygiene D1, #2982) has a `sources` field.
 fn options_sources(root: &Path) -> Probe {
-    let src = std::fs::read_to_string(root.join("bynk-emit/src/project.rs")).unwrap_or_default();
+    let src = std::fs::read_to_string(root.join("bynk-driver/src/project.rs")).unwrap_or_default();
     let present = struct_body(&src, "CompileOptions").is_some_and(|body| body.contains("sources"));
     Probe {
         name: "options_sources",
@@ -1352,10 +1353,17 @@ fn emit_diagnostics(root: &Path) -> Probe {
     let mut parts = Vec::new();
     for (label, dir) in [
         ("bynk-emit", "bynk-emit/src"),
+        // `project` moved here from `bynk-emit` (crate-hygiene D1, #2982): its diagnostics
+        // are still the code generator's orchestration, so they stay in the reading.
+        ("bynk-driver", "bynk-driver/src"),
         ("bynk-check", "bynk-check/src"),
     ] {
         let mut naive: BTreeSet<String> = BTreeSet::new();
-        for (_, contents) in rust_files(&root.join(dir)) {
+        for (path, contents) in rust_files(&root.join(dir)) {
+            // Only the moved `project` module counts for the driver, not its other files.
+            if label == "bynk-driver" && !path.to_string_lossy().contains("src/project") {
+                continue;
+            }
             for lit in bynk_dotted_literals(&contents) {
                 naive.insert(lit.to_string());
             }
@@ -1497,22 +1505,17 @@ fn ide_emit_edge(root: &Path) -> Probe {
 /// the same way a file moving to `bynk-check`/`bynk-project` already leaves
 /// silently rather than needing its own exclusion-list removal step. Two
 /// named exclusions remain.
-const AST_IMPORTER_EXCEPTIONS: &[&str] = &["project/tests_emit.rs", "emitter/serialisation.rs"];
+///
+/// **Crate-hygiene D1 (#2982, PR 3):** `project/tests_emit.rs` (and the ten modules PR 2
+/// split it into) left `bynk-emit/src` for `bynk-driver/src/project/`, so the exception
+/// that named it is gone with the files; the probe's reading is unchanged because those
+/// files were never counted.
+const AST_IMPORTER_EXCEPTIONS: &[&str] = &["emitter/serialisation.rs"];
 
-/// The directory `project/tests_emit.rs` was split into (crate-hygiene D1, #2982, PR 2).
-/// The exception above names the whole family: the split gave it ten child files that
-/// import the AST for exactly the reason the parent did, so the exclusion follows the
-/// path rather than the one file name (a re-pointing; the probe's reading is unchanged).
-const AST_IMPORTER_EXCEPTION_DIRS: &[&str] = &["project/tests_emit/"];
-
-/// Is `rel_path` (relative to `bynk-emit/src`) one of [`AST_IMPORTER_EXCEPTIONS`], or
-/// under one of [`AST_IMPORTER_EXCEPTION_DIRS`]?
+/// Is `rel_path` (relative to `bynk-emit/src`) one of [`AST_IMPORTER_EXCEPTIONS`]?
 fn is_named_ast_importer(rel_path: &Path) -> bool {
     let rel = rel_path.to_string_lossy().replace('\\', "/");
     AST_IMPORTER_EXCEPTIONS.contains(&rel.as_str())
-        || AST_IMPORTER_EXCEPTION_DIRS
-            .iter()
-            .any(|d| rel.starts_with(d))
 }
 
 /// Is `contents` a module (not a nested block) that glob-imports its parent —
@@ -1745,6 +1748,23 @@ fn is_path_construction_line(line: &str) -> bool {
         || line.contains(".with_file_name(format!")
 }
 
+/// The code-generation family's source files, relative to the crate `src/` each lives
+/// in: all of `bynk-emit/src`, plus the orchestration that used to be `bynk-emit`'s
+/// `project` module and now lives at `bynk-driver/src/project{.rs,/}` (crate-hygiene D1,
+/// #2982). The probes that read "the emitter's source" ([`ts_writes`], [`ts_any`],
+/// [`verbatim_origins`], [`verbatim_sites`]) are re-pointed here so moving `project` to
+/// the driver does not drop emission code out of their universe. The exclusion rules in
+/// them name `project.rs` / `project/…` relative to the old root, which still resolves.
+fn codegen_family_files(root: &Path) -> Vec<(PathBuf, String)> {
+    let mut files = rust_files_relative(&root.join("bynk-emit/src"));
+    files.extend(
+        rust_files_relative(&root.join("bynk-driver/src"))
+            .into_iter()
+            .filter(|(p, _)| p == Path::new("project.rs") || p.starts_with("project")),
+    );
+    files
+}
+
 /// Relativises every path in [`rust_files`]'s output against `dir`, so [`ts_writes`]
 /// and [`ts_any`]'s counting logic ([`ts_writes_violations`], [`ts_any_violations`])
 /// takes the same `&[(PathBuf, String)]` shape [`production_std_fs_files`] does — an
@@ -1831,11 +1851,10 @@ fn ts_writes_violations(files: &[(PathBuf, String)]) -> usize {
 /// containing `write!`, `writeln!` or `format!`. See [`ts_writes_violations`] for the
 /// counting logic itself.
 fn ts_writes(root: &Path) -> Probe {
-    let dir = root.join("bynk-emit/src");
     Probe {
         name: "ts_writes",
         gated: true,
-        reads: ts_writes_violations(&rust_files_relative(&dir)).to_string(),
+        reads: ts_writes_violations(&codegen_family_files(root)).to_string(),
     }
 }
 
@@ -1918,11 +1937,10 @@ fn ts_any_violations(files: &[(PathBuf, String)]) -> usize {
 /// `.rs` files, and R7.1 governs the emitted *tree*, not the hand-written runtime R7.7
 /// separately covers.
 fn ts_any(root: &Path) -> Probe {
-    let dir = root.join("bynk-emit/src");
     Probe {
         name: "ts_any",
         gated: true,
-        reads: ts_any_violations(&rust_files_relative(&dir)).to_string(),
+        reads: ts_any_violations(&codegen_family_files(root)).to_string(),
     }
 }
 
@@ -1950,11 +1968,10 @@ fn ts_any(root: &Path) -> Probe {
 /// call-site style always qualifies (`TsStmt::verbatim(VerbatimOrigin::X,
 /// …)`), so this is a theoretical undercount, not an observed one.
 fn verbatim_origins(root: &Path) -> Probe {
-    let dir = root.join("bynk-emit/src");
     Probe {
         name: "verbatim_origins",
         gated: true,
-        reads: verbatim_origins_violations(&rust_files_relative(&dir)).to_string(),
+        reads: verbatim_origins_violations(&codegen_family_files(root)).to_string(),
     }
 }
 
@@ -2025,11 +2042,10 @@ fn verbatim_origins_violations(files: &[(PathBuf, String)]) -> usize {
 /// **0** at this slice's own landing, same reason `verbatim_origins` did;
 /// stays gated after retirement as a regression ratchet.
 fn verbatim_sites(root: &Path) -> Probe {
-    let dir = root.join("bynk-emit/src");
     Probe {
         name: "verbatim_sites",
         gated: true,
-        reads: verbatim_sites_violations(&rust_files_relative(&dir)).to_string(),
+        reads: verbatim_sites_violations(&codegen_family_files(root)).to_string(),
     }
 }
 
@@ -2421,7 +2437,15 @@ fn model_readers_beyond_emit(root: &Path) -> Probe {
             owner_files.push((owner.to_string(), path, contents));
         }
     }
-    let consumer_files = workspace_crate_src_files(root);
+    // `bynk-driver`'s `project` module is the old `bynk-emit::project` (crate-hygiene D1,
+    // #2982): the emitter's own orchestration, so it is not a reader "past the emitter".
+    let consumer_files: Vec<_> = workspace_crate_src_files(root)
+        .into_iter()
+        .filter(|(krate, path, _)| {
+            !(krate == "bynk-driver"
+                && (path == Path::new("project.rs") || path.starts_with("project")))
+        })
+        .collect();
     let excluded = ["bynk-ir", "bynk-lower", "bynk-emit"];
     let (read, _) = pub_items_by_readership(&owners, &excluded, &owner_files, &consumer_files);
     Probe {
@@ -3587,7 +3611,8 @@ mod tests {
     /// `bynk-emit/src` entirely, not merely this list.)
     #[test]
     fn ast_importer_exclusion_is_named_not_prefixed() {
-        assert!(is_named_ast_importer(Path::new("project/tests_emit.rs")));
+        // `project/tests_emit.rs` left `bynk-emit/src` with `project` (D1, #2982).
+        assert!(!is_named_ast_importer(Path::new("project/tests_emit.rs")));
         assert!(is_named_ast_importer(Path::new("emitter/serialisation.rs")));
         assert!(!is_named_ast_importer(Path::new("project.rs")));
         assert!(!is_named_ast_importer(Path::new("emitter.rs")));

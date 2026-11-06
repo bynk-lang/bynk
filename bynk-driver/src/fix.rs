@@ -21,7 +21,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
-use bynk_emit::project;
+use crate::project;
 use bynk_syntax::error::CompileError;
 use bynk_syntax::fix::{apply, lone_fix, select};
 use bynk_syntax::span::Span;

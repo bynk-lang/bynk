@@ -10,6 +10,7 @@ description = "Content-ownership track (#1086) slice 3: cross-crate test fixture
 
 [dependencies]
 bynk-ide.workspace = true
+bynk-driver.workspace = true
 bynk-emit.workspace = true
 
 [lib]

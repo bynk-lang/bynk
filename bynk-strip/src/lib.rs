@@ -169,13 +169,13 @@ fn compose_maps(bynk_to_ts: &str, ts_to_js: &oxc_sourcemap::SourceMap<'_>) -> Op
     Some(map.to_json_string())
 }
 
-/// Rewrite a compiled [`ProjectOutput`](bynk_emit::project::ProjectOutput) from
+/// Rewrite a compiled [`ProjectOutput`](bynk_emit::emit_model::ProjectOutput) from
 /// TypeScript into a JavaScript artefact (the in-browser track's first-class JS
 /// output — ADR 0137). The emitter always produces TypeScript; a JS artefact is
 /// that same output with types stripped, which is total because the emitter is
 /// strip-only (ADR 0136).
 ///
-/// Dispatches on [`Document`](bynk_emit::project::Document) directly (P7.6,
+/// Dispatches on [`Document`](bynk_emit::emit_model::Document) directly (P7.6,
 /// #1309) — no `CompiledFile` text intermediate. Every `Ts` document is
 /// printed through the one printer that owns a character (R7.3), then
 /// type-stripped and renamed to `.js` as its own `Document::Js`; `tsconfig.json`
@@ -188,8 +188,8 @@ fn compose_maps(bynk_to_ts: &str, ts_to_js: &oxc_sourcemap::SourceMap<'_>) -> Op
 /// replaces. Import specifiers are already `.js` (the default `ImportExt`),
 /// so the renamed tree resolves as-is.
 pub fn strip_project_to_js(
-    out: bynk_emit::project::ProjectOutput,
-) -> Result<bynk_emit::project::ProjectOutput, StripError> {
+    out: bynk_emit::emit_model::ProjectOutput,
+) -> Result<bynk_emit::emit_model::ProjectOutput, StripError> {
     strip_project(out, None).map(|(out, _)| out)
 }
 
@@ -203,17 +203,17 @@ pub type JsMaps = std::collections::BTreeMap<PathBuf, String>;
 /// are mapped, so the rest skip the work. The returned `ProjectOutput` is identical to
 /// [`strip_project_to_js`]'s: the maps are not added as documents.
 pub fn strip_project_to_js_mapped(
-    out: bynk_emit::project::ProjectOutput,
+    out: bynk_emit::emit_model::ProjectOutput,
     only: &std::collections::HashSet<PathBuf>,
-) -> Result<(bynk_emit::project::ProjectOutput, JsMaps), StripError> {
+) -> Result<(bynk_emit::emit_model::ProjectOutput, JsMaps), StripError> {
     strip_project(out, Some(only))
 }
 
 fn strip_project(
-    out: bynk_emit::project::ProjectOutput,
+    out: bynk_emit::emit_model::ProjectOutput,
     only: Option<&std::collections::HashSet<PathBuf>>,
-) -> Result<(bynk_emit::project::ProjectOutput, JsMaps), StripError> {
-    use bynk_emit::project::{Artefacts, Document, sibling_path};
+) -> Result<(bynk_emit::emit_model::ProjectOutput, JsMaps), StripError> {
+    use bynk_emit::emit_model::{Artefacts, Document, sibling_path};
     use std::collections::BTreeMap;
 
     let bynk_maps: BTreeMap<PathBuf, String> = if only.is_some() {
@@ -284,7 +284,7 @@ fn strip_project(
     // #1883, slice 0: static assets are served as-is by the platform; type
     // stripping has nothing to do to them.
     Ok((
-        bynk_emit::project::ProjectOutput {
+        bynk_emit::emit_model::ProjectOutput {
             artefacts: Artefacts {
                 docs,
                 assets: out.artefacts.assets,
@@ -448,7 +448,7 @@ mod tests {
     /// pins "nothing but `main` changed", the same discipline as before.
     #[test]
     fn strip_project_to_js_patches_wrangler_toml_main_structurally() {
-        use bynk_emit::project::{BuildTarget, Document, compile_in_memory};
+        use bynk_driver::project::{BuildTarget, Document, compile_in_memory};
 
         let out = compile_in_memory(
             "context api {\n  service routes from http {\n    on GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor {\n      Ok(\"ok\")\n    }\n  }\n}\n",
@@ -507,7 +507,7 @@ mod tests {
     /// build's output by hand, so this tests stripping alone.
     #[test]
     fn strip_project_to_js_passes_static_assets_through_unchanged() {
-        use bynk_emit::project::{BuildTarget, compile_in_memory, worker_assets_dir};
+        use bynk_driver::project::{BuildTarget, compile_in_memory, worker_assets_dir};
 
         let mut out = compile_in_memory(
             "commons only\n\nfn f() -> Int {\n  1\n}\n",
