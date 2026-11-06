@@ -555,30 +555,26 @@ mod tests {
     /// the compiler would accept such a use, so this test reads the module's own
     /// production source (everything before this `tests` module) and fails when
     /// it names any crate other than `bynk_syntax`, `ariadne` or `std`, or
-    /// reaches into the rest of the driver with `crate::`.
-    #[test]
-    fn render_names_only_syntax_and_ariadne() {
+    /// reaches into the rest of the driver with `crate::` or `super::`.
+    /// The offences in `production` source: a line naming a crate other than
+    /// `bynk_syntax`, `ariadne` or `std`, or reaching into the rest of the
+    /// driver with `crate::` or `super::` (inside `render`, `super` is the crate
+    /// root). Only `self` is accepted as a local root.
+    fn offences(production: &str) -> Vec<String> {
         const ALLOWED: [&str; 3] = ["bynk_syntax", "ariadne", "std"];
-        let source = include_str!("render.rs");
-        let production = source
-            .split("\n#[cfg(test)]\nmod tests")
-            .next()
-            .expect("split always yields a first piece");
-        assert!(
-            production.len() < source.len(),
-            "the guard could not find this file's test module, so it would scan the tests too"
-        );
         let mut offences = Vec::new();
         for (n, line) in production.lines().enumerate() {
             let code = line.split("//").next().unwrap_or("").trim();
             if code.is_empty() {
                 continue;
             }
-            if code.contains("crate::") {
-                offences.push(format!(
-                    "line {}: `crate::` reaches the rest of the driver: {code}",
-                    n + 1
-                ));
+            for local in ["crate::", "super::"] {
+                if code.contains(local) {
+                    offences.push(format!(
+                        "line {}: `{local}` reaches the rest of the driver: {code}",
+                        n + 1
+                    ));
+                }
             }
             // Every `bynk_…` identifier must be `bynk_syntax`.
             let mut rest = code;
@@ -592,21 +588,55 @@ mod tests {
                 }
                 rest = &rest[i + word.len().max(1)..];
             }
-            // Every `use` must start at an allowed root (or this module's own `super`/`self`).
+            // Every `use` must start at an allowed root, or `self`.
             let import = code.strip_prefix("pub ").unwrap_or(code);
             if let Some(path) = import.strip_prefix("use ") {
                 let root = path.split("::").next().unwrap_or("").trim();
-                if !ALLOWED.contains(&root) && !["super", "self"].contains(&root) {
+                if !ALLOWED.contains(&root) && root != "self" {
                     offences.push(format!("line {}: `use` of `{root}`: {code}", n + 1));
                 }
             }
         }
+        offences
+    }
+
+    #[test]
+    fn render_names_only_syntax_and_ariadne() {
+        let source = include_str!("render.rs");
+        let production = source
+            .split("\n#[cfg(test)]\nmod tests")
+            .next()
+            .expect("split always yields a first piece");
+        assert!(
+            production.len() < source.len(),
+            "the guard could not find this file's test module, so it would scan the tests too"
+        );
+        let offences = offences(production);
         assert!(
             offences.is_empty(),
             "ADR 0100 (amended by D2): render may name only bynk_syntax, ariadne and std — \
              the AttributedError → CompileError flattening stays above it:\n{}",
             offences.join("\n")
         );
+    }
+
+    /// The guard can fail: each way of reaching the rest of the driver or
+    /// `bynk-emit` is flagged, and ordinary render code is not.
+    #[test]
+    fn the_render_guard_flags_what_it_exists_to_flag() {
+        for bad in [
+            "use bynk_emit::ProjectFailure;",
+            "use crate::project::ProjectFailure;",
+            "use super::project::ProjectFailure;",
+            "let f: super::project::ProjectFailure = todo!();",
+            "let f: crate::project::ProjectFailure = todo!();",
+            "pub use bynk_check::Thing;",
+        ] {
+            assert!(!offences(bad).is_empty(), "the guard let `{bad}` through");
+        }
+        let clean = "use std::path::Path;\nuse ariadne::Source;\nuse bynk_syntax::{CompileError, span};\n\
+                     pub use bynk_syntax::error::LabelHome;\nuse self::helper::Thing;\n// use bynk_emit::X;\n";
+        assert_eq!(offences(clean), Vec::<String>::new());
     }
 
     /// #2838: a hint is worded `hint`, and a terminal drops it.
