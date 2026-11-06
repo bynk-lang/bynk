@@ -2348,7 +2348,7 @@ commons demo {
 
     #[test]
     fn type_shape_record_drops_a_fields_own_inline_refinement() {
-        // Decision B extension, `bynk-ir`'s own `TypeShape::Record` doc
+        // Decision B extension, the vocabulary's own `TypeShape::Record` doc
         // comment: a field's inline `where` clause is a construction-time
         // constraint the checker already enforces, not part of the emitted
         // shape — pin that the field still lowers to `(name, ty)` with the

@@ -108,9 +108,9 @@ boundaries, and several gated probes are defined by path or by crate:
 | `options_sources` | present | `struct CompileOptions` in `bynk-emit/src/project.rs` | moving `project` to the driver (§8) |
 | `fs_below_driver` | 0 | files touching `std::fs` below the driver | moving `project` to the driver. Its `std::fs` uses sit in `project.rs`'s trailing test block, so they leave the counted set. |
 | `emit_diagnostics` | `bynk-emit=14/19` | distinct `"bynk.*"` literals per crate `src/` | moving `project` to the driver. `project.rs` holds most of `bynk-emit`'s. |
-| `ide_emit_edge` | absent | a `bynk-ide` → `bynk-emit` edge | must stay absent. §6 S1 adds `bynk-ide` → `bynk-lower`, which is allowed. |
+| `ide_emit_edge` | absent | a `bynk-ide` → `bynk-emit` edge | must stay absent. B1 added `bynk-ide` → `bynk-model` (then `bynk-lower`), which is allowed. |
 | `unconsumed_ir_items` | 0 | public items of `bynk-model`, owner `bynk-model` (B1 re-pointed it from `bynk-ir`, owners `bynk-ir`/`bynk-lower`) | re-pointed by B1's rename |
-| `model_readers_beyond_emit` | 3 | public items of `bynk-model` read outside `bynk-model` and `bynk-emit` (added by B1; may only rise) | B2, B3 (rising) |
+| `model_readers_beyond_emit` | 3 | public items of `bynk-model` read outside `bynk-model`, `bynk-emit` and `bynk-driver`'s `project` module (added by B1; may only rise) | B3 PR 4 (#2999): 3 → 7, two of the four new names (`EntryParam`, `entry_handlers`) being text collisions in `bynk-wasm`. B2 is invariant: the reading lists *items*, and B2's readers name items already on it. |
 
 **Governing rules:**
 - A slice that moves a probe re-points or re-stamps it (`cargo xtask greenfield-status --apply`)
@@ -218,6 +218,13 @@ already route through the IR):
 was missing. `bynk-fmt/src/fmt.rs` matches the same variants as the source printer and is out of
 scope, as M-1's domain clause says.*
 
+*Re-counted for B2–B3 (#2999) at `bb08a1835`. The `bynk-ide` rows are B1's (0 `HandlerKind::`; the
+8 `ServiceProtocol::` lines in `symbols.rs` cite the domain clause). `openapi.rs` and `smoke.rs` are
+unchanged. D1 (#2982) moved the test-module emitter into `bynk-driver`, which brings a residue this
+table never counted because it sat in `bynk-emit`: `project/tests_emit/system_support.rs` (4
+`HandlerKind::`, 3 `ServiceProtocol::`) and `tests_emit/test_module.rs` (1 and 1). It is out of B2
+by #2999's DECISION D and tracked in #3000.*
+
 R6.16 (handler-invocation origin independence) gave the emitter one answer to "what is this
 handler?" The editor, the OpenAPI generator and the smoke runner don't share it.
 
@@ -295,7 +302,7 @@ items stay plain data, with no lifetimes and no references into the AST.
 |---|---|
 | **B1 — the proof slice** | `bynk_ide::sequence`, `wire_contract` and `symbols` read `IrHandlerKind`/`IrHttpMethod`/`ProtocolIr` through `bynk-lower` instead of matching AST variants. Adds the M-3 ratchet. If it passes, it closes with the Q3 rename. |
 | B2 | `bynk openapi` and `bynk-driver/src/smoke.rs` move onto the same items. |
-| B3 | Entry signatures (#2695) become model items, read by `analyse_in_memory_project` and `bynk-wasm`. |
+| B3 | Entry signatures (#2695) become model items (`bynk_model::entry`), computed by the driver's `build_output` (`bynk-driver/src/project.rs`), carried in `bynk-emit`'s `ProjectOutput.entry_handlers` and rendered by `bynk-wasm`. |
 | B4 | Under Q1(a): `ArchModel`'s shapes move in, with `bynk_ide::architecture` keeping the queries. Under Q1(b): `WireModel` moves down too. |
 
 **Exit criterion (B1).** The workstream continues if moving the three `bynk-ide` files onto the
@@ -516,7 +523,7 @@ Provisional. Each slice becomes an increment proposal, filed as a sub-issue of t
 | 2 | A4 | A1–A3 | adds `unused_deps` |
 | 2 | C3 | — | no |
 | 3 | C4b, then C4c | C3, C4a | no |
-| 2 | B2, B3 | B1 passed | no |
+| 2 | B2, B3 (#2999) | B1 passed | B2: no. B3: `model_readers_beyond_emit` rises (3 → 7) in its last PR |
 | 3 | D1 (public `emitter` API, then the move) | — | `options_sources`, `fs_below_driver`, `emit_diagnostics` |
 | 4 | E1, E2 | D1 | no |
 | 1 | E4a (then E4b one release later) | — | no |

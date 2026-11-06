@@ -2846,7 +2846,7 @@ fn binder_names(e: &Expr, out: &mut Vec<String>) {
 }
 
 /// Visit `e` and every expression under it — the deep walk over
-/// [`expr_children`]. (`bynk_model::walk_exprs` is the same walk, but `bynk-ir`
+/// [`expr_children`]. (`bynk_model::walk_exprs` is the same walk, but `bynk-model`
 /// depends on this crate, so it can't be reused here.)
 fn walk_expr_tree(e: &Expr, f: &mut dyn FnMut(&Expr)) {
     f(e);

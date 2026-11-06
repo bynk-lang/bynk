@@ -472,7 +472,7 @@ fn overlay(
 /// Whether `handler` commits: whether its body writes any of `agent`'s store
 /// fields anywhere, the emitter's condition for wrapping it in the commit that
 /// checks `transition`s. This recomputes `bynk_model::body_writes_state`
-/// syntactically; `bynk-lower`'s tests pin the two together (#2220).
+/// syntactically; `bynk-model`'s builder tests pin the two together (#2220).
 pub fn handler_commits(agent: &AgentDecl, handler: &Handler) -> bool {
     handler_commits_in(handler, &store_kinds(agent))
 }
@@ -2240,7 +2240,7 @@ agent M {
     #[test]
     fn a_local_shadowing_a_store_field_does_not_make_a_handler_commit() {
         // #2220: a `let`, a match binding and a lambda parameter shadow the
-        // field just as a handler parameter does (found by `bynk-lower`'s
+        // field just as a handler parameter does (found by the model builder's
         // agreement test against `body_writes_state`).
         let src = r#"context demo
 type S = enum { A, B }

@@ -1,8 +1,10 @@
-//! `bynk_model::vocabulary` (the `bynk-ir` crate until crate-hygiene B1, #2939): the resolved *declaration-level* vocabulary `bynk-emit` reads
-//! through `bynk-lower`'s AST-analysis helpers, instead of re-deriving the
-//! same facts from `bynk_syntax::ast` a second time.
+//! `bynk_model::vocabulary` (the `bynk-ir` crate until crate-hygiene B1,
+//! #2939): the resolved *declaration-level* vocabulary the model's readers
+//! (the emitter, the editor's analysis, the CLIs) get through the builder,
+//! [`crate::lower`], instead of re-deriving the same facts from
+//! `bynk_syntax::ast` a second time.
 //!
-//! Every type here is a value some `bynk-lower` helper returns from a
+//! Every type here is a value some [`crate::lower`] function returns from a
 //! syntax-tree node plus the checker's own `TypedCommons`, and some
 //! `bynk-emit` site consumes — a service's protocol ([`ProtocolIr`]), a
 //! handler's kind ([`IrHandlerKind`]) and route cache ([`CacheIr`]), a
@@ -16,7 +18,7 @@
 //! them: four AST-walk helpers `bynk-emit` reads ([`block_uses_emit`],
 //! [`walk_block_exprs`], [`walk_exprs`], [`match_needs_if_chain`] — they
 //! live here rather than in the emitter because they were written to be
-//! shared with `bynk-lower`, and `bynk-emit` is the consumer that remains).
+//! shared with the builder, and `bynk-emit` is the consumer that remains).
 //!
 //! **Every `pub` item here has a reader outside `bynk-model`**, and the gated
 //! `unconsumed_ir_items` probe (`cargo xtask greenfield-status`) fails CI if one
@@ -30,8 +32,8 @@
 //! `design/bynk-compiler-trajectory.md` (`the-ir.md`, #1137) built here a
 //! full typed expression IR — `IrExpr`/`IrExprKind`/`IrStmt`, patterns and
 //! match compilation, `IrItem` with every declaration variant, `IrHandler`,
-//! `CommitShape` — and `bynk-lower` built the `&CheckedProgram → Ir` pass
-//! that constructed it. The emitter never consumed any of it: its own
+//! `CommitShape` — and the builder (then the `bynk-lower` crate) built the
+//! `&CheckedProgram → Ir` pass that constructed it. The emitter never consumed any of it: its own
 //! string-emitting lowerer kept reading the AST, and the one production
 //! route into the IR constructors lowered every events-service handler body
 //! and discarded the result. The follow-on track (the IR cutover,
@@ -608,7 +610,7 @@ pub fn walk_exprs(e: &Expr, f: &mut impl FnMut(&Expr)) {
 /// two match-lowering sites). It became `pub` and moved here at P6.5/P7.12
 /// so the IR lowering pass could reuse the identical predicate to record its
 /// own match form and the two could never silently disagree; that second
-/// consumer went with Slices D1/D2 of #1542. It stays in `bynk-ir` rather
+/// consumer went with Slices D1/D2 of #1542. It stays in the model rather
 /// than moving back because it is a pure predicate over the AST with no
 /// emitter state, the same footing as its three sibling walk helpers above,
 /// and moving it would be churn with no reader gained.
