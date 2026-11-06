@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Crate hygiene E1-E2 PR 4 - the `bynkc` lookup (`BYNK_BYNKC`, `PATH`, sibling) and ADR 0434's version-skew gate are retired; `BYNK_BYNKC` is ignored with a one-line warning, `--allow-skew` and `BYNK_ALLOW_SKEW` are accepted and ignored, and the `bynk doctor` compiler row is always in-process
----
+# 0741 — bynk compiles in-process everywhere; the bynkc lookup and the version-skew gate are retired
 
-## ADR: retire-bynkc-lookup-and-skew-gate
-title: bynk compiles in-process everywhere; the bynkc lookup and the version-skew gate are retired
-summary: Implements ADR 0736 for E1-E2: what happens to BYNK_BYNKC, --allow-skew and doctor's compiler row
+- **Status:** Accepted (v0.510.28)
 
 **Context.** ADR 0736 decided that `bynk` runs every command in-process and that
 ADR 0434's skew gate goes. `bynk compile` and `bynk test` (PRs 2 and 3) were the

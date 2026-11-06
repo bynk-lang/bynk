@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0741](0741-retire-bynkc-lookup-and-skew-gate.md) | **bynk compiles in-process everywhere; the bynkc lookup and the version-skew gate are retired** (v0.510.28) — Implements ADR 0736 for E1-E2: what happens to BYNK_BYNKC, --allow-skew and doctor's compiler row | Accepted (v0.510.28) |
 | [0740](0740-system-model-b2-b3.md) | **OpenAPI, the smoke runner and entry signatures move onto the system model, with protocols left where the consumer doesn't hold the model's input** (v0.510.21) — Slices B2–B3 of the crate-hygiene track: which consumers move, which AST matches stay under M-1's domain clause, and how entry signatures become model items | Accepted (v0.510.21) |
 | [0739](0739-multiline-string-language-tags.md) | **A multi-line string literal may carry a language tag for editors** (v0.510) — `"""sql` / `r"""regex`; an open, value-neutral tag the lexer accepts and editors map (amends 0694) | Accepted (v0.510) |
 | [0738](0738-suite-env-fixture-value.md) | **An `env` entry's value may be a fixture of the same suite** (v0.509) — Amends ADR 0524's literal-only values; the text is verbatim and stays in the test module once | Accepted (v0.509) |
