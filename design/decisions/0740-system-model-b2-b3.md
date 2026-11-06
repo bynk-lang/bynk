@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk test --smoke --print` heads each synthesised suite with a `/`-separated path on Windows too, as every other path the CLI shows is (it printed `src\shop\api.smoke.bynk`); the synthesised suites are pinned byte for byte, and the system model's B2–B3 decisions are recorded (crate-hygiene B2)
----
+# 0740 — OpenAPI, the smoke runner and entry signatures move onto the system model, with protocols left where the consumer doesn't hold the model's input
 
-## ADR: system-model-b2-b3
-title: OpenAPI, the smoke runner and entry signatures move onto the system model, with protocols left where the consumer doesn't hold the model's input
-summary: Slices B2–B3 of the crate-hygiene track: which consumers move, which AST matches stay under M-1's domain clause, and how entry signatures become model items
+- **Status:** Accepted (v0.510.21)
 
 **Context.** ADR 0735 made `bynk-model` the system model and set M-1 to M-4,
 including M-1's domain clause: "M-1 applies where the consumer holds the model's
