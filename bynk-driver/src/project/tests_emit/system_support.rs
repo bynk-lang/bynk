@@ -343,7 +343,8 @@ pub(super) fn emit_system_http_support(
     // #2685: whether the typed drivers name their route to the decoder.
     smoke: bool,
 ) -> SystemHttpSupport {
-    use bynk_syntax::ast::{HandlerKind, ServiceProtocol};
+    use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
+    use bynk_syntax::ast::ServiceProtocol;
     let mut http_services: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut declared: DeclaredRoutes = std::collections::HashSet::new();
     let mut route_body: RouteBodyMap = HashMap::new();
@@ -406,22 +407,19 @@ pub(super) fn emit_system_http_support(
     svc_names.sort();
     for sname in svc_names {
         let decl = &table.services[sname];
+        // M-1's domain clause (ADR 0735; crate-hygiene B4, #3012): this
+        // function holds the target's symbol table, not its `TypedCommons`, so it
+        // doesn't hold `bynk_model::lower_protocol_ir`'s input.
         if !matches!(decl.protocol, ServiceProtocol::Http) {
             continue;
         }
         http_services.insert(sname.clone());
         for h in &decl.handlers {
-            let HandlerKind::Http { method, path } = &h.kind else {
+            let IrHandlerKind::Http { method, path } = lower_handler_kind_ir(&h.kind) else {
                 continue;
             };
             declared.insert((sname.clone(), method.as_str().to_string(), path.clone()));
-            let bynk_model::IrHandlerKind::Http {
-                method: ir_method, ..
-            } = bynk_model::lower_handler_kind_ir(&h.kind)
-            else {
-                unreachable!("h.kind already matched HandlerKind::Http above")
-            };
-            let key = bynk_emit::emitter::http_handler_method_name_ir(ir_method, path);
+            let key = bynk_emit::emitter::http_handler_method_name_ir(method, &path);
             // Split the handler's params into path params (matching `:name` in
             // the pattern, in order) and the optional body (the remaining param).
             let path_params: Vec<&str> = path
@@ -1256,7 +1254,8 @@ pub(super) fn emit_system_job_support(
     runtime_use: &RuntimeUse,
     target_sends: bool,
 ) -> SystemJobSupport {
-    use bynk_syntax::ast::{HandlerKind, ServiceProtocol};
+    use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
+    use bynk_syntax::ast::ServiceProtocol;
     let mut services = emitter::SystemJobServices::default();
     let mut drivers: Vec<TsStmt> = Vec::new();
     let Some(table) = unit_tables.get(target) else {
@@ -1273,11 +1272,14 @@ pub(super) fn emit_system_job_support(
     svc_names.sort();
     for sname in svc_names {
         let decl = &table.services[sname];
+        // M-1's domain clause (ADR 0735; crate-hygiene B4, #3012): this
+        // function holds the target's symbol table, not its `TypedCommons`, so it
+        // doesn't hold `bynk_model::lower_protocol_ir`'s input.
         match &decl.protocol {
             ServiceProtocol::Cron => {
                 let mut exprs = Vec::new();
                 for h in &decl.handlers {
-                    let HandlerKind::Cron { expr } = &h.kind else {
+                    let IrHandlerKind::Cron { expr } = lower_handler_kind_ir(&h.kind) else {
                         continue;
                     };
                     let idx = exprs.len();
@@ -1295,7 +1297,7 @@ pub(super) fn emit_system_job_support(
                         ),
                         None,
                     ));
-                    exprs.push(expr.clone());
+                    exprs.push(expr);
                 }
                 services.cron.insert(sname.clone(), exprs);
             }
@@ -1303,7 +1305,7 @@ pub(super) fn emit_system_job_support(
                 let Some(h) = decl
                     .handlers
                     .iter()
-                    .find(|h| matches!(h.kind, HandlerKind::Message))
+                    .find(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Message))
                 else {
                     continue;
                 };
