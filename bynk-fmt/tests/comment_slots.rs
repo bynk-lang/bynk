@@ -84,7 +84,9 @@ fn pin_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join(PIN_DIR)
 }
 
-fn read_pins() -> BTreeMap<String, Refused> {
+/// The pins of one shard (`Some`), or of all (`None`). A shard reads only its
+/// own files: another shard may be rewriting its files while this one runs.
+fn read_pins(only_shard: Option<usize>) -> BTreeMap<String, Refused> {
     let mut pins = BTreeMap::new();
     let Ok(entries) = fs::read_dir(pin_dir()) else {
         return pins;
@@ -98,6 +100,9 @@ fn read_pins() -> BTreeMap<String, Refused> {
         else {
             continue;
         };
+        if only_shard.is_some_and(|s| shard_of(name) != s) {
+            continue;
+        }
         let text = fs::read_to_string(&p).expect("read pin file");
         let n: Vec<usize> = text
             .split_whitespace()
@@ -114,8 +119,8 @@ fn read_pins() -> BTreeMap<String, Refused> {
 fn bless_pins(actual: &BTreeMap<String, Refused>, shard: usize) {
     let dir = pin_dir();
     fs::create_dir_all(&dir).expect("create pin dir");
-    for name in read_pins().keys() {
-        if !actual.contains_key(name) && shard_of(name) == shard {
+    for name in read_pins(Some(shard)).keys() {
+        if !actual.contains_key(name) {
             fs::remove_file(dir.join(format!("{name}.refused"))).expect("remove stale pin");
         }
     }
@@ -387,7 +392,55 @@ shards! {
     a_comment_at_every_slot_is_kept_or_refused_shard_7 => 7,
 }
 
-fn check_shard(shard: usize) {
+/// The [`KNOWN`] rules (`rules`) that matched no failure in any shard, given the
+/// per-rule match counts summed over all shards. A rule whose fixtures all fall
+/// in other shards matches nothing in this one, so this is judged on totals.
+fn stale_rules(rules: &[Rule], matched: &[usize]) -> Vec<String> {
+    rules
+        .iter()
+        .zip(matched)
+        .filter(|(_, n)| **n == 0)
+        .map(|((issue, outcome, kind, _), _)| format!("  #{issue}: {outcome:?} [{kind:?}]"))
+        .collect()
+}
+
+/// With no defect open there is nothing to check; otherwise every shard is run
+/// once more to total the matches. (The cost is paid only while a rule exists.)
+#[test]
+fn known_rules_still_match() {
+    if KNOWN.is_empty() {
+        return;
+    }
+    let mut total = vec![0usize; KNOWN.len()];
+    for shard in 0..SHARDS {
+        for (t, m) in total.iter_mut().zip(check_shard(shard)) {
+            *t += m;
+        }
+    }
+    let stale = stale_rules(KNOWN, &total);
+    assert!(
+        stale.is_empty(),
+        "KNOWN rules that matched nothing (the issue is fixed: delete the rule):\n{}",
+        stale.join("\n")
+    );
+}
+
+/// The stale-rule check is judged on totals: a rule that one shard never
+/// reaches is not stale while another shard matches it.
+#[test]
+fn a_known_rule_is_stale_only_when_no_shard_matches_it() {
+    let rule: Rule = (1, Outcome::Dropped, Kind::Trailing, |_| true);
+    let rules = [rule, rule];
+    assert!(stale_rules(&rules, &[3, 1]).is_empty());
+    assert_eq!(stale_rules(&rules, &[3, 0]).len(), 1);
+    // Shard 0 matches the first only, shard 1 the second only: neither is stale.
+    let (a, b) = ([1usize, 0], [0usize, 1]);
+    let total: Vec<usize> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
+    assert!(stale_rules(&rules, &total).is_empty());
+}
+
+/// Checks one shard; returns how often each [`KNOWN`] rule matched in it.
+fn check_shard(shard: usize) -> Vec<usize> {
     let exhaustive = std::env::var_os("BYNK_FMT_EXHAUSTIVE").is_some();
     let opts = FormatOptions::default();
     let mut counts: BTreeMap<(Outcome, Kind), usize> = BTreeMap::new();
@@ -536,34 +589,26 @@ fn check_shard(shard: usize) {
         }
     }
 
-    let fixed: Vec<String> = KNOWN
-        .iter()
-        .zip(&matched)
-        .filter(|(_, n)| **n == 0)
-        .map(|((issue, outcome, kind, _), _)| format!("  #{issue}: {outcome:?} [{kind:?}]"))
-        .collect();
     let summary = format!("{counts:?}");
     assert!(
-        failures.is_empty() && fixed.is_empty(),
+        failures.is_empty(),
         "{summary}\n\
-         Comments the formatter dropped, duplicated or mangled (fix, or add a KNOWN rule with its issue):\n{}\n\
-         KNOWN rules that matched nothing (the issue is fixed: delete the rule):\n{}",
+         Comments the formatter dropped, duplicated or mangled (fix, or add a KNOWN rule with its issue):\n{}",
         failures.join("\n"),
-        fixed.join("\n"),
     );
     if exhaustive {
         eprintln!("exhaustive run: {summary}");
-        return;
+        return matched;
     }
     if std::env::var_os("BYNK_BLESS").is_some() {
         bless_pins(&refused_by_fixture, shard);
-        eprintln!("blessed {} comment-slot pins", refused_by_fixture.len());
-        return;
+        eprintln!(
+            "blessed {} comment-slot pins (shard {shard})",
+            refused_by_fixture.len()
+        );
+        return matched;
     }
-    let pins: BTreeMap<String, Refused> = read_pins()
-        .into_iter()
-        .filter(|(name, _)| shard_of(name) == shard)
-        .collect();
+    let pins = read_pins(Some(shard));
     let names: std::collections::BTreeSet<&String> =
         pins.keys().chain(refused_by_fixture.keys()).collect();
     let moved: Vec<String> = names
@@ -586,4 +631,5 @@ fn check_shard(shard: usize) {
          `BYNK_BLESS=1 cargo test -p bynk-fmt --test comment_slots` and review the diff.\n{summary}",
         moved.join("\n"),
     );
+    matched
 }
