@@ -1,7 +1,11 @@
-//! Crate-hygiene B3 (#2999): a byte-for-byte snapshot of the entry-handler
-//! signatures the playground's compile reports (#2695), taken *before* the
-//! signatures move from `bynk-check` into the system model (H-1: output stays
-//! byte-identical).
+//! Crate-hygiene B3 (#2999): a snapshot of the entry-handler signatures the
+//! playground's compile reports (#2695), taken *before* the signatures move
+//! from `bynk-check` into the system model (H-1: output stays identical).
+//!
+//! The pin is semantic, not byte-for-byte. Every value, array order and nesting
+//! is pinned, but object keys are printed sorted. The raw JSON's key order
+//! depends on whether a build turns on `serde_json/preserve_order`, which no
+//! code in this repository decides.
 //!
 //! One program declares every `EntryShape` variant as a parameter: each base
 //! type, a refined and an opaque type, a record, a sum with and without

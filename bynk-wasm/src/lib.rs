@@ -26,7 +26,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use bynk_check::checker::{TyId, Types};
-use bynk_check::entry_signature::{EntryHandler, EntryShape};
 use bynk_check::expr_types::type_at_offset;
 use bynk_check::firstparty::Platform;
 use bynk_check::locals::{LocalBinding, locals_at};
@@ -35,6 +34,7 @@ use bynk_driver::project::{
     analyse_in_memory_with_types, compile_in_memory, slash_key,
 };
 use bynk_ide::completion;
+use bynk_model::entry::{EntryHandler, EntryShape};
 use bynk_syntax::CompileError;
 use bynk_syntax::span::Span;
 
