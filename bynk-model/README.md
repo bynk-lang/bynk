@@ -31,6 +31,10 @@ It has three modules, all re-exported at the crate root:
 This is distinct from `bynk_check::project_model`, which models units and
 manifests, not declarations.
 
+The model's boundary half, the wire contract (`bynk_check::wire::WireModel`),
+is part of the system model but lives in `bynk-check`, because the checker's
+own boundary checks read it. The model itself stays above `bynk-check`.
+
 **What it is not.**
 - **An expression IR.** Bodies stay with the emitter's own lowerer, and a model
   item may summarise a body but never represents one.

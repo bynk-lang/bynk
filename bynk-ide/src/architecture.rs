@@ -32,6 +32,13 @@
 //! braces) grants qualified access to every exported capability but flattens
 //! none of them, so it contributes an edge only, unlabelled — matching the
 //! issue's "labelled with selected capabilities where braced".
+//!
+//! This is an editor view, not a system-model item (crate-hygiene B4, #3012).
+//! It is built over a recovering parse of unsaved editor text, so its
+//! `SourceUnit`/`CommonsItem` matches fall under M-1's domain clause (the
+//! system-model ADR): the consumer doesn't hold a certified program. A fact
+//! the model carries, such as a handler kind or a protocol, is read from the
+//! model.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;

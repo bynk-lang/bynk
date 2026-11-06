@@ -200,6 +200,12 @@ The rest of the toolchain needs these facts, and each consumer gets them its own
 `WireModel` is the pattern working. `bynk/src/openapi.rs` says "nothing here re-derives the
 boundary … so the spec cannot drift" because one model feeds five consumers.
 
+*Placement, settled by B4 (#3012).* `WireModel` is the model's boundary half. It stays in
+`bynk-check` because the checker's own boundary checks read it (six sites in `context_checks.rs`,
+`contract.rs` and `wire_format/reference.rs`), and it already meets M-1. `ArchModel` is an editor
+view, not a model item: it is built over a recovering parse of unsaved editor text and carries
+editor coordinates (`Located`), so it stays in `bynk-ide` under M-1's domain clause. Neither moves.
+
 Handler kinds and protocols, meanwhile, are re-derived in each consumer. These are lines matching
 AST variants outside `bynk-check` (which produces the facts) and `bynk-emit`/`bynk-lower` (which
 already route through the IR):
@@ -262,23 +268,26 @@ playground and the smoke runner. `bynk-lower` stays the builder from a checked p
 
 ### 6.3 Questions
 
-**Q1 — Where does the model sit? SETTLED: above `bynk-check` for B1–B3. B4 decides whether it moves below.**
+**Q1 — Where does the model sit? SETTLED: (a), above `bynk-check`. B1–B3 built under it, and B4
+(#3012) settled it for good.**
 - **(a) Above `bynk-check`, as now.** Every consumer already depends on the checker, so H-2 holds.
   But `WireModel` can't move in, because the checker's own boundary checks read it.
 - **(b) Below `bynk-check`.** Every model gets one home, but `TyId` and the `actors` types would
   have to move down, or the model would use names. #1533's S7 (moving `block_uses_emit` off its
   `bynk-check` dependency) is the first step either way.
 
-B1–B3 build under (a). B4 decides (b) on what B1–B3 showed: whether the remaining models
-(`WireModel`, entry signatures) would read better in the same crate than they do in `bynk-check`.
-If (b) is chosen, #1533's S7 is its first slice.
+B4 measured (b) at `1830e38c6`. It would move `TyId`, the `Types` arena and `Ty` out of
+`checker.rs` (54 files outside `bynk-check` name `TyId`), move or rename the `actors` seam types
+and `Callee`, do S7, and split the builder back out (reversing Q2). It would buy one home for
+`WireModel`, which already meets M-1. Entry signatures moved in under (a) (B3). (b) is rejected,
+and so is a new crate for `WireModel` alone. S7 is not needed.
 
 **Q2 — Is `bynk-lower` a separate crate? SETTLED: no. It merges into `bynk-model` as part of the
 Q3 rename.** It is the model's only constructor. Under (a), merging it takes one step out of the
 build chain (H-2 is improved, not just held). `unconsumed_ir_items`' two-owner rule (`bynk-ir` and
 `bynk-lower` can't vouch for each other) becomes a module rule: items in `bynk-model`'s vocabulary
-module need a reader outside the crate. The probe is re-pointed in the same PR (§3). If B4 chooses
-(b), the builder splits back out, because something would then want the vocabulary without it.
+module need a reader outside the crate. The probe is re-pointed in the same PR (§3). B4 kept
+(a), so the builder stays merged.
 
 **Q3 — Name. SETTLED: `bynk-model`, applied when B1 passes.** R10.1 says "a crate is named for what
 it produces". `bynk-ir` reads as an intermediate representation for codegen, which is the reading
@@ -290,11 +299,13 @@ The rename lands as B1's closing step, in its own PR that changes no behaviour, 
 `bynk-lower` (Q2). It publishes `bynk-model` as a new crate and gives `bynk-ir` and `bynk-lower` each
 a final release (H-5). If B1 fails, the crates fold into `bynk-emit` and are never renamed.
 
-**Q4 — Is the model a public interface? SETTLED: deferred until B3.** A serialised form (`bynk model --json`, or an MCP
+**Q4 — Is the model a public interface? SETTLED: deferred past 1.0 (B4, #3012).** A serialised form (`bynk model --json`, or an MCP
 resource) would give tools outside this repository one description of a project, for contract
 diffs, architecture diffs in review and deploy planning. That would make the model's shape a
-versioned contract. Recorded so no slice closes the option: model
-items stay plain data, with no lifetimes and no references into the AST.
+versioned contract, and the model is still moving. `bynk-lsp`'s `WireArchModel` and MCP's
+renderers serialise views, not the model. *Trigger:* a tool outside this repository asks for one
+description of a project. Recorded so no slice closes the option: model items stay plain data,
+with no lifetimes and no references into the AST.
 
 ### 6.4 Slices and the exit criterion
 
@@ -303,7 +314,7 @@ items stay plain data, with no lifetimes and no references into the AST.
 | **B1 — the proof slice** | `bynk_ide::sequence`, `wire_contract` and `symbols` read `IrHandlerKind`/`IrHttpMethod`/`ProtocolIr` through `bynk-lower` instead of matching AST variants. Adds the M-3 ratchet. If it passes, it closes with the Q3 rename. |
 | B2 | `bynk openapi` and `bynk-driver/src/smoke.rs` move onto the same items. |
 | B3 | Entry signatures (#2695) become model items (`bynk_model::entry`), computed by the driver's `build_output` (`bynk-driver/src/project.rs`), carried in `bynk-emit`'s `ProjectOutput.entry_handlers` and rendered by `bynk-wasm`. |
-| B4 | Under Q1(a): `ArchModel`'s shapes move in, with `bynk_ide::architecture` keeping the queries. Under Q1(b): `WireModel` moves down too. |
+| B4 (#3012) | Settles Q1 as (a) and re-defers Q4. `WireModel` and `ArchModel` stay where they are (§6.1's placement note). The driver's test-module emitter reads handler kinds through the model (#3000). openapi's and smoke's protocol filters stay under M-1's domain clause for good. Rebuilding `EntryShape` over `TypeShape` is deferred past 1.0 (*trigger:* a type-shape change made in both derivations, or Q4 making the model public). |
 
 **Exit criterion (B1).** The workstream continues if moving the three `bynk-ide` files onto the
 model:
@@ -481,7 +492,8 @@ Each item names what would bring it back.
 
 - **Splitting the wire/contract cluster out of `bynk-check`** (`wire`, `wire_format`, `contract`,
   `contract_compat`, `schema_registry`, ~9.4k lines). It calls `symbols` and `resolver`, so it
-  needs the core checker types split out first. *Trigger:* §6 Q1(b) lands.
+  needs the core checker types split out first. *Trigger:* the checker core is split (below). B4
+  (#3012) settled §6 Q1 as (a), so that question no longer fires it.
 - **Splitting the checker core** (`checker`, `symbols`, `resolver`, `project_model`, with
   in-degrees of 30–57). There's no clean line to draw.
 - **A registry-client or deploy crate out of `bynk`** (`registry` + `fetch`, ~7k lines with the
@@ -505,10 +517,10 @@ added and settled on 3 November 2026.
 | **Q-C2** How CI runs the tests (added 3 November 2026) | Three tiers (unit, integration, system), each gated on the one before, without lengthening the green path. C4a's measurements pick whether the system tier is its own job | §7 C4 |
 | **Q-E1** What happens to `bynkc` | An `argv[0]` alias of `bynk` (plus a `bynkc-<target>` asset) for one release, then dropped before 1.0 | §9 E3 |
 | **Q-E2** How the language server becomes `bynk-lsp` | `bynk-lsp` is the name, and `bynkc-lsp` is retired before 1.0.0. One release ships both names (assets *and* installers), `vscode-bynk` prefers `bynk-lsp`, then the old name drops | §9 E4 |
-| **§6 Q1** Where the model sits | Above `bynk-check` for B1–B3. B4 decides whether to move below | §6.3 |
+| **§6 Q1** Where the model sits | Above `bynk-check`, settled for good by B4 (#3012) | §6.3 |
 | **§6 Q2** Whether `bynk-lower` stays separate | No, it merges into `bynk-model` with the rename | §6.3 |
 | **§6 Q3** Name | `bynk-model`, applied when B1 passes | §6.3 |
-| **§6 Q4** Public interface | Deferred until B3 | §6.3 |
+| **§6 Q4** Public interface | Deferred past 1.0 by B4 (#3012), with a trigger | §6.3 |
 
 ## 12. Candidate slice decomposition
 
@@ -529,7 +541,7 @@ Provisional. Each slice becomes an increment proposal, filed as a sub-issue of t
 | 1 | E4a (then E4b one release later) | — | no |
 | 5 | E3, D2 | E1, E2 | no |
 | 6 | E5 | E3 | no |
-| — | B4 | B3 | depends on whether B4 chooses (b) |
+| — | B4 (#3012) | B3 | no (both PRs probe-invariant) |
 
 The release workflows' hardcoded crate lists change in every slice that adds, removes or renames
 a crate: C1, the Q3 rename, D2, E3 and the §6 fold path.
