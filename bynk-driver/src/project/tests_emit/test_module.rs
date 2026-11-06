@@ -1379,6 +1379,9 @@ pub(super) fn event_delivery_helpers(
         else {
             continue;
         };
+        // M-1's domain clause (ADR 0735; crate-hygiene B4, #3012): this
+        // function holds the target's symbol table, not its `TypedCommons`, so it
+        // doesn't hold `bynk_model::lower_protocol_ir`'s input.
         let ServiceProtocol::Events {
             event_type,
             schema_dispatch,
@@ -1393,7 +1396,10 @@ pub(super) fn event_delivery_helpers(
         };
         let takes_envelope = schema_dispatch.is_some()
             || decl.handlers.iter().any(|h| {
-                matches!(h.kind, bynk_syntax::ast::HandlerKind::Event) && h.params.len() == 2
+                matches!(
+                    bynk_model::lower_handler_kind_ir(&h.kind),
+                    bynk_model::IrHandlerKind::Event
+                ) && h.params.len() == 2
             });
         // #2052 review: the publisher resolves as the service's header
         // resolves `E` (the target's own event, else the one consumed context

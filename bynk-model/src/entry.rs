@@ -12,8 +12,13 @@
 //! Crate-hygiene B3 (#2999, DECISION C): this was `bynk_check::entry_signature`
 //! until the signatures became system-model items. It moved verbatim, so its
 //! syntax-tree reads (the `call` handler filter, `TypeBody`'s records and
-//! sums) are now the model builder's, which is where M-1 puts them. Rebuilding
-//! [`EntryShape`] over [`crate::TypeShape`] is an input to B4.
+//! sums) are now the model builder's, which is where M-1 puts them.
+//!
+//! [`EntryShape`] and [`crate::TypeShape`] both describe a record's fields and
+//! a sum's variants, from two builders. Rebuilding this one over `TypeShape` is
+//! deferred past 1.0 (crate-hygiene B4, #3012): `build_output` holds no
+//! `CheckedProgram` or type arena to lower it from. *Trigger:* a type-shape
+//! change that has to be made in both, or the model becoming public.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -76,8 +81,8 @@ pub enum EntryShape {
     /// sum): named, not expanded again.
     Recursive(String),
     /// A named record or sum left unexpanded because it sits deeper than
-    /// this module's `MAX_DEPTH` nested records/sums (a wide DAG of non-recursive types
-    /// would otherwise grow exponentially).
+    /// this module's `MAX_DEPTH` nested records/sums (a wide DAG of
+    /// non-recursive types would otherwise grow exponentially).
     Named(String),
     /// Anything else (a generic record instantiation, a function, an effect),
     /// as the checker displays it. Not something a host can build a value for.
