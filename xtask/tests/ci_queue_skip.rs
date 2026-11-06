@@ -36,6 +36,9 @@ struct Job {
     name: Option<String>,
     needs_changes: bool,
     uses_rust_cache: bool,
+    /// Branches on `runner.environment`, i.e. can run on the self-hosted
+    /// runners, where it skips rust-cache.
+    self_hosted: bool,
     condition: String,
 }
 
@@ -66,6 +69,7 @@ fn jobs() -> Vec<Job> {
                 name: None,
                 needs_changes: false,
                 uses_rust_cache: false,
+                self_hosted: false,
                 condition: String::new(),
             });
             in_if = false;
@@ -75,6 +79,9 @@ fn jobs() -> Vec<Job> {
         let Some(job) = jobs.last_mut() else { continue };
         if line.contains("uses: Swatinem/rust-cache@") {
             job.uses_rust_cache = true;
+        }
+        if line.contains("runner.environment") {
+            job.self_hosted = true;
         }
         if in_if && line.starts_with("      ") {
             job.condition.push(' ');
@@ -201,4 +208,37 @@ fn rust_caches_names_every_job_that_saves_one_on_main() {
             "RUST_CACHES lacks `{os}`, one leg of the `test` matrix"
         );
     }
+}
+
+/// A job on the self-hosted runners skips rust-cache, so `main` never has its
+/// cache. The `queue` step must not wait for one (`SELF_HOSTED_CACHES`), or
+/// every push to `main` would read it as missing and run everything. The list
+/// must name exactly the jobs in `RUST_CACHES` that can run self-hosted.
+#[test]
+fn self_hosted_caches_names_every_self_hosted_job_with_a_rust_cache() {
+    let yaml = workflow();
+    let line = yaml
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("SELF_HOSTED_CACHES: "))
+        .expect("ci.yml's `queue` step sets SELF_HOSTED_CACHES on one line");
+    let listed = line
+        .split('\'')
+        .nth(3)
+        .expect("SELF_HOSTED_CACHES is `${{ <cond> && '<list>' || '' }}`");
+    let mut listed_jobs: Vec<&str> = listed
+        .split_whitespace()
+        .map(|c| c.strip_suffix("-Linux").expect("`<job>-Linux`"))
+        .collect();
+    listed_jobs.sort_unstable();
+    let mut expected: Vec<String> = jobs()
+        .into_iter()
+        .filter(|j| j.self_hosted && j.uses_rust_cache && j.key != "drift")
+        .map(|j| j.key)
+        .collect();
+    expected.sort_unstable();
+    assert_eq!(
+        listed_jobs, expected,
+        "SELF_HOSTED_CACHES in ci.yml's `queue` step must name every job that \
+         uses Swatinem/rust-cache and can run on the self-hosted runners"
+    );
 }

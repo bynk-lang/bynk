@@ -116,6 +116,9 @@ jobs:
       installers: ${{ steps.filter.outputs.installers }}
       installer_scripts: ${{ steps.filter.outputs.installer_scripts }}
       all: ${{ steps.all.outputs.value }}
+      # `runs-on` for every Linux job that may use the org's self-hosted runners
+      # (see the `runner` step): a JSON label array or a JSON string.
+      linux_runner: ${{ steps.runner.outputs.labels }}
       # JSON array of the job names the merge queue's run passed on THIS commit,
       # so the push run on `main` need not repeat them. `[]` on every event but
       # `push`, and on any push the queue did not test (see the `queue` step).
@@ -150,6 +153,32 @@ jobs:
       # release.yml's arm64 leg was re-enabled at the same time.)
       test_os: ${{ steps.test-os.outputs.value }}
     steps:
+      # Which runner the self-hosted-capable Linux jobs use. The self-hosted
+      # runners are used only when the repo variable SELF_HOSTED_LINUX is
+      # 'true', and never for a fork PR (this repo is public, so a fork PR
+      # would run untrusted code there) or a Dependabot PR (its branches live
+      # in this repo, so it passes the fork test, but it runs unreviewed
+      # third-party build.rs and proc-macro code, and those machines keep their
+      # state for later runs on `main`). The variable is the kill switch: a job
+      # aimed at an offline runner waits up to 24h in the queue
+      # (timeout-minutes does not count queue time), which would wedge
+      # `CI green` and the merge queue. The `test` job still carries its own
+      # copy of this rule.
+      - id: runner
+        env:
+          SELF_HOSTED: >-
+            ${{
+              vars.SELF_HOSTED_LINUX == 'true'
+              && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+              && github.event.pull_request.user.login != 'dependabot[bot]'
+            }}
+        run: |
+          if [ "$SELF_HOSTED" = true ]; then
+            echo 'labels=["self-hosted","Linux","X64"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'labels="ubuntu-latest"' >> "$GITHUB_OUTPUT"
+          fi
+          echo "self_hosted=$SELF_HOSTED" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -328,6 +357,11 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           SHA: ${{ github.sha }}
+          # The RUST_CACHES entries whose jobs run on the self-hosted runners on
+          # this push. Those skip rust-cache, so `main` never has their cache,
+          # and expecting one would make every push run everything.
+          # xtask/tests/ci_queue_skip.rs keeps this list in step with the jobs.
+          SELF_HOSTED_CACHES: ${{ steps.runner.outputs.self_hosted == 'true' && 'clippy-Linux api-docs-Linux test-Linux msrv-Linux wasm-Linux node-floor-Linux' || '' }}
           CACHE_KEYS: ${{ steps.filter.outputs.cache_keys }}
           # `<job>-<runner OS>` for every job that saves a Rust cache on `main`
           # (`drift` never runs on a push). rust-cache keys start
@@ -345,6 +379,7 @@ jobs:
               keys="$(gh api --paginate "repos/$REPO/actions/caches?ref=refs/heads/main&key=v0-rust-&per_page=100" \
                 --jq '.actions_caches[].key' || true)"
               for c in $RUST_CACHES; do
+                case " $SELF_HOSTED_CACHES " in *" $c "*) continue ;; esac
                 printf '%s\n' "$keys" | grep -q "^v0-rust-$c-" || missing="$missing $c"
               done
             fi
@@ -473,16 +508,33 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Lint (clippy -D warnings)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The self-hosted checkout (see `runner` on `changes`), defined once here
+      # and aliased by every job that can run on the self-hosted runner. A job
+      # on that runner must use both: a plain checkout's `git clean -ffdx`
+      # deletes the warm target/ the next job on that runner relies on.
+      - &self_hosted_checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          clean: ${{ runner.environment != 'self-hosted' }}
+      - &self_hosted_clean
+        name: Clean the workspace, keeping target/ (self-hosted)
+        if: runner.environment == 'self-hosted'
+        run: |
+          git clean -ffdx -e /target/
+          rm -rf target/nextest
+          if [ -d target ] && [ "$(du -s --block-size=1G target | cut -f1)" -gt 40 ]; then
+            echo "target/ is over 40 GB; wiping it (next build is cold)"
+            rm -rf target
+          fi
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # --all-targets covers tests/examples/benches, not just the libs/bins.
@@ -498,14 +550,14 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'API docs (cargo doc)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build the crate API docs (strict)
@@ -738,14 +790,14 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Node floor (oldest supported Node)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Single-sourced: raising NODE_MAJOR_FLOOR or NODE_MINOR_FLOOR moves this
@@ -806,12 +858,11 @@ jobs:
     if: >-
       (needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'MSRV (cargo check on declared rust-version)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       # Derive the toolchain from the *declared* rust-version rather than a
       # hardcoded copy of the pin, so this leg cannot silently degrade into
       # re-running the main toolchain when the two drift apart (#520). Today
@@ -847,6 +898,7 @@ jobs:
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       - name: Check on MSRV toolchain
@@ -912,16 +964,16 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'wasm32 build (bynk-wasm)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build bynk-wasm for wasm32
@@ -1228,14 +1280,14 @@ jobs:
         || needs.changes.outputs.readmes == 'true')
       && needs.changes.outputs.rust != 'true'
       && needs.changes.outputs.all != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Left on `cargo test` (not nextest): each guard is a handful of tests,
