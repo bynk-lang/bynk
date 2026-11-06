@@ -266,7 +266,8 @@ fn self_hosted_caches_name_every_self_hosted_job_with_a_rust_cache() {
 fn every_self_hosted_job_keeps_target_warm() {
     let jobs: Vec<Job> = jobs().into_iter().filter(|j| j.runner.is_some()).collect();
     assert!(
-        jobs.iter().any(|j| j.key == "test" && j.runner == Some("linux_runner")),
+        jobs.iter()
+            .any(|j| j.key == "test" && j.runner == Some("linux_runner")),
         "the `test` job's Linux leg reads `linux_runner`"
     );
     for job in &jobs {
@@ -277,11 +278,17 @@ fn every_self_hosted_job_keeps_target_warm() {
             })
         };
         for step in ["self_hosted_checkout", "self_hosted_clean"] {
-            assert!(has(step), "`{}` can run self-hosted but lacks `{step}`", job.key);
+            assert!(
+                has(step),
+                "`{}` can run self-hosted but lacks `{step}`",
+                job.key
+            );
         }
         assert!(
-            !job.lines.iter().any(|l| l.contains("uses: actions/checkout@")
-                && !l.trim_start().starts_with("uses:")),
+            !job.lines
+                .iter()
+                .any(|l| l.contains("uses: actions/checkout@")
+                    && !l.trim_start().starts_with("uses:")),
             "`{}` can run self-hosted but has its own `actions/checkout` step",
             job.key
         );
