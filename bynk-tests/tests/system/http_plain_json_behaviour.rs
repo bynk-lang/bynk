@@ -169,10 +169,11 @@ fn plain_json_routes_write_v_and_null() {
     // Compile the plain-JSON fixture (workers) in-process.
     let fixture: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/2858_plain_json_options/src");
-    let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_single(fixture).target(bynkc::BuildTarget::Workers),
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(fixture)
+            .target(bynk_driver::project::BuildTarget::Workers),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the plain-JSON fixture must compile");
 
     let tmp = std::env::temp_dir().join(format!(

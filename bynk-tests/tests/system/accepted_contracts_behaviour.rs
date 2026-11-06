@@ -11,7 +11,7 @@
 //! Skips loudly without a toolchain; `BYNK_REQUIRE_TSC=1` turns the skip into
 //! a failure.
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -203,11 +203,11 @@ fn compile(
     let options = bynk_testkit::compile_options_single(&root)
         .target(BuildTarget::Workers)
         .contracts_lock(lock);
-    match bynkc::compile_project(&options) {
+    match bynk_driver::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => panic!(
             "compile {name}:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     }
 }

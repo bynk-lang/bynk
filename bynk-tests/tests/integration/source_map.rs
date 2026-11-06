@@ -21,9 +21,10 @@ fn compile_reps(source: &str) -> (String, String) {
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("reps.bynk"), source).unwrap();
 
-    let out = bynkc::compile_project(&bynk_testkit::compile_options_single(src.clone()))
-        .map_err(bynkc::ProjectFailure::flatten)
-        .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
+    let out =
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_single(src.clone()))
+            .map_err(bynk_driver::project::ProjectFailure::flatten)
+            .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
 
     let main_path = Path::new("reps.ts");
     let ts = out
@@ -35,7 +36,7 @@ fn compile_reps(source: &str) -> (String, String) {
     let map = out
         .artefacts
         .docs
-        .get(&bynkc::sibling_path(main_path, "map"))
+        .get(&bynk_driver::project::sibling_path(main_path, "map"))
         .expect("reps.ts carries a source map")
         .text();
     let _ = std::fs::remove_dir_all(&dir);
@@ -59,10 +60,11 @@ fn compile_reps_with_contracts(source: &str) -> (String, String) {
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("reps.bynk"), source).unwrap();
 
-    let out =
-        bynkc::compile_project(&bynk_testkit::compile_options_single(src.clone()).contracts(true))
-            .map_err(bynkc::ProjectFailure::flatten)
-            .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(src.clone()).contracts(true),
+    )
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
+    .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
 
     let main_path = Path::new("reps.ts");
     let ts = out
@@ -74,7 +76,7 @@ fn compile_reps_with_contracts(source: &str) -> (String, String) {
     let map = out
         .artefacts
         .docs
-        .get(&bynkc::sibling_path(main_path, "map"))
+        .get(&bynk_driver::project::sibling_path(main_path, "map"))
         .expect("reps.ts carries a source map")
         .text();
     let _ = std::fs::remove_dir_all(&dir);
@@ -318,9 +320,10 @@ fn compile_reps_context(source: &str) -> (String, String) {
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("reps.bynk"), source).unwrap();
 
-    let out = bynkc::compile_project(&bynk_testkit::compile_options_single(src.clone()))
-        .map_err(bynkc::ProjectFailure::flatten)
-        .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
+    let out =
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_single(src.clone()))
+            .map_err(bynk_driver::project::ProjectFailure::flatten)
+            .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
 
     let main_path = Path::new("reps.ts");
     let ts = out
@@ -332,7 +335,7 @@ fn compile_reps_context(source: &str) -> (String, String) {
     let map = out
         .artefacts
         .docs
-        .get(&bynkc::sibling_path(main_path, "map"))
+        .get(&bynk_driver::project::sibling_path(main_path, "map"))
         .expect("reps.ts carries a source map")
         .text();
     let _ = std::fs::remove_dir_all(&dir);
@@ -587,10 +590,11 @@ fn compile_chat_workers(source: &str) -> (String, String) {
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("chat.bynk"), source).unwrap();
 
-    let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_single(src.clone()).target(bynkc::BuildTarget::Workers),
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(src.clone())
+            .target(bynk_driver::project::BuildTarget::Workers),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
 
     let main_path = out
@@ -608,7 +612,7 @@ fn compile_chat_workers(source: &str) -> (String, String) {
     let map = out
         .artefacts
         .docs
-        .get(&bynkc::sibling_path(&main_path, "map"))
+        .get(&bynk_driver::project::sibling_path(&main_path, "map"))
         .expect("handlers.ts carries a source map")
         .text();
     let _ = std::fs::remove_dir_all(&dir);
@@ -908,10 +912,11 @@ fn compile_split_chat(files: &[(&str, &str)], suffixes: &[&str]) -> Vec<(String,
     for (name, text) in files {
         std::fs::write(src.join("chat").join(name), text).unwrap();
     }
-    let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_single(src.clone()).target(bynkc::BuildTarget::Workers),
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(src.clone())
+            .target(bynk_driver::project::BuildTarget::Workers),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
     let found = suffixes
         .iter()
@@ -927,7 +932,7 @@ fn compile_split_chat(files: &[(&str, &str)], suffixes: &[&str]) -> Vec<(String,
             let map = out
                 .artefacts
                 .docs
-                .get(&bynkc::sibling_path(&path, "map"))
+                .get(&bynk_driver::project::sibling_path(&path, "map"))
                 .unwrap_or_else(|| panic!("{suffix} carries a source map"))
                 .text()
                 .to_string();

@@ -224,16 +224,17 @@ fn par_overlaps_effects_and_settles_all_in_source_order() {
     fs::create_dir_all(&proj).unwrap();
     fs::write(proj.join("demo.bynk"), SOURCE).unwrap();
 
-    let out = match bynkc::compile_project(&bynk_testkit::compile_options_single(&proj)) {
-        Ok(o) => o,
-        Err(failure) => panic!(
-            "compile the par project:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
-        ),
-    };
-    let out = bynkc::strip_project_to_js(out).expect("the par project strips to JS");
+    let out =
+        match bynk_driver::project::compile_project(&bynk_testkit::compile_options_single(&proj)) {
+            Ok(o) => o,
+            Err(failure) => panic!(
+                "compile the par project:\n{}",
+                bynk_render::render_project_errors(&failure.flatten())
+            ),
+        };
+    let out = bynk_driver::strip::strip_project_to_js(out).expect("the par project strips to JS");
     let js = tmp.join("out");
-    bynkc::write_output(&out, &js).unwrap();
+    bynk_driver::write_output(&out, &js).unwrap();
     fs::write(js.join("check.mjs"), SCRIPT).unwrap();
 
     let run = Command::new("node")

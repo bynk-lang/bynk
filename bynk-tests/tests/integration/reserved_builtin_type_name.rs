@@ -19,7 +19,7 @@ commons demo {
   }
 }
 ";
-    let result = bynkc::compile(source, "value_position.bynk");
+    let result = bynk_emit::compile(source, "value_position.bynk");
     assert!(
         result.is_ok(),
         "built-in type names must be usable as value-position identifiers, got: {:#?}",
@@ -32,7 +32,7 @@ commons demo {
 #[test]
 fn builtin_type_name_is_reserved_in_type_position() {
     let source = "commons demo {\n  type Query = String\n}\n";
-    let errors = bynkc::compile(source, "type_position.bynk")
+    let errors = bynk_emit::compile(source, "type_position.bynk")
         .expect_err("redeclaring a built-in type name must fail");
     assert!(
         errors

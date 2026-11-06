@@ -137,7 +137,7 @@ fn copy_dir(from: &Path, to: &Path) {
 /// writes `bynk.schema.lock` into its input tree).
 struct Compiled {
     tmp: PathBuf,
-    out: bynkc::ProjectOutput,
+    out: bynk_driver::project::ProjectOutput,
 }
 
 fn compile(fixture: &str, tag: &str) -> Compiled {
@@ -151,14 +151,15 @@ fn compile(fixture: &str, tag: &str) -> Compiled {
             .join("src"),
         &src,
     );
-    let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_single(src).target(bynkc::BuildTarget::Workers),
+    let out = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(src)
+            .target(bynk_driver::project::BuildTarget::Workers),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .unwrap_or_else(|e| {
         panic!(
             "{fixture} must compile:\n{}",
-            bynkc::render_project_errors(&e)
+            bynk_render::render_project_errors(&e)
         )
     });
     Compiled { tmp, out }

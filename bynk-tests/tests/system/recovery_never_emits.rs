@@ -31,8 +31,8 @@ fn project(name: &str, source: &str) -> PathBuf {
 }
 
 fn compiles(root: &Path) -> bool {
-    let paths = bynkc::try_read_project_paths(root).expect("well-formed manifest");
-    bynkc::compile_project(&bynk_testkit::compile_options_split(
+    let paths = bynk_driver::project::try_read_project_paths(root).expect("well-formed manifest");
+    bynk_driver::project::compile_project(&bynk_testkit::compile_options_split(
         root.to_path_buf(),
         paths,
     ))
@@ -41,8 +41,8 @@ fn compiles(root: &Path) -> bool {
 
 #[test]
 fn single_file_compile_refuses_a_partial_program() {
-    assert!(bynkc::compile(RESOLVE_ERROR, "demo.bynk").is_err());
-    assert!(bynkc::compile(SYNTAX_ERROR, "demo.bynk").is_err());
+    assert!(bynk_emit::compile(RESOLVE_ERROR, "demo.bynk").is_err());
+    assert!(bynk_emit::compile(SYNTAX_ERROR, "demo.bynk").is_err());
 }
 
 #[test]

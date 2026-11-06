@@ -42,7 +42,7 @@
 //! is compiled (so its worker directory exists) but never run, since nothing
 //! here exercises emission or fan-out.
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -290,17 +290,17 @@ fn events_boundary_rejects_malformed_payload_and_envelope_on_workerd() {
     fs::create_dir_all(&proj).unwrap();
     fs::write(proj.join("probe.bynk"), SOURCE).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the boundary-validation project to workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
-    let out = bynkc::strip_project_to_js(out).expect("boundary project strips to JS");
-    bynkc::write_output(&out, &tmp).unwrap();
+    let out = bynk_driver::strip::strip_project_to_js(out).expect("boundary project strips to JS");
+    bynk_driver::write_output(&out, &tmp).unwrap();
 
     let dir = tmp.join("workers/boundary-probe");
     assert!(
@@ -490,17 +490,18 @@ fn events_boundary_field_default_cross_context_on_workerd() {
     )
     .unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(proj.clone()).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the cross-context field-default project to workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
-    let out = bynkc::strip_project_to_js(out).expect("field-default project strips to JS");
-    bynkc::write_output(&out, &tmp).unwrap();
+    let out =
+        bynk_driver::strip::strip_project_to_js(out).expect("field-default project strips to JS");
+    bynk_driver::write_output(&out, &tmp).unwrap();
 
     let dir = tmp.join("workers/commerce-notifications");
     assert!(

@@ -26,7 +26,7 @@
 //! (Linux CI sets `1`) turns the skip into a failure. The `wrangler dev` is
 //! stopped, with its `workerd`, when the guard drops (#1686).
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -314,17 +314,18 @@ fn a_par_join_in_an_agent_handler_adds_no_interleaving() {
     let proj = tmp.join("proj");
     fs::create_dir_all(&proj).unwrap();
     fs::write(proj.join("gate.bynk"), source(held_port)).unwrap();
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(&proj).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the par gate project to workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
-    let out = bynkc::strip_project_to_js(out).expect("the par gate project strips to JS");
-    bynkc::write_output(&out, &tmp).unwrap();
+    let out =
+        bynk_driver::strip::strip_project_to_js(out).expect("the par gate project strips to JS");
+    bynk_driver::write_output(&out, &tmp).unwrap();
     let dir = tmp.join("workers/gate");
     assert!(
         dir.join("index.js").is_file() && dir.join("wrangler.toml").is_file(),

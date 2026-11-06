@@ -868,15 +868,26 @@ const TSCONFIG_JSON: &str = r#"{
 /// alongside `driver`, then `tsc`-compile and run the driver under node, asserting
 /// it prints `ALL OK`. Skips loudly without a TS toolchain.
 fn verify(tag: &str, source: &str, driver: &str) {
-    verify_with(tag, source, driver, bynkc::BuildTarget::Bundle);
+    verify_with(
+        tag,
+        source,
+        driver,
+        bynk_driver::project::BuildTarget::Bundle,
+    );
 }
 
 /// [`verify`] for a chosen build target. #1691: a held `Map[K, Connection]` is
 /// lowered by its own branch only on Workers (the record stores connection ids,
 /// re-resolved through the Durable Object's hibernation API), so its driver
 /// compiles for Workers and imports `workers/shop/handlers.js`.
-fn verify_with(tag: &str, source: &str, driver: &str, target: bynkc::BuildTarget) {
-    verify_built(tag, source, driver, target, bynkc::SchemaLock::Off);
+fn verify_with(tag: &str, source: &str, driver: &str, target: bynk_driver::project::BuildTarget) {
+    verify_built(
+        tag,
+        source,
+        driver,
+        target,
+        bynk_driver::project::SchemaLock::Off,
+    );
 }
 
 /// [`verify`] for a build that reconciles against a schema lock — `existing`
@@ -887,8 +898,8 @@ fn verify_with_lock(tag: &str, source: &str, driver: &str, existing: Option<&str
         tag,
         source,
         driver,
-        bynkc::BuildTarget::Bundle,
-        bynkc::SchemaLock::On {
+        bynk_driver::project::BuildTarget::Bundle,
+        bynk_driver::project::SchemaLock::On {
             existing: existing.map(str::to_string),
         },
     );
@@ -898,8 +909,8 @@ fn verify_built(
     tag: &str,
     source: &str,
     driver: &str,
-    target: bynkc::BuildTarget,
-    schema_lock: bynkc::SchemaLock,
+    target: bynk_driver::project::BuildTarget,
+    schema_lock: bynk_driver::project::SchemaLock,
 ) {
     let runner = match discover_tsc() {
         Some(r) => r,
@@ -925,12 +936,12 @@ fn verify_built(
     let src = tmp.join("src");
     fs::create_dir_all(&src).unwrap();
     fs::write(src.join("shop.bynk"), source).unwrap();
-    let out = bynkc::compile_project(
+    let out = bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(src.clone())
             .target(target)
             .schema_registry(schema_lock),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the store agent must compile");
 
     for (path, doc) in &out.artefacts.docs {
@@ -1659,7 +1670,7 @@ fn store_held_connection_map_prototype_keys() {
         "held_map",
         HELD_MAP_SOURCE,
         HELD_MAP_DRIVER_TS,
-        bynkc::BuildTarget::Workers,
+        bynk_driver::project::BuildTarget::Workers,
     );
 }
 
@@ -1986,14 +1997,14 @@ fn lock_through(tag: &str, history: &[&str]) -> String {
     let mut lock: Option<String> = None;
     for source in history {
         fs::write(dir.join("src/shop.bynk"), source).unwrap();
-        let out = bynkc::compile_project(
+        let out = bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_single(dir.join("src"))
-                .target(bynkc::BuildTarget::Bundle)
-                .schema_registry(bynkc::SchemaLock::On {
+                .target(bynk_driver::project::BuildTarget::Bundle)
+                .schema_registry(bynk_driver::project::SchemaLock::On {
                     existing: lock.clone(),
                 }),
         )
-        .map_err(bynkc::ProjectFailure::flatten)
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
         .expect("each step of the history builds");
         lock = out.schema_lock;
     }

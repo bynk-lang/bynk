@@ -28,7 +28,8 @@ use std::fs;
 use bynk_check::builtin_names::methods as builtin_methods;
 use bynk_check::kernel_methods::{KernelMethod, QUERY_METHODS};
 use bynk_check::store_ops::MAP_QUERY_ACCESSORS;
-use bynkc::{ProjectFailure, compile_project};
+use bynk_driver::project::ProjectFailure;
+use bynk_driver::project::compile_project;
 
 /// Compile a probe agent with `store items: Map[String, Int]` whose handler
 /// evaluates each given expression (a `<recv>.<member>` access), and return

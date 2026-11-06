@@ -21,7 +21,8 @@
 //! (`events_schema_version_behaviour.rs` already covers the runtime wire
 //! value; this test is about the registry file, not the wire).
 
-use bynkc::{BuildTarget, SchemaLock};
+use bynk_driver::project::BuildTarget;
+use bynk_driver::project::SchemaLock;
 use std::fs;
 
 const SOURCE_V1: &str = r#"context commerce.order
@@ -126,10 +127,10 @@ fn schema_registry_baselines_bumps_and_blocks_non_additive_changes() {
     let options = bynk_testkit::compile_options_single(tmp.join("proj"))
         .target(BuildTarget::Bundle)
         .schema_registry(schema_lock_input(&tmp.join("proj")));
-    match bynkc::compile_project(&options) {
+    match bynk_driver::project::compile_project(&options) {
         Ok(_) => panic!("a field added without a default must not compile"),
         Err(failure) => {
-            let rendered = bynkc::render_project_errors(&failure.flatten());
+            let rendered = bynk_render::render_project_errors(&failure.flatten());
             assert!(
                 rendered.contains("bynk.event.non_additive_schema_change"),
                 "expected the non-additive-change diagnostic:\n{rendered}"
@@ -158,16 +159,16 @@ fn schema_lock_input(proj: &std::path::Path) -> SchemaLock {
 /// computes the reconciled content on `ProjectOutput::schema_lock`; this
 /// helper does the disk write a real caller would, so the test's own
 /// `fs::read_to_string(&lock_path)` assertions keep working unchanged.
-fn compile(tmp: &std::path::Path) -> bynkc::ProjectOutput {
+fn compile(tmp: &std::path::Path) -> bynk_driver::project::ProjectOutput {
     let proj = tmp.join("proj");
     let options = bynk_testkit::compile_options_single(&proj)
         .target(BuildTarget::Bundle)
         .schema_registry(schema_lock_input(&proj));
-    let out = match bynkc::compile_project(&options) {
+    let out = match bynk_driver::project::compile_project(&options) {
         Ok(out) => out,
         Err(failure) => panic!(
             "compile the schema-registry project:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
     if let Some(content) = &out.schema_lock {
@@ -177,7 +178,7 @@ fn compile(tmp: &std::path::Path) -> bynkc::ProjectOutput {
     out
 }
 
-fn emitted_ts(out: &bynkc::ProjectOutput) -> String {
+fn emitted_ts(out: &bynk_driver::project::ProjectOutput) -> String {
     out.artefacts
         .docs
         .values()

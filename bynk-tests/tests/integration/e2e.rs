@@ -54,7 +54,7 @@ fn read(path: &Path) -> String {
 /// tested separately: `runtime.ts`, `tsconfig.json`, and a `package.json` that
 /// is only the `"type": "module"` marker (#2148). A `package.json` carrying an
 /// adapter's npm dependencies is per-fixture and stays snapshotted.
-fn is_project_boilerplate(path: &Path, doc: &bynkc::Document) -> bool {
+fn is_project_boilerplate(path: &Path, doc: &bynk_driver::project::Document) -> bool {
     match path.to_str() {
         Some("tsconfig.json") => true,
         Some(p) if p.starts_with("__bynk_runtime/") => true,
@@ -142,37 +142,38 @@ fn check_expected_contains_absent(dir: &Path, haystack: &str, failures: &mut Vec
 /// `ProjectOutput.files` never carried those as separate entries (they were
 /// `CompiledFile::source_map`/`debug_metadata` fields), so every fixture
 /// comparison here filters them out to keep comparing the same set.
-fn is_main_document(doc: &bynkc::Document) -> bool {
+fn is_main_document(doc: &bynk_driver::project::Document) -> bool {
     !matches!(
         doc,
-        bynkc::Document::SourceMap(_) | bynkc::Document::DebugSidecar(_)
+        bynk_driver::project::Document::SourceMap(_)
+            | bynk_driver::project::Document::DebugSidecar(_)
     )
 }
 
 /// Read the build target marker from a fixture root, if present.
 /// Defaults to bundle when no `target.txt` is present.
-fn fixture_target(dir: &Path) -> bynkc::BuildTarget {
+fn fixture_target(dir: &Path) -> bynk_driver::project::BuildTarget {
     let marker = dir.join("target.txt");
     if let Ok(s) = fs::read_to_string(&marker)
         && s.trim() == "workers"
     {
-        return bynkc::BuildTarget::Workers;
+        return bynk_driver::project::BuildTarget::Workers;
     }
-    bynkc::BuildTarget::Bundle
+    bynk_driver::project::BuildTarget::Bundle
 }
 
 /// v0.18: read the deploy-platform marker from a fixture root, if present.
 /// Defaults to cloudflare when no `platform.txt` is present.
-fn fixture_platform(dir: &Path) -> bynkc::Platform {
+fn fixture_platform(dir: &Path) -> bynk_check::firstparty::Platform {
     let marker = dir.join("platform.txt");
     if let Ok(s) = fs::read_to_string(&marker) {
         match s.trim() {
-            "node" => return bynkc::Platform::Node,
-            "browser" => return bynkc::Platform::Browser,
+            "node" => return bynk_check::firstparty::Platform::Node,
+            "browser" => return bynk_check::firstparty::Platform::Browser,
             _ => {}
         }
     }
-    bynkc::Platform::Cloudflare
+    bynk_check::firstparty::Platform::Cloudflare
 }
 
 /// v0.9.1: compile a project-form fixture. If the fixture root has a
@@ -180,8 +181,8 @@ fn fixture_platform(dir: &Path) -> bynkc::Platform {
 /// fall back to the legacy single-tree mode rooted at `src/`.
 fn compile_fixture(
     fixture_root: &Path,
-    target: bynkc::BuildTarget,
-) -> Result<bynkc::ProjectOutput, bynkc::ProjectFailure> {
+    target: bynk_driver::project::BuildTarget,
+) -> Result<bynk_driver::project::ProjectOutput, bynk_driver::project::ProjectFailure> {
     let bynk_toml = fixture_root.join("bynk.toml");
     if bynk_toml.exists() {
         // Split-paths mode compiles at the default platform — a bynk.toml
@@ -191,13 +192,13 @@ fn compile_fixture(
             "{}: platform.txt is not supported in bynk.toml fixtures",
             fixture_root.display()
         );
-        let paths =
-            bynkc::try_read_project_paths(fixture_root).expect("well-formed fixture manifest");
+        let paths = bynk_driver::project::try_read_project_paths(fixture_root)
+            .expect("well-formed fixture manifest");
         // #1890: a fixture's `[workers] compatibility_flags` reaches its
         // `wrangler.toml`, as `bynk-driver`'s option builders arrange.
-        let workers =
-            bynkc::try_read_workers_config(fixture_root).expect("well-formed fixture manifest");
-        bynkc::compile_project(
+        let workers = bynk_driver::project::try_read_workers_config(fixture_root)
+            .expect("well-formed fixture manifest");
+        bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_split(fixture_root.to_path_buf(), paths)
                 .target(target)
                 .compatibility_flags(workers.compatibility_flags),
@@ -205,7 +206,7 @@ fn compile_fixture(
     } else {
         let src_dir = fixture_root.join("src");
         let platform = fixture_platform(fixture_root);
-        bynkc::compile_project(
+        bynk_driver::project::compile_project(
             &bynk_testkit::compile_options_single(src_dir)
                 .target(target)
                 .platform(platform),
@@ -262,7 +263,7 @@ fn positive_fixtures() {
             let expected = dir.join("expected.ts");
             let source = read(&input);
             let name = input.display().to_string();
-            match bynkc::compile(&source, &name) {
+            match bynk_emit::compile(&source, &name) {
                 Ok(actual) => {
                     let want = read(&expected);
                     if actual != want {
@@ -277,7 +278,7 @@ fn positive_fixtures() {
                     check_expected_contains_absent(&dir, &actual, &mut failures);
                 }
                 Err(errors) => {
-                    let rendered = bynkc::render_errors(&errors, &source, &name);
+                    let rendered = bynk_render::render_errors(&errors, &source, &name);
                     failures.push(format!(
                         "\n=== {} ===\nexpected compile success but got errors:\n{}",
                         dir.display(),
@@ -412,7 +413,7 @@ fn positive_fixtures() {
                     check_expected_contains_absent(&dir, &haystack, &mut failures);
                 }
                 Err(failure) => {
-                    let rendered = bynkc::render_project_errors(&failure.flatten());
+                    let rendered = bynk_render::render_project_errors(&failure.flatten());
                     failures.push(format!(
                         "\n=== {} ===\nexpected compile success but got errors:\n{}",
                         dir.display(),
@@ -450,7 +451,7 @@ fn bless_positive_fixtures() {
             if input.exists() {
                 let source = read(&input);
                 let ts =
-                    bynkc::compile(&source, &input.display().to_string()).unwrap_or_else(|e| {
+                    bynk_emit::compile(&source, &input.display().to_string()).unwrap_or_else(|e| {
                         panic!("bless: {} failed to compile: {e:?}", dir.display())
                     });
                 fs::write(dir.join("expected.ts"), ts).unwrap();
@@ -464,7 +465,7 @@ fn bless_positive_fixtures() {
                 panic!(
                     "bless: {} failed to compile:\n{}",
                     dir.display(),
-                    bynkc::render_project_errors(&failure.flatten())
+                    bynk_render::render_project_errors(&failure.flatten())
                 );
             }
         };
@@ -509,7 +510,7 @@ fn no_unknown_placeholder_in_emitted_output() {
         let src_dir = dir.join("src");
         if input.exists() {
             let source = read(&input);
-            if let Ok(actual) = bynkc::compile(&source, &input.display().to_string())
+            if let Ok(actual) = bynk_emit::compile(&source, &input.display().to_string())
                 && hit(&actual)
             {
                 offenders.push(dir.display().to_string());
@@ -707,7 +708,7 @@ fn every_worker_entry_fault_handler_logs_the_stack() {
 /// could not have caught, because neither carried a path to disagree on.
 fn check_expected_diagnostics(
     dir: &Path,
-    errors: &[bynkc::AttributedError],
+    errors: &[bynk_driver::project::AttributedError],
     snapshots: &[(PathBuf, String)],
     failures: &mut Vec<String>,
 ) {
@@ -883,7 +884,7 @@ fn negative_fixtures() {
         if input.exists() {
             let source = read(&input);
             let name = input.display().to_string();
-            match bynkc::compile(&source, &name) {
+            match bynk_emit::compile(&source, &name) {
                 Ok(_) => {
                     failures.push(format!(
                         "\n=== {} ===\nexpected compile failure but compilation succeeded",

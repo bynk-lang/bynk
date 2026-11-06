@@ -19,7 +19,7 @@
 //! (Linux CI sets `1`) turns the skip into a failure. Both `wrangler dev`s are
 //! stopped, with their `workerd`s, when the guard drops (#1686).
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -145,17 +145,18 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
     fs::write(proj.join("callee.bynk"), SOURCE_CALLEE).unwrap();
     fs::write(proj.join("caller.bynk"), SOURCE_CALLER).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the callee-faulted project to workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
-    let out = bynkc::strip_project_to_js(out).expect("callee-faulted project strips to JS");
-    bynkc::write_output(&out, &tmp).unwrap();
+    let out =
+        bynk_driver::strip::strip_project_to_js(out).expect("callee-faulted project strips to JS");
+    bynk_driver::write_output(&out, &tmp).unwrap();
 
     let callee_dir = tmp.join("workers/fault-callee");
     let caller_dir = tmp.join("workers/fault-caller");

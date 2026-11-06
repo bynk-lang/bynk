@@ -14,7 +14,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use bynkc::CompileError;
+use bynk_syntax::CompileError;
 
 fn diagnostics_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/diagnostics")
@@ -32,7 +32,7 @@ fn first_line(body: &str) -> &str {
 fn compile_fixture(id: &str, source: &str) -> Result<(), Vec<CompileError>> {
     let first = first_line(source);
     if first.starts_with("commons ") {
-        bynkc::compile(source, &format!("{id}.bynk")).map(|_| ())
+        bynk_emit::compile(source, &format!("{id}.bynk")).map(|_| ())
     } else if first.starts_with("context ") {
         let name = first
             .strip_prefix("context")
@@ -46,9 +46,11 @@ fn compile_fixture(id: &str, source: &str) -> Result<(), Vec<CompileError>> {
         let file = root.join(&rel);
         fs::create_dir_all(file.parent().unwrap()).unwrap();
         fs::write(&file, source).unwrap();
-        let result = bynkc::compile_project(&bynk_testkit::compile_options_single(root.clone()))
-            .map_err(bynkc::ProjectFailure::flatten)
-            .map(|_| ());
+        let result = bynk_driver::project::compile_project(&bynk_testkit::compile_options_single(
+            root.clone(),
+        ))
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
+        .map(|_| ());
         let _ = fs::remove_dir_all(&root);
         result
     } else {
@@ -89,7 +91,7 @@ fn diagnostic_transcripts_are_up_to_date() {
             Err(errors) => errors,
         };
 
-        let transcript = bynkc::render_errors_plain(&errors, &source, &format!("{id}.bynk"));
+        let transcript = bynk_render::render_errors_plain(&errors, &source, &format!("{id}.bynk"));
         let txt = dir.join(format!("{id}.txt"));
 
         if bless {

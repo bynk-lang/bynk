@@ -34,21 +34,25 @@ fn deleting_a_unit_prunes_its_stale_emitted_output() {
     );
 
     let compile = || {
-        let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
-        bynkc::compile_project(&bynk_testkit::compile_options_split(root.clone(), paths))
-            .unwrap_or_else(|f| {
-                panic!(
-                    "compile failed: {:?}",
-                    f.errors
-                        .iter()
-                        .map(|e| (&e.source_path, e.error.category, &e.error.message))
-                        .collect::<Vec<_>>()
-                )
-            })
+        let paths = bynk_driver::project::try_read_project_paths(&root)
+            .expect("well-formed fixture manifest");
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_split(
+            root.clone(),
+            paths,
+        ))
+        .unwrap_or_else(|f| {
+            panic!(
+                "compile failed: {:?}",
+                f.errors
+                    .iter()
+                    .map(|e| (&e.source_path, e.error.category, &e.error.message))
+                    .collect::<Vec<_>>()
+            )
+        })
     };
 
     let out = compile();
-    bynkc::write_output(&out, &out_dir).expect("write_output (first build)");
+    bynk_driver::write_output(&out, &out_dir).expect("write_output (first build)");
     assert!(
         out_dir.join("keep.ts").is_file(),
         "keep.ts should be written"
@@ -67,7 +71,7 @@ fn deleting_a_unit_prunes_its_stale_emitted_output() {
 
     std::fs::remove_file(root.join("src/gone.bynk")).unwrap();
     let out = compile();
-    bynkc::write_output(&out, &out_dir).expect("write_output (second build)");
+    bynk_driver::write_output(&out, &out_dir).expect("write_output (second build)");
 
     assert!(
         !out_dir.join("gone.ts").exists(),
@@ -104,18 +108,20 @@ fn a_node_modules_subtree_is_never_descended_into() {
         &root.join("src/only.bynk"),
         "commons only\n\nfn f() -> Int {\n  1\n}\n",
     );
-    let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
-    let out = bynkc::compile_project(&bynk_testkit::compile_options_split(root, paths))
-        .unwrap_or_else(|f| {
-            panic!(
-                "compile failed: {:?}",
-                f.errors
-                    .iter()
-                    .map(|e| (&e.source_path, e.error.category, &e.error.message))
-                    .collect::<Vec<_>>()
-            )
-        });
-    bynkc::write_output(&out, &out_dir).expect("write_output");
+    let paths =
+        bynk_driver::project::try_read_project_paths(&root).expect("well-formed fixture manifest");
+    let out =
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_split(root, paths))
+            .unwrap_or_else(|f| {
+                panic!(
+                    "compile failed: {:?}",
+                    f.errors
+                        .iter()
+                        .map(|e| (&e.source_path, e.error.category, &e.error.message))
+                        .collect::<Vec<_>>()
+                )
+            });
+    bynk_driver::write_output(&out, &out_dir).expect("write_output");
 
     assert!(
         out_dir.join("node_modules/some-pkg/package.json").is_file(),
@@ -141,17 +147,21 @@ fn a_workers_assets_dir_is_written_byte_for_byte_and_pruned_regardless_of_extens
         "commons only\n\nfn f() -> Int {\n  1\n}\n",
     );
     let compile = || {
-        let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
-        bynkc::compile_project(&bynk_testkit::compile_options_split(root.clone(), paths))
-            .unwrap_or_else(|f| {
-                panic!(
-                    "compile failed: {:?}",
-                    f.errors
-                        .iter()
-                        .map(|e| (&e.source_path, e.error.category, &e.error.message))
-                        .collect::<Vec<_>>()
-                )
-            })
+        let paths = bynk_driver::project::try_read_project_paths(&root)
+            .expect("well-formed fixture manifest");
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_split(
+            root.clone(),
+            paths,
+        ))
+        .unwrap_or_else(|f| {
+            panic!(
+                "compile failed: {:?}",
+                f.errors
+                    .iter()
+                    .map(|e| (&e.source_path, e.error.category, &e.error.message))
+                    .collect::<Vec<_>>()
+            )
+        })
     };
 
     let assets = bynk_driver::project::worker_assets_dir("only");
@@ -174,7 +184,7 @@ fn a_workers_assets_dir_is_written_byte_for_byte_and_pruned_regardless_of_extens
     out.artefacts
         .assets
         .insert(well_known.clone(), b"Contact: x\n".to_vec());
-    bynkc::write_output(&out, &out_dir).expect("write_output (with assets)");
+    bynk_driver::write_output(&out, &out_dir).expect("write_output (with assets)");
     assert_eq!(std::fs::read(out_dir.join(&css)).unwrap(), b"body{}");
     assert_eq!(std::fs::read(out_dir.join(&png)).unwrap(), png_bytes);
     assert!(
@@ -211,7 +221,7 @@ fn a_workers_assets_dir_is_written_byte_for_byte_and_pruned_regardless_of_extens
 
     let mut out = compile();
     out.artefacts.assets.insert(css.clone(), b"body{}".to_vec());
-    bynkc::write_output(&out, &out_dir).expect("write_output (one asset dropped)");
+    bynk_driver::write_output(&out, &out_dir).expect("write_output (one asset dropped)");
     assert!(out_dir.join(&css).is_file(), "a still-declared asset stays");
     #[cfg(unix)]
     {
@@ -243,7 +253,7 @@ fn a_workers_assets_dir_is_written_byte_for_byte_and_pruned_regardless_of_extens
     );
 
     let out = compile();
-    bynkc::write_output(&out, &out_dir).expect("write_output (no assets)");
+    bynk_driver::write_output(&out, &out_dir).expect("write_output (no assets)");
     assert!(
         !out_dir.join(&assets).exists(),
         "an assets directory left empty is removed"
@@ -269,13 +279,15 @@ fn an_asset_outside_a_workers_assets_dir_is_rejected_in_debug_builds() {
         &root.join("src/only.bynk"),
         "commons only\n\nfn f() -> Int {\n  1\n}\n",
     );
-    let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
-    let mut out = bynkc::compile_project(&bynk_testkit::compile_options_split(root, paths))
-        .unwrap_or_else(|f| panic!("compile failed: {} error(s)", f.errors.len()));
+    let paths =
+        bynk_driver::project::try_read_project_paths(&root).expect("well-formed fixture manifest");
+    let mut out =
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_split(root, paths))
+            .unwrap_or_else(|f| panic!("compile failed: {} error(s)", f.errors.len()));
     out.artefacts
         .assets
         .insert(PathBuf::from("workers/only/board.css"), b"body{}".to_vec());
-    let _ = bynkc::write_output(&out, &out_dir);
+    let _ = bynk_driver::write_output(&out, &out_dir);
 }
 
 #[test]
@@ -292,11 +304,13 @@ fn a_path_that_is_both_a_document_and_an_asset_is_rejected_in_debug_builds() {
         &root.join("src/only.bynk"),
         "commons only\n\nfn f() -> Int {\n  1\n}\n",
     );
-    let paths = bynkc::try_read_project_paths(&root).expect("well-formed fixture manifest");
-    let mut out = bynkc::compile_project(&bynk_testkit::compile_options_split(root, paths))
-        .unwrap_or_else(|f| panic!("compile failed: {} error(s)", f.errors.len()));
+    let paths =
+        bynk_driver::project::try_read_project_paths(&root).expect("well-formed fixture manifest");
+    let mut out =
+        bynk_driver::project::compile_project(&bynk_testkit::compile_options_split(root, paths))
+            .unwrap_or_else(|f| panic!("compile failed: {} error(s)", f.errors.len()));
     out.artefacts
         .assets
         .insert(PathBuf::from("tsconfig.json"), b"{}".to_vec());
-    let _ = bynkc::write_output(&out, &out_dir);
+    let _ = bynk_driver::write_output(&out, &out_dir);
 }

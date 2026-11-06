@@ -22,7 +22,7 @@
 //! into a failure (CI), matching every other toolchain-driving test in this
 //! suite.
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -218,13 +218,13 @@ fn compile_and_run(
     fs::write(proj.join("order.bynk"), source_order(schema_annotation)).unwrap();
     fs::write(proj.join("notifications.bynk"), notifications).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Bundle),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the schema-dispatch project ({tag}):\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
 

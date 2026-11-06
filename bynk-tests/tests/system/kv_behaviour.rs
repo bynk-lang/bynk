@@ -207,12 +207,12 @@ fn kv_adapter_behaviour() {
     // Compile the bundle Kv fixture in-process.
     let fixture: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/positive/214_kv_list_bundle/src");
-    let out = bynkc::compile_project(
+    let out = bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(fixture)
-            .target(bynkc::BuildTarget::Bundle)
-            .platform(bynkc::Platform::Cloudflare),
+            .target(bynk_driver::project::BuildTarget::Bundle)
+            .platform(bynk_check::firstparty::Platform::Cloudflare),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the Kv bundle fixture must compile");
 
     let tmp = std::env::temp_dir().join(format!("bynk-kv-behaviour-{}", std::process::id()));

@@ -40,7 +40,7 @@ agent Room {
 
 /// Compile the two-file `chat` context (service in `gateway.bynk`, the agent it
 /// transfers to in `room.bynk`) for `target`, returning the error categories.
-fn compile_categories(target: bynkc::BuildTarget) -> Result<(), Vec<String>> {
+fn compile_categories(target: bynk_driver::project::BuildTarget) -> Result<(), Vec<String>> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!(
@@ -51,25 +51,26 @@ fn compile_categories(target: bynkc::BuildTarget) -> Result<(), Vec<String>> {
     std::fs::create_dir_all(src.join("chat")).unwrap();
     std::fs::write(src.join("chat").join("gateway.bynk"), GATEWAY).unwrap();
     std::fs::write(src.join("chat").join("room.bynk"), ROOM).unwrap();
-    let result =
-        bynkc::compile_project(&bynk_testkit::compile_options_single(src.clone()).target(target))
-            .map(|_| ())
-            .map_err(|failure| {
-                bynkc::ProjectFailure::flatten(failure)
-                    .into_iter()
-                    .map(|e| e.category.to_string())
-                    .collect()
-            });
+    let result = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(src.clone()).target(target),
+    )
+    .map(|_| ())
+    .map_err(|failure| {
+        bynk_driver::project::ProjectFailure::flatten(failure)
+            .into_iter()
+            .map(|e| e.category.to_string())
+            .collect()
+    });
     let _ = std::fs::remove_dir_all(&dir);
     result
 }
 
 #[test]
 fn a_cross_file_open_transfer_compiles_on_bundle_and_is_rejected_on_workers() {
-    compile_categories(bynkc::BuildTarget::Bundle)
+    compile_categories(bynk_driver::project::BuildTarget::Bundle)
         .unwrap_or_else(|errs| panic!("the bundle target should accept the layout: {errs:?}"));
 
-    let errs = compile_categories(bynkc::BuildTarget::Workers)
+    let errs = compile_categories(bynk_driver::project::BuildTarget::Workers)
         .expect_err("the Workers target should reject the layout");
     assert_eq!(
         errs,

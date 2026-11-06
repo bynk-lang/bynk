@@ -43,3 +43,5 @@ bynk-ide.workspace = true
 bynk-testkit.workspace = true
 bynk-ts.workspace = true
 bynk-project.workspace = true
+# The diagnostic renderers the corpus calls directly (D2 merges them into `bynk-driver`).
+bynk-render.workspace = true

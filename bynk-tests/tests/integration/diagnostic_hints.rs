@@ -8,7 +8,7 @@ use std::path::Path;
 use bynk_syntax::error::{Applicability, CompileError, Suggestion};
 
 fn errors(source: &str) -> Vec<CompileError> {
-    match bynkc::compile(source, "hints.bynk") {
+    match bynk_emit::compile(source, "hints.bynk") {
         Ok(_) => panic!("expected a compile failure for:\n{source}"),
         Err(errors) => errors,
     }
@@ -137,7 +137,7 @@ fn string_plus_suggests_interpolation_with_a_fix() {
     assert_eq!(s.applicability, Applicability::MachineApplicable);
     let fixed = apply(&src, s);
     assert!(fixed.contains("\"hi \\(name)\""), "{fixed}");
-    bynkc::compile(&fixed, "hints.bynk").expect("the applied fix compiles");
+    bynk_emit::compile(&fixed, "hints.bynk").expect("the applied fix compiles");
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn field_path_and_int_operands_are_fixed() {
     let (src, e) = plus_error("\"n=\" + n");
     let fixed = apply(&src, &e.suggestions[0]);
     assert!(fixed.contains("\"n=\\(n)\""), "{fixed}");
-    bynkc::compile(&fixed, "hints.bynk").expect("the applied fix compiles");
+    bynk_emit::compile(&fixed, "hints.bynk").expect("the applied fix compiles");
 }
 
 #[test]

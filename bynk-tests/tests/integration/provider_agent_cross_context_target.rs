@@ -88,7 +88,10 @@ refinement = "Bool"
 
 /// Compile `registry` plus the given `api` for `target`, returning the error
 /// categories.
-fn compile_categories(api: &str, target: bynkc::BuildTarget) -> Result<(), Vec<String>> {
+fn compile_categories(
+    api: &str,
+    target: bynk_driver::project::BuildTarget,
+) -> Result<(), Vec<String>> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!(
@@ -100,15 +103,16 @@ fn compile_categories(api: &str, target: bynkc::BuildTarget) -> Result<(), Vec<S
     std::fs::write(src.join("registry.bynk"), REGISTRY).unwrap();
     std::fs::write(src.join("api.bynk"), api).unwrap();
     std::fs::write(src.join("bynk.schema.lock"), SCHEMA_LOCK).unwrap();
-    let result =
-        bynkc::compile_project(&bynk_testkit::compile_options_single(src.clone()).target(target))
-            .map(|_| ())
-            .map_err(|failure| {
-                bynkc::ProjectFailure::flatten(failure)
-                    .into_iter()
-                    .map(|e| e.category.to_string())
-                    .collect()
-            });
+    let result = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(src.clone()).target(target),
+    )
+    .map(|_| ())
+    .map_err(|failure| {
+        bynk_driver::project::ProjectFailure::flatten(failure)
+            .into_iter()
+            .map(|e| e.category.to_string())
+            .collect()
+    });
     let _ = std::fs::remove_dir_all(&dir);
     result
 }
@@ -116,11 +120,11 @@ fn compile_categories(api: &str, target: bynkc::BuildTarget) -> Result<(), Vec<S
 #[test]
 fn a_cross_context_agent_provider_compiles_on_bundle_and_is_rejected_on_workers() {
     for (path, api) in [("handler", API_HANDLER), ("provider", API_PROVIDER)] {
-        compile_categories(api, bynkc::BuildTarget::Bundle).unwrap_or_else(|errs| {
+        compile_categories(api, bynk_driver::project::BuildTarget::Bundle).unwrap_or_else(|errs| {
             panic!("the bundle target should accept the {path} layout: {errs:?}")
         });
 
-        let errs = compile_categories(api, bynkc::BuildTarget::Workers)
+        let errs = compile_categories(api, bynk_driver::project::BuildTarget::Workers)
             .expect_err("the Workers target should reject the layout");
         assert_eq!(
             errs,

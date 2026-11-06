@@ -59,7 +59,7 @@
 //! the guards drop, so a panicking assertion still tears them down. Both
 //! are signalled before either is waited on.
 
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -424,17 +424,18 @@ fn per_publisher_fifo_on_workerd() {
     fs::write(proj.join("publisher.bynk"), SOURCE_PUBLISHER).unwrap();
     fs::write(proj.join("subscriber.bynk"), SOURCE_SUBSCRIBER).unwrap();
 
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the fifo-ordering project to workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
-    let out = bynkc::strip_project_to_js(out).expect("fifo-ordering project strips to JS");
-    bynkc::write_output(&out, &tmp).unwrap();
+    let out =
+        bynk_driver::strip::strip_project_to_js(out).expect("fifo-ordering project strips to JS");
+    bynk_driver::write_output(&out, &tmp).unwrap();
 
     let pub_dir = tmp.join("workers/fifo-publisher");
     let sub_dir = tmp.join("workers/fifo-subscriber");

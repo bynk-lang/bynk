@@ -7,7 +7,8 @@
 //! writing the lock the way `bynk-driver`'s production callers do, exactly as
 //! `events_schema_registry_behaviour.rs` does for events.
 
-use bynkc::{BuildTarget, SchemaLock};
+use bynk_driver::project::BuildTarget;
+use bynk_driver::project::SchemaLock;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -44,16 +45,16 @@ impl Project {
         let options = bynk_testkit::compile_options_single(&self.root)
             .target(BuildTarget::Bundle)
             .schema_registry(SchemaLock::On { existing });
-        match bynkc::compile_project(&options) {
+        match bynk_driver::project::compile_project(&options) {
             Ok(out) => {
                 if let Some(content) = &out.schema_lock {
                     bynk_driver::schema_lock::write(&self.root, content).unwrap();
                 }
-                let warnings: Vec<bynkc::CompileError> =
+                let warnings: Vec<bynk_syntax::CompileError> =
                     out.warnings.iter().map(|w| w.error.clone()).collect();
-                Ok(bynkc::render_project_errors(&warnings))
+                Ok(bynk_render::render_project_errors(&warnings))
             }
-            Err(failure) => Err(bynkc::render_project_errors(&failure.flatten())),
+            Err(failure) => Err(bynk_render::render_project_errors(&failure.flatten())),
         }
     }
 
@@ -756,12 +757,12 @@ fn renames_and_removals_emit_exports_tombstones() {
     )
     .unwrap();
     let existing = bynk_driver::schema_lock::read(&p.root).unwrap();
-    let out = bynkc::compile_project(
+    let out = bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(&p.root)
             .target(BuildTarget::Workers)
             .schema_registry(SchemaLock::On { existing }),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the workers build compiles");
     let toml = out
         .artefacts

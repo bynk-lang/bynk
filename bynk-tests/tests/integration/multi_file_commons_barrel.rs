@@ -15,21 +15,21 @@
 
 use std::path::Path;
 
-fn compile(fixture: &str) -> bynkc::ProjectOutput {
+fn compile(fixture: &str) -> bynk_driver::project::ProjectOutput {
     let src = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/barrel")
         .join(fixture)
         .join("src");
-    bynkc::compile_project(
+    bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(src)
-            .target(bynkc::BuildTarget::Bundle)
-            .platform(bynkc::Platform::Cloudflare),
+            .target(bynk_driver::project::BuildTarget::Bundle)
+            .platform(bynk_check::firstparty::Platform::Cloudflare),
     )
-    .map_err(bynkc::ProjectFailure::flatten)
+    .map_err(bynk_driver::project::ProjectFailure::flatten)
     .unwrap_or_else(|errors| {
         panic!(
             "fixture `{fixture}` failed to compile:\n{}",
-            bynkc::render_project_errors(&errors)
+            bynk_render::render_project_errors(&errors)
         )
     })
 }
@@ -37,7 +37,9 @@ fn compile(fixture: &str) -> bynkc::ProjectOutput {
 /// Every emitted file whose output path is exactly `money.ts` — for the
 /// multi-file commons `money`, that path can only be the aggregating barrel
 /// (the real per-file outputs are `money/cents.ts` and `money/make.ts`).
-fn money_barrels(out: &bynkc::ProjectOutput) -> Vec<&bynkc::Document> {
+fn money_barrels(
+    out: &bynk_driver::project::ProjectOutput,
+) -> Vec<&bynk_driver::project::Document> {
     out.artefacts
         .docs
         .iter()

@@ -10,7 +10,7 @@
 //! experimental-use rule itself is tested end to end, under a
 //! supplied policy, in `bynk-check/src/stability.rs`.
 
-use bynkc::Roots;
+use bynk_driver::project::Roots;
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::process::Command;
@@ -63,7 +63,7 @@ fn the_build_and_the_editor_report_the_same_unstable_diagnostics() {
 
     // The editor: `analyse_project`, with `bynk.toml` in the overlay as the LSP
     // puts it there.
-    let paths = bynkc::try_read_project_paths(&root).expect("the manifest reads");
+    let paths = bynk_driver::project::try_read_project_paths(&root).expect("the manifest reads");
     let overlay = HashMap::from([
         (root.join("bynk.toml"), MANIFEST.to_string()),
         (root.join("src/app/probe.bynk"), SOURCE.to_string()),
@@ -74,7 +74,7 @@ fn the_build_and_the_editor_report_the_same_unstable_diagnostics() {
             paths,
         },
         &overlay,
-        &bynkc::SchemaLock::Off,
+        &bynk_driver::project::SchemaLock::Off,
     );
     let editor = unstable(
         analysis

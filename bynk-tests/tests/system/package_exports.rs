@@ -3,7 +3,7 @@
 //! project's units, so it runs at `check` time, and the build and the editor
 //! read `[package]` the same way: this runs one project through both.
 
-use bynkc::Roots;
+use bynk_driver::project::Roots;
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::process::Command;
@@ -56,7 +56,7 @@ fn the_build_and_the_editor_refuse_the_same_exports() {
         Some((code.to_string(), rest.to_string()))
     }));
 
-    let paths = bynkc::try_read_project_paths(&root).expect("the manifest reads");
+    let paths = bynk_driver::project::try_read_project_paths(&root).expect("the manifest reads");
     let overlay = HashMap::from([
         (root.join("bynk.toml"), MANIFEST.to_string()),
         (root.join("src/money.bynk"), COMMONS.to_string()),
@@ -69,7 +69,7 @@ fn the_build_and_the_editor_refuse_the_same_exports() {
             paths,
         },
         &overlay,
-        &bynkc::SchemaLock::Off,
+        &bynk_driver::project::SchemaLock::Off,
     );
     let editor = exports(
         analysis

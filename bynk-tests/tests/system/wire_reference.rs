@@ -29,7 +29,7 @@ use bynk_check::wire_format::reference::{
     EXAMPLE_SOURCE, EXAMPLES, Outcome, example_contracts, render_reference,
 };
 use bynk_check::wire_format::{self as wf, CallCheck};
-use bynkc::BuildTarget;
+use bynk_driver::project::BuildTarget;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
 
@@ -63,13 +63,13 @@ fn compile_example(dir: &Path) {
     let proj = dir.join("proj/wire");
     fs::create_dir_all(&proj).unwrap();
     fs::write(proj.join("sample.bynk"), EXAMPLE_SOURCE).unwrap();
-    let out = match bynkc::compile_project(
+    let out = match bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(dir.join("proj")).target(BuildTarget::Workers),
     ) {
         Ok(o) => o,
         Err(failure) => panic!(
             "compile the wire-format example to Workers:\n{}",
-            bynkc::render_project_errors(&failure.flatten())
+            bynk_render::render_project_errors(&failure.flatten())
         ),
     };
     let run_dir = dir.join("run");
