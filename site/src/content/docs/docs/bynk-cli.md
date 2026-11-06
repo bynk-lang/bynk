@@ -1530,12 +1530,20 @@ escape hatch below — in this order:
 2. **`bynkc` on `PATH`**;
 3. a **`bynkc` sibling** of the running `bynk` binary (how a paired install ships).
 
+`bynk compile` runs in-process and **ignores `BYNK_BYNKC`**: there is no second
+compiler to pin. That is transitional — a later release makes `check`, `fmt`,
+`dev` and `deploy` ignore it too, with a one-line warning for a release before
+it is dropped.
+
 `bynk check` and `bynk fmt` run in-process and need none of this — **unless**
 `BYNK_BYNKC` is set, in which case they shell that pinned compiler so an
 externally-managed `bynkc` still governs the result. `bynk doctor` reports this
 resolution and any driver↔compiler version skew.
 
 ### Version skew
+
+`bynk compile` never runs a separate `bynkc`, so it is not gated: it accepts
+`--allow-skew` and ignores it.
 
 When `bynk` is about to run a separate `bynkc` (`bynk test` always does, and
 `bynk check`, `fmt`, `dev` and `deploy` do under `BYNK_BYNKC`), it compares

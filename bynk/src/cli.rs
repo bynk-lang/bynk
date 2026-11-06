@@ -346,15 +346,17 @@ pub enum Command {
     ///
     /// The `bynkc compile` behaviour, run in-process (#2471, #2998).
     ///
-    /// Needs no `bynkc` binary: the compiler is linked in. With `--sources-stdin` it compiles
-    /// unsaved editor buffers: a JSON object `{ "<absolute path>": "<text>" }`
+    /// Needs no `bynkc` binary: the compiler is linked in, so `BYNK_BYNKC` is
+    /// ignored here. With `--sources-stdin` it compiles unsaved editor buffers:
+    /// a JSON object `{ "<absolute path>": "<text>" }`
     /// on stdin wins over the files on disk, and `bynk.schema.lock` is neither
     /// read nor written. What "Bynk: Show Compiled Output" runs.
     Compile {
-        /// Project directory. Defaults to the current directory.
+        /// Project directory, or one `.bynk` file. Defaults to the current
+        /// directory.
         #[arg(default_value = ".")]
         input: PathBuf,
-        /// Output root directory.
+        /// Output root directory (the output file, for a single-file input).
         #[arg(short, long)]
         output: PathBuf,
         /// Build target. `bundle` (default) produces a single deployment

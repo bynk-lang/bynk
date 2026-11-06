@@ -1240,3 +1240,29 @@ fn compile_emit_js_matches_bynkc_when_present() {
         assert_eq!(x.ok(), y.ok(), "{name} differs");
     }
 }
+
+/// #2998: `bynk compile` ignores `BYNK_BYNKC` (there is no second compiler to
+/// pin), even when it names a binary that does not exist.
+#[test]
+fn compile_ignores_a_missing_bynk_bynkc_override() {
+    let proj = scratch("compile-ignores-override");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let out = proj.join("out");
+    let run = Command::new(bynk())
+        .args(["compile", ".", "-o"])
+        .arg(&out)
+        .current_dir(&proj)
+        .env("BYNK_BYNKC", "/nonexistent/bynkc")
+        .output()
+        .expect("spawn");
+    assert!(
+        run.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(out.join("calc.ts").exists(), "the module is written");
+}
