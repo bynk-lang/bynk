@@ -1,5 +1,13 @@
 # bynk-render
 
+> **Final release: superseded by [`bynk-driver`](https://crates.io/crates/bynk-driver).**
+> The diagnostic renderers become the `bynk_driver::render` module (ADR 0100,
+> amended; crate-hygiene track [#2775](https://github.com/bynk-lang/bynk/issues/2775),
+> slice D2). This is `bynk-render`'s final crates.io release. It is not yanked, and
+> existing pins keep resolving. New code depends on `bynk-driver`, which carries
+> the same functions under `bynk_driver::render`, starting with the first `bynk-driver`
+> release that has a `render` module.
+
 [![crates.io](https://img.shields.io/crates/v/bynk-render.svg)](https://crates.io/crates/bynk-render)
 [![docs.rs](https://img.shields.io/docsrs/bynk-render)](https://docs.rs/bynk-render)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
