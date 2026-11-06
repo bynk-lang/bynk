@@ -26,11 +26,18 @@ stopped=0
 marker="$(mktemp)"
 rm -f "$marker"
 
+errlog="$(mktemp)"
+echo "sibling watcher: polling '$sibling' every ${POLL_SECONDS:-20}s"
 (
   while kill -0 "$cmd_pid" 2>/dev/null; do
     sleep "${POLL_SECONDS:-20}"
     state="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
-      --jq '[.jobs[] | select(.name == env.SIBLING_JOB) | .conclusion] | any(. == "failure")' 2>/dev/null || true)"
+      --jq '[.jobs[] | select(.name == env.SIBLING_JOB) | .conclusion] | any(. == "failure")' 2>"$errlog" || true)"
+    # A lookup that keeps failing would otherwise be invisible: say so once.
+    if [ -s "$errlog" ] && [ -z "${warned:-}" ]; then
+      echo "::warning::sibling watcher cannot read the run's jobs, so it cannot stop this job early: $(head -c 300 "$errlog")"
+      warned=1
+    fi
     if [ "$state" = "true" ]; then
       : > "$marker"
       # The command leads its own process group (setsid), so this reaches the
