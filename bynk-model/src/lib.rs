@@ -8,6 +8,10 @@
 //! This is distinct from `bynk_check::project_model`, which models units and
 //! manifests, not declarations.
 //!
+//! The model sits above `bynk-check` (crate-hygiene B4, #3012). Its boundary
+//! half, `bynk_check::wire::WireModel`, stays in `bynk-check` because the
+//! checker's own boundary checks read it.
+//!
 //! Three modules, all re-exported at the root:
 //! - [`vocabulary`]: the model's items (until crate-hygiene B1, #2939, the
 //!   `bynk-ir` crate).

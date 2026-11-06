@@ -6,6 +6,10 @@
 //! **The seam:** *`bynk-check` says what the boundary is. `bynk-emit` says
 //! how that reads as TypeScript.*
 //!
+//! This is the system model's boundary half. It lives here, not in
+//! `bynk-model`, because the checker's own boundary checks read it
+//! (crate-hygiene B4, #3012).
+//!
 //! Crossing this module boundary is legal for `BaseType`, `PredKind`,
 //! `TypeRef`, `Expr`, `TypeDecl` (all `bynk-syntax`) — the vocabulary a
 //! boundary type is built from. It is **not** legal for any TS-token string,
