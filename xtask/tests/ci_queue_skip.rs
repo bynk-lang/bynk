@@ -36,6 +36,12 @@ struct Job {
     name: Option<String>,
     needs_changes: bool,
     uses_rust_cache: bool,
+    /// The `changes` output `runs-on` reads, when it is one of the self-hosted
+    /// ones (`linux_runner` or `linux_runner_extra`), i.e. the job can run on
+    /// the self-hosted runners.
+    runner: Option<&'static str>,
+    /// Every line of the job, for the self-hosted step checks.
+    lines: Vec<String>,
     condition: String,
 }
 
@@ -66,6 +72,8 @@ fn jobs() -> Vec<Job> {
                 name: None,
                 needs_changes: false,
                 uses_rust_cache: false,
+                runner: None,
+                lines: Vec::new(),
                 condition: String::new(),
             });
             in_if = false;
@@ -75,6 +83,16 @@ fn jobs() -> Vec<Job> {
         let Some(job) = jobs.last_mut() else { continue };
         if line.contains("uses: Swatinem/rust-cache@") {
             job.uses_rust_cache = true;
+        }
+        job.lines.push(line.to_string());
+        if line.starts_with("    runs-on:") {
+            job.runner = if line.contains("needs.changes.outputs.linux_runner_extra") {
+                Some("linux_runner_extra")
+            } else if line.contains("needs.changes.outputs.linux_runner") {
+                Some("linux_runner")
+            } else {
+                None
+            };
         }
         if in_if && line.starts_with("      ") {
             job.condition.push(' ');
@@ -201,4 +219,107 @@ fn rust_caches_names_every_job_that_saves_one_on_main() {
             "RUST_CACHES lacks `{os}`, one leg of the `test` matrix"
         );
     }
+}
+
+/// A job on the self-hosted runners skips rust-cache, so `main` never has its
+/// cache. The `queue` step must not wait for one (`SELF_HOSTED_CACHES`, built
+/// by the `runner` step), or every push to `main` would read it as missing and
+/// run everything. Each group's list must name exactly its jobs that use
+/// rust-cache (bar `drift`, which never runs on a push).
+#[test]
+fn self_hosted_caches_name_every_self_hosted_job_with_a_rust_cache() {
+    let yaml = workflow();
+    for (output, var) in [
+        ("linux_runner", "LINUX_RUNNER_CACHES"),
+        ("linux_runner_extra", "LINUX_RUNNER_EXTRA_CACHES"),
+    ] {
+        let listed = yaml
+            .lines()
+            .find_map(|l| l.trim().strip_prefix(&format!("{var}: \"")))
+            .and_then(|l| l.strip_suffix('"'))
+            .unwrap_or_else(|| panic!("ci.yml's `runner` step sets {var} on one line"));
+        let mut listed_jobs: Vec<&str> = listed
+            .split_whitespace()
+            .map(|c| c.strip_suffix("-Linux").expect("`<job>-Linux`"))
+            .collect();
+        listed_jobs.sort_unstable();
+        let mut expected: Vec<String> = jobs()
+            .into_iter()
+            .filter(|j| j.runner == Some(output) && j.uses_rust_cache && j.key != "drift")
+            .map(|j| j.key)
+            .collect();
+        expected.sort_unstable();
+        assert_eq!(
+            listed_jobs, expected,
+            "{var} on ci.yml's `runner` step must name every job that uses \
+             Swatinem/rust-cache and whose `runs-on` reads `{output}`"
+        );
+    }
+}
+
+/// A job that can run on the self-hosted runners must use the shared
+/// self-hosted checkout and clean steps (defined once with YAML anchors) and
+/// skip every rust-cache step there. A plain `actions/checkout` runs
+/// `git clean -ffdx`, which deletes the warm target/ every other job on that
+/// runner relies on.
+#[test]
+fn every_self_hosted_job_keeps_target_warm() {
+    let jobs: Vec<Job> = jobs().into_iter().filter(|j| j.runner.is_some()).collect();
+    assert!(
+        jobs.iter()
+            .any(|j| j.key == "test" && j.runner == Some("linux_runner")),
+        "the `test` job's Linux leg reads `linux_runner`"
+    );
+    for job in &jobs {
+        let has = |step: &str| {
+            job.lines.iter().any(|l| {
+                let l = l.trim();
+                l == format!("- *{step}") || l == format!("- &{step}")
+            })
+        };
+        for step in ["self_hosted_checkout", "self_hosted_clean"] {
+            assert!(
+                has(step),
+                "`{}` can run self-hosted but lacks `{step}`",
+                job.key
+            );
+        }
+        assert!(
+            !job.lines
+                .iter()
+                .any(|l| l.contains("uses: actions/checkout@")
+                    && !l.trim_start().starts_with("uses:")),
+            "`{}` can run self-hosted but has its own `actions/checkout` step",
+            job.key
+        );
+        for (i, line) in job.lines.iter().enumerate() {
+            if line.contains("uses: Swatinem/rust-cache@") {
+                assert_eq!(
+                    job.lines.get(i + 1).map(|l| l.trim()),
+                    Some("if: runner.environment != 'self-hosted'"),
+                    "`{}`'s rust-cache step must skip the self-hosted runners",
+                    job.key
+                );
+            }
+        }
+    }
+}
+
+/// The trust rule for the self-hosted runners (no fork or Dependabot PRs) is
+/// the security boundary for machines that keep state between jobs, so it
+/// lives in one place: the `runner` step on `changes`. A job that names the
+/// self-hosted labels itself would bypass it.
+#[test]
+fn the_self_hosted_labels_appear_only_in_the_runner_step() {
+    let yaml = workflow();
+    let uses: Vec<&str> = yaml
+        .lines()
+        .filter(|l| l.contains("\"self-hosted\""))
+        .collect();
+    assert_eq!(
+        uses.len(),
+        1,
+        "ci.yml must name the self-hosted labels only in `changes`' `runner` \
+         step; other jobs take `needs.changes.outputs.linux_runner`: {uses:#?}"
+    );
 }

@@ -116,6 +116,12 @@ jobs:
       installers: ${{ steps.filter.outputs.installers }}
       installer_scripts: ${{ steps.filter.outputs.installer_scripts }}
       all: ${{ steps.all.outputs.value }}
+      # `runs-on` for the Linux jobs that may use the org's self-hosted runners
+      # (see the `runner` step): a JSON label array or a JSON string.
+      # `linux_runner` is the `test` job's Linux leg; `linux_runner_extra` is
+      # the jobs that move only once the pool has room for them too.
+      linux_runner: ${{ steps.runner.outputs.labels }}
+      linux_runner_extra: ${{ steps.runner.outputs.extra_labels }}
       # JSON array of the job names the merge queue's run passed on THIS commit,
       # so the push run on `main` need not repeat them. `[]` on every event but
       # `push`, and on any push the queue did not test (see the `queue` step).
@@ -150,6 +156,61 @@ jobs:
       # release.yml's arm64 leg was re-enabled at the same time.)
       test_os: ${{ steps.test-os.outputs.value }}
     steps:
+      # Which runner the self-hosted-capable Linux jobs use. The self-hosted
+      # runners are used only when the repo variable SELF_HOSTED_LINUX is
+      # 'true', and never for a fork PR (this repo is public, so a fork PR
+      # would run untrusted code there) or a Dependabot PR (its branches live
+      # in this repo, so it passes the fork test, but it runs unreviewed
+      # third-party build.rs and proc-macro code, and those machines keep their
+      # state for later runs on `main`). The variable is the kill switch: a job
+      # aimed at an offline runner waits up to 24h in the queue
+      # (timeout-minutes does not count queue time), which would wedge
+      # `CI green` and the merge queue.
+      #
+      # The variable SELF_HOSTED_LINUX_EXTRA ('true') also moves the jobs on
+      # `linux_runner_extra` (clippy, api-docs, node-floor, msrv, wasm, drift).
+      # It is separate because two runners are already kept busy by the `test`
+      # legs alone: with those jobs added, PR #2996's run had its Linux test
+      # leg wait 883s for a free runner, behind its own short jobs, and finish
+      # well after Windows. Turn it on only once the pool has more runners.
+      #
+      # The Dependabot exclusion covers only the PR's own run:
+      # `github.event.pull_request` is empty in `merge_group`, so a Dependabot
+      # PR in the merge queue does run self-hosted. That holds only because a
+      # PR reaches the queue after a human review; if an auto-approve or
+      # auto-merge workflow is ever added, revisit this.
+      #
+      # This is the only copy of the rule; xtask/tests/ci_queue_skip.rs fails
+      # if a job names the self-hosted labels itself.
+      - id: runner
+        env:
+          SELF_HOSTED: >-
+            ${{
+              vars.SELF_HOSTED_LINUX == 'true'
+              && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+              && github.event.pull_request.user.login != 'dependabot[bot]'
+            }}
+          EXTRA: ${{ vars.SELF_HOSTED_LINUX_EXTRA == 'true' }}
+          # The RUST_CACHES entries of each group's jobs, for the `queue` step:
+          # a job on the self-hosted runners keeps no Rust cache on `main`.
+          # xtask/tests/ci_queue_skip.rs keeps both lists in step with the jobs.
+          LINUX_RUNNER_CACHES: "test-Linux"
+          LINUX_RUNNER_EXTRA_CACHES: "clippy-Linux api-docs-Linux msrv-Linux wasm-Linux node-floor-Linux"
+        run: |
+          self_hosted='["self-hosted","Linux","X64"]'
+          hosted='"ubuntu-latest"'
+          labels="$hosted" extra_labels="$hosted" caches=""
+          if [ "$SELF_HOSTED" = true ]; then
+            labels="$self_hosted" caches="$LINUX_RUNNER_CACHES"
+            if [ "$EXTRA" = true ]; then
+              extra_labels="$self_hosted" caches="$caches $LINUX_RUNNER_EXTRA_CACHES"
+            fi
+          fi
+          {
+            echo "labels=$labels"
+            echo "extra_labels=$extra_labels"
+            echo "caches=$caches"
+          } >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -328,6 +389,15 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           SHA: ${{ github.sha }}
+          # The RUST_CACHES entries whose jobs run on the self-hosted runners on
+          # this push. Those skip rust-cache, so `main` never has their cache,
+          # and expecting one would make every push run everything. The cost is
+          # that a run of these jobs on a hosted runner (a fork or Dependabot
+          # PR) finds no `main` cache and compiles cold. That is the accepted
+          # trade: do not "fix" slow fork PRs by dropping this list. Turning
+          # a variable off empties its part, and the next push saves the caches.
+          # The lists themselves are on the `runner` step.
+          SELF_HOSTED_CACHES: ${{ steps.runner.outputs.caches }}
           CACHE_KEYS: ${{ steps.filter.outputs.cache_keys }}
           # `<job>-<runner OS>` for every job that saves a Rust cache on `main`
           # (`drift` never runs on a push). rust-cache keys start
@@ -345,6 +415,7 @@ jobs:
               keys="$(gh api --paginate "repos/$REPO/actions/caches?ref=refs/heads/main&key=v0-rust-&per_page=100" \
                 --jq '.actions_caches[].key' || true)"
               for c in $RUST_CACHES; do
+                case " $SELF_HOSTED_CACHES " in *" $c "*) continue ;; esac
                 printf '%s\n' "$keys" | grep -q "^v0-rust-$c-" || missing="$missing $c"
               done
             fi
@@ -473,16 +544,44 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Lint (clippy -D warnings)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The self-hosted checkout and clean steps (see `runner` on `changes`),
+      # defined once here and aliased by every job whose `runs-on` uses
+      # `linux_runner` or `linux_runner_extra`; xtask/tests/ci_queue_skip.rs enforces that. On the
+      # self-hosted runners the workspace persists between jobs, and a warm
+      # target/ is most of what they buy, so checkout's own `git clean -ffdx`
+      # is off there (a plain checkout would delete target/ for the next job
+      # on that runner) and the clean step removes everything else. Such a job
+      # also skips rust-cache there: target/ is already warm, and its saves
+      # would add GBs against the repo's 10 GB cache cap (see the header note).
+      #
+      # The clean step also removes the previous job's nextest report, so a run
+      # that fails before nextest writes one cannot upload a stale junit.xml,
+      # and wipes target/ outright once it passes 40 GB: nothing else evicts old
+      # dependency hashes or incremental dirs (`msrv`'s second rustc adds its
+      # own), and a full disk fails jobs.
+      - &self_hosted_checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          clean: ${{ runner.environment != 'self-hosted' }}
+      - &self_hosted_clean
+        name: Clean the workspace, keeping target/ (self-hosted)
+        if: runner.environment == 'self-hosted'
+        run: |
+          git clean -ffdx -e /target/
+          rm -rf target/nextest
+          if [ -d target ] && [ "$(du -s --block-size=1G target | cut -f1)" -gt 40 ]; then
+            echo "target/ is over 40 GB; wiping it (next build is cold)"
+            rm -rf target
+          fi
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # --all-targets covers tests/examples/benches, not just the libs/bins.
@@ -498,14 +597,14 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'API docs (cargo doc)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build the crate API docs (strict)
@@ -539,28 +638,12 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && needs.changes.outputs.test_os != '[]'
-    # Self-hosted pilot: the Linux leg runs on the org's self-hosted Linux
-    # runner when the repo variable SELF_HOSTED_LINUX is 'true', and never for
-    # a fork PR (this repo is public, so a fork PR would run untrusted code on
-    # that machine), nor for a Dependabot PR (its branches live in this repo,
-    # so they pass the fork test, but they run unreviewed third-party build.rs
-    # and proc-macro code, and that machine's state persists into later runs
-    # on `main`). `matrix.os` stays `ubuntu-latest` either way: the
-    # workerd/TS7 conditions below and `changes`' `test_os`/`queue_passed` key
-    # off that string. The variable is the kill switch: a job aimed at an
-    # offline runner waits up to 24h in the queue (timeout-minutes does not
-    # count queue time), which would wedge `CI green` and the merge queue, so
-    # unset it rather than editing this line. Steps that differ use
-    # `runner.environment`.
-    runs-on: >-
-      ${{
-        matrix.os == 'ubuntu-latest'
-        && vars.SELF_HOSTED_LINUX == 'true'
-        && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        && github.event.pull_request.user.login != 'dependabot[bot]'
-        && fromJSON('["self-hosted","Linux","X64"]')
-        || matrix.os
-      }}
+    # The Linux leg takes the shared self-hosted rule (`runner` on `changes`);
+    # the other legs run on their own OS. `matrix.os` stays `ubuntu-latest`
+    # either way: the workerd/TS7 conditions below and `changes`'
+    # `test_os`/`queue_passed` key off that string. `linux_runner` is a
+    # non-empty JSON value, so it is truthy even when it is "ubuntu-latest".
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON(needs.changes.outputs.linux_runner) || matrix.os }}
     timeout-minutes: 40
     strategy:
       fail-fast: ${{ github.event_name == 'merge_group' }}
@@ -569,30 +652,10 @@ jobs:
         # see the `test_os` output on the `changes` job.
         os: ${{ fromJSON(needs.changes.outputs.test_os) }}
     steps:
-      # On the self-hosted runner the workspace persists between jobs, and a
-      # warm `target/` is most of what that runner buys, so checkout's own
-      # `git clean -ffdx` is turned off there and the step after it cleans
-      # everything else. rust-cache is skipped there for the same reason: the
-      # target dir is already warm, and its saves would add GBs against the
-      # repo's 10 GB cache cap (see the header note).
-      #
-      # The clean step also removes the previous job's nextest report, so a run
-      # that fails before nextest writes one cannot upload a stale junit.xml,
-      # and wipes target/ outright once it passes 40 GB: nothing else evicts
-      # old dependency hashes or incremental dirs, and a full disk fails jobs.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          clean: ${{ runner.environment != 'self-hosted' }}
-      - name: Clean the workspace, keeping target/ (self-hosted)
-        if: runner.environment == 'self-hosted'
-        run: |
-          git clean -ffdx -e /target/
-          rm -rf target/nextest
-          if [ -d target ] && [ "$(du -s --block-size=1G target | cut -f1)" -gt 40 ]; then
-            echo "target/ is over 40 GB; wiping it (next build is cold)"
-            rm -rf target
-          fi
+      # The self-hosted checkout and clean steps (see `clippy`, where they are
+      # defined).
+      - *self_hosted_checkout
+      - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         if: runner.environment != 'self-hosted'
@@ -831,14 +894,14 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Node floor (oldest supported Node)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Single-sourced: raising NODE_MAJOR_FLOOR or NODE_MINOR_FLOOR moves this
@@ -899,12 +962,11 @@ jobs:
     if: >-
       (needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'MSRV (cargo check on declared rust-version)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       # Derive the toolchain from the *declared* rust-version rather than a
       # hardcoded copy of the pin, so this leg cannot silently degrade into
       # re-running the main toolchain when the two drift apart (#520). Today
@@ -940,6 +1002,7 @@ jobs:
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       - name: Check on MSRV toolchain
@@ -1005,16 +1068,16 @@ jobs:
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'wasm32 build (bynk-wasm)')
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build bynk-wasm for wasm32
@@ -1321,14 +1384,14 @@ jobs:
         || needs.changes.outputs.readmes == 'true')
       && needs.changes.outputs.rust != 'true'
       && needs.changes.outputs.all != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *self_hosted_checkout
+      - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Left on `cargo test` (not nextest): each guard is a handful of tests,
