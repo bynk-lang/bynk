@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.15** | Crate hygiene D1 PR 2 - `bynk-emit`'s test-emission module `tests_emit.rs` (11.8k lines) is split into ten domain modules under `project/tests_emit/`, with their unit tests (no output change) |
 | **v0.510.14** | "comment_slots: stale KNOWN rules are judged on totals across shards, and each shard reads only its own pins" |
 | **v0.510.13** | Crate hygiene D1 PR 1 - the code generator's shared model moves out of `project.rs` into `bynk-emit`'s `emit_model` module, and the `emitter` helpers the orchestration layer uses become a public API (no output change) |
 | **v0.510.12** | "The bynk-tests corpus is grouped into integration/ and system/ tiers, with one nextest profile per tier and a probe that every test is in exactly one" |
