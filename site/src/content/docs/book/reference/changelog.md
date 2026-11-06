@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.20** | Crate hygiene E1 PR 1 - the `compile` command body moves from `bynkc` into `bynk-driver` (`run_compile`), shared like `run_check` and `run_fmt` (no output change) |
 | **v0.510.19** | The `bynk-ir` and `bynk-lower` crates merge into `bynk-model`, the system model, with no change in behaviour (crate-hygiene B1) |
 | **v0.510.18** | Crate hygiene D1 PR 4 - the project-level strip (`strip_project_to_js`) moves into `bynk-driver`, and `bynk-strip` drops its `bynk-emit` dependency to become a leaf on `oxc` (no output change) |
 | **v0.510.17** | "CI runs the Linux suite as parallel unit+integration and system jobs, with the TS7 re-run in a job of its own" |
