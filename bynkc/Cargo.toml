@@ -5,12 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "The Bynk compiler CLI: type-checks Bynk source and compiles it to typed TypeScript for Cloudflare Workers."
+description = "Final release: bynkc is now bynk. Install the bynk crate instead (cargo install bynk); this crate only forwards to it."
 keywords = ["compiler", "dsl", "typescript", "language"]
 categories = ["compilers"]
-[lib]
-path = "src/lib.rs"
-
 # `cargo binstall` fetches the release archive instead of compiling; the layout
 # is the one release.yml's `binaries` job packages.
 [package.metadata.binstall]
@@ -26,23 +23,7 @@ name = "bynkc"
 path = "src/main.rs"
 
 [dependencies]
-# The syntax foundation (lexer, parser, ast, span, keywords, error, diagnostics)
-# — extracted to its own leaf crate (crate-decomposition slice 1).
-bynk-syntax.workspace = true
-# The semantic-analysis layer (resolver, checker, registries, firstparty,
-# actors, captured index/hints tables) — extracted in slice 3. `bynkc` depends
-# on it and re-exports its modules.
-bynk-check.workspace = true
-# Build orchestration + TS emission (emitter, project) — extracted in slice 4.
-# `bynkc` depends on it and re-exports its modules; the CLI/glue drive it.
-bynk-emit.workspace = true
-# #521: the shared bynkc/bynk front-end (fmt/check bodies, flatteners, rooting).
-bynk-driver.workspace = true
-# Strip-only TS→JS (oxc-backed) — backs `bynkc compile --emit js` (the in-browser
-# track, slice 1). Isolated in its own crate so oxc stays out of `bynk-emit` and
-# the LSP, which need neither stripping nor JS output.
-bynk-strip.workspace = true
-# The diagnostic renderers (ariadne human + short/json) — extracted in slice 6.
-# `bynkc` re-exports them; its ProjectFailure flatteners delegate to them.
-bynk-render.workspace = true
-clap.workspace = true
+# `bynkc` is `bynk` under another name (#3013, E3): this crate's only content is
+# the shim that calls into it, so `cargo install bynkc` still works for one
+# release. Published after `bynk` (release.yml's crate list).
+bynk.workspace = true

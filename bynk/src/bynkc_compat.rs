@@ -1,10 +1,18 @@
-//! The `bynkc` command-line interface definition.
+//! `bynkc`, as a name the `bynk` executable answers to (#3013, track E3).
+//!
+//! `bynkc` was a second binary; it is now `bynk` run under another name, for one
+//! release. When the executable's file stem is `bynkc` (a copy in the release
+//! archive, the loose `bynkc-<target>` asset, or the final `bynkc` crate's shim),
+//! `bynk` parses `bynkc`'s four subcommands with their current flags, runs the
+//! same driver command bodies with `prog = "bynkc"` (so every message reads as it
+//! did), and prints one retirement notice on stderr. The alias, the shim crate
+//! and the asset go in the release after (E3-4).
 //!
 //! The clap types live here (rather than in `main.rs`) so they are the single
-//! source of truth for both the binary and the generated CLI reference page
-//! `site/src/content/docs/docs/cli.md`. [`render_markdown`] walks the
-//! clap command tree;
-//! the test `tests/cli_reference.rs` checks the page is up to date.
+//! source of truth for both the alias and the generated CLI reference page
+//! `site/src/content/docs/docs/cli.md`. [`render_markdown`] walks the clap
+//! command tree; the test `xtask/tests/docs_consistency/cli_reference.rs` checks
+//! the page is up to date.
 
 use std::path::PathBuf;
 
@@ -30,7 +38,7 @@ pub enum DiagFormat {
 
 /// v0.59: `bynkc test --format` selector, and the `test` subcommand's flags —
 /// [`bynk_driver::test_runner::TestFormat`]/[`TestArgs`], re-exported so
-/// existing `bynkc::cli::TestFormat` paths resolve unchanged (Wave 5 §5.4:
+/// `TestFormat` resolves here unchanged (Wave 5 §5.4:
 /// the `test` subcommand's contract, findings #40/#72, is now shared with
 /// `bynk test` rather than a per-command near-duplicate).
 pub use bynk_driver::test_runner::{TestArgs, TestFormat};
@@ -41,8 +49,7 @@ pub use bynk_driver::test_runner::{TestArgs, TestFormat};
 pub use bynk_driver::{FmtArgs, IndentKind};
 
 /// The `compile` subcommand's enums, shared with `bynk compile` (#2998): they live
-/// in `bynk-driver` next to the command body, and are re-exported here so
-/// `bynkc::cli::{CliTarget, CliPlatform, EmitFormat}` paths resolve unchanged.
+/// in `bynk-driver` next to the command body, and are re-exported here.
 pub use bynk_driver::{CliPlatform, CliTarget, EmitFormat};
 
 #[derive(Subcommand, Debug)]
@@ -176,7 +183,7 @@ pub fn render_markdown() -> String {
     out.push_str("# CLI (`bynkc`)\n\n");
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
-         Source: bynkc/src/cli.rs (`render_markdown`).\n     \
+         Source: bynk/src/bynkc_compat.rs (`render_markdown`).\n     \
          Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency cli_reference:: -->\n\n",
     );
     let about = styled_to_string(root.get_about());
@@ -280,4 +287,71 @@ pub fn render_markdown() -> String {
     }
 
     out
+}
+
+/// Whether this process was started under the name `bynkc`: its executable's
+/// file stem (so `bynkc` and `bynkc.exe`, any directory) is `bynkc`.
+pub fn invoked_as_bynkc() -> bool {
+    std::env::args_os()
+        .next()
+        .is_some_and(|arg0| is_bynkc_name(std::path::Path::new(&arg0)))
+}
+
+fn is_bynkc_name(arg0: &std::path::Path) -> bool {
+    arg0.file_stem()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("bynkc"))
+}
+
+/// The one-line stderr notice printed when `bynkc` runs a subcommand (Decision G).
+pub const RETIREMENT_NOTICE: &str = "bynkc: notice: `bynkc` is retired and will be removed in the next release; use `bynk` (the same commands, flags and output).";
+
+/// Run `bynkc`'s command line: parse it, print the notice, run the command.
+/// Called by `bynk`'s `main` when invoked as `bynkc`, and by the final `bynkc`
+/// crate's shim.
+pub fn run() -> std::process::ExitCode {
+    use clap::Parser as _;
+    let cli = Cli::parse();
+    eprintln!("{RETIREMENT_NOTICE}");
+    match cli.command {
+        Command::Compile {
+            input,
+            output,
+            target,
+            platform,
+            emit,
+            sources_stdin,
+        } => bynk_driver::run_compile(
+            "bynkc",
+            bynk_driver::CompileArgs {
+                input,
+                output,
+                target,
+                platform,
+                emit,
+                sources_stdin,
+            },
+        ),
+        Command::Check { input, format, fix } => {
+            bynk_driver::run_check("bynkc", &input, format == DiagFormat::Short, fix)
+        }
+        Command::Fmt { args } => bynk_driver::run_fmt("bynkc", &args),
+        Command::Test { args } => bynk_driver::test_runner::run_test("bynkc", args),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn the_name_bynkc_is_recognised_with_or_without_a_directory_or_extension() {
+        for name in ["bynkc", "/usr/local/bin/bynkc", "bynkc.exe", "BYNKC.EXE"] {
+            assert!(is_bynkc_name(Path::new(name)), "{name}");
+        }
+        for name in ["bynk", "bynk-under-test", "bynkc-lsp", "/opt/bynkc/bynk"] {
+            assert!(!is_bynkc_name(Path::new(name)), "{name}");
+        }
+    }
 }

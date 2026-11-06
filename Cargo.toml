@@ -81,7 +81,7 @@ bynk-emit = { path = "bynk-emit", version = "0.510.28" }
 bynk-driver = { path = "bynk-driver", version = "0.510.28" }
 bynk-strip = { path = "bynk-strip", version = "0.510.28" }
 bynk-ide = { path = "bynk-ide", version = "0.510.28" }
-bynkc = { path = "bynkc", version = "0.510.28" }
+bynk = { path = "bynk", version = "0.510.28" }
 bynk-fmt = { path = "bynk-fmt", version = "0.510.28" }
 # #1560: no `version` here, unlike every entry above — `bynk-testkit` is
 # `publish = false` (never on crates.io) and only ever a dev-dependency of

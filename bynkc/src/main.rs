@@ -1,61 +1,26 @@
-// bynkc — the Bynk v0.3 compiler CLI.
+// bynkc — the final release of the `bynkc` crate (#3013, track E3).
+//
+// `bynkc` is now `bynk` under another name. This shim exists so `cargo install
+// bynkc` still installs a working `bynkc` for one release; the crate is not
+// published again after that. Use `cargo install bynk`.
 
-use std::path::PathBuf;
 use std::process::ExitCode;
 
-use bynkc::cli::{Cli, CliPlatform, CliTarget, Command, DiagFormat, EmitFormat};
-use clap::Parser;
+// The stack `bynk` itself runs on (its `main.rs` says why): clap builds the whole
+// command tree on parsing.
+const STACK_BYTES: usize = 16 * 1024 * 1024;
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
-    match cli.command {
-        Command::Compile {
-            input,
-            output,
-            target,
-            platform,
-            emit,
-            sources_stdin,
-        } => run_compile(input, output, target, platform, emit, sources_stdin),
-        Command::Check { input, format, fix } => run_check(input, format, fix),
-        Command::Fmt { args } => run_fmt(args),
-        Command::Test { args } => run_test(args),
+    match std::thread::Builder::new()
+        .stack_size(STACK_BYTES)
+        .spawn(bynk::bynkc_compat::run)
+        .map(std::thread::JoinHandle::join)
+    {
+        Ok(Ok(code)) => code,
+        Ok(Err(_)) => ExitCode::FAILURE,
+        Err(e) => {
+            eprintln!("bynkc: could not start: {e}");
+            ExitCode::FAILURE
+        }
     }
-}
-
-fn run_test(args: bynkc::cli::TestArgs) -> ExitCode {
-    // #521/Wave 5 §5.4: the command body is shared with the `bynk` driver.
-    bynk_driver::test_runner::run_test("bynkc", args)
-}
-
-fn run_fmt(args: bynkc::cli::FmtArgs) -> ExitCode {
-    // #521: the command body is shared with the `bynk` driver.
-    bynk_driver::run_fmt("bynkc", &args)
-}
-
-fn run_compile(
-    input: PathBuf,
-    output: PathBuf,
-    target: CliTarget,
-    platform: CliPlatform,
-    emit: EmitFormat,
-    sources_stdin: bool,
-) -> ExitCode {
-    // #2998: the command body is shared with the `bynk` driver.
-    bynk_driver::run_compile(
-        "bynkc",
-        bynk_driver::CompileArgs {
-            input,
-            output,
-            target,
-            platform,
-            emit,
-            sources_stdin,
-        },
-    )
-}
-
-fn run_check(input: PathBuf, format: DiagFormat, fix: bool) -> ExitCode {
-    // #521: the command body is shared with the `bynk` driver.
-    bynk_driver::run_check("bynkc", &input, format == DiagFormat::Short, fix)
 }

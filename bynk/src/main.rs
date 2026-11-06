@@ -40,6 +40,10 @@ fn main() -> ExitCode {
 }
 
 fn run() -> ExitCode {
+    // #3013 (E3): run under the name `bynkc`, `bynk` answers as `bynkc` did.
+    if bynk::bynkc_compat::invoked_as_bynkc() {
+        return bynk::bynkc_compat::run();
+    }
     // #2998: `BYNK_BYNKC` no longer pins a compiler; say so once.
     bynk::compiler::warn_if_override_set();
     let cli =

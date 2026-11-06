@@ -1,7 +1,7 @@
 # The registry canary (first-party registry R7, #2415, decision D). The hosted
 # registry moved to bynk-lang/registry before going live, and builds there on a
 # pinned `bynk` release, so this repository's PRs no longer run it. This keeps
-# the dogfood: daily (and on dispatch), it builds `main`'s `bynk`, `bynkc` and
+# the dogfood: daily (and on dispatch), it builds `main`'s `bynk` and
 # admission module and runs the service's own checks against them, so a
 # compiler or `bynk-std` change that would break the largest real Bynk program
 # is seen within a day, before it is released and the service bumps its pin.
@@ -54,8 +54,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
-      - name: Build bynk and bynkc
-        run: cargo build --locked -p bynk -p bynkc
+      - name: Build bynk
+        run: cargo build --locked -p bynk
       - name: Build the admission module from main
         env:
           BYNK_REGISTRY_CORE_SRC: ${{ github.workspace }}
@@ -66,7 +66,6 @@ jobs:
         working-directory: registry
         env:
           BYNK: ${{ github.workspace }}/target/debug/bynk
-          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
           WRANGLER: npx -y wrangler@4
         run: |
           export PATH="$GITHUB_WORKSPACE/target/debug:$PATH"

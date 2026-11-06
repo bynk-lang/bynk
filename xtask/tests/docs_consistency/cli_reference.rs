@@ -1,6 +1,6 @@
 //! Keeps the generated CLI reference page in step with the clap definition.
 //!
-//! `site/src/content/docs/docs/cli.md` is rendered from `bynkc::cli` —
+//! `site/src/content/docs/docs/cli.md` is rendered from `bynk::bynkc_compat` —
 //! the very same command tree the binary parses with — so the page cannot
 //! describe a CLI the binary does not have. (The page lives on the Developer
 //! Documentation surface; its relative links still resolve against `reference/`,
@@ -12,7 +12,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use bynkc::cli::{command, render_markdown};
+use bynk::bynkc_compat::{command, render_markdown};
 
 #[test]
 fn every_subcommand_is_documented() {

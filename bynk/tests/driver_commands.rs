@@ -31,6 +31,17 @@ fn bynkc_sibling() -> Option<PathBuf> {
     p.exists().then_some(p)
 }
 
+/// `bynkc`'s stderr without the one-line retirement notice it prints (#3013):
+/// what the equivalence tests compare against `bynk`'s.
+fn without_notice(out: (i32, String, String)) -> (i32, String, String) {
+    let (code, stdout, stderr) = out;
+    let kept: String = stderr
+        .split_inclusive('\n')
+        .filter(|line| !line.starts_with("bynkc: notice:"))
+        .collect();
+    (code, stdout, kept)
+}
+
 /// A clean, empty scratch directory unique to `name`, under the crate's test
 /// tmpdir (cleaned between runs).
 fn scratch(name: &str) -> PathBuf {
@@ -136,7 +147,7 @@ fn check_matches_bynkc_when_present() {
         vec!["check", "ok.bynk"],
     ] {
         let driven = run_bynk_in(&dir, &args);
-        let direct = run_in(&bynkc, &dir, &args, None);
+        let direct = without_notice(run_in(&bynkc, &dir, &args, None));
         assert_eq!(
             driven,
             direct,
@@ -1101,7 +1112,7 @@ fn fmt_directory_matches_bynkc_when_present() {
     };
     let dir = layout_project("fmt-dir-parity");
     let ours = run_bynk_in(&dir, &["fmt", "--check", "."]);
-    let theirs = run_in(&bynkc, &dir, &["fmt", "--check", "."], None);
+    let theirs = without_notice(run_in(&bynkc, &dir, &["fmt", "--check", "."], None));
     assert_eq!(ours.0, theirs.0, "exit codes differ");
     assert_eq!(
         ours.2.replace("bynk fmt:", "fmt:"),

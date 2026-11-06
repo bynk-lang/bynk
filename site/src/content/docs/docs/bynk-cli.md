@@ -1536,6 +1536,20 @@ They are removed together with the `bynkc` alias. (`--accept-compatible-skew`
 on `bynk deploy` is unrelated: it concerns the contracts between deployed
 services, and is unchanged.)
 
+## `bynkc` (retired)
+
+`bynkc` is `bynk` under another name for one release, and then it is gone. The
+release archives, the install scripts, the devcontainer feature and the loose
+`bynkc-<target>` asset each carry a copy of the `bynk` executable named `bynkc`;
+`bynk` looks at its own file name, and when that is `bynkc` it takes
+[`bynkc`'s four subcommands](/docs/cli/) with their current flags and prints one
+line on stderr saying the name is retired. Output, messages and exit codes are the
+ones `bynkc` always gave. The `bynkc` crate on crates.io is a shim that forwards to
+`bynk`, so `cargo install bynkc` still works this once.
+
+Use `bynk` instead: `bynk check`, `bynk fmt`, `bynk compile` and `bynk test` take
+the same flags.
+
 ---
 
 ## `bynk doctor`

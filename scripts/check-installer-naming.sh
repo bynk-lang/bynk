@@ -23,8 +23,14 @@ need "$rel" 'tar czf "$stage.tar.gz" "$stage"' 'unix archive'
 need "$rel" '$stage = "bynk-$env:GITHUB_REF_NAME-${{ matrix.target }}"' 'windows archive stem'
 need "$rel" '-DestinationPath "$stage.zip"' 'windows archive'
 need "$rel" '> SHA256SUMS' 'checksum file'
-need "$rel" 'cp "$bin/bynkc" "$bin/bynk" "$bin/bynk-lsp"' 'unix archive contents'
-need "$rel" 'Copy-Item "$bin/bynkc.exe","$bin/bynk.exe","$bin/bynk-lsp.exe"' 'windows archive contents'
+need "$rel" 'cp "$bin/bynk" "$bin/bynk-lsp"' 'unix archive contents'
+need "$rel" 'Copy-Item "$bin/bynk.exe","$bin/bynk-lsp.exe"' 'windows archive contents'
+# Overlap release (crate-hygiene E3): `bynkc` is a copy of `bynk`, which answers to
+# the name; E3-4 deletes these. The installers extract the archive as it is.
+need "$rel" 'cp "$bin/bynk" "$stage/bynkc"' 'unix archive bynkc copy'
+need "$rel" 'Copy-Item "$bin/bynk.exe" "$stage/bynkc.exe"' 'windows archive bynkc copy'
+need "$rel" 'cp "$bin/bynk" "bynkc-${{ matrix.target }}"' 'loose bynkc asset (a copy of bynk)'
+need "$rel" 'Copy-Item "$bin/bynk.exe" "bynkc-${{ matrix.target }}.exe"' 'loose bynkc asset (windows)'
 # Overlap release (crate-hygiene E4a): the old name rides along; E4b deletes these.
 need "$rel" 'cp "$bin/bynk-lsp" "$stage/bynkc-lsp"' 'unix archive overlap copy'
 need "$rel" 'Copy-Item "$bin/bynk-lsp.exe" "$stage/bynkc-lsp.exe"' 'windows archive overlap copy'
