@@ -540,10 +540,10 @@ interface SqliteDatabase {
  * one past the highest unless the name was seen. Quoted text (`'…'`, `"…"`,
  * `` `…` ``, `[…]`) and comments hold no parameters.
  */
-function sqlParameters(sql: string): { count: number; numbered: string[]; bare: boolean } {
+function sqlParameters(sql: string): { count: number; numbered: string[]; bare: [number, number][] } {
   let count = 0;
   const numbered = new Set<string>();
-  let bare = false;
+  const bare: [number, number][] = []; // each bare `?`: its offset and SQLite index
   const names = new Set<string>();
   const n = sql.length;
   let i = 0;
@@ -567,15 +567,15 @@ function sqlParameters(sql: string): { count: number; numbered: string[]; bare: 
       const end = sql.indexOf("*/", i + 2);
       i = end < 0 ? n : end + 2;
     } else if (c === "?") {
-      i++;
+      const at = i++;
       const start = i;
       while (i < n && sql[i]! >= "0" && sql[i]! <= "9") i++;
       if (i > start) {
         numbered.add(`?${sql.slice(start, i)}`); // the raw spelling, `?01` included
         count = Math.max(count, Number(sql.slice(start, i)));
       } else {
-        bare = true;
         count++;
+        bare.push([at, count]);
       }
     } else if (
       // `$` continues an identifier (`a$b`); `:` and `@` always start a parameter, as in SQLite.
@@ -651,10 +651,17 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
     const values = params.map((v) => (typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v));
     // Node before 22.18 refuses positional values for numbered parameters
     // (`?1`), so those bind by name: `{ "?1": … }`, one key per number used.
-    // A mix with bare `?` binds positionally, which is SQLite's own order.
-    const { count, numbered, bare } = sqlParameters(sql);
+    // A mix with bare `?` is spelled out first (`?` becomes its index, as
+    // SQLite numbers it), since the oldest Node binds only by name.
+    let text = sql;
+    let scan = sqlParameters(sql);
+    if (scan.bare.length > 0 && scan.numbered.length > 0) {
+      for (const [at, index] of [...scan.bare].reverse()) text = `${text.slice(0, at)}?${index}${text.slice(at + 1)}`;
+      scan = sqlParameters(text);
+    }
+    const { count, numbered } = scan;
     const bound: unknown[] =
-      numbered.length === 0 || bare
+      numbered.length === 0
         ? values
         : [Object.fromEntries(numbered.map((name) => [name, values[Number(name.slice(1)) - 1] ?? null]))];
     // D1 refuses a count that differs from what the SQL uses, too many or too
@@ -664,7 +671,7 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
       if (params.length !== count) {
         throw new Error("Wrong number of parameter bindings for SQL query.");
       }
-      return db.prepare(sql);
+      return db.prepare(text);
     };
     return {
       bind: (...values: unknown[]) => statement(sql, values),
