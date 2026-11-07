@@ -13,8 +13,8 @@ name: CodeQL
 on:
   # SAST analyses only Rust + TypeScript, so skip docs/design/markdown-only
   # changes — they cannot affect the analysed code, and re-analysing an
-  # unchanged tree is wasted CI. The weekly `schedule` below stays unfiltered so
-  # the default-branch baseline is always refreshed regardless. A mixed change
+  # unchanged tree is wasted CI. The nightly `schedule` below stays unfiltered
+  # so the default-branch baseline is always refreshed regardless. A mixed change
   # (any non-ignored path also touched) still runs.
   push:
     branches: [main]
@@ -26,8 +26,9 @@ on:
     branches: [main]
     paths-ignore: *non_code_paths
   schedule:
-    # Weekly drift check, offset from the other security workflows.
-    - cron: "40 7 * * 1"
+    # Nightly, offset from ci.yml's nightly. The only run that analyses Rust
+    # (see the matrix); it was a weekly drift check before that.
+    - cron: "40 7 * * *"
 
 permissions:
   contents: read
@@ -54,16 +55,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # A pull request analyses TypeScript only. The Rust leg autobuilds the
-        # whole workspace (~8 min p50) on a hosted runner, it is not a required
-        # check, and it ran on every code PR (212 runs in two days in
-        # November 2026), competing for the same runner slots as the gate. It
-        # still analyses every push to `main` and the weekly baseline, so a
-        # finding surfaces within one merge. The TypeScript leg stays on PRs:
-        # it is quick, it covers the emitted runtime (the surface CodeQL is
-        # load-bearing for, see the header), and it keeps OpenSSF Scorecard's
+        # Rust is analysed on the nightly only; pull requests and pushes to
+        # `main` analyse TypeScript. The Rust leg autobuilds the whole workspace
+        # (~8 min p50) on a hosted runner and is not a required check. It ran
+        # on every code PR (212 runs in two days in November 2026) and then on
+        # every merge's push, competing for the same hosted slots as the merge
+        # queue. Nightly, a Rust finding surfaces within a day, which suits
+        # defence-in-depth over clippy and the type system (see the header).
+        # The TypeScript leg stays on every event: it is quick, it covers the
+        # emitted runtime (the surface CodeQL is load-bearing for), it
+        # annotates new alerts on the PR diff, and it keeps OpenSSF Scorecard's
         # SAST check seeing CodeQL on merged PRs.
-        language: ${{ fromJSON(github.event_name == 'pull_request' && '["javascript-typescript"]' || '["javascript-typescript","rust"]') }}
+        language: ${{ fromJSON(github.event_name == 'schedule' && '["javascript-typescript","rust"]' || '["javascript-typescript"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
