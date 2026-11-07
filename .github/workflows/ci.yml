@@ -736,7 +736,7 @@ jobs:
     # red at 04:58:19). Cancelling the sibling legs reports the failure as soon
     # as the first leg fails.
     #
-    # the test corpus reads the Book (site/src/content/docs/book/**) — the
+    # The test corpus reads the Book (site/src/content/docs/book/**) — the
     # doc_examples compile gate and the reference-page assertions — so the `rust`
     # filter includes the Book content; a content change can legitimately flip a test.
     name: Test suite (${{ matrix.os }})
@@ -816,7 +816,7 @@ jobs:
         run: npx -y wrangler@4 --version
         continue-on-error: true
       # `cargo nextest run --workspace` runs every crate's suite (no rustdoc
-      # doctests exist in the tree, so nextest loses nothing). the corpus's includes:
+      # doctests exist in the tree, so nextest loses nothing). The corpus's includes:
       #   - doc_examples        — the example-compilation gate (the Book)
       #   - diagnostics_registry / keywords_reference / grammar_reference
       #     — assert the generated reference pages are up to date

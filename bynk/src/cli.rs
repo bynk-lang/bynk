@@ -311,8 +311,7 @@ pub enum Command {
     },
     /// Type-check a file or project.
     ///
-    /// Writes no output — the `bynk check` behaviour through the driver
-    /// (v0.138).
+    /// Writes no output.
     ///
     /// Runs the compiler pipeline in-process.
     Check {
@@ -341,7 +340,7 @@ pub enum Command {
     },
     /// Compile a project to TypeScript.
     ///
-    /// The `bynk compile` behaviour, run in-process (#2471, #2998).
+    /// Runs in-process (#2471, #2998).
     ///
     /// The compiler is linked in. With `--sources-stdin` it compiles unsaved editor buffers:
     /// a JSON object `{ "<absolute path>": "<text>" }`
@@ -468,8 +467,7 @@ pub enum Command {
     },
     /// Format `.bynk` source files.
     ///
-    /// Formats in place — the `bynk fmt` behaviour through the driver
-    /// (v0.138). Passing `-` reads from stdin and writes to stdout.
+    /// Formats in place. Passing `-` reads from stdin and writes to stdout.
     ///
     /// Runs the formatter in-process.
     ///
@@ -482,8 +480,7 @@ pub enum Command {
     },
     /// Run the project's tests.
     ///
-    /// Discovers and runs test declarations — the `bynk test` behaviour
-    /// through the driver (v0.138).
+    /// Discovers and runs test declarations.
     ///
     /// Runs in-process. Requires `tsc` (with Node.js) or `tsx` on PATH.
     Test {

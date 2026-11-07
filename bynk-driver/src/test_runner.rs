@@ -362,7 +362,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                     }
                     _ => std::env::var(name).ok(),
                 },
-                "starts a local `bynk dev`, and no `bynk` binary was given to start it with (`bynk test --against dev` supplies one)",
+                "starts a local `bynk dev`, and no `bynk` binary was given to start it with (set `BYNK_DEV_COMMAND`, or run `bynk test --against dev`, which supplies one)",
             ) {
                 Ok(crate::remote::Against::Run(run)) => {
                     Some(crate::remote::RemoteRun { settle_ms, ..run })

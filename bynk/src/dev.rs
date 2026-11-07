@@ -458,7 +458,7 @@ pub fn run(
         return ExitCode::FAILURE;
     }
     // 2. Compile — in-process (slice 7: the driver links the pipeline instead of
-    //    shelling `bynk`). Into the managed `.bynk/dev/` build dir (D1).
+    //    shelling a separate compiler). Into the managed `.bynk/dev/` build dir (D1).
     //    Compilation is additive (never prunes), so clear `workers/` first;
     //    otherwise a renamed/deleted context would linger and spuriously trip the
     //    §2.4 ambiguity check.
