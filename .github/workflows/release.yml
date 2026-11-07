@@ -249,15 +249,11 @@ jobs:
           # Overlap release (crate-hygiene E3): `bynkc` is a copy of `bynk` (a
           # symlink would not survive a Windows archive or `cargo binstall`).
           cp "$bin/bynk" "$stage/bynkc"
-          # Overlap release (crate-hygiene E4a): the server's previous name, so
-          # editor configs naming `bynkc-lsp` keep working. Dropped in E4b.
-          cp "$bin/bynk-lsp" "$stage/bynkc-lsp"
           tar czf "$stage.tar.gz" "$stage"
           # Raw binaries for the VS Code extension's download-on-activate (it
           # fetches single verified files, no archive extraction): the server,
           # plus the `bynk` driver and `bynkc` compiler it puts on PATH.
           cp "$bin/bynk-lsp" "bynk-lsp-${{ matrix.target }}"
-          cp "$bin/bynk-lsp" "bynkc-lsp-${{ matrix.target }}" # overlap; dropped in E4b
           cp "$bin/bynk" "bynk-${{ matrix.target }}"
           cp "$bin/bynk" "bynkc-${{ matrix.target }}" # overlap: a copy of `bynk`; dropped in E3-4
           echo "ASSET=$stage.tar.gz" >> "$GITHUB_ENV"
@@ -271,11 +267,8 @@ jobs:
           Copy-Item "$bin/bynk.exe","$bin/bynk-lsp.exe","LICENSE-MIT","LICENSE-APACHE" $stage
           # Overlap release (crate-hygiene E3): `bynkc` is a copy of `bynk`.
           Copy-Item "$bin/bynk.exe" "$stage/bynkc.exe"
-          # Overlap release (crate-hygiene E4a); dropped in E4b.
-          Copy-Item "$bin/bynk-lsp.exe" "$stage/bynkc-lsp.exe"
           Compress-Archive -Path $stage -DestinationPath "$stage.zip"
           Copy-Item "$bin/bynk-lsp.exe" "bynk-lsp-${{ matrix.target }}.exe"
-          Copy-Item "$bin/bynk-lsp.exe" "bynkc-lsp-${{ matrix.target }}.exe" # overlap; dropped in E4b
           Copy-Item "$bin/bynk.exe" "bynk-${{ matrix.target }}.exe"
           Copy-Item "$bin/bynk.exe" "bynkc-${{ matrix.target }}.exe" # overlap: a copy of `bynk`; dropped in E3-4
           "ASSET=$stage.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -286,7 +279,6 @@ jobs:
           path: |
             ${{ env.ASSET }}
             bynk-lsp-${{ matrix.target }}*
-            bynkc-lsp-${{ matrix.target }}*
             bynk-${{ matrix.target }}*
             bynkc-${{ matrix.target }}*
           if-no-files-found: error
@@ -417,8 +409,7 @@ jobs:
           path: dist
       # One SHA256SUMS over the archives AND the raw binaries (basenames, so
       # they match the flat asset names a consumer downloads). The VS Code
-      # extension's download-on-activate verifies `bynk-lsp-<target>`
-      # (and, for the overlap release, `bynkc-lsp-<target>`),
+      # extension's download-on-activate verifies `bynk-lsp-<target>`,
       # `bynk-<target>` and `bynkc-<target>` against this file. Each artifact
       # directory holds exactly the files to publish, so `*/*` is the lot.
       - name: Checksums

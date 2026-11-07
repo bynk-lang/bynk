@@ -170,25 +170,11 @@ pub fn diagnose(tb: &dyn Toolbox, ctx: &Context, opts: &DoctorOptions) -> Report
         capabilities.push(capability(Capability::Deploy, vec![node, wrangler]));
     }
     if want(Capability::Editor) {
-        let mut lsp = detect_plain(
+        let lsp = detect_plain(
             tb,
             "bynk-lsp",
             "install bynk-lsp (or download from releases)",
         );
-        // Overlap release (crate-hygiene E4a): an older install still has the
-        // server under its previous name. Accept it, but report `bynk-lsp`.
-        // Removed with the old name in E4b.
-        if lsp.level != Level::Ok {
-            let legacy = detect_plain(tb, "bynkc-lsp", "");
-            if legacy.level == Level::Ok {
-                lsp = Row {
-                    label: "bynk-lsp".into(),
-                    level: Level::Ok,
-                    detail: format!("{} (installed as bynkc-lsp)", legacy.detail),
-                    remedy: None,
-                };
-            }
-        }
         capabilities.push(capability(Capability::Editor, vec![lsp]));
     }
     if ctx.in_repo && want(Capability::BuildFromSource) {
