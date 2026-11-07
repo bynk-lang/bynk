@@ -1,12 +1,6 @@
----
-level: minor
-changelog: "`Json.encodePlain(v)` writes `Option` as `v` / `null`, the shape a `json { options: plain }` route writes (#2991)"
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
----
+# 0745 — `Json.encodePlain` writes the plain JSON form of `Option`
 
-## ADR: json-encode-plain
-title: `Json.encodePlain` writes the plain JSON form of `Option`
-summary: A separate intrinsic, `Option` only, reusing the plain-route ambiguity rule, concrete types only
+- **Status:** Accepted (v0.512)
 
 **Context.** ADR 0723 gave a service's HTTP response bodies a plain JSON form (`Some(v)` as `v`, `None` as `null`) and left `Json.encode` tagged. A Bynk program still could not write the JSON a non-Bynk API sends or expects: tests that stub an external API at the wire, and request bodies sent with `Fetch.send`. Proposed in #2991.
 
