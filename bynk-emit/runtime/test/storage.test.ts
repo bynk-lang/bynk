@@ -81,6 +81,8 @@ test("makeIntegrationD1 refuses a wrong parameter count, as D1 does (#3003)", as
   await accepted("SELECT 1 WHERE '?1' = ?2", 1, 1); // quoted ?1 is no parameter
   await accepted("SELECT 1 WHERE ?3 = 1", 1, 1, 1); // the highest number
   await accepted("SELECT '?' AS \"?\", 2 AS `?`, 3 AS [?] -- ?\n /* ? */ WHERE 'it''s ?' = ?1", 1);
+  await accepted("SELECT 1 AS a$b"); // `$` inside an identifier is no parameter
+  await accepted("SELECT 1 WHERE ?01 = 1", 1); // the raw spelling is the bind key
   await refused("SELECT :a, :a, @b, $c", 1, 2);
   await assert.rejects(d.batch([d.prepare("SELECT ?1").bind(1, 2)]), wrong);
 });

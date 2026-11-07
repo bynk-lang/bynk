@@ -571,13 +571,15 @@ function sqlParameters(sql: string): { count: number; numbered: string[]; bare: 
       const start = i;
       while (i < n && sql[i]! >= "0" && sql[i]! <= "9") i++;
       if (i > start) {
-        numbered.add(`?${Number(sql.slice(start, i))}`);
+        numbered.add(`?${sql.slice(start, i)}`); // the raw spelling, `?01` included
         count = Math.max(count, Number(sql.slice(start, i)));
       } else {
         bare = true;
         count++;
       }
-    } else if (c === ":" || c === "@" || c === "$") {
+    } else if (
+      // `$` continues an identifier (`a$b`); `:` and `@` always start a parameter, as in SQLite.
+      (c === ":" || c === "@" || (c === "$" && !(i > 0 && /[A-Za-z0-9_$]/.test(sql[i - 1]!))))) {
       const start = i++;
       while (i < n && /[A-Za-z0-9_$]/.test(sql[i]!)) i++;
       if (i - start > 1) {
