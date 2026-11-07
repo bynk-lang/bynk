@@ -43,6 +43,8 @@ pub(super) fn emit_integration_module(
     d1_migrations: &D1Migrations,
     errors: &mut Vec<CompileError>,
     tys: &Arc<Types>,
+    // #3032 / #2991: whether any suite source calls `Json.encodePlain`.
+    plain_json: bool,
 ) -> Option<(PathBuf, TsProgram, Option<String>, RunnableTest)> {
     // #914: the test-scaffold module's runtime import list is emitted below as a
     // fixed set, but the bodies spliced into it lower through the ordinary `Bytes`
@@ -50,15 +52,14 @@ pub(super) fn emit_integration_module(
     // and injected into the import line as a post-pass, the same shape
     // `emit_project` and `emit_worker_entry` use.
     //
-    // #917: a case body here can still call `Json.decode[T]`/`Json.encode` on a
-    // named type, and `lower_json_codec_call` still records the root on this
-    // `runtime_use` (it is gated on `cx.test_scaffold`, which this harness sets
-    // regardless). Nothing drains it — `emit_test_module`'s codec-closure pass is
-    // unit-tier-only — so a delegating call here is left exactly as broken as it
-    // was before this fix. Deliberate scope, per the issue's own hedge ("the
-    // driver path may already be correct — worth confirming rather than
-    // assuming"); not yet confirmed either way.
+    // #917 / #3032: a case body here can call `Json.decode[T]`/`Json.encode` on a
+    // named type; `lower_json_codec_call` records the root on this `runtime_use`,
+    // and the codec closure is generated for those roots after the cases lower
+    // (below), as `emit_test_module` does for a unit suite.
     let runtime_use = RuntimeUse::default();
+    // #2991: a suite calling `Json.encodePlain` needs its own `Option` encoders to
+    // carry the plain branch.
+    runtime_use.set_plain_json(plain_json);
     let sanitized = sanitise_suite(suite);
     let module_path = PathBuf::from(format!("tests/integration_{sanitized}.test.ts"));
     // #1486: `stmts` collects the module's own real top-level nodes instead of
@@ -676,6 +677,63 @@ pub(super) fn emit_integration_module(
         .map(|(idx, input)| (input.case.name.clone(), case_runners[idx].clone()))
         .collect();
     stmts.extend(build_run_function(&run_entries));
+
+    // #3032: every case body above has now lowered, so every
+    // `Json.decode[T]`/`Json.encode` root it reached for is in hand. Generate
+    // the module's own codec closure over the harness view's types, naming each
+    // through the namespace it is imported under (participants, `uses` commons
+    // and the owners of reached types). Function declarations hoist.
+    let json_codec_roots: Vec<bynk_syntax::ast::TypeRef> = runtime_use
+        .take_json_codec_roots()
+        .into_iter()
+        .filter_map(|ty| bynk_emit::emitter::ty_to_type_ref(ty, tys))
+        .collect();
+    if !json_codec_roots.is_empty() {
+        let (codec_names, codec_insts) = bynk_emit::emitter::serialisation::collect_codec_closure(
+            &json_codec_roots,
+            &view.types,
+        );
+        if !codec_names.is_empty() || !codec_insts.is_empty() {
+            runtime_use.note_json_codec();
+            runtime_use.note_boundary_codec();
+            // First claim wins: `uses` commons, then reached-type owners, then
+            // participants (the view keeps the first declaration of a name).
+            let mut qual: HashMap<String, String> = HashMap::new();
+            let owners = uses_targets
+                .iter()
+                .cloned()
+                .chain(hidden.keys().cloned())
+                .chain(participants.iter().cloned());
+            for u in owners {
+                if let Some(table) = unit_tables.get(&u) {
+                    let ns = test_ns(&u);
+                    for n in table.types.keys() {
+                        qual.entry(n.clone()).or_insert_with(|| format!("{ns}."));
+                    }
+                }
+            }
+            for (n, owner) in &view.hidden {
+                qual.insert(n.clone(), format!("{}.", test_ns(owner)));
+            }
+            stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts_block(
+                bynk_emit::emitter::serialisation::emit_helpers_for_owner_qualified(
+                    &codec_names,
+                    &view.types,
+                    "",
+                    &qual,
+                    &runtime_use,
+                ),
+            ));
+            stmts.extend(bynk_emit::emitter::serialisation::decls_as_stmts(
+                bynk_emit::emitter::serialisation::emit_generic_helpers_qualified(
+                    &codec_insts,
+                    &view.types,
+                    &qual,
+                    &runtime_use,
+                ),
+            ));
+        }
+    }
 
     // #914: every case body above has now lowered, so `runtime_use` carries
     // whatever it actually reached for — fold that into the runtime import's

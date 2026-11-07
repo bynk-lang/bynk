@@ -1,0 +1,7 @@
+context api
+
+uses shape.model
+
+service api from http {
+  on GET("/ping") () -> Effect[HttpResult[Int]] by v: Visitor { Ok(1) }
+}
