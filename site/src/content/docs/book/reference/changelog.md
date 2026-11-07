@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.39** | A test `case` or `property` accepts D1 `select[T]` / `firstAs[T]` on a derived capability, as a handler does |
 | **v0.510.38** | fmt keeps digit separators in InRange, MinLength, MaxLength and Length arguments |
 | **v0.510.37** | "`bynk test --smoke` against a named target now lists every case a write route would have run as skipped, not only its `answers` case, so the skip count agrees with the cases `--smoke-unsafe` adds ([#3008](https://github.com/bynk-lang/bynk/issues/3008))" |
 | **v0.510.36** | The raw `Forged`/`Expired` Bearer test drivers append a typed `query` as its raw string, so a suite for a Bearer `GET` route with a typed query no longer fails `tsc` |
