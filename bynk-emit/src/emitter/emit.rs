@@ -1054,7 +1054,7 @@ fn emit_free_fn_in(
     let body_smb = RefCell::new(SourceMapBuilder::new());
     let given_ir: Vec<bynk_model::CapRefIr> =
         f.given.iter().map(bynk_model::lower_cap_ref_ir).collect();
-    let mut cx = if given_ir.is_empty() {
+    let cx = if given_ir.is_empty() {
         LowerCtx::new(
             ModuleCtx::new(commons, &empty, runtime_use),
             BodyMode::FreeFn,
@@ -1077,6 +1077,9 @@ fn emit_free_fn_in(
         )
     }
     .with_source_map(Some(&body_smb));
+    // #2990: a suite helper (the only non-exported caller) records its `Json`
+    // codec roots for the test module that splices it in.
+    let mut cx = if export { cx } else { cx.with_suite_fn() };
     // Constrained generics slice 1: one trailing comparator parameter per
     // `Ord`-bounded type parameter.
     params.extend(cx.declare_witnesses(f));

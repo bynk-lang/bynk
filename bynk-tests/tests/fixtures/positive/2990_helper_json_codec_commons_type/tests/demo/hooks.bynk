@@ -1,0 +1,27 @@
+// #2990: a suite helper that calls `Json.encode` / `Json.decode` on a
+// `uses`-commons type must reach the codec through the commons' namespace.
+suite demo.hooks
+
+fn enc(u: UserRef) -> String {
+	Json.encode(u)
+}
+
+fn encAll(ps: List[Payload]) -> String {
+	Json.encode(ps)
+}
+
+fn dec(s: String) -> Result[UserRef, JsonError] {
+	Json.decode[UserRef](s)
+}
+
+case "a helper encodes a commons record" {
+	expect enc(UserRef { login: "x", kind: "User" }) == "{\"login\":\"x\",\"kind\":\"User\"}"
+}
+
+case "a helper encodes a list of commons records" {
+	expect encAll([Payload { id: 1 }]) == "[{\"id\":1}]"
+}
+
+case "a helper decodes a commons record" {
+	expect dec("{\"login\":\"x\",\"kind\":\"User\"}") == Ok(UserRef { login: "x", kind: "User" })
+}

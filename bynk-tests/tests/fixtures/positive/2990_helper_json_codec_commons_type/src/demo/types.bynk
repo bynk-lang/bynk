@@ -1,0 +1,10 @@
+commons demo.types
+
+type UserRef = {
+	login: String,
+	kind: String,
+}
+
+type Payload = {
+	id: Int,
+}
