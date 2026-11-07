@@ -1,0 +1,18 @@
+context qrepro
+
+type ReaderId = String where NonEmpty
+
+actor Reader { auth = Bearer(secret = "READER_SECRET"), identity = ReaderId }
+
+type Window = {
+	days: Int,
+}
+
+// #3024: a Bearer GET route with a typed `query` record. The raw `Forged` /
+// `Expired` drivers take the query as its raw string, so they must append it
+// as is, not serialise it as a `Window` again.
+service api from http {
+	on GET("/report") (query: Window) -> Effect[HttpResult[String]] by r: Reader {
+		Ok("\(query.days) days for \(r.identity)")
+	}
+}
