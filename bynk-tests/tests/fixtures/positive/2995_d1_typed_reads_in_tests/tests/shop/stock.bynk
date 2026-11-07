@@ -1,0 +1,9 @@
+suite shop.stock
+
+case "a case reads through the capability" {
+	let _ <- Stock.run("CREATE TABLE items (id TEXT)", [])
+	let rows <- Stock.select[Item]("FROM items", [])
+	expect rows == Ok([])
+	let one <- Stock.firstAs[Item]("FROM items", [])
+	expect one == Ok(None)
+}
