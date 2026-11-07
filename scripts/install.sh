@@ -88,6 +88,12 @@ for bin in bynkc bynk bynk-lsp bynkc-lsp; do
     case "$bin" in
       bynk-lsp | bynkc-lsp)
         [ -f "$tmp/$stage/bynk-lsp" ] || [ -f "$tmp/$stage/bynkc-lsp" ] || die "the archive has no language server"
+        # An upgrade from the overlap release: its bynkc-lsp is skewed against
+        # this release, so drop it rather than leave an editor starting it.
+        if [ "$bin" = bynkc-lsp ] && [ -f "$tmp/$stage/bynk-lsp" ] && [ -f "$dest/bynkc-lsp" ]; then
+          rm -f "$dest/bynkc-lsp"
+          say "Removed the stale $dest/bynkc-lsp; point your editor at bynk-lsp."
+        fi
         continue ;;
     esac
   fi

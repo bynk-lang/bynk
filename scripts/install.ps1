@@ -64,7 +64,16 @@ try {
         # A release before the rename ships only bynkc-lsp, and a current one only
         # bynk-lsp (a pinned older release is still installable): either server
         # name may be absent, but not both.
-        if (-not (Test-Path $src) -and $bin -like '*-lsp') { continue }
+        if (-not (Test-Path $src) -and $bin -like '*-lsp') {
+            # An upgrade from the overlap release: its bynkc-lsp is skewed against
+            # this release, so drop it rather than leave an editor starting it.
+            $stale = Join-Path $dest 'bynkc-lsp.exe'
+            if ($bin -eq 'bynkc-lsp' -and (Test-Path (Join-Path $tmp "$stage\bynk-lsp.exe")) -and (Test-Path $stale)) {
+                Remove-Item $stale -Force
+                Write-Host "Removed the stale $stale; point your editor at bynk-lsp."
+            }
+            continue
+        }
         Copy-Item $src (Join-Path $dest "$bin.exe") -Force
     }
 } finally {
