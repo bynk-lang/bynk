@@ -170,6 +170,26 @@ commons orders {
 }
 ```
 
+## Write JSON for a non-Bynk API
+
+`Json.encode` writes an `Option` in Bynk's tagged form, which only Bynk reads back.
+For a body a non-Bynk API receives, or a test stub that stands in for one, use
+`Json.encodePlain`: `Some(v)` becomes `v` and `None` becomes `null`.
+
+```bynk
+commons github {
+  type NewComment = { body: String, in_reply_to: Option[Int] }
+
+  fn commentBody(c: NewComment) -> String {
+    Json.encodePlain(c)   // {"body":"LGTM","in_reply_to":null}
+  }
+}
+```
+
+Pass the text as the `body` of a `Fetch.send` request. `Json.decode[NewComment]` reads
+it back, since the decoder accepts both forms. See
+[Plain JSON](/book/reference/types/#plain-json) for the two refusals.
+
 **See also:** [Define a refined type and validate untrusted
 input](/book/guides/type-system/define-and-validate/) (the `.of` path, for values you already have in
 hand), and the [type-system reference](/book/reference/types/#the-json-codec).

@@ -4592,7 +4592,7 @@ fn validate_json_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
 /// encoding would write `Some(null-payload)` and `None` identically. The walk
 /// goes through containers, named records and sums, and generic instantiations
 /// (with their type arguments substituted); `seen` guards a recursive type.
-fn null_payload_option(
+pub(crate) fn null_payload_option(
     t: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
     seen: &mut HashSet<String>,

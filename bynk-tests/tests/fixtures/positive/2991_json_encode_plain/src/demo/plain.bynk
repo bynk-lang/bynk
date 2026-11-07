@@ -1,0 +1,33 @@
+commons demo.plain
+
+type Qty = Int where Positive
+
+type Shape = | Circle(radius: Option[Int]) | Dot
+
+type Head = { ref: String, repo: Option[String] }
+
+type Pull = {
+  id: Int,
+  draft: Option[Bool],
+  closed_at: Option[String],
+  head: Head,
+  labels: List[Option[String]],
+  qty: Option[Qty],
+  shape: Shape,
+}
+
+fn sample() -> Pull {
+  Pull {
+    id: 7,
+    draft: Some(true),
+    closed_at: None,
+    head: Head { ref: "b", repo: None },
+    labels: [Some("x"), None],
+    qty: Some(3),
+    shape: Circle(Some(2)),
+  }
+}
+
+fn tagged(p: Pull) -> String { Json.encode(p) }
+
+fn plain(p: Pull) -> String { Json.encodePlain(p) }

@@ -1211,7 +1211,7 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                         push_ground(*t, &mut roots);
                     }
                 }
-                "encode" => {
+                "encode" | "encodePlain" => {
                     if let Some(a) = args.first()
                         && let Some(t) = commons.expr_types.get(&a.id).map(|te| te.ty)
                     {

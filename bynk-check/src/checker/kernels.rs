@@ -2856,12 +2856,17 @@ pub(crate) fn check_json_static(
         true
     };
     match method.name.as_str() {
-        "encode" => {
+        "encode" | "encodePlain" => {
+            // #2991: `encodePlain` is `encode` writing `Option` as `v` / `null`.
+            let plain = method.name == "encodePlain";
             if !type_args.is_empty() {
                 ctx.errors.push(CompileError::new(
                     "bynk.generics.type_arg_mismatch",
                     span,
-                    "`Json.encode` takes no type arguments — its type comes from the value",
+                    format!(
+                        "`Json.{}` takes no type arguments — its type comes from the value",
+                        method.name
+                    ),
                 ));
             }
             if !arity1(ctx) {
@@ -2903,6 +2908,45 @@ pub(crate) fn check_json_static(
                 "`Json.encode` encodes this value",
             ) {
                 return None;
+            }
+            if plain {
+                // #2991 (decision D): the generic codec witness always writes the
+                // tagged form, so plain encoding is for concrete types.
+                if super::contains_var(t, tys) {
+                    ctx.errors.push(
+                        CompileError::new(
+                            "bynk.json.encode_plain_generic",
+                            args[0].span,
+                            format!(
+                                "`Json.encodePlain` cannot encode `{}`: its type mentions a type parameter",
+                                t.display(tys)
+                            ),
+                        )
+                        .with_note(
+                            "a generic value encodes through its `Codable` witness, which writes `Option` tagged; encode at a concrete type, or use `Json.encode`",
+                        ),
+                    );
+                    return None;
+                }
+                // #2991 (decision C): the ambiguity rule of #2858's plain routes.
+                if let Some(payload) =
+                    super::codable::null_payload_option_ty(t, &ctx.input.types, tys)
+                {
+                    ctx.errors.push(
+                        CompileError::new(
+                            "bynk.json.nested_option_plain",
+                            args[0].span,
+                            format!(
+                                "`Option[{payload}]`: `Some({some})` and `None` would both write `null` in plain JSON",
+                                some = if payload == "()" { "()" } else { "…" },
+                            ),
+                        )
+                        .with_note(
+                            "an `Option` payload that can itself be `null` (`Option[T]` or `()`) is ambiguous; model it as a sum type, or use `Json.encode`",
+                        ),
+                    );
+                    return None;
+                }
             }
             Some(tys.intern(Ty::Base(BaseType::String)))
         }

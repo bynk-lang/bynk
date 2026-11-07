@@ -973,7 +973,7 @@ distinction as a sum type, or keep that route `tagged`.
 Only `Ok`, `Created` and `Accepted` **response bodies** of `from http` routes.
 Request bodies already decode plain JSON. Cross-context calls, queue messages,
 agent state, `Json.encode`, `Streaming` (SSE) events and the contract hashes keep
-the tagged form, so `decode(encode(x)) == x` still holds everywhere else.
+the tagged form (`Json.encodePlain` is the plain form outside a route), so `decode(encode(x)) == x` still holds everywhere else.
 `bynk openapi` describes a plain route's `Option` as nullable.
 
 ## Request lifecycle

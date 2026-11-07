@@ -1961,6 +1961,10 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
         "Json",
         &[
             ("encode", "encode(value) -> String"),
+            (
+                "encodePlain",
+                "encodePlain(value) -> String - Option as `v` / `null`",
+            ),
             ("decode", "decode[T](s: String) -> Result[T, JsonError]"),
             (
                 "decodeSql",

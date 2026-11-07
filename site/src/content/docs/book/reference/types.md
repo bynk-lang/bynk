@@ -529,11 +529,12 @@ hibernation and is restored on rehydration.
 
 ## The JSON codec
 
-Three compiler-backed statics decode and encode JSON at a typed boundary:
+Four compiler-backed statics decode and encode JSON at a typed boundary:
 
 | Form | Type | Purpose |
 |---|---|---|
 | `Json.encode(v)` | `String` | serialise a checked value to a JSON string |
+| `Json.encodePlain(v)` | `String` | `encode` writing an `Option` as the value or `null`, as a non-Bynk API sends it (see [Plain JSON](#plain-json)) |
 | `Json.decode[T](s)` | `Result[T, JsonError]` | parse a JSON string into `T`, validating structure (and any refinements) |
 | `Json.decodeSql[T](s)` | `Result[T, JsonError]` | `decode` for a `D1` row or list of rows, which also reads `0`/`1` as a `Bool` ([SQL databases](/book/reference/bynk-capabilities/#sql-databases-d1)) |
 
@@ -542,6 +543,38 @@ against `T` — including refined-type predicates — so untrusted JSON enters t
 program only as a fully-checked value. `JsonError` is the error it returns
 (malformed JSON, or a structural/refinement mismatch). See the guide
 [Decode untrusted JSON into a typed value](/book/guides/type-system/decode-json/).
+
+### Plain JSON
+
+`Json.encode` writes an `Option[U]` in Bynk's tagged form, `{"kind":"Some","value":v}`
+or `{"kind":"None"}`. `Json.encodePlain(v)` writes what a `json { options: plain }`
+route writes ([JSON for non-Bynk clients](/book/reference/http/#json-for-non-bynk-clients)):
+`Some(v)` as `v` and `None` as `null`, at any depth.
+
+```bynk
+commons comments
+
+type NewComment = { body: String, reply_to: Option[Int] }
+
+fn tagged(c: NewComment) -> String { Json.encode(c) }
+// {"body":"LGTM","reply_to":{"kind":"None"}}
+
+fn plain(c: NewComment) -> String { Json.encodePlain(c) }
+// {"body":"LGTM","reply_to":null}
+```
+
+Use it for the text a non-Bynk API reads or sends: an outbound `Fetch.send` body, or
+a test stubbing an external API at the wire. `Json.decode` reads the plain text back
+to the same value (the decoder accepts both forms). It changes `Option` only: sums,
+`Result` and `Map` keep their shapes.
+
+Two refusals keep it honest. An `Option` whose payload can itself be `null`
+(`Option[Option[T]]`, `Option[()]`) anywhere in the value's type is
+`bynk.json.nested_option_plain`, because `Some(None)` and `None` would both write
+`null`. A value whose type mentions a type parameter is
+`bynk.json.encode_plain_generic`: a generic value encodes through its `Codable`
+witness, which writes the tagged form, so encode at a concrete type. `Queue.sendValue`
+and the other typed capability writes stay tagged, because a Bynk consumer reads them.
 
 `JsonError` is a record of three `String` fields, so a failed decode can be
 explained in Bynk:
