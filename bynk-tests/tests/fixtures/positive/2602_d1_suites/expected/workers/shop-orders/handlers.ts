@@ -113,6 +113,12 @@ export const move = {
   },
 };
 
+export const overbound = {
+  async call(id: string, deps: { Orders: Orders }): globalThis.Promise<Result<SqlRun, SqlError>> {
+    return deps.Orders.run("DELETE FROM orders WHERE id = ?1", [SqlValue.Text(id), SqlValue.Integer(1)]);
+  },
+};
+
 export const api = {
   async http_POST_orders_Param_id(id: string, deps: { Orders: Orders }): globalThis.Promise<HttpResult<string>> {
     const __r0 = await deps.Orders.run("CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, total INTEGER NOT NULL CHECK (total BETWEEN 0 AND 100), paid INTEGER NOT NULL, receipt BLOB NOT NULL, note TEXT, weight REAL)", []);
