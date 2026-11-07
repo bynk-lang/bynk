@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The npm security gate CI runs over each package tree with a committed
-// lockfile (`.github/workflows/ci.yml`, job `npm-audit`).
+// lockfile (`.github/workflows/ci.yml`, job `lint`).
 //
 //   node scripts/npm-audit-gate.mjs <tree> [-- <extra npm audit args>]
 //

@@ -527,7 +527,8 @@ jobs:
     # One job takes one slot. Every check keeps its own path gate as a step
     # `if:`, and each runs on `!cancelled()`, so one failing check does not
     # hide the others: the job reports every failure from one run, as the
-    # separate jobs did.
+    # separate jobs did. Each also requires the checkout to have succeeded, so
+    # a failed checkout fails the job once rather than in every step.
     #
     #   - fmt: `cargo fmt --check`. rustfmt parses, it doesn't compile.
     #   - cargo audit: Cargo.lock against the RustSec advisory database. The
@@ -550,6 +551,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: checkout
         with:
           persist-credentials: false
       # Define the toolchain explicitly (rust-toolchain.toml would otherwise
@@ -559,27 +561,27 @@ jobs:
         with:
           components: rustfmt
       - name: Check formatting
-        if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
         run: cargo fmt --all --check
       # Prebuilt binary — avoids compiling cargo-audit from source on every run.
       - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
-        if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
         with:
           tool: cargo-audit
       - name: Audit dependencies (cargo audit)
-        if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
         run: cargo audit
       - name: Supply chain (cargo-deny)
-        if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           command: check
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        if: ${{ !cancelled() && (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true') }}
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true') }}
         with:
           node-version: "24"
       - name: Audit every npm tree
-        if: ${{ !cancelled() && (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true') }}
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true') }}
         run: |
           failed=""
           audit() {
@@ -598,10 +600,10 @@ jobs:
           echo "All three trees passed the npm audit gate."
       # shellcheck is preinstalled on ubuntu-latest.
       - name: shellcheck (POSIX sh)
-        if: ${{ !cancelled() && (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true') }}
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true') }}
         run: shellcheck --shell=sh scripts/install.sh scripts/check-installer-naming.sh
       - name: Asset naming ↔ release.yml
-        if: ${{ !cancelled() && (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true') }}
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true') }}
         run: sh scripts/check-installer-naming.sh
 
   clippy:
