@@ -2872,6 +2872,7 @@ fn lint_header_question(inner: &Expr, span: Span, ctx: &mut Ctx) {
         && let [arg] = args.as_slice()
         && let ExprKind::StrLit(header) = &arg.kind
         && !header.contains(['"', '\\'])
+        && !header.chars().any(char::is_control)
     {
         err = err.with_suggestion(
             "answer `400 BadRequest` when the header is missing",
