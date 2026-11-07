@@ -6608,7 +6608,11 @@ mod pure_helper_pins {
         }
     }
     fn pred(kind: PredKind) -> RefinementPred {
-        RefinementPred { kind, span: sp() }
+        RefinementPred {
+            kind,
+            arg_text: None,
+            span: sp(),
+        }
     }
     fn refinement(preds: Vec<PredKind>) -> Refinement {
         Refinement {
@@ -6626,6 +6630,7 @@ mod pure_helper_pins {
     fn ibound(value: i64) -> IntBound {
         IntBound {
             value,
+            lexeme: value.to_string(),
             span: Span::new(0, 0),
         }
     }

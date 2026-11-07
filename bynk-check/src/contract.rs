@@ -1028,10 +1028,12 @@ mod tests {
             predicates: vec![
                 RefinementPred {
                     kind: PredKind::NonEmpty,
+                    arg_text: None,
                     span: sp(),
                 },
                 RefinementPred {
                     kind: PredKind::MaxLength(10),
+                    arg_text: None,
                     span: sp(),
                 },
             ],
@@ -1041,10 +1043,12 @@ mod tests {
             predicates: vec![
                 RefinementPred {
                     kind: PredKind::MaxLength(10),
+                    arg_text: None,
                     span: sp(),
                 },
                 RefinementPred {
                     kind: PredKind::NonEmpty,
+                    arg_text: None,
                     span: sp(),
                 },
             ],
@@ -1062,6 +1066,7 @@ mod tests {
         let a = Refinement {
             predicates: vec![RefinementPred {
                 kind: PredKind::MaxLength(10),
+                arg_text: None,
                 span: sp(),
             }],
             span: sp(),
@@ -1069,6 +1074,7 @@ mod tests {
         let b = Refinement {
             predicates: vec![RefinementPred {
                 kind: PredKind::MaxLength(11),
+                arg_text: None,
                 span: sp(),
             }],
             span: sp(),
@@ -1269,10 +1275,12 @@ mod tests {
             predicates: vec![
                 RefinementPred {
                     kind: PredKind::NonEmpty,
+                    arg_text: None,
                     span: sp(),
                 },
                 RefinementPred {
                     kind: PredKind::MinLength(1),
+                    arg_text: None,
                     span: sp(),
                 },
             ],

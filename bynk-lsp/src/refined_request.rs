@@ -260,6 +260,7 @@ fn clause(kind: &PredKind) -> Clause {
         source: bynk_fmt::refinement_to_string(&Refinement {
             predicates: vec![bynk_syntax::ast::RefinementPred {
                 kind: kind.clone(),
+                arg_text: None,
                 span: bynk_syntax::span::Span::default(),
             }],
             span: bynk_syntax::span::Span::default(),
