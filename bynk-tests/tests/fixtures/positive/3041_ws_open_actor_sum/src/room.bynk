@@ -9,7 +9,7 @@ actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
 // #3041: an actor-sum `by` on a WebSocket `on open`. The edge resolves the
 // members first-wins (a bad or absent token falls through to `Visitor`) and
 // forwards the member that verified; the Durable Object rebuilds `who` from it
-// for the `on open` body and, via the socket attachment, for `on message`.
+// for the `on open` body and, via the socket attachment, for `on message`, which may name its binder differently (`w`).
 service chat from websocket(in: Frame, out: Frame) {
   on open(room: RoomKey) -> Effect[()] by who: User | Visitor {
     let nobody: Option[String] = None
@@ -20,8 +20,8 @@ service chat from websocket(in: Frame, out: Frame) {
     let _ <- Room(room).join(name, connection)
   }
 
-  on message(room: RoomKey, frame: Frame) -> Effect[()] by who: User | Visitor {
-    let name = match who {
+  on message(room: RoomKey, frame: Frame) -> Effect[()] by w: User | Visitor {
+    let name = match w {
       User(u) => "\(u)",
       Visitor => "visitor",
     }

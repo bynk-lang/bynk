@@ -8306,11 +8306,21 @@ fn emit_ws_do_method(
                 owning_context: ctx.commons_name.clone(),
                 ..HandlerShared::default()
             },
-            deps_identity_binder: host.seam.as_ref().and_then(|s| s.binder.clone()),
+            // Each lifecycle handler names its own binder: `on message`/`on close`
+            // carry their own `by`, and nothing requires the name to match
+            // `on open`'s. The principal itself comes from the `on open`
+            // verification (the attachment), whichever name a handler gives it.
+            deps_identity_binder: host.seam.as_ref().and_then(|_| {
+                h.by_clause
+                    .as_ref()
+                    .and_then(|by| by.binder.as_ref())
+                    .map(|b| b.name.clone())
+            }),
             actor_sum_binder: host
                 .sum
                 .as_ref()
-                .and(host.handler.by_clause.as_ref())
+                .and(h.by_clause.as_ref())
+                .filter(|by| by.is_sum())
                 .and_then(|by| by.binder.as_ref())
                 .map(|b| b.name.clone()),
             ws_self_agent: Some(agent.name.name.clone()),
@@ -8637,7 +8647,6 @@ fn ws_open_fetch_branch_stmt(
             bynk_ts::TsExpr::Ident(expr.to_string()),
             None,
         ));
-        deps_fields.push("...__givenDeps".to_string());
     }
     if let Some(members) = &host.sum {
         deps_fields.push(format!(
@@ -8649,6 +8658,10 @@ fn ws_open_fetch_branch_stmt(
             "identity: __payload.identity as {}",
             seam.identity_type
         ));
+    }
+    // Last, as in the `/_bynk/agent/` branch: the rebuilt providers win.
+    if given_deps_expr.is_some() {
+        deps_fields.push("...__givenDeps".to_string());
     }
     let deps_arg = if deps_fields.is_empty() {
         "{}".to_string()

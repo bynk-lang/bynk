@@ -104,7 +104,7 @@ export class Room {
       const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server);
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       const __givenDeps = { Clock: new bynk__binding.ClockProvider() };
-      await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { ...__givenDeps, identity: __payload.identity as UserId });
+      await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { identity: __payload.identity as UserId, ...__givenDeps });
       return __webSocketUpgradeResponse(__pair.client);
     }
     if (url.pathname.startsWith("/_bynk/agent/")) {
