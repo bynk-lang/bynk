@@ -1133,3 +1133,24 @@ fn keyword_names_the_index_misses_get_lexical_tokens() {
     has("Event { type: t, from: f", "from", false);
     has("Push(from: f", "from", false);
 }
+
+/// #2839 — hovering the `?` of an `Option` in an `HttpResult` handler says
+/// that `None` answers `404 NotFound`; a `?` that is not on an `Option` says
+/// nothing of the kind.
+#[test]
+fn question_on_an_option_hovers_as_not_found() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/2839_http_header_question_behaviour",
+        "src/hooks/events.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "stored?", "?"))
+        .expect("the `?` on an Option hovers");
+    assert!(h.contains("None → 404 NotFound"), "{h}");
+    assert!(h.contains("let Some(x) = e else"), "{h}");
+    let elsewhere = hover_at(r, rel, text, root, at(text, "Ok(\"found", "Ok"));
+    assert!(
+        elsewhere.is_none_or(|h| !h.contains("404 NotFound")),
+        "only the `?` carries the note"
+    );
+}

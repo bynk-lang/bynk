@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import * as __ns_demo_web from "./../demo/web.js";
 import * as __ns_bynk from "./../bynk.js";
+import * as __ns_bynk_locale_types from "./../bynk/locale/types.js";
 
 class ExpectationError extends Error {
   location: string;

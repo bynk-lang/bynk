@@ -1,0 +1,46 @@
+suite hooks.events {
+	case "a present header is answered" {
+		let r <- events.POST("/event", RequestHeaders.of(["X-Event: ping"]), Bytes.fromUtf8("{}")) by Sender
+		expect r is Ok("ping e30=")
+	}
+
+	case "a missing header is a bad request, compared by ==" {
+		let r <- events.POST("/event", RequestHeaders.empty(), Bytes.fromUtf8("{}")) by Sender
+		expect r == BadRequest("missing X-Event")
+		expect r != NotFound
+		expect r != BadRequest("missing something else")
+		expect r is BadRequest("missing X-Event")
+	}
+
+	case "a qualified variant compares too" {
+		let r <- events.POST("/event", RequestHeaders.empty(), Bytes.fromUtf8("{}")) by Sender
+		expect r == HttpResult.BadRequest("missing X-Event")
+		expect r != HttpResult.NotFound
+	}
+
+	case "an unmatched lookup keeps the 404 of `?`" {
+		let r <- events.POST("/lookup", RequestHeaders.of(["X-Key: abc"]), Bytes.fromUtf8("{}")) by Visitor
+		expect r == NotFound
+		expect r is NotFound
+	}
+}
+
+suite hooks.events as system {
+	env { EVENTS_SECRET = "test-events" }
+
+	case "a missing header answers 400 on the wire" {
+		let r <- events.POST("/event", RequestHeaders.empty(), Bytes.fromUtf8("{}")) by Sender
+		expect r is BadRequest("missing X-Event")
+		expect r != NotFound
+	}
+
+	case "a present header answers 200 on the wire" {
+		let r <- events.POST("/event", RequestHeaders.of(["X-Event: push"]), Bytes.fromUtf8("{}")) by Sender
+		expect r is Ok("push e30=")
+	}
+
+	case "the 404 of `?` on a non-header Option still answers 404" {
+		let r <- events.POST("/lookup", RequestHeaders.of(["X-Key: abc"]), Bytes.fromUtf8("{}")) by Visitor
+		expect r is NotFound
+	}
+}

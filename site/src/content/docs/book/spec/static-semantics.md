@@ -217,6 +217,15 @@ types over one base) agree at the base, but unrelated types do not
 from its expected type when that type is either, and otherwise from the enclosing
 return type, so it is never ambiguous (#1659).
 
+The operands of `==` and `!=` are same-typed, so one operand's type is the
+expected type for the other. An operand that can take its type only from its
+context — a bare `None`, `Ok(…)`, `Err(…)`, an empty list, or an `HttpResult`
+or `QueueResult` variant (`NotFound`, `BadRequest("…")`, `HttpResult.NotFound`,
+`Ack`, `Retry("…")`) — is typed against the other operand, so
+`r == BadRequest("msg")` and `r != NotFound` type-check for
+`r: HttpResult[String]`. A variant with nothing to infer from keeps the `()`
+payload fallback; `expect r is …` is unchanged (#2839).
+
 **The bottom type and deliberate faults** (#2620). `unreachable(message)` and
 `todo(message)` are ambient built-in functions, not keywords: each takes one
 `String` (`bynk.types.argument_mismatch`, `bynk.types.call_arity`), and a `fn`,

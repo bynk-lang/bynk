@@ -271,6 +271,24 @@ pub(super) fn emit_test_module(
             uses_imports.push((ns, relative_import_for_test(&commons_dir_for(owner))));
         }
     }
+    // #2994: a stub class's method signature names the stubbed capability's
+    // types by the namespace declaring them (`stubs::emit_stub_class`) — the
+    // providing unit's own, or a commons it `uses` — which the target need not
+    // `uses` itself.
+    for rp in stubs.values() {
+        let Some(owner) = unit_tables
+            .get(target_name)
+            .and_then(|t| t.flattened_caps.get(&rp.cap))
+        else {
+            continue;
+        };
+        for used in unit_uses.get(owner).into_iter().flatten() {
+            let ns = test_ns(used);
+            if used != target_name && !consumed_imports.iter().any(|(n, _)| *n == ns) {
+                uses_imports.push((ns, relative_import_for_test(&commons_dir_for(used))));
+            }
+        }
+    }
     uses_imports.sort();
     uses_imports.dedup();
     for (ns, path) in &uses_imports {
@@ -936,6 +954,10 @@ pub(super) fn emit_test_module(
     // #1934: a case that compares a typed http outcome with `Ok(…)`.
     if runtime_use.http_result() {
         append_missing_bindings(&mut runtime_names, "HttpResult");
+    }
+    // #2839: a case that compares a queue verdict with a bare variant.
+    if runtime_use.queue_result() {
+        append_missing_bindings(&mut runtime_names, "QueueResult");
     }
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);

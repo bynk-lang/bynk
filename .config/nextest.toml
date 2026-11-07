@@ -9,6 +9,10 @@
 # doctests in the tree (nextest cannot run those), so nothing is lost — the
 # `doc_examples` gate is an ordinary `#[test]`, which nextest runs normally.
 
+# Test groups (see the macOS overrides on `profile.default` below).
+[test-groups]
+macos-node-heavy = { max-threads = 1 }
+
 # #1676: the `ci` profile is THE suite policy for every gate that runs the
 # workspace suite — ci.yml's Test suite legs (the PR gate), release.yml's test
 # job (the release gate) and release-bootstrap.yml's verify job. All three run
@@ -146,6 +150,17 @@ default-filter = 'not (((binary_id(bynk-tests::it) & test(/^system::/)) | (binar
 inherits = "ci"
 default-filter = 'not ((binary_id(bynk-tests::it) & test(/^system::/)) | (binary_id(/^bynk::/) & not binary_id(/^bynk::(compile_once_strips_suites|dev|doctor|new)$/)) | binary_id(xtask::ci_command))'
 
+# The Windows and macOS legs in the merge queue and on `main` (ci.yml's
+# `test` job; the nightly runs the full `ci` profile there instead). The whole
+# suite minus the corpus-wide passes that type-check or run every fixture's
+# emitted code under tsc/node. Those are OS-independent (the same emitted code,
+# the same Node and tsc), they run on Linux in the same stage (`test-system`,
+# `test-ts7`), and on the 3-core macOS runner they were ~900 of ~2100
+# test-seconds. Not a tier profile: the tier probe does not partition it.
+[profile.ci-os]
+inherits = "ci"
+default-filter = 'not (binary_id(bynk-tests::it) & (test(/^system::tsc_verify::/) | test(/^system::behaviour_fixtures::/) | test(/^system::examples::/) | test(/^system::example_tests_behaviour::/)))'
+
 [profile.default]
 # Local runs keep the default (0) retries so flakes surface immediately.
 retries = 0
@@ -196,6 +211,37 @@ priority = 40
 [[profile.default.overrides]]
 filter = 'binary_id(bynk-tests::it) & test(=system::tsc_verify::js_artefact_strips_every_fixture_to_js_shape)'
 priority = 40
+
+# macOS: stop the heavy Node-bound corpus tests from oversubscribing the runner.
+#
+# The `macos-latest` runner has 3 cores, so nextest runs 3 tests at a time, and
+# the longest-first priorities above start the heaviest ones together. They
+# are not single-threaded. `behaviour_fixtures` runs its own worker pool sized
+# to `available_parallelism()` (3 more Node processes). `tsc_strict` is one
+# large `tsc` program, and `emitted_javascript_is_valid_under_node` is another
+# Node-heavy pass. All of them on 3 cores, next to each other, is the pattern
+# seen in CI: `tsc_strict` hit its 600 s terminate in 5 of 8 sampled macOS
+# legs (run 42349950008: TRY 1 timed out at 600 s, TRY 2 passed in 177 s),
+# adding ~10 min to a leg that sits on the critical path of every merge-queue
+# entry. The Linux and Windows legs (4 cores) have not shown it.
+#
+# So, on macOS only:
+#   - `behaviour_fixtures` takes every test thread. It already parallelises
+#     internally, so running it alone costs no throughput.
+#   - The other heavy Node passes share the `macos-node-heavy` group, one at a
+#     time, so at most one of them runs beside the light tests.
+# `platform` matches the host the tests run on, so these do nothing elsewhere.
+# This is a containment, not a diagnosis: if the timeouts persist, look at
+# memory on the runner (7 GB) before widening it.
+[[profile.default.overrides]]
+platform = 'cfg(target_os = "macos")'
+filter = 'binary_id(bynk-tests::it) & test(=system::behaviour_fixtures::marked_positive_fixtures_behave_as_expected)'
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+platform = 'cfg(target_os = "macos")'
+filter = 'binary_id(bynk-tests::it) & (test(=system::tsc_verify::emitted_typescript_passes_tsc_strict) | test(=system::tsc_verify::emitted_javascript_is_valid_under_node) | test(=system::tsc_verify::js_artefact_strips_every_fixture_to_js_shape) | test(=system::tsc_verify::all_emitted_typescript_strips_under_node))'
+test-group = "macos-node-heavy"
 
 # On Windows, the registry conformance faults test opened dozens of loopback
 # connections that each waited out a refused `[::1]` (see the test's `proxy`),

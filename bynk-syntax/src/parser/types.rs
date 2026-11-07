@@ -644,6 +644,7 @@ impl<'a> Parser<'a> {
         self.bump();
         let name = self.slice(t.span);
         let start = t.span;
+        let mut arg_text = None;
         let (kind, end_span) = match name {
             "Matches" => {
                 self.expect(TokenKind::LParen, "after `Matches`")?;
@@ -680,19 +681,22 @@ impl<'a> Parser<'a> {
             }
             "MinLength" => {
                 self.expect(TokenKind::LParen, "after `MinLength`")?;
-                let n = self.parse_signed_int_literal("as the argument to `MinLength`")?;
+                let (n, text) = self.parse_signed_int_literal("as the argument to `MinLength`")?;
+                arg_text = Some(text);
                 let close = self.expect(TokenKind::RParen, "after the `MinLength` argument")?;
                 (PredKind::MinLength(n), close.span)
             }
             "MaxLength" => {
                 self.expect(TokenKind::LParen, "after `MaxLength`")?;
-                let n = self.parse_signed_int_literal("as the argument to `MaxLength`")?;
+                let (n, text) = self.parse_signed_int_literal("as the argument to `MaxLength`")?;
+                arg_text = Some(text);
                 let close = self.expect(TokenKind::RParen, "after the `MaxLength` argument")?;
                 (PredKind::MaxLength(n), close.span)
             }
             "Length" => {
                 self.expect(TokenKind::LParen, "after `Length`")?;
-                let n = self.parse_signed_int_literal("as the argument to `Length`")?;
+                let (n, text) = self.parse_signed_int_literal("as the argument to `Length`")?;
+                arg_text = Some(text);
                 let close = self.expect(TokenKind::RParen, "after the `Length` argument")?;
                 (PredKind::Length(n), close.span)
             }
@@ -714,11 +718,14 @@ impl<'a> Parser<'a> {
         };
         Ok(RefinementPred {
             kind,
+            arg_text,
             span: start.merge(end_span),
         })
     }
 
-    fn parse_signed_int_literal(&mut self, ctx: &str) -> Result<i64, CompileError> {
+    /// The value and the literal as written (`-1_000`, from its tokens), so the
+    /// formatter keeps digit separators (#2993).
+    fn parse_signed_int_literal(&mut self, ctx: &str) -> Result<(i64, String), CompileError> {
         let neg = self.eat(TokenKind::Minus).is_some();
         let t = self.expect(TokenKind::IntLit, ctx)?;
         let slice = self.slice(t.span);
@@ -734,7 +741,8 @@ impl<'a> Parser<'a> {
                     ),
                 )
             })?;
-        Ok(if neg { -n } else { n })
+        let text = format!("{}{slice}", if neg { "-" } else { "" });
+        Ok((if neg { -n } else { n }, text))
     }
 
     /// A signed numeric literal in refinement-bound position (v0.21):
@@ -767,6 +775,7 @@ impl<'a> Parser<'a> {
                     })?;
                 Ok(SignedNumLit::Int(IntBound {
                     value: if neg { -n } else { n },
+                    lexeme: format!("{}{slice}", if neg { "-" } else { "" }),
                     span: span_of(t.span),
                 }))
             }

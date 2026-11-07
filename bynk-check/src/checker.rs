@@ -1665,6 +1665,7 @@ pub fn check_handler_body(
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
         let_else_removals: HashMap::new(),
+        question_let_binders: HashMap::new(),
         return_ty,
         return_ty_span,
         effectful,
@@ -1834,6 +1835,7 @@ pub fn check_body(
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
         let_else_removals: HashMap::new(),
+        question_let_binders: HashMap::new(),
         return_ty,
         return_ty_span,
         effectful: return_ty.is_effect(tys),
@@ -1991,6 +1993,7 @@ pub fn check_invariants(
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
             let_else_removals: HashMap::new(),
+            question_let_binders: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: inv.predicate.span,
             // A predicate is a pure expression — effectful operations (capability
@@ -2145,6 +2148,7 @@ pub(crate) fn check_contracts(
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
             let_else_removals: HashMap::new(),
+            question_let_binders: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: c.predicate.span,
             effectful: false,
@@ -2377,6 +2381,7 @@ pub fn check_transitions(
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
             let_else_removals: HashMap::new(),
+            question_let_binders: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: tr.predicate.span,
             effectful: false,
@@ -2565,6 +2570,7 @@ pub fn check_migrations(
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
             let_else_removals: HashMap::new(),
+            question_let_binders: HashMap::new(),
             return_ty: tys.intern(Ty::Unit),
             return_ty_span: step.span,
             // A step is pure: no capability calls, no `<-` (track §3.3).
@@ -2924,6 +2930,10 @@ pub(crate) struct Ctx<'a> {
     /// source ranges to delete to drop its `else` — what the
     /// "remove the `else`" fix of an `else` that can never run applies.
     pub let_else_removals: HashMap<String, Vec<Span>>,
+    /// #2839: a plain `let name = <e>?` statement's `?` expression span →
+    /// the binder's span and name, so the header-`?` lint can offer the
+    /// `let … else` rewrite. Only `let`s with no annotation are recorded.
+    pub question_let_binders: HashMap<Span, (Span, String)>,
     pub return_ty: TyId,
     pub return_ty_span: Span,
     /// True if the enclosing function/handler returns `Effect[T]` (v0.5).
@@ -4262,6 +4272,13 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
         }
         match stmt {
             Statement::Let(l) => {
+                if l.type_annot.is_none()
+                    && l.let_else.is_none()
+                    && matches!(l.value.kind, ExprKind::Question(_))
+                {
+                    ctx.question_let_binders
+                        .insert(l.value.span, (l.name.span, l.name.name.clone()));
+                }
                 let annot_ty = l.type_annot.as_ref().and_then(|a| {
                     // v0.20b: the enclosing fn's type parameters are legal
                     // in body annotations (`let init: List[B] = …`).
@@ -6608,7 +6625,11 @@ mod pure_helper_pins {
         }
     }
     fn pred(kind: PredKind) -> RefinementPred {
-        RefinementPred { kind, span: sp() }
+        RefinementPred {
+            kind,
+            arg_text: None,
+            span: sp(),
+        }
     }
     fn refinement(preds: Vec<PredKind>) -> Refinement {
         Refinement {
@@ -6626,6 +6647,7 @@ mod pure_helper_pins {
     fn ibound(value: i64) -> IntBound {
         IntBound {
             value,
+            lexeme: value.to_string(),
             span: Span::new(0, 0),
         }
     }

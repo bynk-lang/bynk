@@ -1,0 +1,16 @@
+context shop.stock
+
+// #2995: a test case reads through the capability with the typed reads.
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Stock = D1
+
+type Item = { id: String }
+
+service listing {
+	on call() -> Effect[Result[List[Item], SqlReadError]] given Stock {
+		Stock.select[Item]("FROM items", [])
+	}
+}

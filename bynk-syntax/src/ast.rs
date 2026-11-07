@@ -2743,6 +2743,9 @@ impl DurationUnit {
 #[derive(Debug, Clone)]
 pub struct IntBound {
     pub value: i64,
+    /// The bound as written (`-20_000`), digit separators kept (#2993). Only
+    /// the formatter reads it; `value` is what the checker uses.
+    pub lexeme: String,
     pub span: Span,
 }
 
@@ -2775,6 +2778,10 @@ pub struct Refinement {
 #[derive(Debug, Clone)]
 pub struct RefinementPred {
     pub kind: PredKind,
+    /// The integer argument of `MinLength`/`MaxLength`/`Length` as written
+    /// (`1_000`), digit separators kept (#2993); `None` for other predicates
+    /// and for a predicate built without source. Only the formatter reads it.
+    pub arg_text: Option<String>,
     pub span: Span,
 }
 

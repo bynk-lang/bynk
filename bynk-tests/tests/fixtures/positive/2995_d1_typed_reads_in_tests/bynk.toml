@@ -1,0 +1,6 @@
+[project]
+name = "d1-typed-reads-in-tests"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

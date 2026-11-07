@@ -1,0 +1,28 @@
+context hooks.events
+
+fn find(key: String) -> Option[String] {
+	None
+}
+
+actor Sender { auth = Signature(secret = "EVENTS_SECRET", header = "X-Hub-Signature-256") }
+
+service events from http {
+	limits { maxBody: 256 }
+
+	// A required header answered with `400`. `?` on `headers.get(…)` would
+	// answer `404 NotFound` for a missing header (#2839); the `let … else`
+	// names the status.
+	@raw(contentType: "application/json")
+	on POST("/event") (headers: RequestHeaders, body: Bytes) -> Effect[HttpResult[String]] by Sender {
+		let Some(event) = headers.get("X-Event") else { BadRequest("missing X-Event") }
+		Ok("\(event) \(body.toBase64())")
+	}
+
+	// `?` on an `Option` that is not a header keeps its documented `404`.
+	@raw(contentType: "*/*")
+	on POST("/lookup") (headers: RequestHeaders, body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {
+		let stored = find("abc")
+		let found = stored?
+		Ok("found \(found)")
+	}
+}
