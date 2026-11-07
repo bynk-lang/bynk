@@ -4060,7 +4060,7 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
     } else {
         ts_ty(t, tys)
     };
-    if cx.in_test_scaffold() {
+    if cx.records_codec_roots() {
         note_ground_roots(t, cx);
     }
     // #914: the wrapper below names `Result`, `JsonValue` and `JsonError`
@@ -4108,7 +4108,7 @@ fn json_encode_text(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<Stri
     // parameter encodes through the codec witness of that type.
     let arg_ty = cx.commons().expr_types.get(&arg.id).map(|te| te.ty)?;
     if super::codec::has_var(arg_ty, cx.commons()) {
-        if cx.in_test_scaffold() {
+        if cx.records_codec_roots() {
             note_ground_roots(arg_ty, cx);
         }
         let codec = cx.codec(arg_ty);
@@ -4123,7 +4123,7 @@ fn json_encode_text(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<Stri
     // consumed context's boundary types (#661). P6.28: pushes the `TyId`
     // already in hand, not a re-derived `TypeRef` — `tref` below still
     // exists for this call site's own, separate codec-rendering use.
-    if cx.in_test_scaffold() {
+    if cx.records_codec_roots() {
         cx.runtime_use().note_json_codec_root(arg_ty);
     }
     let v = pre.lower(arg, cx);

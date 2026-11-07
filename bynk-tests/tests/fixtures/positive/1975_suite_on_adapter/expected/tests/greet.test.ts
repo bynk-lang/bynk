@@ -6,6 +6,7 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 import * as __ns_greet from "./../greet.js";
 import * as __ns_bynk from "./../bynk.js";
 import * as greet__binding from "../greet.binding.js";
+import * as __ns_bynk_locale_types from "./../bynk/locale/types.js";
 
 class ExpectationError extends Error {
   location: string;

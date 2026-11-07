@@ -1,0 +1,9 @@
+context demo.hooks
+
+uses demo.types
+
+service echo {
+	on call(u: UserRef) -> Effect[String] {
+		u.login
+	}
+}

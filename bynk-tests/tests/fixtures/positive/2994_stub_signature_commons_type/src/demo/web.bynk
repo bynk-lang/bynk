@@ -1,0 +1,11 @@
+context demo.web
+
+uses demo.messages
+consumes bynk { Locale }
+
+service api {
+	on call() -> Effect[String] given Locale {
+		let tag <- Locale.current()
+		greeting(tag)
+	}
+}
