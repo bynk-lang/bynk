@@ -26,8 +26,8 @@ on:
     branches: [main]
     paths-ignore: *non_code_paths
   schedule:
-    # Nightly, offset from ci.yml's nightly. The only run that analyses Rust
-    # (see the matrix); it was a weekly drift check before that.
+    # Nightly at 07:40 UTC, 40 min after ci.yml's scheduled run. The only run
+    # that analyses Rust (see the matrix); it was a weekly drift check before.
     - cron: "40 7 * * *"
 
 permissions:
@@ -66,6 +66,14 @@ jobs:
         # emitted runtime (the surface CodeQL is load-bearing for), it
         # annotates new alerts on the PR diff, and it keeps OpenSSF Scorecard's
         # SAST check seeing CodeQL on merged PRs.
+        #
+        # Trade-offs, accepted: `main` holds a Rust configuration that PR runs
+        # never upload, so code scanning's PR check may note that it cannot
+        # determine the alerts introduced for "1 configuration present on
+        # refs/heads/main" (rust). That is a notice, not a block, unless
+        # code-scanning merge protection is ever turned on in a ruleset (then
+        # revisit this). And a merge that fixes or introduces a Rust alert
+        # shows on `main` only after the next nightly.
         language: ${{ fromJSON(github.event_name == 'schedule' && '["javascript-typescript","rust"]' || '["javascript-typescript"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
