@@ -1079,3 +1079,13 @@ fn copy_dir(from: &Path, to: &Path) {
         }
     }
 }
+
+/// `--allow-skew` went with `bynkc`: there is no separate compiler to drift
+/// from, so the flag is an ordinary unknown flag.
+#[test]
+fn allow_skew_is_an_unknown_flag() {
+    let dir = scratch("allow-skew-rejected");
+    let (code, _out, err) = run_bynk_in(&dir, &["check", "--allow-skew"]);
+    assert_ne!(code, 0, "{err}");
+    assert!(err.contains("--allow-skew"), "{err}");
+}

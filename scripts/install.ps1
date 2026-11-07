@@ -66,6 +66,13 @@ try {
         if (-not (Test-Path $src) -and $bin -like '*-lsp') { continue }
         Copy-Item $src (Join-Path $dest "$bin.exe") -Force
     }
+    # The upgrade from a release that shipped bynkc: it is gone, and a leftover
+    # would keep running the old compiler beside the new bynk.
+    $oldBynkc = Join-Path $dest 'bynkc.exe'
+    if (Test-Path $oldBynkc) {
+        Remove-Item $oldBynkc -Force
+        Write-Host "Removed the old $oldBynkc; use bynk."
+    }
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

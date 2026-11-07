@@ -96,6 +96,13 @@ for bin in bynk bynk-lsp bynkc-lsp; do # bynkc-lsp: overlap copy, dropped in E4b
   mv -f "$dest/.$bin.new" "$dest/$bin"
 done
 
+# The upgrade from a release that shipped bynkc: it is gone, and a leftover
+# would keep running the old compiler beside the new bynk.
+if [ -f "$dest/bynkc" ]; then
+  rm -f "$dest/bynkc"
+  say "Removed the old $dest/bynkc; use bynk."
+fi
+
 say "Installed bynk and bynk-lsp (plus a bynkc-lsp copy for this release) to $dest"
 case ":$PATH:" in
   *":$dest:"*) say "Run 'bynk doctor' to check your setup." ;;

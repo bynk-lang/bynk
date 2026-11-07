@@ -328,8 +328,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         }
     }
     // #2138: `--against` — resolve and check the target before anything is
-    // built, so a refused run makes no request. `dev` is the `bynk` driver's
-    // to start (`bynk test --against dev`); here it is refused.
+    // built, so a refused run makes no request. `dev` starts a local `bynk dev`
+    // through the `bynk` binary named by `dev_command` / `BYNK_DEV_COMMAND`
+    // (the `bynk` CLI sets it); without one it is refused.
     let mut remote = match against.as_deref() {
         None => None,
         Some(value) => {
@@ -360,7 +361,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                     }
                     _ => std::env::var(name).ok(),
                 },
-                "starts a local `bynk dev`, which only the `bynk` driver can do: run `bynk test --against dev`",
+                "starts a local `bynk dev`, and no `bynk` binary was given to start it with (`bynk test --against dev` supplies one)",
             ) {
                 Ok(crate::remote::Against::Run(run)) => {
                     Some(crate::remote::RemoteRun { settle_ms, ..run })

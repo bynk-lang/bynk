@@ -20,9 +20,9 @@ use crate::project::{RemoteSkip, TestTarget};
 /// The reserved `--against` value that starts a local `bynk dev`.
 pub const DEV: &str = "dev";
 
-/// Internal: the `bynk` binary that can start `bynk dev`, set by `bynk test
-/// --against dev` for the `bynk` it delegates to. Without it, `bynk test
-/// --against dev` is refused.
+/// Internal: the `bynk` binary that starts `bynk dev` for `bynk test --against
+/// dev`, set by `bynk` itself. A caller of the library that does not set it
+/// gets `--against dev` refused.
 pub const DEV_COMMAND_ENV: &str = "BYNK_DEV_COMMAND";
 
 /// Internal: the URLs of a running `bynk dev`, by worker, for one group's run

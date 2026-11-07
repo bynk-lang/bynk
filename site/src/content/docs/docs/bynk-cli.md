@@ -423,8 +423,7 @@ in `bynk.foreign.toml` (`bynk.deploy.foreign_contract_skew`; see
 
 ## `bynk check`
 
-Type-check a `.bynk` file or project without writing output — the same behaviour
-as [`bynk check`](#bynk-check), through the driver. Runs the compiler
+Type-check a `.bynk` file or project without writing output. Runs the compiler
 pipeline **in-process**.
 
 ```text
@@ -496,8 +495,7 @@ remains.
 
 ## `bynk compile`
 
-Compile a project to TypeScript in a directory — [`bynk compile`](#bynk-compile),
-run **in-process** through the driver, and the output is the same. It also serves the editor's **Show
+Compile a project to TypeScript in a directory, **in-process**. It also serves the editor's **Show
 Compiled Output** view; for a build you deploy, use [`bynk dev`](#bynk-dev) or
 [`bynk deploy`](#bynk-deploy).
 
@@ -611,8 +609,7 @@ emitted verifier reads. The project must check clean.
 
 ## `bynk fmt`
 
-Format `.bynk` source files in place — the same behaviour as
-[`bynk fmt`](#bynk-fmt), through the driver, run **in-process**.
+Format `.bynk` source files in place, **in-process**.
 
 ```text
 bynk fmt <INPUTS>... [--check] [--indent tab|spaces] [--indent-width N] [--max-line-width COLUMNS] [--trailing-comma|--no-trailing-comma] [--no-config]
@@ -676,10 +673,9 @@ canonical). Non-zero if a file could not be read/written, failed to parse, or
 
 ## `bynk test`
 
-Discover and run a project's test declarations — the same behaviour as
-[`bynk test`](#bynk-test), run **in-process** through the driver. It still starts the external `tsc` and
+Discover and run a project's test declarations, **in-process**. It still starts the external `tsc` and
 `node` for the runner (and `bynk dev` for `--against dev`). Requires `tsc` (with
-Node.js) or `tsx` on `PATH`, exactly as `bynk test`.
+Node.js) or `tsx` on `PATH`.
 
 ```text
 bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots]
@@ -879,8 +875,8 @@ Cloudflare: it is local `wrangler dev` only, and `-- --remote` is never passed.
   `--skip-unsupported`). A cron handler is reachable on `bynk dev` only through
   wrangler's `/__scheduled`, which returns no result to check, so it stays
   refused.
-- **Only through `bynk`.** `bynk test --against dev` is refused: only the
-  `bynk` driver can start `bynk dev`.
+- **Started for you.** `bynk test --against dev` starts `bynk dev` itself, runs
+  the groups against it and stops it afterwards.
 
 Under `--format json` the groups are reported as one document, with
 `"transport": "remote:dev"`.
@@ -979,8 +975,7 @@ more than one `from http` service puts the service's name before the method.
   array, before `"durationMs"`. It never fails the run: the set is walked from the
   handler'"'"'s body, so a status that comes from a helper'"'"'s result is outside it, and
   treating the set as exhaustive would fail on the false positives the warning
-  exists to surface. The set is computed by `bynk test`; a direct `bynk test
-  --smoke` compares nothing and does not warn.
+  exists to surface.
 - **`--print`.** Prints the synthesised suites, each headed by the path it would
   have beside its context file, and the skipped cases as comments. Copy one
   into `tests/` to extend it. A smoke run writes nothing into the project: a
