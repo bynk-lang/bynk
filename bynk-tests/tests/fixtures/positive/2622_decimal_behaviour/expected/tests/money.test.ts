@@ -167,7 +167,7 @@ async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[
       let violation = __bynkViolationOf(e);
       try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; violation = __bynkViolationOf(e2); } }
       const firstLine = String(detail).split("\n")[0];
-      const message = `property failed after ${ran} cases (seed ${seedHex})\n  shrunk counterexample:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
+      const message = `property failed after ${ran} cases (seed ${seedHex})\n  shrunk counterexample:  ${shown}\n  ${firstLine}\n  reproduce: bynk test ${spec.file} --seed ${seedHex}`;
       return { pass: false, error: { message, location: at, violation }, kind: "property", seed: seedHex, counterexample: shown };
     }
   }
