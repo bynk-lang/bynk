@@ -768,15 +768,14 @@ service api from http {
         // Every case the write route would have run is named, not only its
         // first (#3008).
         let names: Vec<&str> = skipped.iter().map(|s| s.case.as_str()).collect();
+        let mut all = Smoke::collect(&src, Methods::All);
+        let _ = all.overlay(&src);
+        let (_, run, _) = all.summary();
+        // The skipped cases plus the ones that run are every case there is.
+        assert_eq!(names.len() + cases, run, "{names:?}");
         assert!(
             names.contains(&"smoke: PUT /cart/:sku answers"),
             "{names:?}"
-        );
-        assert!(names.len() > 1, "{names:?}");
-        assert!(
-            names
-                .iter()
-                .all(|n| n.starts_with("smoke: PUT /cart/:sku "))
         );
         assert!(skipped.iter().all(|s| s.reason.contains("--smoke-unsafe")));
     }
