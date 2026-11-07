@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-bynk",
-  "version": "0.510.36",
+  "version": "0.510.37",
   "description": "Tree-sitter grammar for the Bynk language.",
   "main": "bindings/node",
   "types": "bindings/node",
