@@ -4138,14 +4138,17 @@ fn json_encode_text(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx, plain: bool) -
         // `Float`). The checker has refused a generic argument, so only
         // monomorphic encoders (which read the flag) run here. Inlined rather
         // than a runtime helper, so no module needs a new import.
-        // Normally the argument text goes straight in (a pure value). One that
-        // awaits cannot sit inside the synchronous arrow, so it is hoisted.
-        let tmp = if v.contains("await") {
+        // The argument must be evaluated *before* the flag is raised, or a tagged
+        // `Json.encode` (or a function that calls one) inside it would come out
+        // plain. An argument that awaits is hoisted to a temporary; any other
+        // is the default of the arrow's one parameter, which JS evaluates at
+        // call time, before the body raises the flag (its type is inferred).
+        let (param, tmp) = if v.contains("await") {
             let tmp = format!("__pj{}", arg.id.0);
             pre.push(format!("const {tmp} = {v};"));
-            tmp
+            (format!("__pv = {tmp}"), "__pv".to_string())
         } else {
-            v.clone()
+            (format!("__pv = {v}"), "__pv".to_string())
         };
         let ser = bynk_ts::print_expr(&serialisation::serialise_expr(
             &tref,
@@ -4153,7 +4156,7 @@ fn json_encode_text(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx, plain: bool) -
             cx.runtime_use(),
         ));
         return Some(format!(
-            "((): string => {{ const __g = globalThis as {{ __bynkPlainJson?: boolean }}; \
+            "(({param}): string => {{ const __g = globalThis as {{ __bynkPlainJson?: boolean }}; \
              const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; \
              try {{ return globalThis.JSON.stringify({ser}); }} \
              finally {{ __g.__bynkPlainJson = __was; }} }})()"

@@ -32,3 +32,12 @@ case "a plain call does not leak into a later tagged one" {
   let _ = Json.encodePlain(Some(1))
   expect Json.encode(Some(1)) == "{\"kind\":\"Some\",\"value\":1}"
 }
+
+case "an encode inside the argument stays tagged" {
+  expect tagged_inside(Some(1)) == "{\"body\":\"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":1}\",\"note\":null}"
+  expect Json.encodePlain(build()) == "{\"body\":\"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":2}\",\"note\":\"n\"}"
+}
+
+case "a None literal argument" {
+  expect Json.encodePlain(Env { body: "b", note: None }) == "{\"body\":\"b\",\"note\":null}"
+}

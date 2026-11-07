@@ -42,12 +42,13 @@ function __makeTestDeps() {
 async function test_a_plain_encoding_writes_the_shape_a_non_Bynk_API_sends() {
   try {
     const deps = {};
-    const { Head, Pull, Qty, Shape, plain, sample, tagged } = __ns_demo_plain;
+    const { Env, Head, Pull, Qty, Shape, build, plain, sample, tagged, tagged_inside } = __ns_demo_plain;
+    type Env = __ns_demo_plain.Env;
     type Head = __ns_demo_plain.Head;
     type Pull = __ns_demo_plain.Pull;
     type Qty = __ns_demo_plain.Qty;
     type Shape = __ns_demo_plain.Shape;
-    if (!(((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(sample())); } finally { __g.__bynkPlainJson = __was; } })() === "{\"id\":7,\"draft\":true,\"closed_at\":null,\"head\":{\"ref\":\"b\",\"repo\":null},\"labels\":[\"x\",null],\"qty\":3,\"shape\":{\"kind\":\"Circle\",\"radius\":2}}")) { throw __bynkExpectFailure("tests/demo/plain.bynk:8:10", 255, 449, "expect Json.encodePlain(sample()) == \"{\\\"id\\\":7,\\\"draft\\\":true,\\\"closed_at\\\":null,\\\"head\\\":{\\\"ref\\\":\\\"b\\\",\\\"repo\\\":null},\\\"labels\\\":[\\\"x\\\",null],\\\"qty\\\":3,\\\"shape\\\":{\\\"kind\\\":\\\"Circle\\\",\\\"radius\\\":2}}\"\n  expected: Json.encodePlain(sample()) == \"{\\\"id\\\":7,\\\"draft\\\":true,\\\"closed_at\\\":null,\\\"head\\\":{\\\"ref\\\":\\\"b\\\",\\\"repo\\\":null},\\\"labels\\\":[\\\"x\\\",null],\\\"qty\\\":3,\\\"shape\\\":{\\\"kind\\\":\\\"Circle\\\",\\\"radius\\\":2}}\"\n  actual:   " + __bynkShow((((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(sample())); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("{\"id\":7,\"draft\":true,\"closed_at\":null,\"head\":{\"ref\":\"b\",\"repo\":null},\"labels\":[\"x\",null],\"qty\":3,\"shape\":{\"kind\":\"Circle\",\"radius\":2}}"))); }
+    if (!(((__pv = sample()): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(__pv)); } finally { __g.__bynkPlainJson = __was; } })() === "{\"id\":7,\"draft\":true,\"closed_at\":null,\"head\":{\"ref\":\"b\",\"repo\":null},\"labels\":[\"x\",null],\"qty\":3,\"shape\":{\"kind\":\"Circle\",\"radius\":2}}")) { throw __bynkExpectFailure("tests/demo/plain.bynk:8:10", 255, 449, "expect Json.encodePlain(sample()) == \"{\\\"id\\\":7,\\\"draft\\\":true,\\\"closed_at\\\":null,\\\"head\\\":{\\\"ref\\\":\\\"b\\\",\\\"repo\\\":null},\\\"labels\\\":[\\\"x\\\",null],\\\"qty\\\":3,\\\"shape\\\":{\\\"kind\\\":\\\"Circle\\\",\\\"radius\\\":2}}\"\n  expected: Json.encodePlain(sample()) == \"{\\\"id\\\":7,\\\"draft\\\":true,\\\"closed_at\\\":null,\\\"head\\\":{\\\"ref\\\":\\\"b\\\",\\\"repo\\\":null},\\\"labels\\\":[\\\"x\\\",null],\\\"qty\\\":3,\\\"shape\\\":{\\\"kind\\\":\\\"Circle\\\",\\\"radius\\\":2}}\"\n  actual:   " + __bynkShow((((__pv = sample()): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(__pv)); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("{\"id\":7,\"draft\":true,\"closed_at\":null,\"head\":{\"ref\":\"b\",\"repo\":null},\"labels\":[\"x\",null],\"qty\":3,\"shape\":{\"kind\":\"Circle\",\"radius\":2}}"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -61,13 +62,14 @@ async function test_a_plain_encoding_writes_the_shape_a_non_Bynk_API_sends() {
 async function test_a_plain_encoding_round_trips_through_Json_decode() {
   try {
     const deps = {};
-    const { Head, Pull, Qty, Shape, plain, sample, tagged } = __ns_demo_plain;
+    const { Env, Head, Pull, Qty, Shape, build, plain, sample, tagged, tagged_inside } = __ns_demo_plain;
+    type Env = __ns_demo_plain.Env;
     type Head = __ns_demo_plain.Head;
     type Pull = __ns_demo_plain.Pull;
     type Qty = __ns_demo_plain.Qty;
     type Shape = __ns_demo_plain.Shape;
     const p = sample();
-    if (!(__bynkEq(((__s: string): Result<__ns_demo_plain.Pull, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Pull(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_plain.Pull); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(p)); } finally { __g.__bynkPlainJson = __was; } })()), Ok(p)))) { throw __bynkExpectFailure("tests/demo/plain.bynk:13:10", 539, 586, "expect Json.decode[Pull](Json.encodePlain(p)) == Ok(p)\n  expected: Json.decode[Pull](Json.encodePlain(p)) == Ok(p)\n  actual:   " + __bynkShow((((__s: string): Result<__ns_demo_plain.Pull, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Pull(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_plain.Pull); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(p)); } finally { __g.__bynkPlainJson = __was; } })()))) + " == " + __bynkShow((Ok(p)))); }
+    if (!(__bynkEq(((__s: string): Result<__ns_demo_plain.Pull, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Pull(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_plain.Pull); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(((__pv = p): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(__pv)); } finally { __g.__bynkPlainJson = __was; } })()), Ok(p)))) { throw __bynkExpectFailure("tests/demo/plain.bynk:13:10", 539, 586, "expect Json.decode[Pull](Json.encodePlain(p)) == Ok(p)\n  expected: Json.decode[Pull](Json.encodePlain(p)) == Ok(p)\n  actual:   " + __bynkShow((((__s: string): Result<__ns_demo_plain.Pull, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Pull(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_plain.Pull); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(((__pv = p): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(__pv)); } finally { __g.__bynkPlainJson = __was; } })()))) + " == " + __bynkShow((Ok(p)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -81,7 +83,8 @@ async function test_a_plain_encoding_round_trips_through_Json_decode() {
 async function test_Json_encode_still_writes_the_tagged_form() {
   try {
     const deps = {};
-    const { Head, Pull, Qty, Shape, plain, sample, tagged } = __ns_demo_plain;
+    const { Env, Head, Pull, Qty, Shape, build, plain, sample, tagged, tagged_inside } = __ns_demo_plain;
+    type Env = __ns_demo_plain.Env;
     type Head = __ns_demo_plain.Head;
     type Pull = __ns_demo_plain.Pull;
     type Qty = __ns_demo_plain.Qty;
@@ -103,16 +106,17 @@ async function test_Json_encode_still_writes_the_tagged_form() {
 async function test_a_top_level_Option_and_a_list_of_them() {
   try {
     const deps = {};
-    const { Head, Pull, Qty, Shape, plain, sample, tagged } = __ns_demo_plain;
+    const { Env, Head, Pull, Qty, Shape, build, plain, sample, tagged, tagged_inside } = __ns_demo_plain;
+    type Env = __ns_demo_plain.Env;
     type Head = __ns_demo_plain.Head;
     type Pull = __ns_demo_plain.Pull;
     type Qty = __ns_demo_plain.Qty;
     type Shape = __ns_demo_plain.Shape;
     const n: Option<string> = None;
-    if (!(((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_String(n)); } finally { __g.__bynkPlainJson = __was; } })() === "null")) { throw __bynkExpectFailure("tests/demo/plain.bynk:25:10", 925, 954, "expect Json.encodePlain(n) == \"null\"\n  expected: Json.encodePlain(n) == \"null\"\n  actual:   " + __bynkShow((((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_String(n)); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("null"))); }
-    if (!(((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_String(Some("a"))); } finally { __g.__bynkPlainJson = __was; } })() === "\"a\"")) { throw __bynkExpectFailure("tests/demo/plain.bynk:26:10", 964, 1002, "expect Json.encodePlain(Some(\"a\")) == \"\\\"a\\\"\"\n  expected: Json.encodePlain(Some(\"a\")) == \"\\\"a\\\"\"\n  actual:   " + __bynkShow((((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_String(Some("a"))); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("\"a\""))); }
+    if (!(((__pv = n): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_String(__pv)); } finally { __g.__bynkPlainJson = __was; } })() === "null")) { throw __bynkExpectFailure("tests/demo/plain.bynk:25:10", 925, 954, "expect Json.encodePlain(n) == \"null\"\n  expected: Json.encodePlain(n) == \"null\"\n  actual:   " + __bynkShow((((__pv = n): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_String(__pv)); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("null"))); }
+    if (!(((__pv = Some("a")): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_String(__pv)); } finally { __g.__bynkPlainJson = __was; } })() === "\"a\"")) { throw __bynkExpectFailure("tests/demo/plain.bynk:26:10", 964, 1002, "expect Json.encodePlain(Some(\"a\")) == \"\\\"a\\\"\"\n  expected: Json.encodePlain(Some(\"a\")) == \"\\\"a\\\"\"\n  actual:   " + __bynkShow((((__pv = Some("a")): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_String(__pv)); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("\"a\""))); }
     const xs: readonly Option<number>[] = [Some(1), None];
-    if (!(((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_List_Option_Int(xs)); } finally { __g.__bynkPlainJson = __was; } })() === "[1,null]")) { throw __bynkExpectFailure("tests/demo/plain.bynk:28:10", 1058, 1092, "expect Json.encodePlain(xs) == \"[1,null]\"\n  expected: Json.encodePlain(xs) == \"[1,null]\"\n  actual:   " + __bynkShow((((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_List_Option_Int(xs)); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("[1,null]"))); }
+    if (!(((__pv = xs): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_List_Option_Int(__pv)); } finally { __g.__bynkPlainJson = __was; } })() === "[1,null]")) { throw __bynkExpectFailure("tests/demo/plain.bynk:28:10", 1058, 1092, "expect Json.encodePlain(xs) == \"[1,null]\"\n  expected: Json.encodePlain(xs) == \"[1,null]\"\n  actual:   " + __bynkShow((((__pv = xs): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_List_Option_Int(__pv)); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("[1,null]"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -126,12 +130,13 @@ async function test_a_top_level_Option_and_a_list_of_them() {
 async function test_a_plain_call_does_not_leak_into_a_later_tagged_one() {
   try {
     const deps = {};
-    const { Head, Pull, Qty, Shape, plain, sample, tagged } = __ns_demo_plain;
+    const { Env, Head, Pull, Qty, Shape, build, plain, sample, tagged, tagged_inside } = __ns_demo_plain;
+    type Env = __ns_demo_plain.Env;
     type Head = __ns_demo_plain.Head;
     type Pull = __ns_demo_plain.Pull;
     type Qty = __ns_demo_plain.Qty;
     type Shape = __ns_demo_plain.Shape;
-    const __r0 = ((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_Int(Some(1))); } finally { __g.__bynkPlainJson = __was; } })();
+    const __r0 = ((__pv = Some(1)): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Option_Int(__pv)); } finally { __g.__bynkPlainJson = __was; } })();
     if (!(globalThis.JSON.stringify(__serialise_Option_Int(Some(1))) === "{\"kind\":\"Some\",\"value\":1}")) { throw __bynkExpectFailure("tests/demo/plain.bynk:33:10", 1201, 1258, "expect Json.encode(Some(1)) == \"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":1}\"\n  expected: Json.encode(Some(1)) == \"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":1}\"\n  actual:   " + __bynkShow((globalThis.JSON.stringify(__serialise_Option_Int(Some(1))))) + " == " + __bynkShow(("{\"kind\":\"Some\",\"value\":1}"))); }
     return { pass: true };
   } catch (e) {
@@ -140,6 +145,69 @@ async function test_a_plain_call_does_not_leak_into_a_later_tagged_one() {
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
+}
+
+// case tier: unit
+async function test_an_encode_inside_the_argument_stays_tagged() {
+  try {
+    const deps = {};
+    const { Env, Head, Pull, Qty, Shape, build, plain, sample, tagged, tagged_inside } = __ns_demo_plain;
+    type Env = __ns_demo_plain.Env;
+    type Head = __ns_demo_plain.Head;
+    type Pull = __ns_demo_plain.Pull;
+    type Qty = __ns_demo_plain.Qty;
+    type Shape = __ns_demo_plain.Shape;
+    if (!(tagged_inside(Some(1)) === "{\"body\":\"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":1}\",\"note\":null}")) { throw __bynkExpectFailure("tests/demo/plain.bynk:37:10", 1323, 1423, "expect tagged_inside(Some(1)) == \"{\\\"body\\\":\\\"{\\\\\\\"kind\\\\\\\":\\\\\\\"Some\\\\\\\",\\\\\\\"value\\\\\\\":1}\\\",\\\"note\\\":null}\"\n  expected: tagged_inside(Some(1)) == \"{\\\"body\\\":\\\"{\\\\\\\"kind\\\\\\\":\\\\\\\"Some\\\\\\\",\\\\\\\"value\\\\\\\":1}\\\",\\\"note\\\":null}\"\n  actual:   " + __bynkShow((tagged_inside(Some(1)))) + " == " + __bynkShow(("{\"body\":\"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":1}\",\"note\":null}"))); }
+    if (!(((__pv = build()): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Env(__pv)); } finally { __g.__bynkPlainJson = __was; } })() === "{\"body\":\"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":2}\",\"note\":\"n\"}")) { throw __bynkExpectFailure("tests/demo/plain.bynk:38:10", 1433, 1537, "expect Json.encodePlain(build()) == \"{\\\"body\\\":\\\"{\\\\\\\"kind\\\\\\\":\\\\\\\"Some\\\\\\\",\\\\\\\"value\\\\\\\":2}\\\",\\\"note\\\":\\\"n\\\"}\"\n  expected: Json.encodePlain(build()) == \"{\\\"body\\\":\\\"{\\\\\\\"kind\\\\\\\":\\\\\\\"Some\\\\\\\",\\\\\\\"value\\\\\\\":2}\\\",\\\"note\\\":\\\"n\\\"}\"\n  actual:   " + __bynkShow((((__pv = build()): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Env(__pv)); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("{\"body\":\"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":2}\",\"note\":\"n\"}"))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_None_literal_argument() {
+  try {
+    const deps = {};
+    const { Env, Head, Pull, Qty, Shape, build, plain, sample, tagged, tagged_inside } = __ns_demo_plain;
+    type Env = __ns_demo_plain.Env;
+    type Head = __ns_demo_plain.Head;
+    type Pull = __ns_demo_plain.Pull;
+    type Qty = __ns_demo_plain.Qty;
+    type Shape = __ns_demo_plain.Shape;
+    if (!(((__pv = { body: "b", note: None }): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Env(__pv)); } finally { __g.__bynkPlainJson = __was; } })() === "{\"body\":\"b\",\"note\":null}")) { throw __bynkExpectFailure("tests/demo/plain.bynk:42:10", 1583, 1666, "expect Json.encodePlain(Env { body: \"b\", note: None }) == \"{\\\"body\\\":\\\"b\\\",\\\"note\\\":null}\"\n  expected: Json.encodePlain(Env { body: \"b\", note: None }) == \"{\\\"body\\\":\\\"b\\\",\\\"note\\\":null}\"\n  actual:   " + __bynkShow((((__pv = { body: "b", note: None }): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Env(__pv)); } finally { __g.__bynkPlainJson = __was; } })())) + " == " + __bynkShow(("{\"body\":\"b\",\"note\":null}"))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+export function __serialise_Env(value: __ns_demo_plain.Env): __JsonValue {
+  return {
+    body: value.body as __JsonValue,
+    note: __serialise_Option_String(value.note),
+  };
+}
+
+export function __deserialise_Env(json: __JsonValue, path: string = "$"): Result<__ns_demo_plain.Env, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["body"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "string", actual: typeof obj["body"] });
+  }
+  const __body = obj["body"];
+  const __r_note = __deserialise_Option_String(obj["note"], `${path}.note`);
+  if (__r_note.tag === "Err") return __r_note;
+  const __note = __r_note.value;
+  return Ok({ body: __body, note: __note } as __ns_demo_plain.Env);
 }
 
 export function __serialise_Head(value: __ns_demo_plain.Head): __JsonValue {
@@ -475,7 +543,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a plain encoding writes the shape a non-Bynk API sends", "a plain encoding round-trips through Json.decode", "Json.encode still writes the tagged form", "a top-level Option and a list of them", "a plain call does not leak into a later tagged one"];
+export const __bynkCases: readonly string[] = ["a plain encoding writes the shape a non-Bynk API sends", "a plain encoding round-trips through Json.decode", "Json.encode still writes the tagged form", "a top-level Option and a list of them", "a plain call does not leak into a later tagged one", "an encode inside the argument stays tagged", "a None literal argument"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -507,6 +575,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a plain call does not leak into a later tagged one")) {
     const started = __bynkCaseNow();
     const r = { name: "a plain call does not leak into a later tagged one", ...(await test_a_plain_call_does_not_leak_into_a_later_tagged_one()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an encode inside the argument stays tagged")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an encode inside the argument stays tagged", ...(await test_an_encode_inside_the_argument_stays_tagged()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a None literal argument")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a None literal argument", ...(await test_a_None_literal_argument()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

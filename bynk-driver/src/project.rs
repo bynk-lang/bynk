@@ -1489,7 +1489,6 @@ fn build_emit_unit_ctx(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 /// #2991: whether any source file of the project mentions `Json.encodePlain`.
 /// Textual on purpose: it only decides whether the generated `Option` encoders
 /// carry their (inert unless raised) plain branch, so a mention in a comment

@@ -49,6 +49,14 @@ export interface Pull {
 export const Pull = {
 };
 
+export interface Env {
+  readonly body: string;
+  readonly note: Option<string>;
+}
+
+export const Env = {
+};
+
 export function sample(): Pull {
   return { id: 7, draft: Some(true), closed_at: None, head: { ref: "b", repo: None }, labels: [Some("x"), None], qty: Some((3 as Qty)), shape: Shape.Circle(Some(2)) };
 }
@@ -58,7 +66,37 @@ export function tagged(p: Pull): string {
 }
 
 export function plain(p: Pull): string {
-  return ((): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(p)); } finally { __g.__bynkPlainJson = __was; } })();
+  return ((__pv = p): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Pull(__pv)); } finally { __g.__bynkPlainJson = __was; } })();
+}
+
+export function tagged_inside(x: Option<number>): string {
+  return ((__pv = { body: globalThis.JSON.stringify(__serialise_Option_Int(x)), note: None }): string => { const __g = globalThis as { __bynkPlainJson?: boolean }; const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; try { return globalThis.JSON.stringify(__serialise_Env(__pv)); } finally { __g.__bynkPlainJson = __was; } })();
+}
+
+export function build(): Env {
+  return { body: globalThis.JSON.stringify(__serialise_Option_Int(Some(2))), note: Some("n") };
+}
+
+export function __serialise_Env(value: Env): __JsonValue {
+  return {
+    body: value.body as __JsonValue,
+    note: __serialise_Option_String(value.note),
+  };
+}
+
+export function __deserialise_Env(json: __JsonValue, path: string = "$"): Result<Env, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["body"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "string", actual: typeof obj["body"] });
+  }
+  const __body = obj["body"];
+  const __r_note = __deserialise_Option_String(obj["note"], `${path}.note`);
+  if (__r_note.tag === "Err") return __r_note;
+  const __note = __r_note.value;
+  return Ok({ body: __body, note: __note } as Env);
 }
 
 export function __serialise_Head(value: Head): __JsonValue {
@@ -175,6 +213,50 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
   }
 }
 
+
+export function __serialise_Option_Int(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return (globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true ? ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) : { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return (globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true ? null : { kind: "None" };
+}
+
+function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Int(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Int(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Int(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
 
 export function __serialise_Option_String(value: Option<string>): __JsonValue {
   if (value.tag === "Some") return (globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true ? value.value as __JsonValue : { kind: "Some", value: value.value as __JsonValue };
@@ -310,50 +392,6 @@ export function __deserialise_Option_Qty(json: __JsonValue, path: string = "$"):
   const __b = __option_value_Qty(json, path);
   if (__b.tag === "Ok") {
     return Ok(Some(__b.value as Qty) as Option<Qty>);
-  }
-  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
-    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
-  }
-  return __b;
-}
-
-export function __serialise_Option_Int(value: Option<number>): __JsonValue {
-  if (value.tag === "Some") return (globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true ? ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) : { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
-  return (globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true ? null : { kind: "None" };
-}
-
-function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
-  if (typeof raw !== "number") {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
-  }
-  if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
-  }
-  const __v = raw;
-  return Ok(__v);
-}
-
-export function __deserialise_Option_Int(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
-  if (json === undefined || json === null) {
-    return Ok(None as Option<number>);
-  }
-  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
-    const obj = json as { [k: string]: __JsonValue };
-    const __keys = globalThis.Object.keys(obj);
-    if (obj["kind"] === "None" && __keys.length === 1) {
-      return Ok(None as Option<number>);
-    }
-    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
-      const __t = __option_value_Int(obj["value"], `${path}.value`);
-      if (__t.tag === "Err") {
-        return __t;
-      }
-      return Ok(Some(__t.value as number) as Option<number>);
-    }
-  }
-  const __b = __option_value_Int(json, path);
-  if (__b.tag === "Ok") {
-    return Ok(Some(__b.value as number) as Option<number>);
   }
   if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
     return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
