@@ -7,3 +7,11 @@ case "a case reads through the capability" {
 	let one <- Stock.firstAs[Item]("FROM items", [])
 	expect one == Ok(None)
 }
+
+property "a property reads through the capability" {
+	for all n: Int {
+		let _ <- Stock.run("CREATE TABLE IF NOT EXISTS items (id TEXT)", [])
+		let rows <- Stock.select[Item]("FROM items", [])
+		expect rows == Ok([])
+	}
+}

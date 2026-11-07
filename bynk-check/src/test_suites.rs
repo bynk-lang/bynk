@@ -3457,13 +3457,10 @@ fn typecheck_case_body_recording(
                 checker::CapabilityInfo {
                     name: name.clone(),
                     ops,
-                    derived_from: decl.derived.as_ref().and_then(|d| {
-                        resolved
-                            .cross_context
-                            .flattened_caps
-                            .get(&d.base.name)
-                            .map(|unit| (unit.clone(), d.base.name.clone()))
-                    }),
+                    derived_from: crate::context_checks::derived_from(
+                        decl,
+                        &resolved.cross_context.flattened_caps,
+                    ),
                 },
             );
         }
@@ -4507,13 +4504,10 @@ fn check_property_body(
                 checker::CapabilityInfo {
                     name: name.clone(),
                     ops,
-                    derived_from: decl.derived.as_ref().and_then(|d| {
-                        resolved
-                            .cross_context
-                            .flattened_caps
-                            .get(&d.base.name)
-                            .map(|unit| (unit.clone(), d.base.name.clone()))
-                    }),
+                    derived_from: crate::context_checks::derived_from(
+                        decl,
+                        &resolved.cross_context.flattened_caps,
+                    ),
                 },
             );
         }
