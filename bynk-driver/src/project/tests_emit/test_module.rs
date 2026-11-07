@@ -934,6 +934,10 @@ pub(super) fn emit_test_module(
     if runtime_use.http_result() {
         append_missing_bindings(&mut runtime_names, "HttpResult");
     }
+    // #2839: a case that compares a queue verdict with a bare variant.
+    if runtime_use.queue_result() {
+        append_missing_bindings(&mut runtime_names, "QueueResult");
+    }
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }

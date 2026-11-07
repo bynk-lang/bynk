@@ -1495,6 +1495,36 @@ pub fn describe_effect_method_at(
     )
 }
 
+/// #2839: hover on the `?` of an `Option` value. An `Option` is only liftable
+/// by `?` inside a handler returning `HttpResult` (ADR 0177), so an `Option`
+/// operand means `None` answers `404 NotFound`: the hover says so, and points
+/// at `let … else` for any other status. A `?` on a `Result` is not described.
+pub fn describe_question_at(
+    text: &str,
+    offset: usize,
+    expr_types: &[(Span, bynk_check::checker::TyId)],
+    tys: &bynk_check::checker::Types,
+) -> Option<String> {
+    let tokens = tokenize(text).ok()?;
+    let tok = tokens.iter().find(|t| {
+        t.span.start <= offset && offset < t.span.end && &text[t.span.start..t.span.end] == "?"
+    })?;
+    let before = text[..tok.span.start].trim_end();
+    let operand =
+        bynk_check::expr_types::type_at_offset(expr_types, before.len().checked_sub(1)?, tys)?;
+    if !matches!(&*tys.get(operand), bynk_check::checker::Ty::Option(_)) {
+        return None;
+    }
+    Some(
+        "```bynk\n? : None → 404 NotFound\n```\n\n\
+         On an `Option` in an `HttpResult` handler, `?` yields the value for `Some` and \
+         answers `404 NotFound` for `None`. That is right for \"the thing you asked for is not \
+         there\", but a missing or malformed request input is a `400`: write \
+         `let Some(x) = e else { BadRequest(\"…\") }` to answer another status."
+            .to_string(),
+    )
+}
+
 /// v0.123 (editor-currency slice 2, DECISION B): if the identifier at
 /// `ident_span` is the member of an `Upper.member` name-receiver access
 /// (`Clock.now`, `Email.of`), return the full `Recv.member` callee for

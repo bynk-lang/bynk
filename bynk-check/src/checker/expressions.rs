@@ -2195,6 +2195,25 @@ pub(crate) fn needs_expected_type(e: &Expr) -> bool {
         ExprKind::Some(inner) => needs_expected_type(inner),
         ExprKind::ListLit(items) => items.first().is_none_or(needs_expected_type),
         ExprKind::Paren(inner) => needs_expected_type(inner),
+        // #2839 (Decision C): a bare `HttpResult`/`QueueResult` variant
+        // (`NotFound`, `BadRequest("…")`, `HttpResult.NotFound`, `Ack`) types
+        // itself only from its surroundings — the payload falls back to `()`
+        // and a bare `Ack` needs a queue context — so `r == BadRequest("x")`
+        // takes `r`'s type. The `()` fallback stays when nothing is inferable.
+        ExprKind::Ident(id) => {
+            http_variant(&id.name).is_some() || queue_variant(&id.name).is_some()
+        }
+        ExprKind::Call { name, .. } => {
+            http_variant(&name.name).is_some() || queue_variant(&name.name).is_some()
+        }
+        ExprKind::FieldAccess { receiver, field } => {
+            matches!(&receiver.kind, ExprKind::Ident(r) if r.name == HTTP_RESULT && http_variant(&field.name).is_some())
+        }
+        ExprKind::MethodCall {
+            receiver, method, ..
+        } => {
+            matches!(&receiver.kind, ExprKind::Ident(r) if r.name == HTTP_RESULT && http_variant(&method.name).is_some())
+        }
         _ => false,
     }
 }
@@ -2811,6 +2830,64 @@ pub(crate) fn check_none(span: Span, expected: Option<TyId>, ctx: &mut Ctx) -> O
     None
 }
 
+/// #2839 (Decision B): `headers.get("X")?` in an `HttpResult` handler lifts a
+/// missing header to `404 NotFound` (ADR 0177) where `400` is almost always
+/// meant. A warning with a machine-applicable `let … else` rewrite when the
+/// `?` is the whole value of an unannotated `let name = …`. Headers only:
+/// `?` on any other `Option` keeps its documented `404`.
+fn lint_header_question(inner: &Expr, span: Span, ctx: &mut Ctx) {
+    let ExprKind::MethodCall {
+        receiver,
+        method,
+        args,
+        ..
+    } = &inner.kind
+    else {
+        return;
+    };
+    if method.name != "get" {
+        return;
+    }
+    let ExprKind::Ident(r) = &receiver.kind else {
+        return;
+    };
+    if !ctx
+        .lookup(&r.name)
+        .is_some_and(|t| matches!(&*ctx.tys.get(t), Ty::RequestHeaders))
+    {
+        return;
+    }
+    let mut err = CompileError::new(
+        "bynk.http.header_question_not_found",
+        span,
+        "`?` on a missing header answers `404 NotFound`, which says the URL does not exist",
+    )
+    .with_label(span, "`None` here becomes `NotFound`")
+    .with_note(
+        "a missing or malformed request header is a `400`: write \
+         `let Some(x) = headers.get(\"X\") else { BadRequest(\"missing X\") }`; \
+         keep `?` for \"the thing you asked for is not there\"",
+    );
+    if let Some((binder_span, name)) = ctx.question_let_binders.get(&span).cloned()
+        && let [arg] = args.as_slice()
+        && let ExprKind::StrLit(header) = &arg.kind
+        && !header.contains(['"', '\\'])
+    {
+        err = err.with_suggestion(
+            "answer `400 BadRequest` when the header is missing",
+            vec![
+                (binder_span, format!("Some({name})")),
+                (
+                    Span::new_in(span.file, inner.span.end, span.end),
+                    format!(" else {{ BadRequest(\"missing {header}\") }}"),
+                ),
+            ],
+            Applicability::MachineApplicable,
+        );
+    }
+    ctx.errors.push(err);
+}
+
 pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     let inner_ty = type_of(inner, None, ctx)?;
@@ -2821,6 +2898,7 @@ pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<
     // `Option` has no error channel to propagate into.
     if let Ty::Option(t) = &*tys.get(inner_ty) {
         if peel_to_http_result(ctx.return_ty, tys).is_some() {
+            lint_header_question(inner, span, ctx);
             return Some(*t);
         }
         ctx.errors.push(
