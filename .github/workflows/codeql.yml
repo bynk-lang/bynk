@@ -54,7 +54,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [javascript-typescript, rust]
+        # A pull request analyses TypeScript only. The Rust leg autobuilds the
+        # whole workspace (~8 min p50) on a hosted runner, it is not a required
+        # check, and it ran on every code PR (212 runs in two days in
+        # November 2026), competing for the same runner slots as the gate. It
+        # still analyses every push to `main` and the weekly baseline, so a
+        # finding surfaces within one merge. The TypeScript leg stays on PRs:
+        # it is quick, it covers the emitted runtime (the surface CodeQL is
+        # load-bearing for, see the header), and it keeps OpenSSF Scorecard's
+        # SAST check seeing CodeQL on merged PRs.
+        language: ${{ fromJSON(github.event_name == 'pull_request' && '["javascript-typescript"]' || '["javascript-typescript","rust"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

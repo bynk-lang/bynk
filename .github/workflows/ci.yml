@@ -309,7 +309,7 @@ jobs:
             npm_audit:
               # The npm audit gate and its allowlist. An edit to either (such as
               # dropping an allowlist entry) touches no npm tree, so without this
-              # the `npm-audit` job would skip on the very PR that changes it.
+              # the `lint` job's npm audit would skip on the very PR that changes it.
               - *global
               - 'scripts/npm-audit-gate.mjs'
               - 'scripts/npm-audit-allowlist.json'
@@ -519,24 +519,90 @@ jobs:
             emit "$three"
           fi
 
-  fmt:
-    name: Formatting (cargo fmt)
+  lint:
+    # The checks that need no build, in one job. Each was its own job, and each
+    # ran for 10-60 s but waited for a hosted runner like any other: in
+    # November 2026 `cargo audit` waited 366 s to run for 18 s, on runs that
+    # already started ~20 jobs at once against the org's concurrent-job cap.
+    # One job takes one slot. Every check keeps its own path gate as a step
+    # `if:`, and each runs on `!cancelled()`, so one failing check does not
+    # hide the others: the job reports every failure from one run, as the
+    # separate jobs did.
+    #
+    #   - fmt: `cargo fmt --check`. rustfmt parses, it doesn't compile.
+    #   - cargo audit: Cargo.lock against the RustSec advisory database. The
+    #     schedule (an `all` run) catches advisories published after a merge.
+    #   - cargo-deny: licence policy, duplicate/wildcard detection and source
+    #     allowlisting (deny.toml). Advisories overlap `cargo audit` by design.
+    #   - npm audit: every npm tree with a committed lockfile, through
+    #     `scripts/npm-audit-gate.mjs` (high/critical gates, except an entry
+    #     in `scripts/npm-audit-allowlist.json` before its `review_by` date).
+    #     Covers site, whose deploy job holds the Cloudflare token.
+    #   - installers (#2558): shellcheck both POSIX scripts, and check that
+    #     release.yml's `binaries` job still produces the asset names they and
+    #     binstall expect, so a rename fails here, not for a user.
+    name: Lints (fmt, audit, deny, npm, installers)
     needs: changes
     if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Formatting (cargo fmt)')
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Lints (fmt, audit, deny, npm, installers)')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Define the toolchain explicitly (rust-toolchain.toml would otherwise
+      # trigger an implicit download when `cargo audit` dispatches in-repo).
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        if: ${{ (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
         with:
           components: rustfmt
-      # No build/cache: rustfmt parses, it doesn't compile.
       - name: Check formatting
+        if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
         run: cargo fmt --all --check
+      # Prebuilt binary — avoids compiling cargo-audit from source on every run.
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
+        if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        with:
+          tool: cargo-audit
+      - name: Audit dependencies (cargo audit)
+        if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        run: cargo audit
+      - name: Supply chain (cargo-deny)
+        if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          command: check
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        if: ${{ !cancelled() && (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true') }}
+        with:
+          node-version: "24"
+      - name: Audit every npm tree
+        if: ${{ !cancelled() && (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true') }}
+        run: |
+          failed=""
+          audit() {
+            tree="$1"; shift
+            echo "::group::npm audit: $tree"
+            node scripts/npm-audit-gate.mjs "$tree" -- "$@" || failed="$failed $tree"
+            echo "::endgroup::"
+          }
+          audit tree-sitter-bynk
+          audit bynk-emit/runtime
+          audit site
+          if [ -n "$failed" ]; then
+            echo "::error::npm audit gate failed for:$failed"
+            exit 1
+          fi
+          echo "All three trees passed the npm audit gate."
+      # shellcheck is preinstalled on ubuntu-latest.
+      - name: shellcheck (POSIX sh)
+        if: ${{ !cancelled() && (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true') }}
+        run: shellcheck --shell=sh scripts/install.sh scripts/check-installer-naming.sh
+      - name: Asset naming ↔ release.yml
+        if: ${{ !cancelled() && (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true') }}
+        run: sh scripts/check-installer-naming.sh
 
   clippy:
     name: Lint (clippy -D warnings)
@@ -1404,104 +1470,6 @@ jobs:
       - name: Docs and index guards; pending-increment files; bynk.toml schema
         run: cargo test -p xtask
 
-  audit:
-    # Scans Cargo.lock against the RustSec advisory database. Only the lockfile
-    # and manifests matter here, both of which live in the `rust`/`global`
-    # filters; the weekly schedule (an `all` run) catches advisories published
-    # after a PR merges.
-    name: Security audit (cargo audit)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Security audit (cargo audit)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # Define the toolchain explicitly (rust-toolchain.toml would otherwise
-      # trigger an implicit download when `cargo audit` dispatches in-repo).
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      # Prebuilt binary — avoids compiling cargo-audit from source on every run.
-      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
-        with:
-          tool: cargo-audit
-      - name: Audit dependencies
-        run: cargo audit
-
-  deny:
-    # Licence-policy enforcement, duplicate/wildcard detection, and source
-    # allowlisting (deny.toml). Complements `audit` — advisories overlap by
-    # design (defence in depth); the unique value is licences + bans + sources.
-    name: Supply chain (cargo-deny)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Supply chain (cargo-deny)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
-        with:
-          command: check
-
-  npm-audit:
-    # Audit every npm package's dependency tree against the npm advisory DB —
-    # the JS-side parallel of `cargo audit`, closing the un-audited dependency
-    # surface. Reads the committed lockfiles (no install). A high-severity
-    # advisory gates; low/moderate are signal, not a blocker. Covers all four
-    # trees with committed lockfiles, including site, whose deploy job holds the
-    # Cloudflare token.
-    #
-    # The gate is `scripts/npm-audit-gate.mjs`: `npm audit --json`, failing on any
-    # high/critical advisory except one listed for that tree in
-    # `scripts/npm-audit-allowlist.json`. The allowlist is only for advisories
-    # with no patched release; each entry carries a `review_by` date past which
-    # it stops exempting.
-    #
-    # One job for all three trees, not a three-leg matrix. Each audit takes ~10 s,
-    # but each leg also queued for a runner, and a CI run already starts ~25
-    # jobs at once: on busy runs the legs waited 3-5 min for a runner apiece
-    # (run 39910638379), holding `ci-fast` and `ci-green` back with them. The
-    # step keeps the matrix's `fail-fast: false` behaviour: every tree is
-    # audited, each in its own log group, and the job fails at the end naming
-    # every tree that failed.
-    name: Security audit (npm)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Security audit (npm)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: "24"
-      - name: Audit every tree
-        run: |
-          failed=""
-          audit() {
-            tree="$1"; shift
-            echo "::group::npm audit: $tree"
-            node scripts/npm-audit-gate.mjs "$tree" -- "$@" || failed="$failed $tree"
-            echo "::endgroup::"
-          }
-          audit tree-sitter-bynk
-          audit bynk-emit/runtime
-          audit site
-          if [ -n "$failed" ]; then
-            echo "::error::npm audit gate failed for:$failed"
-            exit 1
-          fi
-          echo "All three trees passed the npm audit gate."
-
   dependency-review:
     # On PRs, flag newly-introduced dependencies that carry known advisories or
     # disallowed licences before they merge. Complements Dependabot (which acts
@@ -1547,28 +1515,6 @@ jobs:
           node-version: "24"
       - name: Test the feature
         run: npx --yes @devcontainers/cli@0.89.0 features test --project-folder features --features bynk --skip-autogenerated
-
-  installers-lint:
-    # #2558 shipped install.sh / install.ps1 / cargo-binstall metadata with
-    # nothing exercising them. This lints both scripts and statically checks
-    # that release.yml's `binaries` job still produces the asset names they
-    # (and binstall) expect, so a rename fails here, not for a user.
-    name: Installers (lint + naming)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Installers (lint + naming)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # shellcheck is preinstalled on ubuntu-latest.
-      - name: shellcheck (POSIX sh)
-        run: shellcheck --shell=sh scripts/install.sh scripts/check-installer-naming.sh
-      - name: Asset naming ↔ release.yml
-        run: sh scripts/check-installer-naming.sh
 
   installers-lint-ps:
     name: Installers (PSScriptAnalyzer)
@@ -1683,7 +1629,7 @@ jobs:
     if: always()
     needs:
       - changes
-      - fmt
+      - lint
       - clippy
       - api-docs
       - msrv
@@ -1693,9 +1639,6 @@ jobs:
       - grammar
       - runtime
       - drift
-      - audit
-      - deny
-      - npm-audit
       - dependency-review
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1833,7 +1776,7 @@ jobs:
     if: always()
     needs:
       - changes
-      - fmt
+      - lint
       - clippy
       - api-docs
       - test
@@ -1848,12 +1791,8 @@ jobs:
       - grammar
       - runtime
       - drift
-      - audit
-      - deny
-      - npm-audit
       - dependency-review
       - devcontainer-feature
-      - installers-lint
       - installers-lint-ps
       - installers-smoke
       # Needed rather than exempted: it makes `ci-green` subsume the fast tier
