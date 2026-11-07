@@ -1,7 +1,7 @@
 //! Writing a compiled project's output to disk.
 //!
 //! Moved down from `bynk-emit` (#1047, R2.3/T0.7 residue): every caller was
-//! already at driver level (`bynkc`'s CLI/test paths, `bynk dev`'s in-process
+//! already at driver level (`bynk`'s CLI/test paths, `bynk dev`'s in-process
 //! build) — `bynk-emit` never called this itself, so relocating it here is a
 //! pure move, not a design change. `bynk-emit` stays a pure, in-memory
 //! library; disk writes are the driver's job, as R2.3 says they should be.
@@ -14,7 +14,7 @@ use crate::project::{
 };
 
 /// Write a [`ProjectOutput`]'s artefacts under `dir`, creating parent
-/// directories as needed. The shared writer behind both `bynkc`'s
+/// directories as needed. The shared writer behind both `bynk`'s
 /// `compile`/`test` paths and `bynk dev`'s in-process build (slice 7) — so
 /// the on-disk result is identical however the build was driven.
 ///
@@ -109,8 +109,8 @@ fn write_asset(path: &Path, bytes: &[u8], dir: &Path) -> std::io::Result<()> {
 /// Write one [`Document`] under `dir` — the real, typed write boundary
 /// (P7.6, #1309, Decision C: one place derives the sibling-path relationship
 /// instead of two independently-maintained ones). Shared by [`write_output`]
-/// and `bynk-driver::test_runner`'s own output loop (`bynkc test`), so every
-/// disk-writing path emits maps uniformly (slice 2 — `bynkc test --inspect`
+/// and `bynk-driver::test_runner`'s own output loop (`bynk test`), so every
+/// disk-writing path emits maps uniformly (slice 2 — `bynk test --inspect`
 /// runs the emitted `.ts` directly and needs the maps on disk).
 ///
 /// A `Ts` document is printed through the one printer that owns a character

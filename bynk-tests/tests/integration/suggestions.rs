@@ -2,7 +2,7 @@
 //! [`Suggestion`]s whose `given`-clause edits are list-aware. The position
 //! matrix below pins the **exact emitted text** for first / middle / last /
 //! only positions (and add-to-existing / synthesise-absent) — fix
-//! *correctness* is pinned here in `bynkc`, with no LSP involved.
+//! *correctness* is pinned here in `bynk`, with no LSP involved.
 
 use std::path::{Path, PathBuf};
 

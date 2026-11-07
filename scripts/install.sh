@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the Bynk toolchain (bynkc, bynk, bynk-lsp) from a GitHub Release,
+# Install the Bynk toolchain (bynk, bynk-lsp) from a GitHub Release,
 # without needing Rust or cargo.
 #
 #   curl -fsSL https://github.com/bynk-lang/bynk/releases/latest/download/install.sh | sh
@@ -35,7 +35,7 @@ fi
 case "$(uname -s)" in
   Linux)
     case "$(ldd --version 2>&1 || true)" in
-      *musl*) die "the prebuilt Linux binaries need glibc (this looks like musl); use 'cargo install bynkc bynk' instead" ;;
+      *musl*) die "the prebuilt Linux binaries need glibc (this looks like musl); use 'cargo install bynk' instead" ;;
     esac
     os="unknown-linux-gnu" ;;
   Darwin) os="apple-darwin" ;;
@@ -49,7 +49,7 @@ esac
 target="$arch-$os"
 case "$target" in
   x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu | x86_64-apple-darwin | aarch64-apple-darwin) ;;
-  *) die "no prebuilt binaries for $target; use 'cargo install bynkc bynk' instead" ;;
+  *) die "no prebuilt binaries for $target; use 'cargo install bynk' instead" ;;
 esac
 
 tag="${BYNK_VERSION:-}"
@@ -80,11 +80,12 @@ fi
 
 tar -xzf "$tmp/$stage.tar.gz" -C "$tmp"
 mkdir -p "$dest"
-for bin in bynkc bynk bynk-lsp bynkc-lsp; do # bynkc-lsp: overlap copy, dropped in E4b
+for bin in bynk bynkc bynk-lsp bynkc-lsp; do # bynkc: only in releases before its removal
   # A release before the rename ships only bynkc-lsp, and the overlap copy goes
   # in E4b: either server name may be absent, but not both.
   if [ ! -f "$tmp/$stage/$bin" ]; then
     case "$bin" in
+      bynkc) continue ;; # absent from a current release; present in an older pin
       bynk-lsp | bynkc-lsp)
         [ -f "$tmp/$stage/bynk-lsp" ] || [ -f "$tmp/$stage/bynkc-lsp" ] || die "the archive has no language server"
         continue ;;
@@ -96,7 +97,15 @@ for bin in bynkc bynk bynk-lsp bynkc-lsp; do # bynkc-lsp: overlap copy, dropped 
   mv -f "$dest/.$bin.new" "$dest/$bin"
 done
 
-say "Installed bynkc, bynk and bynk-lsp (plus a bynkc-lsp copy for this release) to $dest"
+# A release without bynkc, installed over one that shipped it: the leftover
+# would keep running the old compiler beside the new bynk. (A pinned older
+# release ships bynkc and gets it installed above.)
+if [ ! -f "$tmp/$stage/bynkc" ] && [ -f "$dest/bynkc" ]; then
+  rm -f "$dest/bynkc"
+  say "Removed the old $dest/bynkc; use bynk."
+fi
+
+say "Installed bynk and bynk-lsp (plus a bynkc-lsp copy for this release) to $dest"
 case ":$PATH:" in
   *":$dest:"*) say "Run 'bynk doctor' to check your setup." ;;
   *) say "Add it to your PATH, e.g.:  export PATH=\"$dest:\$PATH\""

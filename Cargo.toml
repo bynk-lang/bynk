@@ -12,7 +12,6 @@ members = [
     "bynk-strip",
     "bynk-wasm",
     "bynk-ide",
-    "bynkc",
     "bynk",
     "bynk-fmt",
     "bynk-lsp",
@@ -79,11 +78,10 @@ bynk-emit = { path = "bynk-emit", version = "0.512.3" }
 bynk-driver = { path = "bynk-driver", version = "0.512.3" }
 bynk-strip = { path = "bynk-strip", version = "0.512.3" }
 bynk-ide = { path = "bynk-ide", version = "0.512.3" }
-bynk = { path = "bynk", version = "0.512.3" }
 bynk-fmt = { path = "bynk-fmt", version = "0.512.3" }
 # #1560: no `version` here, unlike every entry above — `bynk-testkit` is
 # `publish = false` (never on crates.io) and only ever a dev-dependency of
-# `bynk`/`bynkc`/`bynk-lsp`. A `version` alongside `path` makes `cargo publish`
+# `bynk`/`bynk-lsp`. A `version` alongside `path` makes `cargo publish`
 # resolve it against the registry to build the packaged Cargo.lock — before
 # the build step `--no-verify` would skip — so it would fail unconditionally,
 # forever, since this crate can never appear there. Path-only makes Cargo

@@ -33,7 +33,7 @@ version = "0.1.0"
 Move the `shortener.bynk` you built into `src/`. A `suite` names the unit it
 tests, so `tests/shortener.bynk` — or a `suite` block right inside
 `src/shortener.bynk` — tests the `shortener` context. (When you build, the
-`suite` is stripped; only `bynkc test` runs it.)
+`suite` is stripped; only `bynk test` runs it.)
 
 ## Write a test and assert
 
@@ -85,13 +85,13 @@ matches a value against a pattern and yields a `Bool`, perfect for "this is an
 
 ## Run the tests
 
-Run the whole suite with `bynkc test`:
+Run the whole suite with `bynk test`:
 
 ```sh
-bynkc test .
+bynk test .
 ```
 
-`bynkc` compiles the project (including the tests), type-checks the generated
+`bynk` compiles the project (including the tests), type-checks the generated
 TypeScript with `tsc`, and runs it with Node. You will need `tsc` and `node` on
 your path. The output:
 
@@ -171,7 +171,7 @@ integration` and run the real collaborator. We call the service through
 Run everything again:
 
 ```sh
-bynkc test .
+bynk test .
 ```
 
 ```text
@@ -194,7 +194,7 @@ shortener:
 ## What you have done — and where to go
 
 You laid out a test project, wrote `case`s with `expect`, ran them with
-`bynkc test`, fabricated values with `Val[T]`, and stubbed a collaborator with
+`bynk test`, fabricated values with `Val[T]`, and stubbed a collaborator with
 `stub`. More than that: you have built one system the whole way — from a first
 compiled program, through an HTTP service, a data model, refined types, and a
 stateful agent, to a tested URL shortener.

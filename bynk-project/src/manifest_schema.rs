@@ -70,7 +70,7 @@ struct LspTable {
     diagnostics_debounce_ms: Option<u64>,
 }
 
-/// Settings for the Cloudflare Workers a Workers build emits (`bynkc compile
+/// Settings for the Cloudflare Workers a Workers build emits (`bynk compile
 /// --target workers`, `bynk dev`, `bynk deploy`).
 #[derive(JsonSchema)]
 #[serde(deny_unknown_fields)]

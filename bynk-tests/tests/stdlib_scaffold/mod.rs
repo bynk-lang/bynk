@@ -77,7 +77,7 @@ pub fn stem(output_path: &str) -> &str {
     file.strip_suffix(".ts").unwrap_or(file)
 }
 
-/// Write `platform`'s scaffold project under `dir` and compile it with `bynkc`,
+/// Write `platform`'s scaffold project under `dir` and compile it with `bynk`,
 /// to TypeScript or (with `js`) to JavaScript. Returns the output root.
 pub fn compile(platform: Platform, dir: &Path, js: bool) -> PathBuf {
     let project = dir.join(format!("scaffold-{}", platform.as_str()));
@@ -114,7 +114,7 @@ pub fn compile(platform: Platform, dir: &Path, js: bool) -> PathBuf {
         .arg(&out)
         .arg(&project)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     assert!(
         compiled.status.success(),
         "the {} scaffold does not compile:\n{}\n--- source ---\n{}",

@@ -1,7 +1,7 @@
 ---
 title: "§10 Conformance & test corpus"
 ---
-The conformance suite is the `bynkc` **fixture corpus**, together with the gates
+The conformance suite is the `bynk` **fixture corpus**, together with the gates
 that run over it ([§1.3](/book/spec/scope/)). This chapter defines what a conforming
 implementation MUST do in terms of that corpus and those gates.
 
@@ -49,7 +49,7 @@ modules:
 - **Agent keys address state by value.** Semantically-equal keys MUST address the
   same state — records compared independent of field order
   ([§7.4.4](/book/spec/runtime-library/#744-agent-state)).
-- **Tests execute and report.** `bynkc test` MUST compile the project, including
+- **Tests execute and report.** `bynk test` MUST compile the project, including
   the generated test modules, and run the aggregated runner on Node, reporting
   each case as pass or fail; an `assert` failure MUST be reported as a failing
   case with its source location ([§7.3.5](/book/spec/emission/#735-tests)).
@@ -58,7 +58,7 @@ modules:
 > Of these, the automated runtime gate executes the runtime library's agent
 > helpers (key serialisation, state persistence, and reset) directly, and the
 > TypeScript gate ([§10.2](#102-the-typescript-gate)) type-checks all emitted
-> output; whole-program execution is exercised through the `bynkc test` pipeline.
+> output; whole-program execution is exercised through the `bynk test` pipeline.
 > This note is informative.
 
 ## §10.4 Documentation gates

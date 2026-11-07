@@ -1,5 +1,5 @@
 --- bynk.toml ---
-# Bynk project manifest — marks the project root for `bynkc` and the LSP.
+# Bynk project manifest — marks the project root for `bynk` and the LSP.
 [project]
 name = "hello"
 version = "0.1.0"

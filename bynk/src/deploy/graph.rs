@@ -14,7 +14,7 @@ pub(crate) fn service_graph(
 #[derive(Debug, PartialEq, Eq)]
 pub enum OrderError {
     /// A Service Binding cycle. A `consumes` cycle never reaches here —
-    /// `bynkc` rejects one as `bynk.context.consumes_cycle` before emit — and
+    /// `bynk` rejects one as `bynk.context.consumes_cycle` before emit — and
     /// a context is bound only when called (#1961), so the one cycle the
     /// compiler can produce runs through an events fan-out: the publisher
     /// binds to each subscriber to deliver, and a subscriber that also calls

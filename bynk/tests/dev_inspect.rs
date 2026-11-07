@@ -10,7 +10,7 @@
 //!
 //! Skipped when `wrangler` or `node` is unavailable, so it never blocks CI on a
 //! toolchain that lacks the Cloudflare runtime — the always-on guarantee that the
-//! emitted handler maps are correct is `bynkc`'s in-process decode goldens.
+//! emitted handler maps are correct is `bynk`'s in-process decode goldens.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

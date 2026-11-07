@@ -9,7 +9,7 @@
 //!
 //! This module is the *format contract* between that human-authored file and the
 //! future stamp. It is process tooling, not compiler behaviour, which is why it
-//! lives in the unpublished `xtask` crate rather than in `bynkc`'s test suite.
+//! lives in the unpublished `xtask` crate rather than in `bynk`'s test suite.
 //! [`check_all`] is exercised two ways: an integration test (`tests/pending_files.rs`)
 //! runs it over the real `design/pending/**` as a drift guard, and the
 //! `check-pending` binary subcommand exposes it for local runs.

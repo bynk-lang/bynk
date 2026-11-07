@@ -33,7 +33,7 @@
 //! same gap this module just closed for the CLI, unclosed). `#1079`'s issue
 //! text scopes only `bynk-ide`'s `completion.rs`/`symbols.rs` — it does not
 //! mention `analyse_project_with` or the `diagnose_project(&root,
-//! &HashMap::new())` pattern that is `bynk-ide`'s (and `bynkc`'s test suite's)
+//! &HashMap::new())` pattern that is `bynk-ide`'s (and `bynk`'s test suite's)
 //! dominant way of exercising this whole analysis path (100+ call sites
 //! spanning `bynk-ide`'s own inline test modules, `bynk-lsp/tests`, and
 //! `bynk-tests/tests`) — every one depends on `read_source`'s fallback today.

@@ -1,4 +1,4 @@
-//! #854 behavioural test for `bynkc test --coverage`. Drives the real `bynkc
+//! #854 behavioural test for `bynk test --coverage`. Drives the real `bynk
 //! test` CLI against fixture projects and asserts the coverage it reports is
 //! attributed to `.bynk` source lines — the exact covered/uncovered sets, the
 //! `tsc → node`-only guards (DECISION C), and source-only attribution for a
@@ -34,7 +34,7 @@ fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/behaviour/{name}"))
 }
 
-/// Run `bynkc test <fixture> --coverage [--format json]` and return combined
+/// Run `bynk test <fixture> --coverage [--format json]` and return combined
 /// stdout+stderr. Each run gets its own parent dir: the runner derives the
 /// executed `out-js` tree as a *sibling* of `--output`, so a shared parent would
 /// race the emitted `.js`/`.js.map`s the remap reads back.
@@ -59,7 +59,7 @@ fn run_coverage_case(name: &str, out_dir: &str, json: bool, case: Option<&str>) 
     if let Some(case) = case {
         cmd.arg("--case").arg(case);
     }
-    let out = cmd.output().expect("run bynkc test --coverage");
+    let out = cmd.output().expect("run bynk test --coverage");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     s
@@ -67,7 +67,7 @@ fn run_coverage_case(name: &str, out_dir: &str, json: bool, case: Option<&str>) 
 
 fn skip_or_fail() -> bool {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return true;
     }
     if !have_coverage_runner() {

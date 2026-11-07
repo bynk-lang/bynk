@@ -8,7 +8,7 @@
 //! `BTreeMap` makes the iteration (and so the diagnostic order) a function of
 //! the unit names alone.
 //!
-//! Drives the real `bynkc check` CLI repeatedly against a fixture with five
+//! Drives the real `bynk check` CLI repeatedly against a fixture with five
 //! independent commons units, each producing exactly one `unknown_type` error,
 //! and asserts every run's `--format short` output is byte-identical.
 
@@ -27,7 +27,7 @@ fn run_once() -> String {
         .arg("--format")
         .arg("short")
         .output()
-        .expect("run bynkc check");
+        .expect("run bynk check");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     s

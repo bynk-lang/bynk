@@ -16,7 +16,7 @@ What it shows:
   boundary before any cache lookup runs. Those constraints live in
   `commons tokens`.
 
-- **Testing expiry without waiting** — under `bynkc test` the platform `Clock`
+- **Testing expiry without waiting** — under `bynk test` the platform `Clock`
   is a deterministic test double that reads the epoch. A case moves time on with
   `stub Clock.now() returns each [Instant.fromEpochMillis(0), Instant.fromEpochMillis(1860000)]`:
   the `login` reads the first instant, and the `whoami` 31 minutes later finds
@@ -37,8 +37,8 @@ sessions/
 ## Check and test
 
 ```sh
-bynkc check src      # type-check, no output
-bynkc test .
+bynk check src      # type-check, no output
+bynk test .
 ```
 
 ```text

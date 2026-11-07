@@ -2,7 +2,7 @@
 //!
 //! The default human table is for a person at a terminal; `--format short` (one
 //! `capability: level (remedy)` line) and `--format json` are the **pinned
-//! scriptable surface** (golden-tested), siblings to `bynkc check --format
+//! scriptable surface** (golden-tested), siblings to `bynk check --format
 //! short` (ADR 0071).
 
 use crate::doctor::{Capability, CapabilityReport, Level, Report};

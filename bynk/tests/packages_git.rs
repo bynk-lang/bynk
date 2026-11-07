@@ -6,8 +6,8 @@
 //!  - a git dependency is fetched, locked (commit + tree checksum) and
 //!    compiled, and a suite runs against its code;
 //!  - a moved branch keeps the locked commit until `bynk update`;
-//!  - `--locked` refuses a lock change; `--offline` refuses a fetch; `bynkc`
-//!    reports `not_fetched` for a cold store and never fetches;
+//!  - `--locked` refuses a lock change; `--offline` refuses a fetch;
+//!    a cold store reports `not_fetched`;
 //!  - a tampered store entry fails with `checksum_mismatch`;
 //!  - unsafe sources (`ext::`, option-shaped) and a fetched package's path or
 //!    local-git dependencies are refused;
@@ -25,10 +25,6 @@ fn bin(name: &str) -> PathBuf {
     } else {
         bynk.parent().unwrap().join(name)
     }
-}
-
-fn have_bynkc() -> bool {
-    bin("bynkc").exists()
 }
 
 fn scratch(name: &str) -> PathBuf {
@@ -111,12 +107,8 @@ fn run(bin_name: &str, cwd: &Path, home: &Path, args: &[&str]) -> (i32, String) 
     cmd.args(args)
         .current_dir(cwd)
         .env("BYNK_HOME", home)
-        .env_remove("BYNK_BYNKC")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if bin_name == "bynk" && args.first() == Some(&"test") && have_bynkc() {
-        cmd.env("BYNK_BYNKC", bin("bynkc"));
-    }
     let out = cmd.output().expect("spawn");
     (
         out.status.code().unwrap_or(-1),
@@ -174,11 +166,9 @@ fn a_git_dependency_is_fetched_locked_and_run() {
     assert_eq!(code, 0, "{out}");
     assert!(!out.contains("fetched"), "{out}");
 
-    if have_bynkc() {
-        let (code, out) = run("bynk", &app, &home, &["test"]);
-        assert_eq!(code, 0, "{out}");
-        assert!(out.contains("posts through the git dependency"), "{out}");
-    }
+    let (code, out) = run("bynk", &app, &home, &["test"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("posts through the git dependency"), "{out}");
 }
 
 #[test]
@@ -272,14 +262,6 @@ fn locked_and_offline_refuse_rather_than_repair() {
     assert_eq!(code, 1, "{out}");
     assert!(out.contains("error[bynk.package.not_fetched]"), "{out}");
     assert!(!app.join("bynk.lock").exists());
-
-    // `bynkc` never fetches: a cold store is one `not_fetched` diagnostic.
-    if have_bynkc() {
-        let (code, out) = run("bynkc", &app, &home, &["check", "--format", "short", "."]);
-        assert_eq!(code, 1, "{out}");
-        assert!(out.contains("bynk.package.not_fetched"), "{out}");
-        assert!(!out.contains("unknown_commons"), "{out}");
-    }
 
     assert_eq!(run("bynk", &app, &home, &["fetch"]).0, 0);
     // A cold store with a lock: `--offline` still can't fetch it.
@@ -447,33 +429,31 @@ fn dev_dependencies_reach_only_suites_and_never_a_deployable_build() {
     let home = root.join("home");
     let (code, out) = run("bynk", &app, &home, &["check"]);
     assert_eq!(code, 0, "{out}");
-    if have_bynkc() {
-        let (code, out) = run("bynk", &app, &home, &["test"]);
-        assert_eq!(code, 0, "{out}");
-        assert!(out.contains("three is three"), "{out}");
+    let (code, out) = run("bynk", &app, &home, &["test"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("three is three"), "{out}");
 
-        // A deployable build carries none of it.
-        let with = root.join("out-with");
-        let (code, out) = run(
-            "bynkc",
-            &app,
-            &home,
-            &["compile", ".", "-o", with.to_str().unwrap()],
-        );
-        assert_eq!(code, 0, "{out}");
-        assert!(
-            !with.join("deps").exists(),
-            "no dev-dependency unit is emitted"
-        );
-        // #2255: nor its adapters' npm requirements, though the lock records them.
-        let pkg = std::fs::read_to_string(with.join("package.json")).unwrap();
-        assert!(!pkg.contains("left-pad"), "{pkg}");
-        assert!(
-            lock(&app).contains("required-by = [\"acme/fixtures:pad\"]"),
-            "{}",
-            lock(&app)
-        );
-    }
+    // A deployable build carries none of it.
+    let with = root.join("out-with");
+    let (code, out) = run(
+        "bynk",
+        &app,
+        &home,
+        &["compile", ".", "-o", with.to_str().unwrap()],
+    );
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        !with.join("deps").exists(),
+        "no dev-dependency unit is emitted"
+    );
+    // #2255: nor its adapters' npm requirements, though the lock records them.
+    let pkg = std::fs::read_to_string(with.join("package.json")).unwrap();
+    assert!(!pkg.contains("left-pad"), "{pkg}");
+    assert!(
+        lock(&app).contains("required-by = [\"acme/fixtures:pad\"]"),
+        "{}",
+        lock(&app)
+    );
 
     // Production source can't reach a dev-only alias.
     write(

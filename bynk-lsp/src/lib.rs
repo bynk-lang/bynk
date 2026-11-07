@@ -377,7 +377,7 @@ impl Backend {
 
     /// Locate the nearest ancestor directory named `src`, walking upward from
     /// `start`. This is the implicit source root of a *rootless* tree — the
-    /// same `src/`-without-`bynk.toml` layout `bynkc` compiles in its legacy
+    /// same `src/`-without-`bynk.toml` layout `bynk` compiles in its legacy
     /// single-tree mode (`bynk-tests/tests/e2e.rs` `compile_fixture`), which the
     /// compiler fixtures use. Returns that `src` directory.
     fn find_source_root(start: &std::path::Path) -> Option<PathBuf> {
@@ -416,7 +416,7 @@ impl Backend {
 
     /// Slice D (Q4): the **canonical** project root that owns `uri`, with its
     /// config, or `None` for a file under no project (single-file mode). Routing
-    /// is `resolve_root`'s walk-up — the same project `bynkc` attributes the file
+    /// is `resolve_root`'s walk-up — the same project `bynk` attributes the file
     /// to — canonicalised so it matches the `projects` map key and every
     /// `Analysis.project_root`. Workspace folders do not enter here: a URI routes
     /// by its nearest enclosing `bynk.toml`, whatever folder it sits in.
@@ -761,7 +761,7 @@ impl Backend {
             )
         };
 
-        // Slice A: manifest-aware, multi-root — the same trees `bynkc` compiles.
+        // Slice A: manifest-aware, multi-root — the same trees `bynk` compiles.
         let roots = bynk_ide::AnalysisRoots::Project(root.clone());
         // Content-ownership track (#1086) slice 5: `overlay` above is only the
         // open buffers — with `discovery.rs`'s disk fallback gone, a project's
@@ -6549,7 +6549,7 @@ mod tests {
             "the editor must never write the lock"
         );
 
-        // Record the new shape, as `bynkc compile` would after a fix: the next
+        // Record the new shape, as `bynk compile` would after a fix: the next
         // round re-reads the lock and the diagnostic clears.
         std::fs::write(canonical.join("bynk.schema.lock"), LOCK_V2).unwrap();
         backend.run_project_diagnostics(canonical.clone()).await;

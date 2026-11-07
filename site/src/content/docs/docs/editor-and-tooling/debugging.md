@@ -13,7 +13,7 @@ exact statement, so you debug *Bynk*, not the generated TypeScript.
 
 - The `vscode-bynk` extension installed (see [Set up editor
   support](/docs/editor-and-tooling/editor-support/)).
-- `bynkc` and `bynk` on your `PATH` (or set `bynk.compilerPath` / `bynk.bynkPath`).
+- `bynk` on your `PATH` (or set `bynk.bynkPath`).
 - **Node ≥ 22.6** for the test path (the emitted `.ts` runs under Node's
   type-stripping). For the dev-server path, the same toolchain
   [`bynk dev`](/docs/bynk-cli/#bynk-dev) needs (`wrangler`).
@@ -25,7 +25,7 @@ exact statement, so you debug *Bynk*, not the generated TypeScript.
 2. Run or debug it from the editor: each test shows a **`▷ Run Test | Debug Test`**
    CodeLens (and the native run/debug glyphs in the gutter) — click **Debug Test**.
    You can also use the **Testing** view's **Debug** action or profile.
-3. The extension shells `bynkc test --inspect`, attaches, and execution pauses at
+3. The extension shells `bynk test --inspect`, attaches, and execution pauses at
    your breakpoint. Step, inspect variables, and continue as usual.
 
 The whole suite runs under the debugger; your breakpoint decides where it stops.

@@ -1280,7 +1280,7 @@ pub type BrokenDeclNames = HashMap<String, Vec<String>>;
 /// wins, in case one `include` tree is nested inside another.
 ///
 /// A `trees` root is only absolute when `Roots`'s own `project_root` is — a
-/// relative project root (`bynkc build .`, the ordinary CLI shape) leaves
+/// relative project root (`bynk compile .`, the ordinary CLI shape) leaves
 /// every tree root relative, while `pf.abs_path()` (`bynk-project`'s
 /// `parse_sources`, via `std::path::absolute`) is always absolute. Comparing
 /// them directly with `starts_with` would never match, silently collapsing

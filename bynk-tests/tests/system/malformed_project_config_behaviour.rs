@@ -7,7 +7,7 @@
 //! with no hint at the real cause. `try_read_project_paths` (R3.8, #1113)
 //! surfaces both instead.
 //!
-//! Drives the real `bynkc check` CLI against the two malformed-config
+//! Drives the real `bynk check` CLI against the two malformed-config
 //! fixtures and asserts each now fails loudly with an actionable message,
 //! instead of silently succeeding — plus the R3.9 (#1113) counterpart: an
 //! `include` list of three or more roots used to be capped at two
@@ -23,7 +23,7 @@ fn check(fixture: &str) -> (bool, String) {
         .arg("check")
         .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(fixture))
         .output()
-        .expect("run bynkc check");
+        .expect("run bynk check");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), s)

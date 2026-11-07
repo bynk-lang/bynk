@@ -21,7 +21,7 @@
 //! **Both targets.** A project fixture is compiled for bundle *and* Workers,
 //! whatever its `target.txt` says. A fixture built only for bundle never had
 //! its Workers output type-checked, and that is where #1845 and #1846 were
-//! found. `bynkc test`'s layout is the bundle output with the Workers output
+//! found. `bynk test`'s layout is the bundle output with the Workers output
 //! overlaid, so its modules are covered too. A single-file fixture is compiled
 //! in memory through the project pipeline (its own path has no tree to walk).
 //!

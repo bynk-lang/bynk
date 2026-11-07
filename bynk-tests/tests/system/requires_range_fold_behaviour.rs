@@ -45,7 +45,7 @@ fn compile(dir: &Path) -> (bool, String) {
         .args(["compile", "src", "-o", "out"])
         .current_dir(dir)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), s)

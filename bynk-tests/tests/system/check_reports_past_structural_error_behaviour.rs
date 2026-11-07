@@ -1,4 +1,4 @@
-//! Finding #64: `bynkc check`'s directory path used to route through
+//! Finding #64: `bynk check`'s directory path used to route through
 //! `compile_project`, whose `Mode::Build` bails at the first structural error
 //! and returns only what it collected up to that point. Once any file in the
 //! project had an earlier structural error (here, `exports capability`
@@ -6,7 +6,7 @@
 //! test body's own type error, which only surfaces in the per-unit checking
 //! pass that runs *after* the bail gate — was silently dropped, even though
 //! the editor (`bynk_check::analysis::analyse_project`, which already used
-//! this same non-bailing shape) still reported it. `bynkc check` now routes
+//! this same non-bailing shape) still reported it. `bynk check` now routes
 //! through `check_project`
 //! (`Mode::Analyse`, never bails) instead, so both diagnostics are reported
 //! and the exit code is decided by "does any error-severity diagnostic
@@ -23,7 +23,7 @@ fn check_reports_a_test_body_error_past_an_earlier_structural_error() {
         .arg("check")
         .arg(&fixture)
         .output()
-        .expect("run bynkc check");
+        .expect("run bynk check");
     assert!(
         !out.status.success(),
         "a project with a real structural error must not exit 0"

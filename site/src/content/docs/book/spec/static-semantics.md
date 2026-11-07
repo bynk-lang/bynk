@@ -763,7 +763,7 @@ separator MUST fall between two digits: a leading (`_1`), trailing (`1_`), or
 doubled (`1__2`) separator, or one adjacent to the decimal point or exponent
 marker, is a lexical error. The separators are **purely visual** — they are
 stripped before the value is parsed, so `1_000` and `1000` denote the same value.
-As with `Float` literals, the **as-written lexeme is preserved**, so `bynkc fmt`
+As with `Float` literals, the **as-written lexeme is preserved**, so `bynk fmt`
 keeps the author's grouping verbatim.
 
 ### §5.2b Record field defaults {#field-defaults}
@@ -1074,8 +1074,8 @@ Renaming a field is a removal plus an addition. A shape recorded before position
 were (an older lock) has none: an unchanged build fills them in without changing
 the version, and until then a change inside a stored value is judged as a change of
 the field's value types. A recorded class no
-longer declared is `bynk.agent.class_removed`. As for events, `bynkc check` and
-`bynkc test` reconcile without writing the lock, and only a build records a new
+longer declared is `bynk.agent.class_removed`. As for events, `bynk check` and
+`bynk test` reconcile without writing the lock, and only a build records a new
 version.
 
 **The schema-version marker.** A build with the lock stamps every committed record
@@ -2113,8 +2113,8 @@ every added field has a default and no field is removed, retyped, or loses a
 default, increments it by one; any other change is
 `bynk.event.non_additive_schema_change`. A declared `@schema(N)` MUST equal the
 version so computed (`bynk.event.schema_version_mismatch`). The computed version
-is the envelope's `schemaVersion`. A check (`bynkc check`) and a test run
-(`bynkc test`) reconcile against the committed registry the same way and report
+is the envelope's `schemaVersion`. A check (`bynk check`) and a test run
+(`bynk test`) reconcile against the committed registry the same way and report
 the same diagnostics, but never write it; only a build records a new version.
 
 **Idempotent handling.** `Idempotency` is a first-party capability of the `bynk`

@@ -1,4 +1,4 @@
-//! #2471: `bynkc compile --sources-stdin` compiles unsaved buffers: the JSON
+//! #2471: `bynk compile --sources-stdin` compiles unsaved buffers: the JSON
 //! overlay on stdin wins over disk, its output and source maps are written to
 //! `--output`, a bad overlay builds nothing, and the preview build leaves
 //! `bynk.schema.lock` alone.
@@ -18,7 +18,7 @@ fn project(tag: &str) -> PathBuf {
     root.canonicalize().unwrap()
 }
 
-/// Run `bynkc compile <root> -o <out> --sources-stdin` feeding `stdin`.
+/// Run `bynk compile <root> -o <out> --sources-stdin` feeding `stdin`.
 fn compile(root: &Path, out: &Path, stdin: &str) -> (bool, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("compile")
@@ -31,7 +31,7 @@ fn compile(root: &Path, out: &Path, stdin: &str) -> (bool, String) {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     child
         .stdin
         .take()

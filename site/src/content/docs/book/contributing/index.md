@@ -1,7 +1,7 @@
 ---
 title: Contributing to the compiler
 ---
-This section is for people working on Bynk itself — the `bynkc` compiler and its
+This section is for people working on Bynk itself — the `bynk` compiler and its
 sibling tools — rather than people writing Bynk programs. If you are here to
 *use* Bynk, start with the [tutorials](/book/tutorials/01-first-program/).
 
@@ -13,7 +13,8 @@ VS Code extension lives in its own repository,
 
 | Crate / project | What it is |
 |---|---|
-| `bynkc` | The compiler and CLI (`bynkc`): lex → parse → resolve → check → emit. |
+| `bynk-syntax`, `bynk-check`, `bynk-emit` | The compiler: lex → parse → resolve → check → emit. |
+| `bynk` | The CLI (`bynk`), over `bynk-driver`'s command bodies. |
 | `bynk-fmt` | The formatter, a leaf over `bynk-syntax`. |
 | `bynk-lsp` | The language server (`bynk-lsp`), built on `tower-lsp`. |
 | `tree-sitter-bynk` | The grammar (`grammar.js` → generated parser) and highlight queries. |
@@ -28,7 +29,7 @@ cargo test                  # run the whole Rust test suite
 cargo test -p bynk-tests     # the integration corpus (one `it` binary)
 ```
 
-`cargo test -p bynkc` runs, among others:
+`cargo test -p bynk-tests` runs, among others:
 
 - the **fixture suite** (`tests/e2e.rs`) — the heart of the compiler's tests;
 - the **`tsc` verification gate** (`tests/tsc_verify.rs`);

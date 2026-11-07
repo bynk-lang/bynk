@@ -1,4 +1,4 @@
-//! Round-trip + idempotency tests against the bynkc positive fixture corpus.
+//! Round-trip + idempotency tests against the bynk positive fixture corpus.
 //!
 //! For every single-file fixture (those with `input.bynk`), we:
 //!  1. Format the source. It must succeed.

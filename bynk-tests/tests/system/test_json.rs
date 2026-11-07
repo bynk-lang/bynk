@@ -1,4 +1,4 @@
-//! v0.59: the `bynkc test --format json` surface.
+//! v0.59: the `bynk test --format json` surface.
 //!
 //! Two toolchain-free layers (proposal v0.59 "Goldening strategy"):
 //!  1. **The pinned document** — built from a synthetic [`TestRun`] model and
@@ -195,7 +195,7 @@ fn golden_document_runtime() {
 // End-to-end discovery (real binary, no toolchain — `--no-run` runs no `tsc`/node)
 // ---------------------------------------------------------------------------
 
-/// `bynkc test --no-run --format json` against a real fixture: the compile
+/// `bynk test --no-run --format json` against a real fixture: the compile
 /// retains the suite/case manifest and renders it without running. Toolchain-free
 /// (no `tsc`/`node`) and side-effect-free (`--no-run` writes no `out/`), so it is
 /// safe to point at a committed fixture.
@@ -210,7 +210,7 @@ fn discovery_lists_cases_without_running() {
         .arg(&fixture)
         .args(["--no-run", "--format", "json"])
         .output()
-        .expect("run bynkc test --no-run");
+        .expect("run bynk test --no-run");
     assert!(
         out.status.success(),
         "discovery should exit 0; stderr:\n{}",
@@ -264,7 +264,7 @@ fn discovery_lists_integration_suites() {
         .arg(&fixture)
         .args(["--no-run", "--format", "json"])
         .output()
-        .expect("run bynkc test --no-run");
+        .expect("run bynk test --no-run");
     assert!(
         out.status.success(),
         "discovery should exit 0; stderr:\n{}",
@@ -303,7 +303,7 @@ fn discovery_reports_each_cases_own_tier() {
         .arg(&fixture)
         .args(["--no-run", "--format", "json"])
         .output()
-        .expect("run bynkc test --no-run");
+        .expect("run bynk test --no-run");
     assert!(
         out.status.success(),
         "discovery should exit 0; stderr:\n{}",
@@ -341,7 +341,7 @@ fn discovery_marks_generative_cases() {
         .arg(&fixture)
         .args(["--no-run", "--format", "json"])
         .output()
-        .expect("run bynkc test --no-run");
+        .expect("run bynk test --no-run");
     assert!(
         out.status.success(),
         "discovery should exit 0; stderr:\n{}",

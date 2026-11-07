@@ -132,7 +132,7 @@ pub use runtime_files::{RUNTIME_DIR, emit_all_runtime_modules, rewrite_runtime_i
 pub const EVENTS_WIRE_EVENT_TS_TYPE: &str = "{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }";
 
 /// Emit the contents of `out/tsconfig.json`. The CLI uses `tsc -p` against
-/// this when running `bynkc test`; users can also drive `tsc` against it
+/// this when running `bynk test`; users can also drive `tsc` against it
 /// directly to produce JS for deployment.
 ///
 /// I4 (#1970): a context's generated TypeScript client (`bynk-client.ts`) is
@@ -151,10 +151,10 @@ pub fn emit_tsconfig() -> String {
     TSCONFIG_JSON.to_string()
 }
 
-/// The `bynkc test --coverage` variant (#854): the same config with `sourceMap`
+/// The `bynk test --coverage` variant (#854): the same config with `sourceMap`
 /// enabled, so `tsc` emits the `.js.map`s the coverage remap consumes (hop 1,
 /// `.js` → emitted `.ts`). Kept coverage-only rather than folded into the
-/// default so a normal `bynkc test` / deployment `tsc` run ships no `.js.map`s.
+/// default so a normal `bynk test` / deployment `tsc` run ships no `.js.map`s.
 /// The runner overwrites the default `out/tsconfig.json` with this before `tsc`.
 pub fn emit_tsconfig_with_source_maps() -> String {
     TSCONFIG_JSON.replace(
@@ -2536,7 +2536,7 @@ fn emit_context_rebrands(
             // v0.132.1 (#481): forward the commons' user-defined attached methods
             // (`Cents.fromInt`, …) so the rebranded const carries more than the
             // built-in `of`/`unsafe`. Without this a consumer's `Cents.fromInt(n)`
-            // — which `bynkc check` accepts — fails `tsc`. The methods aren't in
+            // — which `bynk check` accepts — fails `tsc`. The methods aren't in
             // this context's own `commons` (only imported *types* are merged);
             // they arrive via `ctx.imported_methods`, keyed by type name.
             if let Some(methods) = ctx.imported_methods.get(name) {
@@ -5997,7 +5997,7 @@ impl<'a> LowerCtx<'a> {
     /// nearest-enclosing-checkpoint rule (ADR 0103 D2) falls back to whatever
     /// was correctly mapped just before the IIFE started, rather than a wrong
     /// one silently taking over — degraded stepping through the IIFE's own
-    /// lines in `bynkc test --inspect`, not a corrupted map.
+    /// lines in `bynk test --inspect`, not a corrupted map.
     fn without_source_map<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let saved = self.source_map.take();
         let result = f(self);
@@ -7670,7 +7670,7 @@ mod runtime_tests {
         // #854: the coverage remap consumes tsc's `.js.map`s, so the variant must
         // set `sourceMap` — a guard against a silent string-replace miss if the
         // base config's `outDir` line is ever reworded. The default stays map-free
-        // so a normal `bynkc test` / deployment build ships no `.js.map`s.
+        // so a normal `bynk test` / deployment build ships no `.js.map`s.
         let cov = emit_tsconfig_with_source_maps();
         assert!(
             cov.contains("\"sourceMap\": true"),

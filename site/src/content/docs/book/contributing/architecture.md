@@ -1,8 +1,8 @@
 ---
 title: Compiler architecture
 ---
-`bynkc` is a straight-line pipeline: **lex → parse → resolve → check → emit**.
-Each stage has a module in `bynkc/src/`.
+The compiler is a straight-line pipeline: **lex → parse → resolve → check → emit**.
+Each stage lives in its own crate (`bynk-syntax`, `bynk-check`, `bynk-emit`).
 
 ```text
   .bynk source
@@ -103,6 +103,6 @@ produces.
 ## The sibling tools
 
 - `bynk-fmt` is a leaf over `bynk-syntax`, so the formatter has one
-  implementation shared by the CLI (`bynkc fmt`) and the LSP.
-- `bynk-lsp` depends on `bynkc` for `diagnose` and on the formatter, adding the
+  implementation shared by the CLI (`bynk fmt`) and the LSP.
+- `bynk-lsp` depends on `bynk-ide` for `diagnose` and on the formatter, adding the
   LSP protocol layer. See [`bynk-lsp`](/docs/tooling/bynk-lsp/).

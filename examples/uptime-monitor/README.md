@@ -34,8 +34,8 @@ uptime-monitor/
 ## Check and test
 
 ```sh
-bynkc check src
-bynkc test .
+bynk check src
+bynk test .
 ```
 
 ```text
@@ -51,7 +51,7 @@ status:
 
 The health policy and key helper live in `commons status` so they are unit-tested
 without `Fetch`/`Kv`. The cron and HTTP handlers consume those platform
-capabilities; under `bynkc test` `Kv` is in memory and `Fetch` must be stubbed.
+capabilities; under `bynk test` `Kv` is in memory and `Fetch` must be stubbed.
 Run the schedule locally (below) to exercise the whole path.
 
 ## Run it

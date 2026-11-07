@@ -2,18 +2,25 @@
 title: "CLI (`bynk` driver)"
 ---
 The **`bynk`** driver is the developer front-end — it **links the compiler
-pipeline in-process** and orchestrates the Node toolchain (`bynk` is to `bynkc`
-as `cargo` is to `rustc`). A fresh `cargo install bynk` is self-contained: it
-compiles, checks, and formats without a separately-installed `bynkc`. This page
-is the argument and exit-code reference for its subcommands. The pure-pipeline
-binary [`bynkc`](/docs/cli/) (`compile`, `check`, `fmt`, `test`) survives for CI
-and direct use.
+pipeline in-process** and orchestrates the Node toolchain. A fresh
+`cargo install bynk` is self-contained: it compiles, checks, formats and tests
+with nothing else installed. This page is the argument and exit-code reference
+for its subcommands.
 
-The everyday commands — [`bynk check`](#bynk-check), [`bynk fmt`](#bynk-fmt), and
-[`bynk test`](#bynk-test) — mirror their `bynkc` counterparts exactly (same flags,
-same output, same exit codes), so the two are drop-in equivalent. `check` and
-`fmt` and `test` run the pipeline in-process, so none of them needs a
-separately-installed `bynkc`.
+The everyday commands — [`bynk check`](#bynk-check), [`bynk compile`](#bynk-compile),
+[`bynk fmt`](#bynk-fmt), and [`bynk test`](#bynk-test) — are what the retired
+`bynkc` binary used to provide, with the same flags, output and exit codes.
+
+## Exit codes and diagnostics
+
+A diagnostic's **severity** decides whether it fails a build. An **`Error`**
+rejects the program: `bynk compile` and `bynk check` exit non-zero and produce no
+output. A **`Warning`** is surfaced but does **not** fail the build: these commands
+still **succeed (exit 0)** and emit their output, with warnings reported alongside.
+The build-failure gate counts error-severity diagnostics only. See the normative
+rule in the [specification](/book/spec/diagnostics/) and the
+[diagnostic index](/book/reference/diagnostics/) (warning-severity codes are
+marked *(warning)*).
 
 ```text
 bynk <command> [options]
@@ -78,7 +85,7 @@ bynk new <PATH> [--name NAME]
 ```
 
 **Behaviour** — `bynk new` is pure, offline file-writing: it shells nothing,
-compiles nothing, and reads no network, so it works before `bynkc`, Node, or
+compiles nothing, and reads no network, so it works before Node or
 `wrangler` are installed.
 
 1. Derive the project name from `PATH`'s final component (or `--name`) and
@@ -108,7 +115,7 @@ isn't a legal identifier exits non-zero, **touching nothing**.
 ## `bynk dev`
 
 Build the project and serve it locally — one step in place of the manual
-`bynkc compile` + `cd` + `wrangler dev` recipe. See the guide [Run your project
+`bynk compile` + `cd` + `wrangler dev` recipe. See the guide [Run your project
 locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
@@ -137,7 +144,7 @@ run it inside a member.
 **Behaviour**
 
 1. Locate the project root and read `[paths] include`.
-2. Pre-flight the `deploy` capability (`bynkc`, Node, `wrangler`) exactly as
+2. Pre-flight the `deploy` capability (Node, `wrangler`) exactly as
    [`doctor`](#bynk-doctor) does; a missing required tool fails here, before any
    build, with doctor's remedy text.
 3. Compile to the managed **`.bynk/dev/`** build directory (gitignored
@@ -416,9 +423,8 @@ in `bynk.foreign.toml` (`bynk.deploy.foreign_contract_skew`; see
 
 ## `bynk check`
 
-Type-check a `.bynk` file or project without writing output — the same behaviour
-as [`bynkc check`](/docs/cli/#bynkc-check), through the driver. Runs the compiler
-pipeline **in-process**: no separately-installed `bynkc` is required.
+Type-check a `.bynk` file or project without writing output. Runs the compiler
+pipeline **in-process**.
 
 ```text
 bynk check [INPUT] [--format rich|short] [--fix] [--locked] [--offline]
@@ -432,7 +438,7 @@ bynk check [INPUT] [--format rich|short] [--fix] [--locked] [--offline]
 | `--fix` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. See [Applying fixes](#applying-fixes). |
 
 **Exit code** — `0` when the input type-checks (warnings are surfaced but do not
-fail the build, per the [diagnostics rule](/docs/cli/#exit-codes-and-diagnostics));
+fail the build, per the [diagnostics rule](#exit-codes-and-diagnostics));
 non-zero on any error-severity diagnostic.
 
 **At a workspace root** — `INPUT` naming a
@@ -489,9 +495,7 @@ remains.
 
 ## `bynk compile`
 
-Compile a project to TypeScript in a directory — [`bynkc compile`](/docs/cli/#bynkc-compile),
-run **in-process** through the driver: no separately-installed `bynkc` is
-required, and the output is the same. It also serves the editor's **Show
+Compile a project to TypeScript in a directory, **in-process**. It also serves the editor's **Show
 Compiled Output** view; for a build you deploy, use [`bynk dev`](#bynk-dev) or
 [`bynk deploy`](#bynk-deploy).
 
@@ -605,8 +609,7 @@ emitted verifier reads. The project must check clean.
 
 ## `bynk fmt`
 
-Format `.bynk` source files in place — the same behaviour as
-[`bynkc fmt`](/docs/cli/#bynkc-fmt), through the driver, run **in-process**.
+Format `.bynk` source files in place, **in-process**.
 
 ```text
 bynk fmt <INPUTS>... [--check] [--indent tab|spaces] [--indent-width N] [--max-line-width COLUMNS] [--trailing-comma|--no-trailing-comma] [--no-config]
@@ -670,11 +673,9 @@ canonical). Non-zero if a file could not be read/written, failed to parse, or
 
 ## `bynk test`
 
-Discover and run a project's test declarations — the same behaviour as
-[`bynkc test`](/docs/cli/#bynkc-test), run **in-process** through the driver: no
-separately-installed `bynkc` is required. It still starts the external `tsc` and
+Discover and run a project's test declarations, **in-process**. It still starts the external `tsc` and
 `node` for the runner (and `bynk dev` for `--against dev`). Requires `tsc` (with
-Node.js) or `tsx` on `PATH`, exactly as `bynkc test`.
+Node.js) or `tsx` on `PATH`.
 
 ```text
 bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots]
@@ -734,7 +735,7 @@ bynk test --suite commerce.money --case "accepts positive"   # that case, only i
 - **A value that selects nothing fails the run.** Each value is judged on its
   own, so `--case a --case typo` fails although `a` matches. The run prints its
   usual output first, then names each unmatched value on stderr
-  (`bynkc test: no case matched --case "typo"`, `no suite named --suite "x"`) and
+  (`bynk test: no case matched --case "typo"`, `no suite named --suite "x"`) and
   exits non-zero. Before this, a filter that matched nothing passed with
   `0 passed, 0 failed`.
 - `--inspect`, `--coverage` and `--against` (`--against dev` included) honour the
@@ -874,8 +875,8 @@ Cloudflare: it is local `wrangler dev` only, and `-- --remote` is never passed.
   `--skip-unsupported`). A cron handler is reachable on `bynk dev` only through
   wrangler's `/__scheduled`, which returns no result to check, so it stays
   refused.
-- **Only through `bynk`.** `bynkc test --against dev` is refused: only the
-  `bynk` driver can start `bynk dev`.
+- **Started for you.** `bynk test --against dev` starts `bynk dev` itself, runs
+  the groups against it and stops it afterwards.
 
 Under `--format json` the groups are reported as one document, with
 `"transport": "remote:dev"`.
@@ -974,8 +975,7 @@ more than one `from http` service puts the service's name before the method.
   array, before `"durationMs"`. It never fails the run: the set is walked from the
   handler'"'"'s body, so a status that comes from a helper'"'"'s result is outside it, and
   treating the set as exhaustive would fail on the false positives the warning
-  exists to surface. The set is computed by `bynk test`; a direct `bynkc test
-  --smoke` compares nothing and does not warn.
+  exists to surface.
 - **`--print`.** Prints the synthesised suites, each headed by the path it would
   have beside its context file, and the skipped cases as comments. Copy one
   into `tests/` to extend it. A smoke run writes nothing into the project: a
@@ -1046,8 +1046,8 @@ In a workspace, the members share one lock at the workspace root.
 
 Both flags are accepted by `check`, `test`, `dev`, `deploy` and `fetch`. CI
 typically runs `bynk fetch` (or restores a cached store) and then
-`bynk check --locked --offline`. `bynkc` never fetches or writes the lock: a
-dependency missing from the store is one `bynk.package.not_fetched` diagnostic.
+`bynk check --locked --offline`. A dependency missing from the store under `--offline` is one
+`bynk.package.not_fetched` diagnostic.
 
 **The store** holds each fetched commit's files, named by their checksum, under
 `$BYNK_HOME/store/sha256/` (`BYNK_HOME` defaults to `$XDG_CACHE_HOME/bynk`, or
@@ -1515,40 +1515,15 @@ not a readable directory.
 
 ---
 
-## `BYNK_BYNKC` and version skew (retired)
+## `bynkc` (removed)
 
-Every `bynk` command runs the compiler **in-process**, so there is no separate
-`bynkc` to locate and nothing to drift from. Earlier releases looked for one
-(`BYNK_BYNKC`, then `bynkc` on `PATH`, then a sibling of `bynk`), compared its
-version with `bynk`'s, and warned or refused on a mismatch; all of that is gone.
-
-For one release the old switches are still accepted so existing setups keep
-working, and do nothing:
-
-- **`BYNK_BYNKC`** is ignored. If it is set to anything, `bynk` prints one line
-  to stderr saying so, and runs on its own compiler. Unset it. An editor
-  setting that pinned a compiler through it (such as `vscode-bynk`'s
-  `bynk.compilerPath`) no longer pins anything.
-- **`--allow-skew`** (on `bynk test` and `bynk compile`, hidden from `--help`)
-  and **`BYNK_ALLOW_SKEW`** are accepted and ignored.
-
-They are removed together with the `bynkc` alias. (`--accept-compatible-skew`
+`bynkc` is gone: the executable, the `bynkc` crate's shim and the `bynkc-<target>`
+release asset. Use `bynk`: `bynk check`, `bynk fmt`, `bynk compile` and `bynk test`
+take the same flags. `BYNK_BYNKC`, `BYNK_ALLOW_SKEW` and the hidden `--allow-skew`
+flag are gone too: there is no separate compiler to pin or to drift from, so
+passing `--allow-skew` is now an unknown-flag error. (`--accept-compatible-skew`
 on `bynk deploy` is unrelated: it concerns the contracts between deployed
 services, and is unchanged.)
-
-## `bynkc` (retired)
-
-`bynkc` is `bynk` under another name for a transition release, and then it is gone. The
-release archives, the install scripts, the devcontainer feature and the loose
-`bynkc-<target>` asset each carry a copy of the `bynk` executable named `bynkc`;
-`bynk` looks at its own file name, and when that is `bynkc` it takes
-[`bynkc`'s four subcommands](/docs/cli/) with their current flags and prints one
-line on stderr saying the name is retired. Output, messages and exit codes are the
-ones `bynkc` always gave. The `bynkc` crate on crates.io is a shim that forwards to
-`bynk`, so `cargo install bynkc` still works during the transition.
-
-Use `bynk` instead: `bynk check`, `bynk fmt`, `bynk compile` and `bynk test` take
-the same flags.
 
 ---
 
@@ -1569,6 +1544,6 @@ bynk doctor [PATH] [--only CAPABILITY] [--strict] [--format human|short|json]
 | `--strict` | — | Treat every warning (optional gaps, `npx` provisionability, minor skew) as a failure. For CI. |
 | `--format` | `human` | `human` is a grouped table; `short` and `json` are the stable scriptable surface. |
 
-**Exit code** — Bare `bynk doctor` is informational: it exits `0` unless `bynkc`
-itself is unusable. `--only <capability>` gates on that capability; `--strict`
+**Exit code** — Bare `bynk doctor` is informational: it exits `0` unless the
+compiler itself is unusable. `--only <capability>` gates on that capability; `--strict`
 fails on any warning.

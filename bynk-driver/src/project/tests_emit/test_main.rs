@@ -412,7 +412,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
     program.push(TsStmt::comment("top-level test runner", None));
     // Node's `process` global isn't declared without @types/node. The runner
     // uses `process.exit` and reads `process.env.BYNK_TEST_FORMAT` (v0.59: set
-    // to `ndjson` by `bynkc test --format json`), so we narrow the global with a
+    // to `ndjson` by `bynk test --format json`), so we narrow the global with a
     // minimal ambient declaration rather than pulling in a dependency.
     program.push(TsStmt::decl(
         TsDecl::DeclareConst {
@@ -457,7 +457,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         ));
     }
 
-    // v0.127 (editor-currency slice 6), #2273: `bynkc test --case <name>` and
+    // v0.127 (editor-currency slice 6), #2273: `bynk test --case <name>` and
     // `--suite <name>`, each repeatable, set BYNK_TEST_FILTER (see
     // `TEST_FILTER_RUNTIME`). `active` is the modules whose suite is selected;
     // each runs through `runSelected`, which calls its own `run(name)` once per
@@ -903,7 +903,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
 }
 
 /// #2273: the entry's `--suite`/`--case` machinery. `BYNK_TEST_FILTER` is one
-/// JSON value (`bynkc` builds it): `suites` and `cases` each combine their values
+/// JSON value (`bynk` builds it): `suites` and `cases` each combine their values
 /// as "or", the two as "and". `selected` keeps a module whose suite is chosen,
 /// `runSelected` runs one module's selected cases through its own `run(name)`
 /// (the module is unchanged) and concatenates them, and `unmatched` names each
@@ -1044,7 +1044,7 @@ mod tests {
 
     // v0.127 (editor-currency slice 6), #2273: the top-level runner reads
     // `BYNK_TEST_CASE` and threads it into every suite's `run(only)`, so a
-    // `bynkc test --case <name>` filters which cases execute.
+    // `bynk test --case <name>` filters which cases execute.
     #[test]
     fn emit_test_main_threads_the_case_and_suite_filter() {
         let tests = vec![RunnableTest {

@@ -42,9 +42,9 @@ Run `bynk doctor` to check these for you (see the book's install page):
 bynk doctor
 ```
 
-- `bynkc` on your `PATH` (see the book's install page; from this
-  repository: `cargo build --release -p bynkc` →
-  `target/release/bynkc`).
+- `bynk` on your `PATH` (see the book's install page; from this
+  repository: `cargo build --release -p bynk` →
+  `target/release/bynk`).
 - Node.js (for `bynk test` and for Wrangler).
 
 ## Check and test
@@ -52,8 +52,8 @@ bynk doctor
 From this directory:
 
 ```sh
-bynkc check src
-bynkc test .
+bynk check src
+bynk test .
 ```
 
 ```text
@@ -68,7 +68,7 @@ hello.text:
 ## Build the Worker
 
 ```sh
-bynkc compile src --output out --target workers
+bynk compile src --output out --target workers
 ```
 
 This emits a complete, standard Cloudflare Worker under
@@ -84,7 +84,7 @@ bynk dev
 
 From anywhere inside the project, `bynk dev` compiles, picks the `hello-web`
 worker, and serves it on `http://localhost:8787` — no need to build first or
-`cd` anywhere. (Under the hood it runs the `bynkc compile` above, then `cd
+`cd` anywhere. (Under the hood it runs the `bynk compile` above, then `cd
 out/workers/hello-web && npx wrangler dev`.)
 
 Then, in another terminal:

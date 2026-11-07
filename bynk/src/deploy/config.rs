@@ -324,7 +324,7 @@ impl Default for Resources {
 
 /// The emitted `bynk-secrets.json` (ADR 0195 D5) — the seam that carries the
 /// compiler's knowledge to the driver across both compile paths, including the
-/// shelled-`bynkc` one where there is no in-memory model to consult.
+/// shelled-`bynk` one where there is no in-memory model to consult.
 #[derive(Debug, Deserialize)]
 struct SecretsManifest {
     version: u32,

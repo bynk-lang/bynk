@@ -1,6 +1,6 @@
 [package]
 name = "bynk-driver"
-description = "The command bodies shared by the Bynk CLIs (bynkc and bynk): project rooting, check, fmt, test, and output writing."
+description = "The command bodies of the Bynk CLI: project rooting, check, fmt, test, and output writing."
 keywords = ["compiler", "dsl", "cli", "language"]
 categories = ["compilers", "command-line-interface"]
 edition.workspace = true
@@ -28,14 +28,13 @@ ariadne.workspace = true
 # artefacts through the one printer that owns a character (R7.3).
 bynk-ts.workspace = true
 # `test_json`'s `TestRun` document + `coverage`'s V8-coverage JSON parsing
-# (moved down from `bynkc`, Wave 5 §5.4 — both `bynkc` and `bynk` need them).
+# (moved down from the former `bynkc`, Wave 5 §5.4).
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
-# `probe`'s tool detection (moved down from `bynk`, Wave 5 §5.4 — `bynkc`
-# needs it too, replacing its old PATH-only `tool_exists`).
+# `probe`'s tool detection (moved down from `bynk`, Wave 5 §5.4).
 which.workspace = true
 # The shared `test` subcommand contract (Wave 5 §5.4, findings #40/#72): one
-# `#[derive(Args)]` struct both `bynkc::cli` and `bynk::cli` flatten instead
+# `#[derive(Args)]` struct `bynk::cli` flattens instead
 # of hand-spelling the same 8 flags twice.
 clap.workspace = true

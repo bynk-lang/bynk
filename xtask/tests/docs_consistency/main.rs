@@ -10,7 +10,6 @@
 //! A test's name gains its file's stem as a prefix. Run one file's with
 //! `cargo test -p xtask --test docs_consistency decisions_index::`.
 
-mod cli_reference;
 mod decisions_index;
 mod diagnostics_registry;
 mod doc_version;

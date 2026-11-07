@@ -291,7 +291,7 @@ service api from http {
 ```
 
 ```sh
-bynkc compile . --output out --target workers
+bynk compile . --output out --target workers
 ```
 
 The shortener now creates real links and resolves them, counting hits as it goes.

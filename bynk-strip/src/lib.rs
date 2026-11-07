@@ -1,7 +1,7 @@
 //! Strip-only TypeScript → JavaScript for Bynk's first-class JS artefact (the
 //! in-browser track, slice 1 — ADR 0137).
 //!
-//! `bynkc` emits TypeScript. A JS artefact is *emit-then-strip*: the same emitter
+//! `bynk` emits TypeScript. A JS artefact is *emit-then-strip*: the same emitter
 //! output with type annotations erased and nothing else changed. Because the
 //! emitter is **strip-only** (ADR 0136 — every emitted `.ts` is erasable by pure
 //! type-stripping), the transform here is total and lossless for runtime
@@ -9,7 +9,7 @@
 //! property, `enum`, `namespace`), only delete type syntax.
 //!
 //! The engine is [`oxc`] — a pure-Rust TS parser, type-erasing transform, and
-//! codegen — so neither `bynkc --emit js` nor the in-browser compile path has any
+//! codegen — so neither `bynk --emit js` nor the in-browser compile path has any
 //! Node/`tsc` dependency, and the crate compiles to `wasm32` for the playground.
 //!
 //! The transform is configured for **pure type-stripping**, matching Node's

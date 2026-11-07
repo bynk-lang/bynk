@@ -55,8 +55,8 @@ markdown/
 ## Check and test
 
 ```sh
-bynkc check .
-bynkc test .
+bynk check .
+bynk test .
 ```
 
 ## Run it

@@ -358,7 +358,7 @@ fn the_single_file_compile_does_not_print_the_hint() {
         .arg("-o")
         .arg(dir.join("steps.ts"))
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stderr}");
     assert!(!stderr.contains("let_else_staircase"), "{stderr}");
@@ -382,7 +382,7 @@ fn a_failed_project_build_does_not_print_the_hint() {
         .arg("-o")
         .arg(dir.join("out"))
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success(), "{stderr}");
     assert!(

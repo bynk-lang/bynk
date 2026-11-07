@@ -29,8 +29,8 @@ decides whether it **fails compilation** (v0.89, ADR 0117):
 
 - An **`Error`** is a well-formedness violation: the program is rejected and the
   compiler exits non-zero. No output is produced.
-- A **`Warning`** is surfaced but does **not** fail the build: `bynkc compile` and
-  `bynkc check` still **succeed (exit 0)** and emit their output, with the warnings
+- A **`Warning`** is surfaced but does **not** fail the build: `bynk compile` and
+  `bynk check` still **succeed (exit 0)** and emit their output, with the warnings
   reported alongside. A warning never gates emission.
 
 A conforming implementation MUST classify each emitted diagnostic by the severity
@@ -43,4 +43,4 @@ Warning-severity codes are marked **(warning)** in the
 `bynk.given.unused_capability`, `bynk.list.deprecated_function`, and the
 `@indexed` hygiene codes (`bynk.index.missing` / `bynk.index.unused`). This
 severity split is what lets a *deprecation* (`bynk.list.deprecated_function`) warn
-rather than break a build. See [CLI exit codes](/docs/cli/).
+rather than break a build. See [CLI exit codes](/docs/bynk-cli/).

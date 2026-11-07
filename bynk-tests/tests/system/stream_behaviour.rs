@@ -1,4 +1,4 @@
-//! #2267 (Slice D stage 1) behavioural tests for `bynkc test --format ndjson`:
+//! #2267 (Slice D stage 1) behavioural tests for `bynk test --format ndjson`:
 //! the supported result stream. Drives the real CLI against the `suite_filter`
 //! fixture (two suites that share a case name) and a project that does not
 //! compile.
@@ -22,7 +22,7 @@ fn tool_exists(name: &str) -> bool {
 
 fn can_run() -> bool {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return false;
     }
     if !(tool_exists("tsx") || (tool_exists("tsc") && tool_exists("node")) || tool_exists("npx")) {
@@ -39,7 +39,7 @@ fn fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/suite_filter")
 }
 
-/// `bynkc test <project> --format <format> <args…>`, each run in its own output
+/// `bynk test <project> --format <format> <args…>`, each run in its own output
 /// parent: the runner derives the executed tree as a sibling of `--output`.
 fn test(
     project: &PathBuf,
@@ -61,7 +61,7 @@ fn test(
     for (k, v) in env {
         cmd.env(k, v);
     }
-    cmd.output().expect("run bynkc test")
+    cmd.output().expect("run bynk test")
 }
 
 /// The stream's events, each parsed from one line of stdout.

@@ -62,7 +62,7 @@ When you change the emitter (and the new output is correct), regenerate the
 positive fixtures' expectations rather than editing them by hand:
 
 ```sh
-BYNK_BLESS=1 cargo test -p bynkc bless_positive_fixtures
+BYNK_BLESS=1 cargo test -p bynk-tests --test it e2e::bless_positive_fixtures
 ```
 
 The `bless_positive_fixtures` test is a no-op unless `BYNK_BLESS` is set; with it
@@ -103,7 +103,7 @@ when neither is available:
 - in CI — set **`BYNK_REQUIRE_TSC=1`** to make a missing `tsc` a hard failure.
 
 The same file checks that every emitted `.ts` is erasable by pure type-stripping
-(ADR 0136), which `bynkc test --inspect` and in-browser evaluation depend on.
+(ADR 0136), which `bynk test --inspect` and in-browser evaluation depend on.
 `embedded_runtime_strips_types_under_node` needs Node ≥ 22.6;
 `all_emitted_typescript_strips_under_node` needs Node ≥ 22.13 (for
 `stripTypeScriptTypes`). **`BYNK_REQUIRE_TSC=1` governs them too:** with it set,
@@ -132,7 +132,7 @@ fail an enum Cell reads back after a reload
 ```
 
 The gate copies each marked fixture to a scratch directory and runs
-`bynkc test --format json` over it. It then checks:
+`bynk test --format json` over it. It then checks:
 
 - the case counts match `passed=`/`failed=`;
 - every `fail <case name>` case **fails**;
@@ -148,7 +148,7 @@ but never run. Mark a fixture unless it exists only to pin emitted *shape*
 rather than behaviour (for example `1402_stub_fails_and_single_outcome_sequence`,
 whose cases can never pass by design).
 
-The run uses the bundle target, because `bynkc test` has no `--target` flag.
+The run uses the bundle target, because `bynk test` has no `--target` flag.
 Like the `tsc` gate, it skips locally without a TypeScript toolchain, and
 `BYNK_REQUIRE_TSC=1` makes that a failure. The `fixture_kinds` row of
 `design/greenfield-status.md` counts marked fixtures as `run=`.

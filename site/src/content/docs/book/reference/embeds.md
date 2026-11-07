@@ -81,7 +81,7 @@ A unit-tier `suite` case can name its target's embeds, and those of the commons
 the target `uses`, to assert on the text. A `system` suite cannot: an embed is
 code, not something a Worker serves.
 
-A single file (`bynkc compile page.bynk`) has no project to find `embeds/` in,
+A single file (`bynk compile page.bynk`) has no project to find `embeds/` in,
 so building one that declares an embed is `bynk.embed.needs_project`. Checking
 it is unaffected.
 

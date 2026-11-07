@@ -337,14 +337,14 @@ on it unchanged.
 On Workers, each instance gets its own binding, named from the kind and the
 capability (`Sessions` → `KV_SESSIONS`, `PriceCache` → `KV_PRICE_CACHE`), with an
 `Env` member and a `[[kv_namespaces]]` stanza of its own. The bare `KV` stanza is
-emitted only for a context that uses the bare `Kv`. Under `bynkc test`, each
+emitted only for a context that uses the bare `Kv`. Under `bynk test`, each
 instance has its own fresh in-memory double. `bynk deploy` provisions each
 instance's namespace and records its id, titled `<worker>-<capability>`
 ([Several KV namespaces](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#several-kv-namespaces)). See [Use more than one KV namespace](/book/guides/effects-and-capabilities/use-several-kv-namespaces/).
 
 A `Service` instance (`capability Billing = Service @worker("legacy-billing")`)
 binds as `SERVICE_BILLING`, a `[[services]]` entry naming its Worker. Under
-`bynkc test` its double faults until `send` is stubbed; `bynk deploy` binds it
+`bynk test` its double faults until `send` is stubbed; `bynk deploy` binds it
 without provisioning anything. See [Call a Worker outside the project](/book/guides/effects-and-capabilities/call-a-foreign-worker/).
 
 ## Cross-context capabilities (`exports capability`)

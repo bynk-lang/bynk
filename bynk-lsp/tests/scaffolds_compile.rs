@@ -7,7 +7,7 @@
 //!
 //! The VS Code extension's own static catalogue lived here too (ADR 0157's
 //! second half). It now lives with the extension (bynk-lang/vscode-bynk),
-//! which parses every snippet with the released `bynkc` in its CI.
+//! which parses every snippet with the released `bynk` in its CI.
 
 mod support;
 

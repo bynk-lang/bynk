@@ -3,7 +3,7 @@ title: Compile and target Cloudflare Workers
 ---
 **Goal:** understand the two emission targets and build a deployable Worker.
 
-`bynkc compile` takes a `--target`:
+`bynk compile` takes a `--target`:
 
 | Target | Flag | What it emits | Cross-context calls |
 |---|---|---|---|
@@ -13,7 +13,7 @@ title: Compile and target Cloudflare Workers
 ## Bundle (default)
 
 ```sh
-bynkc compile . --output out
+bynk compile . --output out
 ```
 
 Each source unit becomes a `.ts` file, and contexts call each other directly.
@@ -22,7 +22,7 @@ Use this for a single deployable unit or for running the output yourself.
 ## Workers
 
 ```sh
-bynkc compile . --output out --target workers
+bynk compile . --output out --target workers
 ```
 
 Each context becomes a directory under `out/workers/<context>/`:
@@ -36,7 +36,7 @@ out/workers/notes/
 ```
 
 A workers build is the deployable, so it writes no test modules: every `suite`
-is stripped (`bynkc test` compiles and stages them itself).
+is stripped (`bynk test` compiles and stages them itself).
 
 The emitted directory is a standard Worker. Run it locally with
 [Wrangler](https://developers.cloudflare.com/workers/wrangler/):

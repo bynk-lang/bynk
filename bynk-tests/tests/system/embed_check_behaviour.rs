@@ -1,6 +1,6 @@
 //! #2387: `embed` declarations through the real CLI.
 //!
-//! - A single file and a project check clean (`bynkc check`), with the embed's
+//! - A single file and a project check clean (`bynk check`), with the embed's
 //!   name typed as a `String` in a function body.
 //! - A single file's build is refused with `bynk.embed.needs_project`: it has
 //!   no project root to find `embeds/` under.
@@ -35,12 +35,12 @@ fn project(name: &str) -> PathBuf {
     dir
 }
 
-fn bynkc(args: &[&str], path: &Path) -> (bool, String) {
+fn bynk(args: &[&str], path: &Path) -> (bool, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .args(args)
         .arg(path)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), s)
@@ -52,12 +52,12 @@ fn a_single_file_with_an_embed_checks_clean_and_its_build_is_refused() {
     let file = dir.join("page.bynk");
     std::fs::write(&file, PAGE).unwrap();
 
-    let (ok, out) = bynkc(&["check"], &file);
-    assert!(ok, "`bynkc check` must pass, got:\n{out}");
+    let (ok, out) = bynk(&["check"], &file);
+    assert!(ok, "`bynk check` must pass, got:\n{out}");
 
     let ts = dir.join("page.ts");
-    let (ok, out) = bynkc(&["compile", "--output", ts.to_str().unwrap()], &file);
-    assert!(!ok, "`bynkc compile` must refuse the embed, got:\n{out}");
+    let (ok, out) = bynk(&["compile", "--output", ts.to_str().unwrap()], &file);
+    assert!(!ok, "`bynk compile` must refuse the embed, got:\n{out}");
     assert!(out.contains("bynk.embed.needs_project"), "{out}");
 }
 
@@ -70,12 +70,12 @@ fn a_project_with_an_embed_builds_the_files_text_as_a_constant() {
         b"\xef\xbb\xbf<p>{{content}}</p>\r\n<!-- \"q\" \\ -->\r\n",
     )
     .unwrap();
-    let (ok, out) = bynkc(&["check"], &dir);
-    assert!(ok, "`bynkc check` on a project must pass, got:\n{out}");
+    let (ok, out) = bynk(&["check"], &dir);
+    assert!(ok, "`bynk check` on a project must pass, got:\n{out}");
 
     let out_dir = dir.join("out");
-    let (ok, out) = bynkc(&["compile", "--output", out_dir.to_str().unwrap()], &dir);
-    assert!(ok, "`bynkc compile` must build the embed, got:\n{out}");
+    let (ok, out) = bynk(&["compile", "--output", out_dir.to_str().unwrap()], &dir);
+    assert!(ok, "`bynk compile` must build the embed, got:\n{out}");
     let ts = std::fs::read_to_string(out_dir.join("app/page.ts")).unwrap();
     assert!(
         ts.contains(r#"export const shell: string = "<p>{{content}}</p>\n<!-- \"q\" \\ -->\n";"#),
@@ -107,7 +107,7 @@ fn a_bad_embedded_file_is_refused_with_its_reason() {
         } else {
             std::fs::write(dir.join("embeds/page.html"), bytes).unwrap();
         }
-        let (ok, out) = bynkc(&["check"], &dir);
+        let (ok, out) = bynk(&["check"], &dir);
         assert!(!ok, "{name} must fail the check, got:\n{out}");
         assert!(out.contains(code), "{name} must report {code}, got:\n{out}");
     }
@@ -124,7 +124,7 @@ fn the_declared_embeds_together_have_a_size_cap() {
         decls.push_str(&format!("embed f{n} = \"embeds/f{n}.txt\"\n"));
     }
     std::fs::write(dir.join("src/app/more.bynk"), decls).unwrap();
-    let (ok, out) = bynkc(&["check"], &dir);
+    let (ok, out) = bynk(&["check"], &dir);
     assert!(
         !ok,
         "five 250 KiB embeds must pass the project cap, got:\n{out}"
@@ -145,7 +145,7 @@ fn an_embed_is_a_string_not_an_int() {
         "commons app.page\n\nembed shell = \"embeds/page.html\"\n\nfn n() -> Int {\n  shell\n}\n",
     )
     .unwrap();
-    let (ok, out) = bynkc(&["check"], &dir);
+    let (ok, out) = bynk(&["check"], &dir);
     assert!(!ok, "an embed returned as an Int must fail, got:\n{out}");
     assert!(out.contains("bynk.types.return_mismatch"), "{out}");
 }
@@ -160,7 +160,7 @@ fn a_used_commons_embed_is_a_string_and_a_local_declaration_wins() {
         "context app.board\n\nuses app.page\n\nfn shell_text() -> String {\n  shell\n}\n",
     )
     .unwrap();
-    let (ok, out) = bynkc(&["check"], &dir);
+    let (ok, out) = bynk(&["check"], &dir);
     assert!(ok, "a used commons' embed must check, got:\n{out}");
 
     // A local function of the same name wins; the embed is not the value.
@@ -169,7 +169,7 @@ fn a_used_commons_embed_is_a_string_and_a_local_declaration_wins() {
         "context app.board\n\nuses app.page\n\nfn shell() -> Int {\n  1\n}\n\nfn n() -> Int {\n  shell()\n}\n",
     )
     .unwrap();
-    let (ok, out) = bynkc(&["check"], &dir);
+    let (ok, out) = bynk(&["check"], &dir);
     assert!(
         ok,
         "a local declaration must win over the import, got:\n{out}"
