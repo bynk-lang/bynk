@@ -32,8 +32,7 @@ use bynk_syntax::{CompileError, lexer, parser};
 ///
 /// Lives in `bynk-emit` (slice 7 precedent, alongside [`NODE_MAJOR_FLOOR`]) so
 /// both `bynk` and the `bynk` driver can compile a self-contained single-file
-/// commons in-process without depending on each other; `bynkc` re-exports it so
-/// `bynkc::compile_with_warnings` and `bynkc::Compiled` are unchanged.
+/// commons in-process without depending on each other.
 pub struct Compiled {
     pub ts: String,
     pub warnings: Vec<CompileError>,
@@ -171,8 +170,8 @@ fn check_single_file(
 /// and for running Bynk's emitted TypeScript.
 ///
 /// Single source of truth for the Node floor: the emitted code targets it, the
-/// `bynk` driver's `doctor` command compares a detected `node` against it, and
-/// `bynkc`'s CLI re-exports it rather than restating the number. Lives in
+/// `bynk` driver's `doctor` command compares a detected `node` against it, rather than
+/// restating the number. Lives in
 /// `bynk-emit` (which emits the TS that runs on Node) so both binaries share one
 /// definition (slice 7; was a `bynkc` const before the driver dropped that dep).
 ///
