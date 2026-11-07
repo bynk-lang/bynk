@@ -978,7 +978,7 @@ function unmatched(): { suites?: string[]; cases?: string[] } | undefined {
 function reportUnmatched(): void {
   const left = unmatched();
   if (left === undefined) return;
-  const program = filter?.program ?? "bynkc";
+  const program = filter?.program ?? "bynk";
   for (const s of left.suites ?? []) {
     globalThis.console.error(`${program} test: no suite named --suite ${globalThis.JSON.stringify(s)}`);
   }

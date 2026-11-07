@@ -53,7 +53,7 @@ commerce.money › more discount, never a higher price
   property failed after 41 cases (seed 0x5f3a)
   shrunk counterexample:  p = 100, a = 10, b = 20
   expect discount(p, b) <= discount(p, a)
-  reproduce: bynkc test commerce/money.bynk --seed 0x5f3a
+  reproduce: bynk test commerce/money.bynk --seed 0x5f3a
 ```
 
 Each run draws a **fresh random seed**, printed only on failure. Thread it back
