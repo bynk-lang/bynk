@@ -1,0 +1,13 @@
+context commerce.limits
+
+exports transparent { Cents, Offset, Name, Code, Blurb }
+
+type Cents = Int where InRange(1, 20_000)
+
+type Offset = Int where InRange(-1_000, 1_000)
+
+type Name = String where MinLength(1_0) && MaxLength(1_000)
+
+type Code = String where Length(1_000)
+
+type Blurb = String where NonEmpty && MaxLength(10_000)
