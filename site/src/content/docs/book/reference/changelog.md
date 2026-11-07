@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.510.38** | fmt keeps digit separators in InRange, MinLength, MaxLength and Length arguments |
 | **v0.510.37** | "`bynk test --smoke` against a named target now lists every case a write route would have run as skipped, not only its `answers` case, so the skip count agrees with the cases `--smoke-unsafe` adds ([#3008](https://github.com/bynk-lang/bynk/issues/3008))" |
 | **v0.510.36** | The raw `Forged`/`Expired` Bearer test drivers append a typed `query` as its raw string, so a suite for a Bearer `GET` route with a typed query no longer fails `tsc` |
 | **v0.510.35** | Crate hygiene D2-1 - the diagnostic renderers become `bynk-driver`'s `render` module and the `bynk-render` crate leaves the workspace and the release lists (its final release, which names `bynk-driver`, shipped earlier); no behaviour change |
