@@ -29,7 +29,7 @@ pub use fmt::annotation_to_string;
 pub use bynk_syntax::print::escape_string;
 
 // #972: the `[fmt]` section of a project's `bynk.toml`, layered under the CLI's
-// own flags by `bynk fmt`/`bynk fmt` and read directly by `bynk-lsp` for
+// own flags by `bynk fmt` and read directly by `bynk-lsp` for
 // format-on-save. One reader for one section — the two front-ends previously
 // had only the language server reading it at all, so a project that set a style
 // there saw the editor and the command line disagree.

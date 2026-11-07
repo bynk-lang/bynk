@@ -4,7 +4,7 @@
 //! fields have sensible defaults so an absent or minimal config is fine.
 //!
 //! `[fmt]` is **not** parsed here (#972). It is read by
-//! [`bynk_fmt::FmtConfig`], the same reader `bynk fmt` / `bynk fmt` layer
+//! [`bynk_fmt::FmtConfig`], the same reader `bynk fmt` layer
 //! their flags over, so the editor's format-on-save and the command line
 //! cannot drift apart on what a key means. This file owns only the mapping
 //! from that shared config into the server's own [`ProjectConfig`], alongside

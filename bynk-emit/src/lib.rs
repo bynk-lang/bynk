@@ -61,7 +61,7 @@ pub fn compile_with_warnings(source: &str, _filename: &str) -> Result<Compiled, 
 /// Check a single-file commons without building it: the same diagnostics as
 /// [`compile_with_warnings`], minus the build-only ones, and no emission.
 /// Returns the non-failing warnings on success. The single-file half of
-/// `bynk check` / `bynk check` (`bynk_driver::run_check`); a directory goes
+/// `bynk check` (`bynk_driver::run_check`); a directory goes
 /// through the project pipeline in `Mode::Check` instead.
 ///
 /// #1883, slice 1a (review of #1903): before this, `run_check` reused

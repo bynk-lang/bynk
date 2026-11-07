@@ -73,7 +73,7 @@ The public API is small:
   `bynk.toml`, applied over a base `FormatOptions`.
 
 `FormatOptions`'s three fields are reachable from a project's `bynk.toml` and
-from the command line — `bynk fmt` / `bynk fmt` take `--indent tab|spaces`,
+from the command line — `bynk fmt` take `--indent tab|spaces`,
 `--indent-width N`, `--max-line-width COLUMNS`, and `--trailing-comma` /
 `--no-trailing-comma`, overriding the project's `[fmt]` section for one run
 (`--no-config` ignores that section entirely).

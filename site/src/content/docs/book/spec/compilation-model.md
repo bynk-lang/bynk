@@ -17,7 +17,7 @@ its layout. Its keys:
 | `[paths]` | `include` | the trees to compile (array; defaults below) |
 | | `exclude` | subtrees to skip during discovery (array) |
 | | `out` | the default output directory |
-| `[fmt]` | `indent`, `indent_width`, `max_line_width`, `trailing_comma` | formatter settings (read by `bynk fmt` / `bynk fmt` and by format-on-save; CLI flags override them) |
+| `[fmt]` | `indent`, `indent_width`, `max_line_width`, `trailing_comma` | formatter settings (read by `bynk fmt` and by format-on-save; CLI flags override them) |
 | `[lsp]` | `diagnostics_mode` | language-server settings |
 | `[workers]` | `compatibility_flags` | extra Cloudflare compatibility flags for every emitted `wrangler.toml`, after the default `global_fetch_strictly_public` (array of strings) |
 

@@ -281,7 +281,7 @@ the same way you would `Cargo.lock`.
 
 ### Checking against the lock without writing it
 
-`bynk check` and `bynk test` (and `bynk check`/`bynk test`) reconcile against
+`bynk check` and `bynk test` reconcile against
 the committed `bynk.schema.lock` too, but **read-only**: a non-additive change
 fails them with the same `bynk.event.non_additive_schema_change` a build
 reports, so a CI gate of format, check and test (such as

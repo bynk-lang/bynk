@@ -90,7 +90,7 @@
     },
     "fmt": {
       "additionalProperties": false,
-      "description": "Formatter settings, read by format-on-save in the editor and by `bynk fmt` / `bynk fmt`, through one shared reader. A flag passed to `fmt` overrides the key it names.",
+      "description": "Formatter settings, read by format-on-save in the editor and by `bynk fmt`, through one shared reader. A flag passed to `fmt` overrides the key it names.",
       "properties": {
         "indent": {
           "default": "tab",

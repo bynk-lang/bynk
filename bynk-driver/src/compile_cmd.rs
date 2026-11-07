@@ -1,4 +1,4 @@
-//! The `compile` command body, shared by `bynk compile` and `bynk compile`
+//! The `compile` command body, run by `bynk compile`
 //! (D2/E1, #2998): before this, only `bynk` had it, so `bynk compile` had to
 //! start a `bynk` process. Parameterised by the program name that prefixes
 //! messages, like [`crate::run_check`] and [`crate::run_fmt`].
@@ -84,7 +84,7 @@ pub struct CompileArgs {
     pub sources_stdin: bool,
 }
 
-/// Run `compile`. `prog` prefixes the messages (`"bynk"` or `"bynk"`).
+/// Run `compile`. `prog` prefixes the messages (`"bynk"`).
 pub fn run_compile(prog: &str, args: CompileArgs) -> ExitCode {
     let CompileArgs {
         input,

@@ -1,4 +1,4 @@
-//! bynk-driver — the shared front-end of the `bynk` and `bynk` CLIs (#521).
+//! bynk-driver — the front-end of the `bynk` CLI (#521).
 //!
 //! Both binaries expose `fmt` and `check` with identical semantics; before
 //! this crate each re-implemented the command bodies (and the project-failure
@@ -793,7 +793,7 @@ impl ManifestCache {
     }
 }
 
-/// The `fmt` command body shared by `bynk fmt` and `bynk fmt`: each input is
+/// The `fmt` command body run by `bynk fmt`: each input is
 /// formatted and rewritten only when it changes; `--check` reports
 /// non-canonical files without writing; `-` reads stdin and writes the
 /// formatted result to stdout. `prog` prefixes messages (`bynk fmt: …`).
@@ -1039,7 +1039,7 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-/// The `check` command body shared by `bynk check` and `bynk check`: a
+/// The `check` command body run by `bynk check`: a
 /// directory routes through [`project::check_project`] (finding #64 —
 /// non-bailing, so a structural error anywhere does not hide diagnostics
 /// elsewhere the way `compile_project`'s bail-fast `Mode::Build` would), a

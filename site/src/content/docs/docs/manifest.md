@@ -421,7 +421,7 @@ This code is described in the [diagnostic index](/book/reference/diagnostics/).
 ## `[fmt]`
 
 Formatter settings. Read by **both** format-on-save in the editor and the
-`bynk fmt` / `bynk fmt` CLI, through one shared reader, so a section they can
+`bynk fmt` CLI, through one shared reader, so a section they can
 both read is interpreted identically.
 
 They part company on a section that does **not** read: the CLI reports the
