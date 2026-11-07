@@ -16,4 +16,4 @@
 
 **Mechanism.** One codec with the mode flag of ADR 0723. A call lowers to the monomorphic serialiser inside an inline arrow that raises `globalThis.__bynkPlainJson` and restores it in a `finally`, so no module needs a new runtime import. The project's `Option` encoders carry the (inert unless raised) plain branch when a route is plain or when any source file mentions `encodePlain` (a textual over-approximation computed once per build, in the driver); test suites get the same switch. A project with neither is byte-for-byte unchanged.
 
-**Consequences.** `Json.decode(Json.encodePlain(v)) == Ok(v)` for every `v` the checker admits. Hover and completion list the new member; semantic tokens are unchanged (an ordinary member access). An integration suite does not yet switch its own encoders on, because that module emitter does not draw its own codec closure (the same standing limit as `Json.encode` there).
+**Consequences.** `Json.decode(Json.encodePlain(v)) == Ok(v)` for every `v` the checker admits. Hover and completion list the new member; semantic tokens are unchanged (an ordinary member access).

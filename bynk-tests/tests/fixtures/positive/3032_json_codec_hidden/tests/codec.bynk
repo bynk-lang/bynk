@@ -1,0 +1,11 @@
+suite api as integration {
+  // `Pull` is reached through the participant's `Wrap`, not named by a `uses`:
+  // the codec helpers qualify it through the view's hidden-type owner.
+  case "a reached commons type round-trips" {
+    let h = Head { ref: "b", repo: Some("r") }
+    let p = Pull { id: 1, draft: Some(false), closed_at: None, head: h, labels: ["x"] }
+    let w = Wrap { pull: p, shape: Dot }
+    expect Json.decode[Wrap](Json.encode(w)) == Ok(w)
+    expect Json.decode[Wrap](Json.encodePlain(w)) == Ok(w)
+  }
+}
