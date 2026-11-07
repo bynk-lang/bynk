@@ -1001,7 +1001,15 @@ pub(crate) fn emit_free_fn(
     runtime_use: &RuntimeUse,
     cross_context: &bynk_check::resolver::CrossContextInfo,
 ) -> Vec<bynk_ts::TsStmt> {
-    emit_free_fn_in(f, commons, contracts, runtime_use, cross_context, true, false)
+    emit_free_fn_in(
+        f,
+        commons,
+        contracts,
+        runtime_use,
+        cross_context,
+        true,
+        false,
+    )
 }
 
 /// #2834: a suite-local helper `fn` — `emit_free_fn` without the `export`,
