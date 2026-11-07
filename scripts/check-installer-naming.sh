@@ -25,13 +25,8 @@ need "$rel" '-DestinationPath "$stage.zip"' 'windows archive'
 need "$rel" '> SHA256SUMS' 'checksum file'
 need "$rel" 'cp "$bin/bynk" "$bin/bynk-lsp"' 'unix archive contents'
 need "$rel" 'Copy-Item "$bin/bynk.exe","$bin/bynk-lsp.exe"' 'windows archive contents'
-# Overlap release (crate-hygiene E4a): the old name rides along; E4b deletes these.
-need "$rel" 'cp "$bin/bynk-lsp" "$stage/bynkc-lsp"' 'unix archive overlap copy'
-need "$rel" 'Copy-Item "$bin/bynk-lsp.exe" "$stage/bynkc-lsp.exe"' 'windows archive overlap copy'
 need "$rel" 'cp "$bin/bynk-lsp" "bynk-lsp-${{ matrix.target }}"' 'loose server asset'
-need "$rel" 'cp "$bin/bynk-lsp" "bynkc-lsp-${{ matrix.target }}"' 'loose server asset (overlap name)'
 need "$rel" 'Copy-Item "$bin/bynk-lsp.exe" "bynk-lsp-${{ matrix.target }}.exe"' 'loose server asset (windows)'
-need "$rel" 'Copy-Item "$bin/bynk-lsp.exe" "bynkc-lsp-${{ matrix.target }}.exe"' 'loose server asset (windows, overlap name)'
 
 need scripts/install.sh 'stage="bynk-$tag-$target"' 'archive stem'
 need scripts/install.sh '$stage.tar.gz' 'archive suffix'

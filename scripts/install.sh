@@ -81,13 +81,20 @@ fi
 tar -xzf "$tmp/$stage.tar.gz" -C "$tmp"
 mkdir -p "$dest"
 for bin in bynk bynkc bynk-lsp bynkc-lsp; do # bynkc: only in releases before its removal
-  # A release before the rename ships only bynkc-lsp, and the overlap copy goes
-  # in E4b: either server name may be absent, but not both.
+  # A release before the rename ships only bynkc-lsp, and a current one only
+  # bynk-lsp (a pinned older release is still installable): either server name
+  # may be absent, but not both.
   if [ ! -f "$tmp/$stage/$bin" ]; then
     case "$bin" in
       bynkc) continue ;; # absent from a current release; present in an older pin
       bynk-lsp | bynkc-lsp)
         [ -f "$tmp/$stage/bynk-lsp" ] || [ -f "$tmp/$stage/bynkc-lsp" ] || die "the archive has no language server"
+        # An upgrade from the overlap release: its bynkc-lsp is skewed against
+        # this release, so drop it rather than leave an editor starting it.
+        if [ "$bin" = bynkc-lsp ] && [ -f "$tmp/$stage/bynk-lsp" ] && [ -f "$dest/bynkc-lsp" ]; then
+          rm -f "$dest/bynkc-lsp"
+          say "Removed the stale $dest/bynkc-lsp; point your editor at bynk-lsp."
+        fi
         continue ;;
     esac
   fi
@@ -105,7 +112,7 @@ if [ ! -f "$tmp/$stage/bynkc" ] && [ -f "$dest/bynkc" ]; then
   say "Removed the old $dest/bynkc; use bynk."
 fi
 
-say "Installed bynk and bynk-lsp (plus a bynkc-lsp copy for this release) to $dest"
+say "Installed bynk and bynk-lsp to $dest"
 case ":$PATH:" in
   *":$dest:"*) say "Run 'bynk doctor' to check your setup." ;;
   *) say "Add it to your PATH, e.g.:  export PATH=\"$dest:\$PATH\""

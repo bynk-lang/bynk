@@ -90,12 +90,10 @@ See the [CLI reference](/docs/bynk-cli/) for every flag and exit code.
 
 ## Editor support
 
-> **Renamed from `bynkc-lsp`** — The server was called `bynkc-lsp` before the rename. This release still ships a
-> `bynkc-lsp` copy next to `bynk-lsp` (in the archives, the installers and the
-> dev-container feature), so an editor config that names the old binary keeps
-> working for one release. Change the command in your editor config from
-> `bynkc-lsp` to `bynk-lsp` . The
-> `bynkc-lsp` copy is removed in the next release.
+> **Renamed from `bynkc-lsp`** — The server was called `bynkc-lsp` in earlier
+> releases, which also shipped a `bynkc-lsp` copy next to `bynk-lsp` so old
+> editor configs kept working. That copy is gone. If your editor config still
+> names `bynkc-lsp`, change the command to `bynk-lsp`.
 
 
 `bynk-lsp`, the language server, is in the release archive. Most users run it

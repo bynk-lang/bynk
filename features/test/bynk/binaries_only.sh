@@ -6,8 +6,7 @@ set -e
 source dev-container-features-test-lib
 
 check "bynk on PATH" bash -c "bynk --version"
-# The published release may predate the rename (bynkc-lsp only); either name will do.
-check "a language server (bynk-lsp or bynkc-lsp) is executable on PATH" bash -c "test -x \"\$(command -v bynk-lsp)\" || test -x \"\$(command -v bynkc-lsp)\""
+check "bynk-lsp is executable on PATH" bash -c "test -x \"\$(command -v bynk-lsp)\""
 check "no wrangler installed" bash -c "! command -v wrangler"
 check "bynk doctor (compile floor)" bash -c "bynk doctor"
 

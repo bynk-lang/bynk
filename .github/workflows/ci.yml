@@ -1622,9 +1622,7 @@ jobs:
         run: |
           sh scripts/install.sh
           test -x "$BYNK_INSTALL_DIR/bynk"
-          # The latest published release may predate the rename (bynkc-lsp only);
-          # a release with the overlap ships both. Either name must be installed.
-          test -x "$BYNK_INSTALL_DIR/bynk-lsp" || test -x "$BYNK_INSTALL_DIR/bynkc-lsp"
+          test -x "$BYNK_INSTALL_DIR/bynk-lsp"
           "$BYNK_INSTALL_DIR/bynk" --version
       - name: install.ps1
         if: runner.os == 'Windows'
@@ -1636,8 +1634,7 @@ jobs:
         run: |
           ./scripts/install.ps1
           if (-not (Test-Path "$env:BYNK_INSTALL_DIR\bynk.exe")) { throw "bynk.exe was not installed" }
-          # The latest published release may predate the rename; either name will do.
-          if (-not ((Test-Path "$env:BYNK_INSTALL_DIR\bynk-lsp.exe") -or (Test-Path "$env:BYNK_INSTALL_DIR\bynkc-lsp.exe"))) { throw "no language server was installed" }
+          if (-not (Test-Path "$env:BYNK_INSTALL_DIR\bynk-lsp.exe")) { throw "bynk-lsp.exe was not installed" }
           & "$env:BYNK_INSTALL_DIR\bynk.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "bynk --version failed" }
 
