@@ -1,0 +1,44 @@
+context room
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
+
+// #3041: an actor-sum `by` on a WebSocket `on open`. The edge resolves the
+// members first-wins (a bad or absent token falls through to `Visitor`) and
+// forwards the member that verified; the Durable Object rebuilds `who` from it
+// for the `on open` body and, via the socket attachment, for `on message`.
+service chat from websocket(in: Frame, out: Frame) {
+  on open(room: RoomKey) -> Effect[()] by who: User | Visitor {
+    let nobody: Option[String] = None
+    let name = match who {
+      User(u) => Some("\(u)"),
+      Visitor => nobody,
+    }
+    let _ <- Room(room).join(name, connection)
+  }
+
+  on message(room: RoomKey, frame: Frame) -> Effect[()] by who: User | Visitor {
+    let name = match who {
+      User(u) => "\(u)",
+      Visitor => "visitor",
+    }
+    let _ <- Room(room).say(name, frame.text)
+  }
+}
+
+agent Room {
+  key id: RoomKey
+
+  store conns: Map[String, Connection[Frame]]
+
+  on call join(name: Option[String], conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(name.getOrElse("visitor"), conn)
+  }
+
+  on call say(name: String, text: String) -> Effect[()] {
+    let _ <- conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: "\(name): \(text)" }))
+  }
+}
