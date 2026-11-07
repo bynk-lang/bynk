@@ -234,20 +234,25 @@ impl Smoke {
                     source,
                     renders_rejections,
                 };
+                let principal = principal(handler, service, actors);
+                let cases = route.cases(&principal);
                 if methods == Methods::SafeOnly && method != IrHttpMethod::Get {
-                    self.skipped.push(Skip {
-                        suite: name.clone(),
-                        case: route.case_name("answers"),
-                        code: "smoke".to_string(),
-                        reason: format!(
-                            "a `{}` route writes, so a run against a named target calls only `GET` routes; pass `--smoke-unsafe` to call it",
-                            method.as_str()
-                        ),
-                    });
+                    // One skip per case the route would have run, so the
+                    // skip list agrees with the run's own count (#3008).
+                    for (case, _) in cases {
+                        self.skipped.push(Skip {
+                            suite: name.clone(),
+                            case: case.name,
+                            code: "smoke".to_string(),
+                            reason: format!(
+                                "a `{}` route writes, so a run against a named target calls only `GET` routes; pass `--smoke-unsafe` to call it",
+                                method.as_str()
+                            ),
+                        });
+                    }
                     continue;
                 }
-                let principal = principal(handler, service, actors);
-                suite.cases.extend(route.cases(&principal));
+                suite.cases.extend(cases);
             }
         }
         if !suite.cases.is_empty() {
@@ -760,9 +765,19 @@ service api from http {
         assert!(!text.contains("PUT"), "{text}");
         let (_, cases, skipped) = smoke.summary();
         assert_eq!(cases, 1);
-        assert_eq!(skipped.len(), 1);
-        assert_eq!(skipped[0].case, "smoke: PUT /cart/:sku answers");
-        assert!(skipped[0].reason.contains("--smoke-unsafe"));
+        // Every case the write route would have run is named, not only its
+        // first (#3008).
+        let names: Vec<&str> = skipped.iter().map(|s| s.case.as_str()).collect();
+        let mut all = Smoke::collect(&src, Methods::All);
+        let _ = all.overlay(&src);
+        let (_, run, _) = all.summary();
+        // The skipped cases plus the ones that run are every case there is.
+        assert_eq!(names.len() + cases, run, "{names:?}");
+        assert!(
+            names.contains(&"smoke: PUT /cart/:sku answers"),
+            "{names:?}"
+        );
+        assert!(skipped.iter().all(|s| s.reason.contains("--smoke-unsafe")));
     }
 
     #[test]

@@ -110,6 +110,28 @@ pub(super) fn emit_stub_class(
         {
             sig_type_ns.insert(a.original.clone(), test_ns(owner));
         }
+        // #2994: the signature's other names are the declaring unit's own, or a
+        // commons it `uses` (`bynk`'s `Locale.current` returns the `uses`d
+        // `bynk.locale.types`' `LocaleTag`) — whether or not the target uses that
+        // commons. Qualify them by the namespace that declares them, over
+        // the target's own view, which is not the one the signature was written
+        // in. The unit's own types win over a used commons', as they do there.
+        let mut declared: HashMap<String, String> = HashMap::new();
+        for used in unit_uses.get(owner).into_iter().flatten() {
+            if let Some(table) = unit_tables.get(used) {
+                for n in public_types(table) {
+                    declared.entry(n.clone()).or_insert_with(|| test_ns(used));
+                }
+            }
+        }
+        if let Some(table) = unit_tables.get(owner) {
+            for n in table.types.keys() {
+                declared.insert(n.clone(), test_ns(owner));
+            }
+        }
+        for (n, ns) in declared {
+            sig_type_ns.insert(n, ns);
+        }
     }
     let scope_names: Vec<String> = if let Some(table) = unit_tables.get(&owning_unit) {
         let mut v: Vec<String> = table

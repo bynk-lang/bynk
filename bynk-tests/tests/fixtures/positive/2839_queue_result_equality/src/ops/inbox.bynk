@@ -1,0 +1,13 @@
+context ops.inbox
+
+type Job = { id: String, attempt: Int }
+
+service inbox from queue("jobs") {
+  on message(job: Job) -> Effect[QueueResult] {
+    if job.attempt > 3 {
+      Retry("too many attempts")
+    } else {
+      Ack
+    }
+  }
+}

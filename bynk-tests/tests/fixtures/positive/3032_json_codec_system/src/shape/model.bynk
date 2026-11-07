@@ -1,0 +1,13 @@
+commons shape.model
+
+type Head = { ref: String, repo: Option[String] }
+
+type Pull = {
+  id: Int,
+  draft: Option[Bool],
+  closed_at: Option[String],
+  head: Head,
+  labels: List[String],
+}
+
+type Shape = | Circle(radius: Option[Int]) | Dot

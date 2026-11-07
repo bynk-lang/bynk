@@ -1,0 +1,5 @@
+commons enc
+
+type Row = { id: String, note: Option[Option[String]] }
+
+fn plain(r: Row) -> String { Json.encodePlain(r) }

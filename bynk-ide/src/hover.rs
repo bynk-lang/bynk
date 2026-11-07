@@ -175,6 +175,15 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         {
             return Some(content);
         }
+        // 2b. #2839: the `?` of an `Option` — `None` answers `404 NotFound`. Ahead of the locals rung, which
+        //     would otherwise describe the operand the `?` abuts.
+        if let Some(text) = a.snapshots.get(a.rel)
+            && let Some(entries) = a.expr_types.get(a.rel)
+            && let Some(content) =
+                crate::symbols::describe_question_at(text, a.offset, entries, tys)
+        {
+            return Some(content);
+        }
         // 3. v0.122 (slice 1): a local / parameter → its inferred type, and
         //    `self` → its receiver/agent type. Both read the retained analysis
         //    tables and run before the lexical fallback, which knows only

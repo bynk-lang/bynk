@@ -3457,7 +3457,10 @@ fn typecheck_case_body_recording(
                 checker::CapabilityInfo {
                     name: name.clone(),
                     ops,
-                    derived_from: None,
+                    derived_from: crate::context_checks::derived_from(
+                        decl,
+                        &resolved.cross_context.flattened_caps,
+                    ),
                 },
             );
         }
@@ -4501,7 +4504,10 @@ fn check_property_body(
                 checker::CapabilityInfo {
                     name: name.clone(),
                     ops,
-                    derived_from: None,
+                    derived_from: crate::context_checks::derived_from(
+                        decl,
+                        &resolved.cross_context.flattened_caps,
+                    ),
                 },
             );
         }

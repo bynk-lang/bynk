@@ -321,8 +321,45 @@ rejects it with `bynk.types.question_option_outside_http` (use `.okOr(err)` to
 turn an `Option` into a `Result` in a `Result`-returning function). A `Result`
 under `?` is unchanged: its `Err` propagates as before. Mapping a **domain
 error** into an `HttpResult` — the `Result → HttpResult` direction — is a
-separate, later capability; `?` does not yet convert an arbitrary `Err` into a
-status.
+separate, later capability, tracked with the declared-embedding design
+([#543](https://github.com/bynk-lang/bynk/issues/543)); see
+[Answering another status](#answering-another-status) for what to write today.
+
+`?` on an `Option` **always means `404`**. That is right for "the thing you asked
+for is not there" (a lookup that misses), and wrong for a missing or malformed
+request input, which is a `400`. Hovering the `?` in an editor says so
+(`None → 404 NotFound`), and `RequestHeaders.get(…)?` is flagged by
+`bynk.http.header_question_not_found` (below).
+
+### Answering another status
+
+`let … else` names the status. At the top of a handler body the `else` block's
+value is the handler's result, so a bare `BadRequest(…)` is accepted there:
+
+```bynk,fragment
+on POST("/github") (headers: RequestHeaders, body: Bytes) -> Effect[HttpResult[String]] by GitHub {
+  let Some(event) = headers.get("X-GitHub-Event") else { BadRequest("missing X-GitHub-Event") }
+  let Some(row) = stored else { NotFound }     // the 404 case, spelled out
+  Ok(event)
+}
+```
+
+Where the `None` arm needs a computed answer, use `else match { None => … }`. A
+wrongly typed `else` is rejected with `bynk.types.match_arm_mismatch`.
+
+### The header lint
+
+`headers.get("X")?` in an `HttpResult` handler is the shortest spelling of the
+wrong status: a delivery missing the header would answer `404`, telling the
+sender the URL does not exist. The checker warns
+(`bynk.http.header_question_not_found`, a non-failing warning) on exactly that
+shape — `get` on a `RequestHeaders` value, under `?`, in an `HttpResult`
+handler. Query parameters, parsed bodies and every other `Option` are not
+flagged: `?` keeps its `404` there. When the `?` is the whole value of a plain
+`let x = headers.get("X")?`, the warning carries a machine-applicable fix
+(`bynk check --fix`, or the editor's quick fix) that rewrites it to the
+`let Some(x) = headers.get("X") else { BadRequest("missing X") }` above, keeping
+the binding name and leaving the message for you to edit.
 
 ## Method semantics
 
@@ -973,7 +1010,7 @@ distinction as a sum type, or keep that route `tagged`.
 Only `Ok`, `Created` and `Accepted` **response bodies** of `from http` routes.
 Request bodies already decode plain JSON. Cross-context calls, queue messages,
 agent state, `Json.encode`, `Streaming` (SSE) events and the contract hashes keep
-the tagged form, so `decode(encode(x)) == x` still holds everywhere else.
+the tagged form (`Json.encodePlain` is the plain form outside a route), so `decode(encode(x)) == x` still holds everywhere else.
 `bynk openapi` describes a plain route's `Option` as nullable.
 
 ## Request lifecycle

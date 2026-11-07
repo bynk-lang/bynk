@@ -414,6 +414,7 @@ pub(crate) fn process_integration_tests(
             d1_migrations,
             errors,
             tys,
+            super::project_mentions_encode_plain(parsed),
         ) {
             outputs.push(StagedFile {
                 output_path: path,

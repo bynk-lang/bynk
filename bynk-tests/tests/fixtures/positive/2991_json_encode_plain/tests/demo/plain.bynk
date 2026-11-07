@@ -1,0 +1,43 @@
+---
+#2991: `Json.encodePlain` writes `Some(v)` as `v` and `None` as `null`, at any
+depth, and Bynk's lenient decoder reads it back. `Json.encode` is unchanged.
+---
+suite demo.plain
+
+case "a plain encoding writes the shape a non-Bynk API sends" {
+  expect Json.encodePlain(sample()) == "{\"id\":7,\"draft\":true,\"closed_at\":null,\"head\":{\"ref\":\"b\",\"repo\":null},\"labels\":[\"x\",null],\"qty\":3,\"shape\":{\"kind\":\"Circle\",\"radius\":2}}"
+}
+
+case "a plain encoding round-trips through Json.decode" {
+  let p = sample()
+  expect Json.decode[Pull](Json.encodePlain(p)) == Ok(p)
+}
+
+case "Json.encode still writes the tagged form" {
+  expect Json.encode(Some(1)) == "{\"kind\":\"Some\",\"value\":1}"
+  let none: Option[Int] = None
+  expect Json.encode(none) == "{\"kind\":\"None\"}"
+  expect tagged(sample()) != plain(sample())
+}
+
+case "a top-level Option and a list of them" {
+  let n: Option[String] = None
+  expect Json.encodePlain(n) == "null"
+  expect Json.encodePlain(Some("a")) == "\"a\""
+  let xs: List[Option[Int]] = [Some(1), None]
+  expect Json.encodePlain(xs) == "[1,null]"
+}
+
+case "a plain call does not leak into a later tagged one" {
+  let _ = Json.encodePlain(Some(1))
+  expect Json.encode(Some(1)) == "{\"kind\":\"Some\",\"value\":1}"
+}
+
+case "an encode inside the argument stays tagged" {
+  expect tagged_inside(Some(1)) == "{\"body\":\"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":1}\",\"note\":null}"
+  expect Json.encodePlain(build()) == "{\"body\":\"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":2}\",\"note\":\"n\"}"
+}
+
+case "a None literal argument" {
+  expect Json.encodePlain(Env { body: "b", note: None }) == "{\"body\":\"b\",\"note\":null}"
+}

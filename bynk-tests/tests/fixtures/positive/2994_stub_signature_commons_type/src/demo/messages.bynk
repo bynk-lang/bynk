@@ -1,0 +1,7 @@
+commons demo.messages
+
+uses bynk.locale.types
+
+fn greeting(tag: LocaleTag) -> String {
+	"hello"
+}

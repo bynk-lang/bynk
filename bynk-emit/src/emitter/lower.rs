@@ -1056,7 +1056,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             let location = expect_location(cx, span_start);
             let src = expect_source_text(cx, a.value.span);
             let mut pre = Pre::new();
-            let json = json_encode_text(&mut pre, &a.value, cx);
+            let json = json_encode_text(&mut pre, &a.value, cx, false);
             for s in pre.stmts() {
                 write_line(out, indent, s);
             }
@@ -4018,8 +4018,9 @@ fn lower_json_codec_call(
         Some(Callee::Intrinsic { ns, .. }) if *ns == JSON
     ) && args.len() == 1
     {
-        if method.name == "encode"
-            && let Some(text) = json_encode_text(&mut pre, &args[0], cx)
+        if matches!(method.name.as_str(), "encode" | "encodePlain")
+            && let Some(text) =
+                json_encode_text(&mut pre, &args[0], cx, method.name == "encodePlain")
         {
             return Some(pre.finish(text));
         }
@@ -4060,7 +4061,7 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
     } else {
         ts_ty(t, tys)
     };
-    if cx.in_test_scaffold() {
+    if cx.records_codec_roots() {
         note_ground_roots(t, cx);
     }
     // #914: the wrapper below names `Result`, `JsonValue` and `JsonError`
@@ -4102,17 +4103,18 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
 /// the codec roots the module needs recorded. Shared by the `Json.encode` call
 /// and the snapshot `expect` (#2842), so both encode a value one way. `None`
 /// when the argument's type is unknown to the lowering.
-fn json_encode_text(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<String> {
+fn json_encode_text(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx, plain: bool) -> Option<String> {
     let tys = cx.commons().tys();
     // Constrained generics slice 3: a value whose type mentions a type
     // parameter encodes through the codec witness of that type.
     let arg_ty = cx.commons().expr_types.get(&arg.id).map(|te| te.ty)?;
     if super::codec::has_var(arg_ty, cx.commons()) {
-        if cx.in_test_scaffold() {
+        if cx.records_codec_roots() {
             note_ground_roots(arg_ty, cx);
         }
         let codec = cx.codec(arg_ty);
         let v = pre.lower(arg, cx);
+        // `plain` never reaches a generic argument: the checker refused it.
         return Some(format!("globalThis.JSON.stringify({codec}.encode({v}))"));
     }
     let tref = ty_to_type_ref(arg_ty, tys)?;
@@ -4123,12 +4125,43 @@ fn json_encode_text(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<Stri
     // consumed context's boundary types (#661). P6.28: pushes the `TyId`
     // already in hand, not a re-derived `TypeRef` — `tref` below still
     // exists for this call site's own, separate codec-rendering use.
-    if cx.in_test_scaffold() {
+    if cx.records_codec_roots() {
         cx.runtime_use().note_json_codec_root(arg_ty);
     }
     let v = pre.lower(arg, cx);
     // #1435 (Arc E slice 1): boundary-print, same treatment as this
     // file's own `serialise_expr_via` call site above.
+    if plain {
+        // #2991: `Json.encodePlain`. The one `Option` encoder reads
+        // `__bynkPlainJson`, so raise it for this one synchronous serialisation
+        // and restore it in a `finally` (the encoder throws on a non-finite
+        // `Float`). The checker has refused a generic argument, so only
+        // monomorphic encoders (which read the flag) run here. Inlined rather
+        // than a runtime helper, so no module needs a new import.
+        // The argument must be evaluated *before* the flag is raised, or a tagged
+        // `Json.encode` (or a function that calls one) inside it would come out
+        // plain. An argument that awaits is hoisted to a temporary; any other
+        // is the default of the arrow's one parameter, which JS evaluates at
+        // call time, before the body raises the flag (its type is inferred).
+        let (param, tmp) = if v.contains("await") {
+            let tmp = format!("__pj{}", arg.id.0);
+            pre.push(format!("const {tmp} = {v};"));
+            (format!("__pv = {tmp}"), "__pv".to_string())
+        } else {
+            (format!("__pv = {v}"), "__pv".to_string())
+        };
+        let ser = bynk_ts::print_expr(&serialisation::serialise_expr(
+            &tref,
+            &tmp,
+            cx.runtime_use(),
+        ));
+        return Some(format!(
+            "(({param}): string => {{ const __g = globalThis as {{ __bynkPlainJson?: boolean }}; \
+             const __was = __g.__bynkPlainJson; __g.__bynkPlainJson = true; \
+             try {{ return globalThis.JSON.stringify({ser}); }} \
+             finally {{ __g.__bynkPlainJson = __was; }} }})()"
+        ));
+    }
     let ser = bynk_ts::print_expr(&serialisation::serialise_expr(&tref, &v, cx.runtime_use()));
     Some(format!("globalThis.JSON.stringify({ser})"))
 }
@@ -6774,6 +6807,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         cx.commons().callee(e.id),
         Some(Callee::Intrinsic { ns, .. }) if *ns == QUEUE_RESULT
     ) {
+        cx.note_queue_result();
         return format!("QueueResult.{}", id.name);
     }
     // A bare ident whose name matches a declared variant of a sum
@@ -6931,6 +6965,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         cx.commons().callee(e.id),
         Some(Callee::Intrinsic { ns, .. }) if *ns == QUEUE_RESULT
     ) {
+        cx.note_queue_result();
         return pre.finish(format!(
             "QueueResult.{}({})",
             name.name,

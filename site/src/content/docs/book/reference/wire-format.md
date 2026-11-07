@@ -146,7 +146,7 @@ on the wire, so every JSON parser reads them exactly.
 | record | an object keyed by field name. A missing field decodes as its default when it has one, as `None` when it is an `Option`, and otherwise fails. Unknown keys are ignored. |
 | sum (`enum` included) | an object with `"kind"`: the variant's name, beside the variant's payload fields: `{"kind":"Circle","radius":0.5}`, `{"kind":"Dot"}` |
 | `Result[T, E]` | `{"kind":"Ok","value":<T>}` or `{"kind":"Err","error":<E>}` |
-| `Option[T]` | `{"kind":"Some","value":<T>}` or `{"kind":"None"}`. A sender may also send `null` or leave the field out for `None`, or send the bare value for `Some`; Bynk always encodes the tagged form |
+| `Option[T]` | `{"kind":"Some","value":<T>}` or `{"kind":"None"}`. A sender may also send `null` or leave the field out for `None`, or send the bare value for `Some`; Bynk encodes the tagged form, except in a plain HTTP route and for `Json.encodePlain`, which write `v` / `null` (`Option[Option[T]]` is refused there) |
 | `List[T]` | an array |
 | `Map[K, V]` | an array of `[key, value]` pairs, in insertion order |
 | refined type (`type Qty = Int where NonNegative`) | its base type's encoding. The decoder checks the predicates, refusing with `RefinementViolation` |

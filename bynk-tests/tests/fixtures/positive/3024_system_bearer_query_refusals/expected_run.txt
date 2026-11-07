@@ -1,0 +1,2 @@
+# #3024: the raw Forged/Expired drivers append a typed query as its raw string.
+passed=5 failed=0

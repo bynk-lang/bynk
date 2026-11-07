@@ -122,6 +122,22 @@ fn handle(ok: Bool) -> HttpResult[String] {
 }
 ```
 
+## Answer a missing header with `400`
+
+`?` on an `Option` answers `404 NotFound`, which is right for a lookup that
+misses and wrong for a request that left out a required header. Name the status
+with `let … else`:
+
+```bynk,fragment
+on POST("/hook") (headers: RequestHeaders, body: Bytes) -> Effect[HttpResult[String]] by Sender {
+  let Some(event) = headers.get("X-Event") else { BadRequest("missing X-Event") }
+  Ok(event)
+}
+```
+
+The checker warns on `headers.get("X")?` and offers this rewrite as a fix. See
+[HTTP → Answering another status](/book/reference/http/#answering-another-status).
+
 ## Stream an incremental response
 
 To send a response as it is produced — a progress feed, a token relay, a live

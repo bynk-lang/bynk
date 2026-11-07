@@ -1,0 +1,25 @@
+suite qrepro as system {
+	env {
+		READER_SECRET = "test-reader-secret"
+	}
+
+	case "a reader gets the report through the seam" {
+		let r <- api.GET("/report", Window { days: 7 }) by Reader("someone")
+		expect r is Ok("7 days for someone")
+	}
+
+	case "no credential is refused at the seam" {
+		let r <- api.GET("/report", Window { days: 7 }) by Nobody
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a forged token is refused" {
+		let r <- api.GET("/report", Window { days: 7 }) by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired token is refused" {
+		let r <- api.GET("/report", Window { days: 7 }) by Expired
+		expect r is Rejected(Unauthorized)
+	}
+}

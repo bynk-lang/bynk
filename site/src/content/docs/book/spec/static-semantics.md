@@ -217,6 +217,15 @@ types over one base) agree at the base, but unrelated types do not
 from its expected type when that type is either, and otherwise from the enclosing
 return type, so it is never ambiguous (#1659).
 
+The operands of `==` and `!=` are same-typed, so one operand's type is the
+expected type for the other. An operand that can take its type only from its
+context — a bare `None`, `Ok(…)`, `Err(…)`, an empty list, or an `HttpResult`
+or `QueueResult` variant (`NotFound`, `BadRequest("…")`, `HttpResult.NotFound`,
+`Ack`, `Retry("…")`) — is typed against the other operand, so
+`r == BadRequest("msg")` and `r != NotFound` type-check for
+`r: HttpResult[String]`. A variant with nothing to infer from keeps the `()`
+payload fallback; `expect r is …` is unchanged (#2839).
+
 **The bottom type and deliberate faults** (#2620). `unreachable(message)` and
 `todo(message)` are ambient built-in functions, not keywords: each takes one
 `String` (`bynk.types.argument_mismatch`, `bynk.types.call_arity`), and a `fn`,
@@ -630,6 +639,13 @@ function returning `Result[_, F]` (or `Effect[Result[_, F]]`), applying `?` to a
 instead of requiring a manual `.mapErr`. The conversion is **one level**: `E`
 must match a declared embedding of `F` directly. When neither the types match
 nor an embedding applies, it is `bynk.types.question_error_mismatch`.
+
+**`Json.encodePlain`** (ADR for #2991). `Json.encodePlain(v) -> String` has `Json.encode`'s
+rules and the same domain, and writes an `Option[U]` as `u` / `null` (the form of a plain
+route, [§5.7.5](/book/spec/static-semantics/#response-json)). It is refused when the type
+of `v` contains an `Option` whose payload can encode as `null`
+(`bynk.json.nested_option_plain`, the injectivity rule of §5.7.5), or mentions a type
+parameter (`bynk.json.encode_plain_generic`).
 
 **The typed JSON codec** (v0.22b, ADR 0045). `Json.encode(v) -> String` and
 `Json.decode[T](s) -> Result[T, JsonError]` are compiler-backed statics on

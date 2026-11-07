@@ -13,8 +13,8 @@ name: CodeQL
 on:
   # SAST analyses only Rust + TypeScript, so skip docs/design/markdown-only
   # changes — they cannot affect the analysed code, and re-analysing an
-  # unchanged tree is wasted CI. The weekly `schedule` below stays unfiltered so
-  # the default-branch baseline is always refreshed regardless. A mixed change
+  # unchanged tree is wasted CI. The nightly `schedule` below stays unfiltered
+  # so the default-branch baseline is always refreshed regardless. A mixed change
   # (any non-ignored path also touched) still runs.
   push:
     branches: [main]
@@ -26,8 +26,9 @@ on:
     branches: [main]
     paths-ignore: *non_code_paths
   schedule:
-    # Weekly drift check, offset from the other security workflows.
-    - cron: "40 7 * * 1"
+    # Nightly at 07:40 UTC, 40 min after ci.yml's scheduled run. The only run
+    # that analyses Rust (see the matrix); it was a weekly drift check before.
+    - cron: "40 7 * * *"
 
 permissions:
   contents: read
@@ -54,7 +55,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [javascript-typescript, rust]
+        # Rust is analysed on the nightly only; pull requests and pushes to
+        # `main` analyse TypeScript. The Rust leg autobuilds the whole workspace
+        # (~8 min p50) on a hosted runner and is not a required check. It ran
+        # on every code PR (212 runs in two days in November 2026) and then on
+        # every merge's push, competing for the same hosted slots as the merge
+        # queue. Nightly, a Rust finding surfaces within a day, which suits
+        # defence-in-depth over clippy and the type system (see the header).
+        # The TypeScript leg stays on every event: it is quick, it covers the
+        # emitted runtime (the surface CodeQL is load-bearing for), it
+        # annotates new alerts on the PR diff, and it keeps OpenSSF Scorecard's
+        # SAST check seeing CodeQL on merged PRs.
+        #
+        # Trade-offs, accepted: `main` holds a Rust configuration that PR runs
+        # never upload, so code scanning's PR check may note that it cannot
+        # determine the alerts introduced for "1 configuration present on
+        # refs/heads/main" (rust). That is a notice, not a block, unless
+        # code-scanning merge protection is ever turned on in a ruleset (then
+        # revisit this). And a merge that fixes or introduces a Rust alert
+        # shows on `main` only after the next nightly.
+        language: ${{ fromJSON(github.event_name == 'schedule' && '["javascript-typescript","rust"]' || '["javascript-typescript"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

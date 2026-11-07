@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "listing": "ba0da0f88da474ef"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),N(\"SqlReadError\"))))"
+  }
+}
