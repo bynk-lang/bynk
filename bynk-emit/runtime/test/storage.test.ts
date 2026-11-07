@@ -63,6 +63,30 @@ test("makeIntegrationD1 runs real SQL, binding integers as INTEGER", async () =>
   assert.equal(await d.prepare("SELECT * FROM t WHERE n = ?").bind(9).first(), null);
 });
 
+test("makeIntegrationD1 refuses a wrong parameter count, as D1 does (#3003)", async () => {
+  const d = makeIntegrationD1();
+  await d.prepare("CREATE TABLE t (a, b)").run();
+  const wrong = /^Error: D1_ERROR: Wrong number of parameter bindings for SQL query\.$/;
+  const refused = (sql: string, ...v: unknown[]) => assert.rejects(d.prepare(sql).bind(...v).all(), wrong);
+  const accepted = (sql: string, ...v: unknown[]) => d.prepare(sql).bind(...v).all();
+  await refused("SELECT 1 WHERE ?1 = 1", 1, 2); // too many
+  await refused("SELECT 1 WHERE ?1 = ?2", 1); // too few
+  await refused("SELECT 1 WHERE ?2 = 1", 1); // ?2 needs two
+  await refused("SELECT ?");
+  await refused("SELECT 1", 1);
+  await accepted("SELECT 1 WHERE ?1 = ?1", 1); // a repeat is one
+  await accepted("SELECT 1 WHERE ? = ?", 1, 1);
+  await accepted("SELECT 1 WHERE ?2 = ?", 1, 1, 1); // a bare ? follows the highest
+  await refused("SELECT 1 WHERE ?2 = ?", 1, 1);
+  await accepted("SELECT 1 WHERE '?1' = ?2", 1, 1); // quoted ?1 is no parameter
+  await accepted("SELECT 1 WHERE ?3 = 1", 1, 1, 1); // the highest number
+  await accepted("SELECT '?' AS \"?\", 2 AS `?`, 3 AS [?] -- ?\n /* ? */ WHERE 'it''s ?' = ?1", 1);
+  await accepted("SELECT 1 AS a$b"); // `$` inside an identifier is no parameter
+  await accepted("SELECT 1 WHERE ?01 = 1", 1); // the raw spelling is the bind key
+  await refused("SELECT :a, :a, @b, $c", 1, 2);
+  await assert.rejects(d.batch([d.prepare("SELECT ?1").bind(1, 2)]), wrong);
+});
+
 test("makeIntegrationD1 words a constraint failure as D1 does", async () => {
   const d = makeIntegrationD1();
   await d.prepare("CREATE TABLE t (k TEXT UNIQUE)").run();

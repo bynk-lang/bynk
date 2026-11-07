@@ -69,6 +69,13 @@ service move {
 	}
 }
 
+service overbound {
+	on call(id: String) -> Effect[Result[SqlRun, SqlError]] given Orders {
+		// #3003: one value too many for the one `?1` the SQL uses.
+		Orders.run("DELETE FROM orders WHERE id = ?1", [Text(id), Integer(1)])
+	}
+}
+
 service api from http {
 	on POST("/orders/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
 		let _ <- Orders.run("CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, total INTEGER NOT NULL CHECK (total BETWEEN 0 AND 100), paid INTEGER NOT NULL, receipt BLOB NOT NULL, note TEXT, weight REAL)", [])

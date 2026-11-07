@@ -57,3 +57,9 @@ case "a write at integration runs on the participant's database" as integration 
 	let made <- save.call("a", 1, true)
 	expect made == Ok(SqlRun { changes: 1, lastRowId: 1 })
 }
+
+case "a statement bound to more values than its SQL uses fails, as on D1" {
+	let _ <- setup.call()
+	let r <- overbound.call("a")
+	expect r is Err(Failed("D1_ERROR: Wrong number of parameter bindings for SQL query."))
+}
