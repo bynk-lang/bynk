@@ -1,0 +1,3 @@
+commons enc
+
+fn plain[T: Codable](v: T) -> String { Json.encodePlain(v) }

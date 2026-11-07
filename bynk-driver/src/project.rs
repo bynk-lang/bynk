@@ -1489,6 +1489,14 @@ fn build_emit_unit_ctx(
     }
 }
 
+/// #2991: whether any source file of the project mentions `Json.encodePlain`.
+/// Textual on purpose: it only decides whether the generated `Option` encoders
+/// carry their (inert unless raised) plain branch, so a mention in a comment
+/// costs a few bytes and nothing else.
+pub(crate) fn project_mentions_encode_plain(parsed: &[ParsedFile]) -> bool {
+    parsed.iter().any(|p| p.source().contains("encodePlain"))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_unit(
     name: &str,
@@ -1510,6 +1518,7 @@ fn emit_unit(
     agent_deps_plan: Option<&AgentDepsPlan>,
     compiled: &mut Vec<StagedFile>,
     schema_effective_versions: &SchemaVersions,
+    plain_encode_in_project: bool,
 ) {
     let typed = program.program();
     // Build the emitter context.
@@ -1706,10 +1715,13 @@ fn emit_unit(
     // the branch is inert unless `withPlainJson` sets the flag) switches the generated `Option`
     // encoders to carry the plain branch (a response type can live in a commons
     // another unit's route serialises through).
+    // #2991: so does any `Json.encodePlain` call in the project's sources (a
+    // textual over-approximation: the branch is inert unless a call raises the flag).
     emit_ctx.runtime_use.set_plain_json(
-        unit_info
-            .values()
-            .any(|i| emitter::table_has_plain_json(&i.table)),
+        plain_encode_in_project
+            || unit_info
+                .values()
+                .any(|i| emitter::table_has_plain_json(&i.table)),
     );
     // v0.72: the map's `source` is the absolute path the compiler read the file
     // from, so an editor breakpoint set on the real `.bynk` resolves to the same
@@ -1977,6 +1989,7 @@ fn check_unit_files(
             agent_deps_plan,
             compiled,
             schema_effective_versions,
+            project_mentions_encode_plain(parsed),
         );
     }
     if mode == Mode::Build && split_worker {

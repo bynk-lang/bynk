@@ -1654,8 +1654,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An invariant predicate does not have type `Bool`.",
     ),
     d(
+        "bynk.json.encode_plain_generic",
+        "`Json.encodePlain` is given a value whose type mentions a type parameter. A generic value encodes through its `Codable` witness, which always writes `Option` in the tagged form, so plain encoding is available only at a concrete type.",
+    ),
+    d(
         "bynk.json.nested_option_plain",
-        "A plain-JSON route's response type contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`.",
+        "A plain-JSON route's response type, or the argument of `Json.encodePlain`, contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`.",
     ),
     dg(
         "bynk.lambda.unannotated_param",

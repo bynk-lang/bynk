@@ -391,8 +391,13 @@ generated `__serialise_Option_*` encoder carries both forms: while `withPlainJso
 has set the flag `__bynkPlainJson` (a `globalThis` property), it writes `Some(v)` as `v` and `None`
 as `null`; otherwise it writes the tagged object. The flag is set only for that
 one synchronous serialisation and restored afterwards, and the plain branch is
-emitted only in a project that has a plain route, so a project without one is
-byte-for-byte unchanged.
+emitted only in a project that has a plain route or a source file that mentions
+`Json.encodePlain`, so a project with neither is byte-for-byte unchanged.
+
+`Json.encodePlain(v)` lowers to the same `JSON.stringify(__serialise_<T>(v))` as
+`Json.encode`, inside an inline synchronous arrow that sets `__bynkPlainJson`, runs the
+serialisation, and restores the flag in a `finally`. It needs no runtime import. An
+argument whose text awaits is first bound to a temporary.
 
 A service that declares a **`cors { }`** policy
 ([§5.7.1](/book/spec/static-semantics/#cors)) additionally emits, in `index.ts`, a

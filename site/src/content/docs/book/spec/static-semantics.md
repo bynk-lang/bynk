@@ -640,6 +640,13 @@ instead of requiring a manual `.mapErr`. The conversion is **one level**: `E`
 must match a declared embedding of `F` directly. When neither the types match
 nor an embedding applies, it is `bynk.types.question_error_mismatch`.
 
+**`Json.encodePlain`** (ADR for #2991). `Json.encodePlain(v) -> String` has `Json.encode`'s
+rules and the same domain, and writes an `Option[U]` as `u` / `null` (the form of a plain
+route, [§5.7.5](/book/spec/static-semantics/#response-json)). It is refused when the type
+of `v` contains an `Option` whose payload can encode as `null`
+(`bynk.json.nested_option_plain`, the injectivity rule of §5.7.5), or mentions a type
+parameter (`bynk.json.encode_plain_generic`).
+
 **The typed JSON codec** (v0.22b, ADR 0045). `Json.encode(v) -> String` and
 `Json.decode[T](s) -> Result[T, JsonError]` are compiler-backed statics on
 the built-in `Json` module: `encode` dispatches to the generated

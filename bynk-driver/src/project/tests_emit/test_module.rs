@@ -52,6 +52,9 @@ pub(super) fn emit_test_module(
     // and injected into the import line as a post-pass, the same shape
     // `emit_project` and `emit_worker_entry` use.
     let runtime_use = RuntimeUse::default();
+    // #2991: a suite calling `Json.encodePlain` needs its own `Option` encoders to
+    // carry the plain branch.
+    runtime_use.set_plain_json(super::super::project_mentions_encode_plain(parsed));
     runtime_use.set_json_codec_qual(json_codec_qual_for_target(
         target_name,
         unit_tables,
