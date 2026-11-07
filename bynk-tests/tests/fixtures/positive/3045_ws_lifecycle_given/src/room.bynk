@@ -1,0 +1,42 @@
+context room
+
+consumes bynk { Clock }
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
+
+// #3045: `on message` and `on close` call an agent handler that declares
+// `given`. Their deps come from the socket attachment, so the Durable Object
+// rebuilds the capabilities from its own `env` there too, as it does for `on open`.
+service chat from websocket(in: Frame, out: Frame) {
+	on open(room: RoomKey) -> Effect[()] by u: User {
+		let _ <- Room(room).join("\(u.identity)", connection)
+	}
+
+	on message(room: RoomKey, frame: Frame) -> Effect[()] by u: User {
+		let _ <- Room(room).stamp("\(u.identity)")
+	}
+
+	on close(room: RoomKey) -> Effect[()] by u: User {
+		let _ <- Room(room).stamp("\(u.identity)")
+	}
+}
+
+agent Room {
+	key id: RoomKey
+
+	store conns: Map[String, Connection[Frame]]
+	store stamps: Map[String, Int]
+
+	on call join(name: String, conn: Connection[Frame]) -> Effect[()] {
+		let _ <- conns.put(name, conn)
+	}
+
+	on call stamp(name: String) -> Effect[()] given Clock {
+		let now <- Clock.now()
+		let _ <- stamps.put(name, now.toEpochMillis())
+	}
+}

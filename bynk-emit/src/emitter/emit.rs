@@ -7393,6 +7393,12 @@ pub(crate) fn emit_agent(
             ));
         }
     }
+    for host in &mut ws_open_hosts {
+        host.rebuild = WsDepsRebuild {
+            given: given_deps_expr.clone(),
+            uses_emit: agent_uses_emit,
+        };
+    }
     for host in &ws_open_hosts {
         // #2280: anchor each hosted lifecycle method's header and prologue to
         // its own `on open`/`on message`/`on close` line, not to the previous
@@ -7473,11 +7479,7 @@ pub(crate) fn emit_agent(
         // client end. The verified identity and route arguments ride in a trusted
         // internal header (the DO is only reachable through the Worker).
         for host in &ws_open_hosts {
-            fetch_stmts.push(ws_open_fetch_branch_stmt(
-                host,
-                tys,
-                given_deps_expr.as_deref(),
-            ));
+            fetch_stmts.push(ws_open_fetch_branch_stmt(host, tys));
         }
         // State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake,
         // a branch of its own before the method dispatch. It carries no key
@@ -7604,63 +7606,13 @@ pub(crate) fn emit_agent(
                 }),
             ))];
             if let Some(expr) = &given_deps_expr {
-                agent_dispatch_stmts.push(bynk_ts::TsStmt::const_stmt(
-                    bynk_ts::TsBindingName::Ident("__givenDeps".to_string()),
-                    None,
-                    bynk_ts::TsExpr::Ident(expr.clone()),
-                    None,
-                ));
+                agent_dispatch_stmts.push(given_deps_const_stmt(expr));
                 entries.push(bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
                     "__givenDeps".to_string(),
                 )));
             }
             if agent_uses_emit {
-                let bind = crate::emitter::wrangler::events_fanout_binding().name;
-                // P7.2: `env` is now `Record<string, unknown>` (above), so this
-                // specific binding needs its own cast to what
-                // `dispatchToEventsFanout` actually declares.
-                agent_dispatch_stmts.push(bynk_ts::TsStmt::const_stmt(
-                    bynk_ts::TsBindingName::Ident("__eventsDeps".to_string()),
-                    None,
-                    bynk_ts::TsExpr::object(vec![(
-                        "__eventsDispatch".to_string(),
-                        bynk_ts::TsExpr::Arrow {
-                            params: vec![bynk_ts::TsParam {
-                                name: "events".to_string(),
-                                ty: Some(bynk_ts::TsType::named_with_args(
-                                    "globalThis.Array",
-                                    vec![bynk_ts::TsType::named(
-                                        crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE,
-                                    )],
-                                )),
-                                optional: false,
-                            }],
-                            is_async: false,
-                            generics: Vec::new(),
-                            return_type: None,
-                            body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(
-                                bynk_ts::TsExpr::Call {
-                                    callee: Box::new(bynk_ts::TsExpr::Ident(
-                                        "__dispatchToEventsFanout".to_string(),
-                                    )),
-                                    args: vec![
-                                        bynk_ts::TsExpr::As {
-                                            expr: Box::new(bynk_ts::TsExpr::Member {
-                                                object: Box::new(bynk_ts::TsExpr::Ident(
-                                                    "env".to_string(),
-                                                )),
-                                                property: bind,
-                                            }),
-                                            ty: bynk_ts::TsType::named("__DurableObjectNamespace"),
-                                        },
-                                        bynk_ts::TsExpr::Ident("events".to_string()),
-                                    ],
-                                },
-                            ))),
-                        },
-                    )]),
-                    None,
-                ));
+                agent_dispatch_stmts.push(events_deps_const_stmt());
                 entries.push(bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
                     "__eventsDeps".to_string(),
                 )));
@@ -8136,6 +8088,8 @@ struct WsOpenHost<'a> {
     // and the key's TS type. A WebSocket body runs through these entry points,
     // not the `/_bynk/agent/` dispatch, so each sets `this.__key` itself.
     agent_key: Option<(String, String)>,
+    // #3045: the `given`/events deps every entry point rebuilds from the DO's `env`.
+    rebuild: WsDepsRebuild,
 }
 
 impl WsOpenHost<'_> {
@@ -8224,6 +8178,7 @@ fn ws_open_hosts_for<'a>(
                         bynk_check::actors::bearer_seam_for(h, actors)
                     },
                     agent_key: None,
+                    rebuild: WsDepsRebuild::default(),
                 });
             }
         }
@@ -8459,6 +8414,122 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
     )
 }
 
+/// `const __eventsDeps = { __eventsDispatch: (events) => __dispatchToEventsFanout(env.EVENTS_FANOUT, events) };`
+/// — the fan-out callback is a function, so it never survives the DO wire and is
+/// rebuilt from the DO's own `env` (which must already be in scope).
+fn events_deps_const_stmt() -> bynk_ts::TsStmt {
+    let bind = crate::emitter::wrangler::events_fanout_binding().name;
+    // P7.2: `env` is now `Record<string, unknown>` (above), so this
+    // specific binding needs its own cast to what
+    // `dispatchToEventsFanout` actually declares.
+    bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__eventsDeps".to_string()),
+        None,
+        bynk_ts::TsExpr::object(vec![(
+            "__eventsDispatch".to_string(),
+            bynk_ts::TsExpr::Arrow {
+                params: vec![bynk_ts::TsParam {
+                    name: "events".to_string(),
+                    ty: Some(bynk_ts::TsType::named_with_args(
+                        "globalThis.Array",
+                        vec![bynk_ts::TsType::named(
+                            crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE,
+                        )],
+                    )),
+                    optional: false,
+                }],
+                is_async: false,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(
+                    bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Ident(
+                            "__dispatchToEventsFanout".to_string(),
+                        )),
+                        args: vec![
+                            bynk_ts::TsExpr::As {
+                                expr: Box::new(bynk_ts::TsExpr::Member {
+                                    object: Box::new(bynk_ts::TsExpr::Ident("env".to_string())),
+                                    property: bind,
+                                }),
+                                ty: bynk_ts::TsType::named("__DurableObjectNamespace"),
+                            },
+                            bynk_ts::TsExpr::Ident("events".to_string()),
+                        ],
+                    },
+                ))),
+            },
+        )]),
+        None,
+    )
+}
+
+/// `const __givenDeps = <expr>;` — the agent's `given` providers rebuilt in-process.
+fn given_deps_const_stmt(expr: &str) -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__givenDeps".to_string()),
+        None,
+        bynk_ts::TsExpr::Ident(expr.to_string()),
+        None,
+    )
+}
+
+/// The in-DO deps a WebSocket entry point (`on open`'s fetch branch,
+/// `webSocketMessage`, `webSocketClose`) rebuilds from the DO's own `env`, as the
+/// `/_bynk/agent/` branch does: the `given` providers and the events fan-out
+/// callback. Neither survives the wire or the socket attachment. Returns the
+/// statements (`env`, `__givenDeps`, `__eventsDeps`) and the spreads to append
+/// last in the deps object so the rebuilt providers win. Spreads, unlike the
+/// shorthand `env`, are exempt from excess-property checks, so the body's own
+/// `deps` type need not name them.
+#[derive(Clone, Default)]
+struct WsDepsRebuild {
+    given: Option<String>,
+    uses_emit: bool,
+}
+
+impl WsDepsRebuild {
+    fn is_empty(&self) -> bool {
+        self.given.is_none() && !self.uses_emit
+    }
+
+    fn stmts(&self) -> Vec<bynk_ts::TsStmt> {
+        if self.is_empty() {
+            return Vec::new();
+        }
+        let mut stmts = vec![agent_env_const_stmt()];
+        if let Some(expr) = &self.given {
+            stmts.push(given_deps_const_stmt(expr));
+        }
+        if self.uses_emit {
+            stmts.push(events_deps_const_stmt());
+        }
+        stmts
+    }
+
+    fn spreads(&self) -> Vec<&'static str> {
+        let mut v = Vec::new();
+        if self.given.is_some() {
+            v.push("...__givenDeps");
+        }
+        if self.uses_emit {
+            v.push("...__eventsDeps");
+        }
+        v
+    }
+
+    /// `{ <principal>, ...rebuilt }`, or `{}` when both are empty.
+    fn deps_object(&self, principal: Option<String>) -> String {
+        let mut fields: Vec<String> = principal.into_iter().collect();
+        fields.extend(self.spreads().into_iter().map(String::from));
+        if fields.is_empty() {
+            "{}".to_string()
+        } else {
+            format!("{{ {} }}", fields.join(", "))
+        }
+    }
+}
+
 /// `const env = this.__env as unknown as Record<string, unknown>;` — the DO's own
 /// `env`, which the `given` providers (and the events fan-out) are rebuilt from.
 fn agent_env_const_stmt() -> bynk_ts::TsStmt {
@@ -8472,11 +8543,7 @@ fn agent_env_const_stmt() -> bynk_ts::TsStmt {
     )
 }
 
-fn ws_open_fetch_branch_stmt(
-    host: &WsOpenHost<'_>,
-    tys: &Arc<Types>,
-    given_deps_expr: Option<&str>,
-) -> bynk_ts::TsStmt {
+fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: &Arc<Types>) -> bynk_ts::TsStmt {
     let h = host.handler;
     let path = format!("/_bynk/ws/open/{}", host.service);
     let method = ws_open_do_method_name(host.service);
@@ -8638,36 +8705,20 @@ fn ws_open_fetch_branch_stmt(
     // and `on open` hands it `deps` as they stand. Providers cannot cross the
     // wire, so rebuild them from this DO's own `env`, exactly as the
     // `/_bynk/agent/` branch does, and let them lead the deps object.
-    let mut deps_fields = Vec::new();
-    if let Some(expr) = given_deps_expr {
-        stmts.push(agent_env_const_stmt());
-        stmts.push(bynk_ts::TsStmt::const_stmt(
-            bynk_ts::TsBindingName::Ident("__givenDeps".to_string()),
-            None,
-            bynk_ts::TsExpr::Ident(expr.to_string()),
-            None,
-        ));
-    }
-    if let Some(members) = &host.sum {
-        deps_fields.push(format!(
+    stmts.extend(host.rebuild.stmts());
+    let principal = if let Some(members) = &host.sum {
+        Some(format!(
             "who: __payload.who as {}",
             actor_sum_ts_union(members)
-        ));
-    } else if let Some(seam) = host.seam.as_ref().filter(|s| s.binder.is_some()) {
-        deps_fields.push(format!(
-            "identity: __payload.identity as {}",
-            seam.identity_type
-        ));
-    }
-    // Last, as in the `/_bynk/agent/` branch: the rebuilt providers win.
-    if given_deps_expr.is_some() {
-        deps_fields.push("...__givenDeps".to_string());
-    }
-    let deps_arg = if deps_fields.is_empty() {
-        "{}".to_string()
+        ))
     } else {
-        format!("{{ {} }}", deps_fields.join(", "))
+        host.seam
+            .as_ref()
+            .filter(|s| s.binder.is_some())
+            .map(|seam| format!("identity: __payload.identity as {}", seam.identity_type))
     };
+    // Rebuilt providers last, as in the `/_bynk/agent/` branch: they win.
+    let deps_arg = host.rebuild.deps_object(principal);
     // An object-literal expression — tagged `VerbatimExpr`, not `Ident`
     // (#1539).
     call_args.push(bynk_ts::TsExpr::VerbatimExpr(
@@ -8719,13 +8770,15 @@ fn ws_open_fetch_branch_stmt(
 /// receives — the verified identity recovered from the socket attachment, when the
 /// actor binds one (else `{}`).
 fn ws_attachment_deps_arg(host: &WsOpenHost<'_>) -> String {
-    if let Some(members) = &host.sum {
-        return format!("{{ who: __att.who as {} }}", actor_sum_ts_union(members));
-    }
-    match host.seam.as_ref().filter(|s| s.binder.is_some()) {
-        Some(seam) => format!("{{ identity: __att.identity as {} }}", seam.identity_type),
-        None => "{}".to_string(),
-    }
+    let principal = if let Some(members) = &host.sum {
+        Some(format!("who: __att.who as {}", actor_sum_ts_union(members)))
+    } else {
+        host.seam
+            .as_ref()
+            .filter(|s| s.binder.is_some())
+            .map(|seam| format!("identity: __att.identity as {}", seam.identity_type))
+    };
+    host.rebuild.deps_object(principal)
 }
 
 /// v0.106 (slice 3b-iii): emit the hibernatable-WebSocket dispatch handlers
@@ -8874,6 +8927,7 @@ fn emit_ws_dispatch_handlers(
         let decode = serialisation::deserialise_expr(&in_type, "__json", "frame", runtime_use);
         let mut stmts = Vec::new();
         att_guard(&mut stmts);
+        stmts.extend(host.rebuild.stmts());
         stmts.push(bynk_ts::TsStmt::let_stmt(
             bynk_ts::TsBindingName::Ident("__raw".to_string()),
             Some(bynk_ts::TsType::named("string")),
@@ -9007,6 +9061,7 @@ fn emit_ws_dispatch_handlers(
             None,
         )];
         att_guard(&mut stmts);
+        stmts.extend(host.rebuild.stmts());
         let mut call_args = vec!["connection".to_string()];
         for (i, p) in c.params.iter().enumerate() {
             call_args.push(format!("__att.args[{i}] as {}", ts_type_ref(&p.type_ref)));

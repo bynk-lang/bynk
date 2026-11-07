@@ -1640,6 +1640,57 @@ fn check_service_protocols(
                     }
                 }
             }
+            // #3046: the principal is established once, by `on open`'s `by`, and
+            // carried for the connection's life (the Workers socket attachment).
+            // `on message`/`on close` read it rather than re-verifying per frame, so
+            // their `by` must name the same kind of principal: the same single actor
+            // or the same actor-sum members. Binder names may differ, and a sum's
+            // member order is irrelevant (the order only matters to open's
+            // first-wins resolution). A checker rule, not a Workers-only one: the
+            // contract is the language's, whatever a target does with the principal.
+            if let [open] = opens.as_slice() {
+                let actors_of = |h: &Handler| -> Option<std::collections::BTreeSet<String>> {
+                    h.by_clause
+                        .as_ref()
+                        .map(|by| by.actors.iter().map(|a| a.name.clone()).collect())
+                };
+                let render = |h: &Handler| -> String {
+                    match &h.by_clause {
+                        Some(by) => by
+                            .actors
+                            .iter()
+                            .map(|a| a.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" | "),
+                        None => "no `by` clause".to_string(),
+                    }
+                };
+                let open_actors = actors_of(open);
+                for h in messages.iter().chain(closes.iter()) {
+                    if actors_of(h) != open_actors {
+                        let which = if matches!(h.kind, HandlerKind::Message) {
+                            "on message"
+                        } else {
+                            "on close"
+                        };
+                        errors.push(
+                            CompileError::new(
+                                "bynk.ws.lifecycle_by_mismatch",
+                                h.by_clause.as_ref().map_or(h.span, |by| by.span),
+                                format!(
+                                    "the `{which}` handler of `{}` is `by` {}, but `on open` is `by` {} — a connection's principal is established once, at `on open`, so the lifecycle handlers must name the same actor(s)",
+                                    service.name.name,
+                                    render(h),
+                                    render(open),
+                                ),
+                            )
+                            .with_note(
+                                "give `on message`/`on close` the same `by` actor (or the same actor-sum members) as `on open`; the binder name may differ. The principal is carried from `on open` for the connection's life, never re-verified per frame",
+                            ),
+                        );
+                    }
+                }
+            }
             // v0.104 (D2): on Workers the upgrade is routed to the Durable Object
             // that hosts the connection — the agent the `on open` transfers it to.
             // That target must be statically resolvable: exactly one top-level
